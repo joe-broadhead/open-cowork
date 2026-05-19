@@ -4,10 +4,20 @@ packages:
   - packages/*
 
 allowBuilds:
-  electron: set this to true or false
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
+  electron: true
+  electron-winstaller: true
+  esbuild: true
   opencode-ai: true
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - opencode-ai
+
+overrides:
+  electron-builder-squirrel-windows: 26.8.1
+  ip-address@<=10.1.0: ">=10.1.1"
+  mermaid>uuid: ^14.0.0
 
 # macOS packaging produces x64 and arm64 artifacts from the same runner.
 # Linux public release artifacts are x64-only for v0.0.0, but installing both

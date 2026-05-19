@@ -22,6 +22,13 @@ function promptIsVisible(prompt: ProviderAuthPrompt, inputs: Record<string, stri
     : current !== prompt.when.value
 }
 
+function extractAuthorizationCode(instructions: string) {
+  const hyphenated = instructions.match(/\b[A-Za-z0-9]{4,}(?:-[A-Za-z0-9]{4,})+\b/)
+  if (hyphenated) return hyphenated[0]
+  const labelled = instructions.match(/\b(?:authentication|authorization)?\s*code\b\D+([A-Za-z0-9]{4,})\b/i)
+  return labelled?.[1] || null
+}
+
 interface Props {
   providerId: string | null
   providerName?: string
@@ -49,7 +56,7 @@ export function ProviderAuthControls({
   const [status, setStatus] = useState<string | null>(null)
   const [authorizationInstructions, setAuthorizationInstructions] = useState<string | null>(null)
   const [pending, setPending] = useState<{ method: number; authorization: ProviderAuthAuthorization } | null>(null)
-  const [pendingBrowserLogin, setPendingBrowserLogin] = useState(false)
+  const [pendingBrowserLogin, setPendingBrowserLogin] = useState<{ method: number; authorization: ProviderAuthAuthorization } | null>(null)
   const [code, setCode] = useState('')
   const [methodInputs, setMethodInputs] = useState<Record<number, Record<string, string>>>({})
 
@@ -97,7 +104,7 @@ export function ProviderAuthControls({
     setStatus(null)
     setAuthorizationInstructions(null)
     setPending(null)
-    setPendingBrowserLogin(false)
+    setPendingBrowserLogin(null)
     setCode('')
     setMethodInputs({})
     void loadMethods()
@@ -128,7 +135,7 @@ export function ProviderAuthControls({
     setStatus(null)
     setAuthorizationInstructions(null)
     setPending(null)
-    setPendingBrowserLogin(false)
+    setPendingBrowserLogin(null)
     try {
       if (onBeforeAuthorize) {
         const ok = await onBeforeAuthorize()
@@ -156,7 +163,7 @@ export function ProviderAuthControls({
         setPending({ method: selectedIndex, authorization })
         setStatus(authorization.instructions || t('providerAuth.enterCode', 'Complete the browser login, then paste the authorization code here.'))
       } else {
-        setPendingBrowserLogin(true)
+        setPendingBrowserLogin({ method: selectedIndex, authorization })
         if (authorization.instructions) {
           setAuthorizationInstructions(authorization.instructions)
           setStatus(authorization.instructions)
@@ -223,16 +230,23 @@ export function ProviderAuthControls({
   }
 
   const finishBrowserLogin = async () => {
+    if (!providerId || !pendingBrowserLogin) return
     setAuthorizing(-1)
     setStatus(null)
     setAuthorizationInstructions(null)
     try {
+      let callbackError: string | null = null
+      try {
+        await window.coworkApi.provider.callback(providerId, pendingBrowserLogin.method)
+      } catch (err) {
+        callbackError = err instanceof Error ? err.message : String(err)
+      }
       if (!await verifyProviderConnected()) {
-        setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
+        setStatus(callbackError || t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
         return
       }
       await onAuthUpdated?.()
-      setPendingBrowserLogin(false)
+      setPendingBrowserLogin(null)
       setStatus(t('providerAuth.connected', 'Provider login completed.'))
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -248,7 +262,7 @@ export function ProviderAuthControls({
     try {
       await window.coworkApi.provider.logout(providerId)
       setPending(null)
-      setPendingBrowserLogin(false)
+      setPendingBrowserLogin(null)
       setAuthorizationInstructions(null)
       setCode('')
       setStatus(t('providerAuth.removed', 'Provider login removed. Sign in again to refresh the token.'))
@@ -264,8 +278,9 @@ export function ProviderAuthControls({
   const entries = oauthMethods
   const copyAuthorizationInstructions = () => {
     if (!authorizationInstructions) return
-    void writeTextToClipboard(authorizationInstructions)
+    void writeTextToClipboard(extractAuthorizationCode(authorizationInstructions) || authorizationInstructions)
   }
+  const authorizationCode = authorizationInstructions ? extractAuthorizationCode(authorizationInstructions) : null
 
   return (
     <div className="flex flex-col gap-3">
@@ -397,7 +412,9 @@ export function ProviderAuthControls({
                 onClick={copyAuthorizationInstructions}
                 className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-[11px] font-semibold text-text hover:bg-surface-hover cursor-pointer"
               >
-                {t('common.copy', 'Copy')}
+                {authorizationCode
+                  ? t('providerAuth.copyCode', 'Copy code')
+                  : t('common.copy', 'Copy')}
               </button>
             </div>
             <pre className="m-0 whitespace-pre-wrap break-words rounded-lg border border-border-subtle bg-base px-3 py-2 font-mono text-[12px] leading-relaxed text-text">

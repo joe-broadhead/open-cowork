@@ -19,6 +19,7 @@ describe('ProviderAuthControls', () => {
       method: 'auto',
       instructions: 'Finish in your browser.',
     })
+    vi.mocked(window.coworkApi.provider.callback).mockResolvedValue(true)
     vi.mocked(window.coworkApi.provider.list).mockResolvedValue([
       { id: 'openai', name: 'OpenAI', connected: true },
     ])
@@ -45,6 +46,7 @@ describe('ProviderAuthControls', () => {
 
     await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
 
+    expect(window.coworkApi.provider.callback).toHaveBeenCalledWith('openai', 0)
     await waitFor(() => expect(onAuthUpdated).toHaveBeenCalledTimes(1))
     expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
     expect(screen.getByText('Provider login completed.')).toBeTruthy()
@@ -99,8 +101,66 @@ describe('ProviderAuthControls', () => {
     expect(screen.queryByText('Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.')).toBeNull()
     expect(screen.getByRole('button', { name: "I've finished signing in" })).toBeTruthy()
 
+    await user.click(screen.getByRole('button', { name: 'Copy code' }))
+
+    expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('XXXX-YYYY')
+  })
+
+  it('falls back to the full instructions when no device code can be detected', async () => {
+    const instructions = 'Finish signing in from the browser window.'
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      openai: [browserMethod],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://auth.example.test',
+      method: 'auto',
+      instructions,
+    })
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected={false}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
     await user.click(screen.getByRole('button', { name: 'Copy' }))
 
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(instructions)
+  })
+
+  it('still verifies browser login when the callback endpoint is already consumed', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      openai: [browserMethod],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://auth.example.test',
+      method: 'auto',
+      instructions: 'Finish in your browser.',
+    })
+    vi.mocked(window.coworkApi.provider.callback).mockRejectedValue(new Error('Callback already completed.'))
+    vi.mocked(window.coworkApi.provider.list).mockResolvedValue([
+      { id: 'openai', name: 'OpenAI', connected: true },
+    ])
+    const onAuthUpdated = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="openai"
+        providerName="OpenAI"
+        connected={false}
+        onAuthUpdated={onAuthUpdated}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
+    await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
+
+    await waitFor(() => expect(onAuthUpdated).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Provider login completed.')).toBeTruthy()
   })
 })
