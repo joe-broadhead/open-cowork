@@ -176,6 +176,7 @@ function providerWithoutDefaultModel(provider: ProviderDescriptor): ProviderDesc
     description: provider.description,
     credentials: provider.credentials,
     models: provider.models,
+    ...(provider.smallModel ? { smallModel: provider.smallModel } : {}),
     ...(provider.connected !== undefined ? { connected: provider.connected } : {}),
   }
 }

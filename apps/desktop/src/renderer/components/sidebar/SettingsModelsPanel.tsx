@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { EffectiveAppSettings, PublicAppConfig } from '@open-cowork/shared'
+import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 import {
@@ -77,6 +77,31 @@ export function ModelsPanel({
     }
   }
 
+  const rawSelectedSmallModelId = settings.selectedSmallModelId || null
+  const smallModelFollowsMainModel = rawSelectedSmallModelId === SMALL_MODEL_USE_MAIN
+  const selectedSmallModelId = smallModelFollowsMainModel ? '' : rawSelectedSmallModelId || ''
+  const mainModelId = settings.effectiveModel || settings.selectedModelId || ''
+  const providerSmallModelId = provider?.smallModel || ''
+  const effectiveSmallModel = settings.effectiveSmallModel || providerSmallModelId || mainModelId
+  const smallModelUsesMainModel = effectiveSmallModel === mainModelId
+  const smallModelUsesProviderDefault = !selectedSmallModelId && !!providerSmallModelId && effectiveSmallModel === providerSmallModelId
+  const updateMainModel = (modelId: string) => update({
+    selectedModelId: modelId,
+    effectiveModel: modelId,
+    ...(smallModelFollowsMainModel || (!settings.selectedSmallModelId && !providerSmallModelId) ? { effectiveSmallModel: modelId } : {}),
+  })
+  const updateSmallModel = (modelId: string) => {
+    const trimmed = modelId.trim()
+    update({
+      selectedSmallModelId: trimmed || null,
+      effectiveSmallModel: trimmed || providerSmallModelId || mainModelId || null,
+    })
+  }
+  const useMainModelForSmallModel = () => update({
+    selectedSmallModelId: SMALL_MODEL_USE_MAIN,
+    effectiveSmallModel: mainModelId || null,
+  })
+
   return (
     <div className="flex flex-col gap-5">
       {config.auth.enabled ? (
@@ -115,8 +140,10 @@ export function ModelsPanel({
                 onClick={() => update({
                   selectedProviderId: entry.id,
                   selectedModelId: nextModelId,
+                  selectedSmallModelId: smallModelFollowsMainModel ? SMALL_MODEL_USE_MAIN : null,
                   effectiveProviderId: entry.id,
                   effectiveModel: nextModelId,
+                  effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
                 })}
                 className="text-start rounded-2xl border p-3 transition-colors cursor-pointer"
                 style={{
@@ -184,7 +211,7 @@ export function ModelsPanel({
           <input
             type="text"
             value={settings.effectiveModel || settings.selectedModelId || ''}
-            onChange={(event) => update({ selectedModelId: event.target.value, effectiveModel: event.target.value })}
+            onChange={(event) => updateMainModel(event.target.value)}
             placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
             className={inputCls}
           />
@@ -241,7 +268,7 @@ export function ModelsPanel({
                         </div>
                       )}
                       <button
-                        onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
+                        onClick={() => updateMainModel(model.id)}
                         className="w-full text-start px-3 py-2 border-b border-border-subtle last:border-b-0 cursor-pointer transition-colors"
                         style={{
                           background: isActive ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
@@ -281,7 +308,7 @@ export function ModelsPanel({
               {filteredModels.map((model) => (
                 <button
                   key={model.id}
-                  onClick={() => update({ selectedModelId: model.id, effectiveModel: model.id })}
+                  onClick={() => updateMainModel(model.id)}
                   className="rounded-2xl border px-3 py-3 text-start transition-colors cursor-pointer"
                   style={{
                     background: settings.effectiveModel === model.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
@@ -296,6 +323,55 @@ export function ModelsPanel({
           )}
         </div>
       )}
+
+      {provider ? (
+        <div className="flex flex-col gap-3">
+          <div>
+            <span className={sectionLabelCls}>{t('settings.models.smallModel', 'Small model')}</span>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              {t('settings.models.smallModelDescription', 'OpenCode uses this for lightweight work such as thread titles. Leave it empty to use the provider default, or the selected chat model when no default is configured.')}
+            </div>
+          </div>
+          <div className={panelCardCls}>
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-1.5">
+                <span className={fieldLabelCls}>{t('settings.models.smallModelId', 'Model ID')}</span>
+                <input
+                  type="text"
+                  list={models.length > 0 ? 'open-cowork-small-model-options' : undefined}
+                  value={selectedSmallModelId}
+                  onChange={(event) => updateSmallModel(event.target.value)}
+                  placeholder={providerSmallModelId || mainModelId || t('settings.models.sameAsMainModel', 'Same as main model')}
+                  className={inputCls}
+                />
+              </label>
+              {models.length > 0 ? (
+                <datalist id="open-cowork-small-model-options">
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </datalist>
+              ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-[10px] text-text-muted">
+                  {smallModelUsesMainModel
+                    ? t('settings.models.smallModelUsingMain', 'Using the selected chat model.')
+                    : smallModelUsesProviderDefault
+                      ? t('settings.models.smallModelUsingProviderDefault', 'Using provider default {{model}} for lightweight SDK calls.', { model: effectiveSmallModel })
+                      : t('settings.models.smallModelUsingCustom', 'Using {{model}} for lightweight SDK calls.', { model: effectiveSmallModel })}
+                </div>
+                <button
+                  type="button"
+                  onClick={useMainModelForSmallModel}
+                  className="shrink-0 text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  {t('settings.models.useMainModel', 'Use main model')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

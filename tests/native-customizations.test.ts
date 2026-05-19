@@ -234,6 +234,7 @@ test('custom agent builder selections round-trip through managed sidecar metadat
 
     const markdownPath = join(projectRoot, '.opencowork', 'agents', 'researcher.md')
     const markdown = readFileSync(markdownPath, 'utf-8')
+    assert.match(markdown, /permission:\n {2}task: deny/)
     assert.match(markdown, / {2}skill:\n {4}"\*": deny\n {4}"analyst": allow\n {4}"chart-creator": allow/)
     assert.match(markdown, /open-cowork:runtime-directive:start/)
     assert.match(markdown, /Attached skills: analyst, chart-creator/)
@@ -294,6 +295,7 @@ Use Nova carefully.
 
     const markdown = readFileSync(join(agentsDir, 'analyst.md'), 'utf-8')
     assert.match(markdown, /steps: 20/)
+    assert.match(markdown, /permission:\n {2}task: deny/)
     assert.match(markdown, / {2}skill:\n {4}"\*": deny\n {4}"analyst": allow\n {4}"chart-creator": allow/)
     assert.match(markdown, /open-cowork:runtime-directive:start/)
     assert.match(markdown, /Attached skills: analyst, chart-creator/)
@@ -304,6 +306,65 @@ Use Nova carefully.
     assert.ok(agent)
     assert.equal(agent.instructions, 'Use Nova carefully.')
     assert.deepEqual(agent.skillNames, ['analyst', 'chart-creator'])
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('custom agent runtime guidance preserves explicit task delegation opt-in', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-task-optin-')
+  const agentsDir = join(projectRoot, '.opencowork', 'agents')
+
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(join(agentsDir, 'coordinator.md'), `---
+description: "Coordinates specialist work"
+mode: subagent
+permission:
+  task: allow
+  webfetch: allow
+---
+
+Coordinate carefully.
+`)
+
+  try {
+    syncCustomAgentRuntimeGuidance({ directory: projectRoot })
+
+    const markdown = readFileSync(join(agentsDir, 'coordinator.md'), 'utf-8')
+    assert.match(markdown, /permission:\n {2}task: allow\n {2}webfetch: allow/)
+
+    const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'coordinator')
+    assert.ok(agent)
+    assert.deepEqual(agent.toolIds, ['task', 'webfetch'])
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('custom agent runtime guidance merges inline permission maps without duplicating keys', () => {
+  const projectRoot = testTempDir('opencowork-native-agent-inline-permission-')
+  const agentsDir = join(projectRoot, '.opencowork', 'agents')
+
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(join(agentsDir, 'researcher.md'), `---
+description: "Researches carefully"
+mode: subagent
+permission: { bash: allow, webfetch: ask }
+---
+
+Research carefully.
+`)
+
+  try {
+    syncCustomAgentRuntimeGuidance({ directory: projectRoot })
+
+    const markdown = readFileSync(join(agentsDir, 'researcher.md'), 'utf-8')
+    assert.equal(markdown.match(/^permission:/gm)?.length, 1)
+    assert.match(markdown, /permission:\n {2}bash: allow\n {2}webfetch: ask\n {2}task: deny/)
+
+    const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'researcher')
+    assert.ok(agent)
+    assert.deepEqual(agent.toolIds, ['bash', 'webfetch'])
   } finally {
     rmSync(projectRoot, { recursive: true, force: true })
   }

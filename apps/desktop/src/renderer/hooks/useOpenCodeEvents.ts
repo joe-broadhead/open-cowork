@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { flushSync } from 'react-dom'
 import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { shouldCommitStreamingTextImmediately } from '../../lib/session-streaming-flush.ts'
+
+const STREAM_FLUSH_INTERVAL_MS = 32
 
 let notifyCtx: AudioContext | null = null
 let activeHookMounts = 0
@@ -35,43 +36,28 @@ export function useOpenCodeEvents() {
 
   useEffect(() => {
     activeHookMounts += 1
-    const textBuffers = new Map<string, SessionPatch>()
+    let textBuffers: SessionPatch[] = []
     let frameHandle: number | null = null
-
-    const bufferKey = (part: SessionPatch) =>
-      part.type === 'task_text' || part.type === 'task_reasoning'
-        ? `${part.sessionId}:${part.taskRunId}:${part.segmentId}`
-        : `${part.sessionId}:${part.messageId}:${part.segmentId}`
+    let flushTimer: number | null = null
+    let lastFlushAt = 0
 
     const queueBufferedText = (part: SessionPatch) => {
-      const key = bufferKey(part)
-      const existing = textBuffers.get(key)
-
-      if (!existing || part.mode === 'replace') {
-        textBuffers.set(key, { ...part })
-        return
-      }
-
-      if (existing.mode === 'replace') return
-      existing.content += part.content
-      existing.eventAt = part.eventAt
+      textBuffers.push({ ...part })
     }
 
     const pruneCoveredTextBuffers = (sessionId: string, lastEventAt: number) => {
-      for (const [key, value] of textBuffers.entries()) {
-        if (value.sessionId !== sessionId) continue
-        if (value.eventAt <= lastEventAt) {
-          textBuffers.delete(key)
-        }
-      }
+      textBuffers = textBuffers.filter((buffer) => (
+        buffer.sessionId !== sessionId || buffer.eventAt > lastEventAt
+      ))
     }
 
-    const commitTextPart = (
+    const commitTextParts = (
       store: ReturnType<typeof useSessionStore.getState>,
-      part: SessionPatch,
+      parts: SessionPatch[],
     ) => {
-      if (!part.content) return
-      store.applySessionPatch(part)
+      const visibleParts = parts.filter((part) => part.content)
+      if (visibleParts.length === 0) return
+      store.applySessionPatches(visibleParts)
     }
 
     const shouldCommitTextImmediately = (part: SessionPatch) => {
@@ -80,15 +66,20 @@ export function useOpenCodeEvents() {
     }
 
     const flushTextBuffers = (store: ReturnType<typeof useSessionStore.getState>, sessionId?: string) => {
-      for (const [key, buffer] of textBuffers.entries()) {
-        if (sessionId && buffer.sessionId !== sessionId) continue
-        if (!buffer.content) {
-          textBuffers.delete(key)
+      const parts: SessionPatch[] = []
+      const retained: SessionPatch[] = []
+      for (const buffer of textBuffers) {
+        if (sessionId && buffer.sessionId !== sessionId) {
+          retained.push(buffer)
           continue
         }
-        commitTextPart(store, buffer)
-        textBuffers.delete(key)
+        if (!buffer.content) {
+          continue
+        }
+        parts.push({ ...buffer })
       }
+      textBuffers = retained
+      commitTextParts(store, parts)
     }
 
     const playDoneSound = () => {
@@ -109,26 +100,42 @@ export function useOpenCodeEvents() {
       }
     }
 
-    const flushStreamEvents = () => {
+    const flushStreamEvents = (timestamp: number) => {
       frameHandle = null
-      if (textBuffers.size === 0) return
+      if (textBuffers.length === 0) return
 
-      flushSync(() => {
-        const store = useSessionStore.getState()
-        flushTextBuffers(store)
-      })
+      lastFlushAt = timestamp || performance.now()
+      const store = useSessionStore.getState()
+      flushTextBuffers(store)
     }
 
-    const scheduleEventFlush = () => {
+    const requestFlushFrame = () => {
       if (frameHandle !== null) return
       frameHandle = requestAnimationFrame(flushStreamEvents)
     }
 
+    const scheduleEventFlush = () => {
+      if (frameHandle !== null || flushTimer !== null) return
+
+      const now = performance.now()
+      const waitMs = Math.max(0, STREAM_FLUSH_INTERVAL_MS - (now - lastFlushAt))
+      if (waitMs <= 0) {
+        requestFlushFrame()
+        return
+      }
+
+      flushTimer = window.setTimeout(() => {
+        flushTimer = null
+        requestFlushFrame()
+      }, waitMs)
+    }
+
     const unsubSessionPatch = window.coworkApi.on.sessionPatch((patch: SessionPatch) => {
       if (shouldCommitTextImmediately(patch)) {
-        flushSync(() => {
-          commitTextPart(useSessionStore.getState(), patch)
-        })
+        const store = useSessionStore.getState()
+        flushTextBuffers(store, patch.sessionId)
+        commitTextParts(useSessionStore.getState(), [patch])
+        lastFlushAt = performance.now()
       } else {
         queueBufferedText(patch)
         scheduleEventFlush()
@@ -202,6 +209,9 @@ export function useOpenCodeEvents() {
     return () => {
       if (frameHandle !== null) {
         cancelAnimationFrame(frameHandle)
+      }
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer)
       }
       unsubscribeAll()
       activeHookMounts = Math.max(0, activeHookMounts - 1)

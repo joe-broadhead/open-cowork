@@ -5,6 +5,7 @@ import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
 import { sessionEngine } from './session-engine.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
+import { getSessionRecord } from './session-registry.ts'
 
 export type RuntimeSessionEvent = {
   type?: string
@@ -181,6 +182,19 @@ export function publishSessionView(win: BrowserWindow | null | undefined, sessio
   })
 }
 
+export function publishSessionMetadata(win: BrowserWindow | null | undefined, sessionId: string | null | undefined) {
+  if (!win || win.isDestroyed() || !sessionId) return
+  const record = getSessionRecord(sessionId)
+  if (!record) return
+  win.webContents.send('session:updated', {
+    id: record.id,
+    title: record.title || null,
+    parentSessionId: record.parentSessionId,
+    changeSummary: record.changeSummary,
+    revertedMessageId: record.revertedMessageId,
+  })
+}
+
 export function publishSessionPatch(
   win: BrowserWindow | null | undefined,
   patch: SessionPatch | null | undefined,
@@ -264,6 +278,7 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
             slowData: { sessionId: shortSessionId(sessionId) },
           })
           publishSessionView(pending.win, sessionId)
+          publishSessionMetadata(pending.win, sessionId)
         } catch (err) {
           const message = err instanceof Error
             ? err.message

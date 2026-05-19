@@ -11,10 +11,11 @@ import { cloneCompactionNotice } from './session-view-compaction.ts'
 import {
   nextOrderFrom,
   nowIsoFromTiming,
+  orderAfterSplitBoundary,
   timestampIsoFromTiming,
   type SessionViewTiming,
 } from './session-view-order.ts'
-import { mergeStreamingText } from './session-view-text.ts'
+import { mergeStreamingText, splitReplacementTextByPreviousSegments } from './session-view-text.ts'
 import { cloneTokens, EMPTY_SESSION_TOKENS } from './session-view-tokens.ts'
 
 function appendTaskTranscript(existing: string, incoming: string, options?: { boundary?: boolean }) {
@@ -40,6 +41,22 @@ function sortTaskTranscript(transcript: TaskTranscriptSegment[]) {
   return transcript.slice().sort((a, b) => a.order - b.order)
 }
 
+function splitSegmentPrefix(segmentId: string) {
+  return `${segmentId}:after:`
+}
+
+function latestSplitSegmentId(transcript: TaskTranscriptSegment[], segmentId: string) {
+  let latest: { id: string; order: number } | null = null
+  const prefix = splitSegmentPrefix(segmentId)
+  for (const segment of transcript) {
+    if (!segment.id.startsWith(prefix)) continue
+    if (!latest || segment.order > latest.order) {
+      latest = { id: segment.id, order: segment.order }
+    }
+  }
+  return latest?.id ?? null
+}
+
 export function renderTaskTranscript(transcript: TaskTranscriptSegment[]) {
   return sortTaskTranscript(transcript)
     .map((segment) => segment.content)
@@ -51,16 +68,46 @@ function appendTaskTranscriptSegment(
   transcript: TaskTranscriptSegment[],
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean; replace?: boolean; order?: number },
+  options?: { boundary?: boolean; replace?: boolean; order?: number; splitAfterOrder?: number },
 ) {
   if (!incoming) return transcript
 
-  const existing = transcript.find((segment) => segment.id === segmentId)
-  if (!existing) {
-    return [...transcript, { id: segmentId, content: incoming, order: options?.order ?? nextOrderFrom(transcript) }]
+  if (options?.replace) {
+    const relatedSegments = transcript
+      .filter((segment) => segment.id === segmentId || segment.id.startsWith(splitSegmentPrefix(segmentId)))
+      .sort((left, right) => left.order - right.order)
+    if (relatedSegments.length > 1) {
+      const replacementSegments = splitReplacementTextByPreviousSegments(relatedSegments, incoming)
+      const contentById = new Map(
+        relatedSegments.map((segment, index) => [segment.id, replacementSegments[index] ?? '']),
+      )
+      return transcript.map((segment) => contentById.has(segment.id)
+        ? { ...segment, content: contentById.get(segment.id) || '' }
+        : segment)
+    }
   }
 
-  return transcript.map((segment) => segment.id === segmentId
+  const originalSegment = transcript.find((segment) => segment.id === segmentId)
+  const shouldSplitSegment = Boolean(
+    originalSegment
+    && !options?.replace
+    && options?.splitAfterOrder !== undefined
+    && originalSegment.order <= options.splitAfterOrder,
+  )
+  const targetSegmentId = shouldSplitSegment
+    ? `${segmentId}:after:${options!.splitAfterOrder}`
+    : (!options?.replace ? latestSplitSegmentId(transcript, segmentId) || segmentId : segmentId)
+  const existing = transcript.find((segment) => segment.id === targetSegmentId)
+  if (!existing) {
+    const fallbackOrder = options?.order ?? nextOrderFrom(transcript)
+    return [...transcript, {
+      id: targetSegmentId,
+      content: incoming,
+      order: orderAfterSplitBoundary(fallbackOrder, shouldSplitSegment ? options?.splitAfterOrder : undefined),
+    }]
+  }
+
+  return transcript.map((segment) => segment.id === targetSegmentId
     ? {
         ...segment,
         content: options?.replace ? incoming : appendTaskTranscript(segment.content, incoming, options),
@@ -72,7 +119,7 @@ export function withTaskTranscript(
   taskRun: TaskRun,
   segmentId: string,
   incoming: string,
-  options?: { boundary?: boolean; replace?: boolean; order?: number },
+  options?: { boundary?: boolean; replace?: boolean; order?: number; splitAfterOrder?: number },
 ) {
   const transcript = appendTaskTranscriptSegment(taskRun.transcript, segmentId, incoming, options)
   return {

@@ -188,7 +188,7 @@ export class SessionTaskStateStore {
       return bound || this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
     }
 
-    if (!normalizedTaskRun.childSessionId) {
+    if (!normalizedTaskRun.childSessionId && !isTerminalTaskStatus(normalizedTaskRun.status)) {
       pushUniqueQueueValue(this.pendingTaskRunsByParent, parentQueueKey, normalizedTaskRun.id)
     }
 
@@ -258,6 +258,8 @@ export class SessionTaskStateStore {
     this.taskRuns.set(taskRunId, next)
     if (next.childSessionId) {
       this.childSessionToTaskRunId.set(next.childSessionId, next.id)
+    } else if (isTerminalTaskStatus(next.status)) {
+      this.removePendingTaskRun(next.id)
     }
     return next
   }

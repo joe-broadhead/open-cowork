@@ -451,6 +451,422 @@ test('tool calls and transcript segments share the same sequence space so a sub-
   assert.ok(seg2.order < tool2.order, 'seg-2 must sort before tool-2')
 })
 
+test('streaming text after a task tool call is split into a later transcript segment', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'session-sub-split'
+  const childSessionId = 'child-session-split'
+  const taskRunId = 'task-run-split'
+
+  engine.activateSession(rootSessionId)
+  apply(engine, rootSessionId, {
+    type: 'task_run',
+    id: taskRunId,
+    title: 'Explore directory',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'I will inspect the repo.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'The README confirms the setup.',
+    mode: 'append',
+  })
+
+  const taskRun = engine.getSessionView(rootSessionId).taskRuns.find((task) => task.id === taskRunId)
+  assert.ok(taskRun)
+  assert.equal(taskRun.transcript.length, 2)
+  const tool = taskRun.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(tool)
+  assert.ok(taskRun.transcript[0]!.order < tool.order)
+  assert.ok(tool.order < taskRun.transcript[1]!.order)
+})
+
+test('final task text replacement reconciles split transcript segments without duplication', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'session-sub-split-replace'
+  const childSessionId = 'child-session-split-replace'
+  const taskRunId = 'task-run-split-replace'
+
+  engine.activateSession(rootSessionId)
+  apply(engine, rootSessionId, {
+    type: 'task_run',
+    id: taskRunId,
+    title: 'Explore directory',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.After tool.',
+    mode: 'replace',
+  })
+
+  const taskRun = engine.getSessionView(rootSessionId).taskRuns.find((task) => task.id === taskRunId)
+  const tool = taskRun?.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(taskRun)
+  assert.ok(tool)
+  assert.equal(taskRun.transcript.length, 2)
+  assert.equal(taskRun.transcript[0]?.content, 'Before tool.')
+  assert.equal(taskRun.transcript[1]?.content, 'After tool.')
+  assert.ok(taskRun.transcript[0]!.order < tool.order)
+  assert.ok(tool.order < taskRun.transcript[1]!.order)
+})
+
+test('final task text replacement applies authoritative text when split prefix changes', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'session-sub-split-prefix-replace'
+  const childSessionId = 'child-session-split-prefix-replace'
+  const taskRunId = 'task-run-split-prefix-replace'
+
+  engine.activateSession(rootSessionId)
+  apply(engine, rootSessionId, {
+    type: 'task_run',
+    id: taskRunId,
+    title: 'Explore directory',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool!After tool.',
+    mode: 'replace',
+  })
+
+  const taskRun = engine.getSessionView(rootSessionId).taskRuns.find((task) => task.id === taskRunId)
+  const tool = taskRun?.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(taskRun)
+  assert.ok(tool)
+  assert.equal(taskRun.transcript.length, 2)
+  assert.equal(taskRun.transcript[0]?.content, 'Before tool!')
+  assert.equal(taskRun.transcript[1]?.content, 'After tool.')
+  assert.ok(taskRun.transcript[0]!.order < tool.order)
+  assert.ok(tool.order < taskRun.transcript[1]!.order)
+})
+
+test('final task text replacement preserves post-tool segment when earlier text shortens', () => {
+  const engine = new SessionEngine()
+  const rootSessionId = 'session-sub-split-short-prefix'
+  const childSessionId = 'child-session-split-short-prefix'
+  const taskRunId = 'task-run-split-short-prefix'
+
+  engine.activateSession(rootSessionId)
+  apply(engine, rootSessionId, {
+    type: 'task_run',
+    id: taskRunId,
+    title: 'Explore directory',
+    agent: 'explore',
+    status: 'running',
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+    taskRunId,
+    sourceSessionId: childSessionId,
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, rootSessionId, {
+    type: 'text',
+    taskRunId,
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before After tool.',
+    mode: 'replace',
+  })
+
+  const taskRun = engine.getSessionView(rootSessionId).taskRuns.find((task) => task.id === taskRunId)
+  const tool = taskRun?.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(taskRun)
+  assert.ok(tool)
+  assert.equal(taskRun.transcript.length, 2)
+  assert.equal(taskRun.transcript[0]?.content, 'Before ')
+  assert.equal(taskRun.transcript[1]?.content, 'After tool.')
+  assert.ok(taskRun.transcript[0]!.order < tool.order)
+  assert.ok(tool.order < taskRun.transcript[1]!.order)
+})
+
+test('streaming root text after a root tool call is split into a later message segment', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-root-split'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'I will inspect the repo.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'The README confirms the setup.',
+    mode: 'append',
+  })
+
+  const view = engine.getSessionView(sessionId)
+  const message = view.messages.find((entry) => entry.id === 'msg-live')
+  const tool = view.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(message?.segments)
+  assert.ok(tool)
+  assert.equal(message.segments.length, 2)
+  assert.ok(message.segments[0]!.order < tool.order)
+  assert.ok(tool.order < message.segments[1]!.order)
+})
+
+test('final root text replacement reconciles split message segments without duplication', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-root-split-replace'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.After tool.',
+    mode: 'replace',
+  })
+
+  const view = engine.getSessionView(sessionId)
+  const message = view.messages.find((entry) => entry.id === 'msg-live')
+  const tool = view.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(message?.segments)
+  assert.ok(tool)
+  assert.equal(message.segments.length, 2)
+  assert.equal(message.segments[0]?.content, 'Before tool.')
+  assert.equal(message.segments[1]?.content, 'After tool.')
+  assert.ok(message.segments[0]!.order < tool.order)
+  assert.ok(tool.order < message.segments[1]!.order)
+})
+
+test('final root text replacement applies authoritative text when split prefix changes', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-root-split-prefix-replace'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool!After tool.',
+    mode: 'replace',
+  })
+
+  const view = engine.getSessionView(sessionId)
+  const message = view.messages.find((entry) => entry.id === 'msg-live')
+  const tool = view.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(message?.segments)
+  assert.ok(tool)
+  assert.equal(message.segments.length, 2)
+  assert.equal(message.segments[0]?.content, 'Before tool!')
+  assert.equal(message.segments[1]?.content, 'After tool.')
+  assert.ok(message.segments[0]!.order < tool.order)
+  assert.ok(tool.order < message.segments[1]!.order)
+})
+
+test('final root text replacement preserves post-tool segment when earlier text shortens', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-root-split-short-prefix'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    id: 'tool-live',
+    name: 'read',
+    status: 'complete',
+    input: { path: 'README.md' },
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'After tool.',
+    mode: 'append',
+  })
+  apply(engine, sessionId, {
+    type: 'text',
+    messageId: 'msg-live',
+    partId: 'seg-live',
+    role: 'assistant',
+    content: 'Before After tool.',
+    mode: 'replace',
+  })
+
+  const view = engine.getSessionView(sessionId)
+  const message = view.messages.find((entry) => entry.id === 'msg-live')
+  const tool = view.toolCalls.find((entry) => entry.id === 'tool-live')
+  assert.ok(message?.segments)
+  assert.ok(tool)
+  assert.equal(message.segments.length, 2)
+  assert.equal(message.segments[0]?.content, 'Before ')
+  assert.equal(message.segments[1]?.content, 'After tool.')
+  assert.ok(message.segments[0]!.order < tool.order)
+  assert.ok(tool.order < message.segments[1]!.order)
+})
+
 test('session engine preserves newer streamed state across forced history hydration', () => {
   const engine = new SessionEngine()
   const sessionId = 'session-history-1'
@@ -481,6 +897,57 @@ test('session engine preserves newer streamed state across forced history hydrat
 
   const view = engine.getSessionView(sessionId)
   assert.equal(view.messages[0]?.content, 'Live reply')
+})
+
+test('session engine preserves global history sequence when hydrating messages and task runs', () => {
+  const engine = new SessionEngine()
+  const sessionId = 'session-history-order'
+
+  engine.setSessionFromHistory(sessionId, [
+    {
+      id: 'launch-message',
+      messageId: 'launch-message',
+      partId: 'launch-text',
+      type: 'message',
+      role: 'assistant',
+      content: 'I will delegate this.',
+      timestamp: '2026-05-18T13:42:10.000Z',
+      sequence: 1,
+    },
+    {
+      id: 'child:analyst-child',
+      type: 'task_run',
+      timestamp: '2026-05-18T13:42:12.000Z',
+      sequence: 2,
+      taskRun: {
+        title: 'UK website traffic and conversion analysis',
+        agent: 'business-analyst',
+        status: 'complete',
+        sourceSessionId: 'analyst-child',
+      },
+    },
+    {
+      id: 'final-message',
+      messageId: 'final-message',
+      partId: 'final-text',
+      type: 'message',
+      role: 'assistant',
+      content: 'The analyst finished the work.',
+      timestamp: '2026-05-18T13:46:48.000Z',
+      sequence: 3,
+    },
+  ])
+
+  const view = engine.getSessionView(sessionId)
+  const launch = view.messages.find((message) => message.id === 'launch-message')
+  const final = view.messages.find((message) => message.id === 'final-message')
+  const taskRun = view.taskRuns.find((task) => task.id === 'child:analyst-child')
+
+  assert.ok(launch?.segments?.[0])
+  assert.ok(final?.segments?.[0])
+  assert.ok(taskRun)
+  assert.ok(launch.segments[0].order < taskRun.order)
+  assert.ok(taskRun.order < final.segments[0].order)
 })
 
 test('session engine surfaces pending questions as a first-class waiting state', () => {

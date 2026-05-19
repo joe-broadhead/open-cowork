@@ -8,7 +8,6 @@ import {
   getConfiguredToolAskPatterns,
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
-  getProviderDescriptor,
   expandMcpToolPermissionPatterns,
 } from './config-loader.ts'
 import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings } from './settings.ts'
@@ -288,6 +287,27 @@ function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAct
   return enabled ? web : 'deny'
 }
 
+function stripProviderPrefix(providerId: string, modelId: string | null | undefined) {
+  const trimmed = modelId?.trim()
+  if (!trimmed) return ''
+  const prefix = `${providerId}/`
+  return trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed
+}
+
+function resolveRuntimeSmallModelId(input: {
+  providerId: string
+  selectedModelId: string
+  selectedSmallModelId?: string | null
+  appConfig: ReturnType<typeof getAppConfig>
+}) {
+  const settingsSmallModel = stripProviderPrefix(input.providerId, input.selectedSmallModelId)
+  if (settingsSmallModel) return settingsSmallModel
+  const descriptorSmallModel = input.appConfig.providers.descriptors?.[input.providerId]?.smallModel
+  const customSmallModel = input.appConfig.providers.custom?.[input.providerId]?.smallModel
+  return stripProviderPrefix(input.providerId, descriptorSmallModel || customSmallModel)
+    || input.selectedModelId
+}
+
 function buildRuntimeConfigWithCustomMcpsResult(
   projectDirectory: string | null | undefined,
   customMcps: CustomMcpConfig[],
@@ -304,11 +324,15 @@ function buildRuntimeConfigWithCustomMcpsResult(
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
   const configModel = settings.effectiveModel
     || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
-  const providerDescriptor = getProviderDescriptor(providerId)
-  const modelId = configModel.startsWith(`${providerId}/`) ? configModel.slice(providerId.length + 1) : configModel
-  const fallbackSmallModel = providerDescriptor?.models?.find((model) => model.id !== modelId)?.id || modelId
+  const modelId = stripProviderPrefix(providerId, configModel)
   const modelStr = modelId ? `${providerId}/${modelId}` : `${providerId}`
-  const smallModelStr = fallbackSmallModel ? `${providerId}/${fallbackSmallModel}` : modelStr
+  const smallModelId = resolveRuntimeSmallModelId({
+    providerId,
+    selectedModelId: modelId,
+    selectedSmallModelId: settings.effectiveSmallModel || settings.selectedSmallModelId,
+    appConfig,
+  })
+  const smallModelStr = smallModelId ? `${providerId}/${smallModelId}` : modelStr
 
   const mcpConfig: NonNullable<Config['mcp']> = {}
   const compactionConfig = getAppConfig().compaction

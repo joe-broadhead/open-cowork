@@ -117,7 +117,7 @@ export function ChatView() {
       const item = timeline[index]
       if (!item) return index
       switch (item.kind) {
-        case 'message': return `msg:${item.data.id}`
+        case 'message': return item.key
         case 'tools': return `tools:${item.data[0]?.id || index}`
         case 'task': return `task:${item.data.id}`
         case 'task_group': return `task-group:${item.data[0]?.id || index}`
@@ -404,7 +404,7 @@ function escapeAttributeSelector(value: string) {
 
 function timelineItemKey(item: TimelineItem) {
   switch (item.kind) {
-    case 'message': return `msg:${item.data.id}`
+    case 'message': return item.key
     case 'tools': return `tools:${item.data[0]?.id || 'empty'}`
     case 'task': return `task:${item.data.id}`
     case 'task_group': return `task-group:${item.data[0]?.id || 'empty'}`

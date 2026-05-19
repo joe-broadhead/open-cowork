@@ -65,6 +65,21 @@ export function saveTextExportFile(filePath: string, content: string) {
   writeFileAtomic(filePath, content, { mode: 0o600 })
 }
 
+export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSettings>) {
+  return Boolean(
+    updates.selectedProviderId !== undefined
+    || updates.selectedModelId !== undefined
+    || updates.selectedSmallModelId !== undefined
+    || updates.providerCredentials !== undefined
+    || updates.integrationCredentials !== undefined
+    || updates.integrationEnabled !== undefined
+    || updates.enableBash !== undefined
+    || updates.enableFileWrite !== undefined
+    || updates.runtimeConfigSource !== undefined
+    || updates.runtimeToolingBridgeEnabled !== undefined
+  )
+}
+
 export function registerAppHandlers(context: IpcHandlerContext) {
   subscribeUpdateInstallEvents((event) => {
     const win = context.getMainWindow()
@@ -185,17 +200,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update'), async (_event, updates) => {
     const result = saveSettings(updates)
-    const runtimeSensitiveUpdate = Boolean(
-      updates.selectedProviderId !== undefined
-      || updates.selectedModelId !== undefined
-      || updates.providerCredentials !== undefined
-      || updates.integrationCredentials !== undefined
-      || updates.integrationEnabled !== undefined
-      || updates.enableBash !== undefined
-      || updates.enableFileWrite !== undefined
-      || updates.runtimeConfigSource !== undefined
-      || updates.runtimeToolingBridgeEnabled !== undefined
-    )
+    const runtimeSensitiveUpdate = hasRuntimeSensitiveSettingsUpdate(updates)
 
     if (isSetupComplete(result)) {
       const activeClient = getClient()

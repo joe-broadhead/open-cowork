@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { ensureRuntimeAfterAuthLogin, mergeRuntimeProviderModels } from '../apps/desktop/src/main/ipc/app-handlers.ts'
+import { ensureRuntimeAfterAuthLogin, hasRuntimeSensitiveSettingsUpdate, mergeRuntimeProviderModels } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { clearConfigCaches, getPublicAppConfig } from '../apps/desktop/src/main/config-loader.ts'
 
 test('ensureRuntimeAfterAuthLogin reboots an active runtime after successful sign-in', async () => {
@@ -70,6 +70,12 @@ test('ensureRuntimeAfterAuthLogin does nothing for incomplete or failed auth flo
   })
 
   assert.deepEqual(calls, [])
+})
+
+test('small model changes are runtime-sensitive settings updates', () => {
+  assert.equal(hasRuntimeSensitiveSettingsUpdate({ selectedSmallModelId: 'openrouter/deepseek/deepseek-v4-flash:free' }), true)
+  assert.equal(hasRuntimeSensitiveSettingsUpdate({ selectedSmallModelId: null }), true)
+  assert.equal(hasRuntimeSensitiveSettingsUpdate({ workflowDesktopNotifications: false }), false)
 })
 
 test('mergeRuntimeProviderModels drops provider defaults absent from the live runtime catalog', () => {

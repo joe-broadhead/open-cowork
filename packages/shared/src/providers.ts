@@ -79,6 +79,7 @@ export interface ProviderDescriptor {
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]
   defaultModel?: string
+  smallModel?: string
   connected?: boolean
 }
 

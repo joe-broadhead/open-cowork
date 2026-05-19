@@ -5,6 +5,8 @@ import type {
   ToolTraceConfig,
 } from './tool-trace.js'
 
+export const SMALL_MODEL_USE_MAIN = '__open_cowork_use_main_model__'
+
 export interface BrandThemeTokens {
   base: string
   surface: string
@@ -137,6 +139,7 @@ export interface AppSettings {
   _schemaVersion?: number
   selectedProviderId: string | null
   selectedModelId: string | null
+  selectedSmallModelId?: string | null
   providerCredentials: Record<string, Record<string, string>>
   integrationCredentials: Record<string, Record<string, string>>
   integrationEnabled: Record<string, boolean>
@@ -158,6 +161,7 @@ export interface AppSettings {
 export interface EffectiveAppSettings extends AppSettings {
   effectiveProviderId: string | null
   effectiveModel: string | null
+  effectiveSmallModel?: string | null
 }
 
 export interface AuthState {

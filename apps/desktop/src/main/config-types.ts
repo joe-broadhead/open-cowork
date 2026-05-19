@@ -109,6 +109,7 @@ export type CustomProviderRuntimeConfig = {
   npm: string
   name: string
   defaultModel?: string
+  smallModel?: string
   options?: Record<string, unknown>
   models: Record<string, Record<string, unknown>>
   credentials?: CredentialField[]
@@ -133,6 +134,7 @@ export type ConfiguredProviderDescriptor = {
   name: string
   description: string
   defaultModel?: string
+  smallModel?: string
   options?: Record<string, unknown>
   credentials: CredentialField[]
   models: ProviderModelDescriptor[]

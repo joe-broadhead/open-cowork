@@ -59,9 +59,11 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
 export const MessageBubble = memo(function MessageBubble({
   message,
   streaming = false,
+  actionsEnabled = true,
 }: {
   message: Message
   streaming?: boolean
+  actionsEnabled?: boolean
 }) {
   const isUser = message.role === 'user'
   const hasAttachments = message.attachments && message.attachments.length > 0
@@ -84,7 +86,7 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
         </div>
-        <MessageActions message={message} placement="right" />
+        {actionsEnabled && <MessageActions message={message} placement="right" />}
       </article>
     )
   }
@@ -98,7 +100,11 @@ export const MessageBubble = memo(function MessageBubble({
         />
         {message.content && <MarkdownContent text={message.content} streaming={streaming} />}
       </div>
-      <MessageActions message={message} placement="left" />
+      {actionsEnabled && <MessageActions message={message} placement="left" />}
     </article>
   )
-}, (prev, next) => prev.message === next.message && prev.streaming === next.streaming)
+}, (prev, next) => (
+  prev.message === next.message
+  && prev.streaming === next.streaming
+  && prev.actionsEnabled === next.actionsEnabled
+))

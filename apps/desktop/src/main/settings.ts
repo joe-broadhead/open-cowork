@@ -1,11 +1,12 @@
 import electron from 'electron'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import type {
-  AgentColor,
-  AppSettings,
-  EffectiveAppSettings,
-  RuntimePermissionPolicy,
+import {
+  SMALL_MODEL_USE_MAIN,
+  type AgentColor,
+  type AppSettings,
+  type EffectiveAppSettings,
+  type RuntimePermissionPolicy,
 } from '@open-cowork/shared'
 import {
   getAppConfig,
@@ -120,6 +121,7 @@ function createDefaults(): AppSettings {
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: defaultProvider,
     selectedModelId: defaultProviderDescriptor?.defaultModel || config.providers.defaultModel,
+    selectedSmallModelId: null,
     providerCredentials: {},
     integrationCredentials: {},
     integrationEnabled: {},
@@ -213,6 +215,8 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   if (settings.selectedProviderId === null) update.selectedProviderId = null
   if (typeof settings.selectedModelId === 'string' && Buffer.byteLength(settings.selectedModelId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedModelId = settings.selectedModelId
   if (settings.selectedModelId === null) update.selectedModelId = null
+  if (typeof settings.selectedSmallModelId === 'string' && Buffer.byteLength(settings.selectedSmallModelId, 'utf8') <= MAX_SETTINGS_KEY_BYTES) update.selectedSmallModelId = settings.selectedSmallModelId
+  if (settings.selectedSmallModelId === null) update.selectedSmallModelId = null
   if (settings.providerCredentials !== undefined) update.providerCredentials = normalizeNestedStringMap(settings.providerCredentials)
   if (settings.integrationCredentials !== undefined) update.integrationCredentials = normalizeNestedStringMap(settings.integrationCredentials)
   if (settings.integrationEnabled !== undefined) update.integrationEnabled = normalizeBoolMap(settings.integrationEnabled)
@@ -278,6 +282,9 @@ function migrateLegacySettings(raw: any): AppSettings {
       : typeof raw?.defaultModel === 'string'
         ? raw.defaultModel
         : defaults.selectedModelId,
+    selectedSmallModelId: typeof raw?.selectedSmallModelId === 'string'
+      ? raw.selectedSmallModelId
+      : null,
     providerCredentials: normalizeNestedStringMap(raw?.providerCredentials),
     integrationCredentials: normalizeNestedStringMap(raw?.integrationCredentials),
     integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
@@ -577,6 +584,15 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
   const validSelectedModel = resolveProviderModelSelection(providerId, provider?.models, settings.selectedModelId)
   const fallbackModel = validDefaultModel || provider?.models?.[0]?.id || ''
   const selectedModelId = validSelectedModel || fallbackModel
+  const appConfig = getAppConfig()
+  const configuredSmallModel = provider?.smallModel
+    || appConfig.providers.descriptors?.[providerId || '']?.smallModel
+    || appConfig.providers.custom?.[providerId || '']?.smallModel
+  const validConfiguredSmallModel = resolveProviderModelSelection(providerId, provider?.models, configuredSmallModel)
+  const validSelectedSmallModel = settings.selectedSmallModelId === SMALL_MODEL_USE_MAIN
+    ? selectedModelId
+    : resolveProviderModelSelection(providerId, provider?.models, settings.selectedSmallModelId)
+  const effectiveSmallModel = validSelectedSmallModel || validConfiguredSmallModel || selectedModelId
   const bashPermission = clampRuntimePermissionPolicy(
     settings.enableBash === false ? 'deny' : settings.bashPermission,
     appPermissions.bash,
@@ -594,5 +610,6 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     enableFileWrite: fileWritePermission !== 'deny',
     effectiveProviderId: providerId,
     effectiveModel: selectedModelId,
+    effectiveSmallModel,
   }
 }

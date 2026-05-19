@@ -95,6 +95,7 @@ export function buildProviderDescriptors(
         credentials: builtin.credentials || [],
         models,
         ...(defaultModel ? { defaultModel } : {}),
+        ...(builtin.smallModel ? { smallModel: normalizeProviderModelId(providerId, builtin.smallModel) } : {}),
       }
     }
 
@@ -121,6 +122,7 @@ export function buildProviderDescriptors(
       credentials: custom.credentials || [],
       models,
       ...(defaultModel ? { defaultModel } : {}),
+      ...(custom.smallModel ? { smallModel: normalizeProviderModelId(providerId, custom.smallModel) } : {}),
     }
   })
 }

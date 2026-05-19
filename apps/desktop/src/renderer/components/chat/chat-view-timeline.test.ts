@@ -87,4 +87,100 @@ describe('buildChatTimeline', () => {
 
     expect(timeline.map((item) => item.kind)).toEqual(['tools', 'approval', 'task'])
   })
+
+  it('interleaves root message segments with tool calls by segment order', () => {
+    const timeline = buildChatTimeline({
+      messages: [{
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Before tool.After tool.',
+        segments: [
+          { id: 'segment-before', content: 'Before tool.', order: 1 },
+          { id: 'segment-after', content: 'After tool.', order: 3 },
+        ],
+        order: 1,
+      }],
+      toolCalls: [
+        { id: 'tool-1', name: 'read', input: {}, status: 'complete', order: 2 },
+      ],
+      taskRuns: [],
+      compactions: [],
+      approvals: [],
+      errors: [],
+    })
+
+    expect(timeline.map((item) => item.kind)).toEqual(['message', 'tools', 'message'])
+    expect(timeline[0]).toMatchObject({
+      kind: 'message',
+      key: 'msg:message-1:timeline:segment-before',
+      actionsEnabled: false,
+      data: { id: 'message-1', content: 'Before tool.' },
+    })
+    expect(timeline[1]).toMatchObject({ kind: 'tools', data: [{ id: 'tool-1' }] })
+    expect(timeline[2]).toMatchObject({
+      kind: 'message',
+      key: 'msg:message-1:timeline:segment-after',
+      actionsEnabled: false,
+      data: { id: 'message-1', content: 'After tool.' },
+    })
+    expect(timeline[0].kind === 'message' && timeline[2].kind === 'message' && timeline[0].key !== timeline[2].key).toBe(true)
+  })
+
+  it('preserves whitespace-only segments around interleaved tools', () => {
+    const timeline = buildChatTimeline({
+      messages: [{
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Before tool.\n\nAfter tool.',
+        segments: [
+          { id: 'segment-before', content: 'Before tool.', order: 1 },
+          { id: 'segment-space', content: '\n\n', order: 3 },
+          { id: 'segment-after', content: 'After tool.', order: 4 },
+        ],
+        order: 1,
+      }],
+      toolCalls: [
+        { id: 'tool-1', name: 'read', input: {}, status: 'complete', order: 2 },
+      ],
+      taskRuns: [],
+      compactions: [],
+      approvals: [],
+      errors: [],
+    })
+
+    expect(timeline.map((item) => item.kind)).toEqual(['message', 'tools', 'message'])
+    expect(timeline[2]).toMatchObject({
+      kind: 'message',
+      key: 'msg:message-1:timeline:segment-space',
+      data: { id: 'message-1', content: '\n\nAfter tool.' },
+    })
+  })
+
+  it('keeps adjacent segments from the same message in one timeline bubble', () => {
+    const timeline = buildChatTimeline({
+      messages: [{
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Part one.Part two.',
+        segments: [
+          { id: 'segment-one', content: 'Part one.', order: 1 },
+          { id: 'segment-two', content: 'Part two.', order: 2 },
+        ],
+        order: 1,
+      }],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      approvals: [],
+      errors: [],
+    })
+
+    expect(timeline).toHaveLength(1)
+    expect(timeline[0]).toMatchObject({
+      kind: 'message',
+      key: 'msg:message-1',
+      actionsEnabled: true,
+      data: { id: 'message-1', content: 'Part one.Part two.' },
+    })
+  })
 })

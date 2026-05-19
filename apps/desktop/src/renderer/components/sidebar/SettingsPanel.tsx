@@ -151,6 +151,7 @@ export function SettingsPanel({
       const savedSettings = await window.coworkApi.settings.set({
         selectedProviderId: settings.selectedProviderId,
         selectedModelId: settings.selectedModelId,
+        selectedSmallModelId: settings.selectedSmallModelId ?? null,
         providerCredentials: settings.providerCredentials,
         integrationCredentials: settings.integrationCredentials,
         bashPermission: settings.bashPermission,
