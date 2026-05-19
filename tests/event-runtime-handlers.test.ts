@@ -627,10 +627,7 @@ test('session.updated preserves event-order binding instead of rebinding from me
 
 test('session.error resolves camelCase session ids and nested provider messages', () => {
   const collector = createDispatchCollector()
-  const win = {
-    webContents: { send: () => undefined },
-    isDestroyed: () => false,
-  } as unknown as BrowserWindow
+  const { win, sent } = createWindowSendCollector()
 
   trackParentSession('root-session')
 
@@ -661,6 +658,67 @@ test('session.error resolves camelCase session ids and nested provider messages'
       sourceSessionId: 'root-session',
     },
   })
+  assert.deepEqual(sent, [{
+    channel: 'runtime:notification',
+    data: {
+      type: 'error',
+      sessionId: 'root-session',
+      message: 'Vertex rejected the selected model',
+    },
+  }])
+})
+
+test('session.failure marks child task failed without dropping lineage', () => {
+  const collector = createDispatchCollector()
+  const { win, sent } = createWindowSendCollector()
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+  registerTaskRun({
+    id: 'task-1',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Analyze data',
+    agent: 'analyst',
+    childSessionId: 'child-session',
+    status: 'running',
+  })
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.failure',
+    properties: {
+      sessionID: 'child-session',
+      failure: {
+        message: 'Provider terminated the child session',
+      },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.equal(getTaskRun('task-1')?.status, 'error')
+  assert.equal(getTaskRun('task-1')?.childSessionId, 'child-session')
+  assert.equal(resolveRootSession('child-session'), 'root-session')
+  assert.deepEqual(collector.events[0], {
+    type: 'error',
+    sessionId: 'root-session',
+    data: {
+      type: 'error',
+      message: 'Provider terminated the child session',
+      taskRunId: 'task-1',
+      sourceSessionId: 'child-session',
+    },
+  })
+  assert.deepEqual(sent, [{
+    channel: 'runtime:notification',
+    data: {
+      type: 'error',
+      sessionId: 'root-session',
+      message: 'Provider terminated the child session',
+    },
+  }])
 })
 
 // The widened error extractor should surface payloads whose message lives

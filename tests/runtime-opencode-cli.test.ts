@@ -4,6 +4,9 @@ import { existsSync } from 'fs'
 import { delimiter, dirname } from 'path'
 import {
   applyBundledOpencodeCliEnvironment,
+  getBundledOpencodeSdkVersion,
+  getBundledOpencodeVersion,
+  readBundledOpencodeCliVersion,
   resolveBundledOpencodeCliEnvironment,
 } from '../apps/desktop/src/main/runtime-opencode-cli.ts'
 
@@ -72,4 +75,14 @@ test('resolveBundledOpencodeCliEnvironment allows wrapper fallback in developmen
 
   assert.equal(env.opencodeBinPath, undefined)
   assert.equal(env.path?.split(delimiter).filter(Boolean)[0], '/repo/node_modules/opencode-ai/bin')
+})
+
+test('bundled OpenCode package version helpers resolve installed SDK and CLI versions', async () => {
+  assert.match(getBundledOpencodeSdkVersion() || '', /^\d+\.\d+\.\d+/)
+  assert.match(getBundledOpencodeVersion() || '', /^\d+\.\d+\.\d+/)
+
+  const missingCliVersion = await readBundledOpencodeCliVersion({
+    opencodeBinPath: '/definitely/missing/opencode',
+  })
+  assert.equal(missingCliVersion, getBundledOpencodeVersion())
 })

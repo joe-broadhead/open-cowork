@@ -34,10 +34,19 @@ export interface SessionInfo {
   // When present, the session is currently reverted to the message with this
   // id. Cleared on unrevert. From SDK Session.revert.messageID.
   revertedMessageId?: string | null
+  // Per-session composer defaults. These are intentionally separate from
+  // providerId/modelId, which describe the last model observed in the session.
+  composerModelId?: string | null
+  composerReasoningVariant?: string | null
 }
 
 export interface SessionPromptOptions {
   variant?: string | null
+}
+
+export interface SessionComposerPreferences {
+  modelId?: string | null
+  reasoningVariant?: string | null
 }
 
 export interface SessionChildInfo {

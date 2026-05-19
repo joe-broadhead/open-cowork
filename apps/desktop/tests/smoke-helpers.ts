@@ -356,6 +356,47 @@ async function waitForCdpPage(browser: Browser, timeoutMs = 30_000) {
   throw new Error('Timed out waiting for packaged app renderer page')
 }
 
+async function appBridgeIsReady(page: Page) {
+  try {
+    return await page.evaluate(() => Boolean(
+      document.querySelector('#root')
+      && typeof window.coworkApi?.app?.config === 'function'
+      && typeof window.coworkApi?.settings?.get === 'function',
+    ))
+  } catch {
+    return false
+  }
+}
+
+async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    for (const context of browser.contexts()) {
+      for (const page of context.pages()) {
+        if (page.url().startsWith('devtools://')) continue
+        if (await appBridgeIsReady(page)) return page
+      }
+    }
+    await delay(100)
+  }
+  throw new Error('Timed out waiting for packaged app shell page')
+}
+
+async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    for (const page of app.windows()) {
+      if (await appBridgeIsReady(page)) return page
+    }
+    await Promise.race([
+      app.waitForEvent('window', { timeout: Math.min(250, Math.max(1, deadline - Date.now())) }).catch(() => null),
+      delay(100),
+    ])
+  }
+  const diagnostics = await Promise.all(app.windows().map((page) => getAppShellDiagnostics(page)))
+  throw new Error(`Timed out waiting for Electron app shell page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
+}
+
 async function closeCdpSmokeApp(browser: Browser, port: number) {
   try {
     const cdpSession = await browser.newBrowserCDPSession()
@@ -525,12 +566,8 @@ export async function launchSmokeSession(
     try {
       await waitForCdp(port)
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      const page = await waitForCdpPage(browser)
-      await page.waitForFunction(() => Boolean(
-        document.querySelector('#root')
-        && typeof window.coworkApi?.app?.config === 'function'
-        && typeof window.coworkApi?.settings?.get === 'function',
-      ))
+      await waitForCdpPage(browser)
+      const page = await waitForCdpAppPage(browser)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {
@@ -576,12 +613,8 @@ export async function launchSmokeSession(
       await Promise.race([waitForCdp(port), earlyExit])
       clearEarlyExit()
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      const page = await waitForCdpPage(browser)
-      await page.waitForFunction(() => Boolean(
-        document.querySelector('#root')
-        && typeof window.coworkApi?.app?.config === 'function'
-        && typeof window.coworkApi?.settings?.get === 'function',
-      ))
+      await waitForCdpPage(browser)
+      const page = await waitForCdpAppPage(browser)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {
@@ -617,15 +650,11 @@ export async function launchSmokeSession(
     env: getSmokeEnvironment(paths),
   })
 
-  const page = await app.firstWindow()
+  await app.firstWindow()
   // Wait for the preload to attach `coworkApi` — until that happens any
   // renderer-side test is racing app bootstrap. We also wait for the
   // settings bridge because the bootstrap path below depends on it.
-  await page.waitForFunction(() => Boolean(
-    document.querySelector('#root')
-    && typeof window.coworkApi?.app?.config === 'function'
-    && typeof window.coworkApi?.settings?.get === 'function',
-  ))
+  const page = await waitForElectronAppPage(app)
 
   await bootstrapSmokeSettings(page, appShellTimeoutMs)
 

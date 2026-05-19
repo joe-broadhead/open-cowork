@@ -20,11 +20,23 @@ import {
   sweepSessionScopedMessageState,
 } from './event-message-handlers.ts'
 import { handleRuntimeSideEffectEvent } from './event-runtime-handlers.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 export { removeParentSession } from './event-runtime-handlers.ts'
 
+const UNKNOWN_EVENT_LOG_INTERVAL_MS = 60_000
+const unknownEventLastLoggedAt = new Map<string, number>()
+
 function dispatchRuntimeEvent(win: BrowserWindow, event: RuntimeSessionEvent) {
   dispatchRuntimeSessionEvent(win, event)
+}
+
+function logUnknownRuntimeEvent(type: string, scopeLabel: string) {
+  const now = Date.now()
+  const lastLoggedAt = unknownEventLastLoggedAt.get(type) || 0
+  if (now - lastLoggedAt < UNKNOWN_EVENT_LOG_INTERVAL_MS) return
+  unknownEventLastLoggedAt.set(type, now)
+  log('events', `Unknown OpenCode event type${scopeLabel}: ${type}`)
 }
 
 export async function subscribeToEvents(
@@ -91,13 +103,15 @@ export async function subscribeToEvents(
           }
 
           default:
-            handleRuntimeSideEffectEvent({
+            if (!handleRuntimeSideEffectEvent({
               win,
               type: data.type,
               properties: data.properties,
               dispatchRuntimeEvent,
               getMainWindow,
-            })
+            })) {
+              logUnknownRuntimeEvent(data.type, scopeLabel)
+            }
             break
         }
       } catch (err) {
@@ -144,7 +158,7 @@ export async function getMcpStatus(client: OpencodeClient) {
     log('mcp', `Status: ${parts.join(' ')}`)
     return entries
   } catch (err) {
-    log('error', `mcp.status() failed: ${err instanceof Error ? err.message : String(err)}`)
+    log('error', `mcp.status() failed: ${sdkErrorMessage(err)}`)
     return []
   }
 }

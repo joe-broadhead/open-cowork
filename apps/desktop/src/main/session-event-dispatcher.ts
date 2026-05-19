@@ -192,6 +192,8 @@ export function publishSessionMetadata(win: BrowserWindow | null | undefined, se
     parentSessionId: record.parentSessionId,
     changeSummary: record.changeSummary,
     revertedMessageId: record.revertedMessageId,
+    composerModelId: record.composerModelId,
+    composerReasoningVariant: record.composerReasoningVariant,
   })
 }
 

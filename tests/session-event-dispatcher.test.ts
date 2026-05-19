@@ -203,6 +203,8 @@ test('history refresh publishes SDK-owned session metadata after registry sync',
         parentSessionId: null,
         changeSummary: null,
         revertedMessageId: null,
+        composerModelId: null,
+        composerReasoningVariant: null,
       },
     )
   } finally {

@@ -28,7 +28,11 @@ import {
 } from './runtime-paths.ts'
 import { getAdcPathIfAvailable, getAuthState } from './auth.ts'
 import { getEffectiveSettings, getProviderCredentialValue } from './settings.ts'
-import { applyBundledOpencodeCliEnvironment } from './runtime-opencode-cli.ts'
+import {
+  applyBundledOpencodeCliEnvironment,
+  getBundledOpencodeSdkVersion,
+  readBundledOpencodeCliVersion,
+} from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfigForRuntime } from './runtime-config-builder.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
@@ -40,6 +44,7 @@ import {
   createManagedOpencodeServerAuth,
   type ManagedOpencodeServerAuth,
   type ManagedOpencodeServerLogLevel,
+  type ManagedOpencodeServerUnexpectedExit,
 } from './runtime-managed-server.ts'
 import { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
 import {
@@ -49,6 +54,8 @@ import {
   terminateManagedRuntimePid,
 } from './runtime-process-cleanup.ts'
 import { MAX_DIRECTORY_CLIENTS, runtimeState } from './runtime-state.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
+import { asRecord, readString } from './normalizer-utils.ts'
 
 export { getRuntimeHomeDir } from './runtime-paths.ts'
 export { buildManagedRuntimeEnvironment } from './runtime-environment.ts'
@@ -76,6 +83,16 @@ type RuntimeStartupPlan = {
 type CreateOpencodeOptions = OpencodeServerOptions & {
   timeout?: number
   logLevel?: ManagedOpencodeServerLogLevel
+}
+
+type StartRuntimeOptions = {
+  onUnexpectedExit?: ((event: ManagedOpencodeServerUnexpectedExit) => void) | null
+}
+
+type AppInfoCapableClient = {
+  app?: {
+    info?: () => Promise<{ data?: unknown }>
+  }
 }
 
 async function refreshAccessTokenLazy() {
@@ -231,7 +248,7 @@ async function syncProviderApiAuth(c: V2OpencodeClient) {
       await c.auth.set({ providerID, auth }, { throwOnError: true })
       log('provider', `Synced OpenCode API auth for ${providerID}`)
     } catch (err) {
-      log('provider', `Could not sync OpenCode API auth for ${providerID}: ${err instanceof Error ? err.message : String(err)}`)
+      log('provider', `Could not sync OpenCode API auth for ${providerID}: ${sdkErrorMessage(err)}`)
     }
   }))
 }
@@ -284,6 +301,7 @@ async function createManagedOpencode(
   options: OpencodeServerOptions & { logLevel?: ManagedOpencodeServerLogLevel },
   opencodeBinPath?: string | null,
   runtimeConfigSource: RuntimeConfigSource = 'app',
+  onUnexpectedExit?: ((event: ManagedOpencodeServerUnexpectedExit) => void) | null,
 ) {
   const runtimePaths = getRuntimeEnvPathsForSource(runtimeConfigSource)
   // Forward the app-level Google OAuth session as ADC to the OpenCode
@@ -305,6 +323,10 @@ async function createManagedOpencode(
     ...options,
     cwd: getRuntimeWorkingDirectoryForSource(runtimeConfigSource),
     env,
+    onUnexpectedExit: (event) => {
+      log('runtime', `Managed OpenCode server exited unexpectedly: code=${event.code ?? 'null'} signal=${event.signal ?? 'null'}`)
+      onUnexpectedExit?.(event)
+    },
     opencodeBinPath,
   })
   const managedClient = createOpencodeClient(buildManagedOpencodeClientConfig(server.url, auth))
@@ -344,8 +366,32 @@ async function fetchModelInfo(c: V2OpencodeClient) {
     log('runtime', `Loaded model info: ${Object.keys(modelInfo.pricing).length} models with pricing, ${Object.keys(modelInfo.contextLimits).length} with context limits`)
   } catch (err) {
     runtimeState.setCachedModelInfo(configuredFallbacks)
-    log('runtime', `Could not fetch model info: ${err instanceof Error ? err.message : String(err)}`)
+    log('runtime', `Could not fetch model info: ${sdkErrorMessage(err)}`)
   }
+}
+
+async function readSdkAppInfoVersion(client: V2OpencodeClient) {
+  const appInfo = (client as unknown as AppInfoCapableClient).app?.info
+  if (!appInfo) return null
+  try {
+    const result = await appInfo()
+    const data = asRecord(result.data)
+    const info = asRecord(data.info)
+    return readString(data.version) || readString(info.version)
+  } catch {
+    return null
+  }
+}
+
+async function logRuntimeVersions(
+  client: V2OpencodeClient,
+  bundledOpencodeEnv: ReturnType<typeof applyBundledOpencodeCliEnvironment>,
+) {
+  const sdkVersion = getBundledOpencodeSdkVersion() || 'unknown'
+  const appInfoVersion = await readSdkAppInfoVersion(client)
+  const cliVersion = appInfoVersion || await readBundledOpencodeCliVersion(bundledOpencodeEnv)
+  const source = appInfoVersion ? 'sdk app.info' : 'cli --version'
+  log('runtime', `OpenCode runtime versions: sdk=${sdkVersion} cli=${cliVersion || 'unknown'} source=${source}`)
 }
 
 async function prepareRuntimeSandbox(plan: RuntimeStartupPlan) {
@@ -474,7 +520,10 @@ export async function getModelInfoAsync() {
   return getModelInfo()
 }
 
-export async function startRuntime(projectDirectory?: string | null): Promise<V2OpencodeClient> {
+export async function startRuntime(
+  projectDirectory?: string | null,
+  options: StartRuntimeOptions = {},
+): Promise<V2OpencodeClient> {
   const existingClient = runtimeState.getClient()
   if (existingClient) return existingClient
   const existingStart = runtimeState.getStartRuntimePromise()
@@ -499,9 +548,11 @@ export async function startRuntime(projectDirectory?: string | null): Promise<V2
         buildManagedServerOptions(config),
         bundledOpencodeEnv.opencodeBinPath,
         plan.runtimeConfigSource,
+        options.onUnexpectedExit,
       )
 
       await registerStartedRuntime(result, plan)
+      await logRuntimeVersions(result.client, bundledOpencodeEnv)
       log('runtime', `OpenCode server started at ${result.server.url}`)
       return result.client
     } catch (err) {

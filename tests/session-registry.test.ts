@@ -7,9 +7,11 @@ import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   clearSessionRegistryCache,
+  flushSessionRegistryWrites,
   listSessionRecords,
   removeSessionRecord,
   toSessionRecord,
+  updateSessionRecord,
   upsertSessionRecord,
 } from '../apps/desktop/src/main/session-registry.ts'
 
@@ -73,6 +75,44 @@ test('removeSessionRecord persists deletions immediately', () => {
     const registryPath = join(userDataDir, 'sessions.json')
     const records = JSON.parse(readFileSync(registryPath, 'utf8')) as Array<{ id: string }>
     assert.equal(records.some((record) => record.id === sessionId), false, 'expected the deleted session id to be removed from disk immediately')
+  } finally {
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('session composer preferences persist separately from last-used model', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('composer-prefs')
+  const sessionId = `session-composer-${Date.now()}`
+
+  try {
+    resetRegistryTestState(userDataDir)
+
+    upsertSessionRecord(toSessionRecord({
+      id: sessionId,
+      title: 'Composer prefs',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      providerId: 'openrouter',
+      modelId: 'openrouter/model-last-used',
+      composerModelId: 'openrouter/model-composer',
+      composerReasoningVariant: 'xhigh',
+    }))
+    updateSessionRecord(sessionId, {
+      modelId: 'openrouter/model-last-used-after-prompt',
+    })
+    flushSessionRegistryWrites()
+    clearSessionRegistryCache()
+
+    const record = listSessionRecords().find((entry) => entry.id === sessionId)
+    assert.equal(record?.modelId, 'openrouter/model-last-used-after-prompt')
+    assert.equal(record?.composerModelId, 'openrouter/model-composer')
+    assert.equal(record?.composerReasoningVariant, 'xhigh')
   } finally {
     clearSessionRegistryCache()
     clearConfigCaches()

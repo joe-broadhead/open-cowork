@@ -17,7 +17,7 @@ import {
   readRuntimeSessionId,
 } from './runtime-event-normalizers.ts'
 import type { RuntimeSessionEvent } from './session-event-dispatcher.ts'
-import { dropSessionFromDispatcherQueues } from './session-event-dispatcher.ts'
+import { dropSessionFromDispatcherQueues, publishNotification } from './session-event-dispatcher.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { touchSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { sessionEngine } from './session-engine.ts'
@@ -346,13 +346,15 @@ export function handleRuntimeSideEffectEvent(input: {
         }
         if (info.title) patch.title = info.title
         if (info.parentID) patch.parentSessionId = info.parentID
-        updateSessionRecord(info.id, patch)
+        const updated = updateSessionRecord(info.id, patch)
         win.webContents.send('session:updated', {
           id: info.id,
           title: info.title || null,
           parentSessionId: info.parentID,
           changeSummary: info.summary,
           revertedMessageId: info.revertedMessageId,
+          composerModelId: updated?.composerModelId,
+          composerReasoningVariant: updated?.composerReasoningVariant,
         })
       }
       return true
@@ -400,17 +402,20 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
-    case 'session.error': {
+    case 'session.error':
+    case 'session.failure': {
       const actualSessionId = readRuntimeSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
       const error = asRecord(readRecordValue(properties, 'error'))
+      const failure = asRecord(readRecordValue(properties, 'failure'))
+      const errorPayload = Object.keys(error).length > 0 ? error : failure
       if (!rootSessionId) return true
 
       forgetSubmittedPrompt(rootSessionId)
       touchSessionRecord(rootSessionId)
       stopSessionStatusReconciliation(rootSessionId)
-      const message = extractRuntimeErrorMessage(properties, error)
-      log('error', `Session error: ${message}`)
+      const message = extractRuntimeErrorMessage(properties, errorPayload)
+      log('error', `Session ${type === 'session.failure' ? 'failure' : 'error'}: ${message}`)
 
       const taskRunId = actualSessionId && actualSessionId !== rootSessionId
         ? (getTaskRunIdForChild(actualSessionId)
@@ -426,6 +431,7 @@ export function handleRuntimeSideEffectEvent(input: {
         sessionId: rootSessionId,
         data: { type: 'error', message, taskRunId, sourceSessionId: actualSessionId },
       })
+      publishNotification(win, { type: 'error', sessionId: rootSessionId, message })
       runRuntimeSideEffect('workflow session error handling', () => handleWorkflowSessionError(rootSessionId, message))
       return true
     }

@@ -14,6 +14,7 @@ import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../session-registry.ts'
 import { getThreadIndexService } from '../thread-index-service.ts'
+import { sdkErrorMessage } from '../sdk-error.ts'
 
 export function registerSessionActionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:export', async (_event, sessionIdInput: unknown) => {
@@ -92,7 +93,7 @@ export function registerSessionActionHandlers(context: IpcHandlerContext) {
       return { ok: true as const }
     } catch (err) {
       context.logHandlerError(`session:summarize ${shortSessionId(sessionId)}`, err)
-      const message = err instanceof Error ? err.message : String(err)
+      const message = sdkErrorMessage(err)
       return { ok: false as const, message }
     }
   })

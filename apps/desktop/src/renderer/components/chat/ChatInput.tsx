@@ -69,8 +69,42 @@ export function ChatInput() {
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
     [currentSessionId, sessions],
   )
-  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
-  const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels)
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.id === currentSessionId) || null,
+    [currentSessionId, sessions],
+  )
+  const setSessionComposerPreferences = useSessionStore((s) => s.setSessionComposerPreferences)
+  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(currentSession)
+  const saveComposerPreferences = useCallback((preferences: {
+    modelId?: string | null
+    reasoningVariant?: string | null
+  }) => {
+    if (!currentSessionId) return
+    setSessionComposerPreferences(currentSessionId, preferences)
+    void window.coworkApi.session.setComposerPreferences(currentSessionId, preferences).catch((error) => {
+      const rollback = currentSession
+        ? {
+            ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
+              ? { modelId: currentSession.composerModelId ?? null }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')
+              ? { reasoningVariant: currentSession.composerReasoningVariant ?? null }
+              : {}),
+          }
+        : preferences
+      setSessionComposerPreferences(currentSessionId, rollback)
+      reportComposerError(
+        t('chat.composerPreferencesSaveFailed', 'Could not save this thread’s composer settings. Please try again.'),
+        'Failed to save session composer preferences',
+        error,
+        addGlobalError,
+      )
+    })
+  }, [addGlobalError, currentSession, currentSessionId, setSessionComposerPreferences])
+  const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels, {
+    selectedVariant: currentSession?.composerReasoningVariant ?? null,
+    onVariantChange: (variant) => saveComposerPreferences({ reasoningVariant: variant }),
+  })
   const specialistAgents = useMentionableAgents(currentProjectDirectory)
 
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
@@ -440,20 +474,9 @@ export function ChatInput() {
         currentModel={currentModel}
         onClose={() => setShowModelMenu(false)}
         onSelect={async (modelId) => {
-          const previousModel = currentModel
           setCurrentModel(modelId)
           setShowModelMenu(false)
-          try {
-            await window.coworkApi.settings.set({ selectedModelId: modelId })
-          } catch (error) {
-            setCurrentModel(previousModel)
-            reportComposerError(
-              t('chat.modelSaveFailed', 'Could not save the selected model. Please try again.'),
-              'Failed to save selected model',
-              error,
-              addGlobalError,
-            )
-          }
+          saveComposerPreferences({ modelId })
         }}
       />
       <ChatInputReasoningMenu

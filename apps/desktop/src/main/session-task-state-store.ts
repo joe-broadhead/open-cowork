@@ -182,6 +182,13 @@ export class SessionTaskStateStore {
     this.taskRuns.set(normalizedTaskRun.id, normalizedTaskRun)
     const parentQueueKey = normalizedTaskRun.parentSessionId || normalizedTaskRun.rootSessionId
 
+    if (normalizedTaskRun.childSessionId) {
+      this.childSessionToTaskRunId.set(normalizedTaskRun.childSessionId, normalizedTaskRun.id)
+      this.removePendingTaskRun(normalizedTaskRun.id)
+      this.removeQueuedChildSession(normalizedTaskRun.childSessionId)
+      return normalizedTaskRun
+    }
+
     const queuedChild = this.takeQueuedChildSession(parentQueueKey)
     if (queuedChild) {
       const bound = this.bindTaskRunToChild(normalizedTaskRun.id, queuedChild.id)

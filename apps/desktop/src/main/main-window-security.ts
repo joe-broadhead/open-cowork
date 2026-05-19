@@ -30,7 +30,7 @@ export function openExternalNavigation(url: string) {
 function rendererNavigationIsAllowed(
   contents: WebContents,
   url: string,
-  expectedRendererEntryPath: string,
+  expectedRendererEntryPath: string | readonly string[],
   devServerUrl?: string | null,
 ) {
   if (devServerUrl && rendererUrlMatchesDevServer(url, devServerUrl)) return true
@@ -42,7 +42,7 @@ function rendererNavigationIsAllowed(
 
 export function attachWebContentsSecurityGuards(
   contents: WebContents,
-  expectedRendererEntryPath: string,
+  expectedRendererEntryPath: string | readonly string[],
   devServerUrl?: string | null,
 ) {
   if (guardedWebContents.has(contents)) return

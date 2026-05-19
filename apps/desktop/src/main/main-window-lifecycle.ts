@@ -20,11 +20,13 @@ export function rendererUrlLooksWrong(url: string, devServerUrl?: string | null)
   return url.endsWith('.js') || url.includes('/assets/') || !url.endsWith('/index.html')
 }
 
-export function isExpectedPackagedRendererFile(url: string, expectedRendererPath: string) {
+export function isExpectedPackagedRendererFile(url: string, expectedRendererPath: string | readonly string[]) {
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== 'file:') return false
-    return resolve(fileURLToPath(parsed)) === resolve(expectedRendererPath)
+    const actualPath = resolve(fileURLToPath(parsed))
+    const expectedPaths = Array.isArray(expectedRendererPath) ? expectedRendererPath : [expectedRendererPath]
+    return expectedPaths.some((path) => actualPath === resolve(path))
   } catch {
     return false
   }
@@ -45,7 +47,7 @@ export function rendererUrlMatchesDevServer(rawUrl: string, devServerUrl: string
 export function isTrustedRendererIpcUrl(options: {
   rawUrl: string
   devServerUrl?: string | null
-  expectedRendererPath: string
+  expectedRendererPath: string | readonly string[]
 }) {
   if (!options.rawUrl) return false
   if (options.devServerUrl && rendererUrlMatchesDevServer(options.rawUrl, options.devServerUrl)) return true

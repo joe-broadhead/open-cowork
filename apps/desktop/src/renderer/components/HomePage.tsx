@@ -3,6 +3,7 @@ import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@ope
 import { useSessionStore } from '../stores/session'
 import { formatAgentLabel } from '../helpers/agent-label'
 import { formatDate, t } from '../helpers/i18n'
+import { summarizeMcpConnections } from '../helpers/mcp-status-summary'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
 import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
 import { ChatInputModelMenu } from './chat/ChatInputModelMenu'
@@ -533,8 +534,9 @@ function RecentThreads({ threads, onOpen }: {
 
 function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
-  const connected = mcpConnections.filter((conn) => conn.connected).length
-  const total = mcpConnections.length
+  const summary = summarizeMcpConnections(mcpConnections)
+  const connected = summary.connected.length
+  const total = summary.total
 
   return (
     <div

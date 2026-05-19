@@ -12,6 +12,7 @@ import type {
   RuntimeNotification,
   SessionChangeSummary,
   SessionChildInfo,
+  SessionComposerPreferences,
   SessionFileDiff,
   SessionInfo,
   SessionPromptOptions,
@@ -23,8 +24,10 @@ import type {
   PerfSnapshot,
   RuntimeContextOptions,
   RuntimeInputDiagnostics,
+  RuntimeLoadingStatus,
   RuntimeStatus,
   RuntimeToolDescriptor,
+  RecentProject,
   ToolListOptions,
 } from './runtime.js'
 import type {
@@ -125,6 +128,7 @@ export interface CoworkAPI {
     create: (directory?: string) => Promise<SessionInfo>
     activate: (sessionId: string, options?: { force?: boolean }) => Promise<SessionView>
     prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string, options?: SessionPromptOptions) => Promise<void>
+    setComposerPreferences: (sessionId: string, preferences: SessionComposerPreferences) => Promise<SessionInfo | null>
     list: () => Promise<SessionInfo[]>
     get: (id: string) => Promise<SessionInfo | null>
     abort: (sessionId: string) => Promise<void>
@@ -222,10 +226,15 @@ export interface CoworkAPI {
   }
   runtime: {
     status: () => Promise<RuntimeStatus>
+    awaitInitialization: () => Promise<RuntimeLoadingStatus>
     // User-initiated OpenCode runtime restart, called from the
     // offline banner. Returns the post-reboot status so the banner
     // can update without a second round-trip.
     restart: () => Promise<RuntimeStatus>
+  }
+  projects: {
+    list: () => Promise<RecentProject[]>
+    switchByIndex: (index: number) => Promise<SessionInfo | null>
   }
   diagnostics: {
     perf: () => Promise<PerfSnapshot>
@@ -342,12 +351,15 @@ export interface CoworkAPI {
     menuAction: (callback: (action: string) => void) => () => void
     menuNavigate: (callback: (view: string) => void) => () => void
     runtimeReady: (callback: () => void) => () => void
+    runtimeLoadingStatus: (callback: (status: RuntimeLoadingStatus) => void) => () => void
     sessionUpdated: (callback: (data: {
       id: string
       title: string | null
       parentSessionId?: string | null
       changeSummary?: SessionChangeSummary | null
       revertedMessageId?: string | null
+      composerModelId?: string | null
+      composerReasoningVariant?: string | null
     }) => void) => () => void
     sessionDeleted: (callback: (data: { id: string }) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void

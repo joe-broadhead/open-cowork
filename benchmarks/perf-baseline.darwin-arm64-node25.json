@@ -1,0 +1,98 @@
+{
+  "generatedAt": "2026-05-19T14:29:26.990Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v25.4.0"
+  },
+  "suiteRuns": 5,
+  "regressionThresholds": {
+    "avgMultiplier": 1.2,
+    "p95Multiplier": 1.25,
+    "avgAbsoluteFloorMs": 0.5,
+    "p95AbsoluteFloorMs": 0.8
+  },
+  "benchmarks": [
+    {
+      "name": "history.project.large",
+      "iterations": 10,
+      "minMs": 0.34,
+      "maxMs": 0.68,
+      "avgMs": 0.39,
+      "p50Ms": 0.37,
+      "p95Ms": 0.46
+    },
+    {
+      "name": "engine.hydrate.large",
+      "iterations": 24,
+      "minMs": 0.25,
+      "maxMs": 1.43,
+      "avgMs": 0.32,
+      "p50Ms": 0.31,
+      "p95Ms": 0.39
+    },
+    {
+      "name": "engine.view.large",
+      "iterations": 30,
+      "minMs": 0.19,
+      "maxMs": 0.29,
+      "avgMs": 0.21,
+      "p50Ms": 0.21,
+      "p95Ms": 0.24
+    },
+    {
+      "name": "engine.stream.mixed",
+      "iterations": 20,
+      "minMs": 0.63,
+      "maxMs": 0.86,
+      "avgMs": 0.7,
+      "p50Ms": 0.69,
+      "p95Ms": 0.76
+    },
+    {
+      "name": "runtime.permission.downstreamCatalog",
+      "iterations": 24,
+      "minMs": 0.02,
+      "maxMs": 0.04,
+      "avgMs": 0.02,
+      "p50Ms": 0.02,
+      "p95Ms": 0.03
+    },
+    {
+      "name": "agents.catalog.downstreamCatalog",
+      "iterations": 18,
+      "minMs": 0.15,
+      "maxMs": 0.34,
+      "avgMs": 0.2,
+      "p50Ms": 0.18,
+      "p95Ms": 0.3
+    },
+    {
+      "name": "capabilities.map.downstreamCatalog",
+      "iterations": 30,
+      "minMs": 0.35,
+      "maxMs": 1.03,
+      "avgMs": 0.4,
+      "p50Ms": 0.38,
+      "p95Ms": 0.54
+    },
+    {
+      "name": "agents.preview.downstreamCatalog",
+      "iterations": 30,
+      "minMs": 0,
+      "maxMs": 0.17,
+      "avgMs": 0.01,
+      "p50Ms": 0,
+      "p95Ms": 0.01
+    },
+    {
+      "name": "threads.search.downstreamHistory",
+      "iterations": 24,
+      "minMs": 19.81,
+      "maxMs": 25.21,
+      "avgMs": 20.49,
+      "p50Ms": 20.25,
+      "p95Ms": 20.92
+    }
+  ]
+}

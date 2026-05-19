@@ -65,6 +65,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        loading: resolve(__dirname, 'loading.html'),
         chartFrame: resolve(__dirname, 'chart-frame.html'),
       },
       output: {
@@ -97,6 +98,17 @@ export default defineConfig({
             outDir: 'dist/main',
             rollupOptions: {
               external: ['electron', 'google-auth-library', 'vega', 'vega-lite', 'node:sqlite'],
+            },
+          },
+        },
+      },
+      {
+        entry: 'src/main/runtime-managed-server-supervisor.ts',
+        vite: {
+          build: {
+            outDir: 'dist/main',
+            rollupOptions: {
+              external: ['electron'],
             },
           },
         },

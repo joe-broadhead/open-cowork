@@ -1,6 +1,7 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo, useState } from 'react'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import type { Session } from '../../stores/session'
 import type { Attachment, ChatInputModelEntry, InlinePickerState, MentionableAgent } from './chat-input-types'
 import { formatAgentLabel } from '../../helpers/agent-label.ts'
 import { ensureAttachmentId } from './chat-input-utils.ts'
@@ -26,18 +27,21 @@ function reportChatSettingsError(error: unknown) {
   }
 }
 
-export function useChatRuntimeSelection() {
-  const [currentModel, setCurrentModel] = useState('')
+export function useChatRuntimeSelection(session?: Session | null) {
+  const [settingsModel, setSettingsModel] = useState('')
+  const [localModelOverride, setLocalModelOverride] = useState<string | null>(null)
   const [provider, setProvider] = useState('')
   const [availableModels, setAvailableModels] = useState<ModelCatalog>({})
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
+  const sessionId = session?.id || null
+  const sessionModel = session?.composerModelId || null
 
   useEffect(() => {
     let disposed = false
     const refreshRuntimeSelection = () => {
       Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
         if (disposed) return
-        setCurrentModel(settings.effectiveModel || settings.selectedModelId || '')
+        setSettingsModel(settings.effectiveModel || settings.selectedModelId || '')
         setProvider(settings.effectiveProviderId || '')
         setAvailableModels(Object.fromEntries(
           config.providers.available.map((entry) => [
@@ -66,17 +70,31 @@ export function useChatRuntimeSelection() {
     }
   }, [addGlobalError])
 
+  useEffect(() => {
+    setLocalModelOverride(null)
+  }, [sessionId, sessionModel])
+
   return {
-    currentModel,
-    setCurrentModel,
+    currentModel: localModelOverride || sessionModel || settingsModel,
+    setCurrentModel: setLocalModelOverride,
     provider,
     availableModels,
   }
 }
 
-export function useReasoningVariantSelection(provider: string, currentModel: string, availableModels: ModelCatalog) {
-  const reasoningVariant = useSessionStore((s) => s.reasoningVariant)
-  const setReasoningVariant = useSessionStore((s) => s.setReasoningVariant)
+export function useReasoningVariantSelection(
+  provider: string,
+  currentModel: string,
+  availableModels: ModelCatalog,
+  options: {
+    selectedVariant?: string | null
+    onVariantChange?: (variant: string | null) => void
+  } = {},
+) {
+  const storeReasoningVariant = useSessionStore((s) => s.reasoningVariant)
+  const setStoreReasoningVariant = useSessionStore((s) => s.setReasoningVariant)
+  const reasoningVariant = options.selectedVariant === undefined ? storeReasoningVariant : options.selectedVariant
+  const setReasoningVariant = options.onVariantChange || setStoreReasoningVariant
   const currentModelEntry = useMemo(
     () => (availableModels[provider] || []).find((model) => model.id === currentModel) || null,
     [availableModels, currentModel, provider],
@@ -95,10 +113,10 @@ export function useReasoningVariantSelection(provider: string, currentModel: str
   )
 
   useEffect(() => {
-    if (reasoningVariant && !reasoningVariants.includes(reasoningVariant)) {
+    if (reasoningVariant && currentModelEntry && !reasoningVariants.includes(reasoningVariant)) {
       setReasoningVariant(null)
     }
-  }, [reasoningVariant, reasoningVariants, setReasoningVariant])
+  }, [currentModelEntry, reasoningVariant, reasoningVariants, setReasoningVariant])
 
   return {
     supportsReasoning,

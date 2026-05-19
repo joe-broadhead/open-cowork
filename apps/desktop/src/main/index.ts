@@ -18,12 +18,18 @@ import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
 import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow-service.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
+import {
+  configureRuntimeInitialization,
+  resolveRuntimeInitializationError,
+  resolveRuntimeInitializationReady,
+  setRuntimeInitializationPhase,
+} from './runtime-initialization.ts'
 import { registerRuntimeDirectoryEnsurer } from './runtime-context.ts'
 import { pruneOldUnreferencedSandboxStorage } from './sandbox-storage.ts'
 import { projectHasOverlayContent } from './runtime-project-overlay.ts'
 import { syncReadableSkillMirror } from './runtime-skill-catalog.ts'
 import { attachContentSecurityPolicy } from './content-security-policy.ts'
-import { effectiveRendererDevServerUrl, rendererUrlLooksWrong } from './main-window-lifecycle.ts'
+import { effectiveRendererDevServerUrl } from './main-window-lifecycle.ts'
 import {
   createRuntimeEventSubscriptionManager,
 } from './event-subscriptions.ts'
@@ -76,8 +82,11 @@ if (!hasSingleInstanceLock) {
 }
 
 const {
+  closeLoadingWindow,
+  createLoadingWindow,
   createWindow,
   expectedRendererEntryPath,
+  getLoadingWindow,
   getMainWindow,
   getPackagedResourcePath,
   showOrCreateMainWindow,
@@ -88,6 +97,7 @@ const {
   getAppIsQuitting: () => appIsQuitting,
   log,
 })
+configureRuntimeInitialization({ getLoadingWindow })
 
 const eventSubscriptions = createRuntimeEventSubscriptionManager({
   getMainWindow,
@@ -112,16 +122,24 @@ setDirectoryClientLifecycleHandlers({
   },
 })
 
-async function maybeStartRuntimeOnLaunch() {
-  if (runtimeStarted) return
-  if ((await getAuthStateLazy()).authenticated && isSetupComplete()) {
-    log('main', 'Runtime prerequisites satisfied, starting runtime')
-    void bootRuntime().catch((err: unknown) => {
-      log('error', `Deferred runtime startup failed: ${err instanceof Error ? err.message : String(err)}`)
-    })
-  } else {
-    log('main', 'Waiting for setup or authentication before starting runtime')
+async function runtimePrerequisitesSatisfied() {
+  return (await getAuthStateLazy()).authenticated && isSetupComplete()
+}
+
+function openMainWindowAfterRuntimeInitialization() {
+  const loadingWindow = getLoadingWindow()
+  if (!loadingWindow || loadingWindow.isDestroyed()) return
+
+  const existingMain = getMainWindow()
+  if (existingMain && !existingMain.isDestroyed()) {
+    closeLoadingWindow()
+    return
   }
+
+  const mainWindow = createWindow('runtime-ready')
+  mainWindow.webContents.once('did-finish-load', () => {
+    closeLoadingWindow()
+  })
 }
 
 let mcpInterval: NodeJS.Timeout | null = null
@@ -225,6 +243,7 @@ async function bootRuntime(projectDirectory?: string | null): Promise<void> {
 
 async function runBootRuntime(projectDirectory?: string | null) {
   if (runtimeStarted) return
+  setRuntimeInitializationPhase('starting', 'Starting OpenCode runtime...')
   setRuntimeReady(false, null)
   try {
     if (!startupCleanupDone) {
@@ -234,6 +253,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
         log('artifact', `Pruned ${cleanup.removedWorkspaces} stale sandbox workspace(s), freed ${cleanup.removedBytes} bytes`)
       }
     }
+    setRuntimeInitializationPhase('config', 'Validating app configuration...')
     assertConfigValid()
     log('main', 'Starting OpenCode runtime...')
     // Refresh the Google access token before MCPs spawn. `googleAuth: true`
@@ -251,9 +271,15 @@ async function runBootRuntime(projectDirectory?: string | null) {
         log('auth', `Pre-boot Google token refresh failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
-    const client = await startRuntime(projectDirectory)
+    setRuntimeInitializationPhase('managed-server', 'Starting managed OpenCode server...')
+    const client = await startRuntime(projectDirectory, {
+      onUnexpectedExit: () => {
+        scheduleReconnect()
+      },
+    })
     runtimeStarted = true
     runtimeProjectDirectory = normalizeRuntimeProjectDirectory(projectDirectory)
+    setRuntimeInitializationPhase('connecting-events', 'Connecting event stream...')
     setRuntimeReady(true)
     log('main', 'OpenCode runtime started')
     telemetry.appLaunched()
@@ -267,6 +293,7 @@ async function runBootRuntime(projectDirectory?: string | null) {
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
 
+    setRuntimeInitializationPhase('mcp', 'Checking tools and MCP status...')
     mcpInterval = restartRuntimeMcpStatusPolling({
       client,
       runtimeProjectDirectory,
@@ -274,10 +301,13 @@ async function runBootRuntime(projectDirectory?: string | null) {
       getMainWindow,
       scheduleReconnect,
     })
+    resolveRuntimeInitializationReady('OpenCode runtime is ready.')
+    openMainWindowAfterRuntimeInitialization()
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to start runtime'
     log('error', `Failed to start runtime: ${message}`)
     setRuntimeError(message)
+    resolveRuntimeInitializationError(message)
     if (message.includes('Invalid app config')) {
       return
     }
@@ -392,21 +422,26 @@ app.whenReady().then(async () => {
     devServerUrl: rendererDevServerUrl,
   })
   attachPermissionGuards()
+  app.on('child-process-gone', (_event, details) => {
+    if (details.serviceName !== 'opencode-managed-server') return
+    log('runtime', `opencode-managed-server child-process-gone: reason=${details.reason} exitCode=${details.exitCode} type=${details.type} name=${details.name || 'unknown'}`)
+  })
   app.on('web-contents-created', (_event, contents) => {
     attachWebContentsSecurityGuards(contents, expectedRendererEntryPath(), rendererDevServerUrl)
   })
   primeShellEnvironment()
-  const initialWindow = createWindow()
-  const maybeStartRuntimeAfterRendererLoad = () => {
-    const url = initialWindow.webContents.getURL()
-    if (rendererUrlLooksWrong(url, rendererDevServerUrl)) {
-      log('main', `Ignoring provisional renderer load before runtime startup: ${url || '(empty)'}`)
-      return
-    }
-    initialWindow.webContents.off('did-finish-load', maybeStartRuntimeAfterRendererLoad)
-    void maybeStartRuntimeOnLaunch()
+  if (await runtimePrerequisitesSatisfied()) {
+    log('main', 'Runtime prerequisites satisfied, starting runtime before opening main window')
+    createLoadingWindow()
+    void bootRuntime().catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err)
+      log('error', `Runtime startup failed from loading window: ${message}`)
+      resolveRuntimeInitializationError(message)
+    })
+  } else {
+    log('main', 'Waiting for setup or authentication before starting runtime')
+    createWindow('setup')
   }
-  initialWindow.webContents.on('did-finish-load', maybeStartRuntimeAfterRendererLoad)
 
   app.on('activate', () => {
     showOrCreateMainWindow('activate')

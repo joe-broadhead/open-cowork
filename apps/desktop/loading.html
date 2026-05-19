@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Cowork starting</title>
+    <script type="module" src="/src/renderer/loading.ts"></script>
+  </head>
+  <body>
+    <main class="loading-shell" aria-live="polite">
+      <div class="loading-mark" aria-hidden="true"></div>
+      <p id="runtime-brand" class="loading-kicker">Open Cowork</p>
+      <h1>Starting runtime</h1>
+      <p id="runtime-message" class="loading-message">Preparing OpenCode...</p>
+      <div class="loading-track" aria-hidden="true">
+        <div id="runtime-progress" class="loading-progress"></div>
+      </div>
+      <p id="runtime-error" class="loading-error" hidden></p>
+      <div id="runtime-actions" class="loading-actions" hidden>
+        <button id="runtime-restart" type="button">Restart</button>
+        <button id="runtime-diagnostics" type="button">Copy diagnostics</button>
+      </div>
+    </main>
+  </body>
+</html>

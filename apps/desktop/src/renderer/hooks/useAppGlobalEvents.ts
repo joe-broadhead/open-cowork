@@ -82,6 +82,23 @@ async function exportCurrentSession(sessionId: string) {
   }
 }
 
+async function switchProjectByIndex(index: number, setView: (view: AppView) => void) {
+  try {
+    const session = await window.coworkApi.projects.switchByIndex(index)
+    if (!session) return
+    const store = useSessionStore.getState()
+    store.addSession(session)
+    setView('chat')
+    await loadSessionMessages(session.id, { force: true })
+  } catch (err) {
+    reportGlobalActionError(
+      t('globalActions.projectSwitchFailed', 'Could not switch projects. Please try again.'),
+      `Failed to switch to project shortcut ${index}`,
+      err,
+    )
+  }
+}
+
 export function useAppGlobalEvents({
   runtimeReady,
   view,
@@ -182,6 +199,9 @@ export function useAppGlobalEvents({
         if (sid) {
           void exportCurrentSession(sid)
         }
+      } else if (action.startsWith('project-switch:')) {
+        const index = Number.parseInt(action.slice('project-switch:'.length), 10)
+        if (Number.isInteger(index)) void switchProjectByIndex(index, setView)
       }
     })
     const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {

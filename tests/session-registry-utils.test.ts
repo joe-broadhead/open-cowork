@@ -41,6 +41,8 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
     updatedAt: '2026-01-01T00:00:01.000Z',
     providerId: null,
     modelId: null,
+    composerModelId: null,
+    composerReasoningVariant: null,
     summary: null,
     parentSessionId: null,
     changeSummary: null,

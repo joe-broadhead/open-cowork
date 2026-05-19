@@ -5,6 +5,7 @@ import { formatCost } from '../../helpers/format'
 import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from './ModalBackdrop'
 import { getModelContextLimit } from '../../helpers/model-info'
+import { McpStatusBadge } from '../chrome/McpStatusBadge'
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -18,7 +19,6 @@ function formatStatusAgentLabel(agent: string | null) {
 }
 
 export function StatusBar() {
-  const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const currentView = useSessionStore((s) => s.currentView)
   const totalCost = useSessionStore((s) => s.totalCost)
   const isGenerating = currentView.isGenerating
@@ -59,8 +59,6 @@ export function StatusBar() {
     return unsubscribe
   }, [])
 
-  const up = mcpConnections.filter((m) => m.connected).length
-  const total = mcpConnections.length
   const totalTokens = sessionTokens.input + sessionTokens.output + sessionTokens.reasoning
 
   const contextLimit = sdkContextLimit
@@ -135,6 +133,7 @@ export function StatusBar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <McpStatusBadge />
           {showContext && (
             <div className="flex items-center gap-1.5 min-w-[96px]">
               <span style={{ color: contextColor }}>{contextLabel}</span>
@@ -168,13 +167,6 @@ export function StatusBar() {
             </button>
           )}
 
-          {/* Connection status */}
-          {total > 0 && (
-            <div className="flex items-center gap-1.5">
-              <div className="w-[5px] h-[5px] rounded-full" style={{ background: up === total ? 'var(--color-green)' : up > 0 ? 'var(--color-amber)' : 'var(--color-red)', boxShadow: up === total ? '0 0 4px var(--color-green)' : 'none' }} />
-              <span>{up}/{total}</span>
-            </div>
-          )}
         </div>
       </div>
 

@@ -10,6 +10,7 @@ import {
   runtimeToolCache,
   runtimeToolInflight,
 } from './runtime-tool-cache.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 export type RuntimeToolMetadata = {
   id: string
@@ -108,7 +109,7 @@ export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntim
       }
       return tools
     } catch (error) {
-      log('error', `${logScope} failed: ${error instanceof Error ? error.message : String(error)}`)
+      log('error', `${logScope} failed: ${sdkErrorMessage(error)}`)
       return []
     }
   })()

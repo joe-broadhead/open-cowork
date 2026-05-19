@@ -58,7 +58,7 @@ describe('StatusBar', () => {
     expect(screen.getByText('data analyst working...')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('openrouter/anthropic/claude sonnet 4')).toBeInTheDocument())
     expect(screen.getByText('90% · compacting soon')).toBeInTheDocument()
-    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1\/2 MCPs 1 failed/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /1.8K tokens/i }))
 
