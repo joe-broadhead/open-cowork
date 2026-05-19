@@ -261,6 +261,10 @@ body {
   transform: scale(0.96);
 }
 
+.prose [data-slot="markdown-copy-button"][data-animating="true"] {
+  animation: markdown-copy-pop 260ms ease-out;
+}
+
 .prose [data-slot="markdown-copy-button"] svg {
   width: 0.95rem;
   height: 0.95rem;
@@ -276,6 +280,27 @@ body {
 
 .prose [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="markdown-check-icon"] {
   display: block;
+}
+
+@keyframes markdown-copy-pop {
+  0% {
+    transform: scale(0.96);
+    background: color-mix(in srgb, var(--color-success) 24%, var(--color-base));
+    border-color: color-mix(in srgb, var(--color-success) 70%, transparent);
+    color: var(--color-success);
+  }
+  55% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prose [data-slot="markdown-copy-button"][data-animating="true"] {
+    animation: none;
+  }
 }
 
 /* Syntax highlighting (dark theme) */

@@ -79,6 +79,14 @@ function setCopyButtonState(button: HTMLButtonElement, copied: boolean) {
   button.setAttribute('title', label)
 }
 
+function playCopyButtonAnimation(button: HTMLButtonElement) {
+  button.removeAttribute('data-animating')
+  // Force style recalculation so clicking again while still "Copied"
+  // restarts the one-shot animation.
+  void button.offsetWidth
+  button.setAttribute('data-animating', 'true')
+}
+
 function createCopyButton() {
   const button = document.createElement('button')
   button.type = 'button'
@@ -177,6 +185,11 @@ export function MarkdownContent({
           && fromEl.getAttribute('data-copied') === 'true'
         ) {
           setCopyButtonState(toEl, true)
+          const copyResetTimer = fromEl.getAttribute('data-copy-reset-timer')
+          if (copyResetTimer) toEl.setAttribute('data-copy-reset-timer', copyResetTimer)
+          if (fromEl.getAttribute('data-animating') === 'true') {
+            toEl.setAttribute('data-animating', 'true')
+          }
         }
 
         if (fromEl.isEqualNode(toEl)) return false
@@ -198,17 +211,36 @@ export function MarkdownContent({
       if (!content) return
       const copied = await writeTextToClipboard(content)
       if (!copied) return
+      const previousTimer = Number(button.dataset.copyResetTimer || 0)
+      if (previousTimer) {
+        window.clearTimeout(previousTimer)
+        copyResetTimersRef.current.delete(previousTimer)
+      }
       setCopyButtonState(button, true)
+      playCopyButtonAnimation(button)
       const timer = window.setTimeout(() => {
         copyResetTimersRef.current.delete(timer)
+        delete button.dataset.copyResetTimer
         setCopyButtonState(button, false)
       }, 2000)
+      button.dataset.copyResetTimer = String(timer)
       copyResetTimersRef.current.add(timer)
     }
 
+    const handleAnimationEnd = (event: AnimationEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const button = target.closest('[data-slot="markdown-copy-button"]')
+      if (button instanceof HTMLButtonElement) {
+        button.removeAttribute('data-animating')
+      }
+    }
+
     container.addEventListener('click', handleClick)
+    container.addEventListener('animationend', handleAnimationEnd)
     return () => {
       container.removeEventListener('click', handleClick)
+      container.removeEventListener('animationend', handleAnimationEnd)
       for (const timer of copyResetTimersRef.current) window.clearTimeout(timer)
       copyResetTimersRef.current.clear()
     }

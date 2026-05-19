@@ -30,6 +30,7 @@ describe('MarkdownContent', () => {
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledTimes(1)
     expect(vi.mocked(window.coworkApi.clipboard.writeText).mock.calls[0]?.[0]).toContain('const value = 42')
     expect(button.getAttribute('aria-label')).toBe('Copied')
+    expect(button.getAttribute('data-animating')).toBe('true')
   })
 
   it('leaves the copy affordance unchanged when clipboard writing fails', async () => {
