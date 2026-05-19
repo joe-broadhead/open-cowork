@@ -323,6 +323,67 @@ test('history projector anchors root task tool runs before the parent follow-up 
   assert.ok(taskRun.sequence < (finalMessage?.sequence || 0))
 })
 
+test('history projector binds task tool metadata session ids exactly once', async () => {
+  const childIds = ['child-a', 'child-b', 'child-c']
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-metadata',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-metadata-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: childIds.map((childId, index) => ({
+        id: `root-task-part-${index}`,
+        type: 'tool',
+        tool: 'task',
+        callID: `task-call-${index}`,
+        state: {
+          status: 'completed',
+          input: {
+            agent: 'business-analyst',
+            description: `Generic delegation ${index}`,
+          },
+          output: 'done',
+          metadata: { sessionId: childId },
+        },
+      })),
+    }],
+    rootTodos: [],
+    children: childIds.map((childId, index) => ({
+      id: childId,
+      title: `SDK child session ${index}`,
+      parentSessionId: 'root-task-tool-metadata',
+      time: { created: 20 + index, updated: 30 + index },
+    })),
+    statuses: {
+      'root-task-tool-metadata': { type: 'idle' },
+      'child-a': { type: 'idle' },
+      'child-b': { type: 'idle' },
+      'child-c': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: 40 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  assert.equal(taskRuns.length, 3)
+  assert.deepEqual(
+    taskRuns.map((item) => item.id),
+    ['child:child-a', 'child:child-b', 'child:child-c'],
+  )
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.sourceSessionId),
+    childIds,
+  )
+})
+
 test('history projector does not bind a terminal task tool to a later unrelated child session', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-unrelated-child',
@@ -613,16 +674,16 @@ test('history projector binds nested task tools to grandchild sessions during re
                 type: 'tool',
                 tool: 'task',
                 callID: 'nested-task-call',
-                title: 'Deep dive into nested delegation',
+                title: 'Nested explicit metadata delegation',
                 state: {
                   status: 'completed',
                   input: {
                     agent: 'analyst',
-                    description: 'Deep dive into nested delegation',
-                    prompt: 'Deep dive into nested delegation',
+                    description: 'Nested explicit metadata delegation',
+                    prompt: 'Nested explicit metadata delegation',
                   },
                   output: 'started',
-                  metadata: {},
+                  metadata: { sessionId: 'grandchild-nested-task' },
                 },
               },
               { id: 'child-nested-after', type: 'text', text: 'After nested delegation.' },

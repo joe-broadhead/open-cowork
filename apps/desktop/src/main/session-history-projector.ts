@@ -169,6 +169,15 @@ function childLooksLikeTaskTool(part: NormalizedMessagePart, child: ChildSession
   return agent.length > 0 && childTitle.includes(agent)
 }
 
+function taskToolChildSessionId(part: NormalizedMessagePart) {
+  return stringField(part.state.metadata, 'sessionId')
+    || stringField(part.state.metadata, 'sessionID')
+    || stringField(part.state.metadata, 'session_id')
+    || stringField(part.metadata, 'sessionId')
+    || stringField(part.metadata, 'sessionID')
+    || stringField(part.metadata, 'session_id')
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
@@ -181,6 +190,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const children = (input.children || [])
     .slice()
     .sort((a, b) => (a?.time?.created || 0) - (b?.time?.created || 0))
+  const childrenById = new Map(children.map((child) => [child.id, child]))
   const directChildren = children.filter((child) => (child.parentSessionId || sessionId) === sessionId)
   const rootStatus = statusFor(sessionId).type || null
   const childCompletesById = new Map<string, boolean>()
@@ -246,6 +256,17 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   const childBelongsToParent = (child: ChildSessionRecord, parentSessionId: string) => {
     return (child.parentSessionId || sessionId) === parentSessionId
+  }
+
+  const takeExplicitChildForTaskTool = (parentSessionId: string, part: NormalizedMessagePart) => {
+    const childSessionId = taskToolChildSessionId(part)
+    if (!childSessionId) return { child: null, hasExplicitChild: false }
+    const child = childrenById.get(childSessionId)
+    if (!child || matchedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) {
+      return { child: null, hasExplicitChild: true }
+    }
+    matchedChildIds.add(child.id)
+    return { child, hasExplicitChild: true }
   }
 
   const takeChildForTaskTool = (
@@ -405,9 +426,12 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (part.type === 'tool' && part.tool === 'task') {
         const fallbackStatus = fallbackTaskToolStatus(part)
         const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
-        const child = takeDirectChildForSubtask((candidate) => {
-          return !requireTaskMatch || childLooksLikeTaskTool(part, candidate)
-        })
+        const explicit = takeExplicitChildForTaskTool(sessionId, part)
+        const child = explicit.child || (explicit.hasExplicitChild
+          ? null
+          : takeDirectChildForSubtask((candidate) => {
+              return !requireTaskMatch || childLooksLikeTaskTool(part, candidate)
+            }))
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.callId || part.id || generateId()}`
@@ -610,7 +634,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         if (part.type === 'tool' && part.tool === 'task') {
           const fallbackStatus = fallbackTaskToolStatus(part)
           const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
-          const nestedChild = takeChildForTaskTool(child.id, part, requireTaskMatch)
+          const explicit = takeExplicitChildForTaskTool(child.id, part)
+          const nestedChild = explicit.child || (explicit.hasExplicitChild
+            ? null
+            : takeChildForTaskTool(child.id, part, requireTaskMatch))
           const nestedTaskId = nestedChild?.id
             ? `child:${nestedChild.id}`
             : `pending:${part.callId || part.id || generateId()}`
@@ -627,7 +654,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             startedAt: timing.startedAt,
             finishedAt: timing.finishedAt,
           }, ts, tsMs)
-          if (nestedChild) enqueueChildTask(nestedTaskId, nestedChild)
+          if (nestedChild) {
+            matchedChildIds.add(nestedChild.id)
+            enqueueChildTask(nestedTaskId, nestedChild)
+          }
           continue
         }
 

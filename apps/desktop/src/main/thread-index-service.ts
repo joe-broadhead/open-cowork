@@ -43,6 +43,36 @@ function addTokens(target: SessionTokens, source?: Partial<SessionTokens> | null
   target.cacheWrite += source.cacheWrite || 0
 }
 
+function hasUsableThreadView(view?: SessionView | null) {
+  return Boolean(view && (
+    view.messages.length
+    || view.toolCalls.length
+    || view.taskRuns.length
+    || view.sessionCost
+  ))
+}
+
+function hasAuthoritativeThreadView(view?: SessionView | null): view is SessionView {
+  if (!view) return false
+  return Boolean(
+    hasUsableThreadView(view)
+    || view.revision > 0
+    || view.lastEventAt > 0
+    || view.pendingApprovals.length
+    || view.pendingQuestions.length
+    || view.errors.length
+    || view.todos.length
+    || view.executionPlan.length
+    || view.compactions.length
+    || view.isGenerating
+    || view.isAwaitingPermission
+    || view.isAwaitingQuestion
+    || view.contextState !== 'idle'
+    || view.compactionCount > 0
+    || Boolean(view.lastCompactedAt)
+  )
+}
+
 function usageFromRecordAndView(record: SessionRecord, view?: SessionView | null): {
   messages: number
   toolCalls: number
@@ -50,7 +80,7 @@ function usageFromRecordAndView(record: SessionRecord, view?: SessionView | null
   cost: number
   tokens: SessionTokens
 } {
-  if (view && (view.messages.length || view.toolCalls.length || view.taskRuns.length || view.sessionCost)) {
+  if (view && hasUsableThreadView(view)) {
     const tokens = emptyTokens()
     addTokens(tokens, view.sessionTokens)
     for (const taskRun of view.taskRuns) {
@@ -81,8 +111,11 @@ function agentsFromRecordAndView(record: SessionRecord, view?: SessionView | nul
     if (!normalized) return
     counts.set(normalized, (counts.get(normalized) || 0) + count)
   }
-  for (const taskRun of view?.taskRuns || []) add(taskRun.agent)
-  for (const entry of record.summary?.agentBreakdown || []) add(entry.agent, entry.taskRuns || 1)
+  if (view) {
+    for (const taskRun of view.taskRuns) add(taskRun.agent)
+  } else {
+    for (const entry of record.summary?.agentBreakdown || []) add(entry.agent, entry.taskRuns || 1)
+  }
   return Array.from(counts.entries())
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
@@ -142,11 +175,13 @@ function projectLabel(directory?: string | null) {
 }
 
 function threadInputFromRecord(record: SessionRecord, view?: SessionView | null): ThreadIndexUpsertInput {
-  const usage = usageFromRecordAndView(record, view)
-  const actualAgents = view || record.summary?.agentBreakdown !== undefined
-    ? agentsFromRecordAndView(record, view)
+  const statusView = hasAuthoritativeThreadView(view) ? view : null
+  const metadataView = view && hasUsableThreadView(view) ? view : null
+  const usage = usageFromRecordAndView(record, metadataView)
+  const actualAgents = metadataView || record.summary?.agentBreakdown !== undefined
+    ? agentsFromRecordAndView(record, metadataView)
     : undefined
-  const actualTools = view ? toolsFromView(view) : undefined
+  const actualTools = metadataView ? toolsFromView(metadataView) : undefined
   return {
     sessionId: record.id,
     title: record.title || 'New session',
@@ -155,7 +190,7 @@ function threadInputFromRecord(record: SessionRecord, view?: SessionView | null)
     projectLabel: projectLabel(record.directory),
     providerId: record.providerId,
     modelId: record.modelId,
-    status: statusFromRecordAndView(record, view),
+    status: statusFromRecordAndView(record, statusView),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     parentSessionId: record.parentSessionId,
@@ -236,8 +271,10 @@ export class ThreadIndexService {
 
   upsertThreadFromSessionRecord(record: SessionRecord, view?: SessionView | null) {
     try {
-      const existing = view ? null : this.store.getThread(record.id)
       const input = threadInputFromRecord(record, view)
+      const existing = input.actualAgents === undefined || input.actualTools === undefined
+        ? this.store.getThread(record.id)
+        : null
       this.store.upsertThread(input)
       const actualAgents = input.actualAgents ?? existing?.actualAgents ?? []
       const actualTools = input.actualTools ?? existing?.actualTools ?? []

@@ -1,4 +1,5 @@
 import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
+import { performance } from 'node:perf_hooks'
 import type { IpcHandlerContext } from './context.ts'
 import { optionalObjectArg, registerIpcInvoke, stringArg } from './schema.ts'
 import { getClient } from '../runtime.ts'
@@ -42,6 +43,16 @@ const runMcpTransitionForName = createKeyedPromiseChain()
 
 const WRITE_TOOL_IDS = new Set(['edit', 'write', 'apply_patch', 'todowrite'])
 const WRITE_PERMISSION_ACTIONS = new Set(['ask', 'allow'])
+
+async function timeAgentCatalogHandler<T>(name: 'agents:list' | 'agents:catalog' | 'agents:runtime', work: () => Promise<T>) {
+  const start = performance.now()
+  try {
+    return await work()
+  } finally {
+    const durationMs = performance.now() - start
+    log('agent', `${name} completed in ${Math.round(durationMs)}ms`)
+  }
+}
 
 function patternMatches(pattern: string, value: string) {
   let patternIndex = 0
@@ -250,11 +261,13 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('agents:catalog', async (_event, options?: RuntimeContextOptions) => {
-    return await getCustomAgentCatalog(resolveContext(context, options))
+    return timeAgentCatalogHandler('agents:catalog', () =>
+      getCustomAgentCatalog(resolveContext(context, options)))
   })
 
   context.ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
-    return await getCustomAgentSummaries(resolveContext(context, options))
+    return timeAgentCatalogHandler('agents:list', () =>
+      getCustomAgentSummaries(resolveContext(context, options)))
   })
 
   // Ask the SDK what agents are actually registered at runtime. Surfaces
@@ -262,35 +275,37 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   // any agent a downstream distribution injected via the `Config.agent`
   // slot that didn't flow through Cowork's config pipeline.
   context.ipcMain.handle('agents:runtime', async (): Promise<RuntimeAgentDescriptor[]> => {
-    const client = getClient()
-    if (!client) return []
-    try {
-      const response = await client.app.agents()
-      const agents = response.data || []
-      return agents
-        .filter((agent) => agent.name)
-        .map((agent): RuntimeAgentDescriptor => {
-          const toolIds = runtimeAgentToolIds(agent)
-          return {
-            name: agent.name,
-            mode: agent.mode,
-            description: agent.description || null,
-            model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
-            color: agent.color || null,
-            // SDK's Agent type has no `disable` flag — runtime agents are by
-            // definition the registered/enabled set.
-            disabled: false,
-            toolIds,
-            toolCount: toolIds.length,
-            writeAccess: runtimeAgentCanWrite(agent),
-            steps: runtimeAgentSteps(agent),
-          }
-        })
-        .sort((a, b) => a.name.localeCompare(b.name))
-    } catch (err) {
-      context.logHandlerError('agents:runtime', err)
-      return []
-    }
+    return timeAgentCatalogHandler('agents:runtime', async () => {
+      const client = getClient()
+      if (!client) return []
+      try {
+        const response = await client.app.agents()
+        const agents = response.data || []
+        return agents
+          .filter((agent) => agent.name)
+          .map((agent): RuntimeAgentDescriptor => {
+            const toolIds = runtimeAgentToolIds(agent)
+            return {
+              name: agent.name,
+              mode: agent.mode,
+              description: agent.description || null,
+              model: agent.model ? `${agent.model.providerID}/${agent.model.modelID}` : null,
+              color: agent.color || null,
+              // SDK's Agent type has no `disable` flag — runtime agents are by
+              // definition the registered/enabled set.
+              disabled: false,
+              toolIds,
+              toolCount: toolIds.length,
+              writeAccess: runtimeAgentCanWrite(agent),
+              steps: runtimeAgentSteps(agent),
+            }
+          })
+          .sort((a, b) => a.name.localeCompare(b.name))
+      } catch (err) {
+        context.logHandlerError('agents:runtime', err)
+        return []
+      }
+    })
   })
 
   context.ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {
