@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { useSessionStore } from '../../stores/session'
+import { useSessionStore, type Session } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
@@ -20,6 +20,14 @@ function describeComposerError(error: unknown) {
 }
 
 const COMPOSER_TEXTAREA_MAX_LINES = 8
+const COMPOSER_PREFERENCE_KEYS = ['modelId', 'reasoningVariant'] as const
+
+type ComposerPreferencePatch = {
+  modelId?: string | null
+  reasoningVariant?: string | null
+}
+
+type ComposerPreferenceKey = typeof COMPOSER_PREFERENCE_KEYS[number]
 
 function reportComposerError(userMessage: string, diagnosticMessage: string, error: unknown, addGlobalError: (message: string) => void) {
   addGlobalError(userMessage)
@@ -42,6 +50,16 @@ function getComposerTextareaMaxHeight(element: HTMLTextAreaElement) {
   return lineHeight * COMPOSER_TEXTAREA_MAX_LINES + padding
 }
 
+function hasComposerPreferenceKey(preferences: ComposerPreferencePatch, key: ComposerPreferenceKey) {
+  return Object.prototype.hasOwnProperty.call(preferences, key)
+}
+
+function readComposerPreference(session: Session | undefined, key: ComposerPreferenceKey) {
+  if (!session) return null
+  if (key === 'modelId') return session.composerModelId ?? null
+  return session.composerReasoningVariant ?? null
+}
+
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -53,6 +71,7 @@ export function ChatInput() {
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
+  const composerSaveVersionByKeyRef = useRef(new Map<string, number>())
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const isGenerating = useSessionStore((s) => s.currentView.isGenerating)
@@ -75,24 +94,34 @@ export function ChatInput() {
   )
   const setSessionComposerPreferences = useSessionStore((s) => s.setSessionComposerPreferences)
   const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(currentSession)
-  const saveComposerPreferences = useCallback((preferences: {
-    modelId?: string | null
-    reasoningVariant?: string | null
-  }) => {
+  const saveComposerPreferences = useCallback((preferences: ComposerPreferencePatch) => {
     if (!currentSessionId) return
+    const sessionsBeforeSave = useSessionStore.getState().sessions
+    const sessionBeforeSave = sessionsBeforeSave.find((session) => session.id === currentSessionId)
+    const saveVersions = new Map<string, number>()
+    const rollback: ComposerPreferencePatch = {}
+
+    for (const key of COMPOSER_PREFERENCE_KEYS) {
+      if (!hasComposerPreferenceKey(preferences, key)) continue
+      const versionKey = `${currentSessionId}:${key}`
+      const nextVersion = (composerSaveVersionByKeyRef.current.get(versionKey) || 0) + 1
+      composerSaveVersionByKeyRef.current.set(versionKey, nextVersion)
+      saveVersions.set(versionKey, nextVersion)
+      rollback[key] = readComposerPreference(sessionBeforeSave, key)
+    }
+
     setSessionComposerPreferences(currentSessionId, preferences)
     void window.coworkApi.session.setComposerPreferences(currentSessionId, preferences).catch((error) => {
-      const rollback = currentSession
-        ? {
-            ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
-              ? { modelId: currentSession.composerModelId ?? null }
-              : {}),
-            ...(Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')
-              ? { reasoningVariant: currentSession.composerReasoningVariant ?? null }
-              : {}),
-          }
-        : preferences
-      setSessionComposerPreferences(currentSessionId, rollback)
+      const activeRollback: ComposerPreferencePatch = {}
+      for (const key of COMPOSER_PREFERENCE_KEYS) {
+        if (!hasComposerPreferenceKey(rollback, key)) continue
+        const versionKey = `${currentSessionId}:${key}`
+        if (composerSaveVersionByKeyRef.current.get(versionKey) !== saveVersions.get(versionKey)) continue
+        activeRollback[key] = rollback[key] ?? null
+      }
+      if (Object.keys(activeRollback).length === 0) return
+
+      setSessionComposerPreferences(currentSessionId, activeRollback)
       reportComposerError(
         t('chat.composerPreferencesSaveFailed', 'Could not save this thread’s composer settings. Please try again.'),
         'Failed to save session composer preferences',
@@ -100,7 +129,7 @@ export function ChatInput() {
         addGlobalError,
       )
     })
-  }, [addGlobalError, currentSession, currentSessionId, setSessionComposerPreferences])
+  }, [addGlobalError, currentSessionId, setSessionComposerPreferences])
   const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels, {
     selectedVariant: currentSession?.composerReasoningVariant ?? null,
     onVariantChange: (variant) => saveComposerPreferences({ reasoningVariant: variant }),

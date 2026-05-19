@@ -78,6 +78,16 @@ function installModelRuntime() {
   })
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ChatInput', () => {
   it('resizes the textarea when navigating prompt history', async () => {
     installRendererTestCoworkApi({
@@ -254,5 +264,37 @@ describe('ChatInput', () => {
       expect(api.session.setComposerPreferences).toHaveBeenCalledWith('session-a', { modelId: 'model-a' })
     })
     expect(api.settings.set).not.toHaveBeenCalled()
+  })
+
+  it('does not let a stale failed composer save roll back the latest reasoning choice', async () => {
+    const user = userEvent.setup()
+    const api = installModelRuntime()
+    const firstSave = createDeferred<null>()
+    vi.mocked(api.session.setComposerPreferences)
+      .mockImplementationOnce(() => firstSave.promise)
+      .mockImplementationOnce(async () => null)
+    seedCurrentSession()
+
+    render(<ChatInput />)
+
+    await user.click(await screen.findByRole('button', { name: /Think Auto/ }))
+    await user.click(await screen.findByRole('option', { name: /Low/ }))
+
+    expect(useSessionStore.getState().sessions[0]?.composerReasoningVariant).toBe('low')
+
+    await user.click(await screen.findByRole('button', { name: /Think Low/ }))
+    await user.click(await screen.findByRole('option', { name: /XHigh/ }))
+
+    await waitFor(() => {
+      expect(api.session.setComposerPreferences).toHaveBeenCalledWith('session-1', { reasoningVariant: 'xhigh' })
+    })
+
+    firstSave.reject(new Error('older save failed'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Think XHigh/ })).toBeTruthy()
+    })
+    expect(useSessionStore.getState().sessions[0]?.composerReasoningVariant).toBe('xhigh')
+    expect(useSessionStore.getState().globalErrors).toHaveLength(0)
   })
 })
