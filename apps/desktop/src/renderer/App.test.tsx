@@ -415,6 +415,8 @@ describe('App', () => {
     expect(await screen.findByTestId('home-page')).toHaveTextContent('Open Cowork home')
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-view', 'home')
     expect(screen.getByText('Public preview 0.0.0')).toBeInTheDocument()
+    expect(screen.getByTestId('preview-notice')).toHaveClass('border-border-subtle', 'bg-surface', 'text-text')
+    expect(screen.getByTestId('preview-notice').className).not.toContain('amber')
     expect(api.session.list).toHaveBeenCalled()
     expect(api.runtime.status).toHaveBeenCalled()
     expect(mockSetBrandName).toHaveBeenCalledWith('Open Cowork')
