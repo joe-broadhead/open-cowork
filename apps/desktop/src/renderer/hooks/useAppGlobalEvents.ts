@@ -87,7 +87,7 @@ async function switchProjectByIndex(index: number, setView: (view: AppView) => v
     const session = await window.coworkApi.projects.switchByIndex(index)
     if (!session) return
     const store = useSessionStore.getState()
-    store.addSession(session)
+    store.setSessions([session, ...store.sessions.filter((existing) => existing.id !== session.id)])
     setView('chat')
     await loadSessionMessages(session.id, { force: true })
   } catch (err) {
