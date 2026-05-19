@@ -185,6 +185,255 @@ test('createSessionHistoryService loads questions and updates provider/model fro
   })
 })
 
+test('createSessionHistoryService replaces SDK default titles from first user message', async () => {
+  const updates: Array<Record<string, unknown>> = []
+  const sdkTitleUpdates: Array<Record<string, unknown>> = []
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({
+            data: [{
+              info: { id: 'user-message-1', role: 'user', time: { created: 1 } },
+              parts: [
+                { id: 'user-text-1', type: 'text', text: 'Please compare the Q2 launch risks and summarize the blockers.' },
+              ],
+            }],
+          }),
+          todo: async () => ({ data: [] }),
+          diff: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({
+            data: {
+              id: 'session-title-fallback',
+              title: 'New Session - 2026-05-19T12:07:39.243Z',
+              time: { created: 1, updated: 2 },
+            },
+          }),
+          update: async (input: Record<string, unknown>) => {
+            sdkTitleUpdates.push(input)
+            return { data: {} }
+          },
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async () => [],
+    getCachedModelId: () => '',
+    updateSessionRecord: (_sessionId, patch) => {
+      updates.push(patch)
+      return null
+    },
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  await service.loadSessionHistory('session-title-fallback')
+
+  assert.deepEqual(sdkTitleUpdates, [{
+    sessionID: 'session-title-fallback',
+    title: 'Please compare the Q2 launch risks and summarize the blockers.',
+  }])
+  assert.equal(updates[0]?.title, 'Please compare the Q2 launch risks and summarize the blockers.')
+})
+
+test('createSessionHistoryService skips internal Cowork prompts for fallback titles', async () => {
+  const updates: Array<Record<string, unknown>> = []
+  const sdkTitleUpdates: Array<Record<string, unknown>> = []
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({
+            data: [
+              {
+                info: { id: 'internal-message', role: 'user', time: { created: 1 } },
+                parts: [
+                  {
+                    id: 'internal-text',
+                    type: 'text',
+                    text: '[[OPEN_COWORK_INTERNAL_TEAM_CONTEXT]] Hidden workflow orchestration prompt.',
+                  },
+                ],
+              },
+              {
+                info: { id: 'user-message', role: 'user', time: { created: 2 } },
+                parts: [
+                  {
+                    id: 'user-text',
+                    type: 'text',
+                    text: 'Write a clear migration plan for the reporting pipeline.',
+                  },
+                ],
+              },
+            ],
+          }),
+          todo: async () => ({ data: [] }),
+          diff: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({
+            data: {
+              id: 'session-internal-title-fallback',
+              title: 'New session',
+              time: { created: 1, updated: 2 },
+            },
+          }),
+          update: async (input: Record<string, unknown>) => {
+            sdkTitleUpdates.push(input)
+            return { data: {} }
+          },
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async () => [],
+    getCachedModelId: () => '',
+    updateSessionRecord: (_sessionId, patch) => {
+      updates.push(patch)
+      return null
+    },
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  await service.loadSessionHistory('session-internal-title-fallback')
+
+  assert.deepEqual(sdkTitleUpdates, [{
+    sessionID: 'session-internal-title-fallback',
+    title: 'Write a clear migration plan for the reporting pipeline.',
+  }])
+  assert.equal(updates[0]?.title, 'Write a clear migration plan for the reporting pipeline.')
+})
+
+test('createSessionHistoryService preserves product-owned workflow titles before prompt fallback', async () => {
+  const updates: Array<Record<string, unknown>> = []
+  const sdkTitleUpdates: Array<Record<string, unknown>> = []
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({
+            data: [{
+              info: { id: 'workflow-prompt', role: 'user', time: { created: 1 } },
+              parts: [
+                { id: 'workflow-text', type: 'text', text: 'Help the user create and schedule a workflow.' },
+              ],
+            }],
+          }),
+          todo: async () => ({ data: [] }),
+          diff: async () => ({ data: [] }),
+          children: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({
+            data: {
+              id: 'workflow-draft-session',
+              title: 'New session',
+              time: { created: 1, updated: 2 },
+            },
+          }),
+          update: async (input: Record<string, unknown>) => {
+            sdkTitleUpdates.push(input)
+            return { data: {} }
+          },
+        },
+      },
+      questionClient: {},
+      record: {
+        title: 'New workflow draft',
+      },
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async () => [],
+    getCachedModelId: () => '',
+    updateSessionRecord: (_sessionId, patch) => {
+      updates.push(patch)
+      return null
+    },
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {},
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => createEmptySessionView(),
+    },
+  })
+
+  await service.loadSessionHistory('workflow-draft-session')
+
+  assert.deepEqual(sdkTitleUpdates, [{
+    sessionID: 'workflow-draft-session',
+    title: 'New workflow draft',
+  }])
+  assert.equal(updates[0]?.title, 'New workflow draft')
+})
+
 test('createSessionHistoryService honors activate:false during warm syncs', async () => {
   const view = createEmptySessionView()
   const calls = {

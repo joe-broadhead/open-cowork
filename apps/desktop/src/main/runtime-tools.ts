@@ -4,10 +4,23 @@ import { getV2ClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
 import { ensureRuntimeContextDirectory } from './runtime-context.ts'
 import { resolveProjectDirectory } from './runtime-paths.ts'
 import { log } from './logger.ts'
+import {
+  RUNTIME_TOOL_CACHE_TTL_MS,
+  currentRuntimeToolCacheGeneration,
+  runtimeToolCache,
+  runtimeToolInflight,
+} from './runtime-tool-cache.ts'
 
 export type RuntimeToolMetadata = {
   id: string
   description: string
+}
+
+type ResolvedRuntimeToolContext = {
+  directory: string
+  provider: string
+  model: string
+  logScope?: string
 }
 
 const HIDDEN_RUNTIME_TOOL_IDS = new Set([
@@ -60,32 +73,68 @@ export function nativeToolPermissionPatterns(id: string) {
     : { allowPatterns: [id], askPatterns: [] as string[] }
 }
 
+export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntimeToolContext) {
+  const { directory, provider, model, logScope = 'runtime tool discovery' } = context
+  if (!provider || !model) return []
+
+  const cacheKey = `${directory}|${provider}|${model}`
+  const now = Date.now()
+  const cached = runtimeToolCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    return cached.tools
+  }
+
+  const inflight = runtimeToolInflight.get(cacheKey)
+  if (inflight) return await inflight
+
+  const generation = currentRuntimeToolCacheGeneration()
+  const promise = (async () => {
+    await ensureRuntimeContextDirectory(directory)
+
+    const client = getV2ClientForDirectory(directory)
+    if (!client) return []
+
+    try {
+      const result = await client.tool.list({
+        directory,
+        provider,
+        model,
+      }, {
+        throwOnError: true,
+      })
+      const tools = (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
+      if (currentRuntimeToolCacheGeneration() === generation) {
+        runtimeToolCache.set(cacheKey, { expiresAt: Date.now() + RUNTIME_TOOL_CACHE_TTL_MS, tools })
+      }
+      return tools
+    } catch (error) {
+      log('error', `${logScope} failed: ${error instanceof Error ? error.message : String(error)}`)
+      return []
+    }
+  })()
+
+  runtimeToolInflight.set(cacheKey, promise)
+  try {
+    return await promise
+  } finally {
+    if (runtimeToolInflight.get(cacheKey) === promise) {
+      runtimeToolInflight.delete(cacheKey)
+    }
+  }
+}
+
 export async function listRuntimeToolsForContext(context?: RuntimeContextOptions) {
   const settings = getEffectiveSettings()
   const provider = settings.effectiveProviderId || ''
   const model = settings.effectiveModel || ''
   const directory = resolveProjectDirectory(context?.directory) || getRuntimeHomeDir()
 
-  if (!provider || !model) return []
-
-  await ensureRuntimeContextDirectory(directory)
-
-  const client = getV2ClientForDirectory(directory)
-  if (!client) return []
-
-  try {
-    const result = await client.tool.list({
-      directory,
-      provider,
-      model,
-    }, {
-      throwOnError: true,
-    })
-    return (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
-  } catch (error) {
-    log('error', `runtime tool discovery failed: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  }
+  return listRuntimeToolsForResolvedContext({
+    directory,
+    provider,
+    model,
+    logScope: 'runtime tool discovery',
+  })
 }
 
 export function toRuntimeToolMetadata(entry: unknown): RuntimeToolMetadata | null {

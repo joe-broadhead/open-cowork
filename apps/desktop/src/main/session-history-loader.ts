@@ -3,10 +3,12 @@ import type { PendingApproval, PendingQuestion, SessionView } from '@open-cowork
 import { getClientForDirectory, getRuntimeHomeDir, getV2ClientForDirectory } from './runtime.ts'
 import { getBrandName } from './config-loader.ts'
 import { getEffectiveSettings, loadSettings } from './settings.ts'
+import { isInternalCoworkMessage } from './internal-message-utils.ts'
 import {
   normalizeSessionInfo,
   normalizeSessionMessages,
   normalizeSessionStatuses,
+  type NormalizedSessionMessage,
 } from './opencode-adapter.ts'
 import {
   asRecord,
@@ -51,8 +53,42 @@ type ChildSessionRecord = {
   parentSessionId?: string | null
 }
 
+const DEFAULT_SDK_SESSION_TITLE_RE = /^New session(?: - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/i
+const FALLBACK_SESSION_TITLE_MAX_CHARS = 80
+
 function readResponseData(value: unknown) {
   return readRecordValue(value, 'data')
+}
+
+function isDefaultSdkSessionTitle(title?: string | null) {
+  const trimmed = (title || '').trim()
+  return !trimmed || DEFAULT_SDK_SESSION_TITLE_RE.test(trimmed)
+}
+
+function nonDefaultPersistedSessionTitle(title?: string | null) {
+  const trimmed = title?.trim()
+  return trimmed && !isDefaultSdkSessionTitle(trimmed) ? trimmed : null
+}
+
+function truncateFallbackSessionTitle(title: string) {
+  if (title.length <= FALLBACK_SESSION_TITLE_MAX_CHARS) return title
+  const trimmed = title.slice(0, FALLBACK_SESSION_TITLE_MAX_CHARS - 3).trimEnd()
+  return `${trimmed}...`
+}
+
+function fallbackSessionTitleFromHistory(messages: NormalizedSessionMessage[]) {
+  for (const message of messages) {
+    const role = message.info.role || message.role
+    if (role !== 'user') continue
+    const text = message.parts
+      .filter((part) => part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text && !isInternalCoworkMessage(text)) return truncateFallbackSessionTitle(text)
+  }
+  return null
 }
 
 function normalizeQuestionOptions(value: unknown) {
@@ -237,7 +273,7 @@ export function createSessionHistoryService(
 
   async function loadSessionHistory(sessionId: string) {
     return measureAsyncPerf('session.history.load', async () => {
-      const { client, questionClient } = await deps.getSessionClient(sessionId)
+      const { client, questionClient, record } = await deps.getSessionClient(sessionId)
       const [
         rootMessagesResult,
         rootTodosResult,
@@ -321,6 +357,20 @@ export function createSessionHistoryService(
       }
       const sessionInfo = normalizeSessionInfo(sessionInfoResult?.data)
       if (sessionInfo) {
+        let title = sessionInfo.title
+        if (isDefaultSdkSessionTitle(title)) {
+          const fallbackTitle = nonDefaultPersistedSessionTitle(record?.title)
+            || fallbackSessionTitleFromHistory(rootMessages)
+          if (fallbackTitle) {
+            try {
+              await client.session.update({ sessionID: sessionId, title: fallbackTitle })
+              title = fallbackTitle
+              log('session', `Auto-renamed ${shortSessionId(sessionId)} from default SDK title`)
+            } catch (err) {
+              logHistoryError('session:title fallback', sessionId, err)
+            }
+          }
+        }
         // parentSessionId is stable once set at fork time. If SDK's session.get
         // omits parentID on a later refresh (it has in practice), don't erase
         // the value we already persisted — only write when we have one.
@@ -328,7 +378,7 @@ export function createSessionHistoryService(
           ...(sessionInfo.parentID ? { parentSessionId: sessionInfo.parentID } : {}),
           changeSummary: sessionInfo.summary,
           revertedMessageId: sessionInfo.revertedMessageId,
-          ...(sessionInfo.title ? { title: sessionInfo.title } : {}),
+          ...(title ? { title } : {}),
         })
       }
       return { items, questions, approvals }

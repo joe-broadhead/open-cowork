@@ -24,6 +24,33 @@ const MANAGED_SESSION_PATTERNS = [
   /\bForked [^\n]* -> (ses_[A-Za-z0-9]+)\b/g,
 ]
 
+function normalizeSessionTokens(tokens: SessionUsageSummary['tokens'] | undefined | null) {
+  return {
+    input: typeof tokens?.input === 'number' ? tokens.input : 0,
+    output: typeof tokens?.output === 'number' ? tokens.output : 0,
+    reasoning: typeof tokens?.reasoning === 'number' ? tokens.reasoning : 0,
+    cacheRead: typeof tokens?.cacheRead === 'number' ? tokens.cacheRead : 0,
+    cacheWrite: typeof tokens?.cacheWrite === 'number' ? tokens.cacheWrite : 0,
+  }
+}
+
+function normalizeAgentBreakdown(value: unknown): SessionUsageSummary['agentBreakdown'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const entries = value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+      const record = entry as Partial<NonNullable<SessionUsageSummary['agentBreakdown']>[number]>
+      return {
+        agent: typeof record.agent === 'string' ? record.agent : null,
+        taskRuns: typeof record.taskRuns === 'number' ? record.taskRuns : 0,
+        cost: typeof record.cost === 'number' ? record.cost : 0,
+        tokens: normalizeSessionTokens(record.tokens),
+      }
+    })
+    .filter((entry): entry is NonNullable<SessionUsageSummary['agentBreakdown']>[number] => entry !== null)
+  return entries.length > 0 ? entries : undefined
+}
+
 export function extractManagedSessionIdsFromLogContents(logContents: string[]) {
   const managed = new Set<string>()
 
@@ -76,13 +103,8 @@ export function normalizeStoredSessionRecord(
           toolCalls: typeof item.summary.toolCalls === 'number' ? item.summary.toolCalls : 0,
           taskRuns: typeof item.summary.taskRuns === 'number' ? item.summary.taskRuns : 0,
           cost: typeof item.summary.cost === 'number' ? item.summary.cost : 0,
-          tokens: {
-            input: typeof item.summary.tokens?.input === 'number' ? item.summary.tokens.input : 0,
-            output: typeof item.summary.tokens?.output === 'number' ? item.summary.tokens.output : 0,
-            reasoning: typeof item.summary.tokens?.reasoning === 'number' ? item.summary.tokens.reasoning : 0,
-            cacheRead: typeof item.summary.tokens?.cacheRead === 'number' ? item.summary.tokens.cacheRead : 0,
-            cacheWrite: typeof item.summary.tokens?.cacheWrite === 'number' ? item.summary.tokens.cacheWrite : 0,
-          },
+          tokens: normalizeSessionTokens(item.summary.tokens),
+          agentBreakdown: normalizeAgentBreakdown(item.summary.agentBreakdown),
         }
       : null,
     parentSessionId: typeof item.parentSessionId === 'string' ? item.parentSessionId : null,

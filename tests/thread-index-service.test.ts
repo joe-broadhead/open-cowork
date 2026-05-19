@@ -3,10 +3,39 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import type { SessionView } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 import { ThreadIndexService } from '../apps/desktop/src/main/thread-index-service.ts'
 import { ThreadIndexStore } from '../apps/desktop/src/main/thread-index-store.ts'
+
+function emptySessionView(overrides: Partial<SessionView> = {}): SessionView {
+  return {
+    messages: [],
+    toolCalls: [],
+    taskRuns: [],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 0,
+    lastEventAt: 0,
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+    ...overrides,
+  }
+}
 
 function withThreadIndexService(name: string, run: (service: ThreadIndexService) => void) {
   const root = mkdtempSync(join(tmpdir(), `open-cowork-thread-service-${name}-`))
@@ -132,6 +161,261 @@ test('thread index service stores actual metadata and suggestion-only categories
   assert.equal(thread.usage.messages, 1)
   assert.equal(thread.usage.taskRuns, 1)
   assert.equal(thread.usage.tokens.input, 11)
+}))
+
+test('thread index service does not add persisted agent summaries on top of live views', () => withThreadIndexService('agent-dedup', (service) => {
+  const record = upsertSessionRecord(toSessionRecord({
+    id: 'session-agent-dedup',
+    title: 'Delegated analysis',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    opencodeDirectory: '/workspace/analytics',
+    summary: {
+      messages: 2,
+      userMessages: 1,
+      assistantMessages: 1,
+      toolCalls: 0,
+      taskRuns: 2,
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      agentBreakdown: [{
+        agent: 'business-analyst',
+        taskRuns: 2,
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      }],
+    },
+  }))
+  assert.ok(record)
+
+  service.upsertThreadFromSessionRecord(record, {
+    messages: [{ id: 'm1', role: 'user', content: 'delegate twice', order: 1 }],
+    toolCalls: [],
+    taskRuns: ['task-1', 'task-2'].map((id, index) => ({
+      id,
+      title: `Analysis ${index + 1}`,
+      agent: 'business-analyst',
+      status: 'complete',
+      sourceSessionId: `child-${index + 1}`,
+      content: '',
+      transcript: [],
+      toolCalls: [],
+      compactions: [],
+      todos: [],
+      error: null,
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      order: index + 2,
+    })),
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 1,
+    lastEventAt: Date.now(),
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+  })
+
+  const result = service.search({ text: 'analysis' })
+  assert.equal(result.threads.length, 1)
+  assert.deepEqual(result.threads[0]?.actualAgents, [{ name: 'business-analyst', count: 2 }])
+  assert.equal(result.threads[0]?.usage.taskRuns, 2)
+}))
+
+test('thread index service clears persisted agents when a live view has no task runs', () => withThreadIndexService('agent-clear', (service) => {
+  const record = upsertSessionRecord(toSessionRecord({
+    id: 'session-agent-clear',
+    title: 'Analysis without delegation',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    opencodeDirectory: '/workspace/analytics',
+    summary: {
+      messages: 2,
+      userMessages: 1,
+      assistantMessages: 1,
+      toolCalls: 0,
+      taskRuns: 1,
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      agentBreakdown: [{
+        agent: 'business-analyst',
+        taskRuns: 1,
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      }],
+    },
+  }))
+  assert.ok(record)
+
+  service.upsertThreadFromSessionRecord(record, {
+    messages: [{ id: 'm1', role: 'user', content: 'delegate once', order: 1 }],
+    toolCalls: [],
+    taskRuns: [{
+      id: 'task-1',
+      title: 'Analysis',
+      agent: 'business-analyst',
+      status: 'complete',
+      sourceSessionId: 'child-1',
+      content: '',
+      transcript: [],
+      toolCalls: [],
+      compactions: [],
+      todos: [],
+      error: null,
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      order: 2,
+    }],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 1,
+    lastEventAt: Date.now(),
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+  })
+  assert.deepEqual(
+    service.search({ text: 'analysis' }).threads[0]?.actualAgents,
+    [{ name: 'business-analyst', count: 1 }],
+  )
+
+  service.upsertThreadFromSessionRecord(record, {
+    messages: [{ id: 'm1', role: 'user', content: 'analyze locally', order: 1 }],
+    toolCalls: [],
+    taskRuns: [],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 1,
+    lastEventAt: Date.now(),
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+  })
+
+  const result = service.search({ text: 'analysis' })
+  assert.equal(result.threads.length, 1)
+  assert.deepEqual(result.threads[0]?.actualAgents, [])
+  assert.equal(result.threads[0]?.usage.taskRuns, 0)
+  assert.equal(service.search({ agents: ['business-analyst'] }).threads.length, 0)
+}))
+
+test('thread index service preserves persisted agents for unhydrated empty views', () => withThreadIndexService('agent-unhydrated', (service) => {
+  const record = upsertSessionRecord(toSessionRecord({
+    id: 'session-agent-unhydrated',
+    title: 'Historical analysis',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    opencodeDirectory: '/workspace/analytics',
+    summary: {
+      messages: 4,
+      userMessages: 2,
+      assistantMessages: 2,
+      toolCalls: 1,
+      taskRuns: 2,
+      cost: 0.25,
+      tokens: { input: 10, output: 20, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      agentBreakdown: [{
+        agent: 'business-analyst',
+        taskRuns: 2,
+        cost: 0.25,
+        tokens: { input: 10, output: 20, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      }],
+    },
+  }))
+  assert.ok(record)
+
+  service.upsertThreadFromSessionRecord(record, emptySessionView())
+
+  const result = service.search({ agents: ['business-analyst'] })
+  assert.equal(result.threads.length, 1)
+  assert.deepEqual(result.threads[0]?.actualAgents, [{ name: 'business-analyst', count: 2 }])
+  assert.equal(result.threads[0]?.usage.taskRuns, 2)
+}))
+
+test('thread index service preserves metadata rows during status-only view refreshes', () => withThreadIndexService('status-only-metadata', (service) => {
+  const record = upsertSessionRecord(toSessionRecord({
+    id: 'session-status-only',
+    title: 'Historical chart analysis',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+    opencodeDirectory: '/workspace/analytics',
+    summary: {
+      messages: 4,
+      userMessages: 2,
+      assistantMessages: 2,
+      toolCalls: 1,
+      taskRuns: 1,
+      cost: 0.25,
+      tokens: { input: 10, output: 20, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      agentBreakdown: [{
+        agent: 'business-analyst',
+        taskRuns: 1,
+        cost: 0.25,
+        tokens: { input: 10, output: 20, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      }],
+    },
+  }))
+  assert.ok(record)
+
+  service.upsertThreadFromSessionRecord(record, {
+    ...emptySessionView({ revision: 1, lastEventAt: Date.now() }),
+    messages: [{ id: 'm1', role: 'user', content: 'make a chart', order: 1 }],
+    toolCalls: [{ id: 'tool-1', name: 'charts.create', input: {}, status: 'complete', order: 2 }],
+    taskRuns: [],
+  })
+  assert.deepEqual(
+    service.search({ text: 'charts.create' }).threads[0]?.actualTools,
+    [{ name: 'charts.create', mcpName: 'charts', count: 1 }],
+  )
+
+  service.upsertThreadFromSessionRecord(record, emptySessionView({
+    revision: 2,
+    lastEventAt: Date.now(),
+    isGenerating: true,
+  }))
+
+  const result = service.search({ agents: ['business-analyst'], tools: ['charts.create'] })
+  assert.equal(result.threads.length, 1)
+  assert.deepEqual(result.threads[0]?.actualAgents, [{ name: 'business-analyst', count: 1 }])
+  assert.deepEqual(result.threads[0]?.actualTools, [{ name: 'charts.create', mcpName: 'charts', count: 1 }])
+  assert.equal(result.threads[0]?.status, 'running')
+  assert.equal(result.threads[0]?.usage.taskRuns, 1)
 }))
 
 test('thread index service preserves view-derived tools during record-only updates', () => withThreadIndexService('partial-metadata', (service) => {

@@ -13,7 +13,15 @@
 export const RUNTIME_TOOL_CACHE_TTL_MS = 30_000
 type RuntimeToolCacheEntry = { expiresAt: number; tools: unknown[] }
 export const runtimeToolCache = new Map<string, RuntimeToolCacheEntry>()
+export const runtimeToolInflight = new Map<string, Promise<unknown[]>>()
+let runtimeToolCacheGeneration = 0
+
+export function currentRuntimeToolCacheGeneration() {
+  return runtimeToolCacheGeneration
+}
 
 export function invalidateRuntimeToolCache() {
+  runtimeToolCacheGeneration += 1
   runtimeToolCache.clear()
+  runtimeToolInflight.clear()
 }

@@ -52,3 +52,35 @@ test('normalizeStoredSessionRecord keeps Cowork-managed records and drops extern
   })
   assert.equal(external, null)
 })
+
+test('normalizeStoredSessionRecord preserves session usage agent breakdowns', () => {
+  const record = normalizeStoredSessionRecord({
+    id: 'ses_summary',
+    opencodeDirectory: '/runtime-home',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:01.000Z',
+    managedByCowork: true,
+    summary: {
+      messages: 3,
+      userMessages: 1,
+      assistantMessages: 2,
+      toolCalls: 1,
+      taskRuns: 2,
+      cost: 0.25,
+      tokens: { input: 10, output: 20, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
+      agentBreakdown: [{
+        agent: 'business-analyst',
+        taskRuns: 2,
+        cost: 0.25,
+        tokens: { input: 10, output: 20, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
+      }],
+    },
+  }, (value) => value, () => null)
+
+  assert.deepEqual(record?.summary?.agentBreakdown, [{
+    agent: 'business-analyst',
+    taskRuns: 2,
+    cost: 0.25,
+    tokens: { input: 10, output: 20, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
+  }])
+})

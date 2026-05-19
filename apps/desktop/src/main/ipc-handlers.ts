@@ -10,7 +10,6 @@ import { fileURLToPath } from 'url'
 import {
   getClient,
   getRuntimeHomeDir,
-  getV2ClientForDirectory,
 } from './runtime.ts'
 import { getEffectiveSettings } from './settings.ts'
 import { log } from './logger.ts'
@@ -19,8 +18,7 @@ import { shortSessionId } from './log-sanitizer.ts'
 import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
 import { getSessionRecord, listSessionRecords } from './session-registry.ts'
 import { syncSessionView } from './session-history-loader.ts'
-import { ensureRuntimeContextDirectory } from './runtime-context.ts'
-import { isVisibleRuntimeToolId, runtimeToolId } from './runtime-tools.ts'
+import { listRuntimeToolsForResolvedContext } from './runtime-tools.ts'
 import { createSandboxWorkspaceDir } from './runtime-paths.ts'
 import { createDestructiveConfirmationManager } from './destructive-actions.ts'
 import { listWorkflows as listWorkflowState } from './workflow-store.ts'
@@ -50,7 +48,6 @@ import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
 
-import { RUNTIME_TOOL_CACHE_TTL_MS, runtimeToolCache } from './runtime-tool-cache.ts'
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
 type IpcSenderEvent = IpcMainEvent | IpcMainInvokeEvent
@@ -285,33 +282,12 @@ export function setupIpcHandlers(
 
     if (!provider || !model) return []
 
-    const cacheKey = `${directory}|${provider}|${model}`
-    const now = Date.now()
-    const cached = runtimeToolCache.get(cacheKey)
-    if (cached && cached.expiresAt > now) {
-      return cached.tools
-    }
-
-    await ensureRuntimeContextDirectory(directory)
-
-    const client = getV2ClientForDirectory(directory)
-    if (!client) return []
-
-    try {
-      const result = await client.tool.list({
-        directory,
-        provider,
-        model,
-      }, {
-        throwOnError: true,
-      })
-      const tools = (result.data || []).filter((entry) => isVisibleRuntimeToolId(runtimeToolId(entry)))
-      runtimeToolCache.set(cacheKey, { expiresAt: now + RUNTIME_TOOL_CACHE_TTL_MS, tools })
-      return tools
-    } catch (err) {
-      logHandlerError('tool:list', err)
-      return []
-    }
+    return listRuntimeToolsForResolvedContext({
+      directory,
+      provider,
+      model,
+      logScope: 'tool:list',
+    })
   }
 
   const capabilityToolDiscovery = createCapabilityToolDiscovery({
