@@ -1,7 +1,6 @@
 import electron from 'electron'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
 import { randomBytes } from 'node:crypto'
-import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -119,24 +118,6 @@ export function resolveManagedOpencodeSpawn(
   return { command: 'opencode', args }
 }
 
-async function resolveManagedOpencodePort(hostname: string, port: number) {
-  if (port !== 0) return port
-
-  return await new Promise<number>((resolvePort, reject) => {
-    const server = createServer()
-    server.once('error', reject)
-    server.listen(0, hostname, () => {
-      const address = server.address()
-      const nextPort = typeof address === 'object' && address ? address.port : 0
-      server.close((error) => {
-        if (error) reject(error)
-        else if (nextPort > 0) resolvePort(nextPort)
-        else reject(new Error('Failed to allocate a managed OpenCode server port.'))
-      })
-    })
-  })
-}
-
 function resolveManagedOpencodeSupervisorPath() {
   return join(currentModuleDir, 'runtime-managed-server-supervisor.js')
 }
@@ -192,8 +173,7 @@ export async function createManagedOpencodeServer(options: OpencodeServerOptions
     timeout: 5000,
     ...options,
   }
-  const port = await resolveManagedOpencodePort(resolved.hostname, resolved.port)
-  const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${port}`]
+  const args = ['serve', `--hostname=${resolved.hostname}`, `--port=${resolved.port}`]
   const logLevel = normalizeManagedOpencodeServerLogLevel(resolved.logLevel)
     || normalizeManagedOpencodeServerLogLevel((resolved.config as { logLevel?: unknown } | undefined)?.logLevel)
   if (logLevel) args.push(`--log-level=${logLevel}`)

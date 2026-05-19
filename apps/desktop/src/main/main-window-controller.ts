@@ -19,6 +19,7 @@ export function createMainWindowController(options: {
   appDirname: string
   brandName: string
   getAppIsQuitting: () => boolean
+  canOpenMainWindowFromLoading?: () => boolean
   log: (category: string, message: string) => void
 }) {
   let mainWindow: BrowserWindow | null = null
@@ -169,12 +170,13 @@ export function createMainWindowController(options: {
   function showOrCreateMainWindow(reason = 'activate') {
     const window = adoptExistingMainWindow()
     if (!window) {
-      if (loadingWindow && !loadingWindow.isDestroyed()) {
+      if (loadingWindow && !loadingWindow.isDestroyed() && options.canOpenMainWindowFromLoading?.() !== true) {
         loadingWindow.show()
         loadingWindow.moveTop()
         loadingWindow.focus()
         return
       }
+      closeLoadingWindow()
       createWindow(reason)
       return
     }

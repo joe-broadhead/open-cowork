@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `7722531e68c7f97b30192dcf8bb4c84ea3254f63b61e24a1d4618aaa870d23fa`
+- pnpm lockfile SHA-256: `ec4283ebf6b512032b5ea8b5e71349a2898af3ed983b98532ba7df10d9e9e8e1`
 - Production package entries: 420
 - Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
 
@@ -20,7 +20,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
-| @opencode-ai/sdk | 1.15.3 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.3.tgz |
+| @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
 | @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
 | @tanstack/virtual-core | 3.14.0 | MIT | THIRD_PARTY_LICENSES/@tanstack__virtual-core@3.14.0/ | git+https://github.com/TanStack/virtual.git |
 | @types/d3 | 7.4.3 | MIT | THIRD_PARTY_LICENSES/@types__d3@7.4.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
@@ -297,19 +297,19 @@ Each package remains licensed under its own license terms. The table below is pr
 | object-inspect | 1.13.4 | MIT | THIRD_PARTY_LICENSES/object-inspect@1.13.4/ | git://github.com/inspect-js/object-inspect.git |
 | on-finished | 2.4.1 | MIT | THIRD_PARTY_LICENSES/on-finished@2.4.1/ | jshttp/on-finished |
 | once | 1.4.0 | ISC | THIRD_PARTY_LICENSES/once@1.4.0/ | git://github.com/isaacs/once |
-| opencode-ai | 1.15.3 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.15.3/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.15.3.tgz |
-| opencode-darwin-arm64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.15.3.tgz |
-| opencode-darwin-x64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.15.3.tgz |
-| opencode-darwin-x64-baseline | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.15.3.tgz |
-| opencode-linux-arm64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.15.3.tgz |
-| opencode-linux-arm64-musl | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.15.3.tgz |
-| opencode-linux-x64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.15.3.tgz |
-| opencode-linux-x64-baseline | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.15.3.tgz |
-| opencode-linux-x64-baseline-musl | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.15.3.tgz |
-| opencode-linux-x64-musl | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.15.3.tgz |
-| opencode-windows-arm64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.15.3.tgz |
-| opencode-windows-x64 | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.3.tgz |
-| opencode-windows-x64-baseline | 1.15.3 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.3.tgz |
+| opencode-ai | 1.15.5 | MIT | THIRD_PARTY_LICENSES/opencode-ai@1.15.5/ | https://registry.npmjs.org/opencode-ai/-/opencode-ai-1.15.5.tgz |
+| opencode-darwin-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-arm64/-/opencode-darwin-arm64-1.15.5.tgz |
+| opencode-darwin-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64/-/opencode-darwin-x64-1.15.5.tgz |
+| opencode-darwin-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-darwin-x64-baseline/-/opencode-darwin-x64-baseline-1.15.5.tgz |
+| opencode-linux-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64/-/opencode-linux-arm64-1.15.5.tgz |
+| opencode-linux-arm64-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-arm64-musl/-/opencode-linux-arm64-musl-1.15.5.tgz |
+| opencode-linux-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64/-/opencode-linux-x64-1.15.5.tgz |
+| opencode-linux-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline/-/opencode-linux-x64-baseline-1.15.5.tgz |
+| opencode-linux-x64-baseline-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-baseline-musl/-/opencode-linux-x64-baseline-musl-1.15.5.tgz |
+| opencode-linux-x64-musl | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-linux-x64-musl/-/opencode-linux-x64-musl-1.15.5.tgz |
+| opencode-windows-arm64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-arm64/-/opencode-windows-arm64-1.15.5.tgz |
+| opencode-windows-x64 | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64/-/opencode-windows-x64-1.15.5.tgz |
+| opencode-windows-x64-baseline | 1.15.5 | MIT (opencode-ai companion package) |  | https://registry.npmjs.org/opencode-windows-x64-baseline/-/opencode-windows-x64-baseline-1.15.5.tgz |
 | package-manager-detector | 1.6.0 | MIT | THIRD_PARTY_LICENSES/package-manager-detector@1.6.0/ | git+https://github.com/antfu-collective/package-manager-detector.git |
 | parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |

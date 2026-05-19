@@ -20,6 +20,7 @@ import { configureWorkflowService, startWorkflowService, stopWorkflowService } f
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import {
   configureRuntimeInitialization,
+  getRuntimeInitializationStatus,
   resolveRuntimeInitializationError,
   resolveRuntimeInitializationReady,
   setRuntimeInitializationPhase,
@@ -94,6 +95,7 @@ const {
   app,
   appDirname: __dirname,
   brandName: branding.name,
+  canOpenMainWindowFromLoading: () => getRuntimeInitializationStatus().phase === 'error',
   getAppIsQuitting: () => appIsQuitting,
   log,
 })
