@@ -61,12 +61,18 @@ interface SessionStore {
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
   renameSession: (id: string, title: string) => void
+  setSessionComposerPreferences: (id: string, preferences: {
+    modelId?: string | null
+    reasoningVariant?: string | null
+  }) => void
   applySessionMetadata: (patch: {
     id: string
     title: string | null
     parentSessionId?: string | null
     changeSummary?: SessionChangeSummary | null
     revertedMessageId?: string | null
+    composerModelId?: string | null
+    composerReasoningVariant?: string | null
   }) => void
   removeSession: (id: string) => void
   setSessionView: (sessionId: string, view: SessionView) => void
@@ -328,6 +334,20 @@ export const useSessionStore = create<SessionStore>((set) => ({
   renameSession: (id, title) => set((state) => ({
     sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
   })),
+  setSessionComposerPreferences: (id, preferences) => set((state) => ({
+    sessions: state.sessions.map((session) => {
+      if (session.id !== id) return session
+      return {
+        ...session,
+        ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
+          ? { composerModelId: preferences.modelId ?? null }
+          : {}),
+        ...(Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')
+          ? { composerReasoningVariant: preferences.reasoningVariant ?? null }
+          : {}),
+      }
+    }),
+  })),
   applySessionMetadata: (patch) => set((state) => ({
     sessions: state.sessions.map((session) => {
       if (session.id !== patch.id) return session
@@ -338,6 +358,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
       if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
       if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
+      if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
+      if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
       return next
     }),
   })),

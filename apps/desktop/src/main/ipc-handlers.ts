@@ -47,6 +47,7 @@ import { resolvePrivateSessionArtifactPath } from './ipc-artifact-access.ts'
 import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 import { getThreadIndexService } from './thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
@@ -60,11 +61,18 @@ function expectedRendererEntryPath() {
   return join(currentModuleDirname(), '../index.html')
 }
 
+function expectedTrustedRendererPaths() {
+  return [
+    expectedRendererEntryPath(),
+    join(currentModuleDirname(), '../loading.html'),
+  ]
+}
+
 export function isTrustedIpcSenderUrl(rawUrl: string, devServerUrl: string | null | undefined = process.env.VITE_DEV_SERVER_URL) {
   return isTrustedRendererIpcUrl({
     rawUrl,
     devServerUrl,
-    expectedRendererPath: expectedRendererEntryPath(),
+    expectedRendererPath: expectedTrustedRendererPaths(),
   })
 }
 
@@ -96,6 +104,8 @@ export function setupIpcHandlers(
       parentSessionId: record.parentSessionId,
       changeSummary: record.changeSummary,
       revertedMessageId: record.revertedMessageId,
+      composerModelId: record.composerModelId,
+      composerReasoningVariant: record.composerReasoningVariant,
     })
   })
 
@@ -155,11 +165,7 @@ export function setupIpcHandlers(
   }
 
   function logHandlerError(handler: string, err: unknown) {
-    const message = err instanceof Error
-      ? err.message
-      : typeof err === 'string'
-        ? err
-        : JSON.stringify(err)
+    const message = sdkErrorMessage(err, 'IPC handler failed')
     log('error', `${handler} failed: ${message}`)
   }
 

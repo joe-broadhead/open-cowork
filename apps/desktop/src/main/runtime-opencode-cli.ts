@@ -1,10 +1,18 @@
 import electron from 'electron'
+import { execFile } from 'node:child_process'
 import { existsSync } from 'fs'
 import { createRequire } from 'module'
 import { delimiter, dirname, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
+import { promisify } from 'node:util'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
-const require = createRequire(typeof __filename === 'string' ? __filename : import.meta.url)
+const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
+  ? __filename
+  : fileURLToPath(import.meta.url)
+const currentModuleDir = dirname(currentModulePath)
+const require = createRequire(currentModulePath)
+const execFileAsync = promisify(execFile)
 
 function unpackedResourcePath(value: string) {
   if (!electronApp?.isPackaged) return value
@@ -38,8 +46,35 @@ function resolveBundledPackageJsonPath(moduleName: string): string | null {
   return moduleDir ? join(moduleDir, 'package.json') : null
 }
 
+function resolvePackageJsonFromEntry(moduleName: string): string | null {
+  try {
+    let dir = dirname(require.resolve(moduleName))
+    while (true) {
+      const candidate = join(dir, 'package.json')
+      if (existsSync(candidate)) return candidate
+      const parent = dirname(dir)
+      if (parent === dir) return null
+      dir = parent
+    }
+  } catch {
+    return null
+  }
+}
+
+function resolveDevelopmentPackageJsonPath(moduleName: string): string | null {
+  if (electronApp?.isPackaged) return null
+  const moduleParts = moduleName.split('/').filter(Boolean)
+  const candidate = resolve(currentModuleDir, '..', '..', 'node_modules', ...moduleParts, 'package.json')
+  return existsSync(candidate) ? candidate : null
+}
+
 function resolveBundledOpencodeWrapperPath(): string | null {
   return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
+}
+
+function resolveBundledOpencodePackageBinaryPath(): string | null {
+  return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode.exe'))
+    || resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
 }
 
 function resolveBundledOpencodeBinaryPath(): string | null {
@@ -52,11 +87,27 @@ function resolveBundledOpencodeBinaryPath(): string | null {
     const resolved = resolveBundledNodeModuleFile(moduleName, join('bin', binary))
     if (resolved) return resolved
   }
-  return null
+  return resolveBundledOpencodePackageBinaryPath()
 }
 
 export function getBundledOpencodeVersion(): string | null {
   const packageJsonPath = resolveBundledPackageJsonPath('opencode-ai')
+  if (!packageJsonPath) return null
+
+  try {
+    const packageJson = require(packageJsonPath) as { version?: unknown }
+    return typeof packageJson.version === 'string' && packageJson.version.length > 0
+      ? packageJson.version
+      : null
+  } catch {
+    return null
+  }
+}
+
+export function getBundledOpencodeSdkVersion(): string | null {
+  const packageJsonPath = resolveBundledPackageJsonPath('@opencode-ai/sdk')
+    || resolvePackageJsonFromEntry('@opencode-ai/sdk')
+    || resolveDevelopmentPackageJsonPath('@opencode-ai/sdk')
   if (!packageJsonPath) return null
 
   try {
@@ -126,4 +177,30 @@ export function applyBundledOpencodeCliEnvironment() {
 
   if (env.path) process.env.PATH = env.path
   return env
+}
+
+export async function readBundledOpencodeCliVersion(env: {
+  opencodeBinPath?: string | null
+  path?: string | null
+} = {}): Promise<string | null> {
+  const command = env.opencodeBinPath?.trim() || 'opencode'
+  const nextEnv = {
+    ...process.env,
+    ...(env.path ? { PATH: env.path } : {}),
+  }
+  try {
+    const result = await execFileAsync(command, ['--version'], {
+      env: nextEnv,
+      timeout: 5000,
+      windowsHide: true,
+    })
+    const text = `${result.stdout || ''}\n${result.stderr || ''}`
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean)
+    return text || null
+  } catch {
+    return getBundledOpencodeVersion()
+  }
 }

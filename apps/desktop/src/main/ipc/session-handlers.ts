@@ -29,8 +29,10 @@ import { registerSessionActionHandlers } from './session-action-handlers.ts'
 import { registerSessionCommandHandlers } from './session-command-handlers.ts'
 import { registerSessionFileHandlers } from './session-file-handlers.ts'
 import { registerSessionInteractionHandlers } from './session-interaction-handlers.ts'
-import { registerIpcInvoke, sessionPromptArgs } from './schema.ts'
+import { registerIpcInvoke, sessionPromptArgs, stringAndObjectArgs } from './schema.ts'
+import { sdkErrorMessage } from '../sdk-error.ts'
 import {
+  normalizeComposerPreferences,
   normalizePromptAgent,
   normalizePromptAttachments,
   normalizePromptOptions,
@@ -43,13 +45,17 @@ type PromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
   | { type: 'text'; text: string }
 
-function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, runtimeProvider?: ProviderLike | null) {
+function resolvePromptModel(
+  settings: ReturnType<typeof getEffectiveSettings>,
+  runtimeProvider?: ProviderLike | null,
+  composerModelId?: string | null,
+) {
   if (!settings.effectiveProviderId || !settings.effectiveModel) return null
   const prefix = `${settings.effectiveProviderId}/`
   const stripProviderPrefix = (modelId: string) => modelId.startsWith(prefix)
     ? modelId.slice(prefix.length)
     : modelId
-  const configuredModel = stripProviderPrefix(settings.effectiveModel)
+  const configuredModel = stripProviderPrefix(composerModelId || settings.effectiveModel)
   const runtimeModels = runtimeProvider?.models || null
   const runtimeDefault = runtimeProvider?.defaultModel ? stripProviderPrefix(runtimeProvider.defaultModel) : undefined
   const modelID = runtimeModels
@@ -64,6 +70,11 @@ function resolvePromptModel(settings: ReturnType<typeof getEffectiveSettings>, r
     providerID: settings.effectiveProviderId,
     modelID,
   }
+}
+
+function promptModelToStoredModelId(promptModel: ReturnType<typeof resolvePromptModel>, settings: ReturnType<typeof getEffectiveSettings>) {
+  if (!promptModel) return settings.effectiveModel || null
+  return `${promptModel.providerID}/${promptModel.modelID}`
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -156,7 +167,7 @@ async function getSelectedRuntimeProvider(client: NonNullable<ReturnType<typeof 
       provider.id === providerId || provider.name === providerId
     )) || null
   } catch (err) {
-    log('provider', `Could not resolve live provider metadata for ${providerId}: ${err instanceof Error ? err.message : String(err)}`)
+    log('provider', `Could not resolve live provider metadata for ${providerId}: ${sdkErrorMessage(err)}`)
     return null
   }
 }
@@ -180,7 +191,7 @@ async function getRuntimeProviderAuthMethods(
     const methods = result.data?.[providerId]
     return Array.isArray(methods) ? methods : []
   } catch (err) {
-    log('provider', `Could not resolve auth methods for ${providerId}: ${err instanceof Error ? err.message : String(err)}`)
+    log('provider', `Could not resolve auth methods for ${providerId}: ${sdkErrorMessage(err)}`)
     return []
   }
 }
@@ -254,18 +265,12 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const promptAttachments = normalizePromptAttachments(attachments)
     const requestedAgent = normalizePromptAgent(agent)
     const promptOptions = normalizePromptOptions(options)
-    const { client } = await context.getSessionClient(sessionId)
+    const { client, record } = await context.getSessionClient(sessionId)
     const settings = getEffectiveSettings()
     const parts = buildPromptParts(promptText, promptAttachments)
 
     trackParentSession(sessionId)
     touchSessionRecord(sessionId)
-    const promptRecord = updateSessionRecord(sessionId, {
-      providerId: settings.effectiveProviderId || null,
-      modelId: settings.effectiveModel || null,
-      updatedAt: new Date().toISOString(),
-    })
-    if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
     log('prompt', `Sending prompt to ${shortSessionId(sessionId)} attachments=${promptAttachments.length} agent=${requestedAgent}`)
     try {
       const win = context.getMainWindow()
@@ -297,8 +302,15 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
       })
       const runtimeProvider = await getSelectedRuntimeProvider(client, settings.effectiveProviderId)
       await assertSelectedProviderReadyForPrompt(client, settings, runtimeProvider)
-      const promptModel = resolvePromptModel(settings, runtimeProvider)
-      const promptVariant = resolvePromptVariant(promptOptions.variant, promptModel, runtimeProvider)
+      const promptModel = resolvePromptModel(settings, runtimeProvider, record?.composerModelId)
+      const requestedVariant = promptOptions.variant ?? record?.composerReasoningVariant ?? undefined
+      const promptVariant = resolvePromptVariant(requestedVariant, promptModel, runtimeProvider)
+      const promptRecord = updateSessionRecord(sessionId, {
+        providerId: settings.effectiveProviderId || null,
+        modelId: promptModelToStoredModelId(promptModel, settings),
+        updatedAt: new Date().toISOString(),
+      })
+      if (promptRecord) getThreadIndexService().upsertThreadFromSessionRecord(promptRecord)
 
       await client.session.promptAsync(buildPromptRequest({
         sessionId,
@@ -319,11 +331,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     } catch (err) {
       forgetSubmittedPrompt(sessionId)
       const win = context.getMainWindow()
-      const message = err instanceof Error
-        ? err.message
-        : typeof err === 'string'
-          ? err
-          : 'Prompt failed'
+      const message = sdkErrorMessage(err, 'Prompt failed')
       dispatchRuntimeSessionEvent(win, {
         type: 'error',
         sessionId,
@@ -375,6 +383,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
             parentSessionId: record.parentSessionId,
             changeSummary: record.changeSummary,
             revertedMessageId: record.revertedMessageId,
+            composerModelId: record.composerModelId,
+            composerReasoningVariant: record.composerReasoningVariant,
           })
         }
       }
@@ -387,6 +397,22 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
 
   context.ipcMain.handle('session:list', async () => {
     return listSessionRecords().map(toRendererSession)
+  })
+
+  registerIpcInvoke(context, 'session:set-composer-preferences', stringAndObjectArgs('session id', 'composer preferences', { maxBytes: 512 }), async (_event, sessionIdInput, rawPreferences) => {
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const preferences = normalizeComposerPreferences(rawPreferences)
+    const patch: Parameters<typeof updateSessionRecord>[1] = {}
+    if (Object.prototype.hasOwnProperty.call(preferences, 'modelId')) {
+      patch.composerModelId = preferences.modelId ?? null
+    }
+    if (Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')) {
+      patch.composerReasoningVariant = preferences.reasoningVariant ?? null
+    }
+    const record = Object.keys(patch).length > 0
+      ? updateSessionRecord(sessionId, patch)
+      : getSessionRecord(sessionId)
+    return record ? toRendererSession(record) : null
   })
 
   context.ipcMain.handle('session:get', async (_event, idInput: unknown) => {
@@ -483,6 +509,8 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
           opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
           providerId: record?.providerId || settings.effectiveProviderId || null,
           modelId: record?.modelId || settings.effectiveModel || null,
+          composerModelId: record?.composerModelId || null,
+          composerReasoningVariant: record?.composerReasoningVariant || null,
           parentSessionId: session.parentID || sessionId,
           changeSummary: session.summary,
           revertedMessageId: session.revertedMessageId,

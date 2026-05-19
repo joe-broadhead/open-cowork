@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
+import { summarizeMcpConnections } from '../../helpers/mcp-status-summary'
 
 export function McpStatus() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
   const [expanded, setExpanded] = useState(false)
   const [reconnecting, setReconnecting] = useState<string | null>(null)
 
-  const up = mcpConnections.filter((m) => m.connected).length
-  const down = mcpConnections.filter((m) => !m.connected).length
-  const total = mcpConnections.length
+  const summary = summarizeMcpConnections(mcpConnections)
+  const up = summary.connected.length
+  const down = summary.needsAuth.length + summary.failed.length
+  const total = summary.total
 
   if (total === 0) return null
 

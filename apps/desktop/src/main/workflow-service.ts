@@ -41,6 +41,7 @@ import { getThreadIndexService } from './thread-index-service.ts'
 import { toIsoTimestamp } from './task-run-utils.ts'
 import { log } from './logger.ts'
 import { createKeyedPromiseChain } from './promise-chain.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -195,7 +196,7 @@ export function startWorkflowService() {
     publishWorkflowUpdated()
   }
   void ensureWorkflowWebhookServer().then(() => publishWorkflowUpdated()).catch((error) => {
-    log('error', `Failed to start workflow webhook server: ${error instanceof Error ? error.message : String(error)}`)
+    log('error', `Failed to start workflow webhook server: ${sdkErrorMessage(error)}`)
   })
   void runWorkflowSchedulerTick()
   schedulerTimer = setInterval(() => {
@@ -254,11 +255,11 @@ async function runWorkflow(workflowId: string, triggerType: WorkflowTriggerType,
       onSessionCreated: (sessionId) => {
         attachWorkflowRunSession(workflowId, run.id, sessionId)
       },
-    })
+  })
     publishWorkflowUpdated()
     return getWorkflowRun(run.id)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = sdkErrorMessage(error, 'Workflow run failed to start.')
     markWorkflowRunFailed(run.id, message)
     publishWorkflowUpdated()
     throw error
@@ -306,7 +307,7 @@ async function runWorkflowSchedulerTickNow(now = new Date()) {
         scheduledFor: workflow.nextRunAt,
       })
     } catch (error) {
-      log('error', `Failed to start workflow ${workflow.id}: ${error instanceof Error ? error.message : String(error)}`)
+      log('error', `Failed to start workflow ${workflow.id}: ${sdkErrorMessage(error)}`)
     }
   }
 }

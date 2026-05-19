@@ -50,6 +50,12 @@ export function createApplicationMenuTemplate(options: {
       submenu: [
         { label: 'New Thread', accelerator: NEW_THREAD_SHORTCUT, click: () => getMainWindow()?.webContents.send('action', 'new-thread') },
         { type: 'separator' },
+        ...Array.from({ length: 9 }, (_value, index) => ({
+          label: `Switch to Project ${index + 1}`,
+          accelerator: `CmdOrCtrl+${index + 1}`,
+          click: () => getMainWindow()?.webContents.send('action', `project-switch:${index + 1}`),
+        })),
+        { type: 'separator' },
         { label: 'Export Thread...', accelerator: 'CmdOrCtrl+Shift+E', click: () => getMainWindow()?.webContents.send('action', 'export') },
         { type: 'separator' },
         { role: 'close' },

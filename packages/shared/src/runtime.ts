@@ -33,6 +33,24 @@ export interface RuntimeStatus {
   error?: string | null
 }
 
+export type RuntimeLoadingPhase =
+  | 'idle'
+  | 'starting'
+  | 'config'
+  | 'managed-server'
+  | 'connecting-events'
+  | 'mcp'
+  | 'ready'
+  | 'error'
+
+export interface RuntimeLoadingStatus {
+  phase: RuntimeLoadingPhase
+  message: string
+  ready: boolean
+  error: string | null
+  updatedAt: string
+}
+
 export interface RuntimeInputDiagnostics {
   opencodeVersion: string | null
   providerId: string | null
@@ -46,6 +64,14 @@ export interface RuntimeInputDiagnostics {
   modelSource: 'settings' | 'default' | 'fallback'
   providerOptions: Record<string, unknown>
   credentialOverrideKeys: string[]
+}
+
+export interface RecentProject {
+  index: number
+  directory: string
+  latestSessionId: string
+  latestTitle: string | null
+  updatedAt: string
 }
 
 export interface ToolListOptions {

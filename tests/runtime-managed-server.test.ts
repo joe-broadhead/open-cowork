@@ -1,14 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { fork, type ChildProcess } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { setTimeout as delay } from 'timers/promises'
 
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   buildManagedOpencodeAuthorizationHeader,
   createManagedOpencodeServer,
+  type ManagedOpencodeSupervisorFork,
 } from '../apps/desktop/src/main/runtime-managed-server.ts'
 import {
   buildManagedOpencodeClientConfig,
@@ -29,6 +32,37 @@ function writeExecutable(root: string, name: string, source: string) {
   writeFileSync(path, `#!/bin/sh\n${source}`)
   chmodSync(path, 0o755)
   return path
+}
+
+const testSupervisorPath = fileURLToPath(new URL('../apps/desktop/src/main/runtime-managed-server-supervisor.ts', import.meta.url))
+
+const forkTestSupervisor: ManagedOpencodeSupervisorFork = () => {
+  const execArgv = Array.from(new Set([...process.execArgv, '--no-warnings', '--experimental-strip-types']))
+  const child = fork(testSupervisorPath, [], {
+    execArgv,
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  })
+  return {
+    get pid() {
+      return child.pid
+    },
+    stdout: child.stdout,
+    stderr: child.stderr,
+    postMessage(message) {
+      child.send(message)
+    },
+    kill() {
+      return child.kill()
+    },
+    on(event, listener) {
+      child.on(event, listener as Parameters<ChildProcess['on']>[1])
+      return child
+    },
+    off(event, listener) {
+      child.off(event, listener as Parameters<ChildProcess['off']>[1])
+      return child
+    },
+  }
 }
 
 async function waitForProcessExit(pid: number) {
@@ -65,6 +99,7 @@ while true; do sleep 1; done
     },
     hostname: '127.0.0.1',
     config: { logLevel: 'warn' },
+    forkUtilityProcess: forkTestSupervisor,
     opencodeBinPath: executable,
     port: 0,
     timeout: 5000,
@@ -98,6 +133,7 @@ while true; do sleep 1; done
   await assert.rejects(
     createManagedOpencodeServer({
       env: { PATH: process.env.PATH || '' },
+      forkUtilityProcess: forkTestSupervisor,
       hostname: '127.0.0.1',
       opencodeBinPath: executable,
       port: 0,
@@ -124,6 +160,7 @@ while true; do sleep 1; done
   try {
     const started = createManagedOpencodeServer({
       env: { PATH: process.env.PATH || '' },
+      forkUtilityProcess: forkTestSupervisor,
       hostname: '127.0.0.1',
       opencodeBinPath: executable,
       port: 0,
@@ -139,6 +176,41 @@ while true; do sleep 1; done
       await waitForProcessExit(pid)
     }
   } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('managed opencode server reports one unexpected exit after readiness', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-exit-'))
+  const pidFile = join(root, 'pid')
+  const executable = writeExecutable(root, 'exit-opencode', `
+printf '%s' "$$" > ${JSON.stringify(pidFile)}
+printf '%s\\n' 'opencode server listening on http://127.0.0.1:43211'
+sleep 1
+exit 7
+`)
+  const unexpectedExits: Array<{ code: number | null; signal: NodeJS.Signals | null }> = []
+
+  const server = await createManagedOpencodeServer({
+    env: { PATH: process.env.PATH || '' },
+    forkUtilityProcess: forkTestSupervisor,
+    hostname: '127.0.0.1',
+    opencodeBinPath: executable,
+    onUnexpectedExit: (event) => {
+      unexpectedExits.push(event)
+    },
+    port: 0,
+    timeout: 5000,
+  })
+
+  try {
+    assert.equal(server.url, 'http://127.0.0.1:43211')
+    for (let attempt = 0; unexpectedExits.length === 0 && attempt < 80; attempt += 1) {
+      await delay(50)
+    }
+    assert.deepEqual(unexpectedExits, [{ code: 7, signal: null }])
+  } finally {
+    server.close()
     rmSync(root, { recursive: true, force: true })
   }
 })

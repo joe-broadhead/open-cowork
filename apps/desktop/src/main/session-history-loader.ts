@@ -26,6 +26,7 @@ import { getSessionRecord, updateSessionRecord } from './session-registry.ts'
 import { createSessionSyncCoordinator } from './session-sync-coordinator.ts'
 import { buildSessionUsageSummary } from './session-usage-summary.ts'
 import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs, summarizeSessionDiffs } from './session-diff-fallback.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 type QuestionListResult = { data?: QuestionRequest[] }
 type PermissionListResult = { data?: PermissionRequest[] }
@@ -168,11 +169,7 @@ function normalizePendingApprovals(
 }
 
 function logHistoryError(scope: string, sessionId: string, err: unknown) {
-  const message = err instanceof Error
-    ? err.message
-    : typeof err === 'string'
-      ? err
-      : JSON.stringify(err)
+  const message = sdkErrorMessage(err, 'Session history SDK request failed')
   log('error', `${scope} ${shortSessionId(sessionId)} failed: ${message}`)
 }
 

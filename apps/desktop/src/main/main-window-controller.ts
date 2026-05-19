@@ -19,13 +19,19 @@ export function createMainWindowController(options: {
   appDirname: string
   brandName: string
   getAppIsQuitting: () => boolean
+  canOpenMainWindowFromLoading?: () => boolean
   log: (category: string, message: string) => void
 }) {
   let mainWindow: BrowserWindow | null = null
+  let loadingWindow: BrowserWindow | null = null
   let mainWindowRecoveryTimer: NodeJS.Timeout | null = null
 
   function getMainWindow() {
     return mainWindow
+  }
+
+  function getLoadingWindow() {
+    return loadingWindow
   }
 
   function clearMainWindowRecoveryTimer() {
@@ -43,6 +49,10 @@ export function createMainWindowController(options: {
 
   function expectedRendererEntryPath() {
     return join(options.appDirname, '../index.html')
+  }
+
+  function expectedLoadingRendererPath() {
+    return join(options.appDirname, '../loading.html')
   }
 
   function rendererDevServerUrl() {
@@ -65,7 +75,10 @@ export function createMainWindowController(options: {
   }
 
   function adoptExistingMainWindow() {
-    const candidate = pickRecoverableMainWindow(mainWindow, BrowserWindow.getAllWindows())
+    const candidate = pickRecoverableMainWindow(
+      mainWindow,
+      BrowserWindow.getAllWindows().filter((window) => window !== loadingWindow),
+    )
     if (candidate !== mainWindow) {
       mainWindow = candidate
     }
@@ -157,10 +170,69 @@ export function createMainWindowController(options: {
   function showOrCreateMainWindow(reason = 'activate') {
     const window = adoptExistingMainWindow()
     if (!window) {
+      if (loadingWindow && !loadingWindow.isDestroyed() && options.canOpenMainWindowFromLoading?.() !== true) {
+        loadingWindow.show()
+        loadingWindow.moveTop()
+        loadingWindow.focus()
+        return
+      }
+      closeLoadingWindow()
       createWindow(reason)
       return
     }
     revealMainWindow(window, reason)
+  }
+
+  function loadingRendererUrl() {
+    const devServerUrl = rendererDevServerUrl()
+    if (!devServerUrl) return null
+    const base = devServerUrl.endsWith('/') ? devServerUrl : `${devServerUrl}/`
+    return new URL('loading.html', base).toString()
+  }
+
+  function closeLoadingWindow() {
+    const window = loadingWindow
+    loadingWindow = null
+    if (window && !window.isDestroyed()) {
+      window.close()
+    }
+  }
+
+  function createLoadingWindow() {
+    if (loadingWindow && !loadingWindow.isDestroyed()) return loadingWindow
+    const window = new BrowserWindow({
+      width: 520,
+      height: 360,
+      minWidth: 460,
+      minHeight: 320,
+      show: true,
+      resizable: false,
+      fullscreenable: false,
+      maximizable: false,
+      icon: getPackagedResourcePath('icon.png'),
+      title: `${options.brandName} is starting`,
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 14, y: 12 },
+      backgroundColor: '#111827',
+      webPreferences: {
+        preload: join(options.appDirname, '../preload/index.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    })
+    loadingWindow = window
+    window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      options.log('renderer', `loading console[${level}] ${sourceId}:${line} ${message}`)
+    })
+    window.on('closed', () => {
+      if (loadingWindow === window) loadingWindow = null
+    })
+    attachWebContentsSecurityGuards(window.webContents, expectedLoadingRendererPath(), rendererDevServerUrl())
+    const url = loadingRendererUrl()
+    if (url) void window.loadURL(url)
+    else void window.loadFile(expectedLoadingRendererPath())
+    return window
   }
 
   function createWindow(reason = 'startup') {
@@ -257,8 +329,11 @@ export function createMainWindowController(options: {
   }
 
   return {
+    closeLoadingWindow,
+    createLoadingWindow,
     createWindow,
     expectedRendererEntryPath,
+    getLoadingWindow,
     getMainWindow,
     getPackagedResourcePath,
     showOrCreateMainWindow,

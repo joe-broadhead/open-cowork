@@ -5,7 +5,7 @@ import { useSessionStore } from '../stores/session'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { useAppGlobalEvents } from './useAppGlobalEvents'
 
-type MenuActionCallback = (action: 'new-thread' | 'command-palette' | 'search' | 'toggle-sidebar' | 'export') => void
+type MenuActionCallback = (action: 'new-thread' | 'command-palette' | 'search' | 'toggle-sidebar' | 'export' | `project-switch:${number}`) => void
 
 function resetSessionStore() {
   useSessionStore.setState({
@@ -34,6 +34,7 @@ function installGlobalEventsApi(options: {
   revert?: ReturnType<typeof vi.fn>
   unrevert?: ReturnType<typeof vi.fn>
   exportSession?: ReturnType<typeof vi.fn>
+  switchByIndex?: ReturnType<typeof vi.fn>
   reportRendererError?: ReturnType<typeof vi.fn>
   onMenuAction?: (callback: MenuActionCallback) => void
 } = {}) {
@@ -69,6 +70,9 @@ function installGlobalEventsApi(options: {
       revert: options.revert || vi.fn(async () => true),
       unrevert: options.unrevert || vi.fn(async () => true),
       export: options.exportSession || vi.fn(async () => null),
+    },
+    projects: {
+      switchByIndex: options.switchByIndex || vi.fn(async () => null),
     },
     on: {
       menuAction: vi.fn((callback: MenuActionCallback) => {
@@ -170,5 +174,36 @@ describe('useAppGlobalEvents', () => {
       message: expect.stringContaining('export failed'),
       view: 'global-actions',
     }))
+  })
+
+  it('upserts project shortcut sessions instead of duplicating existing ids', async () => {
+    let menuAction: MenuActionCallback | null = null
+    const switchByIndex = vi.fn(async () => ({
+      id: 'session-1',
+      title: 'Session 1',
+      directory: '/tmp/project',
+      createdAt: '2026-05-08T00:00:00.000Z',
+      updatedAt: '2026-05-08T00:01:00.000Z',
+    }))
+    installGlobalEventsApi({
+      switchByIndex,
+      onMenuAction: (callback) => {
+        menuAction = callback
+      },
+    })
+    render(<Harness />)
+
+    await waitFor(() => {
+      expect(menuAction).not.toBeNull()
+    })
+    const callback = menuAction as MenuActionCallback | null
+    if (!callback) throw new Error('menu action callback was not registered')
+    callback('project-switch:1')
+
+    await waitFor(() => {
+      expect(switchByIndex).toHaveBeenCalledWith(1)
+      expect(useSessionStore.getState().currentSessionId).toBe('session-1')
+    })
+    expect(useSessionStore.getState().sessions.filter((session) => session.id === 'session-1')).toHaveLength(1)
   })
 })

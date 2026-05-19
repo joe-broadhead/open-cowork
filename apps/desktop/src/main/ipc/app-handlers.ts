@@ -20,13 +20,22 @@ import {
   isSetupComplete,
   type CoworkSettings,
 } from '../settings.ts'
-import { getClient, getModelInfoAsync } from '../runtime.ts'
+import { getClient, getClientForDirectory, getModelInfoAsync } from '../runtime.ts'
 import { getConfigError } from '../config-loader.ts'
 import { buildDiagnosticsBundle } from '../diagnostics-export.ts'
+import { awaitRuntimeInitialization } from '../runtime-initialization.ts'
 import { getRuntimeStatus } from '../runtime-status.ts'
 import { getPerfSnapshot } from '../perf-metrics.ts'
 import { log } from '../logger.ts'
 import { getRuntimeInputDiagnostics } from '../runtime-input-diagnostics.ts'
+import { getRecentProjectByIndex, listRecentProjects } from '../project-registry.ts'
+import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
+import { syncSessionView } from '../session-history-loader.ts'
+import { publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
+import { getThreadIndexService } from '../thread-index-service.ts'
+import { normalizeSessionInfo } from '../opencode-adapter.ts'
+import { trackParentSession } from '../event-task-state.ts'
+import { toIsoTimestamp } from '../task-run-utils.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
@@ -78,6 +87,29 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
     || updates.runtimeConfigSource !== undefined
     || updates.runtimeToolingBridgeEnabled !== undefined
   )
+}
+
+async function createProjectBoundSession(directory: string) {
+  const client = getClientForDirectory(directory)
+  if (!client) throw new Error('Runtime not started')
+  const result = await client.session.create({}, { throwOnError: true })
+  const session = normalizeSessionInfo(result.data)
+  if (!session) throw new Error('Runtime returned an invalid session payload')
+  const settings = getEffectiveSettings()
+  trackParentSession(session.id)
+  const record = upsertSessionRecord(
+    toSessionRecord({
+      id: session.id,
+      title: session.title || 'New session',
+      createdAt: toIsoTimestamp(session.time.created),
+      updatedAt: toIsoTimestamp(session.time.updated || session.time.created),
+      opencodeDirectory: directory,
+      providerId: settings.effectiveProviderId || null,
+      modelId: settings.effectiveModel || null,
+    }),
+  )
+  if (record) getThreadIndexService().upsertThreadFromSessionRecord(record)
+  return record
 }
 
 export function registerAppHandlers(context: IpcHandlerContext) {
@@ -228,6 +260,10 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     }
   })
 
+  context.ipcMain.handle('runtime:await-initialization', async () => {
+    return awaitRuntimeInitialization()
+  })
+
   // User-initiated runtime restart, reachable from the offline
   // banner's "Try again" button. rebootRuntime is already a singleton,
   // so concurrent clicks coalesce. Returns the post-reboot status so
@@ -245,6 +281,28 @@ export function registerAppHandlers(context: IpcHandlerContext) {
       ...status,
       error: status.error || getConfigError(),
     }
+  })
+
+  context.ipcMain.handle('projects:list', async () => {
+    return listRecentProjects(9)
+  })
+
+  context.ipcMain.handle('projects:switch-by-index', async (_event, indexInput: unknown) => {
+    const index = typeof indexInput === 'number' && Number.isInteger(indexInput) ? indexInput : 0
+    if (index < 1 || index > 9) throw new Error('projects:switch-by-index requires an index from 1 to 9.')
+    const project = getRecentProjectByIndex(index)
+    if (!project) return null
+    const { ensureRuntimeForDirectory } = await import('../index.ts')
+    await ensureRuntimeForDirectory(project.directory)
+    const session = getSessionRecord(project.latestSessionId) || await createProjectBoundSession(project.directory)
+    if (!session) return null
+    const view = await syncSessionView(session.id, { force: true, activate: true })
+    getThreadIndexService().refreshThreadMetadata(session.id, view)
+    const win = context.getMainWindow()
+    publishSessionView(win, session.id)
+    publishSessionMetadata(win, session.id)
+    const record = getSessionRecord(session.id)
+    return record ? toRendererSession(record) : null
   })
 
   context.ipcMain.handle('diagnostics:perf', async () => {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { BrowserWindow } from 'electron'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getMcpStatus, subscribeToEvents } from '../apps/desktop/src/main/events.ts'
 import { closeLogger } from '../apps/desktop/src/main/logger.ts'
@@ -35,6 +36,11 @@ async function* emptyStream() {
 async function* throwingStream() {
   for (const value of [] as unknown[]) yield value
   throw new Error('stream failed')
+}
+
+async function* unknownEventStream(type: string) {
+  yield { type, properties: {} }
+  yield { type, properties: {} }
 }
 
 async function withTrackedIntervals(fn: (state: {
@@ -120,6 +126,23 @@ test('subscribeToEvents clears its sweep interval when stream iteration throws',
 
     assert.equal(created.length, 1)
     assert.deepEqual(cleared, created)
+  })
+})
+
+test('subscribeToEvents logs unknown normalized event types once per rate window', async () => {
+  await withCapturedLogs(async (lines) => {
+    const win = {
+      webContents: { send: () => undefined },
+      isDestroyed: () => false,
+    } as unknown as BrowserWindow
+
+    await assert.rejects(
+      subscribeToEvents(createFakeClient(unknownEventStream('session.unexpected.test')), () => win),
+      /SSE stream ended unexpectedly/,
+    )
+
+    const unknownLogs = lines.filter((line) => line.includes('Unknown OpenCode event type: session.unexpected.test'))
+    assert.equal(unknownLogs.length, 1, `expected one rate-limited unknown event log, got ${JSON.stringify(lines)}`)
   })
 })
 

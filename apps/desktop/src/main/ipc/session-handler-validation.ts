@@ -8,6 +8,11 @@ export type PromptOptionsInput = {
   variant?: string
 }
 
+export type ComposerPreferencesInput = {
+  modelId?: string | null
+  reasoningVariant?: string | null
+}
+
 const MAX_PROMPT_TEXT_BYTES = 1_000_000
 const MAX_PROMPT_ATTACHMENTS = 10
 const MAX_PROMPT_ATTACHMENT_URL_BYTES = 30 * 1024 * 1024
@@ -16,6 +21,7 @@ const MAX_PROMPT_ATTACHMENT_MIME_BYTES = 256
 const MAX_PROMPT_ATTACHMENT_FILENAME_BYTES = 512
 const MAX_PROMPT_AGENT_BYTES = 128
 const MAX_PROMPT_VARIANT_BYTES = 128
+const MAX_COMPOSER_MODEL_ID_BYTES = 512
 const MAX_SESSION_ID_BYTES = 256
 const MAX_COMMAND_NAME_BYTES = 256
 const MAX_SESSION_TITLE_BYTES = 512
@@ -73,6 +79,25 @@ export function normalizePromptOptions(options: unknown): PromptOptionsInput {
     ? undefined
     : requireBoundedString(record.variant, 'Prompt reasoning variant', MAX_PROMPT_VARIANT_BYTES).trim()
   return variant ? { variant } : {}
+}
+
+function normalizeNullableBoundedString(value: unknown, fieldName: string, maxBytes: number) {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  return requireBoundedString(value, fieldName, maxBytes).trim() || null
+}
+
+export function normalizeComposerPreferences(input: unknown): ComposerPreferencesInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Composer preferences must be an object')
+  }
+  const record = input as Record<string, unknown>
+  const modelId = normalizeNullableBoundedString(record.modelId, 'Composer model id', MAX_COMPOSER_MODEL_ID_BYTES)
+  const reasoningVariant = normalizeNullableBoundedString(record.reasoningVariant, 'Composer reasoning variant', MAX_PROMPT_VARIANT_BYTES)
+  return {
+    ...(modelId !== undefined ? { modelId } : {}),
+    ...(reasoningVariant !== undefined ? { reasoningVariant } : {}),
+  }
 }
 
 export function normalizeSessionId(value: unknown) {

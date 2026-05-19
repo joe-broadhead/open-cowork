@@ -1,6 +1,7 @@
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { log } from './logger.ts'
+import { sdkErrorMessage } from './sdk-error.ts'
 
 type RuntimeSkill = {
   name?: string
@@ -31,7 +32,7 @@ export async function verifyRuntimeSkillCatalog(client: OpencodeClient, director
     }
     return result
   } catch (error) {
-    log('runtime', `OpenCode skill catalog verification failed: ${error instanceof Error ? error.message : String(error)}`)
+    log('runtime', `OpenCode skill catalog verification failed: ${sdkErrorMessage(error)}`)
     return { expected: Array.from(new Set(expectedNames)).sort((a, b) => a.localeCompare(b)), available: [], missing: Array.from(new Set(expectedNames)).sort((a, b) => a.localeCompare(b)) }
   }
 }

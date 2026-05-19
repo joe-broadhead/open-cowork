@@ -12,6 +12,7 @@ import { log } from '../logger.ts'
 import { refreshProviderCatalog } from '../provider-catalog.ts'
 import { normalizeProviderListResponse } from '../provider-utils.ts'
 import { getClient } from '../runtime.ts'
+import { sdkErrorMessage } from '../sdk-error.ts'
 
 type ElectronShell = typeof import('electron').shell
 
@@ -27,7 +28,7 @@ export async function getPublicAppConfigWithRuntimeModels() {
   try {
     return mergeRuntimeProviderModels(config, await listRuntimeProviders())
   } catch (err) {
-    log('provider', `Could not merge runtime provider models: ${err instanceof Error ? err.message : String(err)}`)
+    log('provider', `Could not merge runtime provider models: ${sdkErrorMessage(err)}`)
     return config
   }
 }

@@ -4,6 +4,7 @@ import type {
   McpStatus,
   PermissionRequest,
   RuntimeNotification,
+  RuntimeLoadingStatus,
   SessionPatch,
   SessionView,
   UpdateInstallEvent,
@@ -16,6 +17,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'session:create',
   'session:activate',
   'session:prompt',
+  'session:set-composer-preferences',
   'session:list',
   'session:get',
   'session:abort',
@@ -66,7 +68,10 @@ const PRELOAD_INVOKE_CHANNELS = [
   'provider:oauth-callback',
   'provider:auth-remove',
   'runtime:status',
+  'runtime:await-initialization',
   'runtime:restart',
+  'projects:list',
+  'projects:switch-by-index',
   'diagnostics:perf',
   'app:metadata',
   'app:config',
@@ -148,6 +153,7 @@ const PRELOAD_LISTEN_CHANNELS = [
   'action',
   'navigate',
   'runtime:ready',
+  'runtime:loading-status',
   'session:updated',
   'session:deleted',
   'workflow:updated',
@@ -194,6 +200,7 @@ const api: CoworkAPI = {
     create: (directory?) => invoke('session:create', directory),
     activate: (sessionId, options) => invoke('session:activate', sessionId, options),
     prompt: (sessionId, text, attachments, agent, options) => invoke('session:prompt', sessionId, text, attachments, agent, options),
+    setComposerPreferences: (sessionId, preferences) => invoke('session:set-composer-preferences', sessionId, preferences),
     list: () => invoke('session:list'),
     get: (id) => invoke('session:get', id),
     abort: (sessionId) => invoke('session:abort', sessionId),
@@ -272,7 +279,12 @@ const api: CoworkAPI = {
   },
   runtime: {
     status: () => invoke('runtime:status'),
+    awaitInitialization: () => invoke('runtime:await-initialization'),
     restart: () => invoke('runtime:restart'),
+  },
+  projects: {
+    list: () => invoke('projects:list'),
+    switchByIndex: (index) => invoke('projects:switch-by-index', index),
   },
   diagnostics: {
     perf: () => invoke('diagnostics:perf'),
@@ -406,6 +418,10 @@ const api: CoworkAPI = {
     runtimeReady: (callback: () => void) => {
       const handler = () => callback()
       return listen('runtime:ready', handler)
+    },
+    runtimeLoadingStatus: (callback: (status: RuntimeLoadingStatus) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: RuntimeLoadingStatus) => callback(data)
+      return listen('runtime:loading-status', handler)
     },
     sessionUpdated: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
