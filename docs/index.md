@@ -174,7 +174,7 @@ own branding, providers, skills, and workflows.
     node -v
     # Expected: v22.12.0 or newer
     corepack enable
-    corepack prepare pnpm@10.32.1 --activate
+    corepack prepare pnpm@11.1.3 --activate
     pnpm -v
     pnpm install
     pnpm dev          # builds shared + MCPs, then hot-reloads Electron + Vite

@@ -3,7 +3,7 @@
 ## Requirements
 
 - Node `>=22.12`
-- pnpm `>=10`
+- pnpm `11.1.3` via Corepack, pinned by the root `packageManager` field
 - Python `>=3.11` for documentation work
 
 ## Verify toolchain first
@@ -15,7 +15,7 @@ node -v
 # Expected: v22.12.0 or newer
 
 corepack enable
-corepack prepare pnpm@10.32.1 --activate
+corepack prepare pnpm@11.1.3 --activate
 pnpm -v
 ```
 

@@ -40,7 +40,8 @@ describe('ProviderAuthControls', () => {
 
     expect(onBeforeAuthorize).toHaveBeenCalledTimes(1)
     expect(window.coworkApi.provider.authorize).toHaveBeenCalledWith('openai', 0, {})
-    expect(screen.getByText('Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.')).toBeTruthy()
+    expect(screen.getByText('Finish in your browser.')).toBeTruthy()
+    expect(screen.queryByText('Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.')).toBeNull()
 
     await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
 
@@ -70,5 +71,36 @@ describe('ProviderAuthControls', () => {
     await waitFor(() => expect(window.coworkApi.provider.logout).toHaveBeenCalledWith('openai'))
     expect(onAuthUpdated).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Provider login removed. Sign in again to refresh the token.')).toBeTruthy()
+  })
+
+  it('shows and copies auto authorization instructions returned by OpenCode', async () => {
+    const instructions = 'Enter code XXXX-YYYY at github.com/login/device.'
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      'github-copilot': [browserMethod],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://github.com/login/device',
+      method: 'auto',
+      instructions,
+    })
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="github-copilot"
+        providerName="GitHub Copilot"
+        connected={false}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with ChatGPT' }))
+
+    expect(screen.getByText(instructions)).toBeTruthy()
+    expect(screen.queryByText('Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.')).toBeNull()
+    expect(screen.getByRole('button', { name: "I've finished signing in" })).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
+
+    expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(instructions)
   })
 })

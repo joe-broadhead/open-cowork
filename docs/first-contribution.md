@@ -8,7 +8,7 @@ a small change. Five minutes end-to-end.
 You need:
 
 - Node `>= 22.12` (tracked in `.nvmrc`).
-- pnpm `>= 10` (install via Corepack).
+- pnpm `11.1.3` via Corepack, pinned by the root `packageManager` field.
 - macOS or Linux. Windows isn't supported yet.
 
 No API keys required to run the dev server. Actual LLM calls need
@@ -23,7 +23,7 @@ cd open-cowork
 node -v
 # Expected: v22.12.0 or newer
 corepack enable
-corepack prepare pnpm@10.32.1 --activate
+corepack prepare pnpm@11.1.3 --activate
 pnpm -v
 pnpm install
 pnpm dev

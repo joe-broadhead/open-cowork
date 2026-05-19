@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProviderAuthAuthorization, ProviderAuthMethod, ProviderAuthPrompt } from '@open-cowork/shared'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 import { t } from '../../helpers/i18n'
 
 function suggestedAuthLabel(providerId: string | null | undefined, providerName?: string) {
@@ -46,6 +47,7 @@ export function ProviderAuthControls({
   const [loading, setLoading] = useState(false)
   const [authorizing, setAuthorizing] = useState<number | null>(null)
   const [status, setStatus] = useState<string | null>(null)
+  const [authorizationInstructions, setAuthorizationInstructions] = useState<string | null>(null)
   const [pending, setPending] = useState<{ method: number; authorization: ProviderAuthAuthorization } | null>(null)
   const [pendingBrowserLogin, setPendingBrowserLogin] = useState(false)
   const [code, setCode] = useState('')
@@ -93,6 +95,7 @@ export function ProviderAuthControls({
   useEffect(() => {
     setMethods([])
     setStatus(null)
+    setAuthorizationInstructions(null)
     setPending(null)
     setPendingBrowserLogin(false)
     setCode('')
@@ -123,6 +126,7 @@ export function ProviderAuthControls({
     if (!providerId) return
     setAuthorizing(methodIndex ?? -1)
     setStatus(null)
+    setAuthorizationInstructions(null)
     setPending(null)
     setPendingBrowserLogin(false)
     try {
@@ -153,7 +157,12 @@ export function ProviderAuthControls({
         setStatus(authorization.instructions || t('providerAuth.enterCode', 'Complete the browser login, then paste the authorization code here.'))
       } else {
         setPendingBrowserLogin(true)
-        setStatus(t('providerAuth.browserOpened', 'Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.'))
+        if (authorization.instructions) {
+          setAuthorizationInstructions(authorization.instructions)
+          setStatus(authorization.instructions)
+        } else {
+          setStatus(t('providerAuth.browserOpened', 'Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.'))
+        }
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -166,6 +175,7 @@ export function ProviderAuthControls({
     if (!providerId || !pending) return
     setAuthorizing(pending.method)
     setStatus(null)
+    setAuthorizationInstructions(null)
     try {
       const ok = await window.coworkApi.provider.callback(providerId, pending.method, code.trim())
       setStatus(ok
@@ -215,6 +225,7 @@ export function ProviderAuthControls({
   const finishBrowserLogin = async () => {
     setAuthorizing(-1)
     setStatus(null)
+    setAuthorizationInstructions(null)
     try {
       if (!await verifyProviderConnected()) {
         setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
@@ -238,6 +249,7 @@ export function ProviderAuthControls({
       await window.coworkApi.provider.logout(providerId)
       setPending(null)
       setPendingBrowserLogin(false)
+      setAuthorizationInstructions(null)
       setCode('')
       setStatus(t('providerAuth.removed', 'Provider login removed. Sign in again to refresh the token.'))
       await onAuthUpdated?.()
@@ -250,6 +262,10 @@ export function ProviderAuthControls({
   }
 
   const entries = oauthMethods
+  const copyAuthorizationInstructions = () => {
+    if (!authorizationInstructions) return
+    void writeTextToClipboard(authorizationInstructions)
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -367,7 +383,30 @@ export function ProviderAuthControls({
               : t('providerAuth.finishedBrowserLogin', "I've finished signing in")}
           </button>
         ) : null}
-        {status ? <div className="text-[11px] text-text-muted leading-relaxed">{status}</div> : null}
+        {authorizationInstructions ? (
+          <div
+            className="rounded-xl border border-border-subtle p-3 flex flex-col gap-2"
+            style={{ background: 'var(--color-surface)' }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold text-text">
+                {t('providerAuth.instructions', 'Login instructions')}
+              </span>
+              <button
+                type="button"
+                onClick={copyAuthorizationInstructions}
+                className="shrink-0 px-2 py-1 rounded-lg border border-border-subtle text-[11px] font-semibold text-text hover:bg-surface-hover cursor-pointer"
+              >
+                {t('common.copy', 'Copy')}
+              </button>
+            </div>
+            <pre className="m-0 whitespace-pre-wrap break-words rounded-lg border border-border-subtle bg-base px-3 py-2 font-mono text-[12px] leading-relaxed text-text">
+              {authorizationInstructions}
+            </pre>
+          </div>
+        ) : status ? (
+          <div className="text-[11px] text-text-muted leading-relaxed">{status}</div>
+        ) : null}
       </div>
     </div>
   )

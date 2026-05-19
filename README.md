@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node 22.12+](https://img.shields.io/badge/node-22.12%2B-brightgreen.svg?logo=nodedotjs&logoColor=white)](.nvmrc)
-[![pnpm 10+](https://img.shields.io/badge/pnpm-10%2B-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![pnpm 11.1.3](https://img.shields.io/badge/pnpm-11.1.3-F69220.svg?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs%20material-blue.svg?logo=materialformkdocs&logoColor=white)](https://joe-broadhead.github.io/open-cowork/)
 [![CI](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/joe-broadhead/open-cowork/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/joe-broadhead/open-cowork?include_prereleases&logo=github)](https://github.com/joe-broadhead/open-cowork/releases)
@@ -181,7 +181,7 @@ renderer.
 ### Requirements
 
 - Node `>=22.12`
-- pnpm `>=10`
+- pnpm `11.1.3` via Corepack, pinned by the root `packageManager` field
 - Python `>=3.11` for docs builds
 
 ### Verify Node and install pnpm via Corepack
@@ -191,7 +191,7 @@ node -v
 # Expected: v22.12.0 or newer
 
 corepack enable
-corepack prepare pnpm@10.32.1 --activate
+corepack prepare pnpm@11.1.3 --activate
 pnpm -v
 ```
 
