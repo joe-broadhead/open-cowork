@@ -76,6 +76,10 @@ export function getTaskRunIdForChild(sessionId: string | null | undefined) {
   return hierarchyStore.getTaskRunIdForChild(sessionId)
 }
 
+export function resolveTaskRunId(taskRunId: string | null | undefined) {
+  return hierarchyStore.resolveTaskRunId(taskRunId)
+}
+
 export function rememberSubmittedPrompt(sessionId: string, text: string) {
   hierarchyStore.rememberSubmittedPrompt(sessionId, text)
 }

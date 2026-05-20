@@ -14,6 +14,7 @@ import {
   getTaskRunIdForChild,
   registerSession,
   registerTaskRun,
+  resolveTaskRunId,
   resolveRootSession,
   updateTaskRun,
   consumePendingPromptEcho,
@@ -685,8 +686,9 @@ function handleUpdatedTaskToolPart(
   const childSessionId = readTaskToolSessionId(input.metadata)
   const taskParentSessionId = readTaskToolParentSessionId(input.metadata) || parentSessionId
   const providerTaskRunId = ctx.part.callId || ctx.part.id || `${parentSessionId}:task:${crypto.randomUUID()}`
-  let taskRunId = providerTaskRunId
+  let taskRunId = resolveTaskRunId(providerTaskRunId) || providerTaskRunId
   let existingTaskRun = getTaskRun(providerTaskRunId)
+  if (!existingTaskRun && taskRunId !== providerTaskRunId) existingTaskRun = getTaskRun(taskRunId)
   let existingChildTaskRunId = childSessionId ? getTaskRunIdForChild(childSessionId) : null
   let childTaskRunBeforeBind = existingTaskRun?.childSessionId
     ? existingTaskRun
@@ -708,12 +710,14 @@ function handleUpdatedTaskToolPart(
     }
   }
   const { agentName, titleCandidates } = resolveTaskToolDescriptor(ctx, input.metadata, input.title)
-  const preservedChildStatus = childTaskRunBeforeBind?.status && childTaskRunBeforeBind.status !== 'queued'
-    ? childTaskRunBeforeBind.status
+  const childOwnedTaskRun = childTaskRunBeforeBind || (existingTaskRun?.childSessionId ? existingTaskRun : null)
+  const preservedChildStatus = childOwnedTaskRun?.status && childOwnedTaskRun.status !== 'queued'
+    ? childOwnedTaskRun.status
     : null
+  const hasChildOwnedTaskRun = Boolean(childSessionId || childOwnedTaskRun)
   const taskStatus = input.isError
     ? 'error'
-    : childSessionId
+    : hasChildOwnedTaskRun
       ? preservedChildStatus || 'running'
       : input.isComplete
         ? 'complete'

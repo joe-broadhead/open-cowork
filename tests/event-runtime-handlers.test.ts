@@ -771,6 +771,39 @@ test('late explicit child metadata preserves child-owned running status when mer
   assert.equal(getTaskRun('call-task-1'), null)
   assert.equal(task?.childSessionId, 'child-session')
   assert.equal(task?.status, 'running')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Explore MCP examples and structure',
+        state: {
+          status: 'completed',
+          input: {
+            subagent_type: 'explore',
+            description: 'Explore MCP examples and structure',
+            prompt: 'Explore engaging MCP examples.',
+          },
+          output: 'task_id: child-session',
+          metadata: {},
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const updatedTask = getTaskRun('child:child-session')
+  assert.equal(getTaskRun('call-task-1'), null)
+  assert.equal(updatedTask?.childSessionId, 'child-session')
+  assert.equal(updatedTask?.status, 'running')
 })
 
 test('task tool child ids can arrive in state metadata while top-level metadata is present', () => {
