@@ -42,6 +42,11 @@ async function listPendingPermissions(client: OpencodeClient): Promise<Permissio
 type SessionSyncOptions = {
   force?: boolean
   activate?: boolean
+  progressive?: boolean
+}
+
+type LoadSessionHistoryOptions = {
+  includeChildren?: boolean
 }
 
 type ChildSessionRecord = {
@@ -243,6 +248,8 @@ const defaultSessionHistoryServiceDeps: SessionHistoryServiceDeps = {
 export function createSessionHistoryService(
   deps: SessionHistoryServiceDeps = defaultSessionHistoryServiceDeps,
 ) {
+  const partiallyHydratedSessions = new Set<string>()
+
   async function loadChildSessionsRecursive(
     client: OpencodeClient,
     parentSessionId: string,
@@ -268,8 +275,9 @@ export function createSessionHistoryService(
     return directChildren.concat(nestedChildren.flat())
   }
 
-  async function loadSessionHistory(sessionId: string) {
-    return measureAsyncPerf('session.history.load', async () => {
+  async function loadSessionHistory(sessionId: string, options: LoadSessionHistoryOptions = {}) {
+    const includeChildren = options.includeChildren !== false
+    return measureAsyncPerf(includeChildren ? 'session.history.load' : 'session.history.load.root', async () => {
       const { client, questionClient, record } = await deps.getSessionClient(sessionId)
       const [
         rootMessagesResult,
@@ -311,7 +319,9 @@ export function createSessionHistoryService(
 
       const rootMessages = normalizeSessionMessages(rootMessagesResult.data)
       const rootTodos = readRecordArray({ value: readResponseData(rootTodosResult) }, 'value')
-      const children = await loadChildSessionsRecursive(client, sessionId)
+      const children = includeChildren
+        ? await loadChildSessionsRecursive(client, sessionId)
+        : []
       const statuses = normalizeSessionStatuses(readResponseData(statusResult))
       const descendantSessionIds = new Set([sessionId, ...children.map((child) => child.id)])
       const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId, descendantSessionIds)
@@ -380,15 +390,21 @@ export function createSessionHistoryService(
       }
       return { items, questions, approvals }
     }, {
-      slowThresholdMs: 250,
-      slowData: { sessionId: shortSessionId(sessionId) },
+      slowThresholdMs: includeChildren ? 250 : 100,
+      slowData: {
+        sessionId: shortSessionId(sessionId),
+        includeChildren,
+      },
     })
   }
 
   async function performSessionSync(sessionId: string, options?: SessionSyncOptions): Promise<SessionView> {
     const shouldActivate = options?.activate !== false
+    const progressive = Boolean(options?.progressive && !options.force)
     const metric = options?.force
       ? 'session.sync.force'
+      : progressive
+        ? 'session.sync.progressive'
       : deps.sessionEngine.isHydrated(sessionId)
         ? 'session.sync.warm'
         : 'session.sync.cold'
@@ -398,33 +414,42 @@ export function createSessionHistoryService(
         deps.sessionEngine.activateSession(sessionId)
       }
       if (options?.force || !deps.sessionEngine.isHydrated(sessionId)) {
-        const { items, questions, approvals } = await loadSessionHistory(sessionId)
+        const { items, questions, approvals } = await loadSessionHistory(sessionId, {
+          includeChildren: !progressive,
+        })
         deps.sessionEngine.setSessionFromHistory(sessionId, items, {
           force: options?.force,
         })
         deps.sessionEngine.setPendingQuestions(sessionId, questions)
         deps.sessionEngine.setPendingApprovals(sessionId, approvals)
+        if (progressive) {
+          partiallyHydratedSessions.add(sessionId)
+        } else {
+          partiallyHydratedSessions.delete(sessionId)
+        }
       }
       const view = deps.sessionEngine.getSessionView(sessionId)
       const patch: Parameters<typeof deps.updateSessionRecord>[1] = {
         summary: deps.buildSessionUsageSummary(view),
       }
 
-      try {
-        const { client, record } = await deps.getSessionClient(sessionId)
-        const diffResult = await client.session.diff({
-          sessionID: sessionId,
-        }).catch((err) => {
-          logHistoryError('session:diff summary', sessionId, err)
-          return { data: [] }
-        })
-        const sdkDiffs = normalizeSessionFileDiffs(Array.isArray(diffResult.data) ? diffResult.data : [])
-        const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
-        patch.changeSummary = summarizeSessionDiffs(
-          mergeSessionDiffsWithSynthetic(sdkDiffs, view, rootDir),
-        )
-      } catch (err) {
-        logHistoryError('session:diff summary client', sessionId, err)
+      if (!progressive) {
+        try {
+          const { client, record } = await deps.getSessionClient(sessionId)
+          const diffResult = await client.session.diff({
+            sessionID: sessionId,
+          }).catch((err) => {
+            logHistoryError('session:diff summary', sessionId, err)
+            return { data: [] }
+          })
+          const sdkDiffs = normalizeSessionFileDiffs(Array.isArray(diffResult.data) ? diffResult.data : [])
+          const rootDir = record?.opencodeDirectory || getRuntimeHomeDir()
+          patch.changeSummary = summarizeSessionDiffs(
+            mergeSessionDiffsWithSynthetic(sdkDiffs, view, rootDir),
+          )
+        } catch (err) {
+          logHistoryError('session:diff summary client', sessionId, err)
+        }
       }
 
       deps.updateSessionRecord(sessionId, patch)
@@ -435,6 +460,7 @@ export function createSessionHistoryService(
         sessionId: shortSessionId(sessionId),
         force: Boolean(options?.force),
         activate: shouldActivate,
+        progressive,
       },
     })
   }
@@ -445,6 +471,9 @@ export function createSessionHistoryService(
 
   return {
     loadSessionHistory,
+    isSessionPartiallyHydrated(sessionId: string) {
+      return partiallyHydratedSessions.has(sessionId)
+    },
     syncSessionView(sessionId: string, options?: SessionSyncOptions) {
       return runSessionSync(sessionId, options)
     },
@@ -454,4 +483,5 @@ export function createSessionHistoryService(
 const sessionHistoryService = createSessionHistoryService()
 
 export const loadSessionHistory = sessionHistoryService.loadSessionHistory
+export const isSessionPartiallyHydrated = sessionHistoryService.isSessionPartiallyHydrated
 export const syncSessionView = sessionHistoryService.syncSessionView

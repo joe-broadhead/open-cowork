@@ -16,6 +16,7 @@ import { getBrandName } from '../config-loader.ts'
 import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
 import { assertCustomMcpContentLimits, assertCustomSkillContent } from '../custom-content-limits.ts'
 import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
+import { invalidateCustomAgentCatalogCache } from '../custom-agents.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
@@ -141,6 +142,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     }
     try {
       saveCustomMcp(resolved)
+      invalidateCustomAgentCatalogCache()
       if (resolved.allowPrivateNetwork === true) {
         log('audit', `mcp.allowPrivateNetwork enabled name=${resolved.name} scope=${resolved.scope || 'machine'}`)
       }
@@ -161,6 +163,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
         throw new Error('Confirmation required before removing an MCP.')
       }
       removeCustomMcp(resolvedTarget)
+      invalidateCustomAgentCatalogCache()
       log('custom', `Removed MCP: ${resolvedTarget.name}`)
       log('audit', `mcp.remove completed ${context.describeDestructiveRequest({ action: 'mcp.remove', target: resolvedTarget })}`)
       const { rebootRuntime } = await import('../index.ts')
@@ -187,6 +190,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
       if (!confirmed) return false
     }
     saveCustomSkill(resolved)
+    invalidateCustomAgentCatalogCache()
     logUnsignedSkillBundle('add', resolved)
     log('custom', `Added skill: ${resolved.name}`)
     const { rebootRuntime } = await import('../index.ts')
@@ -224,6 +228,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
     const confirmed = await confirmUnsignedSkillWrite(context, 'import', imported)
     if (!confirmed) return null
     saveCustomSkill(imported)
+    invalidateCustomAgentCatalogCache()
     logUnsignedSkillBundle('import', imported)
     log('custom', `Imported skill directory: ${imported.name}`)
     const { rebootRuntime } = await import('../index.ts')
@@ -238,6 +243,7 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
         throw new Error('Confirmation required before removing a skill.')
       }
       removeCustomSkill(resolvedTarget)
+      invalidateCustomAgentCatalogCache()
       log('custom', `Removed skill: ${resolvedTarget.name}`)
       log('audit', `skill.remove completed ${context.describeDestructiveRequest({ action: 'skill.remove', target: resolvedTarget })}`)
       const { rebootRuntime } = await import('../index.ts')

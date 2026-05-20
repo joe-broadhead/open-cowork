@@ -84,6 +84,11 @@ function getLogPath(): string {
 function getStream(): ReturnType<typeof createWriteStream> {
   if (logStream) return logStream
   logStream = createWriteStream(getLogPath(), { flags: 'a' })
+  logStream.on('error', () => {
+    // File stream errors are asynchronous, so the log() try/catch cannot
+    // catch them. Logging must remain best-effort even if a test or app
+    // cleanup removes the log directory after the stream is created.
+  })
   return logStream
 }
 

@@ -168,7 +168,9 @@ export async function rebootRuntime(): Promise<void> {
     // or model may have changed, and serving stale tool metadata from
     // the Capabilities UI would mislead the user.
     const { invalidateRuntimeToolCache } = await import('./runtime-tool-cache.ts')
+    const { invalidateCustomAgentCatalogCache } = await import('./custom-agents.ts')
     invalidateRuntimeToolCache()
+    invalidateCustomAgentCatalogCache()
     await stopRuntime()
     try {
       await bootRuntime(runtimeProjectDirectory)

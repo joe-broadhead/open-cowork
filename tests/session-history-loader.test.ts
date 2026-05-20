@@ -587,6 +587,203 @@ test('createSessionHistoryService forwards forced refresh syncs without caller-m
   }])
 })
 
+test('createSessionHistoryService can hydrate root history before child transcripts', async () => {
+  const view = createEmptySessionView()
+  const calls = {
+    children: 0,
+    childSnapshot: 0,
+    diff: 0,
+    setHistory: 0,
+  }
+  const updates: Array<Record<string, unknown>> = []
+
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async ({ sessionID }: { sessionID: string }) => {
+            if (sessionID !== 'session-progressive') calls.childSnapshot += 1
+            return { data: [] }
+          },
+          todo: async () => ({ data: [] }),
+          children: async () => {
+            calls.children += 1
+            return { data: [{ id: 'child-1', title: 'Analyst', parentID: 'session-progressive', time: { created: 1 } }] }
+          },
+          diff: async () => {
+            calls.diff += 1
+            return { data: [] }
+          },
+          status: async () => ({ data: {} }),
+          get: async () => ({ data: null }),
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async (input) => {
+      assert.deepEqual(input.children, [])
+      return []
+    },
+    getCachedModelId: () => '',
+    updateSessionRecord: (_sessionId, patch) => {
+      updates.push(patch)
+      return null
+    },
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => false,
+      activateSession: () => {},
+      setSessionFromHistory: () => {
+        calls.setHistory += 1
+      },
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => view,
+    },
+  })
+
+  const result = await service.syncSessionView('session-progressive', {
+    activate: true,
+    progressive: true,
+  })
+
+  assert.equal(result, view)
+  assert.equal(calls.children, 0)
+  assert.equal(calls.childSnapshot, 0)
+  assert.equal(calls.diff, 0)
+  assert.equal(calls.setHistory, 1)
+  assert.equal(service.isSessionPartiallyHydrated('session-progressive'), true)
+  assert.deepEqual(updates[0], {
+    summary: {
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    },
+  })
+})
+
+test('createSessionHistoryService keeps partial hydration retryable until a full sync succeeds', async () => {
+  const view = createEmptySessionView()
+  const calls = {
+    children: 0,
+    setHistory: 0,
+  }
+  const projectedChildren: string[][] = []
+  let hydrated = false
+
+  const service = createSessionHistoryService({
+    getSessionClient: async () => ({
+      client: {
+        session: {
+          messages: async () => ({ data: [] }),
+          todo: async () => ({ data: [] }),
+          children: async ({ sessionID }: { sessionID: string }) => {
+            calls.children += 1
+            return {
+              data: sessionID === 'session-partial'
+                ? [{ id: 'child-1', title: 'Analyst', parentID: 'session-partial', time: { created: 1 } }]
+                : [],
+            }
+          },
+          diff: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
+          get: async () => ({ data: null }),
+        },
+      },
+      questionClient: {},
+      record: null,
+    }),
+    listPendingQuestions: async () => ({ data: [] }),
+    listPendingPermissions: async () => ({ data: [] }),
+    projectSessionHistory: async (input) => {
+      projectedChildren.push(input.children.map((child) => child.id))
+      return []
+    },
+    getCachedModelId: () => '',
+    updateSessionRecord: () => null,
+    buildSessionUsageSummary: () => ({
+      messages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      toolCalls: 0,
+      taskRuns: 0,
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+      },
+    }),
+    sessionEngine: {
+      isHydrated: () => hydrated,
+      activateSession: () => {},
+      setSessionFromHistory: () => {
+        calls.setHistory += 1
+        hydrated = true
+      },
+      setPendingQuestions: () => {},
+      setPendingApprovals: () => {},
+      getSessionView: () => view,
+    },
+  })
+
+  await service.syncSessionView('session-partial', {
+    activate: true,
+    progressive: true,
+  })
+  assert.equal(service.isSessionPartiallyHydrated('session-partial'), true)
+  assert.equal(calls.setHistory, 1)
+  assert.equal(calls.children, 0)
+  assert.deepEqual(projectedChildren, [[]])
+
+  await service.syncSessionView('session-partial', {
+    activate: true,
+    progressive: true,
+  })
+  assert.equal(service.isSessionPartiallyHydrated('session-partial'), true)
+  assert.equal(calls.setHistory, 1)
+  assert.equal(calls.children, 0)
+  assert.deepEqual(projectedChildren, [[]])
+
+  await service.syncSessionView('session-partial', {
+    force: true,
+    activate: false,
+  })
+  assert.equal(service.isSessionPartiallyHydrated('session-partial'), false)
+  assert.equal(calls.setHistory, 2)
+  assert.equal(calls.children, 2)
+  assert.deepEqual(projectedChildren, [[], ['child-1']])
+})
+
 test('createSessionHistoryService synthesizes changeSummary for write-only session artifacts', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-sync-summary-'))
   try {
