@@ -565,6 +565,39 @@ test('completed root task tool with explicit child metadata starts the child tas
   assert.equal(task?.status, 'running')
   assert.equal(task?.agent, 'explore')
   assert.equal(task?.title, 'Explore MCP examples and structure')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Explore MCP examples and structure',
+        state: {
+          status: 'completed',
+          input: {
+            subagent_type: 'explore',
+            description: 'Explore MCP examples and structure',
+            prompt: 'Explore engaging MCP examples.',
+          },
+          output: 'task_id: child-session',
+          metadata: {},
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const updatedTask = getTaskRun('child:child-session')
+  assert.equal(getTaskRun('call-task-1'), null)
+  assert.equal(updatedTask?.childSessionId, 'child-session')
+  assert.equal(updatedTask?.status, 'running')
 })
 
 test('late explicit child metadata binds the pending task call without duplicating lanes', () => {

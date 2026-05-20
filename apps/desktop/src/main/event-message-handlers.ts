@@ -7,6 +7,7 @@ import {
 import { readRecordValue, readString } from './normalizer-utils.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
+  aliasTaskRunId,
   bindTaskRunToChild,
   ensureTaskRunForChild,
   findFallbackTaskRun,
@@ -742,6 +743,9 @@ function handleUpdatedTaskToolPart(
         childSessionId: childSessionId || null,
         status: taskStatus,
       })
+  if (taskRun?.childSessionId && taskRun.id !== providerTaskRunId) {
+    aliasTaskRunId(providerTaskRunId, taskRun.id)
+  }
   if (taskRun) emitTaskRun(ctx.win, taskRun)
   return true
 }

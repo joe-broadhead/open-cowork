@@ -289,6 +289,13 @@ export class SessionTaskStateStore {
     return this.childSessionToTaskRunId.get(sessionId) || null
   }
 
+  aliasTaskRunId(aliasTaskRunId: string | null | undefined, targetTaskRunId: string | null | undefined) {
+    if (!aliasTaskRunId || !targetTaskRunId || aliasTaskRunId === targetTaskRunId) return
+    const resolvedTargetTaskRunId = this.resolveTaskRunId(targetTaskRunId) || targetTaskRunId
+    if (!this.taskRuns.has(resolvedTargetTaskRunId)) return
+    this.taskRunAliases.set(aliasTaskRunId, resolvedTargetTaskRunId)
+  }
+
   resolveTaskRunId(taskRunId: string | null | undefined) {
     if (!taskRunId) return null
     if (this.taskRuns.has(taskRunId)) return taskRunId

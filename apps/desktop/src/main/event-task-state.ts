@@ -76,6 +76,10 @@ export function getTaskRunIdForChild(sessionId: string | null | undefined) {
   return hierarchyStore.getTaskRunIdForChild(sessionId)
 }
 
+export function aliasTaskRunId(aliasId: string | null | undefined, targetId: string | null | undefined) {
+  hierarchyStore.aliasTaskRunId(aliasId, targetId)
+}
+
 export function resolveTaskRunId(taskRunId: string | null | undefined) {
   return hierarchyStore.resolveTaskRunId(taskRunId)
 }
