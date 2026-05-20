@@ -17,7 +17,7 @@ describe('ProviderAuthControls', () => {
     vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
       url: 'https://auth.example.test',
       method: 'auto',
-      instructions: 'Finish in your browser.',
+      instructions: '',
     })
     vi.mocked(window.coworkApi.provider.list).mockResolvedValue([
       { id: 'openai', name: 'OpenAI', connected: true },
@@ -47,6 +47,37 @@ describe('ProviderAuthControls', () => {
     await waitFor(() => expect(onAuthUpdated).toHaveBeenCalledTimes(1))
     expect(window.coworkApi.runtime.restart).not.toHaveBeenCalled()
     expect(screen.getByText('Provider login completed.')).toBeTruthy()
+  })
+
+  it('shows and copies auto auth instructions for device-code providers', async () => {
+    vi.mocked(window.coworkApi.provider.authMethods).mockResolvedValue({
+      'github-copilot': [{ type: 'oauth', label: 'GitHub Copilot' }],
+    })
+    vi.mocked(window.coworkApi.provider.authorize).mockResolvedValue({
+      url: 'https://github.com/login/device',
+      method: 'auto',
+      instructions: 'Enter code ABCD-1234 at https://github.com/login/device',
+    })
+    const user = userEvent.setup()
+
+    render(
+      <ProviderAuthControls
+        providerId="github-copilot"
+        providerName="GitHub Copilot"
+        connected={false}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with GitHub Copilot' }))
+
+    expect(screen.getByText('Browser login opened. Follow the instructions below, then return here and confirm so Open Cowork can verify the new login.')).toBeTruthy()
+    expect(screen.getByText('Login instructions')).toBeTruthy()
+    expect(screen.getByText('Enter code ABCD-1234 at https://github.com/login/device')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
+
+    expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('Enter code ABCD-1234 at https://github.com/login/device')
+    expect(screen.getByText('Login instructions copied to clipboard.')).toBeTruthy()
   })
 
   it('can clear stale OpenCode-native provider auth before a fresh login', async () => {
