@@ -7,6 +7,7 @@ import {
 import { readRecordValue, readString } from './normalizer-utils.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
+  bindTaskRunToChild,
   ensureTaskRunForChild,
   findFallbackTaskRun,
   getTaskRun,
@@ -620,7 +621,11 @@ function resolveTaskToolDescriptor(
   const state = ctx.part.state
   const metadataAgent = typeof metadata.agent === 'string' ? metadata.agent : null
   const inputAgent = readString(readRecordValue(state.input, 'agent'))
+    || readString(readRecordValue(state.input, 'subagent_type'))
+    || readString(readRecordValue(state.input, 'subagentType'))
   const argsAgent = readString(readRecordValue(state.args, 'agent'))
+    || readString(readRecordValue(state.args, 'subagent_type'))
+    || readString(readRecordValue(state.args, 'subagentType'))
   const inputDescription = readString(readRecordValue(state.input, 'description'))
   const argsDescription = readString(readRecordValue(state.args, 'description'))
   const inputTitle = readString(readRecordValue(state.input, 'title'))
@@ -654,6 +659,18 @@ function resolveTaskToolDescriptor(
   }
 }
 
+function readTaskToolSessionId(metadata: Record<string, unknown>) {
+  return readString(readRecordValue(metadata, 'sessionId'))
+    || readString(readRecordValue(metadata, 'sessionID'))
+    || readString(readRecordValue(metadata, 'session_id'))
+}
+
+function readTaskToolParentSessionId(metadata: Record<string, unknown>) {
+  return readString(readRecordValue(metadata, 'parentSessionId'))
+    || readString(readRecordValue(metadata, 'parentSessionID'))
+    || readString(readRecordValue(metadata, 'parent_session_id'))
+}
+
 function handleUpdatedTaskToolPart(
   ctx: MessagePartUpdatedContext,
   input: {
@@ -665,13 +682,40 @@ function handleUpdatedTaskToolPart(
 ) {
   if (ctx.part.tool !== 'task') return false
   const parentSessionId = ctx.actualSessionId || ctx.rootSessionId
-  const taskRunId = ctx.part.callId || ctx.part.id || `${parentSessionId}:task:${crypto.randomUUID()}`
+  const childSessionId = readTaskToolSessionId(input.metadata)
+  const taskParentSessionId = readTaskToolParentSessionId(input.metadata) || parentSessionId
+  const providerTaskRunId = ctx.part.callId || ctx.part.id || `${parentSessionId}:task:${crypto.randomUUID()}`
+  let taskRunId = providerTaskRunId
+  let existingTaskRun = getTaskRun(providerTaskRunId)
+  let existingChildTaskRunId = childSessionId ? getTaskRunIdForChild(childSessionId) : null
+  let existingTaskRunWasChildBound = Boolean(
+    existingTaskRun?.childSessionId
+      || (existingChildTaskRunId ? getTaskRun(existingChildTaskRunId)?.childSessionId : null),
+  )
+
+  if (childSessionId) {
+    registerSession(childSessionId, taskParentSessionId)
+    if (existingTaskRun) {
+      const bound = bindTaskRunToChild(providerTaskRunId, childSessionId)
+      taskRunId = bound?.id || providerTaskRunId
+      existingTaskRun = bound || getTaskRun(taskRunId)
+    } else {
+      existingChildTaskRunId = existingChildTaskRunId || getTaskRunIdForChild(childSessionId)
+      taskRunId = existingChildTaskRunId || `child:${childSessionId}`
+      existingTaskRun = getTaskRun(taskRunId)
+      existingTaskRunWasChildBound = Boolean(existingTaskRun?.childSessionId)
+    }
+  }
   const { agentName, titleCandidates } = resolveTaskToolDescriptor(ctx, input.metadata, input.title)
-  const existingTaskRun = getTaskRun(taskRunId)
+  const preservedChildStatus = existingTaskRunWasChildBound
+    && existingTaskRun
+    && existingTaskRun.status !== 'queued'
+    ? existingTaskRun.status
+    : null
   const taskStatus = input.isError
     ? 'error'
-    : existingTaskRun?.childSessionId
-      ? existingTaskRun.status === 'queued' ? 'running' : existingTaskRun.status
+    : childSessionId
+      ? preservedChildStatus || 'running'
       : input.isComplete
         ? 'complete'
         : 'queued'
@@ -689,10 +733,10 @@ function handleUpdatedTaskToolPart(
     : registerTaskRun({
         id: taskRunId,
         rootSessionId: ctx.rootSessionId,
-        parentSessionId,
+        parentSessionId: taskParentSessionId,
         title: chooseTaskTitle(agentName, ...titleCandidates),
         agent: agentName,
-        childSessionId: null,
+        childSessionId: childSessionId || null,
         status: taskStatus,
       })
   if (taskRun) emitTaskRun(ctx.win, taskRun)
@@ -707,7 +751,10 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
   const isComplete = !isError && (statusValue === 'completed' || statusValue === 'complete' || state.output !== undefined)
   const status = isError ? 'error' : isComplete ? 'complete' : 'running'
   const title = ctx.part.title || state.title || ''
-  const metadata = Object.keys(ctx.part.metadata).length > 0 ? ctx.part.metadata : state.metadata
+  const metadata = {
+    ...state.metadata,
+    ...ctx.part.metadata,
+  }
 
   if (ctx.part.tool === 'question') return true
   if (handleUpdatedTaskToolPart(ctx, { isComplete, isError, metadata, title })) return true
