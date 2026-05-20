@@ -164,6 +164,59 @@ test('bundled skill index prefers root order and shallower duplicate bundles', (
   }
 })
 
+test('bundled skill index accepts symlinked bundle roots while rejecting nested symlink escapes', () => {
+  const tempRoot = testTempDir('opencowork-skill-index-symlink-root-')
+  const realRoot = join(tempRoot, 'real-skills')
+  const linkedRoot = join(tempRoot, 'linked-skills')
+  const skillDir = join(realRoot, 'linked-skill')
+  const outsideSkill = join(tempRoot, 'outside-skill')
+
+  mkdirSync(skillDir, { recursive: true })
+  mkdirSync(outsideSkill, { recursive: true })
+  writeFileSync(join(skillDir, 'SKILL.md'), '---\nname: linked-skill\ndescription: Linked\n---\n# Linked\n')
+  writeFileSync(join(outsideSkill, 'SKILL.md'), '---\nname: outside-skill\ndescription: Outside\n---\n# Outside\n')
+  symlinkSync(realRoot, linkedRoot, 'dir')
+  symlinkSync(outsideSkill, join(realRoot, 'outside-skill'), 'dir')
+
+  try {
+    clearBundledSkillIndexCache()
+    const index = getBundledSkillIndex([linkedRoot])
+    assert.equal(index.get('linked-skill')?.skillDir, join(linkedRoot, 'linked-skill'))
+    assert.equal(index.has('outside-skill'), false)
+  } finally {
+    clearBundledSkillIndexCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('bundled skill index reflects nested tree changes without a manual cache clear', () => {
+  const tempRoot = testTempDir('opencowork-skill-index-refresh-')
+  const skillRoot = join(tempRoot, 'skills')
+  const firstSkill = join(skillRoot, 'first-skill')
+  const nestedSkill = join(skillRoot, 'vendor', 'nested-skill')
+
+  mkdirSync(firstSkill, { recursive: true })
+  writeFileSync(join(firstSkill, 'SKILL.md'), '---\nname: first-skill\ndescription: First\n---\n# First\n')
+
+  try {
+    clearBundledSkillIndexCache()
+    const initialIndex = getBundledSkillIndex([skillRoot])
+    assert.equal(initialIndex.has('first-skill'), true)
+    assert.equal(initialIndex.has('nested-skill'), false)
+
+    mkdirSync(nestedSkill, { recursive: true })
+    writeFileSync(join(nestedSkill, 'SKILL.md'), '---\nname: nested-skill\ndescription: Nested\n---\n# Nested\n')
+
+    const refreshedIndex = getBundledSkillIndex([skillRoot])
+    assert.equal(refreshedIndex.has('first-skill'), true)
+    assert.equal(refreshedIndex.get('nested-skill')?.skillDir, nestedSkill)
+    assert.notEqual(refreshedIndex, initialIndex)
+  } finally {
+    clearBundledSkillIndexCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('effective skill bundle file reads return null when a validated file becomes unreadable', async () => {
   const tempRoot = testTempDir('opencowork-effective-skills-unreadable-')
   const configDir = join(tempRoot, 'config')

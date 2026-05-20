@@ -10,8 +10,19 @@ export type BundledSkillIndexEntry = {
 }
 
 type CachedBundledSkillIndex = {
-  key: string
+  rootsKey: string
+  treeKey: string
   index: Map<string, BundledSkillIndexEntry>
+}
+
+type BundledSkillRoot = {
+  requestedRoot: string
+  realRoot: string
+}
+
+type BundledSkillRootScan = {
+  entries: BundledSkillIndexEntry[]
+  treeKey: string
 }
 
 let cachedIndex: CachedBundledSkillIndex | null = null
@@ -26,52 +37,62 @@ function isInsideRoot(root: string, candidate: string) {
   )
 }
 
-function isSafeDirectoryInsideRoot(root: string, candidate: string) {
-  const absoluteRoot = resolve(root)
+function resolveBundledSkillRoot(root: string): BundledSkillRoot | null {
+  const requestedRoot = resolve(root)
+  if (!existsSync(requestedRoot)) return null
+
+  try {
+    const realRoot = realpathSync.native(requestedRoot)
+    if (!statSync(realRoot).isDirectory()) return null
+    return { requestedRoot, realRoot }
+  } catch {
+    return null
+  }
+}
+
+function isSafeDirectoryInsideRoot(root: BundledSkillRoot, candidate: string) {
   const absoluteCandidate = resolve(candidate)
-  if (!isInsideRoot(absoluteRoot, absoluteCandidate)) return false
+  if (!isInsideRoot(root.requestedRoot, absoluteCandidate)) return false
   if (!existsSync(absoluteCandidate)) return false
 
   try {
     if (lstatSync(absoluteCandidate).isSymbolicLink()) return false
-    const realRoot = realpathSync.native(absoluteRoot)
     const realCandidate = realpathSync.native(absoluteCandidate)
-    if (!isInsideRoot(realRoot, realCandidate)) return false
+    if (!isInsideRoot(root.realRoot, realCandidate)) return false
     return statSync(realCandidate).isDirectory()
   } catch {
     return false
   }
 }
 
-function isSafeSkillDefinition(root: string, skillPath: string) {
-  const absoluteRoot = resolve(root)
+function isSafeSkillDefinition(root: BundledSkillRoot, skillPath: string) {
   const absoluteSkillPath = resolve(skillPath)
-  if (!isInsideRoot(absoluteRoot, absoluteSkillPath)) return false
+  if (!isInsideRoot(root.requestedRoot, absoluteSkillPath)) return false
   if (!existsSync(absoluteSkillPath)) return false
 
   try {
     if (lstatSync(absoluteSkillPath).isSymbolicLink()) return false
-    const realRoot = realpathSync.native(absoluteRoot)
     const realSkillPath = realpathSync.native(absoluteSkillPath)
-    if (!isInsideRoot(realRoot, realSkillPath)) return false
+    if (!isInsideRoot(root.realRoot, realSkillPath)) return false
     return statSync(realSkillPath).isFile()
   } catch {
     return false
   }
 }
 
-function rootSignature(root: string) {
-  const resolvedRoot = resolve(root)
+function statsSignature(kind: 'dir' | 'file' | 'root', root: BundledSkillRoot, path: string) {
   try {
-    const stats = statSync(resolvedRoot)
-    return `${resolvedRoot}:${stats.mtimeMs}:${stats.ctimeMs}:${stats.size}`
+    const realPath = realpathSync.native(path)
+    const stats = statSync(realPath)
+    const relativePath = relative(root.realRoot, realPath) || '.'
+    return `${kind}:${relativePath}:${stats.mtimeMs}:${stats.ctimeMs}:${stats.size}`
   } catch {
-    return `${resolvedRoot}:missing`
+    return `${kind}:missing:${path}`
   }
 }
 
-function cacheKeyForRoots(roots: string[]) {
-  return roots.map(rootSignature).join('|')
+function cacheRootsKey(roots: string[]) {
+  return roots.map((root) => resolve(root)).join('|')
 }
 
 function entrySortKey(entry: BundledSkillIndexEntry) {
@@ -83,12 +104,16 @@ function shouldReplaceEntry(existing: BundledSkillIndexEntry | undefined, next: 
   return entrySortKey(next).localeCompare(entrySortKey(existing)) < 0
 }
 
-function scanBundledSkillRoot(root: string) {
-  const absoluteRoot = resolve(root)
-  if (!isSafeDirectoryInsideRoot(absoluteRoot, absoluteRoot)) return []
+function scanBundledSkillRoot(root: string): BundledSkillRootScan {
+  const resolvedRoot = resolveBundledSkillRoot(root)
+  if (!resolvedRoot) return { entries: [], treeKey: `${resolve(root)}:missing` }
 
   const entries: BundledSkillIndexEntry[] = []
-  const queue = [absoluteRoot]
+  const signatureParts = [
+    `root:${resolvedRoot.requestedRoot}:${resolvedRoot.realRoot}`,
+    statsSignature('root', resolvedRoot, resolvedRoot.realRoot),
+  ]
+  const queue = [resolvedRoot.requestedRoot]
   const visited = new Set<string>()
 
   for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
@@ -102,6 +127,7 @@ function scanBundledSkillRoot(root: string) {
     }
     if (visited.has(realCurrent)) continue
     visited.add(realCurrent)
+    signatureParts.push(statsSignature('dir', resolvedRoot, realCurrent))
 
     let children
     try {
@@ -109,18 +135,20 @@ function scanBundledSkillRoot(root: string) {
     } catch {
       continue
     }
+    signatureParts.push(`children:${relative(resolvedRoot.realRoot, realCurrent) || '.'}:${children.join('\u0000')}`)
 
     for (const child of children) {
       const candidate = join(current, child)
-      if (!isSafeDirectoryInsideRoot(absoluteRoot, candidate)) continue
+      if (!isSafeDirectoryInsideRoot(resolvedRoot, candidate)) continue
 
       const skillPath = join(candidate, 'SKILL.md')
-      if (isSafeSkillDefinition(absoluteRoot, skillPath)) {
-        const relativePath = relative(absoluteRoot, candidate)
+      if (isSafeSkillDefinition(resolvedRoot, skillPath)) {
+        const relativePath = relative(resolvedRoot.requestedRoot, candidate)
         const depth = relativePath ? relativePath.split(/[\\/]/).length : 0
+        signatureParts.push(statsSignature('file', resolvedRoot, skillPath))
         entries.push({
           name: basename(candidate),
-          root: absoluteRoot,
+          root: resolvedRoot.requestedRoot,
           skillDir: candidate,
           skillPath,
           depth,
@@ -131,7 +159,7 @@ function scanBundledSkillRoot(root: string) {
     }
   }
 
-  return entries
+  return { entries, treeKey: signatureParts.join('|') }
 }
 
 export function clearBundledSkillIndexCache() {
@@ -143,7 +171,7 @@ export function buildBundledSkillIndex(roots: string[]) {
 
   for (const root of roots.map((entry) => resolve(entry))) {
     const rootEntries = new Map<string, BundledSkillIndexEntry>()
-    for (const entry of scanBundledSkillRoot(root)) {
+    for (const entry of scanBundledSkillRoot(root).entries) {
       if (shouldReplaceEntry(rootEntries.get(entry.name), entry)) {
         rootEntries.set(entry.name, entry)
       }
@@ -160,11 +188,26 @@ export function buildBundledSkillIndex(roots: string[]) {
 }
 
 export function getBundledSkillIndex(roots: string[]) {
-  const key = cacheKeyForRoots(roots)
-  if (cachedIndex?.key === key) return cachedIndex.index
+  const rootsKey = cacheRootsKey(roots)
+  const scans = roots.map((root) => scanBundledSkillRoot(root))
+  const treeKey = scans.map((scan) => scan.treeKey).join('||')
+  if (cachedIndex?.rootsKey === rootsKey && cachedIndex.treeKey === treeKey) return cachedIndex.index
 
-  const index = buildBundledSkillIndex(roots)
-  cachedIndex = { key, index }
+  const index = new Map<string, BundledSkillIndexEntry>()
+  for (const scan of scans) {
+    const rootEntries = new Map<string, BundledSkillIndexEntry>()
+    for (const entry of scan.entries) {
+      if (shouldReplaceEntry(rootEntries.get(entry.name), entry)) {
+        rootEntries.set(entry.name, entry)
+      }
+    }
+    for (const [name, entry] of rootEntries.entries()) {
+      if (!index.has(name)) {
+        index.set(name, entry)
+      }
+    }
+  }
+  cachedIndex = { rootsKey, treeKey, index }
   return index
 }
 
