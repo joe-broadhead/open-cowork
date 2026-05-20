@@ -1,6 +1,6 @@
 import electron from 'electron'
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'fs'
-import { isAbsolute, join, relative, resolve } from 'path'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { join } from 'path'
 import { getConfiguredSkillsFromConfig } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 import { log } from './logger.ts'
@@ -9,57 +9,9 @@ import { syncProjectOverlayToRuntime } from './runtime-project-overlay.ts'
 import { buildRuntimeSkillCatalog } from './runtime-skill-catalog.ts'
 import { pruneManagedSkillMirror } from './runtime-skill-mirror.ts'
 import { syncCustomAgentRuntimeGuidance } from './native-customizations.ts'
+import { findBundledSkillDirInRoot, getBundledSkillIndex } from './bundled-skill-index.ts'
 
 const { app } = electron
-
-function isInsideRoot(root: string, candidate: string) {
-  const relativePath = relative(root, candidate)
-  const firstSegment = relativePath.split(/[\\/]/, 1)[0]
-  return relativePath === '' || (
-    Boolean(relativePath)
-    && firstSegment !== '..'
-    && !isAbsolute(relativePath)
-  )
-}
-
-function isSafeDirectoryInsideRoot(root: string, candidate: string) {
-  const absoluteRoot = resolve(root)
-  const absoluteCandidate = resolve(candidate)
-  if (!isInsideRoot(absoluteRoot, absoluteCandidate)) return false
-  if (!existsSync(absoluteCandidate)) return false
-
-  try {
-    if (lstatSync(absoluteCandidate).isSymbolicLink()) return false
-    const realRoot = realpathSync.native(absoluteRoot)
-    const realCandidate = realpathSync.native(absoluteCandidate)
-    if (!isInsideRoot(realRoot, realCandidate)) return false
-    return statSync(realCandidate).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-function isSafeFileInsideRoot(root: string, candidate: string) {
-  const absoluteRoot = resolve(root)
-  const absoluteCandidate = resolve(candidate)
-  if (!isInsideRoot(absoluteRoot, absoluteCandidate)) return false
-  if (!existsSync(absoluteCandidate)) return false
-
-  try {
-    if (lstatSync(absoluteCandidate).isSymbolicLink()) return false
-    const realRoot = realpathSync.native(absoluteRoot)
-    const realCandidate = realpathSync.native(absoluteCandidate)
-    if (!isInsideRoot(realRoot, realCandidate)) return false
-    return statSync(realCandidate).isFile()
-  } catch {
-    return false
-  }
-}
-
-function hasSafeSkillDefinition(root: string, skillDir: string) {
-  return isSafeDirectoryInsideRoot(root, skillDir)
-    && isSafeFileInsideRoot(root, join(skillDir, 'SKILL.md'))
-}
 
 function copySkillDirectory(source: string, destination: string) {
   rmSync(destination, { recursive: true, force: true })
@@ -116,26 +68,7 @@ export function getBundledSkillRoots(): string[] {
 }
 
 export function findBundledSkillDir(root: string, skillName: string): string | null {
-  const direct = join(root, skillName)
-  if (hasSafeSkillDefinition(root, direct)) return direct
-  if (!existsSync(root)) return null
-
-  const queue = [root]
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) continue
-
-    for (const entry of readdirSync(current)) {
-      const candidate = join(current, entry)
-      if (!isSafeDirectoryInsideRoot(root, candidate)) continue
-      if (entry === skillName && hasSafeSkillDefinition(root, candidate)) {
-        return candidate
-      }
-      queue.push(candidate)
-    }
-  }
-
-  return null
+  return findBundledSkillDirInRoot(root, skillName)
 }
 
 // Copies the configured-skill subset into Cowork-managed mirrors. The
@@ -163,6 +96,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
   const customSkillsDst = getMachineSkillsDir()
   const runtimeSkillCatalog = getRuntimeSkillCatalogDir()
   const skillSourceRoots = getBundledSkillRoots()
+  const bundledSkillIndex = getBundledSkillIndex(skillSourceRoots)
   const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
   pruneManagedSkillMirror({
     discoverableSkillsDir: customSkillsDst,
@@ -186,9 +120,7 @@ export function copySkillsAndAgents(projectDirectory?: string | null) {
 
   for (const skillName of Array.from(configuredSkillNames)) {
     const destination = join(skillsDst, skillName)
-    const source = skillSourceRoots
-      .map((root) => findBundledSkillDir(root, skillName))
-      .find((candidate) => candidate && existsSync(candidate))
+    const source = bundledSkillIndex.get(skillName)?.skillDir || null
 
     if (!source) {
       log('runtime', `Bundled skill not found: ${skillName}`)

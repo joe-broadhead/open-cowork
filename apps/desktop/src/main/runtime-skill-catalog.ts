@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { getProjectOverlayDirName } from './config-loader.ts'
-import { getEffectiveSkillBundleSync, listEffectiveSkillsSync } from './effective-skills.ts'
+import { listEffectiveBuiltInSkillBundlesSync } from './effective-skills.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
@@ -144,14 +144,11 @@ export function writeRuntimeSkillBundle(root: string, bundle: RuntimeSkillBundle
 }
 
 function listContextBundles(context?: RuntimeContextOptions): RuntimeSkillBundle[] {
-  return listEffectiveSkillsSync(context)
-    // OpenCode already discovers user-authored machine and project skills
-    // from its native skills directory. The generated SDK skills.paths
-    // catalog is only for Cowork-curated built-in bundles; including custom
-    // skills here exposes the same skill twice to OpenCode.
-    .filter((skill) => skill.source === 'builtin')
-    .map((skill) => getEffectiveSkillBundleSync(skill.name, context))
-    .filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
+  // OpenCode already discovers user-authored machine and project skills
+  // from its native skills directory. The generated SDK skills.paths
+  // catalog is only for Cowork-curated built-in bundles; including custom
+  // skills here exposes the same skill twice to OpenCode.
+  return listEffectiveBuiltInSkillBundlesSync(context)
     .map((bundle) => ({
       name: bundle.name,
       content: bundle.content || '',

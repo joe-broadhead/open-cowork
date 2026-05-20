@@ -6,7 +6,7 @@ import { getProviderDescriptor } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
 import { normalizeProviderListResponse, type ProviderLike } from '../provider-utils.ts'
 import { forgetSubmittedPrompt, rememberSubmittedPrompt, trackParentSession } from '../event-task-state.ts'
-import { dispatchRuntimeSessionEvent, publishSessionView } from '../session-event-dispatcher.ts'
+import { dispatchRuntimeSessionEvent, publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
 import { startSessionStatusReconciliation, stopSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import {
   getSessionRecord,
@@ -20,6 +20,7 @@ import {
 } from '../session-registry.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'
 import { syncSessionView } from '../session-history-loader.ts'
+import { sessionEngine } from '../session-engine.ts'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
@@ -356,9 +357,11 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:activate', async (_event, sessionIdInput: unknown, options?: { force?: boolean }) => {
     const sessionId = normalizeSessionId(sessionIdInput)
     try {
+      const rootFirst = !options?.force && !sessionEngine.isHydrated(sessionId)
       const view = await syncSessionView(sessionId, {
         force: options?.force,
         activate: true,
+        progressive: rootFirst,
       })
       getThreadIndexService().refreshThreadMetadata(sessionId, view)
       if (view.isGenerating) {
@@ -375,18 +378,21 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         // Broadcast SDK-owned fields that syncSessionView refreshed (parent,
         // summary, revertedMessageId) so the sidebar/header chips update
         // without waiting for a session.updated SSE event.
-        const record = getSessionRecord(sessionId)
-        if (record) {
-          win.webContents.send('session:updated', {
-            id: record.id,
-            title: record.title || null,
-            parentSessionId: record.parentSessionId,
-            changeSummary: record.changeSummary,
-            revertedMessageId: record.revertedMessageId,
-            composerModelId: record.composerModelId,
-            composerReasoningVariant: record.composerReasoningVariant,
-          })
-        }
+        publishSessionMetadata(win, sessionId)
+      }
+      if (rootFirst) {
+        void syncSessionView(sessionId, {
+          force: true,
+          activate: false,
+        }).then((hydratedView) => {
+          getThreadIndexService().refreshThreadMetadata(sessionId, hydratedView)
+          const hydratedWin = context.getMainWindow()
+          if (!hydratedWin || hydratedWin.isDestroyed()) return
+          publishSessionView(hydratedWin, sessionId)
+          publishSessionMetadata(hydratedWin, sessionId)
+        }).catch((err) => {
+          context.logHandlerError(`session:activate hydrate ${shortSessionId(sessionId)}`, err)
+        })
       }
       return view
     } catch (err) {

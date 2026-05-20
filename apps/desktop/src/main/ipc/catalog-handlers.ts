@@ -5,7 +5,7 @@ import { optionalObjectArg, registerIpcInvoke, stringArg } from './schema.ts'
 import { getClient } from '../runtime.ts'
 import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
 import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
-import { getCustomAgentCatalog, getCustomAgentSummaries, normalizeCustomAgent, validateCustomAgent } from '../custom-agents.ts'
+import { getCustomAgentCatalog, getCustomAgentSummaries, invalidateCustomAgentCatalogCache, normalizeCustomAgent, validateCustomAgent } from '../custom-agents.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../native-customizations.ts'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../capability-catalog.ts'
 import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
@@ -43,6 +43,11 @@ const runMcpTransitionForName = createKeyedPromiseChain()
 
 const WRITE_TOOL_IDS = new Set(['edit', 'write', 'apply_patch', 'todowrite'])
 const WRITE_PERMISSION_ACTIONS = new Set(['ask', 'allow'])
+
+function invalidateRuntimeCapabilityCaches() {
+  invalidateRuntimeToolCache()
+  invalidateCustomAgentCatalogCache()
+}
 
 async function timeAgentCatalogHandler<T>(name: 'agents:list' | 'agents:catalog' | 'agents:runtime', work: () => Promise<T>) {
   const start = performance.now()
@@ -193,7 +198,7 @@ export async function authenticateMcpThroughRuntime(client: {
     }
   }
   await client.mcp.auth.authenticate({ name: mcpName })
-  invalidateRuntimeToolCache()
+  invalidateRuntimeCapabilityCaches()
   return true
 }
 
@@ -231,7 +236,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       try {
         await client.mcp.connect({ name })
         log('mcp', `Connected: ${name}`)
-        invalidateRuntimeToolCache()
+        invalidateRuntimeCapabilityCaches()
         return true
       } catch (err) {
         context.logHandlerError(`mcp:connect ${name}`, err)
@@ -247,7 +252,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       try {
         await client.mcp.disconnect({ name })
         log('mcp', `Disconnected: ${name}`)
-        invalidateRuntimeToolCache()
+        invalidateRuntimeCapabilityCaches()
         return true
       } catch (err) {
         context.logHandlerError(`mcp:disconnect ${name}`, err)
@@ -321,6 +326,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     }
 
     saveCustomAgent(normalized, await context.buildCustomAgentPermission(normalized, catalogContext))
+    invalidateCustomAgentCatalogCache()
     log('agent', `Added custom agent: ${normalized.name}`)
     const { rebootRuntime } = await import('../index.ts')
     await rebootRuntime()
@@ -344,6 +350,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
     removeCustomAgent(resolvedTarget)
     saveCustomAgent(normalized, await context.buildCustomAgentPermission(normalized, catalogContext))
+    invalidateCustomAgentCatalogCache()
     log('agent', `Updated custom agent: ${resolvedTarget.name} -> ${normalized.name}`)
     const { rebootRuntime } = await import('../index.ts')
     await rebootRuntime()
@@ -357,6 +364,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
         throw new Error('Confirmation required before deleting an agent.')
       }
       removeCustomAgent(resolvedTarget)
+      invalidateCustomAgentCatalogCache()
       log('agent', `Removed custom agent: ${resolvedTarget.name}`)
       log('audit', `agent.remove completed ${context.describeDestructiveRequest({ action: 'agent.remove', target: resolvedTarget })}`)
       const { rebootRuntime } = await import('../index.ts')

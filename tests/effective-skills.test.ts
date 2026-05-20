@@ -4,10 +4,17 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { join } from 'path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
+  buildBundledSkillIndex,
+  clearBundledSkillIndexCache,
+  getBundledSkillIndex,
+} from '../apps/desktop/src/main/bundled-skill-index.ts'
+import {
   getEffectiveSkillBundleSync,
+  listEffectiveBuiltInSkillBundlesSync,
   readEffectiveSkillBundleFile,
 } from '../apps/desktop/src/main/effective-skills.ts'
 import { findBundledSkillDir } from '../apps/desktop/src/main/runtime-content.ts'
+import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -128,6 +135,35 @@ test('bundled skill discovery rejects symlinked SKILL.md definitions', () => {
   }
 })
 
+test('bundled skill index prefers root order and shallower duplicate bundles', () => {
+  const tempRoot = testTempDir('opencowork-skill-index-')
+  const firstRoot = join(tempRoot, 'first', 'skills')
+  const secondRoot = join(tempRoot, 'second', 'skills')
+  const firstNested = join(firstRoot, 'nested', 'duplicate-skill')
+  const firstDirect = join(firstRoot, 'duplicate-skill')
+  const secondDirect = join(secondRoot, 'duplicate-skill')
+
+  mkdirSync(firstNested, { recursive: true })
+  mkdirSync(firstDirect, { recursive: true })
+  mkdirSync(secondDirect, { recursive: true })
+  writeFileSync(join(firstNested, 'SKILL.md'), '---\nname: duplicate-skill\ndescription: Nested\n---\n# Nested\n')
+  writeFileSync(join(firstDirect, 'SKILL.md'), '---\nname: duplicate-skill\ndescription: Direct\n---\n# Direct\n')
+  writeFileSync(join(secondDirect, 'SKILL.md'), '---\nname: duplicate-skill\ndescription: Second\n---\n# Second\n')
+
+  try {
+    clearBundledSkillIndexCache()
+    const directIndex = buildBundledSkillIndex([firstRoot, secondRoot])
+    assert.equal(directIndex.get('duplicate-skill')?.skillDir, firstDirect)
+
+    const cachedIndex = getBundledSkillIndex([secondRoot, firstRoot])
+    assert.equal(cachedIndex.get('duplicate-skill')?.skillDir, secondDirect)
+    assert.equal(getBundledSkillIndex([secondRoot, firstRoot]), cachedIndex)
+  } finally {
+    clearBundledSkillIndexCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('effective skill bundle file reads return null when a validated file becomes unreadable', async () => {
   const tempRoot = testTempDir('opencowork-effective-skills-unreadable-')
   const configDir = join(tempRoot, 'config')
@@ -169,6 +205,59 @@ test('effective skill bundle file reads return null when a validated file become
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
     else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('built-in skill bundles are materialized in one pass while custom skills shadow configured bundles', () => {
+  const tempRoot = testTempDir('opencowork-effective-builtins-')
+  const configDir = join(tempRoot, 'config')
+  const downstreamRoot = join(tempRoot, 'downstream')
+  const downstreamSkills = join(downstreamRoot, 'skills')
+  const bundledAnalyst = join(downstreamSkills, 'analyst')
+  const bundledChart = join(downstreamSkills, 'chart-creator')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousDownstreamRoot = process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(bundledAnalyst, { recursive: true })
+  mkdirSync(bundledChart, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    skills: [
+      { name: 'Analyst', description: 'Bundled analyst.', badge: 'Skill', sourceName: 'analyst', toolIds: [] },
+      { name: 'Chart Creator', description: 'Bundled charting.', badge: 'Skill', sourceName: 'chart-creator', toolIds: ['charts'] },
+    ],
+  }, null, 2))
+  writeFileSync(join(bundledAnalyst, 'SKILL.md'), '---\nname: analyst\ndescription: Bundled analyst.\n---\n# Analyst\n')
+  writeFileSync(join(bundledChart, 'SKILL.md'), '---\nname: chart-creator\ndescription: Bundled charting.\n---\n# Chart\n')
+  writeFileSync(join(bundledChart, 'reference.md'), 'chart reference')
+
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_DOWNSTREAM_ROOT = downstreamRoot
+  process.env.OPEN_COWORK_USER_DATA_DIR = join(tempRoot, 'user-data')
+  clearBundledSkillIndexCache()
+  clearConfigCaches()
+
+  try {
+    const customAnalyst = join(getMachineSkillsDir(), 'analyst')
+    mkdirSync(customAnalyst, { recursive: true })
+    writeFileSync(join(customAnalyst, 'SKILL.md'), '---\nname: analyst\ndescription: Custom analyst.\n---\n# Custom Analyst\n')
+
+    const bundles = listEffectiveBuiltInSkillBundlesSync()
+    assert.equal(bundles.some((bundle) => bundle.name === 'analyst'), false)
+    const chartBundle = bundles.find((bundle) => bundle.name === 'chart-creator')
+    assert.equal(chartBundle?.content?.includes('Bundled charting'), true)
+    assert.equal(chartBundle?.files.some((file) => file.path === 'reference.md' && file.content === 'chart reference'), true)
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousDownstreamRoot === undefined) delete process.env.OPEN_COWORK_DOWNSTREAM_ROOT
+    else process.env.OPEN_COWORK_DOWNSTREAM_ROOT = previousDownstreamRoot
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearBundledSkillIndexCache()
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }
