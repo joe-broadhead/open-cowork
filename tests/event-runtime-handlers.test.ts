@@ -708,6 +708,71 @@ test('late explicit child metadata preserves child-owned terminal status when me
   assert.equal(task?.status, 'complete')
 })
 
+test('late explicit child metadata preserves child-owned running status when merging lanes', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+  registerTaskRun({
+    id: 'call-task-1',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Explore MCP examples and structure',
+    agent: 'explore',
+    childSessionId: null,
+    status: 'complete',
+  })
+  registerTaskRun({
+    id: 'child:child-session',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Explore MCP examples and structure',
+    agent: 'explore',
+    childSessionId: 'child-session',
+    status: 'running',
+  })
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        id: 'part-task',
+        callID: 'call-task-1',
+        type: 'tool',
+        tool: 'task',
+        title: 'Explore MCP examples and structure',
+        state: {
+          status: 'completed',
+          input: {
+            subagent_type: 'explore',
+            description: 'Explore MCP examples and structure',
+            prompt: 'Explore engaging MCP examples.',
+          },
+          output: 'task_id: child-session',
+          metadata: {
+            parentSessionId: 'root-session',
+            sessionId: 'child-session',
+          },
+        },
+      },
+    },
+    createSessionScopedMessageState(),
+    'openai/gpt-5.5',
+  )
+
+  const task = getTaskRun('child:child-session')
+  assert.equal(getTaskRun('call-task-1'), null)
+  assert.equal(task?.childSessionId, 'child-session')
+  assert.equal(task?.status, 'running')
+})
+
 test('task tool child ids can arrive in state metadata while top-level metadata is present', () => {
   const collector = createDispatchCollector()
   const win = {

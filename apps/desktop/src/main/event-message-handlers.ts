@@ -688,10 +688,11 @@ function handleUpdatedTaskToolPart(
   let taskRunId = providerTaskRunId
   let existingTaskRun = getTaskRun(providerTaskRunId)
   let existingChildTaskRunId = childSessionId ? getTaskRunIdForChild(childSessionId) : null
-  let existingTaskRunWasChildBound = Boolean(
-    existingTaskRun?.childSessionId
-      || (existingChildTaskRunId ? getTaskRun(existingChildTaskRunId)?.childSessionId : null),
-  )
+  let childTaskRunBeforeBind = existingTaskRun?.childSessionId
+    ? existingTaskRun
+    : existingChildTaskRunId
+      ? getTaskRun(existingChildTaskRunId)
+      : null
 
   if (childSessionId) {
     registerSession(childSessionId, taskParentSessionId)
@@ -703,14 +704,12 @@ function handleUpdatedTaskToolPart(
       existingChildTaskRunId = existingChildTaskRunId || getTaskRunIdForChild(childSessionId)
       taskRunId = existingChildTaskRunId || `child:${childSessionId}`
       existingTaskRun = getTaskRun(taskRunId)
-      existingTaskRunWasChildBound = Boolean(existingTaskRun?.childSessionId)
+      childTaskRunBeforeBind = existingTaskRun?.childSessionId ? existingTaskRun : null
     }
   }
   const { agentName, titleCandidates } = resolveTaskToolDescriptor(ctx, input.metadata, input.title)
-  const preservedChildStatus = existingTaskRunWasChildBound
-    && existingTaskRun
-    && existingTaskRun.status !== 'queued'
-    ? existingTaskRun.status
+  const preservedChildStatus = childTaskRunBeforeBind?.status && childTaskRunBeforeBind.status !== 'queued'
+    ? childTaskRunBeforeBind.status
     : null
   const taskStatus = input.isError
     ? 'error'
