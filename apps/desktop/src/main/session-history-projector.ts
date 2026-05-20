@@ -104,7 +104,11 @@ function stringField(record: Record<string, unknown>, key: string) {
 
 function taskToolDescriptor(part: NormalizedMessagePart, child?: ChildSessionRecord | null) {
   const inputAgent = stringField(part.state.input, 'agent')
+    || stringField(part.state.input, 'subagent_type')
+    || stringField(part.state.input, 'subagentType')
   const argsAgent = stringField(part.state.args, 'agent')
+    || stringField(part.state.args, 'subagent_type')
+    || stringField(part.state.args, 'subagentType')
   const metadataAgent = stringField(part.state.metadata, 'agent') || stringField(part.metadata, 'agent')
   const inputDescription = stringField(part.state.input, 'description')
   const argsDescription = stringField(part.state.args, 'description')

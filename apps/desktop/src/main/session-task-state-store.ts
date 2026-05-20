@@ -40,6 +40,7 @@ export class SessionTaskStateStore {
   private readonly sessionLineage = new Map<string, string>()
   private readonly taskRuns = new Map<string, TaskRunMeta>()
   private readonly childSessionToTaskRunId = new Map<string, string>()
+  private readonly taskRunAliases = new Map<string, string>()
   private readonly pendingTaskRunsByParent = new Map<string, string[]>()
   private readonly queuedChildSessionsByParent = new Map<string, QueuedChildSessionMeta[]>()
   private readonly pendingSubmittedPromptBySession = new Map<string, string>()
@@ -49,6 +50,7 @@ export class SessionTaskStateStore {
     this.sessionLineage.clear()
     this.taskRuns.clear()
     this.childSessionToTaskRunId.clear()
+    this.taskRunAliases.clear()
     this.pendingTaskRunsByParent.clear()
     this.queuedChildSessionsByParent.clear()
     this.pendingSubmittedPromptBySession.clear()
@@ -117,11 +119,12 @@ export class SessionTaskStateStore {
   }
 
   bindTaskRunToChild(taskRunId: string, childSessionId: string) {
+    const resolvedTaskRunId = this.resolveTaskRunId(taskRunId) || taskRunId
     const existingTaskRunId = this.childSessionToTaskRunId.get(childSessionId)
     const childParentSessionId = this.getImmediateParentSession(childSessionId)
-    if (existingTaskRunId && existingTaskRunId !== taskRunId) {
+    if (existingTaskRunId && existingTaskRunId !== resolvedTaskRunId) {
       const existingTaskRun = this.taskRuns.get(existingTaskRunId)
-      const incomingTaskRun = this.taskRuns.get(taskRunId)
+      const incomingTaskRun = this.taskRuns.get(resolvedTaskRunId)
 
       if (existingTaskRun && incomingTaskRun) {
         const mergedAgent = incomingTaskRun.agent || existingTaskRun.agent
@@ -156,20 +159,23 @@ export class SessionTaskStateStore {
         }
 
         this.taskRuns.set(existingTaskRunId, mergedTaskRun)
-        this.taskRuns.delete(taskRunId)
+        this.taskRuns.delete(resolvedTaskRunId)
         this.childSessionToTaskRunId.set(childSessionId, existingTaskRunId)
-        this.removePendingTaskRun(taskRunId)
+        this.taskRunAliases.set(taskRunId, existingTaskRunId)
+        if (resolvedTaskRunId !== taskRunId) this.taskRunAliases.set(resolvedTaskRunId, existingTaskRunId)
+        this.removePendingTaskRun(resolvedTaskRunId)
         this.removeQueuedChildSession(childSessionId)
         return mergedTaskRun
       }
     }
 
-    const taskRun = this.taskRuns.get(taskRunId)
+    const taskRun = this.taskRuns.get(resolvedTaskRunId)
     if (!taskRun) return null
     taskRun.childSessionId = childSessionId
     taskRun.parentSessionId = childParentSessionId || taskRun.parentSessionId || taskRun.rootSessionId
-    this.childSessionToTaskRunId.set(childSessionId, taskRunId)
-    this.removePendingTaskRun(taskRunId)
+    this.childSessionToTaskRunId.set(childSessionId, resolvedTaskRunId)
+    if (resolvedTaskRunId !== taskRunId) this.taskRunAliases.set(taskRunId, resolvedTaskRunId)
+    this.removePendingTaskRun(resolvedTaskRunId)
     this.removeQueuedChildSession(childSessionId)
     return taskRun
   }
@@ -179,6 +185,7 @@ export class SessionTaskStateStore {
       ...taskRun,
       parentSessionId: taskRun.parentSessionId || taskRun.rootSessionId,
     })
+    this.taskRunAliases.delete(normalizedTaskRun.id)
     this.taskRuns.set(normalizedTaskRun.id, normalizedTaskRun)
     const parentQueueKey = normalizedTaskRun.parentSessionId || normalizedTaskRun.rootSessionId
 
@@ -259,12 +266,13 @@ export class SessionTaskStateStore {
   }
 
   updateTaskRun(taskRunId: string, patch: Partial<TaskRunMeta>) {
-    const existing = this.taskRuns.get(taskRunId)
+    const resolvedTaskRunId = this.resolveTaskRunId(taskRunId) || taskRunId
+    const existing = this.taskRuns.get(resolvedTaskRunId)
     if (!existing) return null
     const next = applyTaskTimingTransition(existing, patch)
-    this.taskRuns.set(taskRunId, next)
+    this.taskRuns.set(resolvedTaskRunId, next)
     if (next.childSessionId) {
-      this.childSessionToTaskRunId.set(next.childSessionId, next.id)
+      this.childSessionToTaskRunId.set(next.childSessionId, resolvedTaskRunId)
     } else if (isTerminalTaskStatus(next.status)) {
       this.removePendingTaskRun(next.id)
     }
@@ -279,6 +287,23 @@ export class SessionTaskStateStore {
   getTaskRunIdForChild(sessionId: string | null | undefined) {
     if (!sessionId) return null
     return this.childSessionToTaskRunId.get(sessionId) || null
+  }
+
+  aliasTaskRunId(aliasTaskRunId: string | null | undefined, targetTaskRunId: string | null | undefined) {
+    if (!aliasTaskRunId || !targetTaskRunId || aliasTaskRunId === targetTaskRunId) return
+    const resolvedTargetTaskRunId = this.resolveTaskRunId(targetTaskRunId) || targetTaskRunId
+    if (!this.taskRuns.has(resolvedTargetTaskRunId)) return
+    this.taskRunAliases.set(aliasTaskRunId, resolvedTargetTaskRunId)
+  }
+
+  resolveTaskRunId(taskRunId: string | null | undefined) {
+    if (!taskRunId) return null
+    if (this.taskRuns.has(taskRunId)) return taskRunId
+    const aliasedTaskRunId = this.taskRunAliases.get(taskRunId)
+    if (!aliasedTaskRunId) return null
+    if (this.taskRuns.has(aliasedTaskRunId)) return aliasedTaskRunId
+    this.taskRunAliases.delete(taskRunId)
+    return null
   }
 
   rememberSubmittedPrompt(sessionId: string, text: string) {
@@ -316,6 +341,12 @@ export class SessionTaskStateStore {
       }
     }
 
+    for (const [aliasTaskRunId, taskRunId] of this.taskRunAliases.entries()) {
+      if (!this.taskRuns.has(taskRunId) || aliasTaskRunId === taskRunId) {
+        this.taskRunAliases.delete(aliasTaskRunId)
+      }
+    }
+
     for (const [parentSessionId] of this.pendingTaskRunsByParent.entries()) {
       if (!this.isKnownSession(parentSessionId)) {
         this.pendingTaskRunsByParent.delete(parentSessionId)
@@ -344,9 +375,14 @@ export class SessionTaskStateStore {
     this.queuedChildSessionsByParent.delete(sessionId)
     this.pendingSubmittedPromptBySession.delete(sessionId)
     this.deleteTaskRunsForSessions([sessionId])
+    const deletedTaskRunIds = new Set<string>()
     for (const [taskRunId, taskRun] of this.taskRuns.entries()) {
-      if (taskRun.rootSessionId === sessionId) this.taskRuns.delete(taskRunId)
+      if (taskRun.rootSessionId === sessionId) {
+        deletedTaskRunIds.add(taskRunId)
+        this.taskRuns.delete(taskRunId)
+      }
     }
+    this.removeTaskRunAliasesForTaskIds(deletedTaskRunIds)
     this.removeDescendantLineage(sessionId)
   }
 
@@ -433,6 +469,7 @@ export class SessionTaskStateStore {
 
   private deleteTaskRunsForSessions(sessionIds: string[]) {
     const targetIds = new Set(sessionIds)
+    const deletedTaskRunIds = new Set<string>()
     for (const sessionId of targetIds) {
       this.childSessionToTaskRunId.delete(sessionId)
     }
@@ -442,7 +479,18 @@ export class SessionTaskStateStore {
         (childSessionId && targetIds.has(childSessionId))
         || (taskRunId.startsWith('child:') && targetIds.has(taskRunId.slice('child:'.length)))
       ) {
+        deletedTaskRunIds.add(taskRunId)
         this.taskRuns.delete(taskRunId)
+      }
+    }
+    this.removeTaskRunAliasesForTaskIds(deletedTaskRunIds)
+  }
+
+  private removeTaskRunAliasesForTaskIds(taskRunIds: Set<string>) {
+    if (taskRunIds.size === 0) return
+    for (const [aliasTaskRunId, targetTaskRunId] of this.taskRunAliases.entries()) {
+      if (taskRunIds.has(aliasTaskRunId) || taskRunIds.has(targetTaskRunId)) {
+        this.taskRunAliases.delete(aliasTaskRunId)
       }
     }
   }
