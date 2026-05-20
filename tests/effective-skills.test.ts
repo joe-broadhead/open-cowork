@@ -263,7 +263,7 @@ test('effective skill bundle file reads return null when a validated file become
   }
 })
 
-test('built-in skill bundles are materialized in one pass while custom skills shadow configured bundles', () => {
+test('built-in skill bundles are materialized in one pass while only valid custom skills shadow configured bundles', () => {
   const tempRoot = testTempDir('opencowork-effective-builtins-')
   const configDir = join(tempRoot, 'config')
   const downstreamRoot = join(tempRoot, 'downstream')
@@ -298,11 +298,16 @@ test('built-in skill bundles are materialized in one pass while custom skills sh
     mkdirSync(customAnalyst, { recursive: true })
     writeFileSync(join(customAnalyst, 'SKILL.md'), '---\nname: analyst\ndescription: Custom analyst.\n---\n# Custom Analyst\n')
 
+    const invalidCustomChart = join(getMachineSkillsDir(), 'chart-creator')
+    mkdirSync(invalidCustomChart, { recursive: true })
+    writeFileSync(join(invalidCustomChart, 'SKILL.md'), '---\nname: chart-creator\n---\n# Invalid Custom Chart\n')
+
     const bundles = listEffectiveBuiltInSkillBundlesSync()
     assert.equal(bundles.some((bundle) => bundle.name === 'analyst'), false)
     const chartBundle = bundles.find((bundle) => bundle.name === 'chart-creator')
     assert.equal(chartBundle?.content?.includes('Bundled charting'), true)
     assert.equal(chartBundle?.files.some((file) => file.path === 'reference.md' && file.content === 'chart reference'), true)
+    assert.equal(getEffectiveSkillBundleSync('chart-creator')?.origin, 'open-cowork')
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

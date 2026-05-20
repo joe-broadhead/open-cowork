@@ -19,7 +19,7 @@ import {
   upsertSessionRecord,
 } from '../session-registry.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'
-import { syncSessionView } from '../session-history-loader.ts'
+import { isSessionPartiallyHydrated, syncSessionView } from '../session-history-loader.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
@@ -357,11 +357,15 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
   context.ipcMain.handle('session:activate', async (_event, sessionIdInput: unknown, options?: { force?: boolean }) => {
     const sessionId = normalizeSessionId(sessionIdInput)
     try {
-      const rootFirst = !options?.force && !sessionEngine.isHydrated(sessionId)
+      const shouldRetryFullHydration = !options?.force && isSessionPartiallyHydrated(sessionId)
+      const progressive = !options?.force && (
+        !sessionEngine.isHydrated(sessionId)
+        || shouldRetryFullHydration
+      )
       const view = await syncSessionView(sessionId, {
         force: options?.force,
         activate: true,
-        progressive: rootFirst,
+        progressive,
       })
       getThreadIndexService().refreshThreadMetadata(sessionId, view)
       if (view.isGenerating) {
@@ -380,7 +384,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         // without waiting for a session.updated SSE event.
         publishSessionMetadata(win, sessionId)
       }
-      if (rootFirst) {
+      if (progressive) {
         void syncSessionView(sessionId, {
           force: true,
           activate: false,

@@ -248,6 +248,8 @@ const defaultSessionHistoryServiceDeps: SessionHistoryServiceDeps = {
 export function createSessionHistoryService(
   deps: SessionHistoryServiceDeps = defaultSessionHistoryServiceDeps,
 ) {
+  const partiallyHydratedSessions = new Set<string>()
+
   async function loadChildSessionsRecursive(
     client: OpencodeClient,
     parentSessionId: string,
@@ -420,6 +422,11 @@ export function createSessionHistoryService(
         })
         deps.sessionEngine.setPendingQuestions(sessionId, questions)
         deps.sessionEngine.setPendingApprovals(sessionId, approvals)
+        if (progressive) {
+          partiallyHydratedSessions.add(sessionId)
+        } else {
+          partiallyHydratedSessions.delete(sessionId)
+        }
       }
       const view = deps.sessionEngine.getSessionView(sessionId)
       const patch: Parameters<typeof deps.updateSessionRecord>[1] = {
@@ -464,6 +471,9 @@ export function createSessionHistoryService(
 
   return {
     loadSessionHistory,
+    isSessionPartiallyHydrated(sessionId: string) {
+      return partiallyHydratedSessions.has(sessionId)
+    },
     syncSessionView(sessionId: string, options?: SessionSyncOptions) {
       return runSessionSync(sessionId, options)
     },
@@ -473,4 +483,5 @@ export function createSessionHistoryService(
 const sessionHistoryService = createSessionHistoryService()
 
 export const loadSessionHistory = sessionHistoryService.loadSessionHistory
+export const isSessionPartiallyHydrated = sessionHistoryService.isSessionPartiallyHydrated
 export const syncSessionView = sessionHistoryService.syncSessionView

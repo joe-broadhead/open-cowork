@@ -31,10 +31,20 @@ export type EffectiveSkillBundle = Omit<CapabilitySkillBundle, 'files'> & {
 }
 
 type ConfiguredSkill = ReturnType<typeof getConfiguredSkillsFromConfig>[number]
+type ManagedCustomSkill = ReturnType<typeof listCustomSkills>[number]
 
 function logSkippedSkill(name: string, source: 'builtin' | 'custom', issues: string[]) {
   if (issues.length === 0) return
   log('capability', `Skipping ${source} skill ${name}: ${issues.join(' ')}`)
+}
+
+function customSkillIsValid(managed: ManagedCustomSkill) {
+  const issues = validateOpenCodeSkillBundle({ name: managed.name, content: managed.content })
+  if (issues.length > 0) {
+    logSkippedSkill(managed.name, 'custom', issues)
+    return false
+  }
+  return true
 }
 
 function humanize(value: string) {
@@ -198,11 +208,7 @@ export function listEffectiveSkillsSync(context?: RuntimeContextOptions): Effect
     const skills = new Map<string, EffectiveSkillDefinition>()
 
     for (const managed of managedCustomSkills.values()) {
-      const issues = validateOpenCodeSkillBundle({ name: managed.name, content: managed.content })
-      if (issues.length > 0) {
-        logSkippedSkill(managed.name, 'custom', issues)
-        continue
-      }
+      if (!customSkillIsValid(managed)) continue
 
       skills.set(managed.name, {
         name: managed.name,
@@ -251,7 +257,7 @@ export function getEffectiveSkillBundleSync(
   context?: RuntimeContextOptions,
 ): EffectiveSkillBundle | null {
   const managed = getCustomSkill(skillName, context)
-  if (managed) {
+  if (managed && customSkillIsValid(managed)) {
     return {
       name: managed.name,
       source: 'custom',
@@ -273,7 +279,11 @@ export function getEffectiveSkillBundleSync(
 export function listEffectiveBuiltInSkillBundlesSync(context?: RuntimeContextOptions): EffectiveSkillBundle[] {
   return measurePerf('skills.effective.bundles', () => {
     const configuredSkills = buildConfiguredSkillMap()
-    const managedCustomSkillNames = new Set(listCustomSkills(context).map((skill) => skill.name))
+    const managedCustomSkillNames = new Set(
+      listCustomSkills(context)
+        .filter(customSkillIsValid)
+        .map((skill) => skill.name),
+    )
     const bundledSkillIndex = getBundledSkillIndex(getBundledSkillRoots())
     const bundles: EffectiveSkillBundle[] = []
 
@@ -313,7 +323,7 @@ export async function readEffectiveSkillBundleFile(
   if (!filePath || filePath.trim().length === 0) return null
 
   const managed = getCustomSkill(skillName, context)
-  if (managed) {
+  if (managed && customSkillIsValid(managed)) {
     // Custom skills carry their file list in memory already; we can't
     // expand arbitrary content from disk because the custom-skill
     // store may not even surface a filesystem location. Return the
