@@ -4,7 +4,7 @@ import {
   normalizeMessagePart,
   normalizeSessionInfo,
 } from './opencode-adapter.ts'
-import { readRecordValue, readString } from './normalizer-utils.ts'
+import { asRecord, readRecordValue, readString } from './normalizer-utils.ts'
 import { resolveDisplayCost } from './pricing.ts'
 import {
   aliasTaskRunId,
@@ -334,11 +334,20 @@ export function handleMessagePartDeltaEvent(
   properties: Record<string, unknown> | null | undefined,
   messageState: SessionScopedMessageState,
 ) {
+  const rawPart = asRecord(readRecordValue(properties, 'part'))
   const messageId = readString(readRecordValue(properties, 'messageID'))
     || readString(readRecordValue(properties, 'messageId'))
+    || readString(readRecordValue(rawPart, 'messageID'))
+    || readString(readRecordValue(rawPart, 'messageId'))
     || null
   const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
     || readString(readRecordValue(properties, 'sessionId'))
+    || readString(readRecordValue(rawPart, 'sessionID'))
+    || readString(readRecordValue(rawPart, 'sessionId'))
+    || null
+  const partId = readString(readRecordValue(properties, 'partID'))
+    || readString(readRecordValue(properties, 'partId'))
+    || readString(readRecordValue(rawPart, 'id'))
     || null
   const sessionId = resolveRootSession(actualSessionId)
   const rawDelta = readString(readRecordValue(properties, 'delta'))
@@ -365,7 +374,7 @@ export function handleMessagePartDeltaEvent(
         actualSessionId,
         taskRunId,
         messageId,
-        partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
+        partId,
         content: delta,
       })
       return
@@ -378,7 +387,7 @@ export function handleMessagePartDeltaEvent(
       actualSessionId,
       taskRunId,
       messageId,
-      partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
+      partId,
       content: delta,
       mode: 'append',
     })
@@ -390,7 +399,7 @@ export function handleMessagePartDeltaEvent(
     actualSessionId,
     taskRunId,
     messageId,
-    partId: readString(readRecordValue(properties, 'partID')) || readString(readRecordValue(properties, 'partId')) || null,
+    partId,
     content: delta,
     mode: 'append',
   })
@@ -416,18 +425,26 @@ function resolveUpdatedPartContext(
   messageState: SessionScopedMessageState,
   cachedModelId: string,
 ): MessagePartUpdatedContext | null {
-  const part = normalizeMessagePart(readRecordValue(properties, 'part'))
+  const rawPart = asRecord(readRecordValue(properties, 'part'))
+  const part = normalizeMessagePart(rawPart)
   if (!part) return null
 
   const messageId = readString(readRecordValue(properties, 'messageID'))
     || readString(readRecordValue(properties, 'messageId'))
+    || readString(readRecordValue(rawPart, 'messageID'))
+    || readString(readRecordValue(rawPart, 'messageId'))
     || null
   const partId = readString(readRecordValue(properties, 'partID'))
     || readString(readRecordValue(properties, 'partId'))
+    || readString(readRecordValue(rawPart, 'partID'))
+    || readString(readRecordValue(rawPart, 'partId'))
+    || readString(readRecordValue(rawPart, 'id'))
     || part.id
     || null
   const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
     || readString(readRecordValue(properties, 'sessionId'))
+    || readString(readRecordValue(rawPart, 'sessionID'))
+    || readString(readRecordValue(rawPart, 'sessionId'))
     || null
   const messageRole = messageId ? getMessageRole(messageState, actualSessionId, messageId) : undefined
   if (messageRole === 'user') return null

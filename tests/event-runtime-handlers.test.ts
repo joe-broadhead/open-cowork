@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BrowserWindow } from 'electron'
-import { handleRuntimeSideEffectEvent } from '../apps/desktop/src/main/event-runtime-handlers.ts'
+import {
+  handleRuntimeSideEffectEvent,
+  resetRuntimeEventStateForTests,
+} from '../apps/desktop/src/main/event-runtime-handlers.ts'
 import {
   createSessionScopedMessageState,
+  handleMessageUpdatedEvent,
   handleMessagePartUpdatedEvent,
 } from '../apps/desktop/src/main/event-message-handlers.ts'
 import {
@@ -41,6 +45,7 @@ function createWindowSendCollector(options?: { destroyed?: boolean; webContentsD
 
 test.afterEach(() => {
   resetEventTaskState()
+  resetRuntimeEventStateForTests()
 })
 
 test('returns false for events outside the runtime side-effect handler scope', () => {
@@ -327,6 +332,103 @@ test('session.status tracks child task runs through running and complete states'
   })
 })
 
+test('session.idle drives the same root completion path as session.status idle', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.idle',
+    properties: {
+      sessionID: 'root-session',
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events, [
+    {
+      type: 'history_refresh',
+      sessionId: 'root-session',
+      data: { type: 'history_refresh' },
+    },
+    {
+      type: 'done',
+      sessionId: 'root-session',
+      data: { type: 'done' },
+    },
+  ])
+})
+
+test('session.status idle and session.idle are deduped for the same SDK transition', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.status',
+    properties: {
+      sessionID: 'root-session',
+      status: { type: 'idle' },
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.idle',
+    properties: {
+      sessionID: 'root-session',
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(collector.events.length, 2)
+  assert.equal((collector.events[0] as { type?: string }).type, 'history_refresh')
+  assert.equal((collector.events[1] as { type?: string }).type, 'done')
+})
+
+test('session.next.agent.switched updates root active agent without waiting for message parts', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+
+  trackParentSession('root-session')
+
+  const handled = handleRuntimeSideEffectEvent({
+    win,
+    type: 'session.next.agent.switched',
+    properties: {
+      sessionID: 'root-session',
+      agent: 'business-analyst',
+    },
+    dispatchRuntimeEvent: collector.dispatch,
+    getMainWindow: () => win,
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(collector.events, [{
+    type: 'agent',
+    sessionId: 'root-session',
+    data: { type: 'agent', name: 'business-analyst' },
+  }])
+})
+
 test('child tool errors do not terminalize a still-running subagent task', () => {
   const collector = createDispatchCollector()
   const win = {
@@ -377,6 +479,61 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
       attachments: undefined,
       taskRunId: 'child:child-session',
       sourceSessionId: 'child-session',
+    },
+  })
+})
+
+test('message.part.updated reads SDK part-scoped ids for child transcript text', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+
+  trackParentSession('root-session')
+  registerSession('child-session', 'root-session')
+
+  handleMessageUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      info: {
+        id: 'message-1',
+        role: 'assistant',
+        sessionID: 'child-session',
+      },
+    },
+    messageState,
+  )
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      part: {
+        id: 'part-1',
+        sessionID: 'child-session',
+        messageID: 'message-1',
+        type: 'text',
+        text: 'Subagent findings should be visible.',
+      },
+    },
+    messageState,
+    'openai/gpt-5.5',
+  )
+
+  assert.deepEqual(collector.events[0], {
+    type: 'text',
+    sessionId: 'root-session',
+    data: {
+      type: 'text',
+      mode: 'replace',
+      content: 'Subagent findings should be visible.',
+      taskRunId: 'child:child-session',
+      sourceSessionId: 'child-session',
+      messageId: 'message-1',
+      partId: 'part-1',
     },
   })
 })

@@ -288,7 +288,10 @@ export function normalizeRuntimeEventEnvelope(value: unknown): NormalizedRuntime
   const payload = asRecord(envelope.payload)
   const source = readRecordString(payload, ['type']) ? payload : envelope
   const nested = asRecord(source.data)
-  const rawType = readRecordString(source, ['type']) || readRecordString(nested, ['type'])
+  const sourceType = readRecordString(source, ['type'])
+  const rawType = sourceType === 'sync'
+    ? readRecordString(source, ['name']) || readRecordString(nested, ['type'])
+    : sourceType || readRecordString(nested, ['type'])
   const type = rawType?.replace(/\.\d+$/, '') || null
   if (!type) return null
   const sourceProperties = asRecord(source.properties)
