@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../apps/desktop/src/main/workflow-schedule.ts'
+import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../apps/desktop/src/main/workflow/workflow-schedule.ts'
 
 test('workflow schedules compute the next enabled trigger', () => {
   const next = computeNextWorkflowRunAt([

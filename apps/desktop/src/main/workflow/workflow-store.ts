@@ -13,7 +13,7 @@ import type {
   WorkflowTrigger,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
-import { getAppDataDir } from './config-loader.ts'
+import { getAppDataDir } from '../config-loader.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from './workflow-schedule.ts'
 
 const WORKFLOW_DB_SCHEMA_VERSION = 1

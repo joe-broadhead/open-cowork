@@ -170,8 +170,8 @@ Code:
   `apps/desktop/src/main/destructive-actions.ts`,
   `apps/desktop/src/main/mcp-stdio-policy.ts`,
   `apps/desktop/src/main/shell-env.ts` — policy and safety boundaries.
-- `apps/desktop/src/main/thread-index-store.ts` and
-  `apps/desktop/src/main/thread-index-service.ts` — the local Threads
+- `apps/desktop/src/main/thread-index/thread-index-store.ts` and
+  `apps/desktop/src/main/thread-index/thread-index-service.ts` — the local Threads
   search/tag projection over the session registry and session history.
 
 ### 4. Event projection layer
@@ -245,14 +245,14 @@ It does **not** replace OpenCode sessions or subagents. It creates and tracks
 them.
 
 Code:
-- `apps/desktop/src/main/workflow-store.ts` — durable workflow definitions and
+- `apps/desktop/src/main/workflow/workflow-store.ts` — durable workflow definitions and
   run ledger
-- `apps/desktop/src/main/workflow-service.ts` — setup-thread creation,
+- `apps/desktop/src/main/workflow/workflow-service.ts` — setup-thread creation,
   scheduler ticks, run-thread creation, and run completion projection
-- `apps/desktop/src/main/workflow-tool-bridge.ts` and
-  `apps/desktop/src/main/workflow-tool-actions.ts` — local MCP bridge used by
+- `apps/desktop/src/main/workflow/workflow-tool-bridge.ts` and
+  `apps/desktop/src/main/workflow/workflow-tool-actions.ts` — local MCP bridge used by
   Workflow Designer to preview and save workflows after user confirmation
-- `apps/desktop/src/main/workflow-webhook-server.ts` — loopback webhook intake
+- `apps/desktop/src/main/workflow/workflow-webhook-server.ts` — loopback webhook intake
   for saved workflows
 - `apps/desktop/src/renderer/components/workflows/` — saved workflow list,
   manual run controls, webhook invocation details, and setup/run thread links

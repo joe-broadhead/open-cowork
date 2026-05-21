@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomBytes } from 'node:crypto'
 import type { WorkflowDraft } from '@open-cowork/shared'
 import { createWorkflowFromTool, previewWorkflowFromTool } from './workflow-tool-actions.ts'
-import { log } from './logger.ts'
+import { log } from '../logger.ts'
 
 const MAX_TOOL_BODY_BYTES = 256 * 1024
 

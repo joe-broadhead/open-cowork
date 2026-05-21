@@ -4,8 +4,8 @@ import type {
   UpdateInstallUnsupportedReason,
   UpdateReleaseSourceDescriptor,
 } from '@open-cowork/shared'
-import type { OpenCoworkConfig, UpdateReleaseSourceConfig } from './config-types.ts'
-import { getAppConfig, getBranding } from './config-loader.ts'
+import type { OpenCoworkConfig, UpdateReleaseSourceConfig } from '../config-types.ts'
+import { getAppConfig, getBranding } from '../config-loader.ts'
 import { compareVersions, normalizeVersion } from './update-version.ts'
 import {
   githubApiReleaseUrl,
@@ -195,7 +195,7 @@ async function resolveGoogleAccessToken(input: {
   }
   const authState = input.options.getAuthState
     ? input.options.getAuthState()
-    : (await import('./auth.ts')).getAuthState()
+    : (await import('../auth.ts')).getAuthState()
   if (!authState.authenticated) {
     throw new UpdateReleaseSourceError(
       'auth-required',
@@ -205,7 +205,7 @@ async function resolveGoogleAccessToken(input: {
   }
   const token = input.options.refreshGoogleAccessToken
     ? await input.options.refreshGoogleAccessToken()
-    : await (await import('./auth.ts')).refreshAccessToken()
+    : await (await import('../auth.ts')).refreshAccessToken()
   if (!token) {
     throw new UpdateReleaseSourceError(
       'auth-expired',

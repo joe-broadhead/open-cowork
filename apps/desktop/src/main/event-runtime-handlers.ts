@@ -25,7 +25,7 @@ import { startSessionStatusReconciliation, stopSessionStatusReconciliation } fro
 import {
   handleWorkflowSessionError,
   handleWorkflowSessionIdle,
-} from './workflow-service.ts'
+} from './workflow/workflow-service.ts'
 import {
   ensureTaskRunForChild,
   forgetSubmittedPrompt,
