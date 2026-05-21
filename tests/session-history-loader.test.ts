@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 import type { SessionView } from '@open-cowork/shared'
 import type { ProjectedHistoryItem } from '../apps/desktop/src/main/session-history-projector.ts'
-import { createSessionHistoryService } from '../apps/desktop/src/main/session-history-loader.ts'
+import { createBoundedChildSnapshotLoader, createSessionHistoryService } from '../apps/desktop/src/main/session-history-loader.ts'
 
 function createEmptySessionView(): SessionView {
   return {
@@ -39,6 +39,60 @@ function createEmptySessionView(): SessionView {
     isAwaitingQuestion: false,
   }
 }
+
+test('bounded child snapshot loader prefetches without exceeding the concurrency cap', async () => {
+  let active = 0
+  let maxActive = 0
+  const completed: string[] = []
+  const loader = createBoundedChildSnapshotLoader({
+    ids: ['child-1', 'child-2', 'child-3', 'child-4', 'child-5'],
+    concurrency: 2,
+    load: async (id) => {
+      active += 1
+      maxActive = Math.max(maxActive, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+      completed.push(id)
+      return { messages: [{ id }], todos: [] }
+    },
+  })
+
+  loader.prefetch()
+  const snapshots = await Promise.all([
+    loader.load('child-1'),
+    loader.load('child-2'),
+    loader.load('child-3'),
+    loader.load('child-4'),
+    loader.load('child-5'),
+  ])
+
+  assert.equal(maxActive, 2)
+  assert.deepEqual(snapshots.map((snapshot) => snapshot.messages[0]), [
+    { id: 'child-1' },
+    { id: 'child-2' },
+    { id: 'child-3' },
+    { id: 'child-4' },
+    { id: 'child-5' },
+  ])
+  assert.deepEqual(completed.sort(), ['child-1', 'child-2', 'child-3', 'child-4', 'child-5'])
+})
+
+test('bounded child snapshot prefetch handles early rejections while preserving load errors', async () => {
+  const loader = createBoundedChildSnapshotLoader({
+    ids: ['child-1'],
+    concurrency: 1,
+    load: async () => {
+      throw new Error('child unavailable')
+    },
+  })
+
+  loader.prefetch()
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  await assert.rejects(
+    loader.load('child-1'),
+    /child unavailable/,
+  )
+})
 
 test('createSessionHistoryService loads questions and updates provider/model from projected history', async () => {
   const updates: Array<Record<string, unknown>> = []

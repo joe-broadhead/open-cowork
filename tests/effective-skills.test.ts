@@ -7,6 +7,7 @@ import {
   buildBundledSkillIndex,
   clearBundledSkillIndexCache,
   getBundledSkillIndex,
+  warmBundledSkillIndex,
 } from '../apps/desktop/src/main/bundled-skill-index.ts'
 import {
   getEffectiveSkillBundleSync,
@@ -211,6 +212,34 @@ test('bundled skill index reflects nested tree changes without a manual cache cl
     assert.equal(refreshedIndex.has('first-skill'), true)
     assert.equal(refreshedIndex.get('nested-skill')?.skillDir, nestedSkill)
     assert.notEqual(refreshedIndex, initialIndex)
+  } finally {
+    clearBundledSkillIndexCache()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('warmed bundled skill index stays stable until explicit invalidation', () => {
+  const tempRoot = testTempDir('opencowork-skill-index-warm-')
+  const skillRoot = join(tempRoot, 'skills')
+  const firstSkill = join(skillRoot, 'first-skill')
+  const lateSkill = join(skillRoot, 'late-skill')
+
+  mkdirSync(firstSkill, { recursive: true })
+  writeFileSync(join(firstSkill, 'SKILL.md'), '---\nname: first-skill\ndescription: First\n---\n# First\n')
+
+  try {
+    clearBundledSkillIndexCache()
+    const warmedIndex = warmBundledSkillIndex([skillRoot])
+    assert.equal(warmedIndex.has('first-skill'), true)
+
+    mkdirSync(lateSkill, { recursive: true })
+    writeFileSync(join(lateSkill, 'SKILL.md'), '---\nname: late-skill\ndescription: Late\n---\n# Late\n')
+
+    assert.equal(getBundledSkillIndex([skillRoot]), warmedIndex)
+    assert.equal(getBundledSkillIndex([skillRoot]).has('late-skill'), false)
+
+    clearBundledSkillIndexCache()
+    assert.equal(getBundledSkillIndex([skillRoot]).has('late-skill'), true)
   } finally {
     clearBundledSkillIndexCache()
     rmSync(tempRoot, { recursive: true, force: true })

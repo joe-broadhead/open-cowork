@@ -386,7 +386,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       directory: context.resolveContextDirectory(options),
       deep: false,
     }
-    return context.withDiscoveredBuiltInTools(listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)
+    return context.withDiscoveredBuiltInTools(await listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)
   })
 
   context.ipcMain.handle('capabilities:tool', async (_event, id: string, options?: ToolListOptions) => {
@@ -400,8 +400,8 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       directory: context.resolveContextDirectory(options),
       deep: true,
     }
-    return (await context.withDiscoveredBuiltInTools(listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)).find((tool) => tool.id === id)
-      || getCapabilityTool(id, capabilityContext)
+    return (await context.withDiscoveredBuiltInTools(await listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)).find((tool) => tool.id === id)
+      || await getCapabilityTool(id, capabilityContext)
   })
 
   context.ipcMain.handle('capabilities:skills', async (_event, options?: RuntimeContextOptions) => {

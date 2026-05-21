@@ -296,6 +296,11 @@ async function runBootRuntime(projectDirectory?: string | null) {
     }
 
     eventSubscriptions.ensure(getRuntimeHomeDir(), client)
+    void import('./runtime-catalog-snapshot.ts').then(({ getRuntimeCatalogSnapshot }) =>
+      getRuntimeCatalogSnapshot(runtimeProjectDirectory ? { directory: runtimeProjectDirectory } : undefined)
+    ).catch((err) => {
+      log('main', `Runtime catalog warmup skipped: ${err instanceof Error ? err.message : String(err)}`)
+    })
 
     setRuntimeInitializationPhase('mcp', 'Checking tools and MCP status...')
     mcpInterval = restartRuntimeMcpStatusPolling({

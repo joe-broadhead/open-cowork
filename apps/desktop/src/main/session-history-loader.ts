@@ -49,6 +49,8 @@ type LoadSessionHistoryOptions = {
   includeChildren?: boolean
 }
 
+const CHILD_SNAPSHOT_PREFETCH_CONCURRENCY = 8
+
 type ChildSessionRecord = {
   id: string
   title?: string
@@ -57,6 +59,69 @@ type ChildSessionRecord = {
     updated?: number
   }
   parentSessionId?: string | null
+}
+
+type ChildSnapshot = { messages: unknown[]; todos: unknown[] }
+
+export function createBoundedChildSnapshotLoader(options: {
+  ids: string[]
+  concurrency?: number
+  load: (id: string) => Promise<ChildSnapshot>
+}) {
+  const concurrency = Math.max(1, Math.floor(options.concurrency || CHILD_SNAPSHOT_PREFETCH_CONCURRENCY))
+  const entries = new Map<string, {
+    started: boolean
+    promise: Promise<ChildSnapshot>
+    resolve: (value: ChildSnapshot) => void
+    reject: (error: unknown) => void
+  }>()
+  const queue: string[] = []
+  let active = 0
+
+  const schedule = () => {
+    while (active < concurrency && queue.length > 0) {
+      const id = queue.shift()
+      if (!id) continue
+      const entry = entries.get(id)
+      if (!entry || entry.started) continue
+      entry.started = true
+      active += 1
+      void options.load(id).then(entry.resolve, entry.reject).finally(() => {
+        active -= 1
+        schedule()
+      })
+    }
+  }
+
+  const ensure = (id: string) => {
+    const existing = entries.get(id)
+    if (existing) return existing.promise
+
+    let resolveEntry!: (value: ChildSnapshot) => void
+    let rejectEntry!: (error: unknown) => void
+    const promise = new Promise<ChildSnapshot>((resolve, reject) => {
+      resolveEntry = resolve
+      rejectEntry = reject
+    })
+    entries.set(id, {
+      started: false,
+      promise,
+      resolve: resolveEntry,
+      reject: rejectEntry,
+    })
+    queue.push(id)
+    schedule()
+    return promise
+  }
+
+  return {
+    prefetch(ids = options.ids) {
+      for (const id of ids) void ensure(id).catch(() => undefined)
+    },
+    load(id: string) {
+      return ensure(id)
+    },
+  }
 }
 
 const DEFAULT_SDK_SESSION_TITLE_RE = /^New session(?: - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)?$/i
@@ -327,15 +392,10 @@ export function createSessionHistoryService(
       const questions = normalizePendingQuestions(readResponseData(questionResult), sessionId, descendantSessionIds)
       const approvals = normalizePendingApprovals(readResponseData(permissionResult), sessionId, descendantSessionIds)
       const cachedModelId = deps.getCachedModelId()
-
-      const items = await deps.projectSessionHistory({
-        sessionId,
-        cachedModelId,
-        rootMessages,
-        rootTodos,
-        children,
-        statuses,
-        loadChildSnapshot: async (childId) => {
+      const childSnapshotLoader = createBoundedChildSnapshotLoader({
+        ids: children.map((child) => child.id),
+        concurrency: CHILD_SNAPSHOT_PREFETCH_CONCURRENCY,
+        load: async (childId) => {
           const [result, childTodoResult] = await Promise.all([
             client.session.messages({
               sessionID: childId,
@@ -352,6 +412,19 @@ export function createSessionHistoryService(
             todos: readRecordArray({ value: readResponseData(childTodoResult) }, 'value'),
           }
         },
+      })
+      if (includeChildren) {
+        childSnapshotLoader.prefetch()
+      }
+
+      const items = await deps.projectSessionHistory({
+        sessionId,
+        cachedModelId,
+        rootMessages,
+        rootTodos,
+        children,
+        statuses,
+        loadChildSnapshot: childSnapshotLoader.load,
       })
       const latestModeledItem = [...items]
         .reverse()

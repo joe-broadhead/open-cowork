@@ -1,6 +1,6 @@
 import type { CustomAgentConfig, ScopedArtifactRef } from '@open-cowork/shared'
 import { getBrandName } from './config-loader.ts'
-import { getCustomAgentCatalog } from './custom-agents.ts'
+import { getCustomAgentCatalog, invalidateCustomAgentCatalogCache } from './custom-agents.ts'
 import {
   buildCustomAgentPermissionFromCatalog,
   normalizeCustomAgent,
@@ -85,6 +85,7 @@ export async function saveAgentFromTool(agent: CustomAgentConfig) {
   }
   const normalized = normalizeCustomAgent(agent)
   saveCustomAgent(normalized, preview.permission || {})
+  invalidateCustomAgentCatalogCache()
   return {
     ok: true,
     saved: true,
@@ -117,6 +118,7 @@ export function getAgentFromTool(target: ScopedArtifactRef) {
 export function deleteAgentFromTool(target: ScopedArtifactRef) {
   const normalizedTarget = normalizeTarget(target)
   removeCustomAgent(normalizedTarget)
+  invalidateCustomAgentCatalogCache()
   return {
     ok: true,
     deleted: true,

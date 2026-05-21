@@ -13,6 +13,7 @@ type CachedBundledSkillIndex = {
   rootsKey: string
   treeKey: string
   index: Map<string, BundledSkillIndexEntry>
+  trustUntilInvalidated: boolean
 }
 
 type BundledSkillRoot = {
@@ -166,12 +167,28 @@ export function clearBundledSkillIndexCache() {
   cachedIndex = null
 }
 
-export function buildBundledSkillIndex(roots: string[]) {
-  const index = new Map<string, BundledSkillIndexEntry>()
+export function warmBundledSkillIndex(roots: string[]) {
+  const rootsKey = cacheRootsKey(roots)
+  const scans = roots.map((root) => scanBundledSkillRoot(root))
+  const treeKey = scans.map((scan) => scan.treeKey).join('||')
+  cachedIndex = {
+    rootsKey,
+    treeKey,
+    index: buildBundledSkillIndexFromScans(scans),
+    trustUntilInvalidated: true,
+  }
+  return cachedIndex.index
+}
 
-  for (const root of roots.map((entry) => resolve(entry))) {
+export function buildBundledSkillIndex(roots: string[]) {
+  return buildBundledSkillIndexFromScans(roots.map((root) => scanBundledSkillRoot(root)))
+}
+
+function buildBundledSkillIndexFromScans(scans: BundledSkillRootScan[]) {
+  const index = new Map<string, BundledSkillIndexEntry>()
+  for (const scan of scans) {
     const rootEntries = new Map<string, BundledSkillIndexEntry>()
-    for (const entry of scanBundledSkillRoot(root).entries) {
+    for (const entry of scan.entries) {
       if (shouldReplaceEntry(rootEntries.get(entry.name), entry)) {
         rootEntries.set(entry.name, entry)
       }
@@ -189,25 +206,16 @@ export function buildBundledSkillIndex(roots: string[]) {
 
 export function getBundledSkillIndex(roots: string[]) {
   const rootsKey = cacheRootsKey(roots)
+  if (cachedIndex?.rootsKey === rootsKey && cachedIndex.trustUntilInvalidated) {
+    return cachedIndex.index
+  }
+
   const scans = roots.map((root) => scanBundledSkillRoot(root))
   const treeKey = scans.map((scan) => scan.treeKey).join('||')
   if (cachedIndex?.rootsKey === rootsKey && cachedIndex.treeKey === treeKey) return cachedIndex.index
 
-  const index = new Map<string, BundledSkillIndexEntry>()
-  for (const scan of scans) {
-    const rootEntries = new Map<string, BundledSkillIndexEntry>()
-    for (const entry of scan.entries) {
-      if (shouldReplaceEntry(rootEntries.get(entry.name), entry)) {
-        rootEntries.set(entry.name, entry)
-      }
-    }
-    for (const [name, entry] of rootEntries.entries()) {
-      if (!index.has(name)) {
-        index.set(name, entry)
-      }
-    }
-  }
-  cachedIndex = { rootsKey, treeKey, index }
+  const index = buildBundledSkillIndexFromScans(scans)
+  cachedIndex = { rootsKey, treeKey, index, trustUntilInvalidated: false }
   return index
 }
 

@@ -10,6 +10,21 @@ import { COMPOSER_COMPOSE_EVENT, COMPOSER_INSERT_EVENT, type ComposerComposeDeta
 type ModelCatalog = Record<string, ChatInputModelEntry[]>
 
 type ResizeComposerTextarea = (element?: HTMLTextAreaElement | null) => void
+type MentionableAgentCacheEntry = {
+  value: MentionableAgent[]
+  promise?: Promise<MentionableAgent[]>
+}
+
+const mentionableAgentCache = new Map<string, MentionableAgentCacheEntry>()
+
+function scheduleIdle(task: () => void) {
+  if (typeof window.requestIdleCallback === 'function') {
+    const handle = window.requestIdleCallback(task, { timeout: 750 })
+    return () => window.cancelIdleCallback(handle)
+  }
+  const handle = window.setTimeout(task, 50)
+  return () => window.clearTimeout(handle)
+}
 
 function describeChatSettingsError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -128,16 +143,25 @@ export function useReasoningVariantSelection(
 }
 
 export function useMentionableAgents(currentProjectDirectory: string | null) {
-  const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>([])
+  const cacheKey = currentProjectDirectory || ''
+  const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>(() =>
+    mentionableAgentCache.get(cacheKey)?.value || [])
 
   useEffect(() => {
     let disposed = false
-    const loadRuntimeCatalog = () => {
-      Promise.all([
+    let cancelIdle: (() => void) | null = null
+    const nextCacheKey = currentProjectDirectory || ''
+    const cached = mentionableAgentCache.get(nextCacheKey)?.value
+    if (cached) setSpecialistAgents(cached)
+
+    const loadMentionableAgents = () => {
+      const existing = mentionableAgentCache.get(nextCacheKey)
+      if (existing?.promise) return existing.promise
+      const context = currentProjectDirectory ? { directory: currentProjectDirectory } : undefined
+      const promise = Promise.all([
         window.coworkApi.app.builtinAgents(),
-        window.coworkApi.agents.list(currentProjectDirectory ? { directory: currentProjectDirectory } : undefined),
+        window.coworkApi.agents.list(context),
       ]).then(([builtins, customAgents]) => {
-        if (disposed) return
         const builtinAgents = (builtins || [])
           .filter((agent) => agent.mode === 'subagent' && !agent.hidden && agent.surface !== 'workflow')
           .map((agent) => ({
@@ -153,18 +177,38 @@ export function useMentionableAgents(currentProjectDirectory: string | null) {
             description: agent.description || 'Focused delegated work',
           }))
 
-        setSpecialistAgents(
-          [...builtinAgents, ...userAgents].sort((a, b) => a.label.localeCompare(b.label)),
-        )
+        return [...builtinAgents, ...userAgents].sort((a, b) => a.label.localeCompare(b.label))
+      })
+
+      mentionableAgentCache.set(nextCacheKey, { value: existing?.value || [], promise })
+      return promise.then((value) => {
+        mentionableAgentCache.set(nextCacheKey, { value })
+        return value
+      }).catch((error) => {
+        if (mentionableAgentCache.get(nextCacheKey)?.promise === promise) {
+          mentionableAgentCache.set(nextCacheKey, { value: existing?.value || [] })
+        }
+        throw error
+      })
+    }
+
+    const loadRuntimeCatalog = () => {
+      loadMentionableAgents().then((agents) => {
+        if (disposed) return
+        setSpecialistAgents(agents)
       }).catch(() => {
         if (!disposed) setSpecialistAgents([])
       })
     }
 
-    loadRuntimeCatalog()
-    const unsubscribe = window.coworkApi.on.runtimeReady(() => loadRuntimeCatalog())
+    cancelIdle = scheduleIdle(loadRuntimeCatalog)
+    const unsubscribe = window.coworkApi.on.runtimeReady(() => {
+      cancelIdle?.()
+      cancelIdle = scheduleIdle(loadRuntimeCatalog)
+    })
     return () => {
       disposed = true
+      cancelIdle?.()
       unsubscribe()
     }
   }, [currentProjectDirectory])
