@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { ThreadIndexStore, THREAD_INDEX_SCHEMA_VERSION } from '../apps/desktop/src/main/thread-index-store.ts'
+import { ThreadIndexStore, THREAD_INDEX_SCHEMA_VERSION } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
 
 function withStore(name: string, run: (store: ThreadIndexStore, root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), `open-cowork-thread-index-${name}-`))

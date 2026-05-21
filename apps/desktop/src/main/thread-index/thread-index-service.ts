@@ -11,10 +11,10 @@ import type {
   ThreadTagInput,
   ThreadToolCount,
 } from '@open-cowork/shared'
-import { log } from './logger.ts'
-import { shortSessionId } from './log-sanitizer.ts'
-import { getSessionRecord, listSessionRecords, type SessionRecord } from './session-registry.ts'
-import { sessionEngine } from './session-engine.ts'
+import { log } from '../logger.ts'
+import { shortSessionId } from '../log-sanitizer.ts'
+import { getSessionRecord, listSessionRecords, type SessionRecord } from '../session-registry.ts'
+import { sessionEngine } from '../session-engine.ts'
 import {
   getThreadIndexStore,
   normalizeThreadSearchQuery,

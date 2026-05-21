@@ -1,5 +1,5 @@
 import type { IpcHandlerContext } from './context.ts'
-import { getThreadIndexService } from '../thread-index-service.ts'
+import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import {
   THREAD_BULK_MAX_SESSION_IDS,
   THREAD_FILTER_MAX_VALUES,

@@ -15,7 +15,7 @@ import {
 } from './config-loader.ts'
 import { log } from './logger.ts'
 import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.ts'
-import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow-tool-bridge.ts'
+import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
@@ -538,9 +538,10 @@ export async function startRuntime(
 
     const config = await buildRuntimeConfigForStartup(plan, projectDirectory)
 
-    // Set CWD to the same config source root the child receives. App mode
-    // keeps OpenCode discovery inside the sandbox; machine mode deliberately
-    // lets native OpenCode discovery behave like the user's CLI install.
+    // Global CWD is part of the OpenCode runtime contract: the managed server
+    // discovers config relative to the same root it receives at spawn time.
+    // Keep unrelated app filesystem access on explicit paths; do not add new
+    // product-layer behavior that depends on process.cwd().
     process.chdir(getRuntimeWorkingDirectoryForSource(plan.runtimeConfigSource))
 
     try {

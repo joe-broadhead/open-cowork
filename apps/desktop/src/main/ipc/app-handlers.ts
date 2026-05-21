@@ -32,7 +32,7 @@ import { getRecentProjectByIndex, listRecentProjects } from '../project-registry
 import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
 import { syncSessionView } from '../session-history-loader.ts'
 import { publishSessionMetadata, publishSessionView } from '../session-event-dispatcher.ts'
-import { getThreadIndexService } from '../thread-index-service.ts'
+import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { trackParentSession } from '../event-task-state.ts'
 import { toIsoTimestamp } from '../task-run-utils.ts'
@@ -40,14 +40,14 @@ import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
 import { sessionEngine } from '../session-engine.ts'
-import { checkForUpdates } from '../update-check.ts'
+import { checkForUpdates } from '../update/update-check.ts'
 import {
   checkInstallableUpdate,
   downloadInstallableUpdate,
   getUpdateInstallCapability,
   quitAndInstallUpdate,
   subscribeUpdateInstallEvents,
-} from '../update-service.ts'
+} from '../update/update-service.ts'
 import { resetAppData } from '../app-reset.ts'
 import { readFileCheckedSync, readTextFileCheckedSync } from '../fs-read.ts'
 import { writeFileAtomic } from '../fs-atomic.ts'

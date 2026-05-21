@@ -5,7 +5,7 @@ import { SessionEngine } from '../../apps/desktop/src/main/session-engine.ts'
 import { buildOpenCoworkAgentConfig } from '../../apps/desktop/src/main/agent-config.ts'
 import { summarizeCustomAgents } from '../../apps/desktop/src/main/custom-agents-utils.ts'
 import { buildCoworkRuntimePermissionConfig } from '../../apps/desktop/src/main/runtime-permissions.ts'
-import { ThreadIndexStore } from '../../apps/desktop/src/main/thread-index-store.ts'
+import { ThreadIndexStore } from '../../apps/desktop/src/main/thread-index/thread-index-store.ts'
 import { buildCapabilityMapGroups } from '../../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
 import { compileAgentPreview } from '../../apps/desktop/src/renderer/components/agents/agent-builder-utils.ts'
 import {

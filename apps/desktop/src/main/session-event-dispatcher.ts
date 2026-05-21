@@ -4,7 +4,7 @@ import { log } from './logger.ts'
 import { shortSessionId } from './log-sanitizer.ts'
 import { incrementPerfCounter, measureAsyncPerf, measurePerf, observePerf } from './perf-metrics.ts'
 import { sessionEngine } from './session-engine.ts'
-import { getThreadIndexService } from './thread-index-service.ts'
+import { getThreadIndexService } from './thread-index/thread-index-service.ts'
 import { getSessionRecord } from './session-registry.ts'
 
 export type RuntimeSessionEvent = {

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../apps/desktop/src/main/config-types.ts'
-import { resolveUpdateReleaseSource, UpdateReleaseSourceError } from '../apps/desktop/src/main/update-release-source.ts'
-import { checkForUpdates } from '../apps/desktop/src/main/update-check.ts'
+import { resolveUpdateReleaseSource, UpdateReleaseSourceError } from '../apps/desktop/src/main/update/update-release-source.ts'
+import { checkForUpdates } from '../apps/desktop/src/main/update/update-check.ts'
 import { sanitizeLogMessage } from '../apps/desktop/src/main/log-sanitizer.ts'
 
 function baseConfig(): OpenCoworkConfig {

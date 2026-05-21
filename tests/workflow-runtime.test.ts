@@ -9,13 +9,13 @@ import {
   createWorkflow,
   createWorkflowRun,
   getWorkflow,
-} from '../apps/desktop/src/main/workflow-store.ts'
+} from '../apps/desktop/src/main/workflow/workflow-store.ts'
 import {
   configureWorkflowService,
   runWorkflowSchedulerTick,
   startWorkflowService,
   stopWorkflowService,
-} from '../apps/desktop/src/main/workflow-service.ts'
+} from '../apps/desktop/src/main/workflow/workflow-service.ts'
 import {
   configureWorkflowWebhookServer,
   ensureWorkflowWebhookServer,
@@ -26,13 +26,13 @@ import {
   stopWorkflowWebhookServer,
   claimWorkflowWebhookSignatureOnce,
   verifyWorkflowWebhookAuth,
-} from '../apps/desktop/src/main/workflow-webhook-server.ts'
+} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
 import {
   ensureWorkflowToolBridge,
   getWorkflowToolBridgeEnvironment,
   stopWorkflowToolBridge,
-} from '../apps/desktop/src/main/workflow-tool-bridge.ts'
-import { configureWorkflowToolActions } from '../apps/desktop/src/main/workflow-tool-actions.ts'
+} from '../apps/desktop/src/main/workflow/workflow-tool-bridge.ts'
+import { configureWorkflowToolActions } from '../apps/desktop/src/main/workflow/workflow-tool-actions.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-runtime-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)

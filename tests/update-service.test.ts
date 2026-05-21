@@ -12,7 +12,7 @@ import {
   quitAndInstallUpdate,
   resetUpdateInstallServiceForTests,
   subscribeUpdateInstallEvents,
-} from '../apps/desktop/src/main/update-service.ts'
+} from '../apps/desktop/src/main/update/update-service.ts'
 
 type MockUpdateInfo = { version: string }
 type MockUpdateCheckResult = {

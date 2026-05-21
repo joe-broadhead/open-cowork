@@ -30,18 +30,18 @@ import {
   verifyWorkflowWebhookAuth,
   WebhookHttpError,
 } from './workflow-webhook-server.ts'
-import { getClientForDirectory, getRuntimeHomeDir } from './runtime.ts'
-import { ensureRuntimeContextDirectory } from './runtime-context.ts'
-import { getConfiguredAgentsFromConfig } from './config-loader.ts'
-import { getEffectiveSettings } from './settings.ts'
-import { trackParentSession } from './event-task-state.ts'
-import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from './opencode-adapter.ts'
-import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from './session-registry.ts'
-import { getThreadIndexService } from './thread-index-service.ts'
-import { toIsoTimestamp } from './task-run-utils.ts'
-import { log } from './logger.ts'
-import { createKeyedPromiseChain } from './promise-chain.ts'
-import { sdkErrorMessage } from './sdk-error.ts'
+import { getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
+import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
+import { getConfiguredAgentsFromConfig } from '../config-loader.ts'
+import { getEffectiveSettings } from '../settings.ts'
+import { trackParentSession } from '../event-task-state.ts'
+import { normalizeSessionInfo, normalizeSessionMessages, type NormalizedSessionMessage } from '../opencode-adapter.ts'
+import { getSessionRecord, toRendererSession, toSessionRecord, upsertSessionRecord } from '../session-registry.ts'
+import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
+import { toIsoTimestamp } from '../task-run-utils.ts'
+import { log } from '../logger.ts'
+import { createKeyedPromiseChain } from '../promise-chain.ts'
+import { sdkErrorMessage } from '../sdk-error.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null

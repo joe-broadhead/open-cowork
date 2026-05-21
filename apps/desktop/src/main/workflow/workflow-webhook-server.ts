@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { log } from './logger.ts'
+import { log } from '../logger.ts'
 
 const DEFAULT_WEBHOOK_PORT = 47839
 const WORKFLOW_WEBHOOK_BIND_HOST = '127.0.0.1'

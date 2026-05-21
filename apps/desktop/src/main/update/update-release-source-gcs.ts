@@ -1,5 +1,5 @@
 import type { UpdateReleaseSourceDescriptor } from '@open-cowork/shared'
-import type { UpdateReleaseSourceConfig } from './config-types.ts'
+import type { UpdateReleaseSourceConfig } from '../config-types.ts'
 import { normalizeUpdateSourceUrl } from './update-release-source-generic.ts'
 
 export type GcsReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'gcs' }>

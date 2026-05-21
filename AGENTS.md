@@ -69,10 +69,10 @@ Workflows are a durable product layer wrapped around OpenCode-native
 execution.
 
 Primary files:
-- `apps/desktop/src/main/workflow-store.ts`
-- `apps/desktop/src/main/workflow-service.ts`
-- `apps/desktop/src/main/workflow-tool-actions.ts`
-- `apps/desktop/src/main/workflow-webhook-server.ts`
+- `apps/desktop/src/main/workflow/workflow-store.ts`
+- `apps/desktop/src/main/workflow/workflow-service.ts`
+- `apps/desktop/src/main/workflow/workflow-tool-actions.ts`
+- `apps/desktop/src/main/workflow/workflow-webhook-server.ts`
 - `mcps/workflows/src/index.ts`
 - `apps/desktop/src/renderer/components/workflows/`
 

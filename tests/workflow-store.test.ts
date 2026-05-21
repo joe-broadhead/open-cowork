@@ -19,7 +19,7 @@ import {
   regenerateWorkflowWebhookSecret,
   recoverInterruptedWorkflowRuns,
   updateWorkflowStatus,
-} from '../apps/desktop/src/main/workflow-store.ts'
+} from '../apps/desktop/src/main/workflow/workflow-store.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)

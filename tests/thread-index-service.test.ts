@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import type { SessionView } from '@open-cowork/shared'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { clearSessionRegistryCache, removeSessionRecord, toSessionRecord, updateSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-import { ThreadIndexService } from '../apps/desktop/src/main/thread-index-service.ts'
-import { ThreadIndexStore } from '../apps/desktop/src/main/thread-index-store.ts'
+import { ThreadIndexService } from '../apps/desktop/src/main/thread-index/thread-index-service.ts'
+import { ThreadIndexStore } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
 
 function emptySessionView(overrides: Partial<SessionView> = {}): SessionView {
   return {

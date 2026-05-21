@@ -9,7 +9,7 @@ import {
   resumeWorkflow,
   runWorkflowNow,
   startWorkflowDraft,
-} from '../workflow-service.ts'
+} from '../workflow/workflow-service.ts'
 
 function assertWorkflowId(value: unknown) {
   if (typeof value !== 'string' || !value.trim() || value.length > 256) {

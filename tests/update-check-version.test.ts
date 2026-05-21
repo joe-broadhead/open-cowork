@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { checkForUpdates, compareVersions } from '../apps/desktop/src/main/update-check.ts'
+import { checkForUpdates, compareVersions } from '../apps/desktop/src/main/update/update-check.ts'
 
 async function withMockedFetch<T>(mock: typeof fetch, fn: () => Promise<T>): Promise<T> {
   const previous = globalThis.fetch

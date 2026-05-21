@@ -10,7 +10,7 @@ import { getAdcPathIfAvailable, getCachedAccessToken } from './auth.ts'
 import { log } from './logger.ts'
 import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.ts'
 import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.ts'
-import { getWorkflowToolBridgeEnvironment } from './workflow-tool-bridge.ts'
+import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 

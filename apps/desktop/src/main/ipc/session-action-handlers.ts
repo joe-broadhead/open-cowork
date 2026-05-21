@@ -13,7 +13,7 @@ import { mergeSessionDiffsWithSynthetic, normalizeSessionFileDiffs } from '../se
 import { sessionEngine } from '../session-engine.ts'
 import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 import { getSessionRecord, removeSessionRecord, updateSessionRecord } from '../session-registry.ts'
-import { getThreadIndexService } from '../thread-index-service.ts'
+import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { sdkErrorMessage } from '../sdk-error.ts'
 
 export function registerSessionActionHandlers(context: IpcHandlerContext) {

@@ -31,7 +31,7 @@ export default defineConfig({
         // Keep just below measured coverage and raise as stateful
         // renderer screens gain direct tests.
         lines: 65,
-        branches: 51,
+        branches: 58,
         functions: 62,
         statements: 61,
       },

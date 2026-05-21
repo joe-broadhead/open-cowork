@@ -15,10 +15,10 @@ import type {
   UpdateDownloadedEvent,
   UpdateInfo,
 } from 'electron-updater'
-import { getBranding } from './config-loader.ts'
-import type { OpenCoworkConfig } from './config-types.ts'
-import { log } from './logger.ts'
-import { sanitizeLogMessage } from './log-sanitizer.ts'
+import { getBranding } from '../config-loader.ts'
+import type { OpenCoworkConfig } from '../config-types.ts'
+import { log } from '../logger.ts'
+import { sanitizeLogMessage } from '../log-sanitizer.ts'
 import { getCurrentVersion, parseGithubRepo } from './update-check.ts'
 import {
   type ResolvedUpdateReleaseSource,
