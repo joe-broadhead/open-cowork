@@ -3,9 +3,15 @@ export async function writeTextToClipboard(text: string) {
 
   try {
     if (window.coworkApi?.clipboard?.writeText) {
-      return window.coworkApi.clipboard.writeText(text)
+      const copied = await window.coworkApi.clipboard.writeText(text)
+      if (copied) return true
     }
+  } catch {
+    // Fall back to the browser clipboard API below.
+  }
 
+  try {
+    if (!navigator.clipboard?.writeText) return false
     await navigator.clipboard.writeText(text)
     return true
   } catch {
