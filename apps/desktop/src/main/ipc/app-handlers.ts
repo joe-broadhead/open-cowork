@@ -232,6 +232,8 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update'), async (_event, updates) => {
     const result = saveSettings(updates)
+    const { invalidateRuntimeCatalogSnapshotCache } = await import('../runtime-catalog-snapshot.ts')
+    invalidateRuntimeCatalogSnapshotCache()
     const runtimeSensitiveUpdate = hasRuntimeSensitiveSettingsUpdate(updates)
 
     if (isSetupComplete(result)) {

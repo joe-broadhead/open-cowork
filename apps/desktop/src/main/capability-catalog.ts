@@ -7,16 +7,14 @@ import {
   type RuntimeContextOptions,
 } from '@open-cowork/shared'
 import {
-  getConfiguredAgentsFromConfig,
   getConfiguredMcpsFromConfig,
   getConfiguredToolById,
   getConfiguredToolPatterns,
   getConfiguredToolsFromConfig,
 } from './config-loader.ts'
-import { listCustomAgents, listCustomMcps, listCustomSkills } from './native-customizations.ts'
-import { summarizeCustomAgents, type CustomAgentCatalogSkill } from './custom-agents-utils.ts'
-import { getEffectiveSkillBundle, listEffectiveSkills, listEffectiveSkillsSync } from './effective-skills.ts'
+import { getEffectiveSkillBundle } from './effective-skills.ts'
 import { getEffectiveSettings, getIntegrationCredentialValue } from './settings.ts'
+import { getRuntimeCatalogSnapshot } from './runtime-catalog-snapshot.ts'
 
 function humanize(value: string) {
   return value
@@ -52,62 +50,8 @@ function hasRequiredIntegrationCredentials(
   })
 }
 
-function listRuntimeEligibleCustomAgents(
-  availableSkills: CustomAgentCatalogSkill[],
-  context?: RuntimeContextOptions,
-) {
-  const customMcps = listCustomMcps(context)
-  const customSkills = listCustomSkills(context)
-  const customAgents = listCustomAgents(context)
-  return summarizeCustomAgents({
-    availableSkills,
-    state: {
-      customMcps,
-      customSkills,
-      customAgents,
-    },
-  }).filter((agent) => agent.enabled && agent.valid)
-}
-
-function configuredAgentNamesForTool(
-  toolId: string,
-  availableSkills: CustomAgentCatalogSkill[],
-  context?: RuntimeContextOptions,
-) {
-  const builtIn = getConfiguredAgentsFromConfig()
-    .filter((agent) => (agent.toolIds || []).includes(toolId))
-    .map((agent) => agent.label || agent.name)
-  const custom = listRuntimeEligibleCustomAgents(availableSkills, context)
-    .filter((agent) => agent.toolIds.includes(toolId))
-    .map((agent) => humanize(agent.name))
-  return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
-}
-
-function configuredAgentNamesForSkill(
-  skillName: string,
-  availableSkills: CustomAgentCatalogSkill[],
-  context?: RuntimeContextOptions,
-) {
-  const builtIn = getConfiguredAgentsFromConfig()
-    .filter((agent) => (agent.skillNames || []).includes(skillName))
-    .map((agent) => agent.label || agent.name)
-  const custom = listRuntimeEligibleCustomAgents(availableSkills, context)
-    .filter((agent) => agent.skillNames.includes(skillName))
-    .map((agent) => humanize(agent.name))
-  return Array.from(new Set([...builtIn, ...custom])).sort((a, b) => a.localeCompare(b))
-}
-
-export function listCapabilityTools(context?: RuntimeContextOptions): CapabilityTool[] {
-  const availableSkills = listEffectiveSkillsSync(context).map((skill) => ({
-    name: skill.name,
-    label: skill.label,
-    description: skill.description,
-    source: skill.source,
-    origin: skill.origin,
-    scope: skill.scope,
-    location: skill.location,
-    toolIds: skill.toolIds,
-  }))
+export async function listCapabilityTools(context?: RuntimeContextOptions): Promise<CapabilityTool[]> {
+  const snapshot = await getRuntimeCatalogSnapshot(context)
   // Index configured MCPs by name so we can splice their credential
   // metadata onto the matching Tool entry. Downstream bundles (e.g. the
   // GitHub hosted MCP, Perplexity) declare credentials on the MCP
@@ -143,7 +87,7 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       namespace,
       patterns,
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(tool.id, availableSkills, context),
+      agentNames: snapshot.toolAgentNames.get(tool.id) || [],
       // For every MCP-backed tool, forward the integration id + auth
       // metadata + current enable state so the detail view can render
       // the right CTA (credential form for api_token, "Enable & sign
@@ -164,7 +108,7 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
     }
   })
 
-  const custom = listCustomMcps(context)
+  const custom = snapshot.customMcps
     .filter((entry) => entry.name)
     .map((entry) => ({
       id: entry.name,
@@ -180,29 +124,19 @@ export function listCapabilityTools(context?: RuntimeContextOptions): Capability
       namespace: entry.name,
       patterns: [`mcp__${entry.name}__*`],
       availableTools: [] as CapabilityToolEntry[],
-      agentNames: configuredAgentNamesForTool(entry.name, availableSkills, context),
+      agentNames: snapshot.toolAgentNames.get(entry.name) || [],
     }))
 
   return [...configured, ...custom].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function getCapabilityTool(id: string, context?: RuntimeContextOptions) {
-  return listCapabilityTools(context).find((tool) => tool.id === id) || null
+export async function getCapabilityTool(id: string, context?: RuntimeContextOptions) {
+  return (await listCapabilityTools(context)).find((tool) => tool.id === id) || null
 }
 
 export async function listCapabilitySkills(context?: RuntimeContextOptions): Promise<CapabilitySkill[]> {
-  const effectiveSkills = await listEffectiveSkills(context)
-  const availableSkills = effectiveSkills.map((skill) => ({
-    name: skill.name,
-    label: skill.label,
-    description: skill.description,
-    source: skill.source,
-    origin: skill.origin,
-    scope: skill.scope,
-    location: skill.location,
-    toolIds: skill.toolIds,
-  }))
-  return effectiveSkills
+  const snapshot = await getRuntimeCatalogSnapshot(context)
+  return snapshot.availableSkills
     .map((skill) => ({
       name: skill.name,
       label: skill.label,
@@ -212,7 +146,7 @@ export async function listCapabilitySkills(context?: RuntimeContextOptions): Pro
       scope: skill.scope,
       location: skill.location,
       toolIds: skill.toolIds,
-      agentNames: configuredAgentNamesForSkill(skill.name, availableSkills, context),
+      agentNames: snapshot.skillAgentNames.get(skill.name) || [],
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }

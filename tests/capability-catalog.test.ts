@@ -7,8 +7,8 @@ import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { getMachineSkillsDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 test('built-in capabilities expose discoverable metadata without source parsing', async () => {
-  const tools = listCapabilityTools()
-  const charts = getCapabilityTool('charts')
+  const tools = await listCapabilityTools()
+  const charts = await getCapabilityTool('charts')
   const skills = await listCapabilitySkills()
   const autoresearchBundle = await getCapabilitySkillBundle('autoresearch')
 

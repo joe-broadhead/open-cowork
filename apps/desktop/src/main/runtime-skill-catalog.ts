@@ -3,8 +3,10 @@ import { dirname, join, resolve } from 'path'
 import type { RuntimeContextOptions } from '@open-cowork/shared'
 import { getProjectOverlayDirName } from './config-loader.ts'
 import { listEffectiveBuiltInSkillBundlesSync } from './effective-skills.ts'
+import { warmBundledSkillIndex } from './bundled-skill-index.ts'
 import { log } from './logger.ts'
 import { getRuntimeHomeDir, getRuntimeSkillCatalogDir } from './runtime-paths.ts'
+import { getBundledSkillRoots } from './runtime-content.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
 
 export type RuntimeSkillBundle = {
@@ -186,6 +188,7 @@ export function buildRuntimeSkillCatalog(context?: RuntimeContextOptions) {
   rmSync(catalogRoot, { recursive: true, force: true })
   mkdirSync(catalogRoot, { recursive: true })
 
+  warmBundledSkillIndex(getBundledSkillRoots())
   const bundles = listContextBundles(context)
   for (const bundle of bundles) {
     writeRuntimeSkillBundle(catalogRoot, bundle, buildRuntimeSkillContent(bundle.name, bundle.content, bundle.files), { includeFiles: false })

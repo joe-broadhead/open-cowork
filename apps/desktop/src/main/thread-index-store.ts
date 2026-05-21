@@ -36,6 +36,7 @@ export { THREAD_INDEX_SCHEMA_VERSION }
 
 const THREAD_INDEX_METADATA_VERSION = 1
 const THREAD_DEFAULT_TAG_COLOR = '#64748b'
+const THREAD_QUERY_CACHE_MAX_ENTRIES = 128
 const SMART_FILTER_QUERY_MAX_BYTES = 16_384
 const MAX_SUGGESTION_EVIDENCE_ITEMS = 12
 const SUGGESTION_EVIDENCE_TYPES = new Set(['title', 'project', 'provider', 'model', 'agent', 'tool'])
@@ -271,6 +272,9 @@ export class ThreadIndexStore {
   private db: DatabaseSync
   private transactionCounter = 0
   private readonly dbPath: string
+  private queryCacheGeneration = 0
+  private readonly searchCache = new Map<string, ThreadSearchResult>()
+  private readonly facetCache = new Map<string, ThreadFacetSummary>()
 
   constructor(dbPath = getThreadIndexDbPath()) {
     this.dbPath = dbPath
@@ -297,6 +301,7 @@ export class ThreadIndexStore {
       const result = callback()
       this.db.exec(`release savepoint ${savepoint}`)
       ensureThreadIndexDbFileModes(this.dbPath)
+      this.invalidateQueryCache()
       return result
     } catch (error) {
       try {
@@ -307,6 +312,30 @@ export class ThreadIndexStore {
       }
       throw error
     }
+  }
+
+  private invalidateQueryCache() {
+    this.queryCacheGeneration += 1
+    this.searchCache.clear()
+    this.facetCache.clear()
+  }
+
+  private rememberCachedQuery<T>(cache: Map<string, T>, key: string, value: T) {
+    cache.set(key, value)
+    while (cache.size > THREAD_QUERY_CACHE_MAX_ENTRIES) {
+      const oldestKey = cache.keys().next().value
+      if (typeof oldestKey !== 'string') break
+      cache.delete(oldestKey)
+    }
+    return value
+  }
+
+  private queryCacheKey(kind: 'search' | 'facets', query: ThreadSearchQuery) {
+    return JSON.stringify({
+      generation: this.queryCacheGeneration,
+      kind,
+      query,
+    })
   }
 
   upsertThread(input: ThreadIndexUpsertInput) {
@@ -527,6 +556,9 @@ export class ThreadIndexStore {
 
   searchThreads(input: ThreadSearchQuery = {}): ThreadSearchResult {
     const query = this.mergeSmartFilter(normalizeThreadSearchQuery(input))
+    const cacheKey = this.queryCacheKey('search', query)
+    const cached = this.searchCache.get(cacheKey)
+    if (cached) return cached
     const limit = query.limit || THREAD_SEARCH_DEFAULT_LIMIT
     const offset = decodeCursor(query.cursor)
     const where = this.buildWhere(query)
@@ -541,11 +573,11 @@ export class ThreadIndexStore {
     const threads = this.hydrateRows(rows)
     const totalEstimate = Number(total?.count || 0)
     const nextOffset = offset + rows.length
-    return {
+    return this.rememberCachedQuery(this.searchCache, cacheKey, {
       threads,
       nextCursor: nextOffset < totalEstimate ? encodeCursor(nextOffset) : null,
       totalEstimate,
-    }
+    })
   }
 
   getThread(sessionId: string): ThreadListItem | null {
@@ -557,6 +589,9 @@ export class ThreadIndexStore {
 
   listFacets(input: ThreadSearchQuery = {}): ThreadFacetSummary {
     const query = this.mergeSmartFilter(normalizeThreadSearchQuery({ ...input, cursor: null }))
+    const cacheKey = this.queryCacheKey('facets', query)
+    const cached = this.facetCache.get(cacheKey)
+    if (cached) return cached
     const where = this.buildWhere(query)
     const bucket = (sql: string, args: SQLInputValue[] = where.args): ThreadFacetBucket[] => (
       this.db.prepare(sql).all(...args) as Row[]
@@ -567,7 +602,7 @@ export class ThreadIndexStore {
     }))
     const baseWhere = where.sql
     const whereAnd = (extra: string) => baseWhere ? `${baseWhere} and ${extra}` : `where ${extra}`
-    return {
+    return this.rememberCachedQuery(this.facetCache, cacheKey, {
       projects: bucket(`select project_label as value, project_label as label, count(*) as count from thread_index ${whereAnd('project_label is not null')} group by project_label order by count desc, project_label asc`),
       providers: bucket(`select provider_id as value, provider_id as label, count(*) as count from thread_index ${whereAnd('provider_id is not null')} group by provider_id order by count desc, provider_id asc`),
       models: bucket(`select model_id as value, model_id as label, count(*) as count from thread_index ${whereAnd('model_id is not null')} group by model_id order by count desc, model_id asc`),
@@ -589,7 +624,7 @@ export class ThreadIndexStore {
         color: asString(row.color),
         count: asNumber(row.count),
       })),
-    }
+    })
   }
 
   private hydrateRows(rows: Row[]): ThreadListItem[] {
@@ -722,6 +757,7 @@ export class ThreadIndexStore {
       values (?, ?, ?, ?, ?)
     `).run(id, tag.name, tag.color, timestamp, timestamp)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return this.getTag(id)!
   }
 
@@ -731,6 +767,7 @@ export class ThreadIndexStore {
     this.db.prepare('update thread_tags set name = ?, color = ?, updated_at = ? where id = ?')
       .run(tag.name, tag.color, nowIso(), id)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return this.getTag(id)
   }
 
@@ -785,6 +822,7 @@ export class ThreadIndexStore {
         and tag_id in (${makePlaceholders(tags)})
     `).run(...sessions, ...tags)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return true
   }
 
@@ -819,6 +857,7 @@ export class ThreadIndexStore {
       values (?, ?, ?, ?, ?)
     `).run(id, filter.name, filter.serialized, timestamp, timestamp)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return this.getSmartFilter(id)!
   }
 
@@ -828,6 +867,7 @@ export class ThreadIndexStore {
     this.db.prepare('update thread_smart_filters set name = ?, query_json = ?, updated_at = ? where id = ?')
       .run(filter.name, filter.serialized, nowIso(), id)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return this.getSmartFilter(id)
   }
 
@@ -835,6 +875,7 @@ export class ThreadIndexStore {
     const id = normalizeText(filterId, 256, 'Smart filter id')
     this.db.prepare('delete from thread_smart_filters where id = ?').run(id)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return true
   }
 
@@ -847,6 +888,7 @@ export class ThreadIndexStore {
       values (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, normalizeText(sessionId, 256, 'Session id'), normalized.label, normalized.reason, json(normalized.evidence), status, timestamp, timestamp)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return this.rowToSuggestion(this.db.prepare('select * from thread_category_suggestions where id = ?').get(id) as Row)
   }
 
@@ -888,6 +930,7 @@ export class ThreadIndexStore {
     this.db.prepare("update thread_category_suggestions set label = ?, status = 'accepted', updated_at = ? where id = ?")
       .run(nextLabel, nowIso(), id)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return true
   }
 
@@ -896,6 +939,7 @@ export class ThreadIndexStore {
     this.db.prepare('update thread_category_suggestions set status = ?, updated_at = ? where id = ?')
       .run(status, nowIso(), id)
     ensureThreadIndexDbFileModes(this.dbPath)
+    this.invalidateQueryCache()
     return true
   }
 }

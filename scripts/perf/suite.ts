@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionEngine } from '../../apps/desktop/src/main/session-engine.ts'
 import { buildOpenCoworkAgentConfig } from '../../apps/desktop/src/main/agent-config.ts'
+import { summarizeCustomAgents } from '../../apps/desktop/src/main/custom-agents-utils.ts'
 import { buildCoworkRuntimePermissionConfig } from '../../apps/desktop/src/main/runtime-permissions.ts'
 import { ThreadIndexStore } from '../../apps/desktop/src/main/thread-index-store.ts'
 import { buildCapabilityMapGroups } from '../../apps/desktop/src/renderer/components/capabilities/capabilities-page-support.ts'
@@ -149,6 +150,44 @@ export async function runSessionBenchmarks() {
         )
         if (groups.length === 0) {
           throw new Error('capabilities.map.downstreamCatalog produced no groups')
+        }
+      }, { batchSize: 8, warmupIterations: 3 }),
+      await runBenchmark('catalog.relationship.downstreamCatalog', 30, () => {
+        const summaries = summarizeCustomAgents({
+          state: {
+            customMcps: downstreamCatalog.tools.map((tool) => ({
+              name: tool.id,
+              label: tool.name,
+              description: tool.description,
+              permissionMode: tool.source === 'custom' ? 'ask' as const : 'allow' as const,
+            })),
+            customSkills: downstreamCatalog.skills.map((skill) => ({
+              name: skill.name,
+              label: skill.label,
+              description: skill.description,
+              content: `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n# ${skill.label}`,
+              toolIds: skill.toolIds,
+            })),
+            customAgents: downstreamCatalog.customAgents.map((agent) => ({
+              name: agent.name,
+              description: agent.description,
+              instructions: agent.instructions,
+              skillNames: agent.skillNames,
+              toolIds: downstreamCatalog.tools.slice(0, 3).map((tool) => tool.id),
+              enabled: !agent.disabled,
+              color: agent.color,
+            })),
+          },
+          availableSkills: downstreamCatalog.agentCatalog.skills,
+          runtimeTools: downstreamCatalog.agentCatalog.tools.map((tool) => ({
+            id: tool.id,
+            description: tool.description,
+          })),
+          builtinTools: [],
+          builtinSkills: [],
+        })
+        if (summaries.length !== downstreamCatalog.customAgents.length) {
+          throw new Error('catalog.relationship.downstreamCatalog lost custom agents')
         }
       }, { batchSize: 8, warmupIterations: 3 }),
       await runBenchmark('agents.preview.downstreamCatalog', 30, () => {
