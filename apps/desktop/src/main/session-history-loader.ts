@@ -116,7 +116,7 @@ export function createBoundedChildSnapshotLoader(options: {
 
   return {
     prefetch(ids = options.ids) {
-      for (const id of ids) ensure(id)
+      for (const id of ids) void ensure(id).catch(() => undefined)
     },
     load(id: string) {
       return ensure(id)

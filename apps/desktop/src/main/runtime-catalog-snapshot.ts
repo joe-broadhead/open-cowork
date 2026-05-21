@@ -188,9 +188,7 @@ export async function getRuntimeCatalogSnapshot(options?: RuntimeContextOptions)
     rememberSnapshotEntry(key, { expiresAt: Date.now() + RUNTIME_CATALOG_SNAPSHOT_TTL_MS, value })
     return value
   } catch (error) {
-    if (runtimeCatalogSnapshotCache.get(key)?.promise === promise) {
-      runtimeCatalogSnapshotCache.delete(key)
-    }
+    runtimeCatalogSnapshotCache.delete(key)
     throw error
   }
 }

@@ -77,6 +77,23 @@ test('bounded child snapshot loader prefetches without exceeding the concurrency
   assert.deepEqual(completed.sort(), ['child-1', 'child-2', 'child-3', 'child-4', 'child-5'])
 })
 
+test('bounded child snapshot prefetch handles early rejections while preserving load errors', async () => {
+  const loader = createBoundedChildSnapshotLoader({
+    ids: ['child-1'],
+    concurrency: 1,
+    load: async () => {
+      throw new Error('child unavailable')
+    },
+  })
+
+  loader.prefetch()
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  await assert.rejects(
+    loader.load('child-1'),
+    /child unavailable/,
+  )
+})
+
 test('createSessionHistoryService loads questions and updates provider/model from projected history', async () => {
   const updates: Array<Record<string, unknown>> = []
   const projectedItems: ProjectedHistoryItem[] = [
