@@ -115,6 +115,31 @@ test('normalizeRuntimeEventEnvelope unwraps nested properties inside sync-style 
   assert.equal(event?.properties.delta, 'world')
 })
 
+test('normalizeRuntimeEventEnvelope accepts SDK sync events that identify the runtime event in name', () => {
+  const event = normalizeRuntimeEventEnvelope({
+    payload: {
+      type: 'sync',
+      name: 'message.part.updated.1',
+      data: {
+        sessionID: 'sess_sync',
+        part: {
+          id: 'part_sync',
+          sessionID: 'sess_sync',
+          messageID: 'msg_sync',
+          type: 'text',
+          text: 'hello from sync',
+        },
+        time: 42,
+      },
+    },
+  })
+
+  assert.ok(event)
+  assert.equal(event?.type, 'message.part.updated')
+  assert.equal(event?.properties.sessionID, 'sess_sync')
+  assert.equal((event?.properties.part as { id?: string } | undefined)?.id, 'part_sync')
+})
+
 test('normalizeMcpStatusEntries maps named status objects', () => {
   const entries = normalizeMcpStatusEntries({
     charts: { status: 'connected' },

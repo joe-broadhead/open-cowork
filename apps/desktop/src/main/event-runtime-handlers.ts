@@ -45,11 +45,21 @@ import {
   chooseTaskTitle,
   extractAgentName,
   isPlaceholderTaskTitle,
+  normalizeAgentName,
   toIsoTimestamp,
 } from './task-run-utils.ts'
 import type { PermissionRequest } from '@open-cowork/shared'
 
 type DispatchRuntimeEvent = (win: BrowserWindow, event: RuntimeSessionEvent) => void
+const IDLE_EVENT_DEDUPE_MS = 2_000
+const MAX_RECENT_IDLE_EVENTS = 1_000
+const recentIdleEventAtBySession = new Map<string, number>()
+const INTENTIONALLY_IGNORED_RUNTIME_EVENTS = new Set([
+  'server.connected',
+  'server.heartbeat',
+  'session.diff',
+  'session.next.model.switched',
+])
 
 function runRuntimeSideEffect(scope: string, task: () => void | Promise<unknown>) {
   void Promise.resolve().then(task).catch((err) => {
@@ -74,10 +84,110 @@ function dispatchSyntheticIdle(win: BrowserWindow, sessionId: string, dispatchRu
   })
 }
 
+function readEventSessionId(properties: Record<string, unknown> | null | undefined) {
+  return readString(readRecordValue(properties, 'sessionID'))
+    || readString(readRecordValue(properties, 'sessionId'))
+}
+
+function shouldProcessIdleEvent(actualSessionId: string) {
+  const now = Date.now()
+  const previous = recentIdleEventAtBySession.get(actualSessionId) || 0
+  recentIdleEventAtBySession.set(actualSessionId, now)
+  if (recentIdleEventAtBySession.size > MAX_RECENT_IDLE_EVENTS) {
+    for (const [sessionId, idleAt] of recentIdleEventAtBySession.entries()) {
+      if (now - idleAt > IDLE_EVENT_DEDUPE_MS) recentIdleEventAtBySession.delete(sessionId)
+    }
+  }
+  return now - previous > IDLE_EVENT_DEDUPE_MS
+}
+
+function clearRecentIdleEvent(actualSessionId: string | null | undefined) {
+  if (actualSessionId) recentIdleEventAtBySession.delete(actualSessionId)
+}
+
+function handleIdleTransition(input: {
+  win: BrowserWindow
+  actualSessionId: string | null | undefined
+  dispatchRuntimeEvent: DispatchRuntimeEvent
+}) {
+  const { win, actualSessionId, dispatchRuntimeEvent } = input
+  const rootSessionId = resolveRootSession(actualSessionId)
+  if (!rootSessionId || !actualSessionId) return true
+  if (!shouldProcessIdleEvent(actualSessionId)) return true
+
+  log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
+  if (rootSessionId === actualSessionId) {
+    forgetSubmittedPrompt(rootSessionId)
+    stopSessionStatusReconciliation(rootSessionId)
+    touchSessionRecord(rootSessionId)
+    dispatchRuntimeEvent(win, {
+      type: 'history_refresh',
+      sessionId: rootSessionId,
+      data: { type: 'history_refresh' },
+    })
+    dispatchRuntimeEvent(win, {
+      type: 'done',
+      sessionId: rootSessionId,
+      data: { type: 'done' },
+    })
+    if (isTrackedParentSession(rootSessionId)) {
+      untrackParentSession(rootSessionId)
+    }
+    runRuntimeSideEffect('workflow idle handling', () => handleWorkflowSessionIdle(rootSessionId))
+  } else {
+    const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
+    if (taskRun) {
+      const updated = updateTaskRun(taskRun.id, { status: 'complete' })
+      if (updated) emitTaskRun(win, updated)
+    }
+  }
+  return true
+}
+
+function handleAgentSwitchedEvent(input: {
+  win: BrowserWindow
+  properties: Record<string, unknown> | null | undefined
+  dispatchRuntimeEvent: DispatchRuntimeEvent
+}) {
+  const { win, properties, dispatchRuntimeEvent } = input
+  const actualSessionId = readEventSessionId(properties)
+  const rootSessionId = resolveRootSession(actualSessionId)
+  const agentName = normalizeAgentName(readString(readRecordValue(properties, 'agent')))
+    || readString(readRecordValue(properties, 'agent'))
+    || null
+  if (!rootSessionId || !actualSessionId || !agentName) return true
+
+  if (actualSessionId === rootSessionId) {
+    dispatchRuntimeEvent(win, {
+      type: 'agent',
+      sessionId: rootSessionId,
+      data: { type: 'agent', name: agentName },
+    })
+    return true
+  }
+
+  const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId, agentName)
+  if (!taskRun) return true
+  const updated = updateTaskRun(taskRun.id, {
+    agent: agentName,
+    title: chooseTaskTitle(
+      agentName,
+      !isPlaceholderTaskTitle(taskRun.title, taskRun.agent || agentName) ? taskRun.title : null,
+    ),
+    status: taskRun.status === 'queued' ? 'running' : taskRun.status,
+  })
+  if (updated) emitTaskRun(win, updated)
+  return true
+}
+
 export function removeParentSession(sessionId: string) {
   stopSessionStatusReconciliation(sessionId)
   removeParentSessionState(sessionId)
   sessionEngine.removeSession(sessionId)
+}
+
+export function resetRuntimeEventStateForTests() {
+  recentIdleEventAtBySession.clear()
 }
 
 export function handleRuntimeSideEffectEvent(input: {
@@ -209,13 +319,24 @@ export function handleRuntimeSideEffectEvent(input: {
       return true
     }
 
+    case 'session.next.agent.switched':
+      return handleAgentSwitchedEvent({ win, properties, dispatchRuntimeEvent })
+
+    case 'session.idle':
+      return handleIdleTransition({
+        win,
+        actualSessionId: readEventSessionId(properties),
+        dispatchRuntimeEvent,
+      })
+
     case 'session.status': {
       const status = asRecord(readRecordValue(properties, 'status'))
-      const actualSessionId = readString(readRecordValue(properties, 'sessionID'))
+      const actualSessionId = readEventSessionId(properties)
       const rootSessionId = resolveRootSession(actualSessionId)
       if (!rootSessionId || !actualSessionId) return true
 
       if (readString(readRecordValue(status, 'type')) === 'busy') {
+        clearRecentIdleEvent(actualSessionId)
         if (rootSessionId === actualSessionId) {
           touchSessionRecord(rootSessionId)
           dispatchRuntimeEvent(win, {
@@ -233,32 +354,11 @@ export function handleRuntimeSideEffectEvent(input: {
       }
 
       if (readString(readRecordValue(status, 'type')) === 'idle') {
-        log('session', `Idle: ${shortSessionId(actualSessionId)}${rootSessionId !== actualSessionId ? ` => ${shortSessionId(rootSessionId)}` : ''}`)
-        if (rootSessionId === actualSessionId) {
-          forgetSubmittedPrompt(rootSessionId)
-          stopSessionStatusReconciliation(rootSessionId)
-          touchSessionRecord(rootSessionId)
-          dispatchRuntimeEvent(win, {
-            type: 'history_refresh',
-            sessionId: rootSessionId,
-            data: { type: 'history_refresh' },
-          })
-          dispatchRuntimeEvent(win, {
-            type: 'done',
-            sessionId: rootSessionId,
-            data: { type: 'done' },
-          })
-          if (isTrackedParentSession(rootSessionId)) {
-            untrackParentSession(rootSessionId)
-          }
-          runRuntimeSideEffect('workflow idle handling', () => handleWorkflowSessionIdle(rootSessionId))
-        } else {
-          const taskRun = ensureTaskRunForChild(rootSessionId, actualSessionId)
-          if (taskRun) {
-            const updated = updateTaskRun(taskRun.id, { status: 'complete' })
-            if (updated) emitTaskRun(win, updated)
-          }
-        }
+        handleIdleTransition({
+          win,
+          actualSessionId,
+          dispatchRuntimeEvent,
+        })
       }
       return true
     }
@@ -437,6 +537,7 @@ export function handleRuntimeSideEffectEvent(input: {
     }
 
     default:
+      if (INTENTIONALLY_IGNORED_RUNTIME_EVENTS.has(type)) return true
       return false
   }
 }

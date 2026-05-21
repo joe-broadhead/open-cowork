@@ -56,6 +56,54 @@ test('message text deltas buffer until assistant role is known, then flush', () 
   assert.equal(collector.events.length, 1)
 })
 
+test('message text deltas accept SDK ids from the part payload', () => {
+  const win = {} as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+  const collector = createDispatchCollector()
+
+  handleMessageUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      info: {
+        id: 'msg_part_scoped',
+        role: 'assistant',
+        sessionID: 'sess_part_scoped',
+      },
+    },
+    messageState,
+  )
+
+  handleMessagePartDeltaEvent(
+    win,
+    collector.dispatch,
+    {
+      part: {
+        id: 'part_scoped',
+        sessionID: 'sess_part_scoped',
+        messageID: 'msg_part_scoped',
+        type: 'text',
+      },
+      delta: 'streamed from SDK shape',
+    },
+    messageState,
+  )
+
+  assert.deepEqual(collector.events[0], {
+    type: 'text',
+    sessionId: 'sess_part_scoped',
+    data: {
+      type: 'text',
+      mode: 'append',
+      content: 'streamed from SDK shape',
+      taskRunId: null,
+      sourceSessionId: 'sess_part_scoped',
+      messageId: 'msg_part_scoped',
+      partId: 'part_scoped',
+    },
+  })
+})
+
 test('user-role message updates drop buffered text instead of dispatching it', () => {
   const win = {} as BrowserWindow
   const messageState = createSessionScopedMessageState()
