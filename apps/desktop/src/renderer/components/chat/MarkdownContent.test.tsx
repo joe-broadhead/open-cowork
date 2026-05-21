@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { MarkdownContent } from './MarkdownContent'
@@ -32,8 +32,9 @@ describe('MarkdownContent', () => {
     expect(button.getAttribute('aria-label')).toBe('Copied')
   })
 
-  it('leaves the copy affordance unchanged when clipboard writing fails', async () => {
+  it('falls back to the browser clipboard when the app clipboard bridge returns false', async () => {
     vi.mocked(window.coworkApi.clipboard.writeText).mockResolvedValueOnce(false)
+    const browserWrite = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValueOnce(undefined)
     const user = userEvent.setup()
     const { container } = render(<MarkdownContent text={'```txt\ncopy me\n```'} />)
 
@@ -41,6 +42,28 @@ describe('MarkdownContent', () => {
     await user.click(button)
 
     expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('copy me'))
+    expect(browserWrite).toHaveBeenCalledWith(expect.stringContaining('copy me'))
+    expect(button.getAttribute('aria-label')).toBe('Copied')
+  })
+
+  it('restarts code-copy feedback cleanly on repeated clicks', async () => {
+    const { container } = render(<MarkdownContent text={'```txt\ncopy me\n```'} />)
+    const button = await copyButton(container)
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(button)
+    })
+    expect(button.getAttribute('aria-label')).toBe('Copied')
+
+    act(() => vi.advanceTimersByTime(1500))
+    await act(async () => {
+      fireEvent.click(button)
+    })
+    act(() => vi.advanceTimersByTime(1999))
+    expect(button.getAttribute('aria-label')).toBe('Copied')
+
+    act(() => vi.advanceTimersByTime(1))
     expect(button.getAttribute('aria-label')).toBe('Copy code')
   })
 

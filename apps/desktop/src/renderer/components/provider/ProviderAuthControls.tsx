@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ProviderAuthAuthorization, ProviderAuthMethod, ProviderAuthPrompt } from '@open-cowork/shared'
+import type { ProviderAuthMethod, ProviderAuthPrompt } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 
@@ -31,6 +31,44 @@ interface Props {
   onAuthUpdated?: () => void | Promise<void>
 }
 
+type PendingAuth =
+  | { kind: 'code'; method: number }
+  | { kind: 'browser'; method: number; instructions: string | null }
+
+function deviceCodeFromInstructions(instructions: string) {
+  const normalizeCandidate = (candidate: string) => {
+    const groups = candidate.split(/[ -]+/).filter(Boolean)
+    const normalized = groups.join('').toUpperCase()
+    if (groups.length < 2 || !groups.every((group) => group.length === 4)) return null
+    if (groups[0]?.toUpperCase() === 'CODE') return null
+    if (!/[A-Z]/.test(normalized)) return null
+    return groups.map((group) => group.toUpperCase()).join('-')
+  }
+
+  const contextualPatterns = [
+    /\bcode[^a-z0-9\n]{1,20}([a-z0-9]{4}(?:[ -][a-z0-9]{4}){1,2})\b/i,
+    /\b(?:enter|paste)[^a-z0-9\n]{1,40}(?:code[^a-z0-9\n]{1,20})?([a-z0-9]{4}(?:[ -][a-z0-9]{4}){1,2})\b/i,
+  ]
+  for (const pattern of contextualPatterns) {
+    const contextual = instructions.match(pattern)
+    if (!contextual?.[1]) continue
+    const normalized = normalizeCandidate(contextual[1])
+    if (normalized) return normalized
+  }
+
+  for (const match of instructions.matchAll(/\b([a-z0-9]{4}(?:[ -][a-z0-9]{4}){1,2})\b/gi)) {
+    const normalized = normalizeCandidate(match[1] || '')
+    if (!normalized) continue
+    return normalized
+  }
+  return null
+}
+
+function copyPayloadForAuthInstructions(instructions: string) {
+  const trimmed = instructions.trim()
+  return deviceCodeFromInstructions(trimmed) || trimmed
+}
+
 export function ProviderAuthControls({
   providerId,
   providerName,
@@ -47,9 +85,7 @@ export function ProviderAuthControls({
   const [loading, setLoading] = useState(false)
   const [authorizing, setAuthorizing] = useState<number | null>(null)
   const [status, setStatus] = useState<string | null>(null)
-  const [pending, setPending] = useState<{ method: number; authorization: ProviderAuthAuthorization } | null>(null)
-  const [pendingBrowserLogin, setPendingBrowserLogin] = useState(false)
-  const [browserLoginInstructions, setBrowserLoginInstructions] = useState<string | null>(null)
+  const [pendingAuth, setPendingAuth] = useState<PendingAuth | null>(null)
   const [code, setCode] = useState('')
   const [methodInputs, setMethodInputs] = useState<Record<number, Record<string, string>>>({})
 
@@ -95,9 +131,7 @@ export function ProviderAuthControls({
   useEffect(() => {
     setMethods([])
     setStatus(null)
-    setPending(null)
-    setPendingBrowserLogin(false)
-    setBrowserLoginInstructions(null)
+    setPendingAuth(null)
     setCode('')
     setMethodInputs({})
     void loadMethods()
@@ -126,9 +160,7 @@ export function ProviderAuthControls({
     if (!providerId) return
     setAuthorizing(methodIndex ?? -1)
     setStatus(null)
-    setPending(null)
-    setPendingBrowserLogin(false)
-    setBrowserLoginInstructions(null)
+    setPendingAuth(null)
     try {
       if (onBeforeAuthorize) {
         const ok = await onBeforeAuthorize()
@@ -153,12 +185,11 @@ export function ProviderAuthControls({
         return
       }
       if (authorization.method === 'code') {
-        setPending({ method: selectedIndex, authorization })
+        setPendingAuth({ kind: 'code', method: selectedIndex })
         setStatus(authorization.instructions || t('providerAuth.enterCode', 'Complete the browser login, then paste the authorization code here.'))
       } else {
-        setPendingBrowserLogin(true)
         const instructions = authorization.instructions?.trim() || null
-        setBrowserLoginInstructions(instructions)
+        setPendingAuth({ kind: 'browser', method: selectedIndex, instructions })
         setStatus(instructions
           ? t('providerAuth.browserOpenedWithInstructions', 'Browser login opened. Follow the instructions below, then return here and confirm so Open Cowork can verify the new login.')
           : t('providerAuth.browserOpened', 'Browser login opened. Complete the flow there, then return here and confirm so Open Cowork can verify the new login.'))
@@ -171,7 +202,8 @@ export function ProviderAuthControls({
   }
 
   const completeCodeFlow = async () => {
-    if (!providerId || !pending) return
+    if (!providerId || pendingAuth?.kind !== 'code') return
+    const pending = pendingAuth
     setAuthorizing(pending.method)
     setStatus(null)
     try {
@@ -184,8 +216,7 @@ export function ProviderAuthControls({
           setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
           return
         }
-        setPending(null)
-        setBrowserLoginInstructions(null)
+        setPendingAuth(null)
         setCode('')
         await onAuthUpdated?.()
       }
@@ -222,16 +253,25 @@ export function ProviderAuthControls({
   }
 
   const finishBrowserLogin = async () => {
+    if (!providerId || pendingAuth?.kind !== 'browser') return
+    const pending = pendingAuth
     setAuthorizing(-1)
     setStatus(null)
     try {
+      try {
+        await window.coworkApi.provider.callback(providerId, pending.method)
+      } catch {
+        // Some providers consume the callback before the user returns to
+        // Open Cowork. Provider verification below is the authoritative
+        // success check for those already-completed browser flows.
+      }
+
       if (!await verifyProviderConnected()) {
         setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
         return
       }
       await onAuthUpdated?.()
-      setPendingBrowserLogin(false)
-      setBrowserLoginInstructions(null)
+      setPendingAuth(null)
       setStatus(t('providerAuth.connected', 'Provider login completed.'))
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err))
@@ -246,9 +286,7 @@ export function ProviderAuthControls({
     setStatus(null)
     try {
       await window.coworkApi.provider.logout(providerId)
-      setPending(null)
-      setPendingBrowserLogin(false)
-      setBrowserLoginInstructions(null)
+      setPendingAuth(null)
       setCode('')
       setStatus(t('providerAuth.removed', 'Provider login removed. Sign in again to refresh the token.'))
       await onAuthUpdated?.()
@@ -262,12 +300,14 @@ export function ProviderAuthControls({
 
   const entries = oauthMethods
   const copyBrowserLoginInstructions = async () => {
-    if (!browserLoginInstructions) return
-    const copied = await writeTextToClipboard(browserLoginInstructions)
+    if (pendingAuth?.kind !== 'browser' || !pendingAuth.instructions) return
+    const copied = await writeTextToClipboard(copyPayloadForAuthInstructions(pendingAuth.instructions))
     setStatus(copied
       ? t('providerAuth.instructionsCopied', 'Login instructions copied to clipboard.')
       : t('providerAuth.instructionsCopyFailed', 'Could not copy login instructions. Select the instructions and copy them manually.'))
   }
+  const pendingCodeAuth = pendingAuth?.kind === 'code' ? pendingAuth : null
+  const pendingBrowserAuth = pendingAuth?.kind === 'browser' ? pendingAuth : null
 
   return (
     <div className="flex flex-col gap-3">
@@ -350,7 +390,7 @@ export function ProviderAuthControls({
             </div>
           )
         })}
-        {pending ? (
+        {pendingCodeAuth ? (
           <div className="flex flex-col gap-2">
             <input
               type="text"
@@ -373,9 +413,9 @@ export function ProviderAuthControls({
             </button>
           </div>
         ) : null}
-        {pendingBrowserLogin ? (
+        {pendingBrowserAuth ? (
           <div className="flex flex-col gap-2">
-            {browserLoginInstructions ? (
+            {pendingBrowserAuth.instructions ? (
               <div className="rounded-xl border border-border-subtle p-3 flex flex-col gap-2" style={{ background: 'var(--color-surface)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[11px] font-semibold text-text">
@@ -390,7 +430,7 @@ export function ProviderAuthControls({
                   </button>
                 </div>
                 <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-text">
-                  {browserLoginInstructions}
+                  {pendingBrowserAuth.instructions}
                 </pre>
               </div>
             ) : null}

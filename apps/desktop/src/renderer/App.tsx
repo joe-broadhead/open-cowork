@@ -383,18 +383,28 @@ export function App() {
   // Sidebar), which was the bug this replaced.
   void localeVersion
   const showPreviewNotice = Boolean(metadata?.preview && !previewNoticeDismissed)
+  const previewNoticeStyle = {
+    borderColor: 'color-mix(in srgb, var(--color-amber) 34%, var(--color-border-subtle))',
+    background: 'color-mix(in srgb, var(--color-amber) 10%, var(--color-surface))',
+    color: 'var(--color-text)',
+  }
+  const previewNoticeButtonStyle = {
+    borderColor: 'color-mix(in srgb, var(--color-amber) 30%, var(--color-border-subtle))',
+    color: 'var(--color-text)',
+  }
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-base">
       <TitleBar />
       {showPreviewNotice && metadata ? (
-        <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-50 px-4 py-2 text-[12px] text-amber-950 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100">
+        <div className="flex items-center gap-3 border-b px-4 py-2 text-[12px]" style={previewNoticeStyle}>
           <span className="font-semibold">Public preview {metadata.version}</span>
-          <span className="min-w-0 flex-1 text-amber-800 dark:text-amber-100/80">
+          <span className="min-w-0 flex-1 text-text-muted">
             This v0.x build may change quickly. macOS preview artifacts can be unsigned until signing is configured.
           </span>
           <button
             type="button"
-            className="rounded border border-amber-600/30 px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-200/50 dark:border-amber-300/30 dark:text-amber-50 dark:hover:bg-amber-200/10"
+            className="rounded border px-2 py-1 text-[11px] hover:bg-surface-hover"
+            style={previewNoticeButtonStyle}
             onClick={() => {
               dismissPreview(metadata.version)
               setPreviewNoticeDismissed(true)

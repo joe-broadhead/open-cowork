@@ -151,7 +151,7 @@ export function MarkdownContent({
   streaming?: boolean
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const copyResetTimersRef = useRef(new Set<number>())
+  const copyResetTimersRef = useRef(new Map<HTMLButtonElement, number>())
   const html = useMemo(() => renderHtml(text, streaming), [text, streaming])
 
   useLayoutEffect(() => {
@@ -198,18 +198,21 @@ export function MarkdownContent({
       if (!content) return
       const copied = await writeTextToClipboard(content)
       if (!copied) return
+      const existingTimer = copyResetTimersRef.current.get(button)
+      if (existingTimer) window.clearTimeout(existingTimer)
       setCopyButtonState(button, true)
       const timer = window.setTimeout(() => {
-        copyResetTimersRef.current.delete(timer)
+        if (copyResetTimersRef.current.get(button) !== timer) return
+        copyResetTimersRef.current.delete(button)
         setCopyButtonState(button, false)
       }, 2000)
-      copyResetTimersRef.current.add(timer)
+      copyResetTimersRef.current.set(button, timer)
     }
 
     container.addEventListener('click', handleClick)
     return () => {
       container.removeEventListener('click', handleClick)
-      for (const timer of copyResetTimersRef.current) window.clearTimeout(timer)
+      for (const timer of copyResetTimersRef.current.values()) window.clearTimeout(timer)
       copyResetTimersRef.current.clear()
     }
   }, [])
