@@ -156,6 +156,9 @@ describe('MessageBubble', () => {
     expect(screen.getByRole('article', { name: 'Assistant message' })).toBeInTheDocument()
     expect(screen.getByTestId('markdown-content')).toHaveTextContent('Done with changes streaming')
 
+    await user.click(screen.getByRole('button', { name: 'Copy message' }))
+    await waitFor(() => expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith('Done with changes'))
+
     await user.click(screen.getByRole('button', { name: 'Branch here' }))
     await waitFor(() => expect(api.session.fork).toHaveBeenCalledWith('session-1', 'assistant-message'))
     expect(loadSessionMessages).toHaveBeenCalledWith('forked-session')
@@ -185,6 +188,7 @@ describe('MessageBubble', () => {
     )
 
     expect(screen.getByTestId('markdown-content')).toHaveTextContent('Partial answer before a tool call.')
+    expect(screen.queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Branch here' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Revert to here' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'View diff' })).not.toBeInTheDocument()
