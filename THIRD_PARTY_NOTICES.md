@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `ec4283ebf6b512032b5ea8b5e71349a2898af3ed983b98532ba7df10d9e9e8e1`
+- pnpm lockfile SHA-256: `6696e51c7f7f986fb54e025dc3fbe58c217c491dacff921ebef6c6ab10c16a7b`
 - Production package entries: 420
 - Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
 
@@ -323,7 +323,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | points-on-path | 0.2.1 | MIT | THIRD_PARTY_LICENSES/points-on-path@0.2.1/ | git+https://github.com/pshihn/points-on-path.git |
 | property-information | 7.1.0 | MIT | THIRD_PARTY_LICENSES/property-information@7.1.0/ | wooorm/property-information |
 | proxy-addr | 2.0.7 | MIT | THIRD_PARTY_LICENSES/proxy-addr@2.0.7/ | jshttp/proxy-addr |
-| qs | 6.15.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.1/ | https://github.com/ljharb/qs.git |
+| qs | 6.15.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.2/ | https://github.com/ljharb/qs.git |
 | range-parser | 1.2.1 | MIT | THIRD_PARTY_LICENSES/range-parser@1.2.1/ | jshttp/range-parser |
 | raw-body | 3.0.2 | MIT | THIRD_PARTY_LICENSES/raw-body@3.0.2/ | stream-utils/raw-body |
 | react | 19.2.5 | MIT | THIRD_PARTY_LICENSES/react@19.2.5/ | https://github.com/facebook/react.git |
