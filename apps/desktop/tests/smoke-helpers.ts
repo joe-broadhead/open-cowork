@@ -5,6 +5,10 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  buildE2EArgEnvironment,
+  E2E_ARG_ENV_ENABLE_ARG,
+} from '../src/main/e2e-remote-debugging.ts'
+import {
   _electron as electron,
   chromium,
   type Browser,
@@ -471,15 +475,17 @@ export async function launchPackagedMacProbe(
     OPEN_COWORK_E2E_PROBE_ACTION: action,
     OPEN_COWORK_E2E_READY_FILE: readyFile,
   })
-  const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+  const envArgs = buildE2EArgEnvironment(launchEnvironment)
 
   try {
     await runCommand('open', [
       '-n',
       '-g',
       '-j',
-      ...envArgs,
       macAppBundlePath,
+      '--args',
+      E2E_ARG_ENV_ENABLE_ARG,
+      ...envArgs,
     ])
     return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
   } finally {
