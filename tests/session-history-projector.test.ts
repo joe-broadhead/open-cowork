@@ -818,6 +818,48 @@ test('history projector binds task tools when the root message has no created ti
   assert.equal(taskRun.title, 'Analyze missing timestamp replay')
 })
 
+test('history projector binds task tools to child sessions with missing created timestamps', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-child-missing-time',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-child-missing-time-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-child-missing-time-task-part',
+          type: 'tool',
+          tool: 'task',
+          callID: 'child-missing-time-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze child missing timestamp replay' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-without-created-time',
+      title: 'Analyze child missing timestamp replay (@analyst subagent)',
+      parentSessionId: 'root-task-tool-child-missing-time',
+      time: { updated: 30 },
+    }],
+    statuses: {
+      'root-task-tool-child-missing-time': { type: 'idle' },
+      'child-without-created-time': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')?.taskRun
+
+  assert.ok(taskRun)
+  assert.equal(taskRun.sourceSessionId, 'child-without-created-time')
+  assert.equal(taskRun.title, 'Analyze child missing timestamp replay')
+})
+
 test('history projector preserves root message part order around task tools', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-order',

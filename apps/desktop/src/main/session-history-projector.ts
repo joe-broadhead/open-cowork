@@ -167,6 +167,11 @@ function messageCreatedSortTime(msg: NonNullable<ReturnType<typeof normalizeSess
   return created ? toHistorySortTime(created) : null
 }
 
+function childCreatedSortTime(child: ChildSessionRecord) {
+  const created = child.time?.created
+  return created === null || created === undefined ? null : toHistorySortTime(created)
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
@@ -287,9 +292,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (matchedChildIds.has(child.id) || excludedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) {
         return false
       }
-      const created = toHistorySortTime(child.time?.created || 0)
-      if (options.after !== undefined && created < options.after) return false
-      if (options.before !== undefined && created >= options.before) return false
+      const created = childCreatedSortTime(child)
+      if (created !== null && options.after !== undefined && created < options.after) return false
+      if (created !== null && options.before !== undefined && created >= options.before) return false
       return true
     })
   }

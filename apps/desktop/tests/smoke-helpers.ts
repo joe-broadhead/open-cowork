@@ -550,7 +550,10 @@ export async function launchSmokeSession(
 
   if (macAppBundlePath) {
     const port = await getAvailablePort()
-    const launchEnvironment = getLaunchServicesEnvironment(paths)
+    const launchEnvironment = {
+      ...getLaunchServicesEnvironment(paths),
+      OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+    }
     const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
     await runCommand('open', [
       '-n',
@@ -559,6 +562,7 @@ export async function launchSmokeSession(
       ...envArgs,
       macAppBundlePath,
       '--args',
+      '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
     ])
 
@@ -585,6 +589,7 @@ export async function launchSmokeSession(
   if (options?.executablePath && process.platform === 'linux') {
     const port = await getAvailablePort()
     const childArgs = [
+      '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
       ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
     ]

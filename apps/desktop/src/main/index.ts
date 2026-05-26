@@ -49,8 +49,10 @@ import { createMainWindowController } from './main-window-controller.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
+import { appendE2ERemoteDebuggingSwitches } from './e2e-remote-debugging.ts'
 
 registerAppProtocolSchemes()
+appendE2ERemoteDebuggingSwitches(app)
 
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null

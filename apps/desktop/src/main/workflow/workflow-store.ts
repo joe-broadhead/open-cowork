@@ -39,7 +39,8 @@ const electronSafeStorage = (electron as { safeStorage?: typeof import('electron
 const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
   getSelectedStorageBackend?: () => string
 }) | undefined
-const ENCRYPTED_WEBHOOK_SECRET_PREFIX = 'enc:v1:'
+const LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX = 'enc:v1:'
+const ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION = 2
 
 type DbRow = Record<string, unknown>
 type WorkflowWriteOptions = {
@@ -49,6 +50,10 @@ type WorkflowSecretStorageAdapter = {
   mode: SecretStorageMode
   encryptString?: (value: string) => Buffer
   decryptString?: (value: Buffer) => string
+}
+type EncryptedWebhookSecretRecord = {
+  __openCoworkEncryptedWebhookSecret: typeof ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION
+  value: string
 }
 
 function workflowDbPath() {
@@ -107,29 +112,58 @@ function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
   }
 }
 
-function encodeWebhookSecretForStorage(secret: string | null | undefined) {
+function isEncryptedWebhookSecretRecord(value: unknown): value is EncryptedWebhookSecretRecord {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (value as Partial<EncryptedWebhookSecretRecord>).__openCoworkEncryptedWebhookSecret === ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION
+    && typeof (value as Partial<EncryptedWebhookSecretRecord>).value === 'string',
+  )
+}
+
+function encryptWebhookSecretValue(storage: WorkflowSecretStorageAdapter, secret: string): EncryptedWebhookSecretRecord {
+  if (!storage.encryptString) throw new Error('Electron safeStorage is unavailable')
+  return {
+    __openCoworkEncryptedWebhookSecret: ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION,
+    value: Buffer.from(storage.encryptString(secret)).toString('base64'),
+  }
+}
+
+function tryDecryptWebhookSecretPayload(storage: WorkflowSecretStorageAdapter, payload: string) {
+  if (!storage.decryptString) return null
+  try {
+    return storage.decryptString(Buffer.from(payload, 'base64'))
+  } catch {
+    return null
+  }
+}
+
+function encodeWebhookSecretForStorage(secret: string | null | undefined): string | EncryptedWebhookSecretRecord | null {
   if (!secret) return null
   const storage = getWorkflowSecretStorage()
   if (storage.mode === 'encrypted') {
-    if (!storage.encryptString) throw new Error('Electron safeStorage is unavailable')
-    return `${ENCRYPTED_WEBHOOK_SECRET_PREFIX}${Buffer.from(storage.encryptString(secret)).toString('base64')}`
+    return encryptWebhookSecretValue(storage, secret)
   }
   if (storage.mode === 'plaintext') return secret
   throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist workflow webhook secrets in production without OS-backed secret storage.')
 }
 
 function decodeWebhookSecretFromStorage(secret: unknown) {
-  if (typeof secret !== 'string' || !secret.trim()) return null
-  if (!secret.startsWith(ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
   const storage = getWorkflowSecretStorage()
-  if (storage.mode !== 'encrypted' || !storage.decryptString) {
-    return storage.mode === 'plaintext' ? secret : null
+  if (isEncryptedWebhookSecretRecord(secret)) {
+    return tryDecryptWebhookSecretPayload(storage, secret.value)
   }
-  try {
-    return storage.decryptString(Buffer.from(secret.slice(ENCRYPTED_WEBHOOK_SECRET_PREFIX.length), 'base64'))
-  } catch {
-    return null
-  }
+
+  if (typeof secret !== 'string' || !secret.trim()) return null
+  if (!secret.startsWith(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
+
+  const legacyPayload = secret.slice(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX.length)
+  const decrypted = tryDecryptWebhookSecretPayload(storage, legacyPayload)
+  // Older builds stored encrypted webhook secrets as strings prefixed with
+  // enc:v1:. If decryption fails, preserve the original value so an imported
+  // plaintext secret with that literal prefix still round-trips.
+  return decrypted ?? secret
 }
 
 export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[]) {

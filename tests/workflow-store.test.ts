@@ -103,7 +103,7 @@ test('workflow store encrypts webhook secrets at the SQLite boundary when secure
   try {
     const row = db.prepare('select triggers_json from workflows where id = ?').get(workflow.id) as { triggers_json?: string }
     const raw = row.triggers_json || ''
-    assert.match(raw, /enc:v1:/)
+    assert.match(raw, /__openCoworkEncryptedWebhookSecret/)
     assert.equal(raw.includes(webhookSecret!), false)
 
     const parsed = parseWorkflowTriggersFromStorage(raw)
@@ -114,11 +114,36 @@ test('workflow store encrypts webhook secrets at the SQLite boundary when secure
 }))
 
 test('workflow store preserves plaintext webhook secrets that look like encrypted sentinels', () => withWorkflowStore('plaintext-secret-prefix', () => {
-  setWorkflowSecretStorageForTests({ mode: 'plaintext' })
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: () => {
+      throw new Error('not ciphertext')
+    },
+  })
 
   const rawSecret = 'enc:v1:user-supplied-secret'
   const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
     { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: rawSecret },
+  ]))
+
+  assert.equal(parsed[0]?.webhookSecret, rawSecret)
+}))
+
+test('workflow store decrypts legacy prefixed webhook secrets in plaintext mode when possible', () => withWorkflowStore('legacy-secret-prefix', () => {
+  setWorkflowSecretStorageForTests({
+    mode: 'plaintext',
+    decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
+  })
+
+  const rawSecret = 'legacy-webhook-secret'
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    {
+      id: 'webhook',
+      type: 'webhook',
+      enabled: true,
+      webhookSecret: `enc:v1:${Buffer.from(`sealed:${rawSecret}`, 'utf8').toString('base64')}`,
+    },
   ]))
 
   assert.equal(parsed[0]?.webhookSecret, rawSecret)
