@@ -29,7 +29,6 @@ type E2EProbeFile = {
 const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
 const E2E_ENV_ARG_PREFIX = '--open-cowork-e2e-env='
 export const E2E_ARG_ENV_ENABLE_KEY = 'OPEN_COWORK_E2E_ARG_ENV'
-export const E2E_ARG_ENV_ENABLE_ARG = '--open-cowork-e2e-arg-env=1'
 const E2E_ARG_ENV_KEYS = new Set([
   'OPEN_COWORK_CHART_TIMEOUT_MS',
   'OPEN_COWORK_CONFIG_PATH',
@@ -59,7 +58,7 @@ export function buildE2EArgEnvironment(env: Record<string, string>) {
 }
 
 export function applyE2EArgEnvironment(argv: readonly string[] = process.argv, env: NodeJS.ProcessEnv = process.env) {
-  if (env[E2E_ARG_ENV_ENABLE_KEY] !== '1' && !argv.includes(E2E_ARG_ENV_ENABLE_ARG)) return
+  if (env[E2E_ARG_ENV_ENABLE_KEY] !== '1') return
   const appliedKeys = new Set<string>()
   for (const arg of argv) {
     if (!arg.startsWith(E2E_ENV_ARG_PREFIX)) continue

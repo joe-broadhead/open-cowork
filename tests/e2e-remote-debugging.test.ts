@@ -7,7 +7,6 @@ import {
   appendE2ERemoteDebuggingSwitches,
   applyE2EArgEnvironment,
   buildE2EArgEnvironment,
-  E2E_ARG_ENV_ENABLE_ARG,
   E2E_ARG_ENV_ENABLE_KEY,
   e2eReadyFileRelativePathIsContained,
   e2eWindowReadyProbeEnabled,
@@ -115,21 +114,6 @@ test('e2e arg environment applies only smoke allowlisted keys', () => {
   })
 })
 
-test('e2e arg environment can be enabled with a smoke command-line marker', () => {
-  const args = buildE2EArgEnvironment({
-    OPEN_COWORK_E2E: '1',
-    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
-  })
-  const env: NodeJS.ProcessEnv = {}
-
-  applyE2EArgEnvironment(['Open Cowork', E2E_ARG_ENV_ENABLE_ARG, ...args], env)
-
-  assert.deepEqual(env, {
-    OPEN_COWORK_E2E: '1',
-    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
-  })
-})
-
 test('e2e arg environment is ignored without the trusted smoke marker', () => {
   const args = buildE2EArgEnvironment({
     OPEN_COWORK_E2E: '1',
@@ -137,7 +121,11 @@ test('e2e arg environment is ignored without the trusted smoke marker', () => {
   })
   const env: NodeJS.ProcessEnv = {}
 
-  applyE2EArgEnvironment(['Open Cowork', ...args], env)
+  applyE2EArgEnvironment([
+    'Open Cowork',
+    '--open-cowork-e2e-arg-env=1',
+    ...args,
+  ], env)
 
   assert.deepEqual(env, {})
 })
