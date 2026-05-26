@@ -11,6 +11,7 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
+import { buildE2EArgEnvironment } from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -485,9 +486,10 @@ export async function launchPackagedMacProbe(
     OPEN_COWORK_E2E_PROBE_ACTION: options?.action || 'surface',
   }
   const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+  const appArgs = buildE2EArgEnvironment(launchEnvironment)
 
   try {
-    await runCommand('open', ['-n', '-g', '-j', ...envArgs, macAppBundlePath])
+    await runCommand('open', ['-n', '-g', '-j', ...envArgs, macAppBundlePath, '--args', ...appArgs])
     return await waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000)
   } finally {
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})

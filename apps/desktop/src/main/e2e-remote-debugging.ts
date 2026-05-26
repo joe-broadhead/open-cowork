@@ -27,11 +27,43 @@ type E2EProbeFile = {
 }
 
 const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
+const E2E_ENV_ARG_PREFIX = '--open-cowork-e2e-env='
+const E2E_ARG_ENV_KEYS = new Set([
+  'OPEN_COWORK_CHART_TIMEOUT_MS',
+  'OPEN_COWORK_CONFIG_PATH',
+  'OPEN_COWORK_E2E',
+  'OPEN_COWORK_E2E_PROBE_ACTION',
+  'OPEN_COWORK_E2E_READY_FILE',
+  'OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT',
+  'OPEN_COWORK_SANDBOX_DIR',
+  'OPEN_COWORK_USER_DATA_DIR',
+  'XDG_CACHE_HOME',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
+])
 
 export function e2eReadyFileRelativePathIsContained(relativeToTmp: string) {
   if (!relativeToTmp || relativeToTmp.startsWith('..')) return false
   if (isAbsolute(relativeToTmp)) return false
   return !WINDOWS_ROOTED_PATH_RE.test(relativeToTmp)
+}
+
+export function buildE2EArgEnvironment(env: Record<string, string>) {
+  return Object.entries(env)
+    .filter(([key]) => E2E_ARG_ENV_KEYS.has(key))
+    .map(([key, value]) => `${E2E_ENV_ARG_PREFIX}${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+}
+
+export function applyE2EArgEnvironment(argv: readonly string[] = process.argv, env: NodeJS.ProcessEnv = process.env) {
+  for (const arg of argv) {
+    if (!arg.startsWith(E2E_ENV_ARG_PREFIX)) continue
+    const encoded = arg.slice(E2E_ENV_ARG_PREFIX.length)
+    const separatorIndex = encoded.indexOf('=')
+    if (separatorIndex <= 0) continue
+    const key = decodeURIComponent(encoded.slice(0, separatorIndex))
+    if (!E2E_ARG_ENV_KEYS.has(key)) continue
+    env[key] = decodeURIComponent(encoded.slice(separatorIndex + 1))
+  }
 }
 
 function writeE2EProbeFile(target: string, payload: Omit<E2EProbeFile, 'writtenAt'>) {

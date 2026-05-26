@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   appendE2ERemoteDebuggingSwitches,
+  applyE2EArgEnvironment,
+  buildE2EArgEnvironment,
   e2eReadyFileRelativePathIsContained,
   e2eWindowReadyProbeEnabled,
   resolveE2ERemoteDebuggingPort,
@@ -82,4 +84,27 @@ test('e2e window ready probe is enabled only for contained smoke files', () => {
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
+})
+
+test('e2e arg environment applies only smoke allowlisted keys', () => {
+  const args = buildE2EArgEnvironment({
+    OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
+    OPEN_COWORK_CONFIG_PATH: '/tmp/open-cowork/config.json',
+    HOME: '/tmp/should-not-apply',
+  })
+  assert.equal(args.length, 3)
+
+  const env: NodeJS.ProcessEnv = {}
+  applyE2EArgEnvironment([
+    'Open Cowork',
+    ...args,
+    '--open-cowork-e2e-env=HOME=%2Ftmp%2Fnot-applied',
+  ], env)
+
+  assert.deepEqual(env, {
+    OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
+    OPEN_COWORK_CONFIG_PATH: '/tmp/open-cowork/config.json',
+  })
 })
