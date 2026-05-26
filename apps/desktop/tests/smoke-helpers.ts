@@ -476,20 +476,30 @@ export async function launchPackagedMacProbe(
     OPEN_COWORK_E2E_READY_FILE: readyFile,
   })
   const envArgs = buildE2EArgEnvironment(launchEnvironment)
+  const child = spawn(executablePath, [
+    E2E_ARG_ENV_ENABLE_ARG,
+    ...envArgs,
+  ], {
+    cwd: desktopAppDir,
+    env: launchEnvironment,
+    stdio: 'ignore',
+  })
+  const childExited = new Promise<never>((_, reject) => {
+    child.once('error', reject)
+    child.once('exit', (code, signal) => {
+      reject(new Error(`Packaged macOS app exited before writing probe file with ${signal || code}`))
+    })
+  })
+  childExited.catch(() => {})
 
   try {
-    await runCommand('open', [
-      '-n',
-      '-g',
-      '-j',
-      macAppBundlePath,
-      '--args',
-      E2E_ARG_ENV_ENABLE_ARG,
-      ...envArgs,
+    return await Promise.race([
+      waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000),
+      childExited,
     ])
-    return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
   } finally {
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+    await stopSpawnedSmokeProcess(child)
     await delay(1_000)
   }
 }
