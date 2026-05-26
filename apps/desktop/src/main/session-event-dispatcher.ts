@@ -322,7 +322,11 @@ export function dispatchRuntimeSessionEvent(
   const eventType = getEventType(event)
   sessionEngine.applyStreamEvent(event)
   if (event.sessionId) {
-    getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)
+    try {
+      getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)
+    } catch (err) {
+      log('thread-index', `Metadata refresh scheduling failed session=${shortSessionId(event.sessionId)}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
   if (!win || win.isDestroyed()) return
   publishNotification(win, getRuntimeNotification(event))
