@@ -50,6 +50,7 @@ import type {
   CustomAgentConfig,
   CustomAgentSummary,
   CustomMcpConfig,
+  McpPreflightResult,
   CustomMcpTestResult,
   CustomSkillConfig,
   RuntimeAgentDescriptor,
@@ -171,6 +172,7 @@ export interface CoworkAPI {
     auth: (mcpName: string) => Promise<boolean>
     connect: (name: string) => Promise<void>
     disconnect: (name: string) => Promise<void>
+    preflight: (name: string) => Promise<McpPreflightResult>
   }
   dialog: {
     selectDirectory: () => Promise<string | null>

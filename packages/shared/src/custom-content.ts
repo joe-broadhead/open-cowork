@@ -31,6 +31,30 @@ export interface CustomMcpTestResult {
   error?: string | null
 }
 
+export type McpPreflightStatus =
+  | 'ok'
+  | 'missing_credentials'
+  | 'auth_rejected'
+  | 'forbidden'
+  | 'network_error'
+  | 'http_error'
+  | 'protocol_error'
+  | 'invalid_config'
+  | 'not_found'
+  | 'not_applicable'
+
+export interface McpPreflightResult {
+  ok: boolean
+  status: McpPreflightStatus
+  mcpName: string
+  message: string
+  host?: string
+  httpStatus?: number
+  responseBody?: string
+  methodCount?: number
+  helpText?: string
+}
+
 export interface CustomSkillConfig {
   scope: 'machine' | 'project'
   directory?: string | null

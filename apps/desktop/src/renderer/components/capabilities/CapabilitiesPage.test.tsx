@@ -151,8 +151,10 @@ function renderCapabilitiesPage(overrides: {
   customMcps?: CustomMcpConfig[]
   customSkills?: CustomSkillConfig[]
   integrationCredentials?: Record<string, string>
+  integrationEnabled?: Record<string, boolean>
   integrationCredentialsError?: Error
   settingsGetError?: Error
+  mcpPreflight?: ReturnType<typeof vi.fn>
   reportRendererError?: ReturnType<typeof vi.fn>
   customAgents?: CustomAgentSummary[]
   builtInAgents?: BuiltInAgentDetail[]
@@ -185,35 +187,57 @@ function renderCapabilitiesPage(overrides: {
   const listAgents = vi.fn(async () => overrides.customAgents ?? [])
   const builtinAgents = vi.fn(async () => overrides.builtInAgents ?? [])
   const listWorkflows = vi.fn(async () => overrides.workflows ?? { workflows: [], runs: [] })
+  let settingsSnapshot = {
+    selectedProviderId: null,
+    selectedModelId: null,
+    providerCredentials: {},
+    integrationCredentials: {
+      charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
+    },
+    integrationEnabled: overrides.integrationEnabled ?? {},
+    bashPermission: 'deny',
+    fileWritePermission: 'deny',
+    enableBash: false,
+    enableFileWrite: false,
+    runtimeToolingBridgeEnabled: true,
+    workflowLaunchAtLogin: false,
+    workflowRunInBackground: false,
+    workflowDesktopNotifications: true,
+    workflowQuietHoursStart: null,
+    workflowQuietHoursEnd: null,
+    effectiveProviderId: null,
+    effectiveModel: null,
+  }
   const get = vi.fn(async () => {
     if (overrides.settingsGetError) throw overrides.settingsGetError
-    return {
-      selectedProviderId: null,
-      selectedModelId: null,
-      providerCredentials: {},
-      integrationCredentials: {
-        charts: overrides.integrationCredentials ?? { apiKey: 'ck-stored' },
-      },
-      integrationEnabled: {},
-      bashPermission: 'deny',
-      fileWritePermission: 'deny',
-      enableBash: false,
-      enableFileWrite: false,
-      runtimeToolingBridgeEnabled: true,
-      workflowLaunchAtLogin: false,
-      workflowRunInBackground: false,
-      workflowDesktopNotifications: true,
-      workflowQuietHoursStart: null,
-      workflowQuietHoursEnd: null,
-      effectiveProviderId: null,
-      effectiveModel: null,
-    }
+    return settingsSnapshot
   })
   const getIntegrationCredentials = vi.fn(async () => {
     if (overrides.integrationCredentialsError) throw overrides.integrationCredentialsError
-    return overrides.integrationCredentials ?? { apiKey: 'ck-stored' }
+    return settingsSnapshot.integrationCredentials.charts ?? {}
   })
-  const set = vi.fn(async (updates) => ({ ...(await get()), ...updates }))
+  const set = vi.fn(async (updates) => {
+    settingsSnapshot = {
+      ...settingsSnapshot,
+      ...updates,
+      integrationCredentials: {
+        ...settingsSnapshot.integrationCredentials,
+        ...updates.integrationCredentials,
+      },
+      integrationEnabled: {
+        ...settingsSnapshot.integrationEnabled,
+        ...updates.integrationEnabled,
+      },
+    }
+    return settingsSnapshot
+  })
+  const mcpPreflight = overrides.mcpPreflight || vi.fn(async (name: string) => ({
+    ok: true,
+    status: 'ok',
+    mcpName: name,
+    message: `${name} connected and exposed 1 MCP method.`,
+    methodCount: 1,
+  }))
   const unsubscribeRuntimeReady = vi.fn()
   const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
   const reportRendererError = overrides.reportRendererError || vi.fn()
@@ -248,6 +272,9 @@ function renderCapabilitiesPage(overrides: {
       getIntegrationCredentials,
       set,
     },
+    mcp: {
+      preflight: mcpPreflight,
+    },
     diagnostics: {
       reportRendererError,
     },
@@ -276,6 +303,7 @@ function renderCapabilitiesPage(overrides: {
     getIntegrationCredentials,
     reportRendererError,
     settingsSet: set,
+    mcpPreflight,
     runtimeReady,
     unsubscribeRuntimeReady,
     unmount: view.unmount,
@@ -547,6 +575,150 @@ describe('CapabilitiesPage', () => {
         },
       })
     })
+  })
+
+  it('preflights API-token MCP credentials after saving', async () => {
+    const user = userEvent.setup()
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'auth_rejected',
+      mcpName: name,
+      message: 'charts rejected the saved token with HTTP 401. Check that the token is valid and not revoked.',
+      httpStatus: 401,
+      responseBody: 'Bad credentials',
+      helpText: 'Authorize the token for SSO and required repositories.',
+    }))
+    const api = renderCapabilitiesPage({
+      mcpPreflight,
+      integrationCredentials: {},
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-new')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-new' },
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(api.mcpPreflight).toHaveBeenCalledWith('charts')
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('charts rejected the saved token')
+    expect(screen.getByRole('alert')).toHaveTextContent('Authorize the token for SSO')
+    expect(screen.getByRole('alert')).toHaveTextContent('Response: Bad credentials')
+  })
+
+  it('skips automatic API-token preflight when the integration is explicitly disabled', async () => {
+    const user = userEvent.setup()
+    const disabledTool: CapabilityTool = {
+      ...chartTool,
+      enabled: false,
+    }
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'invalid_config',
+      mcpName: name,
+      message: `${name} is not ready to connect.`,
+    }))
+    const api = renderCapabilitiesPage({
+      tools: [disabledTool, shellTool],
+      mcpPreflight,
+      integrationCredentials: {},
+      integrationEnabled: { charts: false },
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-disabled')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-disabled' },
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(api.getIntegrationCredentials).toHaveBeenCalledTimes(2)
+    })
+    expect(mcpPreflight).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('preflights after enabling an API-token MCP before saving credentials', async () => {
+    const user = userEvent.setup()
+    const disabledTool: CapabilityTool = {
+      ...chartTool,
+      enabled: false,
+    }
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: true,
+      status: 'ok',
+      mcpName: name,
+      message: `${name} connected and exposed 1 MCP method.`,
+      methodCount: 1,
+    }))
+    const api = renderCapabilitiesPage({
+      tools: [disabledTool, shellTool],
+      mcpPreflight,
+      integrationCredentials: {},
+      integrationEnabled: { charts: false },
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    await user.click(screen.getByRole('switch', { name: 'Enable' }))
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationEnabled: { charts: true },
+      })
+    })
+
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-enabled')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-enabled' },
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(api.mcpPreflight).toHaveBeenCalledWith('charts')
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('charts connected')
+  })
+
+  it('shows non-applicable API-token preflight results as non-error status', async () => {
+    const user = userEvent.setup()
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'not_applicable',
+      mcpName: name,
+      message: `${name} does not use remote API-token authentication.`,
+    }))
+    renderCapabilitiesPage({
+      mcpPreflight,
+      integrationCredentials: {},
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-local')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mcpPreflight).toHaveBeenCalledWith('charts')
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('charts does not use remote API-token authentication.')
   })
 
   it('renders radio credential options and saves the selected value', async () => {

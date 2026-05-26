@@ -604,12 +604,28 @@ Bundled MCPs can declare `credentials[]` metadata for the Tools & Skills
 detail panel. Each field persists to
 `integrationCredentials[mcpName][key]`; `envSettings` and
 `headerSettings` can then map those stored values into the spawned MCP.
+Remote MCPs with `authMode: "api_token"` also get a per-MCP preflight
+check after credentials are saved. The preflight distinguishes missing
+credentials, rejected tokens (`401`), forbidden or policy responses
+(`403`), network/proxy failures, and MCP protocol/tool-list failures.
+Credential changes reload the OpenCode runtime when setup is complete,
+so users do not need to restart the desktop app manually.
 
 Text fields are the default. For discrete modes, set `type` to
 `"select"` or `"radio"` and provide `options[]`. Use `when` to hide a
 dependent field unless another credential has the expected value. Hidden
 fields are only hidden in the UI; their stored values are preserved and
 are not cleared when the selector changes.
+
+Downstream builds can add `credentialHelp` to a bundled MCP to surface
+provider-specific guidance with preflight failures, such as required PAT
+scopes, SSO authorization, repository restrictions, or organization
+policy settings.
+
+Remote bundled MCPs that intentionally live on an internal network can set
+`allowPrivateNetwork: true`. This preserves the normal DNS-aware SSRF guard
+for public builds by default; cloud metadata endpoints remain blocked even
+when private network access is enabled.
 
 ```json
 {
@@ -619,6 +635,7 @@ are not cleared when the selector changes.
       "type": "local",
       "description": "Example MCP",
       "authMode": "api_token",
+      "credentialHelp": "If this token is rejected, confirm it has the required scopes and any organization SSO authorization.",
       "envSettings": [
         { "env": "MY_MCP_AUTH_METHOD", "key": "authMethod" },
         { "env": "MY_MCP_API_KEY", "key": "apiKey" },

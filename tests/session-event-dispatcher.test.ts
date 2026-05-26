@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -17,6 +18,8 @@ import {
   updateSessionRecord,
   upsertSessionRecord,
 } from '../apps/desktop/src/main/session-registry.ts'
+import { clearThreadIndexServiceCache } from '../apps/desktop/src/main/thread-index/thread-index-service.ts'
+import { clearThreadIndexStoreCache } from '../apps/desktop/src/main/thread-index/thread-index-store.ts'
 
 function eventOf(type: string, sessionId?: string | null) {
   return {
@@ -209,9 +212,55 @@ test('history refresh publishes SDK-owned session metadata after registry sync',
     )
   } finally {
     setSessionHistoryRefreshHandler(null)
+    clearThreadIndexServiceCache()
+    clearThreadIndexStoreCache()
     clearSessionRegistryCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+  }
+})
+
+test('dispatcher keeps renderer events flowing when thread index scheduling is unavailable', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = mkdtempSync(join(tmpdir(), 'open-cowork-dispatcher-locked-index-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearThreadIndexServiceCache()
+  clearThreadIndexStoreCache()
+  clearConfigCaches()
+
+  const dbPath = join(userDataDir, 'thread-index.sqlite')
+  mkdirSync(userDataDir, { recursive: true })
+  const lockDb = new DatabaseSync(dbPath)
+  lockDb.exec('create table if not exists lock_probe (id integer); begin exclusive;')
+
+  try {
+    const sent: Array<{ channel: string; payload: unknown }> = []
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        id: 43,
+        isDestroyed: () => false,
+        send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
+      },
+    }
+
+    assert.doesNotThrow(() => {
+      dispatchRuntimeSessionEvent(win as any, eventOf('done', 'session-locked-index'))
+    })
+    assert.deepEqual(sent.find((entry) => entry.channel === 'runtime:notification')?.payload, {
+      type: 'done',
+      sessionId: 'session-locked-index',
+      synthetic: false,
+    })
+  } finally {
+    lockDb.exec('rollback;')
+    lockDb.close()
+    clearThreadIndexServiceCache()
+    clearThreadIndexStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
   }
 })

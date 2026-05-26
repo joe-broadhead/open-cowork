@@ -179,6 +179,7 @@ export function CapabilityToolDetailView({
               <ToolCredentialsCard
                 integrationId={selectedTool.integrationId}
                 credentials={selectedTool.credentials}
+                authMode={selectedTool.authMode}
               />
             ) : null}
           </div>

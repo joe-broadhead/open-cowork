@@ -145,15 +145,20 @@ function credentialValueForConditions(
 export function ToolCredentialsCard({
   integrationId,
   credentials,
+  authMode,
 }: {
   integrationId: string
   credentials: NonNullable<CapabilityTool['credentials']>
+  authMode?: CapabilityTool['authMode']
 }) {
   const [stored, setStored] = useState<Record<string, string>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [preflightMessage, setPreflightMessage] = useState<string | null>(null)
+  const [preflightTone, setPreflightTone] = useState<'success' | 'warning' | 'error' | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
 
   useEffect(() => {
@@ -163,6 +168,8 @@ export function ToolCredentialsCard({
         if (cancelled) return
         setStored(current)
         setDrafts({})
+        setPreflightMessage(null)
+        setPreflightTone(null)
       })
       .catch((err) => {
         if (cancelled) return
@@ -174,10 +181,38 @@ export function ToolCredentialsCard({
 
   const dirty = Object.keys(drafts).some((key) => drafts[key] !== undefined && drafts[key] !== '')
 
+  async function runPreflight() {
+    if (authMode !== 'api_token') return
+    setTesting(true)
+    setPreflightMessage(null)
+    setPreflightTone(null)
+    try {
+      const result = await window.coworkApi.mcp.preflight(integrationId)
+      const parts = [
+        result.message,
+        result.helpText,
+        result.responseBody ? `Response: ${result.responseBody}` : null,
+      ].filter(Boolean)
+      setPreflightMessage(parts.join(' '))
+      setPreflightTone(result.ok
+        ? 'success'
+        : result.status === 'missing_credentials' || result.status === 'not_applicable'
+          ? 'warning'
+          : 'error')
+    } catch (error) {
+      setPreflightMessage(error instanceof Error ? error.message : String(error))
+      setPreflightTone('error')
+    } finally {
+      setTesting(false)
+    }
+  }
+
   async function handleSave() {
-    if (!dirty || saving) return
+    if (!dirty || saving || testing) return
     setSaving(true)
     setErrorMessage(null)
+    setPreflightMessage(null)
+    setPreflightTone(null)
     try {
       const patch: Record<string, string> = {}
       for (const credential of credentials) {
@@ -185,7 +220,7 @@ export function ToolCredentialsCard({
         if (draft === undefined) continue
         patch[credential.key] = draft
       }
-      await window.coworkApi.settings.set({
+      const savedSettings = await window.coworkApi.settings.set({
         integrationCredentials: {
           [integrationId]: patch,
         },
@@ -194,6 +229,9 @@ export function ToolCredentialsCard({
       setStored(refreshed)
       setDrafts({})
       setSavedAt(Date.now())
+      if (savedSettings.integrationEnabled?.[integrationId] !== false) {
+        await runPreflight()
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error))
     } finally {
@@ -324,11 +362,21 @@ export function ToolCredentialsCard({
           )
         })}
       </div>
-      <div className="flex justify-end mt-4">
+      <div className="flex justify-end gap-2 mt-4">
+        {authMode === 'api_token' ? (
+          <button
+            type="button"
+            onClick={() => { void runPreflight() }}
+            disabled={dirty || saving || testing}
+            className="px-3 py-2 rounded-lg text-[12px] font-medium border border-border-subtle text-text-secondary hover:bg-surface-hover cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {testing ? t('capabilities.credentialsTesting', 'Testing…') : t('capabilities.credentialsTest', 'Test')}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleSave}
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || testing}
           className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: 'var(--color-accent)', color: 'var(--color-accent-contrast, #fff)' }}
         >
@@ -338,6 +386,21 @@ export function ToolCredentialsCard({
       {errorMessage ? (
         <div className="mt-3 text-[11px]" style={{ color: 'var(--color-red)' }}>
           {errorMessage}
+        </div>
+      ) : null}
+      {preflightMessage ? (
+        <div
+          className="mt-3 text-[11px] leading-relaxed"
+          style={{
+            color: preflightTone === 'success'
+              ? 'var(--color-green)'
+              : preflightTone === 'warning'
+                ? 'var(--color-warning)'
+                : 'var(--color-red)',
+          }}
+          role={preflightTone === 'error' ? 'alert' : 'status'}
+        >
+          {preflightMessage}
         </div>
       ) : null}
     </div>

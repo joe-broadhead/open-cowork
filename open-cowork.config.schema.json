@@ -671,6 +671,8 @@
           "type": "array",
           "items": { "$ref": "#/$defs/credentialField" }
         },
+        "credentialHelp": { "type": "string" },
+        "allowPrivateNetwork": { "type": "boolean" },
         "googleAuth": { "type": "boolean" }
       },
       "required": ["name", "type", "description", "authMode"]

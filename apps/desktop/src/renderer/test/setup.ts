@@ -138,6 +138,18 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       list: vi.fn(async () => []),
       run: vi.fn(async () => true),
     },
+    mcp: {
+      auth: vi.fn(async () => true),
+      connect: vi.fn(async () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      preflight: vi.fn(async (name: string) => ({
+        ok: true,
+        status: 'ok',
+        mcpName: name,
+        message: `${name} connected.`,
+        methodCount: 1,
+      })),
+    },
     custom: {
       addSkill: vi.fn(async () => true),
       addMcp: vi.fn(async () => true),

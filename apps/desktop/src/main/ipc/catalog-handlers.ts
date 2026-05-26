@@ -12,6 +12,7 @@ import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
 import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfiguredToolsFromConfig } from '../config-loader.ts'
 import { log } from '../logger.ts'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
+import { preflightConfiguredApiTokenMcp } from '../mcp-preflight.ts'
 
 function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOptions) {
   return {
@@ -259,6 +260,14 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
         return false
       }
     })
+  })
+
+  registerIpcInvoke(context, 'mcp:preflight', stringArg('MCP name'), async (_event, name) => {
+    const result = await preflightConfiguredApiTokenMcp(name, {
+      listToolsFromMcpEntry: context.listToolsFromMcpEntry,
+    })
+    log('mcp', `Preflight ${name}: ${result.status}${result.httpStatus ? ` http=${result.httpStatus}` : ''} ${result.message}`)
+    return result
   })
 
   context.ipcMain.handle('app:builtin-agents', async () => {
