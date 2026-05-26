@@ -110,3 +110,36 @@ test('custom agent store reconciles interrupted enabled-disabled file pairs', ()
   assert.equal(agent?.description, 'Disabled copy.')
   assert.equal(agent?.instructions, 'Disabled instructions.')
 }))
+
+test('custom agent store prefers disabled copies when interrupted file pairs tie', () => withTempUserData(() => {
+  assert.equal(saveCustomAgent({
+    scope: 'machine',
+    directory: null,
+    name: 'weekly-analyst',
+    description: 'Enabled copy.',
+    instructions: 'Enabled instructions.',
+    skillNames: [],
+    toolIds: [],
+    enabled: true,
+    color: 'accent',
+  }, {}), true)
+
+  const root = getMachineAgentsDir()
+  const enabledPath = join(root, 'weekly-analyst.md')
+  const disabledPath = join(root, 'weekly-analyst.disabled.md')
+  writeFileSync(disabledPath, [
+    '---',
+    'description: "Disabled copy."',
+    '---',
+    '',
+    'Disabled instructions.',
+    '',
+  ].join('\n'))
+  const sameTimestamp = new Date('2026-05-26T10:00:00.000Z')
+  utimesSync(enabledPath, sameTimestamp, sameTimestamp)
+  utimesSync(disabledPath, sameTimestamp, sameTimestamp)
+
+  const agent = listCustomAgents().find((entry) => entry.name === 'weekly-analyst')
+  assert.equal(agent?.enabled, false)
+  assert.equal(agent?.description, 'Disabled copy.')
+}))

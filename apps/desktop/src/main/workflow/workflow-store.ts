@@ -116,7 +116,9 @@ function decodeWebhookSecretFromStorage(secret: unknown) {
   if (typeof secret !== 'string' || !secret.trim()) return null
   if (!secret.startsWith(ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
   const storage = getWorkflowSecretStorage()
-  if (storage.mode !== 'encrypted' || !storage.decryptString) return null
+  if (storage.mode !== 'encrypted' || !storage.decryptString) {
+    return storage.mode === 'plaintext' ? secret : null
+  }
   try {
     return storage.decryptString(Buffer.from(secret.slice(ENCRYPTED_WEBHOOK_SECRET_PREFIX.length), 'base64'))
   } catch {

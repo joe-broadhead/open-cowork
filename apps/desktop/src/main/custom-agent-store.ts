@@ -358,7 +358,7 @@ function currentAgentMarkdownCandidates(root: string, entries: Dirent[]) {
     if (
       !existing
       || candidate.mtimeMs > existing.mtimeMs
-      || (candidate.mtimeMs === existing.mtimeMs && candidate.enabled && !existing.enabled)
+      || (candidate.mtimeMs === existing.mtimeMs && !candidate.enabled && existing.enabled)
     ) {
       byName.set(candidate.name, candidate)
     }

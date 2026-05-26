@@ -113,6 +113,17 @@ test('workflow store encrypts webhook secrets at the SQLite boundary when secure
   }
 }))
 
+test('workflow store preserves plaintext webhook secrets that look like encrypted sentinels', () => withWorkflowStore('plaintext-secret-prefix', () => {
+  setWorkflowSecretStorageForTests({ mode: 'plaintext' })
+
+  const rawSecret = 'enc:v1:user-supplied-secret'
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: rawSecret },
+  ]))
+
+  assert.equal(parsed[0]?.webhookSecret, rawSecret)
+}))
+
 test('workflow store tracks run lifecycle and next scheduled run', () => withWorkflowStore('runs', () => {
   const workflow = createWorkflow(draft)
   const run = createWorkflowRun(workflow.id, 'manual', { source: 'test' })
