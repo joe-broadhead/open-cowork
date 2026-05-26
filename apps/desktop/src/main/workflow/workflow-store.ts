@@ -139,8 +139,9 @@ function tryDecryptWebhookSecretPayload(storage: WorkflowSecretStorageAdapter, p
   }
 }
 
-function encodeWebhookSecretForStorage(secret: string | null | undefined): string | EncryptedWebhookSecretRecord | null {
-  if (!secret) return null
+function encodeWebhookSecretForStorage(secret: unknown): string | EncryptedWebhookSecretRecord | null {
+  if (isEncryptedWebhookSecretRecord(secret)) return secret
+  if (typeof secret !== 'string' || !secret) return null
   const storage = getWorkflowSecretStorage()
   if (storage.mode === 'encrypted') {
     return encryptWebhookSecretValue(storage, secret)
@@ -152,7 +153,7 @@ function encodeWebhookSecretForStorage(secret: string | null | undefined): strin
 function decodeWebhookSecretFromStorage(secret: unknown) {
   const storage = getWorkflowSecretStorage()
   if (isEncryptedWebhookSecretRecord(secret)) {
-    return tryDecryptWebhookSecretPayload(storage, secret.value)
+    return tryDecryptWebhookSecretPayload(storage, secret.value) ?? secret
   }
 
   if (typeof secret !== 'string' || !secret.trim()) return null
@@ -342,7 +343,12 @@ function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
 
 function webhookUrlForWorkflow(workflow: WorkflowSummary, webhookBaseUrl?: string | null) {
   if (!webhookBaseUrl) return null
-  const webhook = workflow.triggers.find((trigger) => trigger.enabled && trigger.type === 'webhook' && trigger.webhookSecret)
+  const webhook = workflow.triggers.find((trigger) => (
+    trigger.enabled
+    && trigger.type === 'webhook'
+    && typeof trigger.webhookSecret === 'string'
+    && trigger.webhookSecret.length > 0
+  ))
   return webhook ? `${webhookBaseUrl}/workflows/${encodeURIComponent(workflow.id)}` : null
 }
 

@@ -20,6 +20,7 @@ import {
   regenerateWorkflowWebhookSecret,
   recoverInterruptedWorkflowRuns,
   parseWorkflowTriggersFromStorage,
+  serializeWorkflowTriggersForStorage,
   setWorkflowSecretStorageForTests,
   updateWorkflowStatus,
 } from '../apps/desktop/src/main/workflow/workflow-store.ts'
@@ -147,6 +148,28 @@ test('workflow store decrypts legacy prefixed webhook secrets in plaintext mode 
   ]))
 
   assert.equal(parsed[0]?.webhookSecret, rawSecret)
+}))
+
+test('workflow store preserves encrypted webhook secret records when decryption fails', () => withWorkflowStore('secret-record-preserve', () => {
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: () => {
+      throw new Error('keychain unavailable')
+    },
+  })
+
+  const storedSecret = {
+    __openCoworkEncryptedWebhookSecret: 2,
+    value: Buffer.from('sealed:webhook-secret', 'utf8').toString('base64'),
+  }
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: storedSecret },
+  ]))
+
+  assert.deepEqual(parsed[0]?.webhookSecret, storedSecret)
+  const serialized = JSON.parse(serializeWorkflowTriggersForStorage(parsed)) as Array<{ webhookSecret?: unknown }>
+  assert.deepEqual(serialized[0]?.webhookSecret, storedSecret)
 }))
 
 test('workflow store treats valid non-array trigger JSON as empty', () => withWorkflowStore('non-array-triggers', () => {
