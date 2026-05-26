@@ -13,6 +13,7 @@ type WebContentsProbe = {
 type E2EProbeResult = {
   reloading?: boolean
   waiting?: boolean
+  waitingReason?: string
   surface?: Record<string, string>
   settings?: Record<string, unknown>
   installCapability?: Record<string, unknown>
@@ -145,7 +146,7 @@ export async function writeE2EWindowReadyProbe(
     (async () => {
       const api = window.coworkApi || {};
       if (typeof api.settings?.get !== 'function' || typeof api.updates?.installCapability !== 'function') {
-        return { waiting: true };
+        return { waiting: true, waitingReason: 'preload-api-unavailable' };
       }
       const delay = (ms) => new Promise((done) => setTimeout(done, ms));
       const withTimeout = (promise, ms, label) => Promise.race([
@@ -171,7 +172,7 @@ export async function writeE2EWindowReadyProbe(
       };
       if (!(await setupComplete())) {
         if (!${JSON.stringify(allowSettingsMutation)}) {
-          return { waiting: true };
+          return { waiting: true, waitingReason: 'setup-incomplete-settings-mutation-disabled' };
         }
         await api.settings.set({
           selectedProviderId: 'openrouter',
@@ -234,7 +235,14 @@ export async function writeE2EWindowReadyProbe(
       };
     })()
     `, false)
-    if (result?.reloading || result?.waiting) return true
+    if (result?.reloading) return true
+    if (result?.waiting) {
+      writeE2EProbeFile(target, {
+        ok: false,
+        error: `E2E ready probe waiting: ${result.waitingReason || 'unknown'}`,
+      })
+      return true
+    }
     writeE2EProbeFile(target, { ok: true, result })
     return true
   } catch (error) {

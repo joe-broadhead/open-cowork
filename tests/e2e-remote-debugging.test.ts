@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -13,6 +13,7 @@ import {
   e2eReadyFileRelativePathIsContained,
   e2eWindowReadyProbeEnabled,
   resolveE2ERemoteDebuggingPort,
+  writeE2EWindowReadyProbe,
 } from '../apps/desktop/src/main/e2e-remote-debugging.ts'
 
 test('e2e remote debugging port is ignored unless smoke mode is enabled', () => {
@@ -125,6 +126,32 @@ test('e2e settings mutation requires explicit opt-in for packaged probes', () =>
     OPEN_COWORK_E2E: '1',
     [E2E_ALLOW_SETTINGS_MUTATION_KEY]: '1',
   }, { isPackaged: true }), true)
+})
+
+test('e2e ready probe writes deterministic failure when no retry will happen', async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-e2e-probe-'))
+  const readyFile = join(tempRoot, 'probe.json')
+  try {
+    const didProbe = await writeE2EWindowReadyProbe({
+      async executeJavaScript() {
+        return {
+          waiting: true,
+          waitingReason: 'setup-incomplete-settings-mutation-disabled',
+        }
+      },
+    }, {
+      OPEN_COWORK_E2E: '1',
+      TMPDIR: tempRoot,
+      OPEN_COWORK_E2E_READY_FILE: readyFile,
+    })
+
+    assert.equal(didProbe, true)
+    const payload = JSON.parse(readFileSync(readyFile, 'utf8')) as { ok: boolean; error?: string }
+    assert.equal(payload.ok, false)
+    assert.equal(payload.error, 'E2E ready probe waiting: setup-incomplete-settings-mutation-disabled')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('e2e arg environment is ignored without the trusted smoke marker', () => {
