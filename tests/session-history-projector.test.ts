@@ -456,6 +456,74 @@ test('history projector binds parallel task tools to same-turn child sessions by
   assert.equal(items.find((item) => item.content === 'child-parallel-b result')?.taskRunId, 'child:child-parallel-b')
 })
 
+test('history projector reserves explicit task-tool children when binding implicit task tools', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-mixed-explicit',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-implicit-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-implicit-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Implicit child work' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-mixed-explicit-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-explicit-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'research', description: 'Explicit child work' },
+            output: 'started',
+            metadata: { sessionId: 'child-mixed-explicit' },
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-mixed-implicit',
+        title: 'Implicit child work (@analyst subagent)',
+        parentSessionId: 'root-task-tool-mixed-explicit',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-mixed-explicit',
+        title: 'Explicit child work (@research subagent)',
+        parentSessionId: 'root-task-tool-mixed-explicit',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-mixed-explicit': { type: 'idle' },
+      'child-mixed-implicit': { type: 'idle' },
+      'child-mixed-explicit': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.sourceSessionId),
+    ['child-mixed-implicit', 'child-mixed-explicit'],
+  )
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.title),
+    ['Implicit child work', 'Explicit child work'],
+  )
+})
+
 test('history projector does not bind a terminal task tool to a later unrelated child session', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-unrelated-child',
@@ -1006,6 +1074,99 @@ test('history projector binds nested parallel task tools to grandchildren by ord
   )
   assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-a result')?.taskRunId, 'child:grandchild-nested-parallel-a')
   assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-b result')?.taskRunId, 'child:grandchild-nested-parallel-b')
+})
+
+test('history projector reserves explicit nested task-tool grandchildren when binding implicit nested task tools', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-nested-mixed-task-tool',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-nested-mixed-msg', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'root-nested-mixed-subtask', type: 'subtask', agent: 'research', description: 'Coordinate nested mixed work' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-nested-mixed-parent',
+        title: 'Coordinate nested mixed work (@research subagent)',
+        parentSessionId: 'root-nested-mixed-task-tool',
+        time: { created: 2, updated: 8 },
+      },
+      {
+        id: 'grandchild-nested-mixed-implicit',
+        title: 'Nested implicit work (@analyst subagent)',
+        parentSessionId: 'child-nested-mixed-parent',
+        time: { created: 4, updated: 7 },
+      },
+      {
+        id: 'grandchild-nested-mixed-explicit',
+        title: 'Nested explicit work (@writer subagent)',
+        parentSessionId: 'child-nested-mixed-parent',
+        time: { created: 5, updated: 8 },
+      },
+    ],
+    statuses: {
+      'root-nested-mixed-task-tool': { type: 'idle' },
+      'child-nested-mixed-parent': { type: 'idle' },
+      'grandchild-nested-mixed-implicit': { type: 'idle' },
+      'grandchild-nested-mixed-explicit': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => {
+      if (childId === 'child-nested-mixed-parent') {
+        return {
+          messages: [{
+            info: { id: 'child-nested-mixed-parent-msg', role: 'assistant', time: { created: 3 } },
+            parts: [
+              {
+                id: 'child-nested-mixed-implicit-task',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-mixed-implicit-call',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'analyst', description: 'Nested implicit work' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              {
+                id: 'child-nested-mixed-explicit-task',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-mixed-explicit-call',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'writer', description: 'Nested explicit work' },
+                  output: 'started',
+                  metadata: { sessionId: 'grandchild-nested-mixed-explicit' },
+                },
+              },
+              { id: 'child-nested-mixed-finish', type: 'step-finish', reason: 'stop' },
+            ],
+          }],
+          todos: [],
+        }
+      }
+
+      return { messages: [], todos: [] }
+    },
+  })
+
+  const nestedTaskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter((taskRun) => taskRun?.parentSessionId === 'child-nested-mixed-parent')
+
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['grandchild-nested-mixed-implicit', 'grandchild-nested-mixed-explicit'],
+  )
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.title),
+    ['Nested implicit work', 'Nested explicit work'],
+  )
 })
 
 test('history projector preserves nested child parentage when replaying reopened threads', async () => {

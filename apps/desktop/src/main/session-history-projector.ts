@@ -286,8 +286,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const takeOnlyChildForTaskTool = (
     parentSessionId: string,
     options: { after?: number; before?: number } = {},
+    excludedChildIds = new Set<string>(),
   ) => {
-    const candidates = candidateChildrenForTaskTool(parentSessionId, options)
+    const candidates = candidateChildrenForTaskTool(parentSessionId, options, excludedChildIds)
     const candidateIndex = findOnlyIndexedCandidate(candidates)
     if (candidateIndex >= 0) {
       const child = candidates[candidateIndex]
@@ -296,6 +297,15 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       return child
     }
     return null
+  }
+
+  const explicitChildIdsForTaskTools = (parts: NormalizedMessagePart[]) => {
+    return new Set(
+      parts
+        .filter((part) => part.type === 'tool' && part.tool === 'task')
+        .map(taskToolChildSessionId)
+        .filter((id): id is string => Boolean(id)),
+    )
   }
 
   const createOrderedTaskToolChildBinder = (
@@ -310,23 +320,27 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     ))
     const hasParallelImplicitTasks = implicitTaskParts.length > 1
     if (!hasParallelImplicitTasks) {
-      return { hasParallelImplicitTasks, take: () => null as ChildSessionRecord | null }
+      return {
+        hasParallelImplicitTasks,
+        explicitChildIds: explicitChildIdsForTaskTools(remainingParts),
+        take: () => null as ChildSessionRecord | null,
+      }
     }
 
-    const explicitChildIds = new Set(
-      remainingParts
-        .filter((part) => part.type === 'tool' && part.tool === 'task')
-        .map(taskToolChildSessionId)
-        .filter((id): id is string => Boolean(id)),
-    )
+    const explicitChildIds = explicitChildIdsForTaskTools(remainingParts)
     const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
     if (candidates.length !== implicitTaskParts.length) {
-      return { hasParallelImplicitTasks, take: () => null as ChildSessionRecord | null }
+      return {
+        hasParallelImplicitTasks,
+        explicitChildIds,
+        take: () => null as ChildSessionRecord | null,
+      }
     }
 
     let candidateIndex = 0
     return {
       hasParallelImplicitTasks,
+      explicitChildIds,
       take: () => {
         const child = candidates[candidateIndex]
         candidateIndex += 1
@@ -500,7 +514,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
               : takeOnlyChildForTaskTool(sessionId, {
                   after: childBindingAfter ?? undefined,
                   before: nextRootDelegationBoundary(msgIndex),
-                })))
+                }, taskToolChildBinder?.explicitChildIds)))
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.callId || part.id || generateId()}`
@@ -712,7 +726,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           const nestedChild = explicit.child || (explicit.hasExplicitChild
             ? null
             : taskToolChildBinder?.take()
-              || (taskToolChildBinder?.hasParallelImplicitTasks ? null : takeOnlyChildForTaskTool(child.id)))
+              || (taskToolChildBinder?.hasParallelImplicitTasks
+                ? null
+                : takeOnlyChildForTaskTool(child.id, {}, taskToolChildBinder?.explicitChildIds)))
           const nestedTaskId = nestedChild?.id
             ? `child:${nestedChild.id}`
             : `pending:${part.callId || part.id || generateId()}`
