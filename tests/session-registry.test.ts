@@ -122,6 +122,36 @@ test('session composer preferences persist separately from last-used model', () 
   }
 })
 
+test('scheduled session registry writes persist the latest coalesced state', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('coalesced-writes')
+  const sessionId = `session-coalesced-${Date.now()}`
+
+  try {
+    resetRegistryTestState(userDataDir)
+
+    upsertSessionRecord(toSessionRecord({
+      id: sessionId,
+      title: 'Initial',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+    }))
+    updateSessionRecord(sessionId, { title: 'Intermediate', updatedAt: '2026-05-18T10:00:00.000Z' })
+    updateSessionRecord(sessionId, { title: 'Latest', updatedAt: '2026-05-18T10:00:01.000Z' })
+    flushSessionRegistryWrites()
+
+    const records = JSON.parse(readFileSync(join(userDataDir, 'sessions.json'), 'utf8')) as Array<{ id: string; title?: string }>
+    assert.equal(records.find((record) => record.id === sessionId)?.title, 'Latest')
+  } finally {
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
 test('legacy session registry migration keeps only Cowork-created sessions from logs', async () => {
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
   const userDataDir = uniqueUserDataDir('legacy-migration')
