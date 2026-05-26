@@ -262,17 +262,27 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return { child, hasExplicitChild: true }
   }
 
-  const takeOnlyChildForTaskTool = (
+  const candidateChildrenForTaskTool = (
     parentSessionId: string,
     options: { after?: number; before?: number } = {},
+    excludedChildIds = new Set<string>(),
   ) => {
-    const candidates = children.filter((child) => {
-      if (matchedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) return false
+    return children.filter((child) => {
+      if (matchedChildIds.has(child.id) || excludedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) {
+        return false
+      }
       const created = toHistorySortTime(child.time?.created || 0)
       if (options.after !== undefined && created < options.after) return false
       if (options.before !== undefined && created >= options.before) return false
       return true
     })
+  }
+
+  const takeOnlyChildForTaskTool = (
+    parentSessionId: string,
+    options: { after?: number; before?: number } = {},
+  ) => {
+    const candidates = candidateChildrenForTaskTool(parentSessionId, options)
     const candidateIndex = findOnlyIndexedCandidate(candidates)
     if (candidateIndex >= 0) {
       const child = candidates[candidateIndex]
@@ -281,6 +291,45 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       return child
     }
     return null
+  }
+
+  const createOrderedTaskToolChildBinder = (
+    parentSessionId: string,
+    remainingParts: NormalizedMessagePart[],
+    options: { after?: number; before?: number } = {},
+  ) => {
+    const implicitTaskParts = remainingParts.filter((part) => (
+      part.type === 'tool'
+      && part.tool === 'task'
+      && !taskToolChildSessionId(part)
+    ))
+    const hasParallelImplicitTasks = implicitTaskParts.length > 1
+    if (!hasParallelImplicitTasks) {
+      return { hasParallelImplicitTasks, take: () => null as ChildSessionRecord | null }
+    }
+
+    const explicitChildIds = new Set(
+      remainingParts
+        .filter((part) => part.type === 'tool' && part.tool === 'task')
+        .map(taskToolChildSessionId)
+        .filter((id): id is string => Boolean(id)),
+    )
+    const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
+    if (candidates.length !== implicitTaskParts.length) {
+      return { hasParallelImplicitTasks, take: () => null as ChildSessionRecord | null }
+    }
+
+    let candidateIndex = 0
+    return {
+      hasParallelImplicitTasks,
+      take: () => {
+        const child = candidates[candidateIndex]
+        candidateIndex += 1
+        if (!child || matchedChildIds.has(child.id)) return null
+        matchedChildIds.add(child.id)
+        return child
+      },
+    }
   }
 
   const enqueueUnmatchedChildren = (parentSessionId?: string) => {
@@ -353,7 +402,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
     let textIndex = 0
     let reasoningIndex = 0
-    for (const part of parts) {
+    let taskToolChildBinder: ReturnType<typeof createOrderedTaskToolChildBinder> | null = null
+    for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
+      const part = parts[partIndex]
+      if (!part) continue
       if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
         const partId = part.id || `${msgId}:part:${textIndex++}`
         if (fullText && !isInternalCoworkMessage(fullText)) {
@@ -428,12 +480,21 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (part.type === 'tool' && part.tool === 'task') {
         const fallbackStatus = fallbackTaskToolStatus(part)
         const explicit = takeExplicitChildForTaskTool(sessionId, part)
+        if (!explicit.hasExplicitChild && !taskToolChildBinder) {
+          taskToolChildBinder = createOrderedTaskToolChildBinder(sessionId, parts.slice(partIndex), {
+            after: tsMs,
+            before: nextRootDelegationBoundary(msgIndex),
+          })
+        }
         const child = explicit.child || (explicit.hasExplicitChild
           ? null
-          : takeOnlyChildForTaskTool(sessionId, {
-              after: tsMs,
-              before: nextRootDelegationBoundary(msgIndex),
-            }))
+          : taskToolChildBinder?.take()
+            || (taskToolChildBinder?.hasParallelImplicitTasks
+              ? null
+              : takeOnlyChildForTaskTool(sessionId, {
+                  after: tsMs,
+                  before: nextRootDelegationBoundary(msgIndex),
+                })))
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.callId || part.id || generateId()}`
@@ -577,7 +638,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
       let textIndex = 0
       let reasoningIndex = 0
-      for (const part of parts) {
+      let taskToolChildBinder: ReturnType<typeof createOrderedTaskToolChildBinder> | null = null
+      for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
+        const part = parts[partIndex]
+        if (!part) continue
         if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
           const messageId = info.id || generateId()
           const partId = part.id || `${messageId}:part:${textIndex++}`
@@ -636,9 +700,13 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         if (part.type === 'tool' && part.tool === 'task') {
           const fallbackStatus = fallbackTaskToolStatus(part)
           const explicit = takeExplicitChildForTaskTool(child.id, part)
+          if (!explicit.hasExplicitChild && !taskToolChildBinder) {
+            taskToolChildBinder = createOrderedTaskToolChildBinder(child.id, parts.slice(partIndex))
+          }
           const nestedChild = explicit.child || (explicit.hasExplicitChild
             ? null
-            : takeOnlyChildForTaskTool(child.id))
+            : taskToolChildBinder?.take()
+              || (taskToolChildBinder?.hasParallelImplicitTasks ? null : takeOnlyChildForTaskTool(child.id)))
           const nestedTaskId = nestedChild?.id
             ? `child:${nestedChild.id}`
             : `pending:${part.callId || part.id || generateId()}`

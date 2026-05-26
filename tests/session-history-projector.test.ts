@@ -384,6 +384,78 @@ test('history projector binds task tool metadata session ids exactly once', asyn
   )
 })
 
+test('history projector binds parallel task tools to same-turn child sessions by order', async () => {
+  const childIds = ['child-parallel-a', 'child-parallel-b']
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-parallel',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-parallel-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-parallel-task-a',
+          type: 'tool',
+          tool: 'task',
+          callID: 'parallel-task-call-a',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze churn' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-parallel-task-b',
+          type: 'tool',
+          tool: 'task',
+          callID: 'parallel-task-call-b',
+          state: {
+            status: 'completed',
+            input: { agent: 'research', description: 'Research market' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: childIds.map((childId, index) => ({
+      id: childId,
+      title: `Parallel child ${index + 1}`,
+      parentSessionId: 'root-task-tool-parallel',
+      time: { created: 11 + index, updated: 20 + index },
+    })),
+    statuses: {
+      'root-task-tool-parallel': { type: 'idle' },
+      'child-parallel-a': { type: 'idle' },
+      'child-parallel-b': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: 30 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.sourceSessionId),
+    childIds,
+  )
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.title),
+    ['Analyze churn', 'Research market'],
+  )
+  assert.equal(items.find((item) => item.content === 'child-parallel-a result')?.taskRunId, 'child:child-parallel-a')
+  assert.equal(items.find((item) => item.content === 'child-parallel-b result')?.taskRunId, 'child:child-parallel-b')
+})
+
 test('history projector does not bind a terminal task tool to a later unrelated child session', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-unrelated-child',
@@ -788,6 +860,110 @@ test('history projector binds nested task tools to grandchild sessions during re
   assert.ok(before.sequence < nestedRun.sequence)
   assert.ok(nestedRun.sequence < after.sequence)
   assert.equal(nestedText.taskRunId, 'child:grandchild-nested-task')
+})
+
+test('history projector binds nested parallel task tools to grandchildren by order', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-nested-parallel-task-tool',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-nested-parallel-msg', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'root-nested-parallel-subtask', type: 'subtask', agent: 'research', description: 'Coordinate nested parallel work' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-nested-parallel-parent',
+        title: 'Coordinate nested parallel work (@research subagent)',
+        parentSessionId: 'root-nested-parallel-task-tool',
+        time: { created: 2, updated: 8 },
+      },
+      {
+        id: 'grandchild-nested-parallel-a',
+        title: 'Nested parallel A (@analyst subagent)',
+        parentSessionId: 'child-nested-parallel-parent',
+        time: { created: 4, updated: 7 },
+      },
+      {
+        id: 'grandchild-nested-parallel-b',
+        title: 'Nested parallel B (@writer subagent)',
+        parentSessionId: 'child-nested-parallel-parent',
+        time: { created: 5, updated: 8 },
+      },
+    ],
+    statuses: {
+      'root-nested-parallel-task-tool': { type: 'idle' },
+      'child-nested-parallel-parent': { type: 'idle' },
+      'grandchild-nested-parallel-a': { type: 'idle' },
+      'grandchild-nested-parallel-b': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => {
+      if (childId === 'child-nested-parallel-parent') {
+        return {
+          messages: [{
+            info: { id: 'child-nested-parallel-parent-msg', role: 'assistant', time: { created: 3 } },
+            parts: [
+              {
+                id: 'child-nested-parallel-task-a',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-parallel-call-a',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'analyst', description: 'Nested parallel A' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              {
+                id: 'child-nested-parallel-task-b',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-parallel-call-b',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'writer', description: 'Nested parallel B' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              { id: 'child-nested-parallel-finish', type: 'step-finish', reason: 'stop' },
+            ],
+          }],
+          todos: [],
+        }
+      }
+
+      return {
+        messages: [{
+          info: { id: `${childId}-msg`, role: 'assistant', time: { created: 6 } },
+          parts: [
+            { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+            { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+          ],
+        }],
+        todos: [],
+      }
+    },
+  })
+
+  const nestedTaskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter((taskRun) => taskRun?.parentSessionId === 'child-nested-parallel-parent')
+
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['grandchild-nested-parallel-a', 'grandchild-nested-parallel-b'],
+  )
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.title),
+    ['Nested parallel A', 'Nested parallel B'],
+  )
+  assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-a result')?.taskRunId, 'child:grandchild-nested-parallel-a')
+  assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-b result')?.taskRunId, 'child:grandchild-nested-parallel-b')
 })
 
 test('history projector preserves nested child parentage when replaying reopened threads', async () => {
