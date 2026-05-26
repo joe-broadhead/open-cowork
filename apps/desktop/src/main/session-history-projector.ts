@@ -168,10 +168,11 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const normalizedRootMessages = rootMessages
     .map((rawMsg) => normalizeSessionMessages([rawMsg])[0])
     .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
-  const rootDelegationTimes = normalizedRootMessages
-    .filter((msg) => msg.parts.some(isDelegationPart))
-    .map((msg) => toHistorySortTime(msg.info.time.created || msg.time.created || Date.now()))
-    .sort((a, b) => a - b)
+  const rootDelegationBoundaries = normalizedRootMessages
+    .map((msg, index) => msg.parts.some(isDelegationPart)
+      ? { index, sortTime: toHistorySortTime(msg.info.time.created || msg.time.created || Date.now()) }
+      : null)
+    .filter((boundary): boundary is { index: number; sortTime: number } => Boolean(boundary))
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -198,8 +199,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     })
   }
 
-  const nextRootDelegationBoundary = (sortTime: number) => {
-    return rootDelegationTimes.find((time) => time > sortTime) ?? Number.POSITIVE_INFINITY
+  const nextRootDelegationBoundary = (messageIndex: number) => {
+    return rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)?.sortTime ?? Number.POSITIVE_INFINITY
   }
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
@@ -338,7 +339,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return null
   }
 
-  for (const msg of normalizedRootMessages) {
+  for (let msgIndex = 0; msgIndex < normalizedRootMessages.length; msgIndex += 1) {
+    const msg = normalizedRootMessages[msgIndex]
+    if (!msg) continue
     const info = msg.info
     const parts = msg.parts
     const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
@@ -429,7 +432,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
           ? null
           : takeOnlyChildForTaskTool(sessionId, {
               after: tsMs,
-              before: nextRootDelegationBoundary(tsMs),
+              before: nextRootDelegationBoundary(msgIndex),
             }))
         const taskId = child?.id
           ? `child:${child.id}`

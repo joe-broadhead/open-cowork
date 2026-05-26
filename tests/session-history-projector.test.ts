@@ -522,6 +522,63 @@ test('history projector does not bind task tools by fuzzy child title matches', 
   assert.equal(targetTask.title, 'Target market analysis')
 })
 
+test('history projector does not bind task tools across same-timestamp delegation boundaries', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-same-timestamp-boundary',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-first-task-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          {
+            id: 'root-first-task-part',
+            type: 'tool',
+            tool: 'task',
+            callID: 'first-task-call',
+            state: {
+              status: 'completed',
+              input: {
+                agent: 'analyst',
+                description: 'Earlier same timestamp delegation',
+              },
+              output: 'done',
+              metadata: {},
+            },
+          },
+        ],
+      },
+      {
+        info: { id: 'root-second-subtask-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          { id: 'root-second-subtask', type: 'subtask', agent: 'research', description: 'Later same timestamp delegation' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-later-same-timestamp',
+      title: 'Later same timestamp delegation (@research subagent)',
+      parentSessionId: 'root-same-timestamp-boundary',
+      time: { created: 21, updated: 24 },
+    }],
+    statuses: {
+      'root-same-timestamp-boundary': { type: 'idle' },
+      'child-later-same-timestamp': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const pendingTask = items.find((item) => item.id === 'pending:first-task-call')?.taskRun
+  const childTask = items.find((item) => item.id === 'child:child-later-same-timestamp')?.taskRun
+
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Earlier same timestamp delegation')
+  assert.ok(childTask)
+  assert.equal(childTask.sourceSessionId, 'child-later-same-timestamp')
+  assert.equal(childTask.title, 'Later same timestamp delegation')
+})
+
 test('history projector preserves root message part order around task tools', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-order',
