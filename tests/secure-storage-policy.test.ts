@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveSecretStorageMode } from '../apps/desktop/src/main/secure-storage-policy.ts'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+} from '../apps/desktop/src/main/secure-storage-policy.ts'
 
 test('resolveSecretStorageMode prefers encrypted storage whenever protective safeStorage is available', () => {
   assert.equal(resolveSecretStorageMode({ isPackaged: false, encryptionAvailable: true }), 'encrypted')
@@ -33,4 +36,24 @@ test('resolveSecretStorageMode treats Linux basic_text as non-protective', () =>
     encryptionAvailable: true,
     selectedStorageBackend: 'basic_text',
   }), 'unavailable')
+})
+
+test('readSafeStorageBackendForPolicy probes only Linux safeStorage backends', () => {
+  let calls = 0
+  const readBackend = () => {
+    calls += 1
+    return 'basic_text'
+  }
+
+  assert.equal(readSafeStorageBackendForPolicy(readBackend, 'darwin'), null)
+  assert.equal(readSafeStorageBackendForPolicy(readBackend, 'win32'), null)
+  assert.equal(calls, 0)
+  assert.equal(readSafeStorageBackendForPolicy(readBackend, 'linux'), 'basic_text')
+  assert.equal(calls, 1)
+})
+
+test('readSafeStorageBackendForPolicy fails closed when backend probing throws', () => {
+  assert.equal(readSafeStorageBackendForPolicy(() => {
+    throw new Error('backend unavailable')
+  }, 'linux'), null)
 })

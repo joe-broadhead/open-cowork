@@ -10,7 +10,11 @@ import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
-import { resolveSecretStorageMode, type SecretStorageMode } from './secure-storage-policy.ts'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+  type SecretStorageMode,
+} from './secure-storage-policy.ts'
 import { escapeHtml } from './html-escape.ts'
 
 const { shell, BrowserWindow } = electron
@@ -66,7 +70,9 @@ function getSecretStorageMode() {
   return resolveSecretStorageMode({
     isPackaged: Boolean(electron.app?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
-    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
+    selectedStorageBackend: readSafeStorageBackendForPolicy(
+      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+    ),
   })
 }
 

@@ -2,6 +2,18 @@ export type SecretStorageMode = 'encrypted' | 'plaintext' | 'unavailable'
 
 const NON_PROTECTIVE_BACKENDS = new Set(['basic_text'])
 
+export function readSafeStorageBackendForPolicy(
+  readBackend: (() => string | null | undefined) | undefined,
+  platform = process.platform,
+) {
+  if (platform !== 'linux' || !readBackend) return null
+  try {
+    return readBackend() || null
+  } catch {
+    return null
+  }
+}
+
 export function resolveSecretStorageMode(options: {
   isPackaged: boolean
   encryptionAvailable: boolean

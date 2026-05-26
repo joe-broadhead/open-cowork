@@ -17,7 +17,11 @@ import {
 } from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
-import { resolveSecretStorageMode, type SecretStorageMode } from './secure-storage-policy.ts'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+  type SecretStorageMode,
+} from './secure-storage-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
@@ -382,7 +386,9 @@ function getSecretStorageMode() {
   return resolveSecretStorageMode({
     isPackaged: Boolean(electronApp?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
-    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
+    selectedStorageBackend: readSafeStorageBackendForPolicy(
+      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+    ),
   })
 }
 

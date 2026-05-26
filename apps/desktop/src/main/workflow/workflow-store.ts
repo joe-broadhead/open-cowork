@@ -15,7 +15,11 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
-import { resolveSecretStorageMode, type SecretStorageMode } from '../secure-storage-policy.ts'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+  type SecretStorageMode,
+} from '../secure-storage-policy.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from './workflow-schedule.ts'
 
 const WORKFLOW_DB_SCHEMA_VERSION = 1
@@ -92,7 +96,9 @@ function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
   const mode = resolveSecretStorageMode({
     isPackaged: Boolean(electronApp?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
-    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
+    selectedStorageBackend: readSafeStorageBackendForPolicy(
+      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+    ),
   })
   return {
     mode,
