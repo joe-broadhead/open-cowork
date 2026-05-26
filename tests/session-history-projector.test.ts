@@ -651,6 +651,48 @@ test('history projector does not bind task tools across same-timestamp delegatio
   assert.equal(childTask.title, 'Later same timestamp delegation')
 })
 
+test('history projector binds task tools when the root message has no created timestamp', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-missing-time',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-missing-time-task-msg', role: 'assistant' },
+      parts: [
+        {
+          id: 'root-missing-time-task-part',
+          type: 'tool',
+          tool: 'task',
+          callID: 'missing-time-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze missing timestamp replay' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-missing-time',
+      title: 'Analyze missing timestamp replay (@analyst subagent)',
+      parentSessionId: 'root-task-tool-missing-time',
+      time: { created: 20, updated: 30 },
+    }],
+    statuses: {
+      'root-task-tool-missing-time': { type: 'idle' },
+      'child-missing-time': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')?.taskRun
+
+  assert.ok(taskRun)
+  assert.equal(taskRun.sourceSessionId, 'child-missing-time')
+  assert.equal(taskRun.title, 'Analyze missing timestamp replay')
+})
+
 test('history projector preserves root message part order around task tools', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-order',

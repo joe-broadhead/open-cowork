@@ -133,7 +133,9 @@ export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[])
 }
 
 export function parseWorkflowTriggersFromStorage(value: unknown) {
-  return parseJson<WorkflowTrigger[]>(value, []).map((trigger) => trigger.type === 'webhook'
+  const parsed = parseJson<unknown>(value, [])
+  if (!Array.isArray(parsed)) return []
+  return (parsed as WorkflowTrigger[]).map((trigger) => trigger.type === 'webhook'
     ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret) }
     : trigger)
 }

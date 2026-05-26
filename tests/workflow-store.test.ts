@@ -124,6 +124,11 @@ test('workflow store preserves plaintext webhook secrets that look like encrypte
   assert.equal(parsed[0]?.webhookSecret, rawSecret)
 }))
 
+test('workflow store treats valid non-array trigger JSON as empty', () => withWorkflowStore('non-array-triggers', () => {
+  assert.deepEqual(parseWorkflowTriggersFromStorage('{}'), [])
+  assert.deepEqual(parseWorkflowTriggersFromStorage('"manual"'), [])
+}))
+
 test('workflow store tracks run lifecycle and next scheduled run', () => withWorkflowStore('runs', () => {
   const workflow = createWorkflow(draft)
   const run = createWorkflowRun(workflow.id, 'manual', { source: 'test' })

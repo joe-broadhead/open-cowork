@@ -162,6 +162,11 @@ function isDelegationPart(part: NormalizedMessagePart) {
   return part.type === 'subtask' || (part.type === 'tool' && part.tool === 'task')
 }
 
+function messageCreatedSortTime(msg: NonNullable<ReturnType<typeof normalizeSessionMessages>[number]>) {
+  const created = msg.info.time.created || msg.time.created
+  return created ? toHistorySortTime(created) : null
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
@@ -170,9 +175,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
   const rootDelegationBoundaries = normalizedRootMessages
     .map((msg, index) => msg.parts.some(isDelegationPart)
-      ? { index, sortTime: toHistorySortTime(msg.info.time.created || msg.time.created || Date.now()) }
+      ? { index, sortTime: messageCreatedSortTime(msg) }
       : null)
-    .filter((boundary): boundary is { index: number; sortTime: number } => Boolean(boundary))
+    .filter((boundary): boundary is { index: number; sortTime: number | null } => Boolean(boundary))
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -200,7 +205,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   }
 
   const nextRootDelegationBoundary = (messageIndex: number) => {
-    return rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)?.sortTime ?? Number.POSITIVE_INFINITY
+    return rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)?.sortTime ?? undefined
   }
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
@@ -393,7 +398,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     if (!msg) continue
     const info = msg.info
     const parts = msg.parts
-    const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
+    const childBindingAfter = messageCreatedSortTime(msg)
+    const tsMs = childBindingAfter ?? Date.now()
     const ts = toIsoTimestamp(tsMs)
     const msgId = info.id || msg.id || generateId()
     const role = info.role || msg.role || 'assistant'
@@ -482,7 +488,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         const explicit = takeExplicitChildForTaskTool(sessionId, part)
         if (!explicit.hasExplicitChild && !taskToolChildBinder) {
           taskToolChildBinder = createOrderedTaskToolChildBinder(sessionId, parts.slice(partIndex), {
-            after: tsMs,
+            after: childBindingAfter ?? undefined,
             before: nextRootDelegationBoundary(msgIndex),
           })
         }
@@ -492,7 +498,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
             || (taskToolChildBinder?.hasParallelImplicitTasks
               ? null
               : takeOnlyChildForTaskTool(sessionId, {
-                  after: tsMs,
+                  after: childBindingAfter ?? undefined,
                   before: nextRootDelegationBoundary(msgIndex),
                 })))
         const taskId = child?.id
