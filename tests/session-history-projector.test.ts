@@ -1032,6 +1032,60 @@ test('history projector treats untimed later delegations as task-tool binding bo
   assert.equal(childTask.title, 'Later untimed delegation')
 })
 
+test('history projector does not bind bounded task tools to untimed later children', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-bounded-untimed-child',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-bounded-task-msg', role: 'assistant', time: { created: 10 } },
+        parts: [{
+          id: 'root-bounded-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'bounded-task-call',
+          state: {
+            status: 'completed',
+            input: {
+              agent: 'analyst',
+              description: 'Earlier bounded task tool',
+            },
+            output: 'started',
+            metadata: {},
+          },
+        }],
+      },
+      {
+        info: { id: 'root-later-timed-subtask-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          { id: 'root-later-timed-subtask', type: 'subtask', agent: 'research', description: 'Later timed delegation' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-later-untimed',
+      title: 'Later timed delegation (@research subagent)',
+      parentSessionId: 'root-bounded-untimed-child',
+    }],
+    statuses: {
+      'root-bounded-untimed-child': { type: 'idle' },
+      'child-later-untimed': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const pendingTask = items.find((item) => item.id === 'pending:bounded-task-call')?.taskRun
+  const childTask = items.find((item) => item.id === 'child:child-later-untimed')?.taskRun
+
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Earlier bounded task tool')
+  assert.ok(childTask)
+  assert.equal(childTask.sourceSessionId, 'child-later-untimed')
+  assert.equal(childTask.title, 'Later timed delegation')
+})
+
 test('history projector binds task tools when the root message has no created timestamp', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-missing-time',

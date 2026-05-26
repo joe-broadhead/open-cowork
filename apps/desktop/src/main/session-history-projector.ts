@@ -293,6 +293,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         return false
       }
       const created = childCreatedSortTime(child)
+      if (created === null && options.before !== undefined) return false
       if (created !== null && options.after !== undefined && created < options.after) return false
       if (created !== null && options.before !== undefined && created >= options.before) return false
       return true
