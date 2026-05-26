@@ -127,7 +127,7 @@ export function applyTemplate(
   }
 }
 
-export type AgentDraftIssue = CustomAgentIssue
+type AgentDraftIssue = CustomAgentIssue
 
 export function validateAgentDraft(params: {
   draft: CustomAgentConfig

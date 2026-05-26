@@ -208,7 +208,7 @@ export function buildProviderRuntimeConfig(
   return result.config
 }
 
-export function buildBuiltinProviderRuntimeConfig(
+function buildBuiltinProviderRuntimeConfig(
   providerId: string,
   settings: CoworkSettings,
 ) {

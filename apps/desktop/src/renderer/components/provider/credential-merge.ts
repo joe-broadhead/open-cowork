@@ -1,4 +1,4 @@
-export type ProviderCredentialBag = Record<string, string>
+type ProviderCredentialBag = Record<string, string>
 
 const CREDENTIAL_MASK = '••••••••'
 

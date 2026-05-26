@@ -10,7 +10,7 @@ import {
 import { configuredToolLabels } from './capability-catalog.ts'
 import { getEffectiveSettings } from './settings.ts'
 
-export function unique(values: string[]) {
+function unique(values: string[]) {
   return Array.from(new Set(values))
 }
 
@@ -179,7 +179,7 @@ function configuredAgentPatternLooksWriteCapable(agent: ConfiguredAgent, pattern
   return toolPatternLooksWriteCapable(pattern)
 }
 
-export function configuredToolMayWrite(toolId: string) {
+function configuredToolMayWrite(toolId: string) {
   const tool = getConfiguredToolById(toolId)
   if (!tool) return false
   if (tool.writeAccess === true) return true

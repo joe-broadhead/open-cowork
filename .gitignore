@@ -9,7 +9,6 @@ coverage/
 .open-cowork-test/
 autoresearch-runs/
 index.html
-index.js
 
 # Electron
 release/
