@@ -342,22 +342,62 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       return {
         usesOrderedImplicitBindings: false,
         explicitChildIds: explicitChildIdsForTaskTools(remainingParts),
+        takeSubtask: () => null as ChildSessionRecord | null,
         take: () => null as ChildSessionRecord | null,
       }
     }
 
     const explicitChildIds = explicitChildIdsForTaskTools(remainingParts)
+    let slotIndex = 0
     let candidateIndex = 0
     const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
+    const skipMatchedCandidates = () => {
+      while (candidateIndex < candidates.length) {
+        const child = candidates[candidateIndex]
+        if (child && !matchedChildIds.has(child.id)) return
+        candidateIndex += 1
+      }
+    }
+    const remainingUnmatchedCandidateCount = () => {
+      let count = 0
+      for (let index = candidateIndex; index < candidates.length; index += 1) {
+        const child = candidates[index]
+        if (child && !matchedChildIds.has(child.id)) count += 1
+      }
+      return count
+    }
+    const remainingTaskToolSlotCount = () => {
+      let count = 0
+      for (let index = slotIndex; index < orderedImplicitBindingParts.length; index += 1) {
+        const part = orderedImplicitBindingParts[index]
+        if (part?.type === 'tool' && part.tool === 'task' && !taskToolChildSessionId(part)) count += 1
+      }
+      return count
+    }
     return {
       usesOrderedImplicitBindings: true,
       explicitChildIds,
-      take: () => {
-        while (candidateIndex < orderedImplicitBindingParts.length) {
-          const part = orderedImplicitBindingParts[candidateIndex]
+      takeSubtask: () => {
+        while (slotIndex < orderedImplicitBindingParts.length) {
+          const part = orderedImplicitBindingParts[slotIndex]
+          if (part?.type !== 'subtask') return null
+          slotIndex += 1
+          skipMatchedCandidates()
+          if (remainingUnmatchedCandidateCount() <= remainingTaskToolSlotCount()) return null
           const child = candidates[candidateIndex]
           candidateIndex += 1
+          return child && !matchedChildIds.has(child.id) ? child : null
+        }
+        return null
+      },
+      take: () => {
+        while (slotIndex < orderedImplicitBindingParts.length) {
+          const part = orderedImplicitBindingParts[slotIndex]
+          slotIndex += 1
           if (part?.type !== 'tool' || part.tool !== 'task' || taskToolChildSessionId(part)) continue
+          skipMatchedCandidates()
+          const child = candidates[candidateIndex]
+          candidateIndex += 1
           if (!child || matchedChildIds.has(child.id)) return null
           matchedChildIds.add(child.id)
           return child
@@ -479,7 +519,9 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       }
 
       if (part.type === 'subtask') {
-        const child = takeDirectChildForSubtask()
+        const child = taskToolChildBinder?.usesOrderedImplicitBindings
+          ? taskToolChildBinder.takeSubtask()
+          : takeDirectChildForSubtask()
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.id || generateId()}`

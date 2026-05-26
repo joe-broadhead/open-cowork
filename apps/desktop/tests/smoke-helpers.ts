@@ -571,7 +571,10 @@ export async function launchSmokeSession(
     ]
     const child = spawn(options.executablePath, childArgs, {
       cwd: desktopAppDir,
-      env: getSmokeEnvironment(paths),
+      env: {
+        ...getSmokeEnvironment(paths),
+        OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+      },
       stdio: 'ignore',
     })
     let clearEarlyExit: () => void = () => undefined

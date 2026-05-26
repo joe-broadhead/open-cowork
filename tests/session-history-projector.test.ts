@@ -704,6 +704,82 @@ test('history projector preserves mixed task-tool and subtask child order in one
   )
 })
 
+test('history projector does not let a missing subtask consume a later task-tool child', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-missing-subtask-slot',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-missing-subtask-slot-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-first-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'first-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'First delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-missing-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Missing middle child',
+        },
+        {
+          id: 'root-later-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'later-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'writer', description: 'Later delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-first-task-tool',
+        title: 'First delegated child (@analyst subagent)',
+        parentSessionId: 'root-task-tool-missing-subtask-slot',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-later-task-tool',
+        title: 'Later delegated child (@writer subagent)',
+        parentSessionId: 'root-task-tool-missing-subtask-slot',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-missing-subtask-slot': { type: 'idle' },
+      'child-first-task-tool': { type: 'idle' },
+      'child-later-task-tool': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['child-first-task-tool', null, 'child-later-task-tool'],
+  )
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.title),
+    ['First delegated child', 'Missing middle child', 'Later delegated child'],
+  )
+})
+
 test('history projector does not bind a terminal task tool to a later unrelated child session', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-unrelated-child',
