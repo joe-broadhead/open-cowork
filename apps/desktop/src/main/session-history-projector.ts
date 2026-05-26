@@ -204,8 +204,19 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     })
   }
 
-  const nextRootDelegationBoundary = (messageIndex: number) => {
-    return rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)?.sortTime ?? undefined
+  const taskToolBindingWindow = (messageIndex: number, after: number | null) => {
+    const nextBoundary = rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)
+    if (!nextBoundary) return { after: after ?? undefined }
+    if (nextBoundary.sortTime === null) {
+      // An untimed later delegation is still a real ordering boundary. Without
+      // an upper timestamp, implicit binding would be allowed to consume that
+      // later child session and leave the actual delegation pending on replay.
+      return null
+    }
+    return {
+      after: after ?? undefined,
+      before: nextBoundary.sortTime,
+    }
   }
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
@@ -500,21 +511,20 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (part.type === 'tool' && part.tool === 'task') {
         const fallbackStatus = fallbackTaskToolStatus(part)
         const explicit = takeExplicitChildForTaskTool(sessionId, part)
+        const bindingWindow = taskToolBindingWindow(msgIndex, childBindingAfter)
         if (!explicit.hasExplicitChild && !taskToolChildBinder) {
-          taskToolChildBinder = createOrderedTaskToolChildBinder(sessionId, parts.slice(partIndex), {
-            after: childBindingAfter ?? undefined,
-            before: nextRootDelegationBoundary(msgIndex),
-          })
+          taskToolChildBinder = bindingWindow
+            ? createOrderedTaskToolChildBinder(sessionId, parts.slice(partIndex), bindingWindow)
+            : null
         }
         const child = explicit.child || (explicit.hasExplicitChild
           ? null
           : taskToolChildBinder?.take()
             || (taskToolChildBinder?.hasParallelImplicitTasks
               ? null
-              : takeOnlyChildForTaskTool(sessionId, {
-                  after: childBindingAfter ?? undefined,
-                  before: nextRootDelegationBoundary(msgIndex),
-                }, taskToolChildBinder?.explicitChildIds)))
+              : bindingWindow
+                ? takeOnlyChildForTaskTool(sessionId, bindingWindow, taskToolChildBinder?.explicitChildIds)
+                : null))
         const taskId = child?.id
           ? `child:${child.id}`
           : `pending:${part.callId || part.id || generateId()}`
