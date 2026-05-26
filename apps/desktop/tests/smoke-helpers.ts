@@ -5,10 +5,6 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  buildE2EArgEnvironment,
-  E2E_ARG_ENV_ENABLE_ARG,
-} from '../src/main/e2e-remote-debugging.ts'
-import {
   _electron as electron,
   chromium,
   type Browser,
@@ -251,6 +247,7 @@ function getSmokeEnvironment(paths: SmokePaths) {
   return {
     ...process.env,
     HOME: paths.tempHome,
+    TMPDIR: process.env.TMPDIR || tmpdir(),
     XDG_CONFIG_HOME: paths.xdgConfigHome,
     XDG_DATA_HOME: paths.xdgDataHome,
     XDG_CACHE_HOME: paths.xdgCacheHome,
@@ -276,8 +273,6 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
   }
   const keys = new Set([
     'HOME',
-    'PATH',
-    'SHELL',
     'TMPDIR',
     'XDG_CONFIG_HOME',
     'XDG_DATA_HOME',
@@ -289,7 +284,6 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
     'OPEN_COWORK_E2E',
     'OPEN_COWORK_E2E_PROBE_ACTION',
     'OPEN_COWORK_E2E_READY_FILE',
-    'CI',
   ])
 
   return Object.fromEntries(
@@ -441,6 +435,21 @@ function runCommand(command: string, args: string[], timeoutMs = 10_000) {
   })
 }
 
+async function withLaunchServicesEnvironment<T>(env: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const appliedKeys: string[] = []
+  try {
+    for (const [key, value] of Object.entries(env)) {
+      await runCommand('launchctl', ['setenv', key, value])
+      appliedKeys.push(key)
+    }
+    return await fn()
+  } finally {
+    for (const key of appliedKeys.reverse()) {
+      await runCommand('launchctl', ['unsetenv', key]).catch(() => {})
+    }
+  }
+}
+
 async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -475,31 +484,19 @@ export async function launchPackagedMacProbe(
     OPEN_COWORK_E2E_PROBE_ACTION: action,
     OPEN_COWORK_E2E_READY_FILE: readyFile,
   })
-  const envArgs = buildE2EArgEnvironment(launchEnvironment)
-  const child = spawn(executablePath, [
-    E2E_ARG_ENV_ENABLE_ARG,
-    ...envArgs,
-  ], {
-    cwd: desktopAppDir,
-    env: launchEnvironment,
-    stdio: 'ignore',
-  })
-  const childExited = new Promise<never>((_, reject) => {
-    child.once('error', reject)
-    child.once('exit', (code, signal) => {
-      reject(new Error(`Packaged macOS app exited before writing probe file with ${signal || code}`))
-    })
-  })
-  childExited.catch(() => {})
 
   try {
-    return await Promise.race([
-      waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000),
-      childExited,
-    ])
+    return await withLaunchServicesEnvironment(launchEnvironment, async () => {
+      await runCommand('open', [
+        '-n',
+        '-g',
+        '-j',
+        macAppBundlePath,
+      ])
+      return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
+    })
   } finally {
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-    await stopSpawnedSmokeProcess(child)
     await delay(1_000)
   }
 }
