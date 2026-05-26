@@ -58,7 +58,15 @@ export function writeFileAtomic(
   let fd: number | null = null
   try {
     fd = openSync(tempPath, 'w', mode)
-    if (process.platform !== 'win32') fchmodSync(fd, mode)
+    if (process.platform !== 'win32') {
+      try {
+        fchmodSync(fd, mode)
+      } catch {
+        // openSync(..., mode) already applies permissions on creation. Some
+        // filesystems reject chmod-on-fd, and that should not turn a durable
+        // write into a persistence failure.
+      }
+    }
     const bytes = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data
     writeBufferFullySync(fd, bytes)
     // fsync forces the bytes out of the page cache so a power-loss

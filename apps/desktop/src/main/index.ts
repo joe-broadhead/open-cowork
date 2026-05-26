@@ -51,11 +51,9 @@ import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
 import {
   appendE2ERemoteDebuggingSwitches,
-  applyE2EArgEnvironment,
   e2eWindowReadyProbeEnabled,
 } from './e2e-remote-debugging.ts'
 
-applyE2EArgEnvironment()
 registerAppProtocolSchemes()
 appendE2ERemoteDebuggingSwitches(app)
 

@@ -347,16 +347,8 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
 
     const explicitChildIds = explicitChildIdsForTaskTools(remainingParts)
-    const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
-    if (candidates.length !== orderedImplicitBindingParts.length) {
-      return {
-        usesOrderedImplicitBindings: true,
-        explicitChildIds,
-        take: () => null as ChildSessionRecord | null,
-      }
-    }
-
     let candidateIndex = 0
+    const candidates = candidateChildrenForTaskTool(parentSessionId, options, explicitChildIds)
     return {
       usesOrderedImplicitBindings: true,
       explicitChildIds,

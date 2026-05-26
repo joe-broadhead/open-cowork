@@ -100,6 +100,7 @@ test('e2e arg environment applies only smoke allowlisted keys', () => {
     'Open Cowork',
     ...args,
     '--open-cowork-e2e-env=HOME=%2Ftmp%2Fnot-applied',
+    '--open-cowork-e2e-env=OPEN_COWORK_E2E_READY_FILE=%',
   ], env)
 
   assert.deepEqual(env, {

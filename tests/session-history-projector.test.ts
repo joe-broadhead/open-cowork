@@ -587,6 +587,123 @@ test('history projector reserves explicit task-tool children when binding implic
   )
 })
 
+test('history projector binds an implicit task tool before a later subtask when only one child is present', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-partial-mixed',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-partial-mixed-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-partial-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'partial-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Partial task child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-partial-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Missing later child',
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-partial-task',
+      title: 'Partial task child (@analyst subagent)',
+      parentSessionId: 'root-task-tool-partial-mixed',
+      time: { created: 11, updated: 20 },
+    }],
+    statuses: {
+      'root-task-tool-partial-mixed': { type: 'idle' },
+      'child-partial-task': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  const taskToolRun = taskRuns.find((item) => item.id === 'child:child-partial-task')?.taskRun
+  const pendingSubtask = taskRuns.find((item) => item.id === 'pending:root-partial-subtask')?.taskRun
+
+  assert.ok(taskToolRun)
+  assert.equal(taskToolRun.sourceSessionId, 'child-partial-task')
+  assert.equal(taskToolRun.title, 'Partial task child')
+  assert.ok(pendingSubtask)
+  assert.equal(pendingSubtask.sourceSessionId, null)
+  assert.equal(pendingSubtask.title, 'Missing later child')
+})
+
+test('history projector preserves mixed task-tool and subtask child order in one message', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-subtask-order',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-order-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-order-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-order-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'First delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-mixed-order-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Second delegated child',
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-mixed-order-first',
+        title: 'First delegated child (@analyst subagent)',
+        parentSessionId: 'root-task-tool-subtask-order',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-mixed-order-second',
+        title: 'Second delegated child (@research subagent)',
+        parentSessionId: 'root-task-tool-subtask-order',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-subtask-order': { type: 'idle' },
+      'child-mixed-order-first': { type: 'idle' },
+      'child-mixed-order-second': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['child-mixed-order-first', 'child-mixed-order-second'],
+  )
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.title),
+    ['First delegated child', 'Second delegated child'],
+  )
+})
+
 test('history projector does not bind a terminal task tool to a later unrelated child session', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-unrelated-child',

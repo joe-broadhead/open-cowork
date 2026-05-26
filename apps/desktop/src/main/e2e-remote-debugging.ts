@@ -60,9 +60,16 @@ export function applyE2EArgEnvironment(argv: readonly string[] = process.argv, e
     const encoded = arg.slice(E2E_ENV_ARG_PREFIX.length)
     const separatorIndex = encoded.indexOf('=')
     if (separatorIndex <= 0) continue
-    const key = decodeURIComponent(encoded.slice(0, separatorIndex))
+    let key: string
+    let value: string
+    try {
+      key = decodeURIComponent(encoded.slice(0, separatorIndex))
+      value = decodeURIComponent(encoded.slice(separatorIndex + 1))
+    } catch {
+      continue
+    }
     if (!E2E_ARG_ENV_KEYS.has(key)) continue
-    env[key] = decodeURIComponent(encoded.slice(separatorIndex + 1))
+    env[key] = value
   }
 }
 

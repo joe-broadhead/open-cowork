@@ -25,6 +25,9 @@ import type {
   ModelFallbackInfo,
   OpenCoworkConfig,
 } from './config-types.ts'
+import { applyE2EArgEnvironment } from './e2e-remote-debugging.ts'
+
+applyE2EArgEnvironment()
 
 export type {
   BuiltInAgentOverrideConfig,
