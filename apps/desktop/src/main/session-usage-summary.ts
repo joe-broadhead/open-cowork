@@ -1,19 +1,9 @@
 import type {
   AgentUsageEntry,
-  SessionTokens,
   SessionUsageSummary,
   SessionView,
 } from '@open-cowork/shared'
-
-function cloneTokens(tokens: SessionTokens): SessionTokens {
-  return {
-    input: tokens.input,
-    output: tokens.output,
-    reasoning: tokens.reasoning,
-    cacheRead: tokens.cacheRead,
-    cacheWrite: tokens.cacheWrite,
-  }
-}
+import { cloneTokens } from '../lib/session-view-tokens.ts'
 
 export function buildSessionUsageSummary(view: SessionView): SessionUsageSummary {
   const messages = view.messages.length

@@ -281,7 +281,7 @@ export function createMainWindowController(options: {
     })
     window.webContents.on('did-finish-load', () => {
       options.log('renderer', 'Renderer did-finish-load')
-      void writeE2EWindowReadyProbe(window.webContents).catch((error: unknown) => {
+      void writeE2EWindowReadyProbe(window.webContents, process.env, { isPackaged: options.app.isPackaged }).catch((error: unknown) => {
         options.log('error', `E2E ready probe failed: ${error instanceof Error ? error.message : String(error)}`)
       })
       revealCurrentWindow('did-finish-load')

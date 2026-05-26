@@ -14,7 +14,8 @@ per patch, O(n²) for the full render. That falls over at ~2k tokens.
 
 Instead:
 
-- `MarkdownContent.tsx` caches the rendered HTML per message id in
+- `apps/desktop/src/renderer/components/chat/MarkdownContent.tsx`
+  caches the rendered HTML per message id in
   an LRU of size 200.
 - New patches render the **append** into the existing DOM via
   `morphdom`, which diffs the old and new HTML and patches only the
@@ -79,22 +80,29 @@ one refresh; intermittent events refresh within a second.
 
 ## Perf benchmark gate
 
-`scripts/perf-benchmark.ts` runs four benchmarks that mirror the
-hot paths:
+`scripts/perf-benchmark.ts` runs benchmarks that mirror the hot paths:
 
-| Benchmark                    | Target           | What it exercises              |
-|------------------------------|------------------|--------------------------------|
-| `history.project.large`      | ~0.4 ms avg      | Session history → TaskRun tree |
-| `engine.hydrate.large`       | ~0.5 ms avg      | Main-process hydration         |
-| `engine.view.large`          | ~0.01 ms avg     | SessionView snapshot           |
-| `engine.stream.mixed`        | ~0.8 ms avg      | Mixed-event stream projection  |
+| Benchmark | Approximate target | What it exercises |
+|------------|--------------------|-------------------|
+| `history.project.large` | sub-2 ms avg | Session history → TaskRun tree |
+| `engine.hydrate.large` | sub-1 ms avg | Main-process hydration |
+| `engine.view.large` | sub-0.5 ms avg | Cached `SessionView` snapshot reads |
+| `engine.stream.mixed` | sub-2 ms avg | Mixed-event stream projection |
+| `runtime.permission.downstreamCatalog` | sub-0.1 ms avg | Runtime permission generation for a large downstream catalog |
+| `agents.catalog.downstreamCatalog` | sub-0.5 ms avg | OpenCode-native agent config generation for a large downstream catalog |
+| `capabilities.map.downstreamCatalog` | sub-3 ms avg | Tools & Skills capability-map grouping |
+| `catalog.relationship.downstreamCatalog` | sub-1 ms avg | Custom agent / tool / skill relationship summarization |
+| `agents.preview.downstreamCatalog` | sub-0.1 ms avg | Agent-builder preview compilation |
+| `threads.search.downstreamHistory` | platform baseline | SQLite-backed thread search and facets over 5,000 seeded threads |
 
-`pnpm perf:check` enforces regression thresholds against
-`benchmarks/perf-baseline.json` (avg 1.2×, p95 1.25×). Every PR runs
-it in CI, with wider absolute floors when the runner OS, architecture,
-or Node major differs from the stored baseline. Refresh the baseline
-intentionally with `pnpm perf:baseline` when a known-good regression is
-accepted.
+`pnpm perf:check` first selects the matching
+`benchmarks/perf-baseline.<platform>-<arch>-node<major>.json`, then falls
+back to the nearest same-platform baseline and finally to
+`benchmarks/perf-baseline.json`. It enforces avg 1.2× and p95 1.25×
+regression thresholds, with wider absolute floors when the runner OS,
+architecture, or Node major differs from the stored baseline. Refresh the
+baseline intentionally with `pnpm perf:baseline` when a known-good
+regression is accepted.
 
 ## What's NOT optimized (yet)
 

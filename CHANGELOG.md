@@ -90,9 +90,8 @@ planned before broad distribution.
 - `docs/security-model.md` documents data-at-rest, MCP sandbox boundaries, CSP rationale (including why the chart iframe needs `unsafe-eval`), and supply-chain posture.
 - `docs/versioning.md` covers semver rules, release cadence, RC flow, breaking-change definition, and downstream support policy.
 - `docs/assets/README.md` documents the capture process for README screenshots and the language-switch demo GIF.
-- Hot-path unit tests for `session-view-model.ts` (timeline derivation, LRU prune, compaction-notice flow, streaming merge), `session-engine.ts` (LRU cap, view-cache identity, busy invalidation), and `dashboard-summary.ts` (planner split, emit cadence).
+- Hot-path unit tests for `session-view-model.ts` (timeline derivation, LRU prune, compaction-notice flow, streaming merge) and `session-engine.ts` (LRU cap, view-cache identity, busy invalidation).
 - Customization-flow smoke tests: `settings-round-trip`, `custom-mcp-add` (incl. SSRF-guard coverage), and `large-history-replay` seeding 60 sessions to exercise the sidebar virtualizer.
-- `planDashboardBackfill` and `shouldEmitBackfillProgress` helpers extracted from the dashboard orchestrator for unit-testable backfill planning.
 - Public project documentation with MkDocs configuration and detailed docs pages for getting started, configuration, architecture, desktop behavior, packaging, releases, and contribution workflow.
 - Contributor-facing governance files including issue templates, a pull request template, `SECURITY.md`, and `SUPPORT.md`.
 - Automated GitHub Actions workflows for CI validation, docs deployment, and tagged macOS/Linux release builds.

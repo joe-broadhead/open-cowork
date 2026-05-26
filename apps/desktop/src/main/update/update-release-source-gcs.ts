@@ -1,8 +1,5 @@
 import type { UpdateReleaseSourceDescriptor } from '@open-cowork/shared'
-import type { UpdateReleaseSourceConfig } from '../config-types.ts'
 import { normalizeUpdateSourceUrl } from './update-release-source-generic.ts'
-
-export type GcsReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'gcs' }>
 
 const GCS_BUCKET_PATTERN = /^(?=.{3,222}$)(?!.*\.\.)(?!\d{1,3}(?:\.\d{1,3}){3}$)[a-z0-9][a-z0-9._-]*[a-z0-9]$/
 

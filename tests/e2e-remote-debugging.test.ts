@@ -4,10 +4,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  E2E_ALLOW_SETTINGS_MUTATION_KEY,
   appendE2ERemoteDebuggingSwitches,
   applyE2EArgEnvironment,
   buildE2EArgEnvironment,
   E2E_ARG_ENV_ENABLE_KEY,
+  e2eSettingsMutationAllowed,
   e2eReadyFileRelativePathIsContained,
   e2eWindowReadyProbeEnabled,
   resolveE2ERemoteDebuggingPort,
@@ -90,12 +92,13 @@ test('e2e window ready probe is enabled only for contained smoke files', () => {
 test('e2e arg environment applies only smoke allowlisted keys', () => {
   const args = buildE2EArgEnvironment({
     OPEN_COWORK_E2E: '1',
+    [E2E_ALLOW_SETTINGS_MUTATION_KEY]: '1',
     OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
     OPEN_COWORK_CONFIG_PATH: '/tmp/open-cowork/config.json',
     HOME: '/tmp/open-cowork-home',
     PATH: '/tmp/should-not-apply',
   })
-  assert.equal(args.length, 4)
+  assert.equal(args.length, 5)
 
   const env: NodeJS.ProcessEnv = { [E2E_ARG_ENV_ENABLE_KEY]: '1' }
   applyE2EArgEnvironment([
@@ -108,10 +111,20 @@ test('e2e arg environment applies only smoke allowlisted keys', () => {
   assert.deepEqual(env, {
     [E2E_ARG_ENV_ENABLE_KEY]: '1',
     OPEN_COWORK_E2E: '1',
+    [E2E_ALLOW_SETTINGS_MUTATION_KEY]: '1',
     OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
     OPEN_COWORK_CONFIG_PATH: '/tmp/open-cowork/config.json',
     HOME: '/tmp/open-cowork-home',
   })
+})
+
+test('e2e settings mutation requires explicit opt-in for packaged probes', () => {
+  assert.equal(e2eSettingsMutationAllowed({ OPEN_COWORK_E2E: '1' }, { isPackaged: false }), true)
+  assert.equal(e2eSettingsMutationAllowed({ OPEN_COWORK_E2E: '1' }, { isPackaged: true }), false)
+  assert.equal(e2eSettingsMutationAllowed({
+    OPEN_COWORK_E2E: '1',
+    [E2E_ALLOW_SETTINGS_MUTATION_KEY]: '1',
+  }, { isPackaged: true }), true)
 })
 
 test('e2e arg environment is ignored without the trusted smoke marker', () => {

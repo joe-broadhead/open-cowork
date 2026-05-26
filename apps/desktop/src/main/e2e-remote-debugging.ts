@@ -29,9 +29,11 @@ type E2EProbeFile = {
 const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
 const E2E_ENV_ARG_PREFIX = '--open-cowork-e2e-env='
 export const E2E_ARG_ENV_ENABLE_KEY = 'OPEN_COWORK_E2E_ARG_ENV'
+export const E2E_ALLOW_SETTINGS_MUTATION_KEY = 'OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION'
 const E2E_ARG_ENV_KEYS = new Set([
   'OPEN_COWORK_CHART_TIMEOUT_MS',
   'OPEN_COWORK_CONFIG_PATH',
+  E2E_ALLOW_SETTINGS_MUTATION_KEY,
   'HOME',
   'TMPDIR',
   'OPEN_COWORK_E2E',
@@ -116,13 +118,28 @@ export function e2eWindowReadyProbeEnabled(env: NodeJS.ProcessEnv = process.env)
   return Boolean(resolveE2EReadyFile(env))
 }
 
-export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, env: NodeJS.ProcessEnv = process.env) {
+export function e2eSettingsMutationAllowed(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { isPackaged?: boolean } = {},
+) {
+  if (env.OPEN_COWORK_E2E !== '1') return false
+  return options.isPackaged === true
+    ? env[E2E_ALLOW_SETTINGS_MUTATION_KEY] === '1'
+    : true
+}
+
+export async function writeE2EWindowReadyProbe(
+  webContents: WebContentsProbe,
+  env: NodeJS.ProcessEnv = process.env,
+  options: { isPackaged?: boolean } = {},
+) {
   const target = resolveE2EReadyFile(env)
   if (!target) return false
   const action = env.OPEN_COWORK_E2E_PROBE_ACTION === 'create-session'
     || env.OPEN_COWORK_E2E_PROBE_ACTION === 'list-sessions'
     ? env.OPEN_COWORK_E2E_PROBE_ACTION
     : 'surface'
+  const allowSettingsMutation = e2eSettingsMutationAllowed(env, options)
   try {
     const result = await webContents.executeJavaScript<E2EProbeResult>(`
     (async () => {
@@ -153,6 +170,9 @@ export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, en
         });
       };
       if (!(await setupComplete())) {
+        if (!${JSON.stringify(allowSettingsMutation)}) {
+          return { waiting: true };
+        }
         await api.settings.set({
           selectedProviderId: 'openrouter',
           selectedModelId: 'anthropic/claude-sonnet-4',

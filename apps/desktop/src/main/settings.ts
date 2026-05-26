@@ -222,6 +222,10 @@ function normalizeRuntimeConfigSource(value: unknown) {
   return RUNTIME_CONFIG_SOURCES.has(value as string) ? value as AppSettings['runtimeConfigSource'] : undefined
 }
 
+function asSettingsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
 function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   const update: Partial<AppSettings> = {}
   const appPermissions = getAppConfig().permissions
@@ -267,8 +271,9 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
   return update
 }
 
-function migrateLegacySettings(raw: any): AppSettings {
-  assertSupportedSettingsSchemaVersion(raw)
+function migrateLegacySettings(rawInput: unknown): AppSettings {
+  assertSupportedSettingsSchemaVersion(rawInput)
+  const raw = asSettingsRecord(rawInput)
   const defaults = createDefaults()
   const appPermissions = getAppConfig().permissions
   const bashPermission = migrateRuntimePermissionPolicy(
@@ -390,10 +395,6 @@ function getSecretStorageMode() {
       electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
     ),
   })
-}
-
-export function getSettingsSecretStorageMode() {
-  return getSecretStorageMode()
 }
 
 function applyWorkflowLaunchAtLogin(settings: AppSettings) {

@@ -19,8 +19,9 @@ Reference workflows in the repository root:
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
 - [ ] perf baseline environment is intentional; refresh
-      `benchmarks/perf-baseline.json` on the target CI runner with
-      `pnpm perf:baseline` after Node, runner OS, or workload changes
+      the environment-specific `benchmarks/perf-baseline.*.json` on the
+      target CI runner with `pnpm perf:baseline` after Node, runner OS,
+      or workload changes
 - [ ] `git diff --check`
 - [ ] working tree is clean
 
