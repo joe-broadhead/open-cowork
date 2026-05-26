@@ -597,6 +597,31 @@ describe('CapabilitiesPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Response: Bad credentials')
   })
 
+  it('shows non-applicable API-token preflight results as non-error status', async () => {
+    const user = userEvent.setup()
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'not_applicable',
+      mcpName: name,
+      message: `${name} does not use remote API-token authentication.`,
+    }))
+    renderCapabilitiesPage({
+      mcpPreflight,
+      integrationCredentials: {},
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-local')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mcpPreflight).toHaveBeenCalledWith('charts')
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('charts does not use remote API-token authentication.')
+  })
+
   it('renders radio credential options and saves the selected value', async () => {
     const user = userEvent.setup()
     const radioTool: CapabilityTool = {

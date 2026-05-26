@@ -194,7 +194,11 @@ export function ToolCredentialsCard({
         result.responseBody ? `Response: ${result.responseBody}` : null,
       ].filter(Boolean)
       setPreflightMessage(parts.join(' '))
-      setPreflightTone(result.ok ? 'success' : result.status === 'missing_credentials' ? 'warning' : 'error')
+      setPreflightTone(result.ok
+        ? 'success'
+        : result.status === 'missing_credentials' || result.status === 'not_applicable'
+          ? 'warning'
+          : 'error')
     } catch (error) {
       setPreflightMessage(error instanceof Error ? error.message : String(error))
       setPreflightTone('error')

@@ -89,9 +89,13 @@ test('preflightConfiguredApiTokenMcp reports missing required credentials withou
   await withRemoteMcpConfig(async () => {
     saveSettings(baseSettings())
     let fetched = false
+    let resolved = false
 
     const result = await preflightConfiguredApiTokenMcp('github', {
-      resolveHostname: resolvePublicTestHost,
+      resolveHostname: async () => {
+        resolved = true
+        throw new Error('should not resolve before credential validation')
+      },
       fetchImpl: (async () => {
         fetched = true
         return new Response('', { status: 200 })
@@ -103,6 +107,7 @@ test('preflightConfiguredApiTokenMcp reports missing required credentials withou
     assert.equal(result.status, 'missing_credentials')
     assert.match(result.message, /GitHub token/)
     assert.equal(fetched, false)
+    assert.equal(resolved, false)
   })
 })
 

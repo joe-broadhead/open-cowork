@@ -48,6 +48,15 @@ function configuredMcpHelpText(mcp: BundleMcp) {
     : undefined
 }
 
+function configuredMcpHost(mcp: BundleMcp) {
+  if (!mcp.url) return undefined
+  try {
+    return new URL(mcp.url).host
+  } catch {
+    return undefined
+  }
+}
+
 function requiredCredentialKeys(mcp: BundleMcp, settings: CoworkSettings) {
   const credentials = mcp.credentials || []
   const credentialValues = Object.fromEntries(
@@ -225,6 +234,18 @@ export async function preflightConfiguredApiTokenMcp(
     })
   }
 
+  const settings = getEffectiveSettings()
+  const missing = requiredCredentialKeys(mcp, settings)
+  if (missing.length > 0) {
+    return result({
+      status: 'missing_credentials',
+      mcpName: name,
+      host: configuredMcpHost(mcp),
+      message: `Save ${missing.join(', ')} before testing ${name}.`,
+      helpText,
+    })
+  }
+
   const urlVerdict = await evaluateHttpMcpUrlResolved(mcp.url, {
     resolveHostname: deps.resolveHostname,
   })
@@ -233,18 +254,6 @@ export async function preflightConfiguredApiTokenMcp(
       status: 'invalid_config',
       mcpName: name,
       message: urlVerdict.reason,
-      helpText,
-    })
-  }
-
-  const settings = getEffectiveSettings()
-  const missing = requiredCredentialKeys(mcp, settings)
-  if (missing.length > 0) {
-    return result({
-      status: 'missing_credentials',
-      mcpName: name,
-      host: urlVerdict.url.host,
-      message: `Save ${missing.join(', ')} before testing ${name}.`,
       helpText,
     })
   }
