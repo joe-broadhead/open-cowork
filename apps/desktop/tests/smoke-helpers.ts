@@ -517,14 +517,18 @@ export async function launchPackagedMacProbe(
 }
 
 async function stopSpawnedSmokeProcess(child: ChildProcess) {
-  if (child.killed || child.exitCode !== null || child.signalCode !== null) return
+  if (child.exitCode !== null || child.signalCode !== null) return
   child.kill('SIGTERM')
-  await Promise.race([
-    new Promise<void>((resolveExit) => child.once('exit', () => resolveExit())),
-    delay(5_000),
+  const exitedAfterTerm = await Promise.race([
+    new Promise<boolean>((resolveExit) => child.once('exit', () => resolveExit(true))),
+    delay(5_000).then(() => false),
   ])
-  if (!child.killed && child.exitCode === null && child.signalCode === null) {
+  if (!exitedAfterTerm && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL')
+    await Promise.race([
+      new Promise<void>((resolveExit) => child.once('exit', () => resolveExit())),
+      delay(5_000),
+    ])
   }
 }
 
