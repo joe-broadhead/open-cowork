@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AppSettings, CapabilityToolEntry } from '@open-cowork/shared'
 import { preflightConfiguredApiTokenMcp } from '../apps/desktop/src/main/mcp-preflight.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearConfigCaches, type BundleMcp } from '../apps/desktop/src/main/config-loader.ts'
 import { clearSettingsCache, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import type { ResolvedRuntimeMcpEntry } from '../apps/desktop/src/main/runtime-mcp.ts'
 
@@ -32,7 +32,10 @@ function baseSettings(): AppSettings {
   }
 }
 
-async function withRemoteMcpConfig(fn: () => Promise<void>) {
+async function withRemoteMcpConfig(
+  fn: () => Promise<void>,
+  mcpOverrides: Partial<BundleMcp> = {},
+) {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-mcp-preflight-'))
   const configDir = join(tempRoot, 'config')
   const userDataDir = join(tempRoot, 'user-data')
@@ -64,6 +67,7 @@ async function withRemoteMcpConfig(fn: () => Promise<void>) {
         required: true,
         secret: true,
       }],
+      ...mcpOverrides,
     }],
   }))
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
@@ -188,5 +192,39 @@ test('preflightConfiguredApiTokenMcp confirms MCP tool-list connectivity', async
     if (entries[0]?.type !== 'remote') return
     assert.equal(entries[0].headers?.Authorization, `Bearer ${fakeToken}`)
     assert.equal(entries[0].headers?.['X-MCP-Toolsets'], 'repos,issues')
+  })
+})
+
+test('preflightConfiguredApiTokenMcp preserves bundled private-network opt-in', async () => {
+  await withRemoteMcpConfig(async () => {
+    const fakeToken = ['github', '_pat_', 'private', 'token', 'value', '1234567890'].join('')
+    saveSettings({
+      ...baseSettings(),
+      integrationCredentials: { github: { token: fakeToken } },
+    })
+    let resolvedHost = ''
+
+    const result = await preflightConfiguredApiTokenMcp('github', {
+      resolveHostname: async (hostname) => {
+        resolvedHost = hostname
+        return [{ address: '10.0.0.5', family: 4 }]
+      },
+      fetchImpl: (async () => new Response('', { status: 405 })) as typeof fetch,
+      listToolsFromMcpEntry: async (entry) => {
+        assert.equal(entry.type, 'remote')
+        if (entry.type === 'remote') {
+          assert.equal(entry.url, 'https://internal.example/mcp/')
+        }
+        return [{ id: 'internal_lookup', description: 'Look up internal resources.' }]
+      },
+    })
+
+    assert.equal(resolvedHost, 'internal.example')
+    assert.equal(result.ok, true)
+    assert.equal(result.status, 'ok')
+    assert.equal(result.methodCount, 1)
+  }, {
+    url: 'https://internal.example/mcp/',
+    allowPrivateNetwork: true,
   })
 })

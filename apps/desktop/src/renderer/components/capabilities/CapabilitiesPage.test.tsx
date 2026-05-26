@@ -597,6 +597,43 @@ describe('CapabilitiesPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Response: Bad credentials')
   })
 
+  it('skips automatic API-token preflight when the integration is explicitly disabled', async () => {
+    const user = userEvent.setup()
+    const disabledTool: CapabilityTool = {
+      ...chartTool,
+      enabled: false,
+    }
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'invalid_config',
+      mcpName: name,
+      message: `${name} is not ready to connect.`,
+    }))
+    const api = renderCapabilitiesPage({
+      tools: [disabledTool, shellTool],
+      mcpPreflight,
+      integrationCredentials: {},
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-disabled')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-disabled' },
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(api.getIntegrationCredentials).toHaveBeenCalledTimes(2)
+    })
+    expect(mcpPreflight).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('shows non-applicable API-token preflight results as non-error status', async () => {
     const user = userEvent.setup()
     const mcpPreflight = vi.fn(async (name: string) => ({

@@ -247,6 +247,7 @@ export async function preflightConfiguredApiTokenMcp(
   }
 
   const urlVerdict = await evaluateHttpMcpUrlResolved(mcp.url, {
+    allowPrivateNetwork: mcp.allowPrivateNetwork,
     resolveHostname: deps.resolveHostname,
   })
   if (!urlVerdict.ok) {

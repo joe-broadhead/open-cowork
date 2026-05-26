@@ -622,6 +622,11 @@ provider-specific guidance with preflight failures, such as required PAT
 scopes, SSO authorization, repository restrictions, or organization
 policy settings.
 
+Remote bundled MCPs that intentionally live on an internal network can set
+`allowPrivateNetwork: true`. This preserves the normal DNS-aware SSRF guard
+for public builds by default; cloud metadata endpoints remain blocked even
+when private network access is enabled.
+
 ```json
 {
   "mcps": [
