@@ -1,5 +1,5 @@
 import { tmpdir } from 'node:os'
-import { relative, resolve } from 'node:path'
+import { isAbsolute, relative, resolve } from 'node:path'
 import { writeFileAtomic } from './fs-atomic.ts'
 
 type ElectronAppWithCommandLine = {
@@ -18,6 +18,14 @@ type E2EProbeResult = {
   installCapability?: Record<string, unknown>
   sessions?: Array<{ id: string }>
   createdSessionId?: string | null
+}
+
+const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
+
+export function e2eReadyFileRelativePathIsContained(relativeToTmp: string) {
+  if (!relativeToTmp || relativeToTmp.startsWith('..')) return false
+  if (isAbsolute(relativeToTmp)) return false
+  return !WINDOWS_ROOTED_PATH_RE.test(relativeToTmp)
 }
 
 export function resolveE2ERemoteDebuggingPort(env: NodeJS.ProcessEnv = process.env) {
@@ -44,7 +52,7 @@ function resolveE2EReadyFile(env: NodeJS.ProcessEnv = process.env) {
   const target = resolve(raw)
   const tmpRoot = resolve(env.TMPDIR || tmpdir())
   const relativeToTmp = relative(tmpRoot, target)
-  if (relativeToTmp.startsWith('..') || relativeToTmp === '' || relativeToTmp.startsWith('/')) return null
+  if (!e2eReadyFileRelativePathIsContained(relativeToTmp)) return null
   return target
 }
 

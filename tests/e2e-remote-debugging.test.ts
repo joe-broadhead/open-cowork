@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   appendE2ERemoteDebuggingSwitches,
+  e2eReadyFileRelativePathIsContained,
   resolveE2ERemoteDebuggingPort,
 } from '../apps/desktop/src/main/e2e-remote-debugging.ts'
 
@@ -44,4 +45,15 @@ test('e2e remote debugging appends address and port switches', () => {
     ['remote-debugging-address', '127.0.0.1'],
     ['remote-debugging-port', '9333'],
   ])
+})
+
+test('e2e ready file containment rejects rooted and cross-volume relative paths', () => {
+  assert.equal(e2eReadyFileRelativePathIsContained('probe/ready.json'), true)
+  assert.equal(e2eReadyFileRelativePathIsContained('probe\\ready.json'), true)
+  assert.equal(e2eReadyFileRelativePathIsContained(''), false)
+  assert.equal(e2eReadyFileRelativePathIsContained('../ready.json'), false)
+  assert.equal(e2eReadyFileRelativePathIsContained('..\\ready.json'), false)
+  assert.equal(e2eReadyFileRelativePathIsContained('/tmp/ready.json'), false)
+  assert.equal(e2eReadyFileRelativePathIsContained('\\tmp\\ready.json'), false)
+  assert.equal(e2eReadyFileRelativePathIsContained('D:\\tmp\\ready.json'), false)
 })
