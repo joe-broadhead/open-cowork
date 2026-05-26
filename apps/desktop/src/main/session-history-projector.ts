@@ -209,14 +209,29 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     })
   }
 
-  const taskToolBindingWindow = (messageIndex: number, after: number | null) => {
+  type TaskToolBindingWindow = {
+    after?: number
+    before?: number
+    excludeUntimed?: boolean
+  }
+
+  const taskToolBindingWindow = (messageIndex: number, after: number | null): TaskToolBindingWindow | null => {
     const nextBoundary = rootDelegationBoundaries.find((boundary) => boundary.index > messageIndex)
     if (!nextBoundary) return { after: after ?? undefined }
     if (nextBoundary.sortTime === null) {
       // An untimed later delegation is still a real ordering boundary. Without
       // an upper timestamp, implicit binding would be allowed to consume that
       // later child session and leave the actual delegation pending on replay.
-      return null
+      if (after === null) return null
+      const laterDelegationSlotCount = normalizedRootMessages[nextBoundary.index]?.parts.filter(isDelegationPart).length || 0
+      const availableDirectChildCount = directChildren.filter((child) => {
+        if (matchedChildIds.has(child.id)) return false
+        const created = childCreatedSortTime(child)
+        return created === null || created >= after
+      }).length
+      return availableDirectChildCount > laterDelegationSlotCount
+        ? { after, excludeUntimed: true }
+        : null
     }
     return {
       after: after ?? undefined,
@@ -285,7 +300,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   const candidateChildrenForTaskTool = (
     parentSessionId: string,
-    options: { after?: number; before?: number } = {},
+    options: TaskToolBindingWindow = {},
     excludedChildIds = new Set<string>(),
   ) => {
     return children.filter((child) => {
@@ -293,7 +308,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
         return false
       }
       const created = childCreatedSortTime(child)
-      if (created === null && options.before !== undefined) return false
+      if (created === null && (options.before !== undefined || options.excludeUntimed)) return false
       if (created !== null && options.after !== undefined && created < options.after) return false
       if (created !== null && options.before !== undefined && created >= options.before) return false
       return true
@@ -302,7 +317,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
   const takeOnlyChildForTaskTool = (
     parentSessionId: string,
-    options: { after?: number; before?: number } = {},
+    options: TaskToolBindingWindow = {},
     excludedChildIds = new Set<string>(),
   ) => {
     const candidates = candidateChildrenForTaskTool(parentSessionId, options, excludedChildIds)
@@ -328,7 +343,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   const createOrderedTaskToolChildBinder = (
     parentSessionId: string,
     remainingParts: NormalizedMessagePart[],
-    options: { after?: number; before?: number } = {},
+    options: TaskToolBindingWindow = {},
   ) => {
     const orderedImplicitBindingParts = remainingParts.filter((part) => (
       part.type === 'subtask'

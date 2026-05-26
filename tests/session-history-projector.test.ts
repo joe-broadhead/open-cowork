@@ -1032,6 +1032,71 @@ test('history projector treats untimed later delegations as task-tool binding bo
   assert.equal(childTask.title, 'Later untimed delegation')
 })
 
+test('history projector binds earlier timed child before an untimed later delegation when another child remains', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-untimed-boundary-with-extra-child',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-extra-earlier-task-msg', role: 'assistant', time: { created: 10 } },
+        parts: [
+          {
+            id: 'root-extra-earlier-task-part',
+            type: 'tool',
+            tool: 'task',
+            callID: 'extra-earlier-task-call',
+            state: {
+              status: 'completed',
+              input: {
+                agent: 'analyst',
+                description: 'Earlier timestamped task tool',
+              },
+              output: 'done',
+              metadata: {},
+            },
+          },
+        ],
+      },
+      {
+        info: { id: 'root-extra-later-untimed-subtask-msg', role: 'assistant' },
+        parts: [
+          { id: 'root-extra-later-untimed-subtask', type: 'subtask', agent: 'research', description: 'Later untimed delegation with remaining child' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-extra-later-untimed',
+        title: 'Later untimed delegation with remaining child (@research subagent)',
+        parentSessionId: 'root-untimed-boundary-with-extra-child',
+      },
+      {
+        id: 'child-extra-earlier-timed',
+        title: 'Earlier timestamped task tool (@analyst subagent)',
+        parentSessionId: 'root-untimed-boundary-with-extra-child',
+        time: { created: 11, updated: 14 },
+      },
+    ],
+    statuses: {
+      'root-untimed-boundary-with-extra-child': { type: 'idle' },
+      'child-extra-earlier-timed': { type: 'idle' },
+      'child-extra-later-untimed': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const earlierTask = items.find((item) => item.id === 'child:child-extra-earlier-timed')?.taskRun
+  const laterTask = items.find((item) => item.id === 'child:child-extra-later-untimed')?.taskRun
+
+  assert.ok(earlierTask)
+  assert.equal(earlierTask.sourceSessionId, 'child-extra-earlier-timed')
+  assert.equal(earlierTask.title, 'Earlier timestamped task tool')
+  assert.ok(laterTask)
+  assert.equal(laterTask.sourceSessionId, 'child-extra-later-untimed')
+  assert.equal(laterTask.title, 'Later untimed delegation with remaining child')
+})
+
 test('history projector does not bind bounded task tools to untimed later children', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-bounded-untimed-child',
