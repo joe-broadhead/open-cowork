@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   cleanupSmokePaths,
   createSmokePaths,
+  launchPackagedMacProbe,
   launchSmokeSession,
   type SmokeSession,
 } from './smoke-helpers.ts'
@@ -47,6 +48,25 @@ test(
     let session: SmokeSession | null = null
 
     try {
+      if (process.platform === 'darwin') {
+        const probe = await launchPackagedMacProbe(paths, executablePath, { timeoutMs: packagedLaunchTimeoutMs })
+        assert.deepEqual(probe.surface, {
+          sessionCreate: 'function',
+          settingsSet: 'function',
+          workflowsStartDraft: 'function',
+          updatesInstallCapability: 'function',
+          onSessionPatch: 'function',
+        })
+        assert.equal(typeof probe.settings.effectiveProviderId, 'string')
+        assert.equal(typeof probe.settings.effectiveModel, 'string')
+        assert.equal(typeof probe.installCapability.supported, 'boolean')
+        assert.ok(
+          probe.installCapability.reason === undefined
+            || typeof probe.installCapability.reason === 'string',
+        )
+        return
+      }
+
       session = await launchSmokeSession(paths, {
         executablePath,
         appShellTimeoutMs: packagedLaunchTimeoutMs,

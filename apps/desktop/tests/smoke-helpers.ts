@@ -54,6 +54,27 @@ export interface SmokeSession {
   close: () => Promise<void>
 }
 
+export type PackagedMacProbe = {
+  surface: {
+    sessionCreate: string
+    settingsSet: string
+    workflowsStartDraft: string
+    updatesInstallCapability: string
+    onSessionPatch: string
+  }
+  settings: {
+    effectiveProviderId: unknown
+    effectiveModel: unknown
+  }
+  installCapability: {
+    supported: unknown
+    reason?: unknown
+    currentVersion?: unknown
+  }
+  sessions: Array<{ id: string }>
+  createdSessionId: string | null
+}
+
 export interface LaunchSmokeAppOptions {
   // Called with the isolated data root *before* Electron launches.
   // Use this to seed files like `sessions.json` under the path the
@@ -266,6 +287,23 @@ async function delay(ms: number) {
   await new Promise((done) => setTimeout(done, ms))
 }
 
+async function waitForJsonFile<T>(path: string, timeoutMs = 30_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown = null
+  while (Date.now() < deadline) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as { ok?: boolean; result?: T }
+      if (parsed.ok) return parsed.result as T
+      lastError = new Error(`Probe file did not report ok=true: ${path}`)
+    } catch (error) {
+      lastError = error
+    }
+    await delay(100)
+  }
+  const suffix = lastError instanceof Error ? ` Last error: ${lastError.message}` : ''
+  throw new Error(`Timed out waiting for probe file ${path}.${suffix}`)
+}
+
 async function withSmokeTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
   try {
@@ -421,6 +459,40 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
 
   await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
   await delay(1_000)
+}
+
+export async function launchPackagedMacProbe(
+  paths: SmokePaths,
+  executablePath: string,
+  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+): Promise<PackagedMacProbe> {
+  if (process.platform !== 'darwin') {
+    throw new Error('launchPackagedMacProbe is only supported on macOS')
+  }
+  const macAppBundlePath = getMacAppBundlePath(executablePath)
+  if (!macAppBundlePath) throw new Error(`Expected a macOS .app executable path, got ${executablePath}`)
+
+  const readyFile = join(paths.tempRoot, `packaged-mac-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
+  const launchEnvironment = {
+    ...getLaunchServicesEnvironment(paths),
+    OPEN_COWORK_E2E_READY_FILE: readyFile,
+    OPEN_COWORK_E2E_PROBE_ACTION: options?.action || 'surface',
+  }
+  const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+  await runCommand('open', [
+    '-n',
+    '-g',
+    '-j',
+    ...envArgs,
+    macAppBundlePath,
+  ])
+
+  try {
+    return await waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000)
+  } finally {
+    await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+    await delay(1_000)
+  }
 }
 
 async function stopSpawnedSmokeProcess(child: ChildProcess) {

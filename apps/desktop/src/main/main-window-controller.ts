@@ -10,6 +10,7 @@ import {
   rendererUrlLooksWrong,
   shouldRecoverMainWindowFromDidFailLoad,
 } from './main-window-lifecycle.ts'
+import { writeE2EWindowReadyProbe } from './e2e-remote-debugging.ts'
 import { loadSettings } from './settings.ts'
 import { resolveStartupSplashTemplatePath, writeStartupSplashFile } from './startup-splash.ts'
 import { createWindowState } from './window-state.ts'
@@ -280,6 +281,9 @@ export function createMainWindowController(options: {
     })
     window.webContents.on('did-finish-load', () => {
       options.log('renderer', 'Renderer did-finish-load')
+      void writeE2EWindowReadyProbe(window.webContents).catch((error: unknown) => {
+        options.log('error', `E2E ready probe failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
       revealCurrentWindow('did-finish-load')
     })
     window.once('ready-to-show', () => {

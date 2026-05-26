@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   cleanupSmokePaths,
   createSmokePaths,
+  launchPackagedMacProbe,
   launchSmokeSession,
   type SmokeSession,
 } from './smoke-helpers.ts'
@@ -62,6 +63,46 @@ test(
     let secondLaunch: SmokeSession | null = null
 
     try {
+      if (process.platform === 'darwin') {
+        const firstProbe = await launchPackagedMacProbe(paths, executablePath, {
+          action: 'create-session',
+          timeoutMs: packagedLaunchTimeoutMs,
+        })
+        assert.equal(
+          typeof firstProbe.installCapability.currentVersion,
+          'string',
+          'expected packaged update capability to include the running app version',
+        )
+        assert.equal(
+          String(firstProbe.installCapability.currentVersion).length > 0,
+          true,
+          'expected packaged update capability version to be non-empty',
+        )
+        if (expectSignedUpdateInstall) {
+          assert.equal(firstProbe.installCapability.supported, true, 'expected signed packaged macOS build to advertise in-app update install support')
+          assert.equal(firstProbe.installCapability.reason, undefined)
+        } else {
+          assert.equal(firstProbe.installCapability.supported, false, 'expected unsigned or unsupported packaged build to keep in-app update install disabled')
+          assert.equal(
+            updateInstallUnsupportedReasons.has(String(firstProbe.installCapability.reason)),
+            true,
+            `expected a known update install unsupported reason, got ${String(firstProbe.installCapability.reason)}`,
+          )
+        }
+
+        assert.ok(firstProbe.createdSessionId, 'expected packaged app to persist a newly created session before relaunch')
+
+        const secondProbe = await launchPackagedMacProbe(paths, executablePath, {
+          action: 'list-sessions',
+          timeoutMs: packagedLaunchTimeoutMs,
+        })
+        assert.ok(
+          secondProbe.sessions.some((session) => session.id === firstProbe.createdSessionId),
+          'expected created session to survive a packaged-app relaunch',
+        )
+        return
+      }
+
       firstLaunch = await launchSmokeSession(paths, {
         executablePath,
         appShellTimeoutMs: packagedLaunchTimeoutMs,

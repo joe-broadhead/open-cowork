@@ -154,6 +154,20 @@ test('workflow store treats valid non-array trigger JSON as empty', () => withWo
   assert.deepEqual(parseWorkflowTriggersFromStorage('"manual"'), [])
 }))
 
+test('workflow store skips malformed trigger array entries during storage parsing', () => withWorkflowStore('malformed-trigger-entries', () => {
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    null,
+    'manual',
+    {},
+    [],
+    { id: 'manual', type: 'manual', enabled: true },
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: 'secret' },
+  ]))
+
+  assert.deepEqual(parsed.map((trigger) => trigger.type), ['manual', 'webhook'])
+  assert.equal(parsed[1]?.webhookSecret, 'secret')
+}))
+
 test('workflow store tracks run lifecycle and next scheduled run', () => withWorkflowStore('runs', () => {
   const workflow = createWorkflow(draft)
   const run = createWorkflowRun(workflow.id, 'manual', { source: 'test' })

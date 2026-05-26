@@ -175,9 +175,14 @@ export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[])
 export function parseWorkflowTriggersFromStorage(value: unknown) {
   const parsed = parseJson<unknown>(value, [])
   if (!Array.isArray(parsed)) return []
-  return (parsed as WorkflowTrigger[]).map((trigger) => trigger.type === 'webhook'
-    ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret) }
-    : trigger)
+  return parsed.flatMap((raw): WorkflowTrigger[] => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+    const trigger = raw as Partial<WorkflowTrigger>
+    if (!VALID_TRIGGER_TYPES.has(trigger.type as WorkflowTriggerType)) return []
+    return [trigger.type === 'webhook'
+      ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret) } as WorkflowTrigger
+      : trigger as WorkflowTrigger]
+  })
 }
 
 export function setWorkflowSecretStorageForTests(adapter: WorkflowSecretStorageAdapter | null) {
