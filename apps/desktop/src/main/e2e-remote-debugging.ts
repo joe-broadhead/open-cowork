@@ -19,6 +19,12 @@ type E2EProbeResult = {
   sessions?: Array<{ id: string }>
   createdSessionId?: string | null
 }
+type E2EProbeFile = {
+  ok: boolean
+  result?: E2EProbeResult
+  error?: string
+  writtenAt: string
+}
 
 const WINDOWS_ROOTED_PATH_RE = /^(?:[a-zA-Z]:[\\/]|[\\/])/
 
@@ -26,6 +32,10 @@ export function e2eReadyFileRelativePathIsContained(relativeToTmp: string) {
   if (!relativeToTmp || relativeToTmp.startsWith('..')) return false
   if (isAbsolute(relativeToTmp)) return false
   return !WINDOWS_ROOTED_PATH_RE.test(relativeToTmp)
+}
+
+function writeE2EProbeFile(target: string, payload: Omit<E2EProbeFile, 'writtenAt'>) {
+  writeFileAtomic(target, JSON.stringify({ ...payload, writtenAt: new Date().toISOString() }), { mode: 0o600 })
 }
 
 export function resolveE2ERemoteDebuggingPort(env: NodeJS.ProcessEnv = process.env) {
@@ -63,13 +73,20 @@ export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, en
     || env.OPEN_COWORK_E2E_PROBE_ACTION === 'list-sessions'
     ? env.OPEN_COWORK_E2E_PROBE_ACTION
     : 'surface'
-  const result = await webContents.executeJavaScript<E2EProbeResult>(`
+  try {
+    const result = await webContents.executeJavaScript<E2EProbeResult>(`
     (async () => {
       const api = window.coworkApi || {};
       if (typeof api.settings?.get !== 'function' || typeof api.updates?.installCapability !== 'function') {
         return { waiting: true };
       }
       const delay = (ms) => new Promise((done) => setTimeout(done, ms));
+      const withTimeout = (promise, ms, label) => Promise.race([
+        promise,
+        delay(ms).then(() => {
+          throw new Error(label + ' timed out after ' + ms + 'ms');
+        }),
+      ]);
       const setupComplete = async () => {
         const [config, settings] = await Promise.all([
           api.app.config(),
@@ -106,24 +123,12 @@ export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, en
       const settings = await api.settings.get();
       const installCapability = await api.updates.installCapability();
       const action = ${JSON.stringify(action)};
-      const waitForRuntimeReady = async () => {
-        const deadline = Date.now() + 30000;
-        while (Date.now() < deadline) {
-          const status = await api.runtime.status().catch(() => null);
-          if (status?.ready) return true;
-          await delay(500);
-        }
-        return false;
-      };
       const initialSessions = await api.session.list();
       const initialIds = initialSessions.map((session) => session.id);
       let sessions = initialSessions;
       let createdSessionId = null;
       if (action === 'create-session') {
-        if (!(await waitForRuntimeReady())) {
-          throw new Error('Runtime did not become ready for packaged session probe');
-        }
-        await api.session.create(null);
+        await withTimeout(api.session.create(null), 30000, 'Creating packaged smoke session');
         const deadline = Date.now() + 15000;
         while (Date.now() < deadline) {
           sessions = await api.session.list();
@@ -149,8 +154,15 @@ export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, en
         createdSessionId,
       };
     })()
-  `, false)
-  if (result?.reloading || result?.waiting) return true
-  writeFileAtomic(target, JSON.stringify({ ok: true, result, writtenAt: new Date().toISOString() }), { mode: 0o600 })
-  return true
+    `, false)
+    if (result?.reloading || result?.waiting) return true
+    writeE2EProbeFile(target, { ok: true, result })
+    return true
+  } catch (error) {
+    writeE2EProbeFile(target, {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 }

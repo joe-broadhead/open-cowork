@@ -292,10 +292,16 @@ async function waitForJsonFile<T>(path: string, timeoutMs = 30_000): Promise<T> 
   let lastError: unknown = null
   while (Date.now() < deadline) {
     try {
-      const parsed = JSON.parse(readFileSync(path, 'utf8')) as { ok?: boolean; result?: T }
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as { ok?: boolean; result?: T; error?: string }
       if (parsed.ok) return parsed.result as T
+      if (parsed.ok === false) {
+        throw new Error(`Probe file reported failure: ${parsed.error || 'unknown error'}`)
+      }
       lastError = new Error(`Probe file did not report ok=true: ${path}`)
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Probe file reported failure:')) {
+        throw error
+      }
       lastError = error
     }
     await delay(100)
@@ -474,22 +480,37 @@ export async function launchPackagedMacProbe(
 
   const readyFile = join(paths.tempRoot, `packaged-mac-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
   const launchEnvironment = {
-    ...getLaunchServicesEnvironment(paths),
+    ...getSmokeEnvironment(paths),
     OPEN_COWORK_E2E_READY_FILE: readyFile,
     OPEN_COWORK_E2E_PROBE_ACTION: options?.action || 'surface',
   }
-  const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
-  await runCommand('open', [
-    '-n',
-    '-g',
-    '-j',
-    ...envArgs,
-    macAppBundlePath,
-  ])
+  const child = spawn(executablePath, [], {
+    cwd: desktopAppDir,
+    env: launchEnvironment,
+    stdio: 'ignore',
+  })
+  let clearEarlyExit: () => void = () => undefined
+  const earlyExit = new Promise<never>((_resolve, reject) => {
+    const onError = (error: Error) => reject(error)
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      reject(new Error(`Packaged app exited before probe file was written: ${signal || code}`))
+    }
+    child.once('error', onError)
+    child.once('exit', onExit)
+    clearEarlyExit = () => {
+      child.off('error', onError)
+      child.off('exit', onExit)
+    }
+  })
 
   try {
-    return await waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000)
+    return await Promise.race([
+      waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000),
+      earlyExit,
+    ])
   } finally {
+    clearEarlyExit()
+    await stopSpawnedSmokeProcess(child)
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
     await delay(1_000)
   }
