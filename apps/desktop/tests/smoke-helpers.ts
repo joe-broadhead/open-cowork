@@ -11,7 +11,7 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
-import { buildE2EArgEnvironment } from '../src/main/e2e-remote-debugging.ts'
+import { buildE2EArgEnvironment, E2E_ARG_ENV_ENABLE_KEY } from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -482,16 +482,23 @@ export async function launchPackagedMacProbe(
   const readyFile = join(paths.tempRoot, `packaged-mac-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
   const launchEnvironment = {
     ...getLaunchServicesEnvironment(paths),
+    [E2E_ARG_ENV_ENABLE_KEY]: '1',
     OPEN_COWORK_E2E_READY_FILE: readyFile,
     OPEN_COWORK_E2E_PROBE_ACTION: options?.action || 'surface',
   }
   const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
   const appArgs = buildE2EArgEnvironment(launchEnvironment)
 
+  let launchServicesMarkerSet = false
   try {
+    await runCommand('launchctl', ['setenv', E2E_ARG_ENV_ENABLE_KEY, '1'])
+    launchServicesMarkerSet = true
     await runCommand('open', ['-n', '-g', '-j', ...envArgs, macAppBundlePath, '--args', ...appArgs])
     return await waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000)
   } finally {
+    if (launchServicesMarkerSet) {
+      await runCommand('launchctl', ['unsetenv', E2E_ARG_ENV_ENABLE_KEY]).catch(() => {})
+    }
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
     await delay(1_000)
   }
