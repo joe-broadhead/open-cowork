@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `6696e51c7f7f986fb54e025dc3fbe58c217c491dacff921ebef6c6ab10c16a7b`
+- pnpm lockfile SHA-256: `c32d304dec09159f01dfc57d63f0d8577a956e825296a81d8e3e0591a20a53b5`
 - Production package entries: 420
 - Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
 
@@ -152,7 +152,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | depd | 2.0.0 | MIT | THIRD_PARTY_LICENSES/depd@2.0.0/ | dougwilson/nodejs-depd |
 | dequal | 2.0.3 | MIT | THIRD_PARTY_LICENSES/dequal@2.0.3/ | lukeed/dequal |
 | devlop | 1.1.0 | MIT | THIRD_PARTY_LICENSES/devlop@1.1.0/ | wooorm/devlop |
-| dompurify | 3.4.2 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.2/ | git://github.com/cure53/DOMPurify.git |
+| dompurify | 3.4.6 | (MPL-2.0 OR Apache-2.0) | THIRD_PARTY_LICENSES/dompurify@3.4.6/ | git://github.com/cure53/DOMPurify.git |
 | dunder-proto | 1.0.1 | MIT | THIRD_PARTY_LICENSES/dunder-proto@1.0.1/ | git+https://github.com/es-shims/dunder-proto.git |
 | ecdsa-sig-formatter | 1.0.11 | Apache-2.0 | THIRD_PARTY_LICENSES/ecdsa-sig-formatter@1.0.11/ | git+ssh://git@github.com/Brightspace/node-ecdsa-sig-formatter.git |
 | ee-first | 1.1.1 | MIT | THIRD_PARTY_LICENSES/ee-first@1.1.1/ | jonathanong/ee-first |
