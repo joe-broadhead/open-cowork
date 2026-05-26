@@ -11,7 +11,6 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
-import { buildE2EArgEnvironment, E2E_ARG_ENV_ENABLE_KEY } from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -252,63 +251,8 @@ function getSmokeEnvironment(paths: SmokePaths) {
   }
 }
 
-function getMacAppBundlePath(executablePath: string) {
-  const bundleMarker = '.app/Contents/MacOS/'
-  const markerIndex = executablePath.indexOf(bundleMarker)
-  if (markerIndex < 0) return null
-  return executablePath.slice(0, markerIndex + '.app'.length)
-}
-
-function getLaunchServicesEnvironment(paths: SmokePaths) {
-  const env = getSmokeEnvironment(paths)
-  const keys = new Set([
-    'HOME',
-    'PATH',
-    'SHELL',
-    'TMPDIR',
-    'XDG_CONFIG_HOME',
-    'XDG_DATA_HOME',
-    'XDG_CACHE_HOME',
-    'OPEN_COWORK_CONFIG_PATH',
-    'OPEN_COWORK_USER_DATA_DIR',
-    'OPEN_COWORK_SANDBOX_DIR',
-    'OPEN_COWORK_CHART_TIMEOUT_MS',
-    'OPEN_COWORK_E2E',
-    'CI',
-  ])
-
-  return Object.fromEntries(
-    Array.from(keys)
-      .map((key) => [key, env[key]] as const)
-      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-  )
-}
-
 async function delay(ms: number) {
   await new Promise((done) => setTimeout(done, ms))
-}
-
-async function waitForJsonFile<T>(path: string, timeoutMs = 30_000): Promise<T> {
-  const deadline = Date.now() + timeoutMs
-  let lastError: unknown = null
-  while (Date.now() < deadline) {
-    try {
-      const parsed = JSON.parse(readFileSync(path, 'utf8')) as { ok?: boolean; result?: T; error?: string }
-      if (parsed.ok) return parsed.result as T
-      if (parsed.ok === false) {
-        throw new Error(`Probe file reported failure: ${parsed.error || 'unknown error'}`)
-      }
-      lastError = new Error(`Probe file did not report ok=true: ${path}`)
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Probe file reported failure:')) {
-        throw error
-      }
-      lastError = error
-    }
-    await delay(100)
-  }
-  const suffix = lastError instanceof Error ? ` Last error: ${lastError.message}` : ''
-  throw new Error(`Timed out waiting for probe file ${path}.${suffix}`)
 }
 
 async function withSmokeTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -341,28 +285,6 @@ async function getAvailablePort() {
     })
   })
   return address.port
-}
-
-function runCommand(command: string, args: string[], timeoutMs = 10_000) {
-  return new Promise<void>((resolveCommand, rejectCommand) => {
-    const child = spawn(command, args, { stdio: 'ignore' })
-    const timeout = setTimeout(() => {
-      child.kill('SIGTERM')
-      rejectCommand(new Error(`${command} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-    child.once('error', (error) => {
-      clearTimeout(timeout)
-      rejectCommand(error)
-    })
-    child.once('exit', (code, signal) => {
-      clearTimeout(timeout)
-      if (code === 0) {
-        resolveCommand()
-        return
-      }
-      rejectCommand(new Error(`${command} exited with ${signal || code}`))
-    })
-  })
 }
 
 async function isCdpAvailable(port: number) {
@@ -442,32 +364,6 @@ async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_0
   throw new Error(`Timed out waiting for Electron app shell page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
 }
 
-async function closeCdpSmokeApp(browser: Browser, port: number) {
-  try {
-    const cdpSession = await browser.newBrowserCDPSession()
-    await withSmokeTimeout('closing packaged app over CDP', cdpSession.send('Browser.close'), 2_000)
-  } catch {
-    // Fall through to the normal Playwright close/disconnect path.
-  }
-
-  try {
-    await withSmokeTimeout('closing packaged browser connection', browser.close(), 5_000)
-  } catch {
-    // The process may already be gone after Browser.close reaches CDP.
-  }
-
-  for (let attempts = 0; attempts < 20; attempts += 1) {
-    if (!(await isCdpAvailable(port))) {
-      await delay(1_000)
-      return
-    }
-    await delay(250)
-  }
-
-  await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-  await delay(1_000)
-}
-
 export async function launchPackagedMacProbe(
   paths: SmokePaths,
   executablePath: string,
@@ -476,31 +372,68 @@ export async function launchPackagedMacProbe(
   if (process.platform !== 'darwin') {
     throw new Error('launchPackagedMacProbe is only supported on macOS')
   }
-  const macAppBundlePath = getMacAppBundlePath(executablePath)
-  if (!macAppBundlePath) throw new Error(`Expected a macOS .app executable path, got ${executablePath}`)
-
-  const readyFile = join(paths.tempRoot, `packaged-mac-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`)
-  const launchEnvironment = {
-    ...getLaunchServicesEnvironment(paths),
-    [E2E_ARG_ENV_ENABLE_KEY]: '1',
-    OPEN_COWORK_E2E_READY_FILE: readyFile,
-    OPEN_COWORK_E2E_PROBE_ACTION: options?.action || 'surface',
-  }
-  const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
-  const appArgs = buildE2EArgEnvironment(launchEnvironment)
-
-  let launchServicesMarkerSet = false
+  let session: SmokeSession | null = null
   try {
-    await runCommand('launchctl', ['setenv', E2E_ARG_ENV_ENABLE_KEY, '1'])
-    launchServicesMarkerSet = true
-    await runCommand('open', ['-n', '-g', '-j', ...envArgs, macAppBundlePath, '--args', ...appArgs])
-    return await waitForJsonFile<PackagedMacProbe>(readyFile, options?.timeoutMs ?? 90_000)
+    session = await launchSmokeSession(paths, {
+      executablePath,
+      appShellTimeoutMs: options?.timeoutMs ?? 90_000,
+    })
+    const action = options?.action || 'surface'
+    return await withSmokeTimeout(
+      'running packaged macOS probe',
+      session.page.evaluate(async (probeAction): Promise<PackagedMacProbe> => {
+        const surface = {
+          sessionCreate: typeof window.coworkApi.session?.create,
+          settingsSet: typeof window.coworkApi.settings?.set,
+          workflowsStartDraft: typeof window.coworkApi.workflows?.startDraft,
+          updatesInstallCapability: typeof window.coworkApi.updates?.installCapability,
+          onSessionPatch: typeof window.coworkApi.on?.sessionPatch,
+        }
+        const [settings, installCapability] = await Promise.all([
+          window.coworkApi.settings.get(),
+          window.coworkApi.updates.installCapability(),
+        ])
+        const initialSessions = await window.coworkApi.session.list()
+        const initialIds = initialSessions.map((candidate) => candidate.id)
+        let sessions = initialSessions
+        let createdSessionId: string | null = null
+        if (probeAction === 'create-session') {
+          const runtimeDeadline = Date.now() + 60_000
+          while (Date.now() < runtimeDeadline) {
+            const status = await window.coworkApi.runtime.status().catch(() => null)
+            if (status?.ready) break
+            await new Promise((done) => setTimeout(done, 250))
+          }
+          await window.coworkApi.session.create(null)
+          const sessionDeadline = Date.now() + 15_000
+          while (Date.now() < sessionDeadline) {
+            sessions = await window.coworkApi.session.list()
+            createdSessionId = sessions.find((candidate) => !initialIds.includes(candidate.id))?.id || null
+            if (createdSessionId) break
+            await new Promise((done) => setTimeout(done, 250))
+          }
+        } else if (probeAction === 'list-sessions') {
+          sessions = await window.coworkApi.session.list()
+        }
+        return {
+          surface,
+          settings: {
+            effectiveProviderId: settings.effectiveProviderId,
+            effectiveModel: settings.effectiveModel,
+          },
+          installCapability: {
+            supported: installCapability.supported,
+            reason: installCapability.reason,
+            currentVersion: installCapability.currentVersion,
+          },
+          sessions: sessions.map((candidate) => ({ id: candidate.id })),
+          createdSessionId,
+        }
+      }, action),
+      options?.timeoutMs ?? 90_000,
+    )
   } finally {
-    if (launchServicesMarkerSet) {
-      await runCommand('launchctl', ['unsetenv', E2E_ARG_ENV_ENABLE_KEY]).catch(() => {})
-    }
-    await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
-    await delay(1_000)
+    if (session) await session.close()
   }
 }
 
@@ -629,49 +562,7 @@ export async function launchSmokeSession(
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
   const appShellTimeoutMs = options?.appShellTimeoutMs ?? 30_000
-  const macAppBundlePath = options?.executablePath && process.platform === 'darwin'
-    ? getMacAppBundlePath(options.executablePath)
-    : null
-
-  if (macAppBundlePath) {
-    const port = await getAvailablePort()
-    const launchEnvironment = {
-      ...getLaunchServicesEnvironment(paths),
-      OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
-    }
-    const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
-    await runCommand('open', [
-      '-n',
-      '-g',
-      '-j',
-      ...envArgs,
-      macAppBundlePath,
-      '--args',
-      '--remote-debugging-address=127.0.0.1',
-      `--remote-debugging-port=${port}`,
-    ])
-
-    let browser: Browser | null = null
-    try {
-      await waitForCdp(port)
-      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      await waitForCdpPage(browser)
-      const page = await waitForCdpAppPage(browser)
-      await bootstrapSmokeSettings(page, appShellTimeoutMs)
-
-      return {
-        page,
-        async close() {
-          if (browser) await closeCdpSmokeApp(browser, port)
-        },
-      }
-    } catch (error) {
-      if (browser) await closeCdpSmokeApp(browser, port)
-      throw error
-    }
-  }
-
-  if (options?.executablePath && process.platform === 'linux') {
+  if (options?.executablePath && (process.platform === 'darwin' || process.platform === 'linux')) {
     const port = await getAvailablePort()
     const childArgs = [
       '--remote-debugging-address=127.0.0.1',
