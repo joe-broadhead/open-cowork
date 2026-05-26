@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { z } from '../mcps/charts/node_modules/zod/index.js'
+import { z } from 'zod'
 import { inferBarChartEncoding } from '../mcps/charts/src/chart-utils.ts'
 import { chartDataSchema, MAX_CHART_DATA_ROWS, vegaLiteSpecSchema } from '../mcps/charts/src/schemas.ts'
 

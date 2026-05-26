@@ -24,8 +24,9 @@ The current suite measures:
 - repeated view derivation from a hydrated session
 - mixed streaming event reduction through the session engine
 - downstream-sized catalog work: runtime permission generation, agent
-  catalog construction, capability map grouping, and agent preview
-  compilation with roughly 60 skills, 18 tools, and 12 custom agents
+  catalog construction, capability map grouping, capability relationship
+  summarization, and agent preview compilation with roughly 60 skills, 18
+  tools, and 12 custom agents
 - thread-index search/facet reads over 5,000 seeded historical threads
 
 ## Usage Notes

@@ -13,9 +13,6 @@ const LIVE_ASSISTANT_SEGMENT_SUFFIX = ':segment:live'
 const LIVE_USER_MESSAGE_SUFFIX = ':user:live'
 const LIVE_USER_SEGMENT_SUFFIX = ':user:segment:live'
 
-export const LIVE_USER_MESSAGE_SUFFIX_PUBLIC = LIVE_USER_MESSAGE_SUFFIX
-export const LIVE_USER_SEGMENT_SUFFIX_PUBLIC = LIVE_USER_SEGMENT_SUFFIX
-
 export interface MessageEntity {
   id: string
   role: 'user' | 'assistant'

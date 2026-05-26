@@ -1,7 +1,4 @@
 import type { UpdateReleaseSourceDescriptor } from '@open-cowork/shared'
-import type { UpdateReleaseSourceConfig } from '../config-types.ts'
-
-export type GenericHttpReleaseSourceConfig = Extract<UpdateReleaseSourceConfig, { kind: 'generic-http' }>
 
 const UPDATE_CHANNEL_PATTERN = /^[A-Za-z0-9._-]{1,80}$/
 

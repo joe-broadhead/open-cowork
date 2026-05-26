@@ -282,7 +282,7 @@ renderer:
   inline values the caller already had.
 - The parent's `postMessage` handler checks both `event.origin` and
   `event.source === iframe.contentWindow` before trusting the payload
-  (see `VegaChart.tsx`).
+  (see `apps/desktop/src/renderer/components/chat/VegaChart.tsx`).
 
 The rationale is also inlined as a comment block in
 `apps/desktop/src/main/content-security-policy.ts` so that future

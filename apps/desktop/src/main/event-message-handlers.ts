@@ -158,18 +158,19 @@ function dropOldestPendingTextEvent(
   scopedPending: Map<string, PendingTextEvent[]>,
 ) {
   const oldestMessageId = scopedPending.keys().next().value
-  if (!oldestMessageId) return false
+  if (!oldestMessageId) return 0
   const pending = scopedPending.get(oldestMessageId) || []
   if (pending.length <= 1) {
     deletePendingTextEvents(state, sessionScope, scopedPending, oldestMessageId)
-    return true
+    return pending.length
   }
   scopedPending.set(oldestMessageId, pending.slice(1))
   state.totalPendingTextEvents = Math.max(0, state.totalPendingTextEvents - 1)
-  return true
+  return 1
 }
 
 function enforcePendingTextEventBounds(state: SessionScopedMessageState) {
+  let dropped = 0
   while (state.totalPendingTextEvents > MAX_TOTAL_PENDING_TEXT_EVENTS) {
     const oldestScope = state.pendingTextEventsBySession.keys().next().value
     if (!oldestScope) {
@@ -184,8 +185,11 @@ function enforcePendingTextEventBounds(state: SessionScopedMessageState) {
       continue
     }
 
+    const before = state.totalPendingTextEvents
     deletePendingTextEvents(state, oldestScope, scopedPending, oldestMessageId)
+    dropped += Math.max(0, before - state.totalPendingTextEvents)
   }
+  return dropped
 }
 
 function pushPendingTextEvent(
@@ -203,10 +207,19 @@ function pushPendingTextEvent(
   const next = [...current, event]
   state.totalPendingTextEvents += 1
   scopedPending.set(messageId, next)
+  let sessionDropped = 0
   while (pendingTextEventCount(scopedPending) > MAX_PENDING_TEXT_EVENTS_PER_SESSION) {
-    if (!dropOldestPendingTextEvent(state, sessionScope, scopedPending)) break
+    const count = dropOldestPendingTextEvent(state, sessionScope, scopedPending)
+    if (count === 0) break
+    sessionDropped += count
   }
-  enforcePendingTextEventBounds(state)
+  if (sessionDropped > 0) {
+    log('events', `Dropped ${sessionDropped} buffered text event${sessionDropped === 1 ? '' : 's'} while enforcing pending text bounds for ${sessionScope}`)
+  }
+  const globalDropped = enforcePendingTextEventBounds(state)
+  if (globalDropped > 0) {
+    log('events', `Dropped ${globalDropped} oldest buffered text event${globalDropped === 1 ? '' : 's'} while enforcing global pending text bounds`)
+  }
 }
 
 export function sweepSessionScopedMessageState(state: SessionScopedMessageState) {
@@ -220,13 +233,19 @@ export function sweepSessionScopedMessageState(state: SessionScopedMessageState)
   }
 
   enforceMessageRoleBounds(state)
+  let dropped = 0
   for (const [scope, pending] of state.pendingTextEventsBySession.entries()) {
     while (pendingTextEventCount(pending) > MAX_PENDING_TEXT_EVENTS_PER_SESSION) {
-      if (!dropOldestPendingTextEvent(state, scope, pending)) break
+      const count = dropOldestPendingTextEvent(state, scope, pending)
+      if (count === 0) break
+      dropped += count
     }
     if (pending.size === 0) state.pendingTextEventsBySession.delete(scope)
   }
-  enforcePendingTextEventBounds(state)
+  dropped += enforcePendingTextEventBounds(state)
+  if (dropped > 0) {
+    log('events', `Dropped ${dropped} buffered text event${dropped === 1 ? '' : 's'} while sweeping pending text bounds`)
+  }
 }
 
 function dispatchTextPatch(

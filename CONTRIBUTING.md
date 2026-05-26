@@ -65,16 +65,17 @@ pnpm dev
   `--experimental-strip-types` for main/shared/runtime coverage.
   Renderer component tests run with Vitest + jsdom via
   `pnpm test:renderer`.
-- **Coverage** is advisory during the public-preview period. Run
-  `pnpm test:coverage` for separate Node and renderer LCOV reports in
-  `coverage/`; CI uploads the same reports without making coverage the
-  primary merge gate.
-- **Perf gate**: `scripts/perf-benchmark.ts` compares against
-  `benchmarks/perf-baseline.json`. Refresh the baseline intentionally
-  with `pnpm perf:baseline` after major environment or workload changes.
-- **Dependabot** is configured for monthly npm and GitHub Actions
-  updates (`.github/dependabot.yml`) so maintenance lands in deliberate,
-  reviewable batches instead of a constant stream of tiny PRs.
+- **Coverage** is gated in CI. Run `pnpm test:coverage` for separate Node
+  and renderer LCOV reports in `coverage/`; `coverage-summary.mjs --check`
+  enforces the ratchet used by the required `coverage` check.
+- **Perf gate**: `scripts/perf-benchmark.ts` compares against the most
+  specific `benchmarks/perf-baseline.<platform>-<arch>-node<major>.json`
+  file, then falls back to `benchmarks/perf-baseline.json`. Refresh the
+  baseline intentionally with `pnpm perf:baseline` after major environment
+  or workload changes.
+- **Dependabot** is configured for weekly npm and GitHub Actions scans
+  (`.github/dependabot.yml`) with grouped dependency PRs so maintenance
+  stays reviewable instead of becoming a constant stream of tiny PRs.
 - **EditorConfig** is present at the repo root for consistent
   indentation and line endings across editors.
 

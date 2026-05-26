@@ -42,8 +42,6 @@ import { mergeStreamingStateFromExisting } from './session-view-streaming-state.
 
 export { beginCompactionNotice, cloneCompactionNotice, finishCompactionNotice } from './session-view-compaction.ts'
 export {
-  LIVE_USER_MESSAGE_SUFFIX_PUBLIC,
-  LIVE_USER_SEGMENT_SUFFIX_PUBLIC,
   buildMessages,
   hasMessageTextSegment,
   hasSplitMessageTextSegment,

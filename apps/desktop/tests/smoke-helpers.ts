@@ -281,6 +281,7 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
     'OPEN_COWORK_USER_DATA_DIR',
     'OPEN_COWORK_SANDBOX_DIR',
     'OPEN_COWORK_CHART_TIMEOUT_MS',
+    'OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION',
     'OPEN_COWORK_E2E',
     'OPEN_COWORK_E2E_PROBE_ACTION',
     'OPEN_COWORK_E2E_READY_FILE',
@@ -481,6 +482,7 @@ export async function launchPackagedMacProbe(
   const action = options?.action || 'surface'
   const readyFile = join(paths.tempRoot, `packaged-mac-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
   const launchEnvironment = getLaunchServicesEnvironment(paths, {
+    OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION: '1',
     OPEN_COWORK_E2E_PROBE_ACTION: action,
     OPEN_COWORK_E2E_READY_FILE: readyFile,
   })
