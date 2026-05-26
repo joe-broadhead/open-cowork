@@ -61,6 +61,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'mcp:auth',
   'mcp:connect',
   'mcp:disconnect',
+  'mcp:preflight',
   'model:info',
   'provider:list',
   'provider:auth-methods',
@@ -266,6 +267,7 @@ const api: CoworkAPI = {
     auth: (mcpName) => invoke('mcp:auth', mcpName),
     connect: (name) => invoke('mcp:connect', name),
     disconnect: (name) => invoke('mcp:disconnect', name),
+    preflight: (name) => invoke('mcp:preflight', name),
   },
   model: {
     info: () => invoke('model:info'),

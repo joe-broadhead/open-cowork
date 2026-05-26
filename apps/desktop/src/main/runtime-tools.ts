@@ -86,7 +86,7 @@ export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntim
   }
 
   const inflight = runtimeToolInflight.get(cacheKey)
-  if (inflight) return await inflight
+  if (inflight) return await inflight.promise
 
   const generation = currentRuntimeToolCacheGeneration()
   const promise = (async () => {
@@ -113,12 +113,13 @@ export async function listRuntimeToolsForResolvedContext(context: ResolvedRuntim
       return []
     }
   })()
+  const inflightEntry = { promise }
 
-  runtimeToolInflight.set(cacheKey, promise)
+  runtimeToolInflight.set(cacheKey, inflightEntry)
   try {
     return await promise
   } finally {
-    if (runtimeToolInflight.get(cacheKey) === promise) {
+    if (runtimeToolInflight.get(cacheKey) === inflightEntry) {
       runtimeToolInflight.delete(cacheKey)
     }
   }

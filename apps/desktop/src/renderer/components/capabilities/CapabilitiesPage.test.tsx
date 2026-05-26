@@ -153,6 +153,7 @@ function renderCapabilitiesPage(overrides: {
   integrationCredentials?: Record<string, string>
   integrationCredentialsError?: Error
   settingsGetError?: Error
+  mcpPreflight?: ReturnType<typeof vi.fn>
   reportRendererError?: ReturnType<typeof vi.fn>
   customAgents?: CustomAgentSummary[]
   builtInAgents?: BuiltInAgentDetail[]
@@ -214,6 +215,13 @@ function renderCapabilitiesPage(overrides: {
     return overrides.integrationCredentials ?? { apiKey: 'ck-stored' }
   })
   const set = vi.fn(async (updates) => ({ ...(await get()), ...updates }))
+  const mcpPreflight = overrides.mcpPreflight || vi.fn(async (name: string) => ({
+    ok: true,
+    status: 'ok',
+    mcpName: name,
+    message: `${name} connected and exposed 1 MCP method.`,
+    methodCount: 1,
+  }))
   const unsubscribeRuntimeReady = vi.fn()
   const runtimeReady = vi.fn(() => unsubscribeRuntimeReady)
   const reportRendererError = overrides.reportRendererError || vi.fn()
@@ -248,6 +256,9 @@ function renderCapabilitiesPage(overrides: {
       getIntegrationCredentials,
       set,
     },
+    mcp: {
+      preflight: mcpPreflight,
+    },
     diagnostics: {
       reportRendererError,
     },
@@ -276,6 +287,7 @@ function renderCapabilitiesPage(overrides: {
     getIntegrationCredentials,
     reportRendererError,
     settingsSet: set,
+    mcpPreflight,
     runtimeReady,
     unsubscribeRuntimeReady,
     unmount: view.unmount,
@@ -547,6 +559,42 @@ describe('CapabilitiesPage', () => {
         },
       })
     })
+  })
+
+  it('preflights API-token MCP credentials after saving', async () => {
+    const user = userEvent.setup()
+    const mcpPreflight = vi.fn(async (name: string) => ({
+      ok: false,
+      status: 'auth_rejected',
+      mcpName: name,
+      message: 'charts rejected the saved token with HTTP 401. Check that the token is valid and not revoked.',
+      httpStatus: 401,
+      responseBody: 'Bad credentials',
+      helpText: 'Authorize the token for SSO and required repositories.',
+    }))
+    const api = renderCapabilitiesPage({
+      mcpPreflight,
+      integrationCredentials: {},
+    })
+
+    await user.click(await screen.findByRole('button', { name: /Chart MCP/ }))
+    const apiKeyInput = await screen.findByLabelText(/Charts API key/)
+    await user.type(apiKeyInput, 'ck-new')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(api.settingsSet).toHaveBeenCalledWith({
+        integrationCredentials: {
+          charts: { apiKey: 'ck-new' },
+        },
+      })
+    })
+    await waitFor(() => {
+      expect(api.mcpPreflight).toHaveBeenCalledWith('charts')
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('charts rejected the saved token')
+    expect(screen.getByRole('alert')).toHaveTextContent('Authorize the token for SSO')
+    expect(screen.getByRole('alert')).toHaveTextContent('Response: Bad credentials')
   })
 
   it('renders radio credential options and saves the selected value', async () => {

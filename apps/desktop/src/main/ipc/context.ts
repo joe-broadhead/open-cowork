@@ -50,7 +50,7 @@ export type IpcHandlerContext = {
     runtimeTools: unknown[],
     options?: RuntimeContextOptions,
   ) => Promise<CapabilityTool[]>
-  listToolsFromMcpEntry: (entry: unknown) => Promise<CapabilityToolEntry[]>
+  listToolsFromMcpEntry: (entry: unknown, options?: { timeoutMs?: number }) => Promise<CapabilityToolEntry[]>
   isLikelyMcpAuthError: (error: unknown) => boolean
   authenticateNewRemoteMcpIfNeeded: (name: string) => Promise<void>
   approvedSkillImportDirectories: Map<string, string>

@@ -56,7 +56,7 @@ function isMcpBackedCapability(tool: CapabilityTool) {
   return Boolean(tool.namespace) || tool.patterns.some((pattern) => pattern.startsWith('mcp__'))
 }
 
-export async function listToolsFromMcpEntry(entry: unknown) {
+export async function listToolsFromMcpEntry(entry: unknown, options: { timeoutMs?: number } = {}) {
   if (!entry) return []
 
   const runtimeEntry = entry as ResolvedRuntimeMcpEntry
@@ -65,32 +65,42 @@ export async function listToolsFromMcpEntry(entry: unknown) {
     { capabilities: {} },
   )
 
-  if (runtimeEntry.type === 'local') {
-    const [command, ...args] = runtimeEntry.command
-    if (!command) return []
-    const transport = new StdioClientTransport({
-      command,
-      args,
-      env: runtimeEntry.environment,
-      stderr: 'pipe',
-    })
-    await client.connect(transport)
-  } else {
-    const transport = new StreamableHTTPClientTransport(new URL(runtimeEntry.url), {
-      requestInit: runtimeEntry.headers
-        ? { headers: runtimeEntry.headers }
-        : undefined,
-    })
-    await client.connect(transport)
-  }
+  const abortController = runtimeEntry.type === 'remote' && options.timeoutMs
+    ? new AbortController()
+    : null
+  const timeout = abortController && options.timeoutMs
+    ? setTimeout(() => abortController.abort(), options.timeoutMs)
+    : null
 
   try {
+    if (runtimeEntry.type === 'local') {
+      const [command, ...args] = runtimeEntry.command
+      if (!command) return []
+      const transport = new StdioClientTransport({
+        command,
+        args,
+        env: runtimeEntry.environment,
+        stderr: 'pipe',
+      })
+      await client.connect(transport)
+    } else {
+      const requestInit: RequestInit = {
+        ...(runtimeEntry.headers ? { headers: runtimeEntry.headers } : {}),
+        ...(abortController ? { signal: abortController.signal } : {}),
+      }
+      const transport = new StreamableHTTPClientTransport(new URL(runtimeEntry.url), {
+        requestInit,
+      })
+      await client.connect(transport)
+    }
+
     const result = await client.listTools()
     return (result.tools || []).map((tool: { name: string; description?: string }) => ({
       id: tool.name,
       description: tool.description?.trim() || 'No description available for this MCP method.',
     }))
   } finally {
+    if (timeout) clearTimeout(timeout)
     await client.close().catch(() => {})
   }
 }

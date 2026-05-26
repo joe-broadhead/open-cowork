@@ -62,6 +62,10 @@ export type BundleMcp = {
   // like GitHub (PAT) or Perplexity (API key) collect their secrets
   // without each downstream fork having to build its own UI.
   credentials?: CredentialField[]
+  // Optional downstream-authored troubleshooting text shown with API-token
+  // preflight failures. Example: GitHub PAT scopes, SSO authorization, or
+  // enterprise policy checks.
+  credentialHelp?: string
   // Opt-in: forward the app-level Google OAuth credentials into this MCP
   // via `GOOGLE_APPLICATION_CREDENTIALS`. See `CustomMcpConfig.googleAuth`
   // for the contract. Gated on `auth.mode: google-oauth` + a successful
