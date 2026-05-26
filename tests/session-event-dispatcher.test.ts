@@ -29,6 +29,23 @@ function eventOf(type: string, sessionId?: string | null) {
   }
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function createWindowCollector(id: number) {
+  const sent: Array<{ channel: string; payload: unknown }> = []
+  const win = {
+    isDestroyed: () => false,
+    webContents: {
+      id,
+      isDestroyed: () => false,
+      send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
+    },
+  }
+  return { win, sent }
+}
+
 test('dispatcher derives renderer-safe text patches', () => {
   assert.deepEqual(getSessionPatch({
     type: 'text',
@@ -75,6 +92,65 @@ test('dispatcher derives renderer-safe text patches', () => {
 
   assert.equal(getSessionPatch(eventOf('done', 'session-1')), null)
   assert.equal(getSessionPatch(eventOf('error')), null)
+})
+
+test('dispatcher batches text patches in event order', async () => {
+  const { win, sent } = createWindowCollector(50)
+
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-order',
+    data: {
+      type: 'text',
+      messageId: 'message-1',
+      partId: 'part-1',
+      content: 'first',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-order',
+    data: {
+      type: 'text',
+      messageId: 'message-1',
+      partId: 'part-1',
+      content: 'second',
+      mode: 'append',
+    },
+  })
+
+  assert.equal(sent.some((entry) => entry.channel === 'session:patch'), false)
+  await wait(20)
+
+  assert.deepEqual(
+    sent.filter((entry) => entry.channel === 'session:patch').map((entry) => (entry.payload as { content?: string }).content),
+    ['first', 'second'],
+  )
+})
+
+test('dispatcher bounds queued patches and schedules full-view catch-up on overflow', async () => {
+  const { win, sent } = createWindowCollector(51)
+
+  for (let index = 0; index < 520; index += 1) {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-patch-overflow',
+      data: {
+        type: 'text',
+        messageId: 'message-overflow',
+        partId: `part-${index}`,
+        content: `chunk-${index}`,
+        mode: 'append',
+      },
+    })
+  }
+
+  await wait(80)
+
+  const patchCount = sent.filter((entry) => entry.channel === 'session:patch').length
+  assert.equal(patchCount, 512)
+  assert.equal(sent.some((entry) => entry.channel === 'session:view'), true)
 })
 
 test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {

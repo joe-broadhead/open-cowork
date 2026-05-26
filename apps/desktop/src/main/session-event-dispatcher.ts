@@ -62,7 +62,21 @@ type PendingViewFlush = {
   timer: ReturnType<typeof setTimeout> | null
 }
 
+type PendingPatchFlush = {
+  win: BrowserWindow
+  patches: SessionPatch[]
+  overflowSessionIds: Set<string>
+  droppedPatches: number
+  queuedAt: number
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+const SESSION_PATCH_FLUSH_INTERVAL_MS = 8
+const MAX_PENDING_SESSION_PATCHES_PER_WINDOW = 512
+const MAX_SESSION_PATCHES_PER_FLUSH = 128
+
 const pendingViewFlushByWindowId = new Map<number, PendingViewFlush>()
+const pendingPatchFlushByWindowId = new Map<number, PendingPatchFlush>()
 let sessionHistoryRefreshHandler: ((sessionId: string) => Promise<void>) | null = null
 const historyRefreshQueue = new Map<string, {
   win: BrowserWindow
@@ -206,6 +220,81 @@ export function publishSessionPatch(
   win.webContents.send('session:patch', patch)
 }
 
+function flushPendingSessionPatches(windowId: number) {
+  const pending = pendingPatchFlushByWindowId.get(windowId)
+  if (!pending) return
+  pending.timer = null
+
+  if (pending.win.isDestroyed() || pending.win.webContents.isDestroyed()) {
+    pendingPatchFlushByWindowId.delete(windowId)
+    return
+  }
+
+  const batch = pending.patches.splice(0, MAX_SESSION_PATCHES_PER_FLUSH)
+  if (batch.length > 0) {
+    observePerf('session.patch.flush.wait', Date.now() - pending.queuedAt, {
+      unit: 'ms',
+    })
+    observePerf('session.patch.flush.batch_size', batch.length, {
+      unit: 'count',
+    })
+    measurePerf('session.patch.flush.duration', () => {
+      for (const patch of batch) publishSessionPatch(pending.win, patch)
+    }, {
+      slowThresholdMs: 8,
+      slowData: {
+        windowId,
+        patchCount: batch.length,
+      },
+    })
+  }
+
+  if (pending.patches.length > 0) {
+    pending.timer = setTimeout(() => {
+      flushPendingSessionPatches(windowId)
+    }, 0)
+    return
+  }
+
+  pendingPatchFlushByWindowId.delete(windowId)
+  if (pending.droppedPatches > 0) {
+    incrementPerfCounter('session.patch.dropped')
+    log(
+      'events',
+      `Dropped ${pending.droppedPatches} queued session patch${pending.droppedPatches === 1 ? '' : 'es'} for window=${windowId}; queued full view catch-up for ${pending.overflowSessionIds.size} session${pending.overflowSessionIds.size === 1 ? '' : 's'}`,
+    )
+  }
+}
+
+function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null | undefined) {
+  if (!patch) return
+  const windowId = win.webContents.id
+  let pending = pendingPatchFlushByWindowId.get(windowId)
+  if (!pending) {
+    pending = {
+      win,
+      patches: [],
+      overflowSessionIds: new Set(),
+      droppedPatches: 0,
+      queuedAt: Date.now(),
+      timer: null,
+    }
+    pending.timer = setTimeout(() => {
+      flushPendingSessionPatches(windowId)
+    }, SESSION_PATCH_FLUSH_INTERVAL_MS)
+    pendingPatchFlushByWindowId.set(windowId, pending)
+  }
+
+  if (pending.patches.length >= MAX_PENDING_SESSION_PATCHES_PER_WINDOW) {
+    pending.droppedPatches += 1
+    pending.overflowSessionIds.add(patch.sessionId)
+    queueSessionViewPublish(win, patch.sessionId)
+    return
+  }
+
+  pending.patches.push(patch)
+}
+
 function flushPendingSessionViews(windowId: number) {
   const pending = pendingViewFlushByWindowId.get(windowId)
   if (!pending) return
@@ -306,6 +395,14 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
 // publishSessionView (the session is gone by then) but is otherwise benign.
 export function dropSessionFromDispatcherQueues(sessionId: string) {
   historyRefreshQueue.delete(sessionId)
+  for (const [windowId, pending] of pendingPatchFlushByWindowId.entries()) {
+    pending.patches = pending.patches.filter((patch) => patch.sessionId !== sessionId)
+    pending.overflowSessionIds.delete(sessionId)
+    if (pending.patches.length === 0 && pending.overflowSessionIds.size === 0) {
+      if (pending.timer) clearTimeout(pending.timer)
+      pendingPatchFlushByWindowId.delete(windowId)
+    }
+  }
   for (const [windowId, pending] of pendingViewFlushByWindowId.entries()) {
     if (!pending.sessionIds.delete(sessionId)) continue
     if (pending.sessionIds.size === 0) {
@@ -334,7 +431,7 @@ export function dispatchRuntimeSessionEvent(
     queueSessionHistoryRefresh(win, event.sessionId)
     return
   }
-  publishSessionPatch(win, getSessionPatch(event))
+  queueSessionPatchPublish(win, getSessionPatch(event))
   if (event.sessionId && shouldPublishSessionView(event)) {
     queueSessionViewPublish(win, event.sessionId)
   }
