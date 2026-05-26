@@ -74,7 +74,8 @@ function requiredCredentialKeys(mcp: BundleMcp, settings: CoworkSettings) {
 
 function classifyProtocolError(name: string, host: string | undefined, error: unknown, helpText?: string): McpPreflightResult {
   const message = error instanceof Error ? error.message : String(error || '')
-  const lower = message.toLowerCase()
+  const errorName = error instanceof Error ? error.name : ''
+  const lower = `${errorName} ${message}`.toLowerCase()
   const safeMessage = responseBodyPreview(message)
   if (/401|unauthorized|invalid[_-]?token|missing authorization header|bad credentials/.test(lower)) {
     return result({
@@ -94,7 +95,7 @@ function classifyProtocolError(name: string, host: string | undefined, error: un
       helpText,
     })
   }
-  if (/enotfound|econnrefused|econnreset|etimedout|timeout|network|tls|certificate|proxy/.test(lower)) {
+  if (/abort|aborted|enotfound|econnrefused|econnreset|etimedout|timeout|network|tls|certificate|proxy/.test(lower)) {
     return result({
       status: 'network_error',
       mcpName: name,

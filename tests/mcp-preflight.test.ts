@@ -251,3 +251,25 @@ test('preflightConfiguredApiTokenMcp sanitizes protocol error text before return
     assert.match(result.message, /\[REDACTED_TOKEN\]/)
   })
 })
+
+test('preflightConfiguredApiTokenMcp classifies aborted tool-list probes as network errors', async () => {
+  await withRemoteMcpConfig(async () => {
+    const fakeToken = ['github', '_pat_', 'aborted', 'token', 'value', '1234567890'].join('')
+    saveSettings({
+      ...baseSettings(),
+      integrationCredentials: { github: { token: fakeToken } },
+    })
+
+    const result = await preflightConfiguredApiTokenMcp('github', {
+      resolveHostname: resolvePublicTestHost,
+      fetchImpl: (async () => new Response('', { status: 405 })) as typeof fetch,
+      listToolsFromMcpEntry: async () => {
+        throw new DOMException('The operation was aborted.', 'AbortError')
+      },
+    })
+
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 'network_error')
+    assert.match(result.message, /Could not reach/)
+  })
+})
