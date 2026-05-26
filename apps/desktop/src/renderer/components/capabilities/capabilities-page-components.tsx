@@ -146,12 +146,10 @@ export function ToolCredentialsCard({
   integrationId,
   credentials,
   authMode,
-  enabled,
 }: {
   integrationId: string
   credentials: NonNullable<CapabilityTool['credentials']>
   authMode?: CapabilityTool['authMode']
-  enabled?: CapabilityTool['enabled']
 }) {
   const [stored, setStored] = useState<Record<string, string>>({})
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -231,7 +229,7 @@ export function ToolCredentialsCard({
       setStored(refreshed)
       setDrafts({})
       setSavedAt(Date.now())
-      if (enabled !== false && savedSettings.integrationEnabled?.[integrationId] !== false) {
+      if (savedSettings.integrationEnabled?.[integrationId] !== false) {
         await runPreflight()
       }
     } catch (error) {

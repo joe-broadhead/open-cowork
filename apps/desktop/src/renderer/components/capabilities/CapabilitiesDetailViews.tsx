@@ -180,7 +180,6 @@ export function CapabilityToolDetailView({
                 integrationId={selectedTool.integrationId}
                 credentials={selectedTool.credentials}
                 authMode={selectedTool.authMode}
-                enabled={selectedTool.enabled}
               />
             ) : null}
           </div>
