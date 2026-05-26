@@ -11,10 +11,6 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
-import {
-  buildE2EArgEnvironment,
-  E2E_ARG_ENV_ENABLE_KEY,
-} from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -262,12 +258,8 @@ function getMacAppBundlePath(executablePath: string) {
   return executablePath.slice(0, markerIndex + '.app'.length)
 }
 
-function getLaunchServicesEnvironment(paths: SmokePaths, port: number) {
-  const env = {
-    ...getSmokeEnvironment(paths),
-    [E2E_ARG_ENV_ENABLE_KEY]: '1',
-    OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
-  }
+function getLaunchServicesEnvironment(paths: SmokePaths) {
+  const env = getSmokeEnvironment(paths)
   const keys = new Set([
     'HOME',
     'PATH',
@@ -281,8 +273,6 @@ function getLaunchServicesEnvironment(paths: SmokePaths, port: number) {
     'OPEN_COWORK_SANDBOX_DIR',
     'OPEN_COWORK_CHART_TIMEOUT_MS',
     'OPEN_COWORK_E2E',
-    'OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT',
-    E2E_ARG_ENV_ENABLE_KEY,
     'CI',
   ])
 
@@ -658,9 +648,8 @@ export async function launchSmokeSession(
 
   if (macAppBundlePath) {
     const port = await getAvailablePort()
-    const launchEnvironment = getLaunchServicesEnvironment(paths, port)
+    const launchEnvironment = getLaunchServicesEnvironment(paths)
     const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
-    const argvEnvArgs = buildE2EArgEnvironment(launchEnvironment)
     await runCommand('open', [
       '-n',
       '-g',
@@ -668,8 +657,6 @@ export async function launchSmokeSession(
       ...envArgs,
       macAppBundlePath,
       '--args',
-      ...argvEnvArgs,
-      '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
     ])
 
