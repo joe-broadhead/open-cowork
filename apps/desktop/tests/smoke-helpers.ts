@@ -54,6 +54,34 @@ export interface SmokeSession {
   close: () => Promise<void>
 }
 
+export type PackagedMacProbe = {
+  surface: {
+    sessionCreate: string
+    settingsSet: string
+    workflowsStartDraft: string
+    updatesInstallCapability: string
+    onSessionPatch: string
+  }
+  settings: {
+    effectiveProviderId: unknown
+    effectiveModel: unknown
+  }
+  installCapability: {
+    supported: unknown
+    reason?: unknown
+    currentVersion?: unknown
+  }
+  sessions: Array<{ id: string }>
+  createdSessionId: string | null
+}
+
+type PackagedMacProbeFile = {
+  ok: boolean
+  result?: PackagedMacProbe
+  error?: string
+  writtenAt: string
+}
+
 export interface LaunchSmokeAppOptions {
   // Called with the isolated data root *before* Electron launches.
   // Use this to seed files like `sessions.json` under the path the
@@ -219,6 +247,7 @@ function getSmokeEnvironment(paths: SmokePaths) {
   return {
     ...process.env,
     HOME: paths.tempHome,
+    TMPDIR: process.env.TMPDIR || tmpdir(),
     XDG_CONFIG_HOME: paths.xdgConfigHome,
     XDG_DATA_HOME: paths.xdgDataHome,
     XDG_CACHE_HOME: paths.xdgCacheHome,
@@ -237,12 +266,13 @@ function getMacAppBundlePath(executablePath: string) {
   return executablePath.slice(0, markerIndex + '.app'.length)
 }
 
-function getLaunchServicesEnvironment(paths: SmokePaths) {
-  const env = getSmokeEnvironment(paths)
+function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<string, string>) {
+  const env = {
+    ...getSmokeEnvironment(paths),
+    ...overrides,
+  }
   const keys = new Set([
     'HOME',
-    'PATH',
-    'SHELL',
     'TMPDIR',
     'XDG_CONFIG_HOME',
     'XDG_DATA_HOME',
@@ -252,7 +282,8 @@ function getLaunchServicesEnvironment(paths: SmokePaths) {
     'OPEN_COWORK_SANDBOX_DIR',
     'OPEN_COWORK_CHART_TIMEOUT_MS',
     'OPEN_COWORK_E2E',
-    'CI',
+    'OPEN_COWORK_E2E_PROBE_ACTION',
+    'OPEN_COWORK_E2E_READY_FILE',
   ])
 
   return Object.fromEntries(
@@ -296,28 +327,6 @@ async function getAvailablePort() {
     })
   })
   return address.port
-}
-
-function runCommand(command: string, args: string[], timeoutMs = 10_000) {
-  return new Promise<void>((resolveCommand, rejectCommand) => {
-    const child = spawn(command, args, { stdio: 'ignore' })
-    const timeout = setTimeout(() => {
-      child.kill('SIGTERM')
-      rejectCommand(new Error(`${command} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-    child.once('error', (error) => {
-      clearTimeout(timeout)
-      rejectCommand(error)
-    })
-    child.once('exit', (code, signal) => {
-      clearTimeout(timeout)
-      if (code === 0) {
-        resolveCommand()
-        return
-      }
-      rejectCommand(new Error(`${command} exited with ${signal || code}`))
-    })
-  })
 }
 
 async function isCdpAvailable(port: number) {
@@ -382,6 +391,65 @@ async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
   throw new Error('Timed out waiting for packaged app shell page')
 }
 
+async function waitForPackagedMacProbeFile(targetPath: string, timeoutMs = 90_000): Promise<PackagedMacProbe> {
+  const deadline = Date.now() + timeoutMs
+  let lastReadError: string | null = null
+  while (Date.now() < deadline) {
+    try {
+      const parsed = JSON.parse(readFileSync(targetPath, 'utf8')) as PackagedMacProbeFile
+      if (!parsed.ok) {
+        throw new Error(parsed.error || 'packaged macOS probe failed')
+      }
+      if (parsed.result) return parsed.result
+      lastReadError = 'probe file did not include a result payload'
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT') {
+        lastReadError = error instanceof Error ? error.message : String(error)
+      }
+    }
+    await delay(250)
+  }
+  throw new Error(`Timed out waiting for packaged macOS probe file ${targetPath}${lastReadError ? `; last error: ${lastReadError}` : ''}`)
+}
+
+function runCommand(command: string, args: string[], timeoutMs = 10_000) {
+  return new Promise<void>((resolveCommand, rejectCommand) => {
+    const child = spawn(command, args, { stdio: 'ignore' })
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM')
+      rejectCommand(new Error(`${command} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timeout)
+      rejectCommand(error)
+    })
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout)
+      if (code === 0) {
+        resolveCommand()
+        return
+      }
+      rejectCommand(new Error(`${command} exited with ${signal || code}`))
+    })
+  })
+}
+
+async function withLaunchServicesEnvironment<T>(env: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+  const appliedKeys: string[] = []
+  try {
+    for (const [key, value] of Object.entries(env)) {
+      await runCommand('launchctl', ['setenv', key, value])
+      appliedKeys.push(key)
+    }
+    return await fn()
+  } finally {
+    for (const key of appliedKeys.reverse()) {
+      await runCommand('launchctl', ['unsetenv', key]).catch(() => {})
+    }
+  }
+}
+
 async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -395,6 +463,42 @@ async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_0
   }
   const diagnostics = await Promise.all(app.windows().map((page) => getAppShellDiagnostics(page)))
   throw new Error(`Timed out waiting for Electron app shell page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
+}
+
+export async function launchPackagedMacProbe(
+  paths: SmokePaths,
+  executablePath: string,
+  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+): Promise<PackagedMacProbe> {
+  if (process.platform !== 'darwin') {
+    throw new Error('launchPackagedMacProbe is only supported on macOS')
+  }
+  const macAppBundlePath = getMacAppBundlePath(executablePath)
+  if (!macAppBundlePath) {
+    throw new Error(`Packaged macOS executable is not inside an app bundle: ${executablePath}`)
+  }
+
+  const action = options?.action || 'surface'
+  const readyFile = join(paths.tempRoot, `packaged-mac-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
+  const launchEnvironment = getLaunchServicesEnvironment(paths, {
+    OPEN_COWORK_E2E_PROBE_ACTION: action,
+    OPEN_COWORK_E2E_READY_FILE: readyFile,
+  })
+
+  try {
+    return await withLaunchServicesEnvironment(launchEnvironment, async () => {
+      await runCommand('open', [
+        '-n',
+        '-g',
+        '-j',
+        macAppBundlePath,
+      ])
+      return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
+    })
+  } finally {
+    await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+    await delay(1_000)
+  }
 }
 
 async function closeCdpSmokeApp(browser: Browser, port: number) {
@@ -424,14 +528,18 @@ async function closeCdpSmokeApp(browser: Browser, port: number) {
 }
 
 async function stopSpawnedSmokeProcess(child: ChildProcess) {
-  if (child.killed || child.exitCode !== null || child.signalCode !== null) return
+  if (child.exitCode !== null || child.signalCode !== null) return
   child.kill('SIGTERM')
-  await Promise.race([
-    new Promise<void>((resolveExit) => child.once('exit', () => resolveExit())),
-    delay(5_000),
+  const exitedAfterTerm = await Promise.race([
+    new Promise<boolean>((resolveExit) => child.once('exit', () => resolveExit(true))),
+    delay(5_000).then(() => false),
   ])
-  if (!child.killed && child.exitCode === null && child.signalCode === null) {
+  if (!exitedAfterTerm && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL')
+    await Promise.race([
+      new Promise<void>((resolveExit) => child.once('exit', () => resolveExit())),
+      delay(5_000),
+    ])
   }
 }
 
@@ -585,13 +693,17 @@ export async function launchSmokeSession(
   if (options?.executablePath && process.platform === 'linux') {
     const port = await getAvailablePort()
     const childArgs = [
+      '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
       '--no-sandbox',
       '--disable-setuid-sandbox',
     ]
     const child = spawn(options.executablePath, childArgs, {
       cwd: desktopAppDir,
-      env: getSmokeEnvironment(paths),
+      env: {
+        ...getSmokeEnvironment(paths),
+        OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+      },
       stdio: 'ignore',
     })
     let clearEarlyExit: () => void = () => undefined

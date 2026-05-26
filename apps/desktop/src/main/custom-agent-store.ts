@@ -2,7 +2,7 @@ import {
   basename,
   join,
 } from 'path'
-import { type Dirent, readdirSync, rmSync } from 'fs'
+import { type Dirent, readdirSync, rmSync, statSync } from 'fs'
 import {
   VALID_CUSTOM_AGENT_NAME,
   type AgentColor,
@@ -56,6 +56,13 @@ type ManagedAgentMetadata = {
   top_p?: number | null
   steps?: number | null
   options?: Record<string, unknown> | null
+}
+
+type AgentMarkdownCandidate = {
+  fullPath: string
+  name: string
+  enabled: boolean
+  mtimeMs: number
 }
 
 const RUNTIME_DIRECTIVE_START = '<!-- open-cowork:runtime-directive:start -->'
@@ -322,6 +329,43 @@ function parseFrontmatter(content: string) {
   return root
 }
 
+function agentMarkdownCandidate(root: string, entry: Dirent): AgentMarkdownCandidate | null {
+  if (!entry.isFile()) return null
+  if (!entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')) return null
+  if (entry.name.endsWith(getSidecarJsonSuffix())) return null
+
+  const enabled = entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')
+  const name = basename(entry.name, enabled ? '.md' : '.disabled.md')
+  const fullPath = join(root, entry.name)
+  try {
+    return {
+      fullPath,
+      name,
+      enabled,
+      mtimeMs: statSync(fullPath).mtimeMs,
+    }
+  } catch {
+    return null
+  }
+}
+
+function currentAgentMarkdownCandidates(root: string, entries: Dirent[]) {
+  const byName = new Map<string, AgentMarkdownCandidate>()
+  for (const entry of entries) {
+    const candidate = agentMarkdownCandidate(root, entry)
+    if (!candidate) continue
+    const existing = byName.get(candidate.name)
+    if (
+      !existing
+      || candidate.mtimeMs > existing.mtimeMs
+      || (candidate.mtimeMs === existing.mtimeMs && !candidate.enabled && existing.enabled)
+    ) {
+      byName.set(candidate.name, candidate)
+    }
+  }
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
 function deriveSkillNamesFromPermission(permission: unknown) {
   if (!permission || typeof permission !== 'object' || Array.isArray(permission)) return []
   const skillRules = (permission as Record<string, unknown>).skill
@@ -485,21 +529,15 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
   const entries = readdirSync(root, { withFileTypes: true })
   const agents: CustomAgentConfig[] = []
 
-  for (const entry of entries) {
-    if (!entry.isFile()) continue
-    if (!entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')) continue
-    if (entry.name.endsWith(getSidecarJsonSuffix())) continue
-
-    const fullPath = join(root, entry.name)
+  for (const candidate of currentAgentMarkdownCandidates(root, entries)) {
     let content: string
     try {
-      content = readTextFileCheckedSync(fullPath).content
+      content = readTextFileCheckedSync(candidate.fullPath).content
     } catch {
       continue
     }
 
-    const enabled = entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')
-    const name = basename(entry.name, enabled ? '.md' : '.disabled.md')
+    const { enabled, name } = candidate
     const metadata = readManagedAgentMetadata(root, name)
     const frontmatter = parseFrontmatter(content)
     const permission = frontmatter.permission
@@ -561,21 +599,15 @@ function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: st
     return
   }
 
-  for (const entry of entries) {
-    if (!entry.isFile()) continue
-    if (!entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')) continue
-    if (entry.name.endsWith(getSidecarJsonSuffix())) continue
-
-    const fullPath = join(root, entry.name)
+  for (const candidate of currentAgentMarkdownCandidates(root, entries)) {
     let content: string
     try {
-      content = readTextFileCheckedSync(fullPath).content
+      content = readTextFileCheckedSync(candidate.fullPath).content
     } catch {
       continue
     }
 
-    const enabled = entry.name.endsWith('.md') && !entry.name.endsWith('.disabled.md')
-    const name = basename(entry.name, enabled ? '.md' : '.disabled.md')
+    const { name } = candidate
     const metadata = readManagedAgentMetadata(root, name)
     const frontmatter = parseFrontmatter(content)
     const skillNames = metadata.skillNames ?? deriveSkillNamesFromPermission(frontmatter.permission)
@@ -585,9 +617,9 @@ function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: st
     const nextContent = `${runtimeFrontmatter ? `${runtimeFrontmatter}\n\n` : ''}${runtimeBody}`.trimEnd() + '\n'
     if (nextContent !== content) {
       try {
-        writeFileAtomic(fullPath, nextContent)
+        writeFileAtomic(candidate.fullPath, nextContent)
       } catch (err) {
-        log('agents', `Skipped runtime guidance rewrite for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`)
+        log('agents', `Skipped runtime guidance rewrite for ${candidate.fullPath}: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
   }

@@ -91,6 +91,18 @@ test('agent tool bridge requires bearer auth and returns before scheduling runti
     assert.equal(unauthorized.status, 401)
     assert.match(await unauthorized.text(), /Unauthorized agent tool request/)
 
+    const wrongSameLengthToken = token!.replace(/.$/, (last) => last === 'A' ? 'B' : 'A')
+    const wrongToken = await fetch(`${baseUrl}/preview`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${wrongSameLengthToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(draft),
+    })
+    assert.equal(wrongToken.status, 401)
+    assert.match(await wrongToken.text(), /Unauthorized agent tool request/)
+
     const preview = await fetch(`${baseUrl}/preview`, {
       method: 'POST',
       headers: {

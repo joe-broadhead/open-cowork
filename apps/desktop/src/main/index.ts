@@ -49,8 +49,13 @@ import { createMainWindowController } from './main-window-controller.ts'
 
 import { log, getLogFilePath, closeLogger } from './logger.ts'
 import { telemetry } from './telemetry.ts'
+import {
+  appendE2ERemoteDebuggingSwitches,
+  e2eWindowReadyProbeEnabled,
+} from './e2e-remote-debugging.ts'
 
 registerAppProtocolSchemes()
+appendE2ERemoteDebuggingSwitches(app)
 
 let runtimeStarted = false
 let reconnectTimer: NodeJS.Timeout | null = null
@@ -441,7 +446,11 @@ app.whenReady().then(async () => {
   primeShellEnvironment()
   if (await runtimePrerequisitesSatisfied()) {
     log('main', 'Runtime prerequisites satisfied, starting runtime before opening main window')
-    createLoadingWindow()
+    if (e2eWindowReadyProbeEnabled()) {
+      createWindow('e2e-runtime-probe')
+    } else {
+      createLoadingWindow()
+    }
     void bootRuntime().catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err)
       log('error', `Runtime startup failed from loading window: ${message}`)

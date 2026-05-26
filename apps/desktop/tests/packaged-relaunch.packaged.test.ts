@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   cleanupSmokePaths,
   createSmokePaths,
+  launchPackagedMacProbe,
   launchSmokeSession,
   type SmokeSession,
 } from './smoke-helpers.ts'
@@ -12,6 +15,7 @@ const expectSignedUpdateInstall = process.env.OPEN_COWORK_EXPECT_SIGNED_UPDATE_I
 const packagedRelaunchTimeoutMs = 240_000
 const packagedLaunchTimeoutMs = 90_000
 const packagedIpcTimeoutMs = 60_000
+const packagedMacSeedSessionId = 'packaged_mac_seed_session'
 const updateInstallUnsupportedReasons = new Set([
   'dev',
   'unsigned',
@@ -25,6 +29,30 @@ const updateInstallUnsupportedReasons = new Set([
   'source-unreachable',
   'unavailable',
 ])
+
+function makePackagedMacSeedSession() {
+  const now = new Date(Date.UTC(2026, 0, 1, 12, 0, 0)).toISOString()
+  return {
+    id: packagedMacSeedSessionId,
+    title: 'Packaged macOS seed thread',
+    directory: null,
+    opencodeDirectory: '/tmp/open-cowork-packaged-mac-seed',
+    createdAt: now,
+    updatedAt: now,
+    kind: 'interactive',
+    workflowId: null,
+    runId: null,
+    providerId: 'openrouter',
+    modelId: 'anthropic/claude-sonnet-4',
+    composerModelId: null,
+    composerReasoningVariant: null,
+    summary: null,
+    parentSessionId: null,
+    changeSummary: null,
+    revertedMessageId: null,
+    managedByCowork: true as const,
+  }
+}
 
 async function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
@@ -57,11 +85,60 @@ test(
       'OPEN_COWORK_PACKAGED_EXECUTABLE must point at a packaged desktop executable',
     )
 
-    const paths = createSmokePaths()
+    const paths = createSmokePaths(process.platform === 'darwin'
+      ? {
+          seedBeforeLaunch: ({ dataRoot }) => {
+            writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify([makePackagedMacSeedSession()], null, 2))
+          },
+        }
+      : undefined)
     let firstLaunch: SmokeSession | null = null
     let secondLaunch: SmokeSession | null = null
 
     try {
+      if (process.platform === 'darwin') {
+        const firstProbe = await launchPackagedMacProbe(paths, executablePath, {
+          action: 'list-sessions',
+          timeoutMs: packagedLaunchTimeoutMs,
+        })
+        assert.equal(
+          typeof firstProbe.installCapability.currentVersion,
+          'string',
+          'expected packaged update capability to include the running app version',
+        )
+        assert.equal(
+          String(firstProbe.installCapability.currentVersion).length > 0,
+          true,
+          'expected packaged update capability version to be non-empty',
+        )
+        if (expectSignedUpdateInstall) {
+          assert.equal(firstProbe.installCapability.supported, true, 'expected signed packaged macOS build to advertise in-app update install support')
+          assert.equal(firstProbe.installCapability.reason, undefined)
+        } else {
+          assert.equal(firstProbe.installCapability.supported, false, 'expected unsigned or unsupported packaged build to keep in-app update install disabled')
+          assert.equal(
+            updateInstallUnsupportedReasons.has(String(firstProbe.installCapability.reason)),
+            true,
+            `expected a known update install unsupported reason, got ${String(firstProbe.installCapability.reason)}`,
+          )
+        }
+
+        assert.ok(
+          firstProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          'expected packaged app to load the seeded session before relaunch',
+        )
+
+        const secondProbe = await launchPackagedMacProbe(paths, executablePath, {
+          action: 'list-sessions',
+          timeoutMs: packagedLaunchTimeoutMs,
+        })
+        assert.ok(
+          secondProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          'expected seeded session to survive a packaged-app relaunch',
+        )
+        return
+      }
+
       firstLaunch = await launchSmokeSession(paths, {
         executablePath,
         appShellTimeoutMs: packagedLaunchTimeoutMs,

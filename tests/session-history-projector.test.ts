@@ -323,6 +323,69 @@ test('history projector anchors root task tool runs before the parent follow-up 
   assert.ok(taskRun.sequence < (finalMessage?.sequence || 0))
 })
 
+test('history projector preserves task-tool binding before later subtask parts', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-mixed-delegation',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-task-call',
+          state: {
+            status: 'completed',
+            input: {
+              agent: 'analyst',
+              description: 'Analyze first child',
+            },
+            output: 'done',
+            metadata: {},
+          },
+        },
+        { id: 'root-mixed-subtask', type: 'subtask', agent: 'research', description: 'Research second child' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      { id: 'child-first', title: 'First delegated child', parentSessionId: 'root-mixed-delegation', time: { created: 20, updated: 25 } },
+      { id: 'child-second', title: 'Second delegated child', parentSessionId: 'root-mixed-delegation', time: { created: 21, updated: 26 } },
+    ],
+    statuses: {
+      'root-mixed-delegation': { type: 'idle' },
+      'child-first': { type: 'idle' },
+      'child-second': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: childId === 'child-first' ? 22 : 23 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter(Boolean)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => ({ source: taskRun?.sourceSessionId, title: taskRun?.title })),
+    [
+      { source: 'child-first', title: 'Analyze first child' },
+      { source: 'child-second', title: 'Research second child' },
+    ],
+  )
+  assert.equal(items.find((item) => item.content === 'child-first result')?.taskRunId, 'child:child-first')
+  assert.equal(items.find((item) => item.content === 'child-second result')?.taskRunId, 'child:child-second')
+})
+
 test('history projector binds task tool metadata session ids exactly once', async () => {
   const childIds = ['child-a', 'child-b', 'child-c']
   const items = await projectSessionHistory({
@@ -381,6 +444,339 @@ test('history projector binds task tool metadata session ids exactly once', asyn
   assert.deepEqual(
     taskRuns.map((item) => item.taskRun?.sourceSessionId),
     childIds,
+  )
+})
+
+test('history projector binds parallel task tools to same-turn child sessions by order', async () => {
+  const childIds = ['child-parallel-a', 'child-parallel-b']
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-parallel',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-parallel-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-parallel-task-a',
+          type: 'tool',
+          tool: 'task',
+          callID: 'parallel-task-call-a',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze churn' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-parallel-task-b',
+          type: 'tool',
+          tool: 'task',
+          callID: 'parallel-task-call-b',
+          state: {
+            status: 'completed',
+            input: { agent: 'research', description: 'Research market' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: childIds.map((childId, index) => ({
+      id: childId,
+      title: `Parallel child ${index + 1}`,
+      parentSessionId: 'root-task-tool-parallel',
+      time: { created: 11 + index, updated: 20 + index },
+    })),
+    statuses: {
+      'root-task-tool-parallel': { type: 'idle' },
+      'child-parallel-a': { type: 'idle' },
+      'child-parallel-b': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: 30 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.sourceSessionId),
+    childIds,
+  )
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.title),
+    ['Analyze churn', 'Research market'],
+  )
+  assert.equal(items.find((item) => item.content === 'child-parallel-a result')?.taskRunId, 'child:child-parallel-a')
+  assert.equal(items.find((item) => item.content === 'child-parallel-b result')?.taskRunId, 'child:child-parallel-b')
+})
+
+test('history projector reserves explicit task-tool children when binding implicit task tools', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-mixed-explicit',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-implicit-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-implicit-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Implicit child work' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-mixed-explicit-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-explicit-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'research', description: 'Explicit child work' },
+            output: 'started',
+            metadata: { sessionId: 'child-mixed-explicit' },
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-mixed-implicit',
+        title: 'Implicit child work (@analyst subagent)',
+        parentSessionId: 'root-task-tool-mixed-explicit',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-mixed-explicit',
+        title: 'Explicit child work (@research subagent)',
+        parentSessionId: 'root-task-tool-mixed-explicit',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-mixed-explicit': { type: 'idle' },
+      'child-mixed-implicit': { type: 'idle' },
+      'child-mixed-explicit': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  assert.equal(taskRuns.some((item) => item.id.startsWith('pending:')), false)
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.sourceSessionId),
+    ['child-mixed-implicit', 'child-mixed-explicit'],
+  )
+  assert.deepEqual(
+    taskRuns.map((item) => item.taskRun?.title),
+    ['Implicit child work', 'Explicit child work'],
+  )
+})
+
+test('history projector binds an implicit task tool before a later subtask when only one child is present', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-partial-mixed',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-partial-mixed-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-partial-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'partial-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Partial task child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-partial-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Missing later child',
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-partial-task',
+      title: 'Partial task child (@analyst subagent)',
+      parentSessionId: 'root-task-tool-partial-mixed',
+      time: { created: 11, updated: 20 },
+    }],
+    statuses: {
+      'root-task-tool-partial-mixed': { type: 'idle' },
+      'child-partial-task': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items.filter((item) => item.type === 'task_run')
+  const taskToolRun = taskRuns.find((item) => item.id === 'child:child-partial-task')?.taskRun
+  const pendingSubtask = taskRuns.find((item) => item.id === 'pending:root-partial-subtask')?.taskRun
+
+  assert.ok(taskToolRun)
+  assert.equal(taskToolRun.sourceSessionId, 'child-partial-task')
+  assert.equal(taskToolRun.title, 'Partial task child')
+  assert.ok(pendingSubtask)
+  assert.equal(pendingSubtask.sourceSessionId, null)
+  assert.equal(pendingSubtask.title, 'Missing later child')
+})
+
+test('history projector preserves mixed task-tool and subtask child order in one message', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-subtask-order',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-order-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-order-task',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-order-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'First delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-mixed-order-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Second delegated child',
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-mixed-order-first',
+        title: 'First delegated child (@analyst subagent)',
+        parentSessionId: 'root-task-tool-subtask-order',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-mixed-order-second',
+        title: 'Second delegated child (@research subagent)',
+        parentSessionId: 'root-task-tool-subtask-order',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-subtask-order': { type: 'idle' },
+      'child-mixed-order-first': { type: 'idle' },
+      'child-mixed-order-second': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['child-mixed-order-first', 'child-mixed-order-second'],
+  )
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.title),
+    ['First delegated child', 'Second delegated child'],
+  )
+})
+
+test('history projector does not let a missing subtask consume a later task-tool child', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-missing-subtask-slot',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-missing-subtask-slot-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-first-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'first-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'First delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+        {
+          id: 'root-missing-subtask',
+          type: 'subtask',
+          agent: 'research',
+          description: 'Missing middle child',
+        },
+        {
+          id: 'root-later-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'later-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'writer', description: 'Later delegated child' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-first-task-tool',
+        title: 'First delegated child (@analyst subagent)',
+        parentSessionId: 'root-task-tool-missing-subtask-slot',
+        time: { created: 11, updated: 20 },
+      },
+      {
+        id: 'child-later-task-tool',
+        title: 'Later delegated child (@writer subagent)',
+        parentSessionId: 'root-task-tool-missing-subtask-slot',
+        time: { created: 12, updated: 21 },
+      },
+    ],
+    statuses: {
+      'root-task-tool-missing-subtask-slot': { type: 'idle' },
+      'child-first-task-tool': { type: 'idle' },
+      'child-later-task-tool': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['child-first-task-tool', null, 'child-later-task-tool'],
+  )
+  assert.deepEqual(
+    taskRuns.map((taskRun) => taskRun?.title),
+    ['First delegated child', 'Missing middle child', 'Later delegated child'],
   )
 })
 
@@ -451,7 +847,7 @@ test('history projector does not bind a terminal task tool to a later unrelated 
   assert.equal(childTask.title, 'Actual child work')
 })
 
-test('history projector scans later direct children when matching task tool sessions', async () => {
+test('history projector does not bind task tools by fuzzy child title matches', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-later-child-match',
     cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
@@ -506,15 +902,337 @@ test('history projector scans later direct children when matching task tool sess
     loadChildSnapshot: async () => ({ messages: [], todos: [] }),
   })
 
-  const targetTask = items.find((item) => item.id === 'child:child-target')?.taskRun
+  const pendingTask = items.find((item) => item.id === 'pending:task-call-target')?.taskRun
   const unrelatedTask = items.find((item) => item.id === 'child:child-unrelated')?.taskRun
+  const targetTask = items.find((item) => item.id === 'child:child-target')?.taskRun
 
-  assert.ok(targetTask)
-  assert.equal(targetTask.sourceSessionId, 'child-target')
-  assert.equal(targetTask.title, 'Target market analysis')
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Target market analysis')
+  assert.equal(pendingTask.agent, 'analyst')
   assert.ok(unrelatedTask)
   assert.equal(unrelatedTask.sourceSessionId, 'child-unrelated')
   assert.equal(unrelatedTask.title, 'Earlier unrelated research')
+  assert.ok(targetTask)
+  assert.equal(targetTask.sourceSessionId, 'child-target')
+  assert.equal(targetTask.title, 'Target market analysis')
+})
+
+test('history projector does not bind task tools across same-timestamp delegation boundaries', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-same-timestamp-boundary',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-first-task-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          {
+            id: 'root-first-task-part',
+            type: 'tool',
+            tool: 'task',
+            callID: 'first-task-call',
+            state: {
+              status: 'completed',
+              input: {
+                agent: 'analyst',
+                description: 'Earlier same timestamp delegation',
+              },
+              output: 'done',
+              metadata: {},
+            },
+          },
+        ],
+      },
+      {
+        info: { id: 'root-second-subtask-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          { id: 'root-second-subtask', type: 'subtask', agent: 'research', description: 'Later same timestamp delegation' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-later-same-timestamp',
+      title: 'Later same timestamp delegation (@research subagent)',
+      parentSessionId: 'root-same-timestamp-boundary',
+      time: { created: 21, updated: 24 },
+    }],
+    statuses: {
+      'root-same-timestamp-boundary': { type: 'idle' },
+      'child-later-same-timestamp': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const pendingTask = items.find((item) => item.id === 'pending:first-task-call')?.taskRun
+  const childTask = items.find((item) => item.id === 'child:child-later-same-timestamp')?.taskRun
+
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Earlier same timestamp delegation')
+  assert.ok(childTask)
+  assert.equal(childTask.sourceSessionId, 'child-later-same-timestamp')
+  assert.equal(childTask.title, 'Later same timestamp delegation')
+})
+
+test('history projector treats untimed later delegations as task-tool binding boundaries', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-untimed-boundary',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-earlier-task-msg', role: 'assistant', time: { created: 10 } },
+        parts: [
+          {
+            id: 'root-earlier-task-part',
+            type: 'tool',
+            tool: 'task',
+            callID: 'earlier-task-call',
+            state: {
+              status: 'completed',
+              input: {
+                agent: 'analyst',
+                description: 'Earlier timed task tool',
+              },
+              output: 'done',
+              metadata: {},
+            },
+          },
+        ],
+      },
+      {
+        info: { id: 'root-later-untimed-subtask-msg', role: 'assistant' },
+        parts: [
+          { id: 'root-later-untimed-subtask', type: 'subtask', agent: 'research', description: 'Later untimed delegation' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-later-untimed-boundary',
+      title: 'Later untimed delegation (@research subagent)',
+      parentSessionId: 'root-untimed-boundary',
+      time: { created: 11, updated: 14 },
+    }],
+    statuses: {
+      'root-untimed-boundary': { type: 'idle' },
+      'child-later-untimed-boundary': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const pendingTask = items.find((item) => item.id === 'pending:earlier-task-call')?.taskRun
+  const childTask = items.find((item) => item.id === 'child:child-later-untimed-boundary')?.taskRun
+
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Earlier timed task tool')
+  assert.ok(childTask)
+  assert.equal(childTask.sourceSessionId, 'child-later-untimed-boundary')
+  assert.equal(childTask.title, 'Later untimed delegation')
+})
+
+test('history projector binds earlier timed child before an untimed later delegation when another child remains', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-untimed-boundary-with-extra-child',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-extra-earlier-task-msg', role: 'assistant', time: { created: 10 } },
+        parts: [
+          {
+            id: 'root-extra-earlier-task-part',
+            type: 'tool',
+            tool: 'task',
+            callID: 'extra-earlier-task-call',
+            state: {
+              status: 'completed',
+              input: {
+                agent: 'analyst',
+                description: 'Earlier timestamped task tool',
+              },
+              output: 'done',
+              metadata: {},
+            },
+          },
+        ],
+      },
+      {
+        info: { id: 'root-extra-later-untimed-subtask-msg', role: 'assistant' },
+        parts: [
+          { id: 'root-extra-later-untimed-subtask', type: 'subtask', agent: 'research', description: 'Later untimed delegation with remaining child' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-extra-later-untimed',
+        title: 'Later untimed delegation with remaining child (@research subagent)',
+        parentSessionId: 'root-untimed-boundary-with-extra-child',
+      },
+      {
+        id: 'child-extra-earlier-timed',
+        title: 'Earlier timestamped task tool (@analyst subagent)',
+        parentSessionId: 'root-untimed-boundary-with-extra-child',
+        time: { created: 11, updated: 14 },
+      },
+    ],
+    statuses: {
+      'root-untimed-boundary-with-extra-child': { type: 'idle' },
+      'child-extra-earlier-timed': { type: 'idle' },
+      'child-extra-later-untimed': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const earlierTask = items.find((item) => item.id === 'child:child-extra-earlier-timed')?.taskRun
+  const laterTask = items.find((item) => item.id === 'child:child-extra-later-untimed')?.taskRun
+
+  assert.ok(earlierTask)
+  assert.equal(earlierTask.sourceSessionId, 'child-extra-earlier-timed')
+  assert.equal(earlierTask.title, 'Earlier timestamped task tool')
+  assert.ok(laterTask)
+  assert.equal(laterTask.sourceSessionId, 'child-extra-later-untimed')
+  assert.equal(laterTask.title, 'Later untimed delegation with remaining child')
+})
+
+test('history projector does not bind bounded task tools to untimed later children', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-bounded-untimed-child',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-bounded-task-msg', role: 'assistant', time: { created: 10 } },
+        parts: [{
+          id: 'root-bounded-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'bounded-task-call',
+          state: {
+            status: 'completed',
+            input: {
+              agent: 'analyst',
+              description: 'Earlier bounded task tool',
+            },
+            output: 'started',
+            metadata: {},
+          },
+        }],
+      },
+      {
+        info: { id: 'root-later-timed-subtask-msg', role: 'assistant', time: { created: 20 } },
+        parts: [
+          { id: 'root-later-timed-subtask', type: 'subtask', agent: 'research', description: 'Later timed delegation' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{
+      id: 'child-later-untimed',
+      title: 'Later timed delegation (@research subagent)',
+      parentSessionId: 'root-bounded-untimed-child',
+    }],
+    statuses: {
+      'root-bounded-untimed-child': { type: 'idle' },
+      'child-later-untimed': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const pendingTask = items.find((item) => item.id === 'pending:bounded-task-call')?.taskRun
+  const childTask = items.find((item) => item.id === 'child:child-later-untimed')?.taskRun
+
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Earlier bounded task tool')
+  assert.ok(childTask)
+  assert.equal(childTask.sourceSessionId, 'child-later-untimed')
+  assert.equal(childTask.title, 'Later timed delegation')
+})
+
+test('history projector binds task tools when the root message has no created timestamp', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-missing-time',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-missing-time-task-msg', role: 'assistant' },
+      parts: [
+        {
+          id: 'root-missing-time-task-part',
+          type: 'tool',
+          tool: 'task',
+          callID: 'missing-time-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze missing timestamp replay' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-missing-time',
+      title: 'Analyze missing timestamp replay (@analyst subagent)',
+      parentSessionId: 'root-task-tool-missing-time',
+      time: { created: 20, updated: 30 },
+    }],
+    statuses: {
+      'root-task-tool-missing-time': { type: 'idle' },
+      'child-missing-time': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')?.taskRun
+
+  assert.ok(taskRun)
+  assert.equal(taskRun.sourceSessionId, 'child-missing-time')
+  assert.equal(taskRun.title, 'Analyze missing timestamp replay')
+})
+
+test('history projector binds task tools to child sessions with missing created timestamps', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-task-tool-child-missing-time',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-child-missing-time-task-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-child-missing-time-task-part',
+          type: 'tool',
+          tool: 'task',
+          callID: 'child-missing-time-task-call',
+          state: {
+            status: 'completed',
+            input: { agent: 'analyst', description: 'Analyze child missing timestamp replay' },
+            output: 'started',
+            metadata: {},
+          },
+        },
+      ],
+    }],
+    rootTodos: [],
+    children: [{
+      id: 'child-without-created-time',
+      title: 'Analyze child missing timestamp replay (@analyst subagent)',
+      parentSessionId: 'root-task-tool-child-missing-time',
+      time: { updated: 30 },
+    }],
+    statuses: {
+      'root-task-tool-child-missing-time': { type: 'idle' },
+      'child-without-created-time': { type: 'idle' },
+    },
+    loadChildSnapshot: async () => ({ messages: [], todos: [] }),
+  })
+
+  const taskRun = items.find((item) => item.type === 'task_run')?.taskRun
+
+  assert.ok(taskRun)
+  assert.equal(taskRun.sourceSessionId, 'child-without-created-time')
+  assert.equal(taskRun.title, 'Analyze child missing timestamp replay')
 })
 
 test('history projector preserves root message part order around task tools', async () => {
@@ -726,6 +1444,203 @@ test('history projector binds nested task tools to grandchild sessions during re
   assert.ok(before.sequence < nestedRun.sequence)
   assert.ok(nestedRun.sequence < after.sequence)
   assert.equal(nestedText.taskRunId, 'child:grandchild-nested-task')
+})
+
+test('history projector binds nested parallel task tools to grandchildren by order', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-nested-parallel-task-tool',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-nested-parallel-msg', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'root-nested-parallel-subtask', type: 'subtask', agent: 'research', description: 'Coordinate nested parallel work' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-nested-parallel-parent',
+        title: 'Coordinate nested parallel work (@research subagent)',
+        parentSessionId: 'root-nested-parallel-task-tool',
+        time: { created: 2, updated: 8 },
+      },
+      {
+        id: 'grandchild-nested-parallel-a',
+        title: 'Nested parallel A (@analyst subagent)',
+        parentSessionId: 'child-nested-parallel-parent',
+        time: { created: 4, updated: 7 },
+      },
+      {
+        id: 'grandchild-nested-parallel-b',
+        title: 'Nested parallel B (@writer subagent)',
+        parentSessionId: 'child-nested-parallel-parent',
+        time: { created: 5, updated: 8 },
+      },
+    ],
+    statuses: {
+      'root-nested-parallel-task-tool': { type: 'idle' },
+      'child-nested-parallel-parent': { type: 'idle' },
+      'grandchild-nested-parallel-a': { type: 'idle' },
+      'grandchild-nested-parallel-b': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => {
+      if (childId === 'child-nested-parallel-parent') {
+        return {
+          messages: [{
+            info: { id: 'child-nested-parallel-parent-msg', role: 'assistant', time: { created: 3 } },
+            parts: [
+              {
+                id: 'child-nested-parallel-task-a',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-parallel-call-a',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'analyst', description: 'Nested parallel A' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              {
+                id: 'child-nested-parallel-task-b',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-parallel-call-b',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'writer', description: 'Nested parallel B' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              { id: 'child-nested-parallel-finish', type: 'step-finish', reason: 'stop' },
+            ],
+          }],
+          todos: [],
+        }
+      }
+
+      return {
+        messages: [{
+          info: { id: `${childId}-msg`, role: 'assistant', time: { created: 6 } },
+          parts: [
+            { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+            { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+          ],
+        }],
+        todos: [],
+      }
+    },
+  })
+
+  const nestedTaskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter((taskRun) => taskRun?.parentSessionId === 'child-nested-parallel-parent')
+
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['grandchild-nested-parallel-a', 'grandchild-nested-parallel-b'],
+  )
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.title),
+    ['Nested parallel A', 'Nested parallel B'],
+  )
+  assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-a result')?.taskRunId, 'child:grandchild-nested-parallel-a')
+  assert.equal(items.find((item) => item.content === 'grandchild-nested-parallel-b result')?.taskRunId, 'child:grandchild-nested-parallel-b')
+})
+
+test('history projector reserves explicit nested task-tool grandchildren when binding implicit nested task tools', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-nested-mixed-task-tool',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-nested-mixed-msg', role: 'assistant', time: { created: 1 } },
+      parts: [
+        { id: 'root-nested-mixed-subtask', type: 'subtask', agent: 'research', description: 'Coordinate nested mixed work' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      {
+        id: 'child-nested-mixed-parent',
+        title: 'Coordinate nested mixed work (@research subagent)',
+        parentSessionId: 'root-nested-mixed-task-tool',
+        time: { created: 2, updated: 8 },
+      },
+      {
+        id: 'grandchild-nested-mixed-implicit',
+        title: 'Nested implicit work (@analyst subagent)',
+        parentSessionId: 'child-nested-mixed-parent',
+        time: { created: 4, updated: 7 },
+      },
+      {
+        id: 'grandchild-nested-mixed-explicit',
+        title: 'Nested explicit work (@writer subagent)',
+        parentSessionId: 'child-nested-mixed-parent',
+        time: { created: 5, updated: 8 },
+      },
+    ],
+    statuses: {
+      'root-nested-mixed-task-tool': { type: 'idle' },
+      'child-nested-mixed-parent': { type: 'idle' },
+      'grandchild-nested-mixed-implicit': { type: 'idle' },
+      'grandchild-nested-mixed-explicit': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => {
+      if (childId === 'child-nested-mixed-parent') {
+        return {
+          messages: [{
+            info: { id: 'child-nested-mixed-parent-msg', role: 'assistant', time: { created: 3 } },
+            parts: [
+              {
+                id: 'child-nested-mixed-implicit-task',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-mixed-implicit-call',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'analyst', description: 'Nested implicit work' },
+                  output: 'started',
+                  metadata: {},
+                },
+              },
+              {
+                id: 'child-nested-mixed-explicit-task',
+                type: 'tool',
+                tool: 'task',
+                callID: 'nested-mixed-explicit-call',
+                state: {
+                  status: 'completed',
+                  input: { agent: 'writer', description: 'Nested explicit work' },
+                  output: 'started',
+                  metadata: { sessionId: 'grandchild-nested-mixed-explicit' },
+                },
+              },
+              { id: 'child-nested-mixed-finish', type: 'step-finish', reason: 'stop' },
+            ],
+          }],
+          todos: [],
+        }
+      }
+
+      return { messages: [], todos: [] }
+    },
+  })
+
+  const nestedTaskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter((taskRun) => taskRun?.parentSessionId === 'child-nested-mixed-parent')
+
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.sourceSessionId),
+    ['grandchild-nested-mixed-implicit', 'grandchild-nested-mixed-explicit'],
+  )
+  assert.deepEqual(
+    nestedTaskRuns.map((taskRun) => taskRun?.title),
+    ['Nested implicit work', 'Nested explicit work'],
+  )
 })
 
 test('history projector preserves nested child parentage when replaying reopened threads', async () => {

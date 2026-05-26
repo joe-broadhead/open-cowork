@@ -1,5 +1,5 @@
 import electron from 'electron'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import {
   SMALL_MODEL_USE_MAIN,
@@ -17,15 +17,29 @@ import {
 } from './config-loader.ts'
 import { log } from './logger.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
-import { resolveSecretStorageMode } from './secure-storage-policy.ts'
+import {
+  readSafeStorageBackendForPolicy,
+  resolveSecretStorageMode,
+  type SecretStorageMode,
+} from './secure-storage-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
+const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
+  getSelectedStorageBackend?: () => string
+}) | undefined
+
+type SecretStorageAdapter = {
+  mode: SecretStorageMode
+  encryptString: (plaintext: string) => Buffer
+  decryptString: (encrypted: Buffer) => string
+}
 
 export type CoworkSettings = AppSettings
 export type { AgentColor }
 
 let settingsCache: AppSettings | null = null
+let settingsSecretStorageForTests: SecretStorageAdapter | null = null
 
 export const SETTINGS_SCHEMA_VERSION = 8
 
@@ -368,9 +382,13 @@ function getLegacySettingsPath() {
 }
 
 function getSecretStorageMode() {
+  if (settingsSecretStorageForTests) return settingsSecretStorageForTests.mode
   return resolveSecretStorageMode({
     isPackaged: Boolean(electronApp?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    selectedStorageBackend: readSafeStorageBackendForPolicy(
+      electronSafeStorageBackend?.getSelectedStorageBackend?.bind(electronSafeStorageBackend),
+    ),
   })
 }
 
@@ -391,10 +409,26 @@ export function applySettingsSideEffects(settings = loadSettings()) {
 }
 
 function requireSafeStorage() {
+  if (settingsSecretStorageForTests) return settingsSecretStorageForTests
   if (!electronSafeStorage) {
     throw new Error('Electron safeStorage is unavailable')
   }
   return electronSafeStorage
+}
+
+export function setSettingsSecretStorageForTests(adapter: SecretStorageAdapter | null) {
+  settingsSecretStorageForTests = adapter
+  settingsCache = null
+}
+
+function decryptLegacyDevelopmentSecret(raw: Buffer) {
+  const testDecrypt = settingsSecretStorageForTests?.decryptString
+  if (testDecrypt) {
+    try { return testDecrypt(raw) } catch { return null }
+  }
+  if (electronApp?.isPackaged) return null
+  if (!electronSafeStorage?.isEncryptionAvailable?.() || !electronSafeStorage.decryptString) return null
+  try { return electronSafeStorage.decryptString(raw) } catch { return null }
 }
 
 // Sentinel rendered into masked credential fields returned by
@@ -456,7 +490,8 @@ export function loadSettings(): AppSettings {
   if (settingsCache) return settingsCache
 
   const encryptedPath = getSettingsPath()
-  if (existsSync(encryptedPath) && getSecretStorageMode() === 'encrypted') {
+  const storageMode = getSecretStorageMode()
+  if (existsSync(encryptedPath) && storageMode === 'encrypted') {
     try {
       const safeStorage = requireSafeStorage()
       const raw = readFileSync(encryptedPath)
@@ -467,6 +502,26 @@ export function loadSettings(): AppSettings {
     } catch (err: unknown) {
       if (isUnsupportedSettingsSchemaVersionError(err)) throw err
       log('error', `Settings load failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (existsSync(encryptedPath) && storageMode === 'plaintext') {
+    try {
+      const raw = readFileSync(encryptedPath)
+      const decrypted = decryptLegacyDevelopmentSecret(raw)
+      if (!decrypted) throw new Error('safeStorage could not decrypt legacy development settings')
+      const result = migrateLegacySettings(JSON.parse(decrypted))
+      settingsCache = result
+      try {
+        saveSettings(result)
+        try { rmSync(encryptedPath, { force: true }) } catch { /* best effort */ }
+      } catch (rewriteErr: unknown) {
+        log('error', `Settings development storage migration rewrite failed: ${rewriteErr instanceof Error ? rewriteErr.message : String(rewriteErr)}`)
+      }
+      return result
+    } catch (err: unknown) {
+      if (isUnsupportedSettingsSchemaVersionError(err)) throw err
+      log('error', `Settings development encrypted load failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

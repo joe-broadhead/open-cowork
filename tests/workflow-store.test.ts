@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -18,6 +19,9 @@ import {
   previewWorkflowDraft,
   regenerateWorkflowWebhookSecret,
   recoverInterruptedWorkflowRuns,
+  parseWorkflowTriggersFromStorage,
+  serializeWorkflowTriggersForStorage,
+  setWorkflowSecretStorageForTests,
   updateWorkflowStatus,
 } from '../apps/desktop/src/main/workflow/workflow-store.ts'
 
@@ -34,6 +38,7 @@ function withWorkflowStore(name: string, run: (userDataDir: string) => void) {
     clearWorkflowStoreCache()
     run(userDataDir)
   } finally {
+    setWorkflowSecretStorageForTests(null)
     clearWorkflowStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -82,6 +87,108 @@ test('workflow store saves thread-created workflows and exposes webhook URLs', (
   if (process.platform !== 'win32') {
     assert.equal(statSync(dbPath).mode & 0o777, 0o600)
   }
+}))
+
+test('workflow store encrypts webhook secrets at the SQLite boundary when secure storage is available', () => withWorkflowStore('secret-storage', (userDataDir) => {
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
+  })
+
+  const workflow = createWorkflow(draft)
+  const webhookSecret = workflow.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret
+  assert.equal(typeof webhookSecret, 'string')
+
+  const db = new DatabaseSync(join(userDataDir, 'workflows.sqlite'))
+  try {
+    const row = db.prepare('select triggers_json from workflows where id = ?').get(workflow.id) as { triggers_json?: string }
+    const raw = row.triggers_json || ''
+    assert.match(raw, /__openCoworkEncryptedWebhookSecret/)
+    assert.equal(raw.includes(webhookSecret!), false)
+
+    const parsed = parseWorkflowTriggersFromStorage(raw)
+    assert.equal(parsed.find((trigger) => trigger.type === 'webhook')?.webhookSecret, webhookSecret)
+  } finally {
+    db.close()
+  }
+}))
+
+test('workflow store preserves plaintext webhook secrets that look like encrypted sentinels', () => withWorkflowStore('plaintext-secret-prefix', () => {
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: () => {
+      throw new Error('not ciphertext')
+    },
+  })
+
+  const rawSecret = 'enc:v1:user-supplied-secret'
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: rawSecret },
+  ]))
+
+  assert.equal(parsed[0]?.webhookSecret, rawSecret)
+}))
+
+test('workflow store decrypts legacy prefixed webhook secrets in plaintext mode when possible', () => withWorkflowStore('legacy-secret-prefix', () => {
+  setWorkflowSecretStorageForTests({
+    mode: 'plaintext',
+    decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
+  })
+
+  const rawSecret = 'legacy-webhook-secret'
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    {
+      id: 'webhook',
+      type: 'webhook',
+      enabled: true,
+      webhookSecret: `enc:v1:${Buffer.from(`sealed:${rawSecret}`, 'utf8').toString('base64')}`,
+    },
+  ]))
+
+  assert.equal(parsed[0]?.webhookSecret, rawSecret)
+}))
+
+test('workflow store preserves encrypted webhook secret records when decryption fails', () => withWorkflowStore('secret-record-preserve', () => {
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: () => {
+      throw new Error('keychain unavailable')
+    },
+  })
+
+  const storedSecret = {
+    __openCoworkEncryptedWebhookSecret: 2,
+    value: Buffer.from('sealed:webhook-secret', 'utf8').toString('base64'),
+  }
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: storedSecret },
+  ]))
+
+  assert.deepEqual(parsed[0]?.webhookSecret, storedSecret)
+  const serialized = JSON.parse(serializeWorkflowTriggersForStorage(parsed)) as Array<{ webhookSecret?: unknown }>
+  assert.deepEqual(serialized[0]?.webhookSecret, storedSecret)
+}))
+
+test('workflow store treats valid non-array trigger JSON as empty', () => withWorkflowStore('non-array-triggers', () => {
+  assert.deepEqual(parseWorkflowTriggersFromStorage('{}'), [])
+  assert.deepEqual(parseWorkflowTriggersFromStorage('"manual"'), [])
+}))
+
+test('workflow store skips malformed trigger array entries during storage parsing', () => withWorkflowStore('malformed-trigger-entries', () => {
+  const parsed = parseWorkflowTriggersFromStorage(JSON.stringify([
+    null,
+    'manual',
+    {},
+    [],
+    { id: 'manual', type: 'manual', enabled: true },
+    { id: 'webhook', type: 'webhook', enabled: true, webhookSecret: 'secret' },
+  ]))
+
+  assert.deepEqual(parsed.map((trigger) => trigger.type), ['manual', 'webhook'])
+  assert.equal(parsed[1]?.webhookSecret, 'secret')
 }))
 
 test('workflow store tracks run lifecycle and next scheduled run', () => withWorkflowStore('runs', () => {

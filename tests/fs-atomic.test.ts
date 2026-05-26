@@ -33,6 +33,16 @@ test('writeFileAtomic replaces an existing file in place', () => withTempDir((di
   assert.equal(readFileSync(target, 'utf-8'), 'new-content')
 }))
 
+test('writeFileAtomic applies requested perms when replacing an existing file', () => withTempDir((dir) => {
+  const target = join(dir, 'settings.enc')
+  writeFileSync(target, 'old-content', { mode: 0o644 })
+  writeFileAtomic(target, 'new-content', { mode: 0o600 })
+  assert.equal(readFileSync(target, 'utf-8'), 'new-content')
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(target).mode & 0o777, 0o600)
+  }
+}))
+
 test('writeFileAtomic does not leave temp files behind after a successful write', () => withTempDir((dir) => {
   const target = join(dir, 'settings.enc')
   writeFileAtomic(target, 'ok')
