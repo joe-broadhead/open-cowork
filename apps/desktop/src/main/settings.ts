@@ -21,6 +21,9 @@ import { resolveSecretStorageMode } from './secure-storage-policy.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
+const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
+  getSelectedStorageBackend?: () => string
+}) | undefined
 
 export type CoworkSettings = AppSettings
 export type { AgentColor }
@@ -371,6 +374,7 @@ function getSecretStorageMode() {
   return resolveSecretStorageMode({
     isPackaged: Boolean(electronApp?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
   })
 }
 

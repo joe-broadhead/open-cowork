@@ -451,7 +451,7 @@ test('history projector does not bind a terminal task tool to a later unrelated 
   assert.equal(childTask.title, 'Actual child work')
 })
 
-test('history projector scans later direct children when matching task tool sessions', async () => {
+test('history projector does not bind task tools by fuzzy child title matches', async () => {
   const items = await projectSessionHistory({
     sessionId: 'root-task-tool-later-child-match',
     cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
@@ -506,15 +506,20 @@ test('history projector scans later direct children when matching task tool sess
     loadChildSnapshot: async () => ({ messages: [], todos: [] }),
   })
 
-  const targetTask = items.find((item) => item.id === 'child:child-target')?.taskRun
+  const pendingTask = items.find((item) => item.id === 'pending:task-call-target')?.taskRun
   const unrelatedTask = items.find((item) => item.id === 'child:child-unrelated')?.taskRun
+  const targetTask = items.find((item) => item.id === 'child:child-target')?.taskRun
 
-  assert.ok(targetTask)
-  assert.equal(targetTask.sourceSessionId, 'child-target')
-  assert.equal(targetTask.title, 'Target market analysis')
+  assert.ok(pendingTask)
+  assert.equal(pendingTask.sourceSessionId, null)
+  assert.equal(pendingTask.title, 'Target market analysis')
+  assert.equal(pendingTask.agent, 'analyst')
   assert.ok(unrelatedTask)
   assert.equal(unrelatedTask.sourceSessionId, 'child-unrelated')
   assert.equal(unrelatedTask.title, 'Earlier unrelated research')
+  assert.ok(targetTask)
+  assert.equal(targetTask.sourceSessionId, 'child-target')
+  assert.equal(targetTask.title, 'Target market analysis')
 })
 
 test('history projector preserves root message part order around task tools', async () => {

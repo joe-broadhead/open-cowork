@@ -15,6 +15,9 @@ import { escapeHtml } from './html-escape.ts'
 
 const { shell, BrowserWindow } = electron
 const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
+const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
+  getSelectedStorageBackend?: () => string
+}) | undefined
 
 type StoredTokens = {
   access_token: string
@@ -55,6 +58,7 @@ function getSecretStorageMode() {
   return resolveSecretStorageMode({
     isPackaged: Boolean(electron.app?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
   })
 }
 

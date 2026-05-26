@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { DatabaseSync } from 'node:sqlite'
 import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -18,6 +19,8 @@ import {
   previewWorkflowDraft,
   regenerateWorkflowWebhookSecret,
   recoverInterruptedWorkflowRuns,
+  parseWorkflowTriggersFromStorage,
+  setWorkflowSecretStorageForTests,
   updateWorkflowStatus,
 } from '../apps/desktop/src/main/workflow/workflow-store.ts'
 
@@ -34,6 +37,7 @@ function withWorkflowStore(name: string, run: (userDataDir: string) => void) {
     clearWorkflowStoreCache()
     run(userDataDir)
   } finally {
+    setWorkflowSecretStorageForTests(null)
     clearWorkflowStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
@@ -81,6 +85,31 @@ test('workflow store saves thread-created workflows and exposes webhook URLs', (
   assert.equal(existsSync(dbPath), true)
   if (process.platform !== 'win32') {
     assert.equal(statSync(dbPath).mode & 0o777, 0o600)
+  }
+}))
+
+test('workflow store encrypts webhook secrets at the SQLite boundary when secure storage is available', () => withWorkflowStore('secret-storage', (userDataDir) => {
+  setWorkflowSecretStorageForTests({
+    mode: 'encrypted',
+    encryptString: (value) => Buffer.from(`sealed:${value}`, 'utf8'),
+    decryptString: (value) => value.toString('utf8').replace(/^sealed:/, ''),
+  })
+
+  const workflow = createWorkflow(draft)
+  const webhookSecret = workflow.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret
+  assert.equal(typeof webhookSecret, 'string')
+
+  const db = new DatabaseSync(join(userDataDir, 'workflows.sqlite'))
+  try {
+    const row = db.prepare('select triggers_json from workflows where id = ?').get(workflow.id) as { triggers_json?: string }
+    const raw = row.triggers_json || ''
+    assert.match(raw, /enc:v1:/)
+    assert.equal(raw.includes(webhookSecret!), false)
+
+    const parsed = parseWorkflowTriggersFromStorage(raw)
+    assert.equal(parsed.find((trigger) => trigger.type === 'webhook')?.webhookSecret, webhookSecret)
+  } finally {
+    db.close()
   }
 }))
 

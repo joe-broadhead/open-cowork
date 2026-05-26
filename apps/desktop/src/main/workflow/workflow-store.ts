@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import electron from 'electron'
 import type {
   WorkflowDetail,
   WorkflowDraft,
@@ -14,6 +15,7 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
+import { resolveSecretStorageMode, type SecretStorageMode } from '../secure-storage-policy.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from './workflow-schedule.ts'
 
 const WORKFLOW_DB_SCHEMA_VERSION = 1
@@ -26,10 +28,23 @@ const VALID_TRIGGER_TYPES = new Set<WorkflowTriggerType>(['manual', 'schedule', 
 
 let workflowDb: DatabaseSync | null = null
 let transactionCounter = 0
+let workflowSecretStorageForTests: WorkflowSecretStorageAdapter | null = null
+
+const electronApp = (electron as { app?: typeof import('electron').app }).app
+const electronSafeStorage = (electron as { safeStorage?: typeof import('electron').safeStorage }).safeStorage
+const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
+  getSelectedStorageBackend?: () => string
+}) | undefined
+const ENCRYPTED_WEBHOOK_SECRET_PREFIX = 'enc:v1:'
 
 type DbRow = Record<string, unknown>
 type WorkflowWriteOptions = {
   now?: Date
+}
+type WorkflowSecretStorageAdapter = {
+  mode: SecretStorageMode
+  encryptString?: (value: string) => Buffer
+  decryptString?: (value: Buffer) => string
 }
 
 function workflowDbPath() {
@@ -70,6 +85,59 @@ function parseJson<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
+  if (workflowSecretStorageForTests) return workflowSecretStorageForTests
+  const mode = resolveSecretStorageMode({
+    isPackaged: Boolean(electronApp?.isPackaged),
+    encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
+    selectedStorageBackend: electronSafeStorageBackend?.getSelectedStorageBackend?.() || null,
+  })
+  return {
+    mode,
+    encryptString: electronSafeStorage?.encryptString?.bind(electronSafeStorage),
+    decryptString: electronSafeStorage?.decryptString?.bind(electronSafeStorage),
+  }
+}
+
+function encodeWebhookSecretForStorage(secret: string | null | undefined) {
+  if (!secret) return null
+  const storage = getWorkflowSecretStorage()
+  if (storage.mode === 'encrypted') {
+    if (!storage.encryptString) throw new Error('Electron safeStorage is unavailable')
+    return `${ENCRYPTED_WEBHOOK_SECRET_PREFIX}${Buffer.from(storage.encryptString(secret)).toString('base64')}`
+  }
+  if (storage.mode === 'plaintext') return secret
+  throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist workflow webhook secrets in production without OS-backed secret storage.')
+}
+
+function decodeWebhookSecretFromStorage(secret: unknown) {
+  if (typeof secret !== 'string' || !secret.trim()) return null
+  if (!secret.startsWith(ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
+  const storage = getWorkflowSecretStorage()
+  if (storage.mode !== 'encrypted' || !storage.decryptString) return null
+  try {
+    return storage.decryptString(Buffer.from(secret.slice(ENCRYPTED_WEBHOOK_SECRET_PREFIX.length), 'base64'))
+  } catch {
+    return null
+  }
+}
+
+export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[]) {
+  return JSON.stringify(triggers.map((trigger) => trigger.type === 'webhook'
+    ? { ...trigger, webhookSecret: encodeWebhookSecretForStorage(trigger.webhookSecret) }
+    : trigger))
+}
+
+export function parseWorkflowTriggersFromStorage(value: unknown) {
+  return parseJson<WorkflowTrigger[]>(value, []).map((trigger) => trigger.type === 'webhook'
+    ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret) }
+    : trigger)
+}
+
+export function setWorkflowSecretStorageForTests(adapter: WorkflowSecretStorageAdapter | null) {
+  workflowSecretStorageForTests = adapter
 }
 
 function normalizeStringList(value: unknown, label: string) {
@@ -244,7 +312,7 @@ function rowToWorkflow(row: DbRow, webhookBaseUrl?: string | null): WorkflowSumm
     status,
     projectDirectory: typeof row.project_directory === 'string' ? row.project_directory : null,
     draftSessionId: typeof row.draft_session_id === 'string' ? row.draft_session_id : null,
-    triggers: parseJson<WorkflowTrigger[]>(row.triggers_json, []),
+    triggers: parseWorkflowTriggersFromStorage(row.triggers_json),
     createdAt: String(row.created_at || ''),
     updatedAt: String(row.updated_at || ''),
     nextRunAt: typeof row.next_run_at === 'string' ? row.next_run_at : null,
@@ -347,7 +415,7 @@ export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | n
       'active',
       normalized.projectDirectory || null,
       normalized.draftSessionId || null,
-      JSON.stringify(normalized.triggers),
+      serializeWorkflowTriggersForStorage(normalized.triggers),
       now,
       now,
       nextRunAt,
@@ -362,7 +430,7 @@ export function updateWorkflowStatus(workflowId: string, status: WorkflowStatus,
   const now = nowDate.toISOString()
   withTransaction((db) => {
     const row = db.prepare('select triggers_json from workflows where id = ?').get(workflowId) as DbRow | undefined
-    const triggers = parseJson<WorkflowTrigger[]>(row?.triggers_json, [])
+    const triggers = parseWorkflowTriggersFromStorage(row?.triggers_json)
     const nextRunAt = status === 'active' ? computeNextWorkflowRunAt(triggers, nowDate) : null
     db.prepare('update workflows set status = ?, updated_at = ?, next_run_at = ? where id = ?')
       .run(status, now, nextRunAt, workflowId)
@@ -379,7 +447,7 @@ export function regenerateWorkflowWebhookSecret(workflowId: string, webhookBaseU
   const now = new Date().toISOString()
   withTransaction((db) => {
     db.prepare('update workflows set triggers_json = ?, updated_at = ? where id = ?')
-      .run(JSON.stringify(triggers), now, workflowId)
+      .run(serializeWorkflowTriggersForStorage(triggers), now, workflowId)
   })
   return getWorkflow(workflowId, webhookBaseUrl)
 }
@@ -508,7 +576,7 @@ export function recoverInterruptedWorkflowRuns(error = 'Workflow run was interru
           ? String(workflowRow.status) as WorkflowStatus
           : 'active'
         const nextStatus = status === 'paused' || status === 'archived' ? status : 'active'
-        const triggers = parseJson<WorkflowTrigger[]>(workflowRow.triggers_json, [])
+        const triggers = parseWorkflowTriggersFromStorage(workflowRow.triggers_json)
         const nextRunAt = nextStatus === 'active' ? computeNextWorkflowRunAt(triggers, now) : null
         db.prepare(`
           update workflows

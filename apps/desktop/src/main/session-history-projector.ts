@@ -24,6 +24,7 @@ import {
   type ChildSessionRecord,
   type TaskStatus,
 } from './session-history-task-binding.ts'
+import { findOnlyIndexedCandidate } from './task-binding-policy.ts'
 
 type TaskRunSnapshot = {
   title: string
@@ -148,31 +149,6 @@ function fallbackTaskToolStatus(part: NormalizedMessagePart): TaskStatus {
   return 'queued'
 }
 
-function normalizeMatchText(value: string | null | undefined) {
-  return (value || '')
-    .toLowerCase()
-    .replace(/@\w[\w-]*/g, ' ')
-    .replace(/\bsubagent\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-function childLooksLikeTaskTool(part: NormalizedMessagePart, child: ChildSessionRecord) {
-  const childTitle = normalizeMatchText(child.title)
-  if (!childTitle) return false
-
-  const descriptor = taskToolDescriptor(part)
-  const titleCandidates = descriptor.titleCandidates
-    .map(normalizeMatchText)
-    .filter((candidate) => candidate.length >= 8)
-  if (titleCandidates.length > 0) {
-    return titleCandidates.some((candidate) => childTitle.includes(candidate) || candidate.includes(childTitle))
-  }
-
-  const agent = normalizeMatchText(descriptor.agent)
-  return agent.length > 0 && childTitle.includes(agent)
-}
-
 function taskToolChildSessionId(part: NormalizedMessagePart) {
   return stringField(part.state.metadata, 'sessionId')
     || stringField(part.state.metadata, 'sessionID')
@@ -182,12 +158,20 @@ function taskToolChildSessionId(part: NormalizedMessagePart) {
     || stringField(part.metadata, 'session_id')
 }
 
+function isDelegationPart(part: NormalizedMessagePart) {
+  return part.type === 'subtask' || (part.type === 'tool' && part.tool === 'task')
+}
+
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
   const normalizedRootMessages = rootMessages
     .map((rawMsg) => normalizeSessionMessages([rawMsg])[0])
     .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
+  const rootDelegationTimes = normalizedRootMessages
+    .filter((msg) => msg.parts.some(isDelegationPart))
+    .map((msg) => toHistorySortTime(msg.info.time.created || msg.time.created || Date.now()))
+    .sort((a, b) => a - b)
   type InternalProjectedHistoryItem = ProjectedHistoryItem & { sortTime: number }
   const normalizedStatuses = normalizeSessionStatuses(statuses)
   const statusFor = (id: string) => normalizedStatuses[id] || { type: null }
@@ -212,6 +196,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       ...item,
       sortTime,
     })
+  }
+
+  const nextRootDelegationBoundary = (sortTime: number) => {
+    return rootDelegationTimes.find((time) => time > sortTime) ?? Number.POSITIVE_INFINITY
   }
 
   const getTaskStatus = (childId?: string | null): TaskStatus => {
@@ -273,14 +261,21 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     return { child, hasExplicitChild: true }
   }
 
-  const takeChildForTaskTool = (
+  const takeOnlyChildForTaskTool = (
     parentSessionId: string,
-    part: NormalizedMessagePart,
-    requireTaskMatch: boolean,
+    options: { after?: number; before?: number } = {},
   ) => {
-    for (const child of children) {
-      if (matchedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) continue
-      if (requireTaskMatch && !childLooksLikeTaskTool(part, child)) continue
+    const candidates = children.filter((child) => {
+      if (matchedChildIds.has(child.id) || !childBelongsToParent(child, parentSessionId)) return false
+      const created = toHistorySortTime(child.time?.created || 0)
+      if (options.after !== undefined && created < options.after) return false
+      if (options.before !== undefined && created >= options.before) return false
+      return true
+    })
+    const candidateIndex = findOnlyIndexedCandidate(candidates)
+    if (candidateIndex >= 0) {
+      const child = candidates[candidateIndex]
+      if (!child) return null
       matchedChildIds.add(child.id)
       return child
     }
@@ -429,12 +424,12 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
       if (part.type === 'tool' && part.tool === 'task') {
         const fallbackStatus = fallbackTaskToolStatus(part)
-        const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
         const explicit = takeExplicitChildForTaskTool(sessionId, part)
         const child = explicit.child || (explicit.hasExplicitChild
           ? null
-          : takeDirectChildForSubtask((candidate) => {
-              return !requireTaskMatch || childLooksLikeTaskTool(part, candidate)
+          : takeOnlyChildForTaskTool(sessionId, {
+              after: tsMs,
+              before: nextRootDelegationBoundary(tsMs),
             }))
         const taskId = child?.id
           ? `child:${child.id}`
@@ -637,11 +632,10 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
 
         if (part.type === 'tool' && part.tool === 'task') {
           const fallbackStatus = fallbackTaskToolStatus(part)
-          const requireTaskMatch = fallbackStatus === 'complete' || fallbackStatus === 'error'
           const explicit = takeExplicitChildForTaskTool(child.id, part)
           const nestedChild = explicit.child || (explicit.hasExplicitChild
             ? null
-            : takeChildForTaskTool(child.id, part, requireTaskMatch))
+            : takeOnlyChildForTaskTool(child.id))
           const nestedTaskId = nestedChild?.id
             ? `child:${nestedChild.id}`
             : `pending:${part.callId || part.id || generateId()}`

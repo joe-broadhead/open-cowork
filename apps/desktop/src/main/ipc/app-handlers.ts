@@ -9,6 +9,7 @@ import {
   normalizeBoundedString,
   normalizeCredentialScopeId,
   resolveSafeSaveTextPath,
+  sniffImageMime,
 } from './app-handler-support.ts'
 import { getPublicAppConfigWithRuntimeModels, registerProviderHandlers } from './provider-handlers.ts'
 import {
@@ -324,9 +325,9 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   // Image picker for custom agent avatars. Returns raw bytes so the
   // renderer can downsample + re-encode before persisting. Capped at
   // 8 MB to keep the IPC buffer sane — the renderer further caps the
-  // final data URI to ~80 KB after downsampling. MIME is inferred from
-  // the filter that matched; gif frames will render statically (first
-  // frame) once the renderer draws them to a canvas.
+  // final data URI to ~80 KB after downsampling. MIME is detected from
+  // magic bytes instead of the file extension; gif frames will render
+  // statically (first frame) once the renderer draws them to a canvas.
   context.ipcMain.handle('dialog:select-image', async () => {
     const { dialog } = await import('electron')
     const result = await dialog.showOpenDialog({
@@ -341,14 +342,11 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     try {
       const MAX_BYTES = 8 * 1024 * 1024
       const { bytes } = readFileCheckedSync(path, { maxBytes: MAX_BYTES })
-      const ext = path.toLowerCase().split('.').pop() || ''
-      const mime = ext === 'jpg' || ext === 'jpeg'
-        ? 'image/jpeg'
-        : ext === 'webp'
-          ? 'image/webp'
-          : ext === 'gif'
-            ? 'image/gif'
-            : 'image/png'
+      const mime = sniffImageMime(bytes)
+      if (!mime) {
+        log('error', 'dialog:select-image rejected non-image payload.')
+        return null
+      }
       return { mime, base64: bytes.toString('base64') }
     } catch (err) {
       log('error', `dialog:select-image read failed: ${err instanceof Error ? err.message : String(err)}`)

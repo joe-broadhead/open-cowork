@@ -25,6 +25,8 @@ function resolveExplorerClient(directory: string) {
 }
 
 type ExplorerClient = NonNullable<ReturnType<typeof resolveExplorerClient>>
+const MAX_FIND_TEXT_PATTERN_BYTES = 512
+const NESTED_QUANTIFIER_PATTERN = /\((?:[^()\\]|\\.)*[+*](?:[^()\\]|\\.)*\)\s*(?:[+*]|\{\d+(?:,\d*)?\})/
 
 function resolveExplorerDirectory(context: IpcHandlerContext, directory?: string | null) {
   if (!directory) return null
@@ -49,6 +51,19 @@ export function isExplorerPathInsideDirectory(path: string, directory?: string |
   } catch {
     return false
   }
+}
+
+export function normalizeFindTextPattern(pattern: unknown) {
+  if (typeof pattern !== 'string') throw new Error('Find text pattern must be a string.')
+  const trimmed = pattern.trim()
+  if (!trimmed) return null
+  if (Buffer.byteLength(trimmed, 'utf8') > MAX_FIND_TEXT_PATTERN_BYTES) {
+    throw new Error(`Find text pattern exceeds ${MAX_FIND_TEXT_PATTERN_BYTES} bytes.`)
+  }
+  if (NESTED_QUANTIFIER_PATTERN.test(trimmed)) {
+    throw new Error('Find text pattern contains a high-cost nested quantifier.')
+  }
+  return trimmed
 }
 
 async function runExplorerOperation<T>(
@@ -140,7 +155,7 @@ export function registerExplorerHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('explorer:find-text', async (_event, pattern: string, directory?: string | null): Promise<TextMatch[]> => {
-    const trimmed = (pattern || '').trim()
+    const trimmed = normalizeFindTextPattern(pattern)
     if (!trimmed) return []
     return runExplorerOperation(context, directory, [], `explorer:find-text ${trimmed}`, async (client, resolvedDirectory) => {
       const result = await client.find.text({

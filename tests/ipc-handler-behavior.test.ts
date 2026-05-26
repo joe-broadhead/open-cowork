@@ -9,9 +9,10 @@ import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
-import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
+import { normalizeFindTextPattern, registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
+import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
@@ -462,6 +463,14 @@ test('settings:set rejects non-object payloads before saving settings', async ()
   )
 })
 
+test('sniffImageMime accepts only image magic bytes', () => {
+  assert.equal(sniffImageMime(Buffer.from('89504e470d0a1a0a0000', 'hex')), 'image/png')
+  assert.equal(sniffImageMime(Buffer.from('ffd8ffe000104a464946', 'hex')), 'image/jpeg')
+  assert.equal(sniffImageMime(Buffer.from('4749463839610000', 'hex')), 'image/gif')
+  assert.equal(sniffImageMime(Buffer.from('524946460000000057454250', 'hex')), 'image/webp')
+  assert.equal(sniffImageMime(Buffer.from('not really an image')), null)
+})
+
 test('custom content write handlers reject malformed objects before save paths', async () => {
   const { context, handlers } = createBaseContext()
   let confirmed = false
@@ -502,6 +511,13 @@ test('explorer:file-read returns null for ungranted renderer-supplied directorie
   assert.equal(result, null)
   assert.match(errors[0] || '', /explorer:directory/)
   assert.match(errors[0] || '', /native directory picker/)
+})
+
+test('explorer find-text pattern validation caps costly regex input', () => {
+  assert.equal(normalizeFindTextPattern('  TODO  '), 'TODO')
+  assert.equal(normalizeFindTextPattern('   '), null)
+  assert.throws(() => normalizeFindTextPattern('x'.repeat(513)), /exceeds 512 bytes/)
+  assert.throws(() => normalizeFindTextPattern('(a+)+$'), /nested quantifier/)
 })
 
 test('artifact:read-attachment rejects private files that were not surfaced by the session', async () => {

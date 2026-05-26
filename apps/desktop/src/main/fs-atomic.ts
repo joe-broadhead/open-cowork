@@ -1,4 +1,4 @@
-import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'fs'
+import { closeSync, fchmodSync, fsyncSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'fs'
 import { dirname } from 'path'
 
 // Atomic-write helper used for every on-disk file that holds
@@ -53,10 +53,12 @@ export function writeFileAtomic(
   // openSync, crashing the main process instead of self-healing.
   // mkdirSync with recursive:true is a no-op when the dir exists.
   mkdirSync(dirname(targetPath), { recursive: true })
+  try { unlinkSync(tempPath) } catch { /* stale temp from a crashed writer is harmless if absent */ }
 
   let fd: number | null = null
   try {
     fd = openSync(tempPath, 'w', mode)
+    if (process.platform !== 'win32') fchmodSync(fd, mode)
     const bytes = typeof data === 'string' ? Buffer.from(data, 'utf-8') : data
     writeBufferFullySync(fd, bytes)
     // fsync forces the bytes out of the page cache so a power-loss
