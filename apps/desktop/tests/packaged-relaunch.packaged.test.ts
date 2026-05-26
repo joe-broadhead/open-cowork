@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   cleanupSmokePaths,
   createSmokePaths,
@@ -13,6 +15,7 @@ const expectSignedUpdateInstall = process.env.OPEN_COWORK_EXPECT_SIGNED_UPDATE_I
 const packagedRelaunchTimeoutMs = 240_000
 const packagedLaunchTimeoutMs = 90_000
 const packagedIpcTimeoutMs = 60_000
+const packagedMacSeedSessionId = 'packaged_mac_seed_session'
 const updateInstallUnsupportedReasons = new Set([
   'dev',
   'unsigned',
@@ -26,6 +29,30 @@ const updateInstallUnsupportedReasons = new Set([
   'source-unreachable',
   'unavailable',
 ])
+
+function makePackagedMacSeedSession() {
+  const now = new Date(Date.UTC(2026, 0, 1, 12, 0, 0)).toISOString()
+  return {
+    id: packagedMacSeedSessionId,
+    title: 'Packaged macOS seed thread',
+    directory: null,
+    opencodeDirectory: '/tmp/open-cowork-packaged-mac-seed',
+    createdAt: now,
+    updatedAt: now,
+    kind: 'interactive',
+    workflowId: null,
+    runId: null,
+    providerId: 'openrouter',
+    modelId: 'anthropic/claude-sonnet-4',
+    composerModelId: null,
+    composerReasoningVariant: null,
+    summary: null,
+    parentSessionId: null,
+    changeSummary: null,
+    revertedMessageId: null,
+    managedByCowork: true as const,
+  }
+}
 
 async function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
@@ -58,14 +85,20 @@ test(
       'OPEN_COWORK_PACKAGED_EXECUTABLE must point at a packaged desktop executable',
     )
 
-    const paths = createSmokePaths()
+    const paths = createSmokePaths(process.platform === 'darwin'
+      ? {
+          seedBeforeLaunch: ({ dataRoot }) => {
+            writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify([makePackagedMacSeedSession()], null, 2))
+          },
+        }
+      : undefined)
     let firstLaunch: SmokeSession | null = null
     let secondLaunch: SmokeSession | null = null
 
     try {
       if (process.platform === 'darwin') {
         const firstProbe = await launchPackagedMacProbe(paths, executablePath, {
-          action: 'create-session',
+          action: 'list-sessions',
           timeoutMs: packagedLaunchTimeoutMs,
         })
         assert.equal(
@@ -90,15 +123,18 @@ test(
           )
         }
 
-        assert.ok(firstProbe.createdSessionId, 'expected packaged app to persist a newly created session before relaunch')
+        assert.ok(
+          firstProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          'expected packaged app to load the seeded session before relaunch',
+        )
 
         const secondProbe = await launchPackagedMacProbe(paths, executablePath, {
           action: 'list-sessions',
           timeoutMs: packagedLaunchTimeoutMs,
         })
         assert.ok(
-          secondProbe.sessions.some((session) => session.id === firstProbe.createdSessionId),
-          'expected created session to survive a packaged-app relaunch',
+          secondProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          'expected seeded session to survive a packaged-app relaunch',
         )
         return
       }
