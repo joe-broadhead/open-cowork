@@ -323,6 +323,69 @@ test('history projector anchors root task tool runs before the parent follow-up 
   assert.ok(taskRun.sequence < (finalMessage?.sequence || 0))
 })
 
+test('history projector preserves task-tool binding before later subtask parts', async () => {
+  const items = await projectSessionHistory({
+    sessionId: 'root-mixed-delegation',
+    cachedModelId: 'openrouter/anthropic/claude-sonnet-4',
+    rootMessages: [{
+      info: { id: 'root-mixed-msg', role: 'assistant', time: { created: 10 } },
+      parts: [
+        {
+          id: 'root-mixed-task-tool',
+          type: 'tool',
+          tool: 'task',
+          callID: 'mixed-task-call',
+          state: {
+            status: 'completed',
+            input: {
+              agent: 'analyst',
+              description: 'Analyze first child',
+            },
+            output: 'done',
+            metadata: {},
+          },
+        },
+        { id: 'root-mixed-subtask', type: 'subtask', agent: 'research', description: 'Research second child' },
+      ],
+    }],
+    rootTodos: [],
+    children: [
+      { id: 'child-first', title: 'First delegated child', parentSessionId: 'root-mixed-delegation', time: { created: 20, updated: 25 } },
+      { id: 'child-second', title: 'Second delegated child', parentSessionId: 'root-mixed-delegation', time: { created: 21, updated: 26 } },
+    ],
+    statuses: {
+      'root-mixed-delegation': { type: 'idle' },
+      'child-first': { type: 'idle' },
+      'child-second': { type: 'idle' },
+    },
+    loadChildSnapshot: async (childId) => ({
+      messages: [{
+        info: { id: `${childId}-msg`, role: 'assistant', time: { created: childId === 'child-first' ? 22 : 23 } },
+        parts: [
+          { id: `${childId}-text`, type: 'text', text: `${childId} result` },
+          { id: `${childId}-finish`, type: 'step-finish', reason: 'stop' },
+        ],
+      }],
+      todos: [],
+    }),
+  })
+
+  const taskRuns = items
+    .filter((item) => item.type === 'task_run')
+    .map((item) => item.taskRun)
+    .filter(Boolean)
+
+  assert.deepEqual(
+    taskRuns.map((taskRun) => ({ source: taskRun?.sourceSessionId, title: taskRun?.title })),
+    [
+      { source: 'child-first', title: 'Analyze first child' },
+      { source: 'child-second', title: 'Research second child' },
+    ],
+  )
+  assert.equal(items.find((item) => item.content === 'child-first result')?.taskRunId, 'child:child-first')
+  assert.equal(items.find((item) => item.content === 'child-second result')?.taskRunId, 'child:child-second')
+})
+
 test('history projector binds task tool metadata session ids exactly once', async () => {
   const childIds = ['child-a', 'child-b', 'child-c']
   const items = await projectSessionHistory({
