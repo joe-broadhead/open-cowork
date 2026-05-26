@@ -66,6 +66,10 @@ function resolveE2EReadyFile(env: NodeJS.ProcessEnv = process.env) {
   return target
 }
 
+export function e2eWindowReadyProbeEnabled(env: NodeJS.ProcessEnv = process.env) {
+  return Boolean(resolveE2EReadyFile(env))
+}
+
 export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, env: NodeJS.ProcessEnv = process.env) {
   const target = resolveE2EReadyFile(env)
   if (!target) return false
@@ -128,6 +132,15 @@ export async function writeE2EWindowReadyProbe(webContents: WebContentsProbe, en
       let sessions = initialSessions;
       let createdSessionId = null;
       if (action === 'create-session') {
+        await withTimeout((async () => {
+          const deadline = Date.now() + 60000;
+          while (Date.now() < deadline) {
+            const status = await api.runtime?.status?.().catch(() => null);
+            if (status?.ready) return;
+            await delay(250);
+          }
+          throw new Error('Runtime readiness timed out after 60000ms');
+        })(), 65000, 'Waiting for packaged smoke runtime readiness');
         await withTimeout(api.session.create(null), 30000, 'Creating packaged smoke session');
         const deadline = Date.now() + 15000;
         while (Date.now() < deadline) {

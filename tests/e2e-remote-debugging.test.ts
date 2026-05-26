@@ -1,8 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   appendE2ERemoteDebuggingSwitches,
   e2eReadyFileRelativePathIsContained,
+  e2eWindowReadyProbeEnabled,
   resolveE2ERemoteDebuggingPort,
 } from '../apps/desktop/src/main/e2e-remote-debugging.ts'
 
@@ -56,4 +60,26 @@ test('e2e ready file containment rejects rooted and cross-volume relative paths'
   assert.equal(e2eReadyFileRelativePathIsContained('/tmp/ready.json'), false)
   assert.equal(e2eReadyFileRelativePathIsContained('\\tmp\\ready.json'), false)
   assert.equal(e2eReadyFileRelativePathIsContained('D:\\tmp\\ready.json'), false)
+})
+
+test('e2e window ready probe is enabled only for contained smoke files', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-e2e-probe-'))
+  try {
+    assert.equal(e2eWindowReadyProbeEnabled({
+      OPEN_COWORK_E2E: '1',
+      TMPDIR: tempRoot,
+      OPEN_COWORK_E2E_READY_FILE: join(tempRoot, 'probe.json'),
+    }), true)
+    assert.equal(e2eWindowReadyProbeEnabled({
+      OPEN_COWORK_E2E: '1',
+      TMPDIR: tempRoot,
+      OPEN_COWORK_E2E_READY_FILE: join(tempRoot, '..', 'probe.json'),
+    }), false)
+    assert.equal(e2eWindowReadyProbeEnabled({
+      TMPDIR: tempRoot,
+      OPEN_COWORK_E2E_READY_FILE: join(tempRoot, 'probe.json'),
+    }), false)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
