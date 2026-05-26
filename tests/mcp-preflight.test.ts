@@ -228,3 +228,26 @@ test('preflightConfiguredApiTokenMcp preserves bundled private-network opt-in', 
     allowPrivateNetwork: true,
   })
 })
+
+test('preflightConfiguredApiTokenMcp sanitizes protocol error text before returning it', async () => {
+  await withRemoteMcpConfig(async () => {
+    const fakeToken = ['ghp', '_', 'protocol', 'secret', 'token', '1234567890'].join('')
+    saveSettings({
+      ...baseSettings(),
+      integrationCredentials: { github: { token: fakeToken } },
+    })
+
+    const result = await preflightConfiguredApiTokenMcp('github', {
+      resolveHostname: resolvePublicTestHost,
+      fetchImpl: (async () => new Response('', { status: 405 })) as typeof fetch,
+      listToolsFromMcpEntry: async () => {
+        throw new Error(`handshake failed with Authorization: Bearer ${fakeToken}`)
+      },
+    })
+
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 'protocol_error')
+    assert.doesNotMatch(result.message, new RegExp(fakeToken))
+    assert.match(result.message, /\[REDACTED_TOKEN\]/)
+  })
+})

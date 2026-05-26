@@ -75,6 +75,7 @@ function requiredCredentialKeys(mcp: BundleMcp, settings: CoworkSettings) {
 function classifyProtocolError(name: string, host: string | undefined, error: unknown, helpText?: string): McpPreflightResult {
   const message = error instanceof Error ? error.message : String(error || '')
   const lower = message.toLowerCase()
+  const safeMessage = responseBodyPreview(message)
   if (/401|unauthorized|invalid[_-]?token|missing authorization header|bad credentials/.test(lower)) {
     return result({
       status: 'auth_rejected',
@@ -106,7 +107,7 @@ function classifyProtocolError(name: string, host: string | undefined, error: un
     status: 'protocol_error',
     mcpName: name,
     host,
-    message: `${name} responded, but the MCP tool-list handshake failed: ${message || 'unknown protocol error'}`,
+    message: `${name} responded, but the MCP tool-list handshake failed: ${safeMessage || 'unknown protocol error'}`,
     helpText,
   })
 }
