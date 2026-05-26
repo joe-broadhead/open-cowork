@@ -464,7 +464,7 @@ export async function launchSmokeSession(
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
   const appShellTimeoutMs = options?.appShellTimeoutMs ?? 30_000
-  if (options?.executablePath && (process.platform === 'darwin' || process.platform === 'linux')) {
+  if (options?.executablePath && process.platform === 'linux') {
     const port = await getAvailablePort()
     const childArgs = [
       `--remote-debugging-port=${port}`,
