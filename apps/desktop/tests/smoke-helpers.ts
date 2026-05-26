@@ -11,6 +11,10 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
+import {
+  buildE2EArgEnvironment,
+  E2E_ARG_ENV_ENABLE_KEY,
+} from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -251,6 +255,44 @@ function getSmokeEnvironment(paths: SmokePaths) {
   }
 }
 
+function getMacAppBundlePath(executablePath: string) {
+  const bundleMarker = '.app/Contents/MacOS/'
+  const markerIndex = executablePath.indexOf(bundleMarker)
+  if (markerIndex < 0) return null
+  return executablePath.slice(0, markerIndex + '.app'.length)
+}
+
+function getLaunchServicesEnvironment(paths: SmokePaths, port: number) {
+  const env = {
+    ...getSmokeEnvironment(paths),
+    [E2E_ARG_ENV_ENABLE_KEY]: '1',
+    OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+  }
+  const keys = new Set([
+    'HOME',
+    'PATH',
+    'SHELL',
+    'TMPDIR',
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_CACHE_HOME',
+    'OPEN_COWORK_CONFIG_PATH',
+    'OPEN_COWORK_USER_DATA_DIR',
+    'OPEN_COWORK_SANDBOX_DIR',
+    'OPEN_COWORK_CHART_TIMEOUT_MS',
+    'OPEN_COWORK_E2E',
+    'OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT',
+    E2E_ARG_ENV_ENABLE_KEY,
+    'CI',
+  ])
+
+  return Object.fromEntries(
+    Array.from(keys)
+      .map((key) => [key, env[key]] as const)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  )
+}
+
 async function delay(ms: number) {
   await new Promise((done) => setTimeout(done, ms))
 }
@@ -349,6 +391,28 @@ async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
   throw new Error('Timed out waiting for packaged app shell page')
 }
 
+function runCommand(command: string, args: string[], timeoutMs = 10_000) {
+  return new Promise<void>((resolveCommand, rejectCommand) => {
+    const child = spawn(command, args, { stdio: 'ignore' })
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM')
+      rejectCommand(new Error(`${command} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timeout)
+      rejectCommand(error)
+    })
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout)
+      if (code === 0) {
+        resolveCommand()
+        return
+      }
+      rejectCommand(new Error(`${command} exited with ${signal || code}`))
+    })
+  })
+}
+
 async function waitForElectronAppPage(app: ElectronApplication, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -435,6 +499,32 @@ export async function launchPackagedMacProbe(
   } finally {
     if (session) await session.close()
   }
+}
+
+async function closeCdpSmokeApp(browser: Browser, port: number) {
+  try {
+    const cdpSession = await browser.newBrowserCDPSession()
+    await withSmokeTimeout('closing packaged app over CDP', cdpSession.send('Browser.close'), 2_000)
+  } catch {
+    // Fall through to the normal Playwright close/disconnect path.
+  }
+
+  try {
+    await withSmokeTimeout('closing packaged browser connection', browser.close(), 5_000)
+  } catch {
+    // The process may already be gone after Browser.close reaches CDP.
+  }
+
+  for (let attempts = 0; attempts < 20; attempts += 1) {
+    if (!(await isCdpAvailable(port))) {
+      await delay(1_000)
+      return
+    }
+    await delay(250)
+  }
+
+  await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+  await delay(1_000)
 }
 
 async function stopSpawnedSmokeProcess(child: ChildProcess) {
@@ -562,12 +652,54 @@ export async function launchSmokeSession(
   options?: LaunchSmokeSessionOptions,
 ): Promise<SmokeSession> {
   const appShellTimeoutMs = options?.appShellTimeoutMs ?? 30_000
-  if (options?.executablePath && (process.platform === 'darwin' || process.platform === 'linux')) {
+  const macAppBundlePath = options?.executablePath && process.platform === 'darwin'
+    ? getMacAppBundlePath(options.executablePath)
+    : null
+
+  if (macAppBundlePath) {
+    const port = await getAvailablePort()
+    const launchEnvironment = getLaunchServicesEnvironment(paths, port)
+    const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+    const argvEnvArgs = buildE2EArgEnvironment(launchEnvironment)
+    await runCommand('open', [
+      '-n',
+      '-g',
+      '-j',
+      ...envArgs,
+      macAppBundlePath,
+      '--args',
+      ...argvEnvArgs,
+      '--remote-debugging-address=127.0.0.1',
+      `--remote-debugging-port=${port}`,
+    ])
+
+    let browser: Browser | null = null
+    try {
+      await waitForCdp(port)
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
+      await waitForCdpPage(browser)
+      const page = await waitForCdpAppPage(browser)
+      await bootstrapSmokeSettings(page, appShellTimeoutMs)
+
+      return {
+        page,
+        async close() {
+          if (browser) await closeCdpSmokeApp(browser, port)
+        },
+      }
+    } catch (error) {
+      if (browser) await closeCdpSmokeApp(browser, port)
+      throw error
+    }
+  }
+
+  if (options?.executablePath && process.platform === 'linux') {
     const port = await getAvailablePort()
     const childArgs = [
       '--remote-debugging-address=127.0.0.1',
       `--remote-debugging-port=${port}`,
-      ...(process.platform === 'linux' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
     ]
     const child = spawn(options.executablePath, childArgs, {
       cwd: desktopAppDir,
