@@ -159,7 +159,7 @@ async function runAuthProbe(
         }),
       }
     }
-    if (response.status === 407) {
+    if (response.status === 407 || response.status === 511) {
       return {
         ok: false,
         result: result({
@@ -168,7 +168,7 @@ async function runAuthProbe(
           host: url.host,
           httpStatus: response.status,
           responseBody,
-          message: `${mcp.name} returned HTTP 407. Check proxy authentication or network policy on this machine.`,
+          message: `${mcp.name} returned HTTP ${response.status}. Check proxy authentication, captive portal sign-in, or network policy on this machine.`,
           helpText: configuredMcpHelpText(mcp),
         }),
       }

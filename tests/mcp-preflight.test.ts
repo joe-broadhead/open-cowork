@@ -166,6 +166,30 @@ test('preflightConfiguredApiTokenMcp classifies forbidden policy responses', asy
   })
 })
 
+test('preflightConfiguredApiTokenMcp classifies network authentication responses as network errors', async () => {
+  await withRemoteMcpConfig(async () => {
+    const fakeToken = ['ghp', '_', 'network', 'auth', 'token', '123456'].join('')
+    saveSettings({
+      ...baseSettings(),
+      integrationCredentials: { github: { token: fakeToken } },
+    })
+
+    const result = await preflightConfiguredApiTokenMcp('github', {
+      resolveHostname: resolvePublicTestHost,
+      fetchImpl: (async () => new Response('Network Authentication Required', { status: 511 })) as typeof fetch,
+      listToolsFromMcpEntry: async () => {
+        throw new Error('should not list tools after network auth rejection')
+      },
+    })
+
+    assert.equal(result.ok, false)
+    assert.equal(result.status, 'network_error')
+    assert.equal(result.httpStatus, 511)
+    assert.match(result.message, /captive portal/)
+    assert.match(result.responseBody || '', /Network Authentication Required/)
+  })
+})
+
 test('preflightConfiguredApiTokenMcp confirms MCP tool-list connectivity', async () => {
   await withRemoteMcpConfig(async () => {
     const fakeToken = ['github', '_pat_', 'valid', 'token', 'value', '1234567890'].join('')
