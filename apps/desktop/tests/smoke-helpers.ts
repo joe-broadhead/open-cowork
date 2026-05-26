@@ -75,6 +75,13 @@ export type PackagedMacProbe = {
   createdSessionId: string | null
 }
 
+type PackagedMacProbeFile = {
+  ok: boolean
+  result?: PackagedMacProbe
+  error?: string
+  writtenAt: string
+}
+
 export interface LaunchSmokeAppOptions {
   // Called with the isolated data root *before* Electron launches.
   // Use this to seed files like `sessions.json` under the path the
@@ -258,8 +265,11 @@ function getMacAppBundlePath(executablePath: string) {
   return executablePath.slice(0, markerIndex + '.app'.length)
 }
 
-function getLaunchServicesEnvironment(paths: SmokePaths) {
-  const env = getSmokeEnvironment(paths)
+function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<string, string>) {
+  const env = {
+    ...getSmokeEnvironment(paths),
+    ...overrides,
+  }
   const keys = new Set([
     'HOME',
     'PATH',
@@ -273,6 +283,8 @@ function getLaunchServicesEnvironment(paths: SmokePaths) {
     'OPEN_COWORK_SANDBOX_DIR',
     'OPEN_COWORK_CHART_TIMEOUT_MS',
     'OPEN_COWORK_E2E',
+    'OPEN_COWORK_E2E_PROBE_ACTION',
+    'OPEN_COWORK_E2E_READY_FILE',
     'CI',
   ])
 
@@ -381,6 +393,28 @@ async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
   throw new Error('Timed out waiting for packaged app shell page')
 }
 
+async function waitForPackagedMacProbeFile(targetPath: string, timeoutMs = 90_000): Promise<PackagedMacProbe> {
+  const deadline = Date.now() + timeoutMs
+  let lastReadError: string | null = null
+  while (Date.now() < deadline) {
+    try {
+      const parsed = JSON.parse(readFileSync(targetPath, 'utf8')) as PackagedMacProbeFile
+      if (!parsed.ok) {
+        throw new Error(parsed.error || 'packaged macOS probe failed')
+      }
+      if (parsed.result) return parsed.result
+      lastReadError = 'probe file did not include a result payload'
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT') {
+        lastReadError = error instanceof Error ? error.message : String(error)
+      }
+    }
+    await delay(250)
+  }
+  throw new Error(`Timed out waiting for packaged macOS probe file ${targetPath}${lastReadError ? `; last error: ${lastReadError}` : ''}`)
+}
+
 function runCommand(command: string, args: string[], timeoutMs = 10_000) {
   return new Promise<void>((resolveCommand, rejectCommand) => {
     const child = spawn(command, args, { stdio: 'ignore' })
@@ -426,68 +460,31 @@ export async function launchPackagedMacProbe(
   if (process.platform !== 'darwin') {
     throw new Error('launchPackagedMacProbe is only supported on macOS')
   }
-  let session: SmokeSession | null = null
+  const macAppBundlePath = getMacAppBundlePath(executablePath)
+  if (!macAppBundlePath) {
+    throw new Error(`Packaged macOS executable is not inside an app bundle: ${executablePath}`)
+  }
+
+  const action = options?.action || 'surface'
+  const readyFile = join(paths.tempRoot, `packaged-mac-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
+  const launchEnvironment = getLaunchServicesEnvironment(paths, {
+    OPEN_COWORK_E2E_PROBE_ACTION: action,
+    OPEN_COWORK_E2E_READY_FILE: readyFile,
+  })
+  const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+
   try {
-    session = await launchSmokeSession(paths, {
-      executablePath,
-      appShellTimeoutMs: options?.timeoutMs ?? 90_000,
-    })
-    const action = options?.action || 'surface'
-    return await withSmokeTimeout(
-      'running packaged macOS probe',
-      session.page.evaluate(async (probeAction): Promise<PackagedMacProbe> => {
-        const surface = {
-          sessionCreate: typeof window.coworkApi.session?.create,
-          settingsSet: typeof window.coworkApi.settings?.set,
-          workflowsStartDraft: typeof window.coworkApi.workflows?.startDraft,
-          updatesInstallCapability: typeof window.coworkApi.updates?.installCapability,
-          onSessionPatch: typeof window.coworkApi.on?.sessionPatch,
-        }
-        const [settings, installCapability] = await Promise.all([
-          window.coworkApi.settings.get(),
-          window.coworkApi.updates.installCapability(),
-        ])
-        const initialSessions = await window.coworkApi.session.list()
-        const initialIds = initialSessions.map((candidate) => candidate.id)
-        let sessions = initialSessions
-        let createdSessionId: string | null = null
-        if (probeAction === 'create-session') {
-          const runtimeDeadline = Date.now() + 60_000
-          while (Date.now() < runtimeDeadline) {
-            const status = await window.coworkApi.runtime.status().catch(() => null)
-            if (status?.ready) break
-            await new Promise((done) => setTimeout(done, 250))
-          }
-          await window.coworkApi.session.create(null)
-          const sessionDeadline = Date.now() + 15_000
-          while (Date.now() < sessionDeadline) {
-            sessions = await window.coworkApi.session.list()
-            createdSessionId = sessions.find((candidate) => !initialIds.includes(candidate.id))?.id || null
-            if (createdSessionId) break
-            await new Promise((done) => setTimeout(done, 250))
-          }
-        } else if (probeAction === 'list-sessions') {
-          sessions = await window.coworkApi.session.list()
-        }
-        return {
-          surface,
-          settings: {
-            effectiveProviderId: settings.effectiveProviderId,
-            effectiveModel: settings.effectiveModel,
-          },
-          installCapability: {
-            supported: installCapability.supported,
-            reason: installCapability.reason,
-            currentVersion: installCapability.currentVersion,
-          },
-          sessions: sessions.map((candidate) => ({ id: candidate.id })),
-          createdSessionId,
-        }
-      }, action),
-      options?.timeoutMs ?? 90_000,
-    )
+    await runCommand('open', [
+      '-n',
+      '-g',
+      '-j',
+      ...envArgs,
+      macAppBundlePath,
+    ])
+    return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
   } finally {
-    if (session) await session.close()
+    await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+    await delay(1_000)
   }
 }
 
