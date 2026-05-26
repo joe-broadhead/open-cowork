@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
+  buildPsSnapshotArgs,
   collectOrphanedManagedProcessTree,
   collectProcessTreeFromRootPids,
   isManagedOpencodeServeCommand,
@@ -53,6 +54,39 @@ test('parsePsOutput reads pid, ppid, and command from ps output', () => {
       command: `node /opt/open-cowork/mcps/charts/dist/index.js PATH=/usr/bin ${OPEN_COWORK_MANAGED_RUNTIME_ENV}=${OPEN_COWORK_MANAGED_RUNTIME_VALUE}`,
     },
   ])
+})
+
+test('parsePsOutput skips headers and malformed rows while preserving ppid zero', () => {
+  const parsed = parsePsOutput([
+    'PID PPID COMMAND',
+    'not-a-pid 1 /bin/echo bad',
+    '1000 0 /sbin/launchd',
+    '1001 1000',
+    '1002 1000 COMMAND',
+    '1003 1000 ARGS',
+    '1004 1000 /usr/bin/node script.js',
+  ].join('\n'))
+
+  assert.deepEqual(parsed, [
+    {
+      pid: 1000,
+      ppid: 0,
+      command: '/sbin/launchd',
+    },
+    {
+      pid: 1004,
+      ppid: 1000,
+      command: '/usr/bin/node script.js',
+    },
+  ])
+})
+
+test('buildPsSnapshotArgs chooses platform-specific command columns', () => {
+  assert.deepEqual(buildPsSnapshotArgs('darwin', false), ['-axo', 'pid=,ppid=,command='])
+  assert.deepEqual(buildPsSnapshotArgs('darwin', true), ['eww', '-axo', 'pid=,ppid=,command='])
+  assert.deepEqual(buildPsSnapshotArgs('linux', false), ['-axo', 'pid=,ppid=,args='])
+  assert.deepEqual(buildPsSnapshotArgs('linux', true), ['eww', '-axo', 'pid=,ppid=,args='])
+  assert.equal(buildPsSnapshotArgs('win32', false), null)
 })
 
 test('collectOrphanedManagedProcessTree returns orphaned Cowork runtime roots and descendants', () => {
