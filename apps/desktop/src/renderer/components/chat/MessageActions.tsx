@@ -3,6 +3,7 @@ import type { Message } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
+import { writeTextToClipboard } from '../../helpers/clipboard'
 import { DiffViewer } from './DiffViewer'
 
 // Per-message contextual actions. Icon-only bar aligned to the same side
@@ -24,11 +25,24 @@ export function MessageActions({
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const addSession = useSessionStore((s) => s.addSession)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
-  const [busy, setBusy] = useState<'fork' | 'revert' | null>(null)
+  const [busy, setBusy] = useState<'copy' | 'fork' | 'revert' | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
 
   if (!currentSessionId) return null
   if (isLivePlaceholderId(message.id)) return null
+
+  async function handleCopy() {
+    if (busy) return
+    const text = message.content
+    if (!text.trim()) return
+    setBusy('copy')
+    try {
+      const copied = await writeTextToClipboard(text)
+      if (!copied) addGlobalError(t('messageActions.copyFailed', 'Could not copy this message. Please try again.'))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function handleFork() {
     if (busy || !currentSessionId) return
@@ -73,6 +87,15 @@ export function MessageActions({
             border: '1px solid var(--color-border-subtle)',
           }}
         >
+          <IconButton
+            onClick={handleCopy}
+            disabled={busy !== null || !message.content.trim()}
+            busy={busy === 'copy'}
+            label={t('messageActions.copyMessage', 'Copy message')}
+            description={t('messageActions.copyMessageDescription', 'Copy this message to the clipboard')}
+          >
+            <CopyIcon />
+          </IconButton>
           <IconButton
             onClick={handleFork}
             disabled={busy !== null}
@@ -170,6 +193,15 @@ function DiffIcon() {
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="2" y="3" width="8" height="10" rx="1" />
       <rect x="6" y="5" width="8" height="10" rx="1" />
+    </svg>
+  )
+}
+
+function CopyIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="5" width="8" height="8" rx="1" />
+      <path d="M3 11V3h8" />
     </svg>
   )
 }
