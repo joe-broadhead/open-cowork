@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { SMALL_MODEL_USE_MAIN } from '../packages/shared/src/app-config.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -262,6 +262,55 @@ test('loadSettings rejects settings from a newer schema version', async () => {
       () => loadSettings(),
       /newer than supported/,
     )
+  } finally {
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('loadSettings migrates legacy encrypted development settings to plaintext', async () => {
+  const tempRoot = testTempDir('opencowork-settings-legacy-encrypted-dev-')
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeEmptyConfig(configDir)
+  mkdirSync(userDataDir, { recursive: true })
+  const encryptedSettings = {
+    selectedProviderId: 'openrouter',
+    selectedModelId: 'openrouter/auto',
+    providerCredentials: {
+      openrouter: {
+        apiKey: 'provider-secret',
+      },
+    },
+  }
+  writeFileSync(join(userDataDir, 'settings.enc'), `sealed:${JSON.stringify(encryptedSettings)}`)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const settingsModule = await importFreshSettingsModule('legacy-encrypted-dev-settings')
+    settingsModule.setSettingsSecretStorageForTests({
+      mode: 'plaintext',
+      encryptString: (value: string) => Buffer.from(`sealed:${value}`),
+      decryptString: (raw: Buffer) => raw.toString('utf-8').replace(/^sealed:/, ''),
+    })
+
+    const settings = settingsModule.loadSettings()
+    assert.equal(settings.selectedProviderId, 'openrouter')
+    assert.equal(settings.providerCredentials.openrouter.apiKey, 'provider-secret')
+
+    const persisted = JSON.parse(readFileSync(join(userDataDir, 'settings.json'), 'utf-8'))
+    assert.equal(persisted.providerCredentials.openrouter.apiKey, 'provider-secret')
+    assert.equal(existsSync(join(userDataDir, 'settings.enc')), false)
+    settingsModule.setSettingsSecretStorageForTests(null)
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

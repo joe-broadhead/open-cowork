@@ -10,7 +10,7 @@ import { log } from './logger.ts'
 import { getUsableAccessToken } from './auth-utils.ts'
 import { getAppConfig, getAppDataDir, getBrandName } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
-import { resolveSecretStorageMode } from './secure-storage-policy.ts'
+import { resolveSecretStorageMode, type SecretStorageMode } from './secure-storage-policy.ts'
 import { escapeHtml } from './html-escape.ts'
 
 const { shell, BrowserWindow } = electron
@@ -18,6 +18,12 @@ const electronSafeStorage = (electron as { safeStorage?: typeof import('electron
 const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
   getSelectedStorageBackend?: () => string
 }) | undefined
+
+type SecretStorageAdapter = {
+  mode: SecretStorageMode
+  encryptString: (plaintext: string) => Buffer
+  decryptString: (encrypted: Buffer) => string
+}
 
 type StoredTokens = {
   access_token: string
@@ -34,6 +40,7 @@ const DEFAULT_GOOGLE_SCOPES = [
 
 let cachedClient: OAuth2Client | null = null
 let cachedTokens: { path: string; tokens: StoredTokens | null } | null = null
+let authSecretStorageForTests: SecretStorageAdapter | null = null
 
 type GoogleOAuthConfig = {
   clientId: string
@@ -55,6 +62,7 @@ function getTokenPath() {
 }
 
 function getSecretStorageMode() {
+  if (authSecretStorageForTests) return authSecretStorageForTests.mode
   return resolveSecretStorageMode({
     isPackaged: Boolean(electron.app?.isPackaged),
     encryptionAvailable: Boolean(electronSafeStorage?.isEncryptionAvailable?.()),
@@ -63,10 +71,16 @@ function getSecretStorageMode() {
 }
 
 function requireSafeStorage() {
+  if (authSecretStorageForTests) return authSecretStorageForTests
   if (!electronSafeStorage) {
     throw new Error('Electron safeStorage is unavailable')
   }
   return electronSafeStorage
+}
+
+export function setAuthSecretStorageForTests(adapter: SecretStorageAdapter | null) {
+  authSecretStorageForTests = adapter
+  cachedTokens = null
 }
 
 function getServerPort(server: ReturnType<typeof createServer>) {
@@ -113,6 +127,34 @@ function createGoogleOAuthClient(oauth: GoogleOAuthConfig, redirectUri?: string)
   })
 }
 
+function decryptLegacyDevelopmentSecret(raw: Buffer) {
+  const testDecrypt = authSecretStorageForTests?.decryptString
+  if (testDecrypt) {
+    try { return testDecrypt(raw) } catch { return null }
+  }
+  if (electron.app?.isPackaged) return null
+  if (!electronSafeStorage?.isEncryptionAvailable?.() || !electronSafeStorage.decryptString) return null
+  try { return electronSafeStorage.decryptString(raw) } catch { return null }
+}
+
+function migrateLegacyEncryptedDevelopmentTokens(path: string, raw: Buffer) {
+  const decrypted = decryptLegacyDevelopmentSecret(raw)
+  if (!decrypted) return null
+  try {
+    const tokens = JSON.parse(decrypted) as StoredTokens
+    try {
+      saveTokens(tokens)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log('auth', `Could not rewrite legacy encrypted development tokens at ${path}: ${message}`)
+      cachedTokens = { path, tokens }
+    }
+    return tokens
+  } catch {
+    return null
+  }
+}
+
 function loadTokens(): StoredTokens | null {
   const path = getTokenPath()
   if (cachedTokens?.path === path) return cachedTokens.tokens
@@ -149,9 +191,18 @@ function loadTokens(): StoredTokens | null {
       cachedTokens = { path, tokens: null }
       return null
     }
-    // Dev-only plaintext fallback when safeStorage is unavailable. File perms
-    // are still 0600 via writeSecureFile.
-    const tokens = JSON.parse(raw.toString('utf-8'))
+    // Dev-only plaintext fallback when safeStorage is unavailable or only
+    // offers Linux's non-protective `basic_text` backend. Existing dev
+    // installs may still have an encrypted basic_text blob from earlier
+    // builds; migrate it once instead of silently dropping auth state.
+    let tokens: StoredTokens
+    try {
+      tokens = JSON.parse(raw.toString('utf-8'))
+    } catch (error) {
+      const migrated = migrateLegacyEncryptedDevelopmentTokens(path, raw)
+      if (migrated) return migrated
+      throw error
+    }
     cachedTokens = { path, tokens }
     return tokens
   } catch {
