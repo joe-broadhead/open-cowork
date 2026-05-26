@@ -5,6 +5,7 @@ import { chmodSync, copyFileSync, existsSync, realpathSync } from 'fs'
 import type { SessionArtifactExportRequest, SessionArtifactRequest } from '@open-cowork/shared'
 import type { IpcHandlerContext } from './context.ts'
 import { noIpcArgs, objectArg, registerIpcInvoke, stringArg } from './schema.ts'
+import { validateSessionArtifactExportRequest, validateSessionArtifactRequest } from './object-validators.ts'
 import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
@@ -29,7 +30,7 @@ function safeRealPath(path: string) {
 export function registerArtifactHandlers(context: IpcHandlerContext) {
   const { app, shell } = electron
 
-  registerIpcInvoke(context, 'artifact:export', objectArg<SessionArtifactExportRequest>('artifact export request'), async (_event, request) => {
+  registerIpcInvoke(context, 'artifact:export', objectArg<SessionArtifactExportRequest>('artifact export request', validateSessionArtifactExportRequest), async (_event, request) => {
     const { dialog } = await import('electron')
     const { source } = context.resolvePrivateArtifactPath(request)
 
@@ -44,14 +45,14 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     return result.filePath
   })
 
-  registerIpcInvoke(context, 'artifact:reveal', objectArg<SessionArtifactRequest>('artifact request'), async (_event, request) => {
+  registerIpcInvoke(context, 'artifact:reveal', objectArg<SessionArtifactRequest>('artifact request', validateSessionArtifactRequest), async (_event, request) => {
     const { source } = context.resolvePrivateArtifactPath(request)
     shell.showItemInFolder(source)
     log('artifact', `Revealed artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
     return true
   })
 
-  registerIpcInvoke(context, 'artifact:read-attachment', objectArg<SessionArtifactRequest>('artifact request'), async (_event, request) => {
+  registerIpcInvoke(context, 'artifact:read-attachment', objectArg<SessionArtifactRequest>('artifact request', validateSessionArtifactRequest), async (_event, request) => {
     const { root, source } = context.resolvePrivateArtifactPath(request)
     const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
     const isChartArtifact = root === safeRealPath(chartRoot)

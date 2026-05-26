@@ -12,6 +12,7 @@ import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/cust
 import { normalizeFindTextPattern, registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
+import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
@@ -928,6 +929,80 @@ test('tool:list rejects malformed options before runtime tool discovery', async 
     /tool list options to be an object/,
   )
   assert.equal(runtimeToolListCalled, false)
+})
+
+test('settings:set rejects unknown and malformed settings payloads before saving', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerAppHandlers(context)
+  const handler = handlers.get('settings:set')
+
+  assert.ok(handler, 'expected settings:set handler to be registered')
+  await assert.rejects(
+    () => handler({}, { unknownSetting: true }),
+    /Unknown settings key/,
+  )
+  await assert.rejects(
+    () => handler({}, { providerCredentials: { openai: { apiKey: 42 } } }),
+    /Provider credentials\.openai\.apiKey must be a string/,
+  )
+})
+
+test('custom MCP IPC rejects malformed nested records before persistence', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerCustomContentHandlers(context)
+  const handler = handlers.get('custom:add-mcp')
+
+  assert.ok(handler, 'expected custom:add-mcp handler to be registered')
+  await assert.rejects(
+    () => handler({}, {
+      scope: 'machine',
+      name: 'local-tools',
+      type: 'stdio',
+      command: 'node',
+      env: { OPEN_COWORK_TOKEN: 123 },
+    }),
+    /MCP env\.OPEN_COWORK_TOKEN must be a string/,
+  )
+})
+
+test('thread object IPC validates query and tag payload shape before store access', async () => {
+  const { context, handlers } = createBaseContext()
+
+  registerThreadHandlers(context)
+  const search = handlers.get('threads:search')
+  const createTag = handlers.get('threads:tags:create')
+
+  assert.ok(search, 'expected threads:search handler to be registered')
+  assert.ok(createTag, 'expected threads:tags:create handler to be registered')
+  await assert.rejects(
+    () => search({}, { statuses: ['not-a-status'] }),
+    /Invalid thread status/,
+  )
+  await assert.rejects(
+    () => createTag({}, { color: '#ffffff' }),
+    /Tag name must be a string/,
+  )
+})
+
+test('artifact IPC validates request shape before resolving private paths', async () => {
+  const { context, handlers } = createBaseContext()
+  let resolveCalled = false
+  context.resolvePrivateArtifactPath = () => {
+    resolveCalled = true
+    return { root: '/tmp', source: '/tmp/file.txt' }
+  }
+
+  registerArtifactHandlers(context)
+  const handler = handlers.get('artifact:export')
+
+  assert.ok(handler, 'expected artifact:export handler to be registered')
+  await assert.rejects(
+    () => handler({}, { sessionId: 'session-1', filePath: '' }),
+    /Artifact path is required/,
+  )
+  assert.equal(resolveCalled, false)
 })
 
 test('chart:save-artifact rejects unknown sessions before writing chart bytes', async () => {

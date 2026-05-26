@@ -33,6 +33,7 @@ import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
+import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
 import { clearPermissionsForSession, trackPermission } from './permission-tracker.ts'
 import { ProjectDirectoryGrantRegistry, trustedRecordDirectoryMatches } from './directory-grants.ts'
 import { isTrustedRendererIpcUrl } from './main-window-lifecycle.ts'
@@ -329,7 +330,7 @@ export function setupIpcHandlers(
     capabilityToolMethodCache,
   }
 
-  registerIpcInvoke(context, 'confirm:request-destructive', objectArg<DestructiveConfirmationRequest>('destructive confirmation request'), async (_event, request) => {
+  registerIpcInvoke(context, 'confirm:request-destructive', objectArg<DestructiveConfirmationRequest>('destructive confirmation request', validateDestructiveConfirmationRequest), async (_event, request) => {
     const confirmed = await showNativeConfirmation(getMainWindow(), destructiveConfirmationPrompt(request))
     if (!confirmed) {
       log('audit', `confirmation.cancelled ${request.action} ${describeDestructiveRequest(request)}`)
