@@ -211,6 +211,7 @@
         }
       }
     },
+    "cloud": { "$ref": "#/$defs/cloudConfig" },
     "i18n": {
       "type": "object",
       "additionalProperties": false,
@@ -254,6 +255,120 @@
       "type": "string",
       "maxLength": 2048,
       "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost)(:[0-9]+)?/).+"
+    },
+    "cloudConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": { "$ref": "#/$defs/cloudRole" },
+        "defaultProfile": { "$ref": "#/$defs/cloudName" },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/cloudProfile" }
+        },
+        "auth": { "$ref": "#/$defs/cloudAuth" },
+        "storage": { "$ref": "#/$defs/cloudStorage" },
+        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
+        "features": { "$ref": "#/$defs/cloudFeatures" }
+      }
+    },
+    "cloudRole": {
+      "type": "string",
+      "enum": ["all-in-one", "web", "worker", "scheduler"]
+    },
+    "cloudName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "cloudStringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "cloudFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chat": { "type": "boolean" },
+        "agents": { "type": "boolean" },
+        "artifacts": { "type": "boolean" },
+        "threadIndex": { "type": "boolean" },
+        "workflows": { "type": "boolean" },
+        "webhooks": { "type": "boolean" },
+        "settings": { "type": "boolean" },
+        "customSkills": { "type": "boolean" },
+        "customAgents": { "type": "boolean" },
+        "customMcps": { "type": "boolean" }
+      }
+    },
+    "cloudRuntimePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configSource": { "type": "string", "enum": ["app"] },
+        "launcher": { "type": "string", "enum": ["node"] },
+        "allowMachineRuntimeConfig": { "type": "boolean" },
+        "allowLocalStdioMcps": { "type": "boolean" },
+        "allowHostProjectDirectories": { "type": "boolean" },
+        "allowedLocalMcpNames": { "$ref": "#/$defs/cloudStringList" },
+        "allowedHostProjectDirectories": { "$ref": "#/$defs/cloudStringList" }
+      }
+    },
+    "cloudProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 400 },
+        "agents": { "$ref": "#/$defs/cloudStringList" },
+        "tools": { "$ref": "#/$defs/cloudStringList" },
+        "mcps": { "$ref": "#/$defs/cloudStringList" },
+        "features": { "$ref": "#/$defs/cloudFeatures" },
+        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" }
+      }
+    },
+    "cloudAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["none", "oidc"] },
+        "issuerUrl": { "type": "string", "pattern": "^https://.+" },
+        "clientId": { "type": "string", "maxLength": 512 },
+        "clientSecretRef": { "type": "string", "maxLength": 512 },
+        "callbackPath": { "type": "string", "pattern": "^/[A-Za-z0-9/_-]*$" },
+        "cookieSecretRef": { "type": "string", "maxLength": 512 },
+        "allowedEmailDomains": { "$ref": "#/$defs/cloudStringList" }
+      }
+    },
+    "cloudStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controlPlane": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "type": "string", "enum": ["local", "postgres"] },
+            "urlRef": { "type": "string", "maxLength": 512 }
+          }
+        },
+        "objectStore": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["filesystem", "s3", "gcs", "azure-blob", "digitalocean-spaces", "minio"]
+            },
+            "bucket": { "type": "string", "maxLength": 512 },
+            "region": { "type": "string", "maxLength": 128 },
+            "endpoint": { "type": "string", "maxLength": 2048 },
+            "prefix": { "type": "string", "maxLength": 512 },
+            "credentialsRef": { "type": "string", "maxLength": 512 }
+          }
+        }
+      }
     },
     "updateChannel": {
       "type": "string",

@@ -31,6 +31,7 @@
     "security": "pnpm audit --prod --audit-level high"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1054.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "1.15.5",
     "@tanstack/react-virtual": "^3.13.24",
@@ -42,6 +43,7 @@
     "mermaid": "^11.15.0",
     "morphdom": "^2.7.8",
     "opencode-ai": "1.15.5",
+    "pg": "^8.21.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",

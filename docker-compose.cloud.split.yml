@@ -1,0 +1,125 @@
+services:
+  open-cowork-cloud-web:
+    build:
+      context: .
+      dockerfile: docker/open-cowork-cloud/Dockerfile
+    environment:
+      OPEN_COWORK_CLOUD_ROLE: web
+      OPEN_COWORK_CLOUD_PROFILE: full
+      OPEN_COWORK_CLOUD_ROOT: /data/open-cowork-cloud
+      OPEN_COWORK_CLOUD_HOST: 0.0.0.0
+      OPEN_COWORK_CLOUD_PORT: 8787
+      OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
+      OPEN_COWORK_CLOUD_COOKIE_SECRET: change-me-for-local-cookie-secret
+      OPEN_COWORK_CLOUD_COOKIE_SECURE: "false"
+      OPEN_COWORK_CLOUD_PUBLIC_URL: http://localhost:8787
+      OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
+      OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: "false"
+      OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT: http://minio:9000
+      OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: open-cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID: open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY: open_cowork_local_dev
+    ports:
+      - "8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  open-cowork-cloud-worker:
+    build:
+      context: .
+      dockerfile: docker/open-cowork-cloud/Dockerfile
+    environment:
+      OPEN_COWORK_CLOUD_ROLE: worker
+      OPEN_COWORK_CLOUD_PROFILE: full
+      OPEN_COWORK_CLOUD_ROOT: /data/open-cowork-cloud
+      OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
+      OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
+      OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_WORKER_ID: compose-worker-1
+      OPEN_COWORK_CLOUD_WORKER_POLL_MS: 1000
+      OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: "true"
+      OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT: http://minio:9000
+      OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: open-cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID: open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY: open_cowork_local_dev
+    volumes:
+      - open-cowork-cloud-worker-data:/data/open-cowork-cloud
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  open-cowork-cloud-scheduler:
+    build:
+      context: .
+      dockerfile: docker/open-cowork-cloud/Dockerfile
+    environment:
+      OPEN_COWORK_CLOUD_ROLE: scheduler
+      OPEN_COWORK_CLOUD_PROFILE: full
+      OPEN_COWORK_CLOUD_ROOT: /data/open-cowork-cloud
+      OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
+      OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
+      OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_SCHEDULER_ID: compose-scheduler-1
+      OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS: 1000
+      OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT: http://minio:9000
+      OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: open-cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_ACCESS_KEY_ID: open_cowork
+      OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY: open_cowork_local_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: open_cowork
+      POSTGRES_USER: open_cowork
+      POSTGRES_PASSWORD: open_cowork
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U open_cowork -d open_cowork"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - open-cowork-cloud-postgres:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2026-02-14T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: open_cowork
+      MINIO_ROOT_PASSWORD: open_cowork_local_dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - open-cowork-cloud-minio:/data
+
+  minio-init:
+    image: minio/mc:RELEASE.2026-02-14T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "mc alias set local http://minio:9000 open_cowork open_cowork_local_dev &&
+       mc mb --ignore-existing local/open-cowork"
+
+volumes:
+  open-cowork-cloud-worker-data:
+  open-cowork-cloud-postgres:
+  open-cowork-cloud-minio:

@@ -21,6 +21,7 @@ import {
   ensureWorkflowWebhookServer,
   getWorkflowWebhookBaseUrl,
   isWorkflowWebhookLoopbackBindAddress,
+  InMemoryWorkflowWebhookSecurityStore,
   resetWorkflowWebhookSecurityStateForTests,
   signWorkflowWebhookPayload,
   stopWorkflowWebhookServer,
@@ -180,8 +181,8 @@ test('workflow webhook bind invariant accepts IPv4-mapped loopback addresses', (
   assert.equal(isWorkflowWebhookLoopbackBindAddress('192.168.1.10'), false)
 })
 
-test('workflow webhook auth verifies HMAC payload signatures with replay bounds', () => {
-  resetWorkflowWebhookSecurityStateForTests()
+test('workflow webhook auth verifies HMAC payload signatures with replay bounds', async () => {
+  await resetWorkflowWebhookSecurityStateForTests()
   const rawBody = JSON.stringify({ source: 'signed' })
   const timestamp = '2026-05-14T10:00:00.000Z'
   const signature = signWorkflowWebhookPayload('secret', rawBody, timestamp)
@@ -203,21 +204,75 @@ test('workflow webhook auth verifies HMAC payload signatures with replay bounds'
   ), false)
 
   const auth = { kind: 'signature' as const, timestamp, signature, rawBody }
-  const transientClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:00.000Z'))
+  const transientClaim = await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:00.000Z'))
   assert.ok(transientClaim, 'first signed delivery should claim replay key')
-  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:01.000Z')), null)
+  assert.equal(await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:01.000Z')), null)
 
-  const fanoutClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:01.000Z'))
+  const fanoutClaim = await claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:01.000Z'))
   assert.ok(fanoutClaim, 'same signed provider event should be accepted for a different workflow')
-  fanoutClaim.accept()
+  await fanoutClaim.accept()
 
-  transientClaim.release()
-  const acceptedClaim = claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:02.000Z'))
+  await transientClaim.release()
+  const acceptedClaim = await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:02.000Z'))
   assert.ok(acceptedClaim, 'released claim should allow provider retry after transient failure')
-  acceptedClaim.accept()
-  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:03.000Z')), null)
-  assert.equal(claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:03.000Z')), null)
-  resetWorkflowWebhookSecurityStateForTests()
+  await acceptedClaim.accept()
+  assert.equal(await claimWorkflowWebhookSignatureOnce(auth, 'workflow-a', new Date('2026-05-14T10:03:03.000Z')), null)
+  assert.equal(await claimWorkflowWebhookSignatureOnce(auth, 'workflow-b', new Date('2026-05-14T10:03:03.000Z')), null)
+  await resetWorkflowWebhookSecurityStateForTests()
+})
+
+test('workflow webhook security store atomically claims requests, auth failures, and replay keys', async () => {
+  const store = new InMemoryWorkflowWebhookSecurityStore()
+  assert.equal(await store.claimRequest({
+    source: 'source-a',
+    nowMs: 1000,
+    windowMs: 60_000,
+    limit: 2,
+  }), true)
+  assert.equal(await store.claimRequest({
+    source: 'source-a',
+    nowMs: 1001,
+    windowMs: 60_000,
+    limit: 2,
+  }), true)
+  assert.equal(await store.claimRequest({
+    source: 'source-a',
+    nowMs: 1002,
+    windowMs: 60_000,
+    limit: 2,
+  }), false)
+
+  assert.equal(await store.checkAuthBackoff({ scope: 'scope-a', nowMs: 2000 }), true)
+  await store.recordAuthFailure({
+    scope: 'scope-a',
+    source: 'source-a',
+    nowMs: 2000,
+    windowMs: 60_000,
+    limit: 1,
+    backoffMs: 60_000,
+  })
+  assert.equal(await store.checkAuthBackoff({ scope: 'scope-a', nowMs: 2001 }), false)
+
+  const first = await store.claimSignature({
+    key: 'replay-key',
+    nowMs: 3000,
+    windowMs: 60_000,
+    cacheLimit: 10,
+  })
+  assert.ok(first)
+  assert.equal(await store.claimSignature({
+    key: 'replay-key',
+    nowMs: 3001,
+    windowMs: 60_000,
+    cacheLimit: 10,
+  }), null)
+  await first.release()
+  assert.ok(await store.claimSignature({
+    key: 'replay-key',
+    nowMs: 3002,
+    windowMs: 60_000,
+    cacheLimit: 10,
+  }))
 })
 
 test('workflow webhook server throttles repeated unauthorized requests per workflow scope', async () => {
@@ -249,6 +304,48 @@ test('workflow webhook server throttles repeated unauthorized requests per workf
       body: '{}',
     })
     assert.equal(otherWorkflow.status, 401)
+  })
+})
+
+test('workflow webhook public mode requires HMAC timestamp signatures', async () => {
+  await withWorkflowRuntimeStore('webhook-public-signature', async () => {
+    const calls: Array<{ workflowId: string; payload: Record<string, unknown> }> = []
+    configureWorkflowWebhookServer(async (input) => {
+      if (input.auth.kind !== 'signature') throw new Error('Expected signature auth.')
+      if (!verifyWorkflowWebhookAuth(input.auth, 'secret', new Date('2026-05-14T10:03:00.000Z'))) {
+        throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
+      }
+      calls.push({ workflowId: input.workflowId, payload: input.payload })
+    }, { requireSignatureAuth: true })
+    const baseUrl = await ensureWorkflowWebhookServer()
+    const rawBody = JSON.stringify({ source: 'signed' })
+    const timestamp = '2026-05-14T10:00:00.000Z'
+    const signature = signWorkflowWebhookPayload('secret', rawBody, timestamp)
+
+    const bearer = await fetchWorkflowWebhookWithRetry(`${baseUrl}/workflows/wf`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer secret',
+        'content-type': 'application/json',
+      },
+      body: rawBody,
+    })
+    assert.equal(bearer.status, 401)
+
+    const signed = await fetchWorkflowWebhookWithRetry(`${baseUrl}/workflows/wf`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': timestamp,
+        'x-open-cowork-signature': signature,
+      },
+      body: rawBody,
+    })
+    assert.equal(signed.status, 202)
+    assert.deepEqual(calls, [{
+      workflowId: 'wf',
+      payload: { source: 'signed' },
+    }])
   })
 })
 

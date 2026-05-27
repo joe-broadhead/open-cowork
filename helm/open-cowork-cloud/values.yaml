@@ -1,0 +1,76 @@
+image:
+  repository: ghcr.io/joe-broadhead/open-cowork-cloud
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+cloud:
+  profile: full
+  root: /data/open-cowork-cloud
+  controlPlaneUrl: ""
+  secretKey: ""
+  secretKeyRef: ""
+  cookieSecret: ""
+  cookieSecure: true
+  publicUrl: ""
+  oidcClientSecret: ""
+  existingSecret: ""
+  observability:
+    serviceName: open-cowork-cloud
+    serviceVersion: ""
+    logFormat: json
+    otlpEndpoint: ""
+    otlpHeaders: ""
+  checkpoints:
+    enabled: false
+  objectStore:
+    kind: s3
+    bucket: ""
+    region: ""
+    endpoint: ""
+    prefix: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    bearerToken: ""
+    sasToken: ""
+    accountName: ""
+
+roles:
+  web:
+    enabled: true
+    replicas: 2
+    port: 8787
+    autoProcessCommands: false
+    resources: {}
+  worker:
+    enabled: true
+    replicas: 1
+    pollMs: 1000
+    checkpointsEnabled: true
+    resources: {}
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClassName: ""
+  scheduler:
+    enabled: true
+    replicas: 1
+    pollMs: 1000
+    resources: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: open-cowork-cloud.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

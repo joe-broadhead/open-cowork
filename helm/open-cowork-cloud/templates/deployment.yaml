@@ -1,0 +1,88 @@
+{{- range $roleName, $role := .Values.roles }}
+{{- if $role.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-cowork-cloud.fullname" $ }}-{{ $roleName }}
+  labels:
+    {{- include "open-cowork-cloud.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $roleName }}
+spec:
+  replicas: {{ $role.replicas }}
+  selector:
+    matchLabels:
+      {{- include "open-cowork-cloud.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $roleName }}
+  template:
+    metadata:
+      labels:
+        {{- include "open-cowork-cloud.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $roleName }}
+    spec:
+      containers:
+        - name: open-cowork-cloud
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-cowork-cloud.fullname" $ }}-config
+            - secretRef:
+                name: {{ include "open-cowork-cloud.secretName" $ }}
+          env:
+            - name: OPEN_COWORK_CLOUD_ROLE
+              value: {{ $roleName | quote }}
+            {{- if eq $roleName "web" }}
+            - name: OPEN_COWORK_CLOUD_HOST
+              value: "0.0.0.0"
+            - name: OPEN_COWORK_CLOUD_PORT
+              value: {{ $role.port | quote }}
+            - name: OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS
+              value: {{ $role.autoProcessCommands | quote }}
+            {{- end }}
+            {{- if eq $roleName "worker" }}
+            - name: OPEN_COWORK_CLOUD_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPEN_COWORK_CLOUD_WORKER_POLL_MS
+              value: {{ $role.pollMs | quote }}
+            {{- end }}
+            {{- if eq $roleName "scheduler" }}
+            - name: OPEN_COWORK_CLOUD_SCHEDULER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS
+              value: {{ $role.pollMs | quote }}
+            {{- end }}
+          {{- if eq $roleName "web" }}
+          ports:
+            - name: http
+              containerPort: {{ $role.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          {{- end }}
+          {{- with $role.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and (eq $roleName "worker") $role.persistence.enabled }}
+          volumeMounts:
+            - name: worker-data
+              mountPath: {{ $.Values.cloud.root }}
+          {{- end }}
+      {{- if and (eq $roleName "worker") $role.persistence.enabled }}
+      volumes:
+        - name: worker-data
+          persistentVolumeClaim:
+            claimName: {{ include "open-cowork-cloud.fullname" $ }}-worker-data
+      {{- end }}
+{{- end }}
+{{- end }}

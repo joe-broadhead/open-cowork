@@ -104,6 +104,52 @@ test('config loader lets downstreams disable native web search while keeping web
   }
 })
 
+test('config loader normalizes cloud defaults and focused profile overrides', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-cloud-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+
+  writeFileSync(configPath, JSON.stringify({
+    cloud: {
+      role: 'worker',
+      defaultProfile: 'focused-agent',
+      profiles: {
+        'focused-agent': {
+          agents: ['data-analyst'],
+          tools: ['warehouse'],
+          mcps: ['warehouse'],
+          features: {
+            workflows: false,
+            customMcps: false,
+          },
+        },
+      },
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    const cloud = getAppConfig().cloud
+    assert.equal(cloud.role, 'worker')
+    assert.equal(cloud.defaultProfile, 'focused-agent')
+    assert.equal(cloud.profiles['focused-agent']?.agents?.[0], 'data-analyst')
+    assert.equal(cloud.profiles['focused-agent']?.features?.workflows, false)
+    assert.equal(cloud.runtime.configSource, 'app')
+    assert.equal(cloud.runtime.allowMachineRuntimeConfig, false)
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('config loader accepts select and radio credential metadata for bundled MCPs', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-mcp-credentials-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

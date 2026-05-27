@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import {
   attachWorkflowRunSession,
+  claimDueWorkflowRun,
   clearWorkflowStoreCache,
   createWorkflow,
   createWorkflowRun,
@@ -256,6 +257,35 @@ test('workflow store recovers interrupted queued and running runs without keepin
   assert.equal(getWorkflowRun(running!.id)?.finishedAt, '2026-05-15T11:00:00.000Z')
   assert.equal(getWorkflow(workflow.id)?.status, 'active')
   assert.equal(getWorkflow(workflow.id)?.latestRunSessionId, 'ses_running')
+}))
+
+test('workflow store atomically claims a due scheduled workflow and creates its run', () => withWorkflowStore('claim-due', () => {
+  const createdAt = new Date('2026-05-15T08:00:00.000Z')
+  const dueAt = new Date('2026-05-15T09:00:00.000Z')
+  const workflow = createWorkflow({
+    ...draft,
+    triggers: [{
+      id: 'once',
+      type: 'schedule',
+      enabled: true,
+      schedule: { type: 'one_time', timezone: 'UTC', startAt: dueAt.toISOString() },
+    }],
+  }, null, { now: createdAt })
+
+  const claimed = claimDueWorkflowRun(dueAt)
+  assert.equal(claimed?.workflowId, workflow.id)
+  assert.equal(claimed?.triggerType, 'schedule')
+  assert.equal(claimed?.status, 'queued')
+  assert.deepEqual(claimed?.triggerPayload, {
+    source: 'schedule',
+    scheduledFor: dueAt.toISOString(),
+  })
+
+  const afterClaim = getWorkflow(workflow.id)
+  assert.equal(afterClaim?.status, 'running')
+  assert.equal(afterClaim?.latestRunId, claimed?.id)
+  assert.equal(afterClaim?.latestRunStatus, 'queued')
+  assert.equal(claimDueWorkflowRun(dueAt), null)
 }))
 
 test('workflow preview accepts manual-only workflows', () => {

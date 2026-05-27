@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-cowork-cloud.fullname" . }}-config
+  labels:
+    {{- include "open-cowork-cloud.labels" . | nindent 4 }}
+data:
+  OPEN_COWORK_CLOUD_PROFILE: {{ .Values.cloud.profile | quote }}
+  OPEN_COWORK_CLOUD_ROOT: {{ .Values.cloud.root | quote }}
+  OPEN_COWORK_CLOUD_COOKIE_SECURE: {{ .Values.cloud.cookieSecure | quote }}
+  OPEN_COWORK_CLOUD_PUBLIC_URL: {{ .Values.cloud.publicUrl | quote }}
+  OPEN_COWORK_CLOUD_SERVICE_NAME: {{ .Values.cloud.observability.serviceName | quote }}
+  OPEN_COWORK_CLOUD_SERVICE_VERSION: {{ .Values.cloud.observability.serviceVersion | quote }}
+  OPEN_COWORK_CLOUD_LOG_FORMAT: {{ .Values.cloud.observability.logFormat | quote }}
+  OPEN_COWORK_CLOUD_OTLP_ENDPOINT: {{ .Values.cloud.observability.otlpEndpoint | quote }}
+  OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: {{ .Values.cloud.objectStore.kind | quote }}
+  OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: {{ .Values.cloud.objectStore.bucket | quote }}
+  OPEN_COWORK_CLOUD_OBJECT_STORE_REGION: {{ .Values.cloud.objectStore.region | quote }}
+  OPEN_COWORK_CLOUD_OBJECT_STORE_ENDPOINT: {{ .Values.cloud.objectStore.endpoint | quote }}
+  OPEN_COWORK_CLOUD_OBJECT_STORE_PREFIX: {{ .Values.cloud.objectStore.prefix | quote }}
+  OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: {{ and .Values.cloud.checkpoints.enabled .Values.roles.worker.checkpointsEnabled | quote }}

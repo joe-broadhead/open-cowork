@@ -542,6 +542,57 @@ export function createWorkflowRun(workflowId: string, triggerType: WorkflowTrigg
   return getWorkflowRun(id)
 }
 
+export function claimDueWorkflowRun(now = new Date()) {
+  const claimedAt = now.toISOString()
+  return withTransaction((db) => {
+    for (let attempt = 0; attempt < MAX_LIST_ITEMS; attempt += 1) {
+      const row = db.prepare(`
+        select * from workflows
+        where status = 'active'
+          and next_run_at is not null
+          and next_run_at <= ?
+        order by next_run_at asc
+        limit 1
+      `).get(claimedAt) as DbRow | undefined
+      if (!row) return null
+
+      const workflow = rowToWorkflow(row)
+      const trigger = workflow.triggers.find((entry) => (
+        entry.enabled && entry.type === 'schedule' && entry.schedule && workflow.nextRunAt
+      ))
+      if (!trigger || !workflow.nextRunAt) {
+        db.prepare('update workflows set next_run_at = ?, updated_at = ? where id = ?')
+          .run(computeNextWorkflowRunAt(workflow.triggers, now), claimedAt, workflow.id)
+        continue
+      }
+
+      const runId = crypto.randomUUID()
+      const update = db.prepare(`
+        update workflows
+        set status = 'running', latest_run_id = ?, latest_run_status = 'queued', updated_at = ?
+        where id = ?
+          and status = 'active'
+          and next_run_at = ?
+      `).run(runId, claimedAt, workflow.id, workflow.nextRunAt)
+      if (Number(update.changes) !== 1) continue
+
+      const payload = {
+        source: 'schedule',
+        scheduledFor: workflow.nextRunAt,
+      }
+      db.prepare(`
+        insert into workflow_runs (
+          id, workflow_id, session_id, trigger_type, trigger_payload_json, status, title,
+          summary, error, created_at, started_at, finished_at
+        ) values (?, ?, null, 'schedule', ?, 'queued', ?, null, null, ?, null, null)
+      `).run(runId, workflow.id, JSON.stringify(payload), `Run ${workflow.title}`, claimedAt)
+
+      return getWorkflowRun(runId)
+    }
+    return null
+  })
+}
+
 export function getWorkflowRun(runId: string) {
   const row = getWorkflowDb().prepare('select * from workflow_runs where id = ?').get(runId) as DbRow | undefined
   return row ? rowToRun(row) : null
