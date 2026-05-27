@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `bddb363a8aea19667c8839e65cfedf12442ffc4592923576b9c02445a284e817`
-- Production package entries: 482
-- Bundled license directories: 453 (29 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `fd1f28d75b3f6e38903874236f1bb1bdb656d7594269a3b17e9689b29e2d4cdf`
+- Production package entries: 491
+- Bundled license directories: 460 (31 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -45,12 +45,14 @@ Each package remains licensed under its own license terms. The table below is pr
 | @aws/lambda-invoke-store | 0.2.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.2.4/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
+| @grammyjs/types | 3.27.3 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.27.3/ | git+https://github.com/grammyjs/types.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
+| @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
@@ -109,6 +111,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @types/unist | 3.0.3 | MIT | THIRD_PARTY_LICENSES/@types__unist@3.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @ungap/structured-clone | 1.3.0 | ISC | THIRD_PARTY_LICENSES/@ungap__structured-clone@1.3.0/ | git+https://github.com/ungap/structured-clone.git |
 | @upsetjs/venn.js | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@upsetjs__venn.js@2.0.0/ | https://github.com/upsetjs/venn.js.git |
+| abort-controller | 3.0.0 | MIT | THIRD_PARTY_LICENSES/abort-controller@3.0.0/ | git+https://github.com/mysticatea/abort-controller.git |
 | accepts | 2.0.0 | MIT | THIRD_PARTY_LICENSES/accepts@2.0.0/ | jshttp/accepts |
 | acorn | 8.16.0 | MIT | THIRD_PARTY_LICENSES/acorn@8.16.0/ | git+https://github.com/acornjs/acorn.git |
 | agent-base | 7.1.4 | MIT | THIRD_PARTY_LICENSES/agent-base@7.1.4/ | https://github.com/TooTallNate/proxy-agents.git |
@@ -211,6 +214,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | escape-string-regexp | 5.0.0 | MIT | THIRD_PARTY_LICENSES/escape-string-regexp@5.0.0/ | sindresorhus/escape-string-regexp |
 | estree-util-is-identifier-name | 3.0.0 | MIT | THIRD_PARTY_LICENSES/estree-util-is-identifier-name@3.0.0/ | syntax-tree/estree-util-is-identifier-name |
 | etag | 1.8.1 | MIT | THIRD_PARTY_LICENSES/etag@1.8.1/ | jshttp/etag |
+| event-target-shim | 5.0.1 | MIT | THIRD_PARTY_LICENSES/event-target-shim@5.0.1/ | https://github.com/mysticatea/event-target-shim.git |
 | eventsource | 3.0.7 | MIT | THIRD_PARTY_LICENSES/eventsource@3.0.7/ | git://git@github.com/EventSource/eventsource.git |
 | eventsource-parser | 3.0.6 | MIT | THIRD_PARTY_LICENSES/eventsource-parser@3.0.6/ | git+ssh://git@github.com/rexxars/eventsource-parser.git |
 | express | 5.2.1 | MIT | THIRD_PARTY_LICENSES/express@5.2.1/ | expressjs/express |
@@ -238,6 +242,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | google-logging-utils | 1.1.3 | Apache-2.0 | THIRD_PARTY_LICENSES/google-logging-utils@1.1.3/ | https://github.com/googleapis/google-cloud-node-core.git |
 | gopd | 1.2.0 | MIT | THIRD_PARTY_LICENSES/gopd@1.2.0/ | git+https://github.com/ljharb/gopd.git |
 | graceful-fs | 4.2.11 | ISC | THIRD_PARTY_LICENSES/graceful-fs@4.2.11/ | https://github.com/isaacs/node-graceful-fs |
+| grammy | 1.43.0 | MIT | THIRD_PARTY_LICENSES/grammy@1.43.0/ | git+https://github.com/grammyjs/grammY.git |
 | hachure-fill | 0.5.2 | MIT | THIRD_PARTY_LICENSES/hachure-fill@0.5.2/ | git+https://github.com/pshihn/hachure-fill.git |
 | has-symbols | 1.1.0 | MIT | THIRD_PARTY_LICENSES/has-symbols@1.1.0/ | git://github.com/inspect-js/has-symbols.git |
 | hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
@@ -337,6 +342,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | ms | 2.1.3 | MIT | THIRD_PARTY_LICENSES/ms@2.1.3/ | vercel/ms |
 | negotiator | 1.0.0 | MIT | THIRD_PARTY_LICENSES/negotiator@1.0.0/ | jshttp/negotiator |
 | node-domexception | 1.0.0 | MIT | THIRD_PARTY_LICENSES/node-domexception@1.0.0/ | git+https://github.com/jimmywarting/node-domexception.git |
+| node-fetch | 2.7.0 | MIT | THIRD_PARTY_LICENSES/node-fetch@2.7.0/ | https://github.com/bitinn/node-fetch.git |
 | node-fetch | 3.3.2 | MIT | THIRD_PARTY_LICENSES/node-fetch@3.3.2/ | https://github.com/node-fetch/node-fetch.git |
 | object-assign | 4.1.1 | MIT | THIRD_PARTY_LICENSES/object-assign@4.1.1/ | sindresorhus/object-assign |
 | object-inspect | 1.13.4 | MIT | THIRD_PARTY_LICENSES/object-inspect@1.13.4/ | git://github.com/inspect-js/object-inspect.git |
@@ -425,6 +431,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | tinyexec | 1.1.1 | MIT | THIRD_PARTY_LICENSES/tinyexec@1.1.1/ | git+https://github.com/tinylibs/tinyexec.git |
 | toidentifier | 1.0.1 | MIT | THIRD_PARTY_LICENSES/toidentifier@1.0.1/ | component/toidentifier |
 | topojson-client | 3.1.0 | ISC | THIRD_PARTY_LICENSES/topojson-client@3.1.0/ | https://github.com/topojson/topojson-client.git |
+| tr46 | 0.0.3 | MIT |  | git+https://github.com/Sebmaster/tr46.js.git |
 | trim-lines | 3.0.1 | MIT | THIRD_PARTY_LICENSES/trim-lines@3.0.1/ | wooorm/trim-lines |
 | trough | 2.2.0 | MIT | THIRD_PARTY_LICENSES/trough@2.2.0/ | wooorm/trough |
 | ts-dedent | 2.2.0 | MIT | THIRD_PARTY_LICENSES/ts-dedent@2.2.0/ | https://github.com/tamino-martinius/node-ts-dedent.git |
@@ -480,6 +487,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | vfile | 6.0.3 | MIT | THIRD_PARTY_LICENSES/vfile@6.0.3/ | vfile/vfile |
 | vfile-message | 4.0.3 | MIT | THIRD_PARTY_LICENSES/vfile-message@4.0.3/ | vfile/vfile-message |
 | web-streams-polyfill | 3.3.3 | MIT | THIRD_PARTY_LICENSES/web-streams-polyfill@3.3.3/ | git+https://github.com/MattiasBuelens/web-streams-polyfill.git |
+| webidl-conversions | 3.0.1 | BSD-2-Clause | THIRD_PARTY_LICENSES/webidl-conversions@3.0.1/ | jsdom/webidl-conversions |
+| whatwg-url | 5.0.0 | MIT | THIRD_PARTY_LICENSES/whatwg-url@5.0.0/ | jsdom/whatwg-url |
 | which | 2.0.2 | ISC | THIRD_PARTY_LICENSES/which@2.0.2/ | git://github.com/isaacs/node-which.git |
 | wrap-ansi | 9.0.2 | MIT | THIRD_PARTY_LICENSES/wrap-ansi@9.0.2/ | chalk/wrap-ansi |
 | wrappy | 1.0.2 | ISC | THIRD_PARTY_LICENSES/wrappy@1.0.2/ | https://github.com/npm/wrappy |
