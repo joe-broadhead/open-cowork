@@ -54,6 +54,11 @@ export type CloudPrincipal = {
   tenantName?: string
   userId: string
   email: string
+  orgId?: string
+  accountId?: string
+  role?: 'owner' | 'admin' | 'member'
+  authSource?: 'user' | 'api_token' | 'local' | 'header'
+  tokenId?: string
 }
 
 export type CloudSessionMessage = {
@@ -907,11 +912,38 @@ export class CloudSessionService {
       tenantId: principal.tenantId,
       name: principal.tenantName || principal.tenantId,
     })
-    await this.store.ensureUser({
+    const user = await this.store.ensureUser({
       tenantId: principal.tenantId,
       userId: principal.userId,
       email: principal.email,
+      role: principal.role || 'member',
     })
+    const org = await this.store.ensureOrgForTenant({
+      tenantId: principal.tenantId,
+      name: principal.tenantName || principal.tenantId,
+      orgId: principal.orgId,
+    })
+    const account = await this.store.createAccount({
+      accountId: principal.accountId || principal.userId,
+      idpSubject: principal.userId,
+      email: principal.email,
+    })
+    const membership = await this.store.resolvePrincipalMembership({
+      tenantId: principal.tenantId,
+      accountId: account.accountId,
+      email: account.email,
+    })
+    if (!membership) {
+      await this.store.upsertMembership({
+        orgId: org.orgId,
+        accountId: account.accountId,
+        role: principal.role || user.role,
+        status: 'active',
+        actor: { actorType: 'system', actorId: 'principal.bootstrap' },
+      })
+    } else if (membership.membership.status !== 'active') {
+      throw new Error('Cloud membership is not active.')
+    }
   }
 
   async createSession(principal: CloudPrincipal, input: { profileName?: string | null } = {}): Promise<CloudSessionView> {

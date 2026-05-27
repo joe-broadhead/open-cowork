@@ -4,6 +4,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "paths": {
+      "@open-cowork/cloud-client": ["./packages/cloud-client/src/index.ts"],
+      "@open-cowork/cloud-client/*": ["./packages/cloud-client/src/*"],
       "@open-cowork/shared": ["./packages/shared/src/index.ts"],
       "@open-cowork/shared/*": ["./packages/shared/src/*"]
     },

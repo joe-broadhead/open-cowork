@@ -239,6 +239,71 @@ test('cloud control plane records worker heartbeats, settings metadata, and migr
   assert.equal(store.listSchemaMigrations().length, 1)
 })
 
+test('cloud control plane resolves org accounts memberships, tokens, and audit events', () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  const account = store.createAccount({
+    accountId: 'account-1',
+    idpSubject: 'issuer:user-1',
+    email: 'Owner@Example.test',
+    displayName: 'Owner',
+  })
+  const membership = store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'owner',
+    status: 'active',
+    actor: { actorType: 'system', actorId: 'test' },
+  })
+
+  assert.equal(org.tenantId, 'tenant-1')
+  assert.equal(account.email, 'owner@example.test')
+  assert.equal(store.findAccountBySubject('issuer:user-1')?.accountId, 'account-1')
+  assert.equal(store.findAccountByEmail('owner@example.test')?.accountId, 'account-1')
+  assert.equal(membership.role, 'owner')
+  assert.equal(store.listMembershipsForAccount('account-1')[0]?.orgId, org.orgId)
+  assert.equal(store.resolvePrincipalMembership({
+    tenantId: 'tenant-1',
+    accountId: 'account-1',
+  })?.membership.status, 'active')
+
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Desktop token',
+    scopes: ['desktop', 'gateway', 'desktop'],
+    secret: 'deterministic-secret',
+    actor: { actorType: 'user', actorId: account.accountId },
+  })
+  assert.match(issued.plaintext, /^occ_/)
+  assert.notEqual(issued.token.tokenHash, issued.plaintext)
+  assert.deepEqual(issued.token.scopes, ['desktop', 'gateway'])
+  assert.equal(store.findApiTokenByPlaintext(issued.plaintext)?.tokenId, issued.token.tokenId)
+
+  const revoked = store.revokeApiToken({
+    tokenId: issued.token.tokenId,
+    actor: { actorType: 'user', actorId: account.accountId },
+  })
+  assert.equal(revoked?.revokedAt !== null, true)
+  assert.equal(store.findApiTokenByPlaintext(issued.plaintext), null)
+
+  const audit = store.recordAuditEvent({
+    orgId: org.orgId,
+    actorType: 'user',
+    actorId: account.accountId,
+    eventType: 'sensitive.changed',
+    metadata: {
+      token: issued.plaintext,
+      secretValue: 'do-not-store',
+      note: 'ok',
+    },
+  })
+  assert.equal(audit.metadata.token, '[redacted]')
+  assert.equal(audit.metadata.secretValue, '[redacted]')
+  assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'api_token.created'), true)
+})
+
 test('cloud control plane persists tenant-scoped thread tags and session links', () => {
   const store = seededStore()
   const tag = store.createThreadTag({

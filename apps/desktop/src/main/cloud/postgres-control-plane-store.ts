@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module'
+import { generateCloudApiToken, hashCloudApiToken } from './control-plane-store.ts'
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
@@ -8,6 +9,9 @@ import type {
 import type {
   AttachWorkflowRunSessionInput,
   AppendWorkspaceEventInput,
+  AccountRecord,
+  ApiTokenRecord,
+  AuditEventRecord,
   ClaimDueWorkflowRunInput,
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
@@ -17,11 +21,19 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
+  CreateAccountInput,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   CreateThreadSmartFilterInput,
   CreateThreadTagInput,
   FailWorkflowRunInput,
+  IssuedApiTokenRecord,
+  IssueApiTokenInput,
+  MembershipRecord,
+  OrgRecord,
+  PrincipalMembershipRecord,
+  RecordAuditEventInput,
+  RevokeApiTokenInput,
   SchemaMigrationRecord,
   SessionCommandRecord,
   SessionEventRecord,
@@ -36,6 +48,7 @@ import type {
   UpdateWorkflowStatusInput,
   UpdateThreadSmartFilterInput,
   UpdateThreadTagInput,
+  UpsertMembershipInput,
   UserRecord,
   WorkerHeartbeatRecord,
   WorkerLeaseRecord,
@@ -49,8 +62,7 @@ import type {
 } from '../workflow/workflow-webhook-server.ts'
 import {
   CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS,
-  CLOUD_CONTROL_PLANE_MIGRATION_ID,
-  CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS,
+  CLOUD_CONTROL_PLANE_MIGRATIONS,
 } from './postgres-schema.ts'
 
 type QueryRow = Record<string, unknown>
@@ -183,6 +195,22 @@ function normalizeThreadQuery(value: unknown) {
   return query
 }
 
+function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
+  const redacted: Record<string, unknown> = {}
+  for (const [field, entry] of Object.entries(value || {})) {
+    if (/token|secret|key|password|credential/i.test(field)) {
+      redacted[field] = '[redacted]'
+    } else if (entry && typeof entry === 'object') {
+      redacted[field] = '[object]'
+    } else if (typeof entry === 'string') {
+      redacted[field] = entry.length > 256 ? `${entry.slice(0, 253)}...` : entry
+    } else {
+      redacted[field] = entry
+    }
+  }
+  return redacted
+}
+
 function tenantFromRow(row: QueryRow): TenantRecord {
   return {
     tenantId: String(row.tenant_id),
@@ -197,6 +225,72 @@ function userFromRow(row: QueryRow): UserRecord {
     userId: String(row.user_id),
     email: String(row.email),
     role: String(row.role) as ControlPlaneRole,
+    createdAt: iso(row.created_at),
+  }
+}
+
+function orgFromRow(row: QueryRow): OrgRecord {
+  return {
+    orgId: String(row.org_id),
+    tenantId: String(row.tenant_id),
+    name: String(row.name),
+    planKey: stringOrNull(row.plan_key),
+    status: String(row.status),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function accountFromRow(row: QueryRow): AccountRecord {
+  return {
+    accountId: String(row.account_id),
+    idpSubject: stringOrNull(row.idp_subject),
+    email: String(row.email),
+    displayName: stringOrNull(row.display_name),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function membershipFromRow(row: QueryRow): MembershipRecord {
+  return {
+    orgId: String(row.org_id),
+    accountId: String(row.account_id),
+    role: String(row.role) as ControlPlaneRole,
+    status: String(row.status) as MembershipRecord['status'],
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function apiTokenFromRow(row: QueryRow): ApiTokenRecord {
+  return {
+    tokenId: String(row.token_id),
+    orgId: String(row.org_id),
+    accountId: stringOrNull(row.account_id),
+    name: String(row.name),
+    tokenHash: String(row.token_hash),
+    scopes: jsonStringArray(row.scopes) as ApiTokenRecord['scopes'],
+    last4: String(row.last4),
+    expiresAt: isoOrNull(row.expires_at),
+    revokedAt: isoOrNull(row.revoked_at),
+    lastUsedAt: isoOrNull(row.last_used_at),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function auditEventFromRow(row: QueryRow): AuditEventRecord {
+  return {
+    eventId: String(row.event_id),
+    orgId: String(row.org_id),
+    accountId: stringOrNull(row.account_id),
+    actorType: String(row.actor_type) as AuditEventRecord['actorType'],
+    actorId: stringOrNull(row.actor_id),
+    eventType: String(row.event_type),
+    targetType: stringOrNull(row.target_type),
+    targetId: stringOrNull(row.target_id),
+    metadata: jsonRecord(row.metadata),
     createdAt: iso(row.created_at),
   }
 }
@@ -413,13 +507,15 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         'SELECT pg_advisory_xact_lock($1, $2)',
         [...CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS],
       )
-      for (const statement of CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS) await client.query(statement)
-      await client.query(
-        `INSERT INTO cloud_schema_migrations (id, applied_at)
-         VALUES ($1, $2)
-         ON CONFLICT (id) DO NOTHING`,
-        [CLOUD_CONTROL_PLANE_MIGRATION_ID, nowIso(undefined)],
-      )
+      for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS) {
+        for (const statement of migration.statements) await client.query(statement)
+        await client.query(
+          `INSERT INTO cloud_schema_migrations (id, applied_at)
+           VALUES ($1, $2)
+           ON CONFLICT (id) DO NOTHING`,
+          [migration.id, nowIso(undefined)],
+        )
+      }
     })
   }
 
@@ -430,6 +526,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
        ON CONFLICT (tenant_id) DO NOTHING`,
       [input.tenantId, input.name, nowIso(input.createdAt)],
     )
+    await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, createdAt: input.createdAt })
     return this.requireTenant(input.tenantId)
   }
 
@@ -441,13 +538,261 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     createdAt?: Date
   }) {
     await this.requireTenant(input.tenantId)
+    const existing = await this.maybeOne(
+      `SELECT * FROM cloud_users WHERE tenant_id = $1 AND user_id = $2`,
+      [input.tenantId, input.userId],
+    )
+    if (existing) return userFromRow(existing)
     await this.pool.query(
       `INSERT INTO cloud_users (tenant_id, user_id, email, role, created_at)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (tenant_id, user_id) DO NOTHING`,
       [input.tenantId, input.userId, input.email, input.role || 'member', nowIso(input.createdAt)],
     )
+    const org = await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId, createdAt: input.createdAt })
+    const account = await this.createAccount({
+      accountId: input.userId,
+      idpSubject: input.userId,
+      email: input.email,
+      createdAt: input.createdAt,
+    })
+    await this.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: input.role || 'member',
+      status: 'active',
+      updatedAt: input.createdAt,
+      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
+    })
     return this.requireTenantUser(input.tenantId, input.userId)
+  }
+
+  async ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }) {
+    const now = nowIso(input.createdAt)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_orgs (org_id, tenant_id, name, plan_key, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
+       ON CONFLICT (tenant_id) DO UPDATE
+       SET name = COALESCE(NULLIF(EXCLUDED.name, ''), cloud_orgs.name),
+           plan_key = COALESCE(EXCLUDED.plan_key, cloud_orgs.plan_key),
+           status = EXCLUDED.status,
+           updated_at = EXCLUDED.updated_at
+       RETURNING *`,
+      [input.orgId || input.tenantId, input.tenantId, input.name, input.planKey ?? null, input.status || 'active', now],
+    )
+    return orgFromRow(result.rows[0])
+  }
+
+  async createAccount(input: CreateAccountInput) {
+    const now = nowIso(input.createdAt)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
+       VALUES ($1, $2, lower($3), $4, $5, $5)
+       ON CONFLICT (account_id) DO UPDATE
+       SET idp_subject = COALESCE(cloud_accounts.idp_subject, EXCLUDED.idp_subject),
+           email = EXCLUDED.email,
+           display_name = COALESCE(EXCLUDED.display_name, cloud_accounts.display_name),
+           updated_at = EXCLUDED.updated_at
+       RETURNING *`,
+      [input.accountId, input.idpSubject || null, input.email, input.displayName || null, now],
+    )
+    return accountFromRow(result.rows[0])
+  }
+
+  async findAccountBySubject(idpSubject: string) {
+    const row = await this.maybeOne(`SELECT * FROM cloud_accounts WHERE idp_subject = $1`, [idpSubject])
+    return row ? accountFromRow(row) : null
+  }
+
+  async findAccountByEmail(email: string) {
+    const row = await this.maybeOne(`SELECT * FROM cloud_accounts WHERE lower(email) = lower($1)`, [email])
+    return row ? accountFromRow(row) : null
+  }
+
+  async upsertMembership(input: UpsertMembershipInput) {
+    return this.withTransaction(async (client) => {
+      const existing = await this.maybeOne(
+        `SELECT * FROM cloud_memberships WHERE org_id = $1 AND account_id = $2`,
+        [input.orgId, input.accountId],
+        client,
+      )
+      const now = nowIso(input.updatedAt)
+      const result = await client.query(
+        `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $5)
+         ON CONFLICT (org_id, account_id) DO UPDATE
+         SET role = EXCLUDED.role,
+             status = EXCLUDED.status,
+             updated_at = EXCLUDED.updated_at
+         RETURNING *`,
+        [input.orgId, input.accountId, input.role, input.status || 'active', now],
+      )
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: input.orgId,
+        accountId: input.accountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: existing ? 'membership.updated' : 'membership.created',
+        targetType: 'membership',
+        targetId: `${input.orgId}:${input.accountId}`,
+        metadata: { role: input.role, status: input.status || 'active' },
+        createdAt: input.updatedAt,
+      })
+      return membershipFromRow(result.rows[0])
+    })
+  }
+
+  async listMembershipsForAccount(accountId: string) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_memberships WHERE account_id = $1 ORDER BY updated_at DESC, org_id`,
+      [accountId],
+    )
+    return result.rows.map(membershipFromRow)
+  }
+
+  async resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): Promise<PrincipalMembershipRecord | null> {
+    const row = await this.maybeOne(
+      `SELECT
+         o.org_id, o.tenant_id, o.name AS org_name, o.plan_key, o.status AS org_status,
+         o.created_at AS org_created_at, o.updated_at AS org_updated_at,
+         a.account_id, a.idp_subject, a.email, a.display_name,
+         a.created_at AS account_created_at, a.updated_at AS account_updated_at,
+         m.role, m.status AS membership_status,
+         m.created_at AS membership_created_at, m.updated_at AS membership_updated_at
+       FROM cloud_orgs o
+       JOIN cloud_memberships m ON m.org_id = o.org_id
+       JOIN cloud_accounts a ON a.account_id = m.account_id
+       WHERE (o.tenant_id = $1 OR o.org_id = $1)
+         AND ($2::text IS NULL OR a.account_id = $2)
+         AND ($3::text IS NULL OR a.idp_subject = $3)
+         AND ($4::text IS NULL OR lower(a.email) = lower($4))
+       ORDER BY m.updated_at DESC
+       LIMIT 1`,
+      [input.tenantId, input.accountId || input.userId || null, input.idpSubject || null, input.email || null],
+    )
+    if (!row) return null
+    return {
+      org: orgFromRow({
+        org_id: row.org_id,
+        tenant_id: row.tenant_id,
+        name: row.org_name,
+        plan_key: row.plan_key,
+        status: row.org_status,
+        created_at: row.org_created_at,
+        updated_at: row.org_updated_at,
+      }),
+      account: accountFromRow({
+        account_id: row.account_id,
+        idp_subject: row.idp_subject,
+        email: row.email,
+        display_name: row.display_name,
+        created_at: row.account_created_at,
+        updated_at: row.account_updated_at,
+      }),
+      membership: membershipFromRow({
+        org_id: row.org_id,
+        account_id: row.account_id,
+        role: row.role,
+        status: row.membership_status,
+        created_at: row.membership_created_at,
+        updated_at: row.membership_updated_at,
+      }),
+    }
+  }
+
+  async issueApiToken(input: IssueApiTokenInput): Promise<IssuedApiTokenRecord> {
+    return this.withTransaction(async (client) => {
+      const generated = generateCloudApiToken(input)
+      const now = nowIso(input.createdAt)
+      const result = await client.query(
+        `INSERT INTO cloud_api_tokens (
+          token_id, org_id, account_id, name, token_hash, scopes, last4,
+          expires_at, revoked_at, last_used_at, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, NULL, NULL, $9, $9)
+         RETURNING *`,
+        [
+          generated.tokenId,
+          input.orgId,
+          input.accountId || null,
+          normalizeText(input.name, 96, 'API token name'),
+          hashCloudApiToken(generated.plaintext),
+          JSON.stringify([...new Set(input.scopes)]),
+          generated.plaintext.slice(-4),
+          input.expiresAt ? input.expiresAt.toISOString() : null,
+          now,
+        ],
+      )
+      const token = apiTokenFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: input.orgId,
+        accountId: input.accountId || null,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'api_token.created',
+        targetType: 'api_token',
+        targetId: token.tokenId,
+        metadata: { name: token.name, scopes: token.scopes, last4: token.last4 },
+        createdAt: input.createdAt,
+      })
+      return { token, plaintext: generated.plaintext }
+    })
+  }
+
+  async findApiTokenByPlaintext(plaintext: string, now = new Date()) {
+    const tokenHash = hashCloudApiToken(plaintext)
+    const result = await this.pool.query(
+      `UPDATE cloud_api_tokens
+       SET last_used_at = $2, updated_at = $2
+       WHERE token_hash = $1
+         AND revoked_at IS NULL
+         AND (expires_at IS NULL OR expires_at > $2)
+       RETURNING *`,
+      [tokenHash, nowIso(now)],
+    )
+    return result.rows[0] ? apiTokenFromRow(result.rows[0]) : null
+  }
+
+  async revokeApiToken(input: RevokeApiTokenInput) {
+    return this.withTransaction(async (client) => {
+      const now = nowIso(input.revokedAt)
+      const result = await client.query(
+        `UPDATE cloud_api_tokens
+         SET revoked_at = COALESCE(revoked_at, $2), updated_at = $2
+         WHERE token_id = $1
+         RETURNING *`,
+        [input.tokenId, now],
+      )
+      if (!result.rows[0]) return null
+      const token = apiTokenFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: token.orgId,
+        accountId: token.accountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'api_token.revoked',
+        targetType: 'api_token',
+        targetId: token.tokenId,
+        metadata: { name: token.name, scopes: token.scopes, last4: token.last4 },
+        createdAt: input.revokedAt,
+      })
+      return token
+    })
+  }
+
+  async recordAuditEvent(input: RecordAuditEventInput) {
+    return this.recordAuditEventWithExecutor(this.pool, input)
+  }
+
+  async listAuditEvents(orgId: string, limit = 100) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_audit_events
+       WHERE org_id = $1
+       ORDER BY created_at DESC, event_id DESC
+       LIMIT $2`,
+      [orgId, Math.max(1, Math.min(limit, 500))],
+    )
+    return result.rows.map(auditEventFromRow)
   }
 
   async createSession(input: {
@@ -1733,6 +2078,38 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     await this.pool.query('DELETE FROM cloud_webhook_replay_claims')
     await this.pool.query('DELETE FROM cloud_webhook_auth_failures')
     await this.pool.query('DELETE FROM cloud_webhook_rate_limits')
+  }
+
+  private async recordAuditEventWithExecutor(
+    executor: PgExecutor,
+    input: RecordAuditEventInput,
+  ): Promise<AuditEventRecord> {
+    const eventId = input.eventId || `audit_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const result = await executor.query(
+      `INSERT INTO cloud_audit_events (
+        event_id, org_id, account_id, actor_type, actor_id,
+        event_type, target_type, target_id, metadata, created_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING *`,
+      [
+        eventId,
+        input.orgId,
+        input.accountId || null,
+        input.actorType,
+        input.actorId || null,
+        input.eventType,
+        input.targetType || null,
+        input.targetId || null,
+        JSON.stringify(redactAuditMetadata(input.metadata)),
+        nowIso(input.createdAt),
+      ],
+    )
+    if (result.rows[0]) return auditEventFromRow(result.rows[0])
+    const existing = await this.maybeOne(`SELECT * FROM cloud_audit_events WHERE event_id = $1`, [eventId], executor)
+    if (!existing) throw new Error(`Audit event ${eventId} was not recorded.`)
+    return auditEventFromRow(existing)
   }
 
   private async requireTenant(tenantId: string, executor: PgExecutor = this.pool) {

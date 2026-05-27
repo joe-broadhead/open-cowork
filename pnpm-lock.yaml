@@ -280,6 +280,16 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/cloud-client:
+    dependencies:
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/shared:
     devDependencies:
       typescript:
