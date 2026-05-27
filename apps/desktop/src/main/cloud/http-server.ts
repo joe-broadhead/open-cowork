@@ -4,11 +4,12 @@ import type { AddressInfo } from 'node:net'
 import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
-import type { CloudPrincipal, CloudSessionService } from './session-service.ts'
+import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
+import type { ChannelProviderId } from './control-plane-store.ts'
 import { recordCloudHttpRequest } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
 import {
@@ -256,6 +257,34 @@ function parseLimit(url: URL) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
+function readNonNegativeInteger(value: unknown, fallback = 0) {
+  const parsed = Number(value ?? fallback)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+function readOptionalDate(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? date : null
+}
+
+function readEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  const raw = readString(value)
+  return raw && (allowed as readonly string[]).includes(raw) ? raw as T : undefined
+}
+
+function readChannelProvider(value: unknown): ChannelProviderId | undefined {
+  return readEnum(value, ['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'] as const)
+}
+
+function principalHasGatewayAccess(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') {
+    return principal.tokenScopes?.includes('gateway') || principal.tokenScopes?.includes('admin') || false
+  }
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
 function parseTagIds(url: URL) {
   const repeated = url.searchParams.getAll('tagId')
   const csv = url.searchParams.get('tagIds')?.split(',') || []
@@ -305,6 +334,20 @@ function writeSseEvent(res: ServerResponse, event: {
   res.write(`id: ${event.sequence}\n`)
   res.write(`event: ${event.type}\n`)
   res.write(`data: ${JSON.stringify(event)}\n\n`)
+}
+
+function writeChannelDeliverySseEvent(res: ServerResponse, delivery: unknown) {
+  const record = readRecord(delivery) || {}
+  const deliveryId = readString(record.deliveryId) || 'delivery'
+  res.write(`id: ${deliveryId}\n`)
+  res.write('event: channel.delivery\n')
+  res.write(`data: ${JSON.stringify({ delivery })}\n\n`)
+}
+
+function publicChannelInteraction(value: unknown) {
+  const record = { ...(readRecord(value) || {}) }
+  delete record.tokenHash
+  return record
 }
 
 function writeSnapshotRequiredEvent(
@@ -554,6 +597,58 @@ async function handleWorkspaceSse(
   req.on('close', () => {
     clearInterval(pollTimer)
     unsubscribe()
+  })
+}
+
+async function handleChannelDeliveriesSse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: CloudHttpServerOptions,
+  context: RouteContext,
+) {
+  if (!principalHasGatewayAccess(context.principal)) {
+    writeError(res, 403, 'Gateway channel access requires a gateway-scoped API token.', options.corsOrigin)
+    return
+  }
+  writeCorsHeaders(res, options.corsOrigin)
+  res.writeHead(200, {
+    'content-type': 'text/event-stream',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+  })
+  const claimedBy = context.url.searchParams.get('claimedBy') || context.principal.tokenId || context.principal.userId || 'gateway'
+  const ttlMsRaw = Number(context.url.searchParams.get('ttlMs') || 30_000)
+  const ttlMs = Number.isInteger(ttlMsRaw) && ttlMsRaw > 0 ? ttlMsRaw : 30_000
+  let closed = false
+  let pollActive = false
+  const poll = async () => {
+    if (pollActive || closed) return
+    pollActive = true
+    try {
+      let claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
+      while (claimed && !closed) {
+        writeChannelDeliverySseEvent(res, claimed)
+        claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
+      }
+      if (!closed) res.write(': keep-alive\n\n')
+    } catch (error) {
+      if (!closed) {
+        const message = error instanceof CloudServiceError
+          ? error.publicMessage
+          : 'Channel delivery stream failed.'
+        res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`)
+      }
+    } finally {
+      pollActive = false
+    }
+  }
+  await poll()
+  const pollTimer = setInterval(() => {
+    void poll()
+  }, ssePollMs(options))
+  req.on('close', () => {
+    closed = true
+    clearInterval(pollTimer)
   })
 }
 
@@ -842,6 +937,323 @@ async function handleApiRequest(
         writeJson(res, 200, {
           deleted: await options.service.deleteThreadSmartFilter(context.principal, itemId),
         }, options.corsOrigin)
+        return
+      }
+    }
+
+    writeError(res, 404, 'Not found.', options.corsOrigin)
+    return
+  }
+
+  if (resource === 'channels') {
+    const collection = sessionId
+    const itemId = action
+    const itemAction = artifactId
+
+    if (collection === 'agents') {
+      if (!itemId && req.method === 'GET') {
+        writeJson(res, 200, { agents: await options.service.listHeadlessAgents(context.principal) }, options.corsOrigin)
+        return
+      }
+      if (!itemId && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const name = readString(body.name)
+        if (!name) {
+          writeError(res, 400, 'Headless agent name is required.', options.corsOrigin)
+          return
+        }
+        const agent = await options.service.createHeadlessAgent(context.principal, {
+          agentId: readString(body.agentId),
+          name,
+          profileName: readString(body.profileName),
+          status: readEnum(body.status, ['active', 'disabled'] as const),
+          managed: body.managed === true,
+        })
+        writeJson(res, 201, { agent }, options.corsOrigin)
+        return
+      }
+      if (itemId && !itemAction && req.method === 'PATCH') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const agent = await options.service.updateHeadlessAgent(context.principal, itemId, {
+          name: body.name === undefined ? undefined : readString(body.name) || '',
+          profileName: body.profileName === undefined ? undefined : readString(body.profileName) || '',
+          status: body.status === undefined ? undefined : readEnum(body.status, ['active', 'disabled'] as const),
+          managed: body.managed === undefined ? undefined : body.managed === true,
+        })
+        if (!agent) {
+          writeError(res, 404, 'Headless agent was not found.', options.corsOrigin)
+          return
+        }
+        writeJson(res, 200, { agent }, options.corsOrigin)
+        return
+      }
+    }
+
+    if (collection === 'bindings') {
+      if (!itemId && req.method === 'GET') {
+        writeJson(res, 200, {
+          bindings: await options.service.listChannelBindings(context.principal, context.url.searchParams.get('agentId')),
+        }, options.corsOrigin)
+        return
+      }
+      if (!itemId && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const agentId = readString(body.agentId)
+        const provider = readChannelProvider(body.provider)
+        const displayName = readString(body.displayName)
+        if (!agentId || !provider || !displayName) {
+          writeError(res, 400, 'Channel binding requires agentId, provider, and displayName.', options.corsOrigin)
+          return
+        }
+        const binding = await options.service.createChannelBinding(context.principal, {
+          bindingId: readString(body.bindingId),
+          agentId,
+          provider,
+          externalWorkspaceId: readString(body.externalWorkspaceId),
+          displayName,
+          status: readEnum(body.status, ['active', 'disabled', 'auth_required', 'error'] as const),
+          credentialRef: readString(body.credentialRef),
+          settings: readRecord(body.settings) || {},
+        })
+        writeJson(res, 201, { binding }, options.corsOrigin)
+        return
+      }
+      if (itemId && !itemAction && req.method === 'PATCH') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const binding = await options.service.updateChannelBinding(context.principal, itemId, {
+          displayName: body.displayName === undefined ? undefined : readString(body.displayName) || '',
+          status: body.status === undefined ? undefined : readEnum(body.status, ['active', 'disabled', 'auth_required', 'error'] as const),
+          credentialRef: body.credentialRef === undefined ? undefined : readString(body.credentialRef),
+          settings: body.settings === undefined ? undefined : readRecord(body.settings) || {},
+        })
+        if (!binding) {
+          writeError(res, 404, 'Channel binding was not found.', options.corsOrigin)
+          return
+        }
+        writeJson(res, 200, { binding }, options.corsOrigin)
+        return
+      }
+    }
+
+    if (collection === 'identities' && itemId === 'resolve' && !itemAction && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const provider = readChannelProvider(body.provider)
+      const externalUserId = readString(body.externalUserId)
+      if (!provider || !externalUserId) {
+        writeError(res, 400, 'Channel identity resolution requires provider and externalUserId.', options.corsOrigin)
+        return
+      }
+      const identity = await options.service.resolveChannelIdentity(context.principal, {
+        identityId: readString(body.identityId),
+        provider,
+        externalWorkspaceId: readString(body.externalWorkspaceId),
+        externalUserId,
+        accountId: readString(body.accountId),
+        role: readEnum(body.role, ['owner', 'admin', 'member', 'approver', 'viewer'] as const),
+        status: readEnum(body.status, ['active', 'disabled', 'pending'] as const),
+        metadata: readRecord(body.metadata) || {},
+      })
+      writeJson(res, 200, { identity }, options.corsOrigin)
+      return
+    }
+
+    if (collection === 'sessions') {
+      if (itemId === 'bind' && !itemAction && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const channelBindingId = readString(body.channelBindingId)
+        const provider = readChannelProvider(body.provider)
+        const externalChatId = readString(body.externalChatId)
+        const externalThreadId = readString(body.externalThreadId)
+        if (!channelBindingId || !provider || !externalChatId || !externalThreadId) {
+          writeError(res, 400, 'Channel session binding requires channelBindingId, provider, externalChatId, and externalThreadId.', options.corsOrigin)
+          return
+        }
+        const bound = await options.service.bindChannelSession(context.principal, {
+          identityId: readString(body.identityId),
+          externalUserId: readString(body.externalUserId),
+          externalWorkspaceId: readString(body.externalWorkspaceId),
+          channelBindingId,
+          provider,
+          externalChatId,
+          externalThreadId,
+          sessionId: readString(body.sessionId),
+          title: readString(body.title),
+          lastEventSequence: readNonNegativeInteger(body.lastEventSequence),
+          lastWorkspaceSequence: readNonNegativeInteger(body.lastWorkspaceSequence),
+          lastChatMessageId: readString(body.lastChatMessageId),
+        })
+        writeJson(res, 200, bound, options.corsOrigin)
+        return
+      }
+      if (itemId === 'by-thread' && !itemAction && req.method === 'GET') {
+        const provider = readChannelProvider(context.url.searchParams.get('provider'))
+        const externalChatId = context.url.searchParams.get('externalChatId')
+        const externalThreadId = context.url.searchParams.get('externalThreadId')
+        if (!provider || !externalChatId || !externalThreadId) {
+          writeError(res, 400, 'Channel thread lookup requires provider, externalChatId, and externalThreadId.', options.corsOrigin)
+          return
+        }
+        const found = await options.service.getChannelSessionByThread(context.principal, {
+          provider,
+          externalWorkspaceId: context.url.searchParams.get('externalWorkspaceId'),
+          externalChatId,
+          externalThreadId,
+        })
+        if (!found) {
+          writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
+          return
+        }
+        writeJson(res, 200, found, options.corsOrigin)
+        return
+      }
+      if (itemId === 'prompt' && !itemAction && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const bindingId = readString(body.bindingId)
+        const text = readString(body.text)
+        if (!bindingId || !text) {
+          writeError(res, 400, 'Channel prompt requires bindingId and text.', options.corsOrigin)
+          return
+        }
+        const result = await options.service.enqueueChannelPrompt(context.principal, {
+          bindingId,
+          text,
+          agent: readString(body.agent),
+          identityId: readString(body.identityId),
+          provider: readChannelProvider(body.provider),
+          externalWorkspaceId: readString(body.externalWorkspaceId),
+          externalUserId: readString(body.externalUserId),
+        })
+        const processed = await processSessionCommandIfConfigured(options, context.principal.tenantId, result.binding.sessionId)
+        writeJson(res, 202, { ...result, processed }, options.corsOrigin)
+        return
+      }
+    }
+
+    if (collection === 'cursor' && !itemId && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const bindingId = readString(body.bindingId)
+      if (!bindingId) {
+        writeError(res, 400, 'Channel cursor update requires bindingId.', options.corsOrigin)
+        return
+      }
+      const binding = await options.service.updateChannelCursor(context.principal, {
+        bindingId,
+        lastEventSequence: readNonNegativeInteger(body.lastEventSequence),
+        lastWorkspaceSequence: readNonNegativeInteger(body.lastWorkspaceSequence),
+        lastChatMessageId: body.lastChatMessageId === undefined ? undefined : readString(body.lastChatMessageId),
+      })
+      if (!binding) {
+        writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
+        return
+      }
+      writeJson(res, 200, { binding }, options.corsOrigin)
+      return
+    }
+
+    if (collection === 'interactions') {
+      if (!itemId && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const agentId = readString(body.agentId)
+        const sessionForInteraction = readString(body.sessionId)
+        const provider = readChannelProvider(body.provider)
+        const kind = readEnum(body.kind, ['permission', 'question'] as const)
+        const targetId = readString(body.targetId)
+        if (!agentId || !sessionForInteraction || !provider || !kind || !targetId) {
+          writeError(res, 400, 'Channel interaction requires agentId, sessionId, provider, kind, and targetId.', options.corsOrigin)
+          return
+        }
+        const issued = await options.service.createChannelInteraction(context.principal, {
+          interactionId: readString(body.interactionId),
+          agentId,
+          sessionId: sessionForInteraction,
+          provider,
+          kind,
+          targetId,
+          externalInteractionId: readString(body.externalInteractionId),
+          createdByIdentityId: readString(body.createdByIdentityId),
+          expiresAt: readOptionalDate(body.expiresAt),
+          tokenSecret: readString(body.tokenSecret),
+        })
+        writeJson(res, 201, {
+          interaction: publicChannelInteraction(issued.interaction),
+          plaintextToken: issued.plaintextToken,
+        }, options.corsOrigin)
+        return
+      }
+      if (itemId === 'resolve' && !itemAction && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const result = await options.service.resolveChannelInteraction(context.principal, {
+          identityId: readString(body.identityId),
+          provider: readChannelProvider(body.provider),
+          externalWorkspaceId: readString(body.externalWorkspaceId),
+          externalUserId: readString(body.externalUserId),
+          token: readString(body.token),
+          externalInteractionId: readString(body.externalInteractionId),
+          response: body.response ?? null,
+          answers: Array.isArray(body.answers) ? body.answers : undefined,
+          reject: body.reject === true,
+        })
+        const processed = await processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
+        writeJson(res, 202, {
+          interaction: publicChannelInteraction(result.interaction),
+          command: result.command,
+          processed,
+        }, options.corsOrigin)
+        return
+      }
+    }
+
+    if (collection === 'deliveries') {
+      if (itemId === 'stream' && !itemAction && req.method === 'GET') {
+        await handleChannelDeliveriesSse(req, res, options, context)
+        return
+      }
+      if (!itemId && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const agentId = readString(body.agentId)
+        const channelBindingId = readString(body.channelBindingId)
+        const provider = readChannelProvider(body.provider)
+        const eventType = readString(body.eventType)
+        const target = readRecord(body.target)
+        const payload = readRecord(body.payload)
+        if (!agentId || !channelBindingId || !provider || !eventType || !target || !payload) {
+          writeError(res, 400, 'Channel delivery requires agentId, channelBindingId, provider, target, eventType, and payload.', options.corsOrigin)
+          return
+        }
+        const delivery = await options.service.createChannelDelivery(context.principal, {
+          deliveryId: readString(body.deliveryId),
+          agentId,
+          channelBindingId,
+          sessionBindingId: readString(body.sessionBindingId),
+          provider,
+          target,
+          eventType,
+          payload,
+          status: readEnum(body.status, ['pending', 'claimed', 'sent', 'failed', 'dead'] as const),
+          nextAttemptAt: readOptionalDate(body.nextAttemptAt),
+        })
+        writeJson(res, 201, { delivery }, options.corsOrigin)
+        return
+      }
+      if (itemId && itemAction === 'ack' && req.method === 'POST') {
+        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+        const status = readString(body.status) as 'sent' | 'failed' | 'dead' | null
+        if (!status || !['sent', 'failed', 'dead'].includes(status)) {
+          writeError(res, 400, 'Channel delivery ack requires status sent, failed, or dead.', options.corsOrigin)
+          return
+        }
+        const delivery = await options.service.ackChannelDelivery(context.principal, {
+          deliveryId: itemId,
+          claimedBy: readString(body.claimedBy) || context.url.searchParams.get('claimedBy') || context.principal.tokenId || context.principal.userId,
+          status,
+          lastError: readString(body.lastError),
+          nextAttemptAt: readOptionalDate(body.nextAttemptAt),
+        })
+        if (!delivery) {
+          writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)
+          return
+        }
+        writeJson(res, 200, { delivery }, options.corsOrigin)
         return
       }
     }
@@ -1327,6 +1739,10 @@ export class CloudHttpServer {
       })
     } catch (error) {
       if (error instanceof CloudHttpError) {
+        writeError(res, error.status, error.publicMessage, this.options.corsOrigin)
+        return
+      }
+      if (error instanceof CloudServiceError) {
         writeError(res, error.status, error.publicMessage, this.options.corsOrigin)
         return
       }

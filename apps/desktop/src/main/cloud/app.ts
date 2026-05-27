@@ -321,6 +321,7 @@ export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): Cloud
       role: membership.membership.role,
       authSource: 'api_token',
       tokenId: record.tokenId,
+      tokenScopes: record.scopes,
     }
   }
 }

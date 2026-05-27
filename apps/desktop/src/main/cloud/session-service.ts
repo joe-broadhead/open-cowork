@@ -26,10 +26,20 @@ import {
   listCapabilityTools,
 } from '../capability-catalog.ts'
 import type {
+  ApiTokenScope,
+  ChannelBindingRecord,
+  ChannelDeliveryRecord,
+  ChannelIdentityRecord,
+  ChannelIdentityRole,
+  ChannelInteractionRecord,
+  ChannelProviderId,
+  ChannelSessionBindingRecord,
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
   ControlPlaneStore,
+  HeadlessAgentRecord,
+  IssuedChannelInteractionRecord,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -59,6 +69,18 @@ export type CloudPrincipal = {
   role?: 'owner' | 'admin' | 'member'
   authSource?: 'user' | 'api_token' | 'local' | 'header'
   tokenId?: string
+  tokenScopes?: ApiTokenScope[]
+}
+
+export class CloudServiceError extends Error {
+  readonly status: number
+  readonly publicMessage: string
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+    this.publicMessage = message
+  }
 }
 
 export type CloudSessionMessage = {
@@ -98,6 +120,7 @@ type CreateCloudSessionRecordInput = {
   tenantId: string
   userId: string
   profileName: string
+  sessionId?: string | null
   title?: string | null
 }
 
@@ -137,6 +160,21 @@ type PermissionRespondPayload = {
   response: unknown
 }
 
+type ChannelActorInput = {
+  identityId?: string | null
+  provider?: ChannelProviderId | null
+  externalWorkspaceId?: string | null
+  externalUserId?: string | null
+}
+
+type ChannelInteractionResolutionInput = ChannelActorInput & {
+  token?: string | null
+  externalInteractionId?: string | null
+  response?: unknown
+  answers?: unknown[]
+  reject?: boolean
+}
+
 const WORKFLOW_MAX_TEXT = 50_000
 const WORKFLOW_TITLE_MAX_LENGTH = 512
 const WORKFLOW_FIELD_MAX_LENGTH = 4096
@@ -168,6 +206,34 @@ function readNumber(value: unknown, fallback = 0) {
 
 function readNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function channelRoleCanPrompt(role: ChannelIdentityRole) {
+  return role === 'owner' || role === 'admin' || role === 'member'
+}
+
+function channelRoleCanApprove(role: ChannelIdentityRole) {
+  return role === 'owner' || role === 'admin' || role === 'member' || role === 'approver'
+}
+
+function hasTokenScope(principal: CloudPrincipal, scope: ApiTokenScope) {
+  return principal.tokenScopes?.includes(scope) || principal.tokenScopes?.includes('admin') || false
+}
+
+function stableCloudId(prefix: string, ...parts: string[]) {
+  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
+}
+
+function principalCanManageChannels(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'gateway')
+  return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function boundedText(value: unknown, label: string, maxLength: number) {
@@ -987,6 +1053,499 @@ export class CloudSessionService {
     return this.store.listWorkerHeartbeats()
   }
 
+  async listHeadlessAgents(principal: CloudPrincipal): Promise<HeadlessAgentRecord[]> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    return this.store.listHeadlessAgents(this.principalOrgId(principal))
+  }
+
+  async createHeadlessAgent(
+    principal: CloudPrincipal,
+    input: {
+      name: string
+      profileName?: string | null
+      status?: HeadlessAgentRecord['status']
+      managed?: boolean
+      agentId?: string | null
+    },
+  ): Promise<HeadlessAgentRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    return this.store.createHeadlessAgent({
+      agentId: input.agentId || this.ids.randomUUID(),
+      orgId: this.principalOrgId(principal),
+      tenantId: principal.tenantId,
+      profileName: input.profileName || this.policy.profileName,
+      name: input.name,
+      status: input.status,
+      managed: input.managed,
+      createdByAccountId: principal.accountId || principal.userId,
+    })
+  }
+
+  async updateHeadlessAgent(
+    principal: CloudPrincipal,
+    agentId: string,
+    input: {
+      name?: string
+      profileName?: string
+      status?: HeadlessAgentRecord['status']
+      managed?: boolean
+    },
+  ): Promise<HeadlessAgentRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    return this.store.updateHeadlessAgent({
+      orgId: this.principalOrgId(principal),
+      agentId,
+      name: input.name,
+      profileName: input.profileName,
+      status: input.status,
+      managed: input.managed,
+    })
+  }
+
+  async listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<ChannelBindingRecord[]> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    return this.store.listChannelBindings(this.principalOrgId(principal), agentId)
+  }
+
+  async createChannelBinding(
+    principal: CloudPrincipal,
+    input: {
+      agentId: string
+      provider: ChannelProviderId
+      displayName: string
+      externalWorkspaceId?: string | null
+      status?: ChannelBindingRecord['status']
+      credentialRef?: string | null
+      settings?: Record<string, unknown>
+      bindingId?: string | null
+    },
+  ): Promise<ChannelBindingRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    const orgId = this.principalOrgId(principal)
+    const agent = await this.store.getHeadlessAgent(orgId, input.agentId)
+    if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
+    return this.store.createChannelBinding({
+      bindingId: input.bindingId || this.ids.randomUUID(),
+      orgId,
+      agentId: input.agentId,
+      provider: input.provider,
+      externalWorkspaceId: input.externalWorkspaceId,
+      displayName: input.displayName,
+      status: input.status,
+      credentialRef: input.credentialRef,
+      settings: input.settings,
+    })
+  }
+
+  async updateChannelBinding(
+    principal: CloudPrincipal,
+    bindingId: string,
+    input: {
+      displayName?: string
+      status?: ChannelBindingRecord['status']
+      credentialRef?: string | null
+      settings?: Record<string, unknown>
+    },
+  ): Promise<ChannelBindingRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertChannelSetupAllowed(principal)
+    return this.store.updateChannelBinding({
+      orgId: this.principalOrgId(principal),
+      bindingId,
+      displayName: input.displayName,
+      status: input.status,
+      credentialRef: input.credentialRef,
+      settings: input.settings,
+    })
+  }
+
+  async resolveChannelIdentity(
+    principal: CloudPrincipal,
+    input: {
+      provider: ChannelProviderId
+      externalWorkspaceId?: string | null
+      externalUserId: string
+      identityId?: string | null
+      accountId?: string | null
+      role?: ChannelIdentityRecord['role']
+      status?: ChannelIdentityRecord['status']
+      metadata?: Record<string, unknown>
+    },
+  ): Promise<ChannelIdentityRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const orgId = this.principalOrgId(principal)
+    const existing = await this.store.findChannelIdentity({
+      orgId,
+      provider: input.provider,
+      externalWorkspaceId: input.externalWorkspaceId,
+      externalUserId: input.externalUserId,
+    })
+    const setupAllowed = principalCanManageChannels(principal)
+    return this.store.upsertChannelIdentity({
+      identityId: existing?.identityId || input.identityId || this.ids.randomUUID(),
+      orgId,
+      provider: input.provider,
+      externalWorkspaceId: input.externalWorkspaceId,
+      externalUserId: input.externalUserId,
+      accountId: setupAllowed ? input.accountId : existing?.accountId,
+      role: setupAllowed ? input.role || existing?.role || 'viewer' : existing?.role || 'viewer',
+      status: setupAllowed ? input.status || existing?.status || 'pending' : existing?.status || 'pending',
+      metadata: input.metadata || existing?.metadata || {},
+    })
+  }
+
+  async bindChannelSession(
+    principal: CloudPrincipal,
+    input: ChannelActorInput & {
+      channelBindingId: string
+      provider: ChannelProviderId
+      externalChatId: string
+      externalThreadId: string
+      sessionId?: string | null
+      title?: string | null
+      lastEventSequence?: number
+      lastWorkspaceSequence?: number
+      lastChatMessageId?: string | null
+    },
+  ): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView }> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const orgId = this.principalOrgId(principal)
+    const channelBinding = await this.store.getChannelBinding(orgId, input.channelBindingId)
+    if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
+    if (channelBinding.status !== 'active') throw new CloudServiceError(403, 'Channel binding is not active.')
+    if (channelBinding.provider !== input.provider) throw new CloudServiceError(400, 'Channel provider does not match binding.')
+    const actor = await this.requireChannelActor(principal, input, 'prompt', {
+      provider: channelBinding.provider,
+      externalWorkspaceId: channelBinding.externalWorkspaceId,
+    })
+    const agent = await this.store.getHeadlessAgent(orgId, channelBinding.agentId)
+    if (!agent || agent.status !== 'active') throw new CloudServiceError(403, 'Headless agent is not active.')
+
+    const existing = await this.store.findChannelSessionBindingByThread({
+      orgId,
+      provider: input.provider,
+      externalWorkspaceId: channelBinding.externalWorkspaceId,
+      externalChatId: input.externalChatId,
+      externalThreadId: input.externalThreadId,
+    })
+    if (existing) {
+      if (existing.channelBindingId !== channelBinding.bindingId) {
+        throw new CloudServiceError(409, 'Channel thread is already bound to a different channel binding.')
+      }
+      const owned = await this.store.getSession(principal.tenantId, principal.userId, existing.sessionId)
+      if (!owned) throw new CloudServiceError(403, 'Channel session binding requires a session owned by the gateway principal.')
+      return {
+        binding: existing,
+        session: {
+          session: owned,
+          projection: await this.store.getSessionProjection(principal.tenantId, existing.sessionId),
+        },
+      }
+    }
+
+    if (input.sessionId) {
+      const owned = await this.store.getSession(principal.tenantId, principal.userId, input.sessionId)
+      if (!owned) throw new CloudServiceError(403, 'Channel session binding requires a session owned by the gateway principal.')
+    }
+    const sessionId = input.sessionId || (await this.createCloudSessionRecord({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      profileName: agent.profileName,
+      sessionId: stableCloudId(
+        'channel_session',
+        orgId,
+        input.provider,
+        channelBinding.externalWorkspaceId || '',
+        input.externalChatId,
+        input.externalThreadId,
+      ),
+      title: input.title || `Channel ${input.provider}`,
+    })).sessionId
+    const binding = await this.store.bindChannelSession({
+      bindingId: this.ids.randomUUID(),
+      orgId,
+      agentId: agent.agentId,
+      channelBindingId: channelBinding.bindingId,
+      provider: input.provider,
+      externalWorkspaceId: channelBinding.externalWorkspaceId,
+      externalThreadId: input.externalThreadId,
+      externalChatId: input.externalChatId,
+      sessionId,
+      lastEventSequence: input.lastEventSequence,
+      lastWorkspaceSequence: input.lastWorkspaceSequence,
+      lastChatMessageId: input.lastChatMessageId,
+    })
+    await this.store.recordAuditEvent({
+      orgId,
+      accountId: actor.accountId,
+      actorType: 'api_token',
+      actorId: principal.tokenId || principal.userId,
+      eventType: 'channel_session.bound_by_identity',
+      targetType: 'channel_session_binding',
+      targetId: binding.bindingId,
+      metadata: { identityId: actor.identityId, provider: actor.provider, sessionId },
+    })
+    return { binding, session: await this.getTenantSessionView(principal.tenantId, sessionId) }
+  }
+
+  async getChannelSessionByThread(
+    principal: CloudPrincipal,
+    input: {
+      provider: ChannelProviderId
+      externalWorkspaceId?: string | null
+      externalChatId: string
+      externalThreadId: string
+    },
+  ): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const binding = await this.store.findChannelSessionBindingByThread({
+      orgId: this.principalOrgId(principal),
+      provider: input.provider,
+      externalWorkspaceId: input.externalWorkspaceId,
+      externalChatId: input.externalChatId,
+      externalThreadId: input.externalThreadId,
+    })
+    if (!binding) return null
+    const session = await this.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
+    if (!session) throw new CloudServiceError(403, 'Channel thread lookup requires a session owned by the gateway principal.')
+    return {
+      binding,
+      session: {
+        session,
+        projection: await this.store.getSessionProjection(principal.tenantId, binding.sessionId),
+      },
+    }
+  }
+
+  async updateChannelCursor(
+    principal: CloudPrincipal,
+    input: {
+      bindingId: string
+      lastEventSequence: number
+      lastWorkspaceSequence: number
+      lastChatMessageId?: string | null
+    },
+  ): Promise<ChannelSessionBindingRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.updateChannelCursor({
+      orgId: this.principalOrgId(principal),
+      bindingId: input.bindingId,
+      lastEventSequence: input.lastEventSequence,
+      lastWorkspaceSequence: input.lastWorkspaceSequence,
+      lastChatMessageId: input.lastChatMessageId,
+    })
+  }
+
+  async enqueueChannelPrompt(
+    principal: CloudPrincipal,
+    input: ChannelActorInput & {
+      bindingId: string
+      text: string
+      agent?: string | null
+    },
+  ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord }> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const binding = await this.store.getChannelSessionBinding(this.principalOrgId(principal), input.bindingId)
+    if (!binding || binding.status !== 'active') throw new CloudServiceError(404, 'Channel session binding was not found.')
+    const channelBinding = await this.store.getChannelBinding(this.principalOrgId(principal), binding.channelBindingId)
+    if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
+    const actor = await this.requireChannelActor(principal, input, 'prompt', {
+      provider: binding.provider,
+      externalWorkspaceId: channelBinding.externalWorkspaceId,
+    })
+    const session = await this.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
+    if (!session) throw new CloudServiceError(403, 'Channel prompt requires a session owned by the gateway principal.')
+    await this.store.recordAuditEvent({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      actorType: 'api_token',
+      actorId: principal.tokenId || principal.userId,
+      eventType: 'channel_prompt.enqueued',
+      targetType: 'session',
+      targetId: binding.sessionId,
+      metadata: { identityId: actor.identityId, provider: actor.provider },
+    })
+    const command = await this.store.enqueueSessionCommand({
+      commandId: this.ids.randomUUID(),
+      tenantId: principal.tenantId,
+      userId: session.userId,
+      sessionId: binding.sessionId,
+      kind: 'prompt',
+      payload: {
+        text: input.text,
+        agent: input.agent || 'build',
+      },
+    })
+    return { binding, command }
+  }
+
+  async createChannelInteraction(
+    principal: CloudPrincipal,
+    input: {
+      agentId: string
+      sessionId: string
+      provider: ChannelProviderId
+      kind: ChannelInteractionRecord['kind']
+      targetId: string
+      externalInteractionId?: string | null
+      createdByIdentityId?: string | null
+      expiresAt?: Date | null
+      interactionId?: string | null
+      tokenSecret?: string | null
+    },
+  ): Promise<IssuedChannelInteractionRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const session = await this.store.getSession(principal.tenantId, principal.userId, input.sessionId)
+    if (!session) throw new CloudServiceError(403, 'Channel interaction requires a session owned by the gateway principal.')
+    const orgId = this.principalOrgId(principal)
+    const agent = await this.store.getHeadlessAgent(orgId, input.agentId)
+    if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
+    return this.store.createChannelInteraction({
+      interactionId: input.interactionId || this.ids.randomUUID(),
+      orgId,
+      agentId: agent.agentId,
+      sessionId: input.sessionId,
+      provider: input.provider,
+      externalInteractionId: input.externalInteractionId,
+      kind: input.kind,
+      targetId: input.targetId,
+      createdByIdentityId: input.createdByIdentityId,
+      expiresAt: input.expiresAt || new Date(Date.now() + 10 * 60 * 1000),
+      tokenSecret: input.tokenSecret || undefined,
+    })
+  }
+
+  async resolveChannelInteraction(
+    principal: CloudPrincipal,
+    input: ChannelInteractionResolutionInput,
+  ): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord }> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    const pendingInteraction = await this.store.findChannelInteraction({
+      orgId: this.principalOrgId(principal),
+      token: input.token,
+      externalInteractionId: input.externalInteractionId,
+      provider: input.provider,
+    })
+    if (!pendingInteraction) throw new CloudServiceError(404, 'Channel interaction was not found or is no longer pending.')
+    const actor = await this.requireChannelActorForSession(principal, input, 'approve', pendingInteraction.sessionId, pendingInteraction.provider)
+    const session = await this.store.getSession(principal.tenantId, principal.userId, pendingInteraction.sessionId)
+    if (!session) throw new CloudServiceError(403, 'Channel interaction requires a session owned by the gateway principal.')
+    const command = {
+      commandId: this.ids.randomUUID(),
+      tenantId: principal.tenantId,
+      userId: session.userId,
+      sessionId: pendingInteraction.sessionId,
+      kind: pendingInteraction.kind === 'permission'
+        ? 'permission.respond' as const
+        : input.reject
+          ? 'question.reject' as const
+          : 'question.reply' as const,
+      payload: pendingInteraction.kind === 'permission'
+        ? {
+            permissionId: pendingInteraction.targetId,
+            response: input.response ?? null,
+          }
+        : input.reject
+          ? {
+              requestId: pendingInteraction.targetId,
+            }
+          : {
+              requestId: pendingInteraction.targetId,
+              answers: Array.isArray(input.answers) ? input.answers : [],
+            },
+    }
+    const resolved = await this.store.resolveChannelInteractionWithCommand({
+      orgId: this.principalOrgId(principal),
+      token: input.token,
+      externalInteractionId: input.externalInteractionId,
+      provider: input.provider,
+      identityId: actor.identityId,
+      command,
+    })
+    if (!resolved) throw new CloudServiceError(409, 'Channel interaction was already resolved.')
+    return resolved
+  }
+
+  async createChannelDelivery(
+    principal: CloudPrincipal,
+    input: {
+      agentId: string
+      channelBindingId: string
+      sessionBindingId?: string | null
+      provider: ChannelProviderId
+      target: Record<string, unknown>
+      eventType: string
+      payload: Record<string, unknown>
+      status?: ChannelDeliveryRecord['status']
+      nextAttemptAt?: Date | null
+      deliveryId?: string | null
+    },
+  ): Promise<ChannelDeliveryRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.createChannelDelivery({
+      deliveryId: input.deliveryId || this.ids.randomUUID(),
+      orgId: this.principalOrgId(principal),
+      agentId: input.agentId,
+      channelBindingId: input.channelBindingId,
+      sessionBindingId: input.sessionBindingId,
+      provider: input.provider,
+      target: input.target,
+      eventType: input.eventType,
+      payload: input.payload,
+      status: input.status,
+      nextAttemptAt: input.nextAttemptAt || undefined,
+    })
+  }
+
+  async claimNextChannelDelivery(
+    principal: CloudPrincipal,
+    input: { claimedBy: string, ttlMs?: number, now?: Date },
+  ): Promise<ChannelDeliveryRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.claimNextChannelDelivery({
+      orgId: this.principalOrgId(principal),
+      claimedBy: input.claimedBy,
+      ttlMs: input.ttlMs,
+      now: input.now,
+    })
+  }
+
+  async ackChannelDelivery(
+    principal: CloudPrincipal,
+    input: {
+      deliveryId: string
+      claimedBy?: string | null
+      status: Extract<ChannelDeliveryRecord['status'], 'sent' | 'failed' | 'dead'>
+      lastError?: string | null
+      nextAttemptAt?: Date | null
+    },
+  ): Promise<ChannelDeliveryRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.ackChannelDelivery({
+      orgId: this.principalOrgId(principal),
+      deliveryId: input.deliveryId,
+      claimedBy: input.claimedBy,
+      status: input.status,
+      lastError: input.lastError,
+      nextAttemptAt: input.nextAttemptAt,
+    })
+  }
+
   async listSettingMetadata(principal: CloudPrincipal) {
     await this.ensurePrincipal(principal)
     this.assertSettingsEnabled()
@@ -1685,6 +2244,33 @@ export class CloudSessionService {
   }
 
   private async createCloudSessionRecord(input: CreateCloudSessionRecordInput): Promise<SessionRecord> {
+    if (input.sessionId) {
+      const existing = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
+      if (existing) return existing
+      const now = new Date()
+      const title = input.title || 'New session'
+      await this.store.createSession({
+        tenantId: input.tenantId,
+        userId: input.userId,
+        sessionId: input.sessionId,
+        opencodeSessionId: '',
+        profileName: input.profileName,
+        title,
+        createdAt: now,
+      })
+      await this.appendProjectedEvent({
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        type: 'session.created',
+        payload: {
+          title,
+          runtimePending: true,
+        },
+        createdAt: now,
+      })
+      return this.requireSessionRecord(input.tenantId, input.sessionId)
+    }
+
     if (this.shouldCreateRuntimeSessionsEagerly()) {
       const runtimeSession = await this.runtime.createSession({ profileName: input.profileName })
       const title = input.title || runtimeSession.title
@@ -1894,6 +2480,14 @@ export class CloudSessionService {
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
       finishedAt: now,
     })
+    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
+      eventType: 'workflow.completed',
+      workflowId: workflow.id,
+      runId: run.id,
+      status: 'completed',
+      summary,
+      finishedAt: now.toISOString(),
+    })
   }
 
   private async failWorkflowRunForSession(tenantId: string, sessionId: string, error: string) {
@@ -1912,12 +2506,137 @@ export class CloudSessionService {
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
       finishedAt: now,
     })
+    await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
+      eventType: 'workflow.failed',
+      workflowId: workflow.id,
+      runId: run.id,
+      status: 'failed',
+      error,
+      finishedAt: now.toISOString(),
+    })
   }
 
   private nextWorkflowStatusAfterRun(workflow: CloudWorkflowRecord): WorkflowStatus {
     return workflow.status === 'paused' || workflow.status === 'archived'
       ? workflow.status
       : 'active'
+  }
+
+  private async enqueueWorkflowChannelDeliveries(
+    tenantId: string,
+    sessionId: string,
+    input: {
+      eventType: string
+      workflowId: string
+      runId: string
+      status: string
+      summary?: string | null
+      error?: string | null
+      finishedAt: string
+    },
+  ) {
+    const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
+    const bindings = await this.store.listChannelSessionBindingsForSession(org.orgId, sessionId)
+    await Promise.all(bindings.map((binding) => this.store.createChannelDelivery({
+      deliveryId: stableCloudId('channel_delivery', org.orgId, input.eventType, input.runId, binding.bindingId),
+      orgId: org.orgId,
+      agentId: binding.agentId,
+      channelBindingId: binding.channelBindingId,
+      sessionBindingId: binding.bindingId,
+      provider: binding.provider,
+      target: {
+        externalChatId: binding.externalChatId,
+        externalThreadId: binding.externalThreadId,
+        lastChatMessageId: binding.lastChatMessageId,
+      },
+      eventType: input.eventType,
+      payload: {
+        workflowId: input.workflowId,
+        runId: input.runId,
+        sessionId,
+        status: input.status,
+        summary: input.summary || null,
+        error: input.error || null,
+        finishedAt: input.finishedAt,
+      },
+    })))
+  }
+
+  private principalOrgId(principal: CloudPrincipal) {
+    return principal.orgId || principal.tenantId
+  }
+
+  private assertChannelSetupAllowed(principal: CloudPrincipal) {
+    if (!principalCanManageChannels(principal)) {
+      throw new CloudServiceError(403, 'Channel administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private assertGatewayAccess(principal: CloudPrincipal) {
+    if (!principalCanUseGatewayRoutes(principal)) {
+      throw new CloudServiceError(403, 'Gateway channel access requires a gateway-scoped API token.')
+    }
+  }
+
+  private async getTenantSessionView(tenantId: string, sessionId: string): Promise<CloudSessionView> {
+    const session = await this.store.getSessionForTenant(tenantId, sessionId)
+    if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
+    return {
+      session,
+      projection: await this.store.getSessionProjection(tenantId, sessionId),
+    }
+  }
+
+  private async requireChannelActor(
+    principal: CloudPrincipal,
+    input: ChannelActorInput,
+    purpose: 'prompt' | 'approve',
+    scope: { provider?: ChannelProviderId | null, externalWorkspaceId?: string | null } = {},
+  ): Promise<ChannelIdentityRecord> {
+    const orgId = this.principalOrgId(principal)
+    const identity = input.identityId
+      ? await this.store.getChannelIdentity(orgId, input.identityId)
+      : input.provider && input.externalUserId
+        ? await this.store.findChannelIdentity({
+            orgId,
+            provider: input.provider,
+            externalWorkspaceId: input.externalWorkspaceId,
+            externalUserId: input.externalUserId,
+          })
+        : null
+    if (!identity) throw new CloudServiceError(403, 'Channel actor identity is not authorized.')
+    if (identity.status !== 'active') throw new CloudServiceError(403, 'Channel actor identity is not active.')
+    if (scope.provider && identity.provider !== scope.provider) {
+      throw new CloudServiceError(403, 'Channel actor identity is not authorized for this provider.')
+    }
+    if (scope.externalWorkspaceId !== undefined && identity.externalWorkspaceId !== (scope.externalWorkspaceId || null)) {
+      throw new CloudServiceError(403, 'Channel actor identity is not authorized for this channel workspace.')
+    }
+    if (purpose === 'prompt' && !channelRoleCanPrompt(identity.role)) {
+      throw new CloudServiceError(403, 'Channel actor is not allowed to prompt this agent.')
+    }
+    if (purpose === 'approve' && !channelRoleCanApprove(identity.role)) {
+      throw new CloudServiceError(403, 'Channel actor is not allowed to approve this interaction.')
+    }
+    return identity
+  }
+
+  private async requireChannelActorForSession(
+    principal: CloudPrincipal,
+    input: ChannelActorInput,
+    purpose: 'prompt' | 'approve',
+    sessionId: string,
+    provider: ChannelProviderId,
+  ): Promise<ChannelIdentityRecord> {
+    const actor = await this.requireChannelActor(principal, input, purpose, { provider })
+    const bindings = await this.store.listChannelSessionBindingsForSession(this.principalOrgId(principal), sessionId)
+    for (const binding of bindings) {
+      if (binding.provider !== provider) continue
+      const channelBinding = await this.store.getChannelBinding(this.principalOrgId(principal), binding.channelBindingId)
+      if (!channelBinding) continue
+      if (channelBinding.externalWorkspaceId === actor.externalWorkspaceId) return actor
+    }
+    throw new CloudServiceError(403, 'Channel actor identity is not authorized for this channel session.')
   }
 
   private assertWorkflowsEnabled() {
