@@ -143,6 +143,12 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
 
 test('cloud image builds workspace packages required by package entrypoints', () => {
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
+  const buildScript = readRepoFile('scripts/build-cloud.mjs')
+
+  assert.match(buildScript, /cloudElectronShimPlugin/)
+  assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
+  assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
+
   assert.match(dockerfile, /pnpm install --frozen-lockfile/)
   assert.match(dockerfile, /pnpm install --frozen-lockfile --prod/)
   assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
