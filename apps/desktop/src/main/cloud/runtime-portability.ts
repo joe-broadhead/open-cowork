@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path'
 
-export type Phase0PortableRuntimeEntryKind =
+export type PortableRuntimeEntryKind =
   | 'opencode-config'
   | 'opencode-data'
   | 'opencode-state'
@@ -10,8 +10,8 @@ export type Phase0PortableRuntimeEntryKind =
   | 'artifact'
   | 'metadata'
 
-export type Phase0PortableRuntimeEntry = {
-  kind: Phase0PortableRuntimeEntryKind
+export type PortableRuntimeEntry = {
+  kind: PortableRuntimeEntryKind
   path: string
   required: boolean
   secretBearing: boolean
@@ -26,7 +26,7 @@ type RuntimePathSet = {
   stateHome: string
 }
 
-type Phase0PortableRuntimeManifestInput = {
+type PortableRuntimeManifestInput = {
   runtimePaths: RuntimePathSet
   workspaceDirs?: string[]
   artifactDirs?: string[]
@@ -42,20 +42,20 @@ const SECRET_PATH_PATTERNS = [
   /(^|[/\\])adc\.json$/i,
 ]
 
-function entry(input: Phase0PortableRuntimeEntry): Phase0PortableRuntimeEntry {
+function entry(input: PortableRuntimeEntry): PortableRuntimeEntry {
   return {
     ...input,
     path: resolve(input.path),
   }
 }
 
-export function isPhase0SecretBearingPath(path: string) {
+export function isRuntimeSnapshotSecretBearingPath(path: string) {
   return SECRET_PATH_PATTERNS.some((pattern) => pattern.test(path))
 }
 
-export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeManifestInput) {
+export function buildPortableRuntimeManifest(input: PortableRuntimeManifestInput) {
   const { runtimePaths } = input
-  const entries: Phase0PortableRuntimeEntry[] = [
+  const entries: PortableRuntimeEntry[] = [
     entry({
       kind: 'opencode-config',
       path: join(runtimePaths.configHome, 'opencode'),
@@ -75,14 +75,14 @@ export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeM
       path: join(runtimePaths.stateHome, 'opencode'),
       required: true,
       secretBearing: true,
-      reason: 'OpenCode state can contain resumable runtime state and must be measured during Phase 0.',
+      reason: 'OpenCode state can contain resumable runtime state and must be captured for portable session restore.',
     }),
     entry({
       kind: 'opencode-cache',
       path: join(runtimePaths.cacheHome, 'opencode'),
       required: false,
       secretBearing: false,
-      reason: 'Cache is expected to be rebuildable, but Phase 0 records whether omit/restore changes reopen behavior.',
+      reason: 'Cache is expected to be rebuildable, so portable restore tracks it as optional.',
     }),
     entry({
       kind: 'cowork-runtime-content',
@@ -105,7 +105,7 @@ export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeM
       kind: 'workspace',
       path,
       required: true,
-      secretBearing: isPhase0SecretBearingPath(path),
+      secretBearing: isRuntimeSnapshotSecretBearingPath(path),
       reason: 'Workspace or sandbox files are needed for tool outputs, diffs, artifacts, and follow-up prompts.',
     }))
   }
@@ -114,7 +114,7 @@ export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeM
       kind: 'artifact',
       path,
       required: true,
-      secretBearing: isPhase0SecretBearingPath(path),
+      secretBearing: isRuntimeSnapshotSecretBearingPath(path),
       reason: 'Generated artifacts and chart metadata must survive worker reassignment and browser reconnects.',
     }))
   }
@@ -123,7 +123,7 @@ export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeM
       kind: 'metadata',
       path,
       required: true,
-      secretBearing: isPhase0SecretBearingPath(path),
+      secretBearing: isRuntimeSnapshotSecretBearingPath(path),
       reason: 'Cowork session metadata links OpenCode sessions to cloud ownership, projections, and artifacts.',
     }))
   }
@@ -132,8 +132,8 @@ export function buildPhase0PortableRuntimeManifest(input: Phase0PortableRuntimeM
 }
 
 // Kept as an explicit structural assertion so changes to runtime path shape
-// surface in Phase 0 tests instead of silently weakening the manifest.
-export function runtimePathsForPhase0(input: RuntimePathSet): RuntimePathSet {
+// surface in portability tests instead of silently weakening the manifest.
+export function runtimePathsForPortability(input: RuntimePathSet): RuntimePathSet {
   return {
     home: input.home,
     configHome: input.configHome,

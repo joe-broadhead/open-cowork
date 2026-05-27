@@ -21,6 +21,9 @@ Example Helm overrides:
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=REGISTRY.azurecr.io/open-cowork-cloud \
   --set cloud.profile=full \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl=https://login.microsoftonline.com/TENANT_ID/v2.0 \
+  --set cloud.auth.oidcClientId=CLIENT_ID \
   --set cloud.checkpoints.enabled=true \
   --set cloud.objectStore.kind=azure-blob \
   --set cloud.objectStore.bucket=CONTAINER_NAME \

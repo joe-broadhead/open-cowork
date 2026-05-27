@@ -21,6 +21,9 @@ Example Helm overrides:
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-cloud \
   --set cloud.profile=full \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl=https://cognito-idp.REGION.amazonaws.com/POOL_ID \
+  --set cloud.auth.oidcClientId=CLIENT_ID \
   --set cloud.checkpoints.enabled=true \
   --set cloud.objectStore.kind=s3 \
   --set cloud.objectStore.bucket=OPEN_COWORK_BUCKET \

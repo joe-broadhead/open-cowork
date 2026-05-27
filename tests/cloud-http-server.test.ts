@@ -13,7 +13,8 @@ import {
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, CloudWorker } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
@@ -61,11 +62,12 @@ function createFixture(options: {
   autoProcessCommands?: boolean
   ssePollMs?: number
   policy?: CloudRuntimePolicy
-  sessionCookies?: ReturnType<typeof createCloudSessionCookieManager> | null
-  auth?: CloudAuthResolver
-  browserAuth?: CloudBrowserAuthProvider | null
-  observability?: CloudObservabilityAdapter | null
-} = {}) {
+    sessionCookies?: ReturnType<typeof createCloudSessionCookieManager> | null
+    auth?: CloudAuthResolver
+    browserAuth?: CloudBrowserAuthProvider | null
+    observability?: CloudObservabilityAdapter | null
+    internalToken?: string | null
+  } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
   const objectStore = createInMemoryObjectStore()
@@ -86,9 +88,10 @@ function createFixture(options: {
     autoProcessCommands: options.autoProcessCommands ?? true,
     ssePollMs: options.ssePollMs,
     sessionCookies: options.sessionCookies,
-    browserAuth: options.browserAuth,
-    observability: options.observability,
-    auth: options.auth || (() => ({
+      browserAuth: options.browserAuth,
+      observability: options.observability,
+      internalToken: options.internalToken,
+      auth: options.auth || (() => ({
       tenantId: 'tenant-1',
       tenantName: 'Tenant 1',
       userId: 'user-1',
@@ -807,8 +810,19 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
   }
 })
 
-test('cloud HTTP scheduler tick claims one due workflow and starts it once', async () => {
+test('cloud HTTP scheduler tick requires an internal token', async () => {
   const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const missing = await fetch(`${baseUrl}/api/workflows/scheduler/tick`, { method: 'POST' })
+    assert.equal(missing.status, 404)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP scheduler tick claims one due workflow and starts it once with internal token', async () => {
+  const fixture = createFixture({ internalToken: 'test-internal-token' })
   const baseUrl = await fixture.server.listen()
   try {
     await fixture.service.ensurePrincipal({
@@ -844,15 +858,29 @@ test('cloud HTTP scheduler tick claims one due workflow and starts it once', asy
       nextRunAt: '2026-01-01T09:00:00.000Z',
     })
 
-    const tickResponse = await fetch(`${baseUrl}/api/workflows/scheduler/tick`, { method: 'POST' })
+    const rejected = await fetch(`${baseUrl}/api/workflows/scheduler/tick`, { method: 'POST' })
+    assert.equal(rejected.status, 403)
+
+    const tickResponse = await fetch(`${baseUrl}/api/workflows/scheduler/tick`, {
+      method: 'POST',
+      headers: { 'x-open-cowork-internal-token': 'test-internal-token' },
+    })
     assert.equal(tickResponse.status, 200)
     const tick = await readJson(tickResponse)
     assert.equal(tick.processed, 1)
     const claimed = asRecord(tick.claimed)
-    assert.equal(asRecord(claimed.run).status, 'completed')
+    assert.equal(claimed.tenantId, 'tenant-1')
+    assert.equal(claimed.workflowId, 'workflow-scheduled')
+    assert.equal(typeof claimed.runId, 'string')
+    assert.equal(typeof claimed.sessionId, 'string')
+    assert.equal(Object.prototype.hasOwnProperty.call(claimed, 'workflow'), false)
+    assert.equal(Object.prototype.hasOwnProperty.call(claimed, 'command'), false)
     assert.equal(fixture.runtime.prompts.length, 1)
 
-    const secondTick = await readJson(await fetch(`${baseUrl}/api/workflows/scheduler/tick`, { method: 'POST' }))
+    const secondTick = await readJson(await fetch(`${baseUrl}/api/workflows/scheduler/tick`, {
+      method: 'POST',
+      headers: { 'x-open-cowork-internal-token': 'test-internal-token' },
+    }))
     assert.equal(secondTick.claimed, null)
   } finally {
     await fixture.server.close()

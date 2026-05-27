@@ -89,8 +89,7 @@ test('removeCustomSkill rejects path-like names before deleting files', async ()
 
     assert.equal(existsSync(join(outsideDir, 'marker.txt')), true)
   } finally {
-    closeLogger()
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await closeLogger()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
@@ -145,8 +144,7 @@ test('listCustomSkills skips invalid existing bundles without aborting enumerati
     const skills = listCustomSkills()
     assert.deepEqual(skills.map((skill) => skill.name), ['valid-skill'])
   } finally {
-    closeLogger()
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await closeLogger()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
@@ -181,8 +179,7 @@ test('listCustomSkills skips bundles with too-deep supporting file paths', async
     const skills = listCustomSkills()
     assert.deepEqual(skills.map((skill) => skill.name), ['valid-skill'])
   } finally {
-    closeLogger()
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await closeLogger()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
@@ -213,8 +210,7 @@ test('listCustomSkills keeps edited machine skills even when the managed mirror 
     const skills = listCustomSkills()
     assert.equal(skills.some((skill) => skill.name === 'stale-generated'), true)
   } finally {
-    closeLogger()
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await closeLogger()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()

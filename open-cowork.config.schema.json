@@ -332,7 +332,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "mode": { "type": "string", "enum": ["none", "oidc"] },
+        "mode": { "type": "string", "enum": ["none", "header", "oidc"] },
         "issuerUrl": { "type": "string", "pattern": "^https://.+" },
         "clientId": { "type": "string", "maxLength": 512 },
         "clientSecretRef": { "type": "string", "maxLength": 512 },

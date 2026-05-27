@@ -1,10 +1,11 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
-import type { CloudPrincipal, CloudSessionService, CloudWorker } from './session-service.ts'
+import type { CloudPrincipal, CloudSessionService } from './session-service.ts'
+import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import { recordCloudHttpRequest } from './observability.ts'
@@ -43,6 +44,7 @@ export type CloudHttpServerOptions = {
   browserAuth?: CloudBrowserAuthProvider | null
   worker?: CloudWorker | null
   webhookSecurity?: WorkflowWebhookSecurityStore | null
+  internalToken?: string | null
   sessionCookies?: CloudSessionCookieManager | null
   observability?: CloudObservabilityAdapter | null
   autoProcessCommands?: boolean
@@ -85,6 +87,24 @@ const CLOUD_WEBHOOK_AUTH_BACKOFF_MS = 60 * 1000
 
 function defaultAuthResolver(): CloudPrincipal {
   return DEFAULT_PRINCIPAL
+}
+
+function readHeader(req: IncomingMessage, name: string) {
+  const value = req.headers[name.toLowerCase()]
+  if (Array.isArray(value)) return value[0] || null
+  return value || null
+}
+
+function constantTimeEquals(left: string, right: string) {
+  const leftBytes = Buffer.from(left)
+  const rightBytes = Buffer.from(right)
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
+}
+
+function internalTokenIsValid(req: IncomingMessage, expected: string | null | undefined) {
+  if (!expected) return false
+  const provided = readHeader(req, 'x-open-cowork-internal-token')
+  return typeof provided === 'string' && constantTimeEquals(provided, expected)
 }
 
 function writeCorsHeaders(res: ServerResponse, origin: string | null | undefined) {
@@ -699,17 +719,27 @@ async function handleApiRequest(
     }
 
     if (workflowId === 'scheduler' && workflowAction === 'tick' && req.method === 'POST') {
+      if (!options.internalToken) {
+        writeError(res, 404, 'Not found.', options.corsOrigin)
+        return
+      }
+      if (!internalTokenIsValid(req, options.internalToken)) {
+        writeError(res, 403, 'Internal scheduler token is missing or invalid.', options.corsOrigin)
+        return
+      }
       const started = await options.service.claimAndStartDueWorkflow()
       const processed = started
         ? await processSessionCommandIfConfigured(options, started.tenantId, started.sessionId)
         : 0
-      const workflow = started
-        ? await options.service.getWorkflow(context.principal, started.workflow.id).catch(() => null)
-        : null
       writeJson(res, 200, {
-        claimed: workflow && started
-          ? { ...started, workflow, run: workflow.runs.find((run) => run.id === started.run.id) || started.run }
-          : started,
+        claimed: started
+          ? {
+              tenantId: started.tenantId,
+              workflowId: started.workflow.id,
+              runId: started.run.id,
+              sessionId: started.sessionId,
+            }
+          : null,
         processed,
       }, options.corsOrigin)
       return

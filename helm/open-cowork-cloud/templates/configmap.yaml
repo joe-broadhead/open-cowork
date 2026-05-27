@@ -7,6 +7,12 @@ metadata:
 data:
   OPEN_COWORK_CLOUD_PROFILE: {{ .Values.cloud.profile | quote }}
   OPEN_COWORK_CLOUD_ROOT: {{ .Values.cloud.root | quote }}
+  OPEN_COWORK_CLOUD_AUTH_MODE: {{ .Values.cloud.auth.mode | quote }}
+  OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: {{ .Values.cloud.allowInsecureAuth | quote }}
+  OPEN_COWORK_CLOUD_OIDC_ISSUER_URL: {{ .Values.cloud.auth.oidcIssuerUrl | quote }}
+  OPEN_COWORK_CLOUD_OIDC_CLIENT_ID: {{ .Values.cloud.auth.oidcClientId | quote }}
+  OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH: {{ .Values.cloud.auth.oidcCallbackPath | quote }}
+  OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: {{ join "," .Values.cloud.auth.allowedEmailDomains | quote }}
   OPEN_COWORK_CLOUD_COOKIE_SECURE: {{ .Values.cloud.cookieSecure | quote }}
   OPEN_COWORK_CLOUD_PUBLIC_URL: {{ .Values.cloud.publicUrl | quote }}
   OPEN_COWORK_CLOUD_SERVICE_NAME: {{ .Values.cloud.observability.serviceName | quote }}

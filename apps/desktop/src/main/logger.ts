@@ -154,8 +154,13 @@ export function getLogFilePath(): string {
 
 export function closeLogger() {
   if (logStream) {
-    logStream.end()
+    const stream = logStream
     logStream = null
+    logPath = null
+    return new Promise<void>((resolve) => {
+      stream.end(resolve)
+    })
   }
   logPath = null
+  return Promise.resolve()
 }

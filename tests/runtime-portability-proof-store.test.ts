@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Phase0ControlPlaneProofStore } from '../apps/desktop/src/main/cloud/phase0-control-plane.ts'
+import { RuntimePortabilityProofStore } from '../scripts/support/runtime-portability-proof-store.ts'
 
-test('phase0 control plane rejects stale worker writes after lease reassignment', () => {
-  const store = new Phase0ControlPlaneProofStore()
+test('runtime portability proof store rejects stale worker writes after lease reassignment', () => {
+  const store = new RuntimePortabilityProofStore()
   const first = store.claimSession('session-1', 'worker-a', new Date('2026-01-01T00:00:00.000Z'), 1000)
   assert.ok(first)
   assert.deepEqual(store.writeProjection(first, 1), { sessionId: 'session-1', projectionSeq: 1 })
@@ -18,8 +18,8 @@ test('phase0 control plane rejects stale worker writes after lease reassignment'
   assert.deepEqual(store.writeProjection(second, 2), { sessionId: 'session-1', projectionSeq: 2 })
 })
 
-test('phase0 control plane fences checkpoint versions', () => {
-  const store = new Phase0ControlPlaneProofStore()
+test('runtime portability proof store fences checkpoint versions', () => {
+  const store = new RuntimePortabilityProofStore()
   const lease = store.claimSession('session-1', 'worker-a', new Date('2026-01-01T00:00:00.000Z'), 1000)
   assert.ok(lease)
 
@@ -29,8 +29,8 @@ test('phase0 control plane fences checkpoint versions', () => {
   assert.deepEqual(store.writeProjection(checkpointed, 1), { sessionId: 'session-1', projectionSeq: 1 })
 })
 
-test('phase0 commands are idempotent and reject conflicting command id reuse', () => {
-  const store = new Phase0ControlPlaneProofStore()
+test('runtime portability commands are idempotent and reject conflicting command id reuse', () => {
+  const store = new RuntimePortabilityProofStore()
   const command = store.enqueueCommand({
     commandId: 'cmd-1',
     tenantId: 'tenant-1',
@@ -64,8 +64,8 @@ test('phase0 commands are idempotent and reject conflicting command id reuse', (
   }), /reused/)
 })
 
-test('phase0 command delivery requires current lease and supports ack replay', () => {
-  const store = new Phase0ControlPlaneProofStore()
+test('runtime portability command delivery requires current lease and supports ack replay', () => {
+  const store = new RuntimePortabilityProofStore()
   const firstLease = store.claimSession('session-1', 'worker-a', new Date('2026-01-01T00:00:00.000Z'), 1000)
   assert.ok(firstLease)
   store.enqueueCommand({

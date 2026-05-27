@@ -3,14 +3,14 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 
 import {
-  buildPhase0PortableRuntimeManifest,
-  isPhase0SecretBearingPath,
-  runtimePathsForPhase0,
-} from '../apps/desktop/src/main/cloud/phase0-runtime-portability.ts'
+  buildPortableRuntimeManifest,
+  isRuntimeSnapshotSecretBearingPath,
+  runtimePathsForPortability,
+} from '../apps/desktop/src/main/cloud/runtime-portability.ts'
 
-test('phase0 portability manifest inventories OpenCode XDG roots and Cowork runtime content', () => {
-  const root = '/tmp/open-cowork-phase0'
-  const runtimePaths = runtimePathsForPhase0({
+test('runtime portability manifest inventories OpenCode XDG roots and Cowork runtime content', () => {
+  const root = '/tmp/open-cowork-portability'
+  const runtimePaths = runtimePathsForPortability({
     home: join(root, 'runtime-home'),
     configHome: join(root, 'runtime-home/.config'),
     dataHome: join(root, 'runtime-home/.local/share'),
@@ -18,7 +18,7 @@ test('phase0 portability manifest inventories OpenCode XDG roots and Cowork runt
     stateHome: join(root, 'runtime-home/.local/state'),
   })
 
-  const manifest = buildPhase0PortableRuntimeManifest({
+  const manifest = buildPortableRuntimeManifest({
     runtimePaths,
     workspaceDirs: [join(root, 'workspace')],
     artifactDirs: [join(root, 'chart-artifacts')],
@@ -44,9 +44,9 @@ test('phase0 portability manifest inventories OpenCode XDG roots and Cowork runt
   assert.equal(manifest.find((entry) => entry.path.endsWith('runtime-skill-catalog'))?.required, true)
 })
 
-test('phase0 portability classifier flags secret-bearing snapshot paths', () => {
-  assert.equal(isPhase0SecretBearingPath('/runtime-home/.local/share/opencode/auth.json'), true)
-  assert.equal(isPhase0SecretBearingPath('/app-data/settings.enc'), true)
-  assert.equal(isPhase0SecretBearingPath('/workspace/.env.production'), true)
-  assert.equal(isPhase0SecretBearingPath('/workspace/report.csv'), false)
+test('runtime portability classifier flags secret-bearing snapshot paths', () => {
+  assert.equal(isRuntimeSnapshotSecretBearingPath('/runtime-home/.local/share/opencode/auth.json'), true)
+  assert.equal(isRuntimeSnapshotSecretBearingPath('/app-data/settings.enc'), true)
+  assert.equal(isRuntimeSnapshotSecretBearingPath('/workspace/.env.production'), true)
+  assert.equal(isRuntimeSnapshotSecretBearingPath('/workspace/report.csv'), false)
 })
