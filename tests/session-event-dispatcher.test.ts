@@ -272,6 +272,50 @@ test('dispatcher flushes queued session patches before a full view is queued', a
   ])
 })
 
+test('history refresh flushes queued session patches before publishing the refreshed view', async () => {
+  const { win, sent } = createWindowCollector(54)
+  setSessionHistoryRefreshHandler(async () => undefined)
+
+  try {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-history-refresh-patches',
+      data: {
+        type: 'text',
+        messageId: 'message-history-refresh',
+        partId: 'part-before-history',
+        content: 'before-history-refresh',
+        mode: 'append',
+      },
+    })
+    dispatchRuntimeSessionEvent(win as any, eventOf('history_refresh', 'session-history-refresh-patches'))
+
+    await wait(30)
+
+    const sessionEvents = sent
+      .filter((entry) => entry.channel === 'session:patch' || entry.channel === 'session:view')
+      .map((entry) => ({
+        channel: entry.channel,
+        sessionId: (entry.payload as { sessionId?: string }).sessionId,
+        content: (entry.payload as { content?: string }).content,
+      }))
+    assert.deepEqual(sessionEvents, [
+      {
+        channel: 'session:patch',
+        sessionId: 'session-history-refresh-patches',
+        content: 'before-history-refresh',
+      },
+      {
+        channel: 'session:view',
+        sessionId: 'session-history-refresh-patches',
+        content: undefined,
+      },
+    ])
+  } finally {
+    setSessionHistoryRefreshHandler(null)
+  }
+})
+
 test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {
   assert.deepEqual(getSessionPatch({
     type: 'reasoning',

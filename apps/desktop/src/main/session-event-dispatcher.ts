@@ -260,6 +260,7 @@ function sessionHasQueuedView(windowId: number, sessionId: string) {
 }
 
 function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string) {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return
   const windowId = win.webContents.id
   const pending = pendingPatchFlushByWindowId.get(windowId)
   if (!pending || pending.patches.length === 0) return
@@ -454,6 +455,7 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
             slowThresholdMs: 300,
             slowData: { sessionId: shortSessionId(sessionId) },
           })
+          flushQueuedSessionPatchesBeforeView(pending.win, sessionId)
           publishSessionView(pending.win, sessionId)
           publishSessionMetadata(pending.win, sessionId)
         } catch (err) {
