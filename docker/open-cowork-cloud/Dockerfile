@@ -13,6 +13,7 @@ COPY open-cowork.config.json open-cowork.config.schema.json ./
 COPY tsconfig.base.json ./
 
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @open-cowork/shared build
 
 ENV NODE_ENV=production
 ENV OPEN_COWORK_CLOUD_ROOT=/data/open-cowork-cloud

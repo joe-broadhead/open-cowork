@@ -108,6 +108,13 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
   assert.doesNotMatch(script, /loadConfig/)
 })
 
+test('cloud image builds workspace packages required by package entrypoints', () => {
+  const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
+  assert.match(dockerfile, /pnpm install --frozen-lockfile/)
+  assert.match(dockerfile, /pnpm --filter @open-cowork\/shared build/)
+  assert.match(dockerfile, /CMD \["pnpm", "cloud:dev"\]/)
+})
+
 test('cloud provider recipes stay thin compositions of the shared image and adapters', () => {
   const index = readRepoFile('deploy/README.md')
   assert.match(index, /same\n`open-cowork-cloud` image/)
