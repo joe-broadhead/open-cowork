@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `c32d304dec09159f01dfc57d63f0d8577a956e825296a81d8e3e0591a20a53b5`
+- pnpm lockfile SHA-256: `ff00a2a0fc3c5f6f35234d9e63bcb53eaf28398880a8eb87910ca448582253f2`
 - Production package entries: 420
 - Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
 
