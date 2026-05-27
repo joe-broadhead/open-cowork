@@ -31,6 +31,8 @@ export interface SessionRecord {
 
 let registryCache: Map<string, SessionRecord> | null = null
 let saveTimer: NodeJS.Timeout | null = null
+let registryWriteInProgress = false
+let registryWriteRequestedDuringWrite = false
 const SAVE_DEBOUNCE_MS = 2000
 
 function getRegistryDir() {
@@ -124,7 +126,7 @@ function loadRegistryMap() {
   return next
 }
 
-function writeRegistryMap(map: Map<string, SessionRecord>) {
+function writeRegistryMapSnapshot(map: Map<string, SessionRecord>) {
   const records = Array.from(map.values()).sort((a, b) => {
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   })
@@ -133,6 +135,25 @@ function writeRegistryMap(map: Map<string, SessionRecord>) {
   // + rename uniformly with the rest of the app's credential-bearing
   // writes.
   writeFileAtomic(getRegistryPath(), JSON.stringify(records, null, 2), { mode: 0o600 })
+}
+
+function writeRegistryMap(map: Map<string, SessionRecord>) {
+  if (registryWriteInProgress) {
+    registryWriteRequestedDuringWrite = true
+    return
+  }
+
+  registryWriteInProgress = true
+  try {
+    do {
+      registryWriteRequestedDuringWrite = false
+      // Always serialize the current in-memory map rather than a captured
+      // array so nested writes drain to the latest cache state.
+      writeRegistryMapSnapshot(map)
+    } while (registryWriteRequestedDuringWrite)
+  } finally {
+    registryWriteInProgress = false
+  }
 }
 
 function scheduleRegistrySave() {
@@ -272,5 +293,7 @@ export function clearSessionRegistryCache() {
     clearTimeout(saveTimer)
     saveTimer = null
   }
+  registryWriteRequestedDuringWrite = false
+  registryWriteInProgress = false
   registryCache = null
 }

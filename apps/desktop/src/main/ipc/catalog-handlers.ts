@@ -1,7 +1,22 @@
 import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
 import { performance } from 'node:perf_hooks'
 import type { IpcHandlerContext } from './context.ts'
-import { optionalObjectArg, registerIpcInvoke, stringArg } from './schema.ts'
+import {
+  objectAndObjectArgs,
+  objectAndOptionalStringArgs,
+  objectArg,
+  optionalObjectArg,
+  registerIpcInvoke,
+  stringAndOptionalObjectArgs,
+  stringArg,
+  twoStringsAndOptionalObjectArgs,
+} from './schema.ts'
+import {
+  validateCustomAgentConfig,
+  validateRuntimeContextOptions,
+  validateScopedArtifactRef,
+  validateToolListOptions,
+} from './object-validators.ts'
 import { getClient } from '../runtime.ts'
 import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
 import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
@@ -204,7 +219,7 @@ export async function authenticateMcpThroughRuntime(client: {
 }
 
 export function registerCatalogHandlers(context: IpcHandlerContext) {
-  registerIpcInvoke(context, 'tool:list', optionalObjectArg<ToolListOptions>('tool list options'), async (_event, options) => {
+  registerIpcInvoke(context, 'tool:list', optionalObjectArg<ToolListOptions>('tool list options', validateToolListOptions), async (_event, options) => {
     return context.listRuntimeTools(options)
   })
 
@@ -274,12 +289,12 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     return listBuiltInAgentDetails()
   })
 
-  context.ipcMain.handle('agents:catalog', async (_event, options?: RuntimeContextOptions) => {
+  registerIpcInvoke(context, 'agents:catalog', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
     return timeAgentCatalogHandler('agents:catalog', () =>
       getCustomAgentCatalog(resolveContext(context, options)))
   })
 
-  context.ipcMain.handle('agents:list', async (_event, options?: RuntimeContextOptions) => {
+  registerIpcInvoke(context, 'agents:list', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
     return timeAgentCatalogHandler('agents:list', () =>
       getCustomAgentSummaries(resolveContext(context, options)))
   })
@@ -322,7 +337,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     })
   })
 
-  context.ipcMain.handle('agents:create', async (_event, agent: CustomAgentConfig) => {
+  registerIpcInvoke(context, 'agents:create', objectArg<CustomAgentConfig>('custom agent', validateCustomAgentConfig), async (_event, agent) => {
     const normalized = normalizeCustomAgent(agent)
     const catalogContext = {
       directory: agent.scope === 'project' ? context.resolveScopedTarget(agent).directory : null,
@@ -342,7 +357,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     return true
   })
 
-  context.ipcMain.handle('agents:update', async (_event, target: ScopedArtifactRef, agent: CustomAgentConfig) => {
+  registerIpcInvoke(context, 'agents:update', objectAndObjectArgs<ScopedArtifactRef, CustomAgentConfig>('custom agent target', 'custom agent', validateScopedArtifactRef, validateCustomAgentConfig), async (_event, target, agent) => {
     const normalized = normalizeCustomAgent(agent)
     const resolvedTarget = context.resolveScopedTarget(target)
     const catalogContext = {
@@ -366,7 +381,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     return true
   })
 
-  context.ipcMain.handle('agents:remove', async (_event, target: ScopedArtifactRef, confirmationToken?: string | null) => {
+  registerIpcInvoke(context, 'agents:remove', objectAndOptionalStringArgs<ScopedArtifactRef>('custom agent target', 'confirmation token', validateScopedArtifactRef), async (_event, target, confirmationToken) => {
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'agent.remove', target: resolvedTarget }, confirmationToken)) {
@@ -385,7 +400,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('capabilities:tools', async (_event, options?: ToolListOptions) => {
+  registerIpcInvoke(context, 'capabilities:tools', optionalObjectArg<ToolListOptions>('tool list options', validateToolListOptions), async (_event, options) => {
     const runtimeTools = await context.listRuntimeTools(options)
     // List view — render just the cards; skip the expensive
     // per-MCP method probe. `deep` defaults to false in shared types
@@ -398,7 +413,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     return context.withDiscoveredBuiltInTools(await listCapabilityTools(capabilityContext), runtimeTools, capabilityContext)
   })
 
-  context.ipcMain.handle('capabilities:tool', async (_event, id: string, options?: ToolListOptions) => {
+  registerIpcInvoke(context, 'capabilities:tool', stringAndOptionalObjectArgs<ToolListOptions>('tool id', 'tool list options', {}, validateToolListOptions), async (_event, id, options) => {
     const runtimeTools = await context.listRuntimeTools(options)
     // Detail view — user actually opened one tool; spend the time
     // probing its MCP so the method table renders. Scoped to a single
@@ -413,15 +428,15 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       || await getCapabilityTool(id, capabilityContext)
   })
 
-  context.ipcMain.handle('capabilities:skills', async (_event, options?: RuntimeContextOptions) => {
+  registerIpcInvoke(context, 'capabilities:skills', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
     return await listCapabilitySkills(resolveContext(context, options))
   })
 
-  context.ipcMain.handle('capabilities:skill-bundle', async (_event, skillName: string, options?: RuntimeContextOptions) => {
+  registerIpcInvoke(context, 'capabilities:skill-bundle', stringAndOptionalObjectArgs<RuntimeContextOptions>('skill name', 'runtime context options', {}, validateRuntimeContextOptions), async (_event, skillName, options) => {
     return await getCapabilitySkillBundle(skillName, resolveContext(context, options))
   })
 
-  context.ipcMain.handle('capabilities:skill-bundle-file', async (_event, skillName: string, filePath: string, options?: RuntimeContextOptions) => {
+  registerIpcInvoke(context, 'capabilities:skill-bundle-file', twoStringsAndOptionalObjectArgs<RuntimeContextOptions>('skill name', 'file path', 'runtime context options', {}, validateRuntimeContextOptions), async (_event, skillName, filePath, options) => {
     return await readEffectiveSkillBundleFile(skillName, filePath, resolveContext(context, options))
   })
 }

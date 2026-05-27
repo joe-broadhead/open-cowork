@@ -1,6 +1,7 @@
 import electron from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import { objectArg, registerIpcInvoke } from './schema.ts'
+import { validateChartSaveArtifactRequest, validateSettingsUpdate } from './object-validators.ts'
 import {
   ensureRuntimeAfterAuthLogin,
   MAX_CLIPBOARD_TEXT_LENGTH,
@@ -40,6 +41,7 @@ import { toIsoTimestamp } from '../task-run-utils.ts'
 import { renderChartSpecToSvg } from '../chart-renderer.ts'
 import { saveChartArtifact } from '../chart-artifacts.ts'
 import { isKnownChartArtifactToolCall } from '../chart-artifact-access.ts'
+import { validateInlineChartSpec } from '../../lib/chart-spec-safety.ts'
 import { sessionEngine } from '../session-engine.ts'
 import { checkForUpdates } from '../update/update-check.ts'
 import {
@@ -231,7 +233,7 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 
-  registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update'), async (_event, updates) => {
+  registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update', validateSettingsUpdate), async (_event, updates) => {
     const result = saveSettings(updates)
     const { invalidateRuntimeCatalogSnapshotCache } = await import('../runtime-catalog-snapshot.ts')
     invalidateRuntimeCatalogSnapshotCache()
@@ -403,11 +405,14 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     }
   })
 
-  registerIpcInvoke(context, 'chart:render-svg', objectArg<Record<string, unknown>>('chart specification'), async (_event, spec) => {
+  registerIpcInvoke(context, 'chart:render-svg', objectArg<Record<string, unknown>>('chart specification', (spec) => {
+    validateInlineChartSpec(spec)
+    return spec
+  }), async (_event, spec) => {
     return renderChartSpecToSvg(spec)
   })
 
-  registerIpcInvoke(context, 'chart:save-artifact', objectArg<ChartSaveArtifactRequest>('chart artifact request'), async (_event, request) => {
+  registerIpcInvoke(context, 'chart:save-artifact', objectArg<ChartSaveArtifactRequest>('chart artifact request', validateChartSaveArtifactRequest), async (_event, request) => {
     const sessionRecord = context.ensureSessionRecord(request.sessionId)
     if (!sessionRecord) {
       throw new Error('Chart artifact save requires an existing session.')

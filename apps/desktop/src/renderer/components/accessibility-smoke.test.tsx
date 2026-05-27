@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { axe } from 'vitest-axe'
 import { LoginScreen } from './LoginScreen'
 import { ApprovalCard } from './chat/ApprovalCard'
 import type { PendingApproval } from '../stores/session'
 import { SettingsPanel } from './sidebar/SettingsPanel'
+import { configureI18n } from '../helpers/i18n'
 
 const axeOptions = {
   rules: {
@@ -19,6 +20,10 @@ async function expectNoA11yViolations(container: HTMLElement) {
   const result = await axe(container, axeOptions)
   expect(result.violations).toEqual([])
 }
+
+afterEach(async () => {
+  await configureI18n({ locale: 'en' })
+})
 
 const approval: PendingApproval = {
   id: 'permission-1',
@@ -51,6 +56,18 @@ describe('focused accessibility smoke', () => {
     const { container } = render(<SettingsPanel onClose={() => undefined} />)
 
     expect(await screen.findByText('Settings')).toBeInTheDocument()
+    await expectNoA11yViolations(container)
+  })
+
+  it('keeps the settings shell accessible when the active locale is RTL', async () => {
+    await configureI18n({ locale: 'ar' })
+
+    const { container } = render(<SettingsPanel onClose={() => undefined} />)
+
+    expect(document.documentElement).toHaveAttribute('lang', 'ar')
+    expect(document.documentElement).toHaveAttribute('dir', 'rtl')
+    expect(await screen.findByText('الإعدادات')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'اللغة' })).toHaveValue('ar')
     await expectNoA11yViolations(container)
   })
 })

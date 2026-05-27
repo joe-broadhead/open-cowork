@@ -17,8 +17,16 @@ export const OPEN_COWORK_MANAGED_RUNTIME_VALUE = '1'
 const MANAGED_RUNTIME_PID_LEDGER = 'managed-runtime-pids.json'
 const PS_SNAPSHOT_MAX_BUFFER_BYTES = 16 * 1024 * 1024
 
-function isPositiveInteger(value: string) {
+function isUnsignedInteger(value: string) {
   return /^[0-9]+$/.test(value)
+}
+
+function parseProcessId(value: string, allowZero: boolean) {
+  if (!isUnsignedInteger(value)) return null
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) return null
+  if (allowZero ? parsed < 0 : parsed <= 0) return null
+  return parsed
 }
 
 export function parsePsOutput(output: string): RuntimeProcessInfo[] {
@@ -30,11 +38,14 @@ export function parsePsOutput(output: string): RuntimeProcessInfo[] {
       const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/)
       if (!match) return null
       const [, pidRaw, ppidRaw, command] = match
-      if (!isPositiveInteger(pidRaw) || !isPositiveInteger(ppidRaw) || !command.trim()) return null
+      const pid = parseProcessId(pidRaw, false)
+      const ppid = parseProcessId(ppidRaw, true)
+      const normalizedCommand = command.trim()
+      if (pid === null || ppid === null || !normalizedCommand || normalizedCommand === 'COMMAND' || normalizedCommand === 'ARGS') return null
       return {
-        pid: Number(pidRaw),
-        ppid: Number(ppidRaw),
-        command: command.trim(),
+        pid,
+        ppid,
+        command: normalizedCommand,
       }
     })
     .filter((entry): entry is RuntimeProcessInfo => entry !== null)
@@ -81,10 +92,19 @@ export function collectOrphanedManagedProcessTree(processes: RuntimeProcessInfo[
   return collectProcessTreeFromRootPids(processes, roots)
 }
 
+export function buildPsSnapshotArgs(
+  platform: NodeJS.Platform = process.platform,
+  includeEnvironment = false,
+) {
+  if (platform === 'win32') return null
+  const commandColumn = platform === 'linux' ? 'args=' : 'command='
+  const args = ['-axo', `pid=,ppid=,${commandColumn}`]
+  return includeEnvironment ? ['eww', ...args] : args
+}
+
 function loadProcessSnapshot(includeEnvironment = false) {
-  const args = includeEnvironment
-    ? ['eww', '-axo', 'pid=,ppid=,command=']
-    : ['-axo', 'pid=,ppid=,command=']
+  const args = buildPsSnapshotArgs(process.platform, includeEnvironment)
+  if (!args) return []
   const output = execFileSync('ps', args, {
     encoding: 'utf8',
     maxBuffer: PS_SNAPSHOT_MAX_BUFFER_BYTES,

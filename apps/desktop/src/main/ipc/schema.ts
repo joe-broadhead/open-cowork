@@ -5,6 +5,12 @@ export type IpcArgsSchema<TArgs extends unknown[]> = {
   parse(channel: string, args: unknown[]): TArgs
 }
 
+export type IpcObjectValidator<T extends object> = (
+  value: Record<string, unknown>,
+  channel: string,
+  label: string,
+) => T
+
 type IpcInvokeHandler<TArgs extends unknown[], TResult> = (
   event: IpcMainInvokeEvent,
   ...args: TArgs
@@ -58,22 +64,22 @@ export function optionalStringArg(label: string, options: { maxBytes?: number } 
   })
 }
 
-export function objectArg<T extends object>(label: string) {
+export function objectArg<T extends object>(label: string, validator?: IpcObjectValidator<T>) {
   return createIpcArgsSchema<[T]>((channel, args) => {
     if (args.length !== 1) {
       throw new Error(`${channel} requires exactly one ${label} argument.`)
     }
-    return [normalizeObjectArg<T>(channel, label, args[0])]
+    return [normalizeObjectArg<T>(channel, label, args[0], validator)]
   })
 }
 
-export function optionalObjectArg<T extends object>(label: string) {
+export function optionalObjectArg<T extends object>(label: string, validator?: IpcObjectValidator<T>) {
   return createIpcArgsSchema<[T | undefined]>((channel, args) => {
     if (args.length > 1) {
       throw new Error(`${channel} accepts at most one argument.`)
     }
     if (args[0] === undefined || args[0] === null) return [undefined]
-    return [normalizeObjectArg<T>(channel, label, args[0])]
+    return [normalizeObjectArg<T>(channel, label, args[0], validator)]
   })
 }
 
@@ -81,6 +87,7 @@ export function stringAndObjectArgs<T extends object>(
   stringLabel: string,
   objectLabel: string,
   options: { maxBytes?: number } = {},
+  validator?: IpcObjectValidator<T>,
 ) {
   return createIpcArgsSchema<[string, T]>((channel, args) => {
     if (args.length !== 2) {
@@ -91,7 +98,70 @@ export function stringAndObjectArgs<T extends object>(
     }
     return [
       normalizeStringArg(channel, stringLabel, args[0], options.maxBytes),
-      normalizeObjectArg<T>(channel, objectLabel, args[1]),
+      normalizeObjectArg<T>(channel, objectLabel, args[1], validator),
+    ]
+  })
+}
+
+export function stringAndOptionalObjectArgs<T extends object>(
+  stringLabel: string,
+  objectLabel: string,
+  options: { maxBytes?: number } = {},
+  validator?: IpcObjectValidator<T>,
+) {
+  return createIpcArgsSchema<[string, T | undefined]>((channel, args) => {
+    if (args.length < 1 || args.length > 2) {
+      throw new Error(`${channel} requires ${stringLabel}.`)
+    }
+    if (typeof args[0] !== 'string') {
+      throw new Error(`${channel} requires ${stringLabel} to be a string.`)
+    }
+    return [
+      normalizeStringArg(channel, stringLabel, args[0], options.maxBytes),
+      args[1] === undefined || args[1] === null
+        ? undefined
+        : normalizeObjectArg<T>(channel, objectLabel, args[1], validator),
+    ]
+  })
+}
+
+export function twoStringsAndOptionalObjectArgs<T extends object>(
+  firstLabel: string,
+  secondLabel: string,
+  objectLabel: string,
+  options: { firstMaxBytes?: number; secondMaxBytes?: number } = {},
+  validator?: IpcObjectValidator<T>,
+) {
+  return createIpcArgsSchema<[string, string, T | undefined]>((channel, args) => {
+    if (args.length < 2 || args.length > 3) {
+      throw new Error(`${channel} requires ${firstLabel} and ${secondLabel}.`)
+    }
+    if (typeof args[0] !== 'string' || typeof args[1] !== 'string') {
+      throw new Error(`${channel} requires ${firstLabel} and ${secondLabel} to be strings.`)
+    }
+    return [
+      normalizeStringArg(channel, firstLabel, args[0], options.firstMaxBytes),
+      normalizeStringArg(channel, secondLabel, args[1], options.secondMaxBytes),
+      args[2] === undefined || args[2] === null
+        ? undefined
+        : normalizeObjectArg<T>(channel, objectLabel, args[2], validator),
+    ]
+  })
+}
+
+export function objectAndObjectArgs<TFirst extends object, TSecond extends object>(
+  firstLabel: string,
+  secondLabel: string,
+  firstValidator?: IpcObjectValidator<TFirst>,
+  secondValidator?: IpcObjectValidator<TSecond>,
+) {
+  return createIpcArgsSchema<[TFirst, TSecond]>((channel, args) => {
+    if (args.length !== 2) {
+      throw new Error(`${channel} requires ${firstLabel} and ${secondLabel}.`)
+    }
+    return [
+      normalizeObjectArg<TFirst>(channel, firstLabel, args[0], firstValidator),
+      normalizeObjectArg<TSecond>(channel, secondLabel, args[1], secondValidator),
     ]
   })
 }
@@ -99,6 +169,7 @@ export function stringAndObjectArgs<T extends object>(
 export function objectAndOptionalStringArgs<T extends object>(
   objectLabel: string,
   optionalStringLabel: string,
+  validator?: IpcObjectValidator<T>,
 ) {
   return createIpcArgsSchema<[T, string | null | undefined]>((channel, args) => {
     if (args.length < 1 || args.length > 2) {
@@ -109,7 +180,7 @@ export function objectAndOptionalStringArgs<T extends object>(
       throw new Error(`${channel} requires ${optionalStringLabel} to be a string when provided.`)
     }
     return [
-      normalizeObjectArg<T>(channel, objectLabel, args[0]),
+      normalizeObjectArg<T>(channel, objectLabel, args[0], validator),
       token,
     ]
   })
@@ -144,9 +215,15 @@ function normalizeStringArg(channel: string, label: string, value: string, maxBy
   return trimmed
 }
 
-function normalizeObjectArg<T extends object>(channel: string, label: string, value: unknown): T {
+function normalizeObjectArg<T extends object>(
+  channel: string,
+  label: string,
+  value: unknown,
+  validator?: IpcObjectValidator<T>,
+): T {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${channel} requires ${label} to be an object.`)
   }
-  return value as T
+  const record = value as Record<string, unknown>
+  return validator ? validator(record, channel, label) : record as T
 }
