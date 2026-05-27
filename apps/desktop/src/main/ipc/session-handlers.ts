@@ -612,12 +612,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const workspaceId = readWorkspaceIdOption(options)
     const sessionId = normalizeSessionId(sessionIdInput)
     if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      const cloudWorkspaceId = workspaceId || context.workspaceGateway.activeWorkspaceId(event)
       await context.workspaceGateway.subscribeCloudSessionEvents(event, sessionId, {
-        workspaceId,
-        onEvent: (cloudEvent) => dispatchCloudWorkspaceSessionEvent(context, cloudEvent, event, workspaceId),
+        workspaceId: cloudWorkspaceId,
+        onEvent: (cloudEvent) => dispatchCloudWorkspaceSessionEvent(context, cloudEvent, event, cloudWorkspaceId),
         onError: (error) => context.logHandlerError(`cloud session:events ${shortSessionId(sessionId)}`, error),
       })
-      return context.workspaceGateway.getCloudSessionView(event, sessionId, workspaceId)
+      return context.workspaceGateway.getCloudSessionView(event, sessionId, cloudWorkspaceId)
     }
     try {
       const shouldRetryFullHydration = !options?.force && isSessionPartiallyHydrated(sessionId)

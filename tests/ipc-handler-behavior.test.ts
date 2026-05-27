@@ -505,7 +505,9 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
   })
 
   registerSessionHandlers(context)
-  await handlers.get('session:activate')?.({}, 'cloud-session-1', { workspaceId: 'cloud:test' })
+  const invokeEvent = { sender: { id: 202 } }
+  context.workspaceGateway.activate(invokeEvent, 'cloud:test')
+  await handlers.get('session:activate')?.(invokeEvent, 'cloud-session-1')
   assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
 
   subscribedEventHandler({
