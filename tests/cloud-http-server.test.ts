@@ -52,6 +52,11 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
           messageId: `${input.sessionId}:assistant:${this.prompts.length}`,
           content: `echo: ${text}`,
         },
+      }, {
+        type: 'session.idle',
+        payload: {
+          sessionId: input.sessionId,
+        },
       }],
     }
   }

@@ -670,8 +670,8 @@ function reduceProjectedEvent(
     case 'assistant.message':
       return addMessage({
         ...current,
-        status: 'idle',
-        isGenerating: false,
+        status: current.status,
+        isGenerating: current.isGenerating,
         lastError: null,
         updatedAt: eventTime,
       }, {
@@ -1432,7 +1432,7 @@ export class CloudSessionService {
     event: CloudRuntimeEvent
     leaseToken?: string | null
   }): Promise<SessionEventRecord> {
-    if (input.event.type === 'assistant.message' || input.event.type === 'session.idle') {
+    if (input.event.type === 'session.idle') {
       return this.updateStatusThenAppendRuntimeEvent(input, 'idle')
     } else if (input.event.type === 'session.status') {
       const statusType = readString(input.event.payload.statusType)

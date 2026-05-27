@@ -136,3 +136,63 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asArray(resolved.pendingApprovals).length, 0)
   assert.equal(asArray(resolved.pendingQuestions).length, 0)
 })
+
+test('cloud assistant chunks keep projection running until explicit idle event', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const service = new CloudSessionService(
+    store,
+    new FakeRuntime(),
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+  )
+  const principal = {
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.test',
+  }
+  const created = await service.createSession(principal)
+  const sessionId = created.session.sessionId
+
+  await store.updateSessionStatus({
+    tenantId: principal.tenantId,
+    sessionId,
+    status: 'running',
+  })
+  await service.appendProductEvent(principal, sessionId, {
+    type: 'prompt.submitted',
+    payload: {
+      messageId: 'command-1:user',
+      text: 'stream a long answer',
+      agent: 'build',
+    },
+  })
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: {
+      type: 'assistant.message',
+      payload: {
+        messageId: 'assistant-1',
+        content: 'partial answer',
+      },
+    },
+  })
+
+  const chunkView = asRecord(asRecord((await service.getSessionView(principal, sessionId)).projection).view)
+  assert.equal(chunkView.status, 'running')
+  assert.equal(chunkView.isGenerating, true)
+  assert.equal((await store.getSessionForTenant(principal.tenantId, sessionId))?.status, 'running')
+
+  await service.appendRuntimeEvent({
+    tenantId: principal.tenantId,
+    sessionId,
+    event: {
+      type: 'session.idle',
+      payload: { sessionId },
+    },
+  })
+
+  const idleView = asRecord(asRecord((await service.getSessionView(principal, sessionId)).projection).view)
+  assert.equal(idleView.status, 'idle')
+  assert.equal(idleView.isGenerating, false)
+  assert.equal((await store.getSessionForTenant(principal.tenantId, sessionId))?.status, 'idle')
+})
