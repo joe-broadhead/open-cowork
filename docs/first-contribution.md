@@ -53,13 +53,14 @@ pnpm typecheck    # TypeScript strict mode across all workspaces
 pnpm test         # repo unit/integration test suite
 pnpm test:renderer # Vitest/jsdom renderer component suite
 pnpm lint         # ESLint + security rules + repo-specific checks
-pnpm perf:check   # Regression gate against benchmarks/perf-baseline.json
+pnpm perf:check   # Regression gate against the matching perf baseline
 ```
 
 All five run on every PR in CI, so pushing green locally saves a
 round trip. If `perf:check` regresses and the regression is known-
 acceptable (e.g. you added a new benchmark case), refresh the
-baseline with `pnpm perf:baseline` and commit the updated JSON.
+environment-specific baseline with `pnpm perf:baseline` and commit the
+updated JSON.
 
 ## Renderer component tests
 

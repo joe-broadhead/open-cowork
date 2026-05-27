@@ -345,7 +345,8 @@ numbers / dates / currencies.
 
 ## Telemetry forwarding
 
-Every in-app event tracked by `telemetry.ts` (app launch, auth
+Every in-app event tracked by `apps/desktop/src/main/telemetry.ts`
+(app launch, auth
 login, session creation, perf-slow, error) is written to a local
 NDJSON file by default — no data leaves the user's machine.
 Downstream installs that want their own telemetry collector

@@ -13,8 +13,6 @@ import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { SessionRecord } from '../session-registry'
 import type { NativeConfirmationOptions } from '../native-confirmation.ts'
 
-export type ScopedTarget = ScopedArtifactRef & { directory: string | null }
-
 export type SessionClientContext = {
   client: OpencodeClient
   record: SessionRecord | null

@@ -143,10 +143,6 @@ export function primeShellEnvironment() {
   void startShellEnvironmentLoad()
 }
 
-export function getShellEnvironment() {
-  return shellEnvironmentCache
-}
-
 function dedupePathEntries(entries: string[]) {
   const seen = new Set<string>()
   const deduped: string[] = []
@@ -195,17 +191,5 @@ export async function prepareShellEnvironment(options?: { maxWaitMs?: number }) 
     log('runtime', 'Shell environment not ready; using fallback PATH entries')
     return null
   }
-  return shellEnvironment
-}
-
-export function applyShellEnvironment() {
-  const shellEnvironment = shellEnvironmentCache
-  if (!shellEnvironment) {
-    applyFallbackPath()
-    log('runtime', 'Shell environment unavailable; using fallback PATH entries')
-    return null
-  }
-
-  mergeShellEnvironment(shellEnvironment)
   return shellEnvironment
 }

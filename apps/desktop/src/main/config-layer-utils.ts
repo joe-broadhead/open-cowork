@@ -3,8 +3,8 @@ import { homedir } from 'os'
 import { join, resolve } from 'path'
 import type { OpenCoworkConfig } from './config-types.ts'
 
-export function deepMerge<T extends Record<string, any>>(base: T, override: Partial<T>): T {
-  const next: Record<string, any> = { ...base }
+export function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
+  const next: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(override || {})) {
     if (Array.isArray(value)) {
       next[key] = value
@@ -13,7 +13,9 @@ export function deepMerge<T extends Record<string, any>>(base: T, override: Part
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       const current = next[key]
       next[key] = deepMerge(
-        current && typeof current === 'object' && !Array.isArray(current) ? current : {},
+        current && typeof current === 'object' && !Array.isArray(current)
+          ? current as Record<string, unknown>
+          : {},
         value as Record<string, unknown>,
       )
       continue

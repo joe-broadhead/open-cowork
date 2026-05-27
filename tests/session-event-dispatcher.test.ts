@@ -29,6 +29,23 @@ function eventOf(type: string, sessionId?: string | null) {
   }
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function createWindowCollector(id: number) {
+  const sent: Array<{ channel: string; payload: unknown }> = []
+  const win = {
+    isDestroyed: () => false,
+    webContents: {
+      id,
+      isDestroyed: () => false,
+      send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
+    },
+  }
+  return { win, sent }
+}
+
 test('dispatcher derives renderer-safe text patches', () => {
   assert.deepEqual(getSessionPatch({
     type: 'text',
@@ -75,6 +92,228 @@ test('dispatcher derives renderer-safe text patches', () => {
 
   assert.equal(getSessionPatch(eventOf('done', 'session-1')), null)
   assert.equal(getSessionPatch(eventOf('error')), null)
+})
+
+test('dispatcher batches text patches in event order', async () => {
+  const { win, sent } = createWindowCollector(50)
+
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-order',
+    data: {
+      type: 'text',
+      messageId: 'message-1',
+      partId: 'part-1',
+      content: 'first',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-order',
+    data: {
+      type: 'text',
+      messageId: 'message-1',
+      partId: 'part-1',
+      content: 'second',
+      mode: 'append',
+    },
+  })
+
+  assert.equal(sent.some((entry) => entry.channel === 'session:patch'), false)
+  await wait(20)
+
+  assert.deepEqual(
+    sent.filter((entry) => entry.channel === 'session:patch').map((entry) => (entry.payload as { content?: string }).content),
+    ['first', 'second'],
+  )
+})
+
+test('dispatcher bounds queued patches and schedules full-view catch-up on overflow', async () => {
+  const { win, sent } = createWindowCollector(51)
+
+  for (let index = 0; index < 520; index += 1) {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-patch-overflow',
+      data: {
+        type: 'text',
+        messageId: 'message-overflow',
+        partId: `part-${index}`,
+        content: `chunk-${index}`,
+        mode: 'append',
+      },
+    })
+  }
+
+  await wait(80)
+
+  const patchCount = sent.filter((entry) => entry.channel === 'session:patch').length
+  assert.equal(patchCount, 0)
+  assert.equal(sent.some((entry) => entry.channel === 'session:view'), true)
+})
+
+test('dispatcher overflow drops only patches for the recovering session', async () => {
+  const { win, sent } = createWindowCollector(52)
+
+  for (let index = 0; index < 511; index += 1) {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-patch-overflow-scoped',
+      data: {
+        type: 'text',
+        messageId: 'message-overflow-scoped',
+        partId: `part-${index}`,
+        content: `overflow-${index}`,
+        mode: 'append',
+      },
+    })
+  }
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-neighbor',
+    data: {
+      type: 'text',
+      messageId: 'message-neighbor',
+      partId: 'part-neighbor',
+      content: 'neighbor',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-overflow-scoped',
+    data: {
+      type: 'text',
+      messageId: 'message-overflow-scoped',
+      partId: 'part-overflow-trigger',
+      content: 'overflow-trigger',
+      mode: 'append',
+    },
+  })
+
+  await wait(80)
+
+  const patchPayloads = sent
+    .filter((entry) => entry.channel === 'session:patch')
+    .map((entry) => {
+      const payload = entry.payload as { sessionId?: string; content?: string }
+      return {
+        sessionId: payload.sessionId,
+        content: payload.content,
+      }
+    })
+  assert.deepEqual(patchPayloads, [{
+    sessionId: 'session-patch-neighbor',
+    content: 'neighbor',
+  }])
+  assert.equal(
+    sent.some((entry) => entry.channel === 'session:view' && (entry.payload as { sessionId?: string }).sessionId === 'session-patch-overflow-scoped'),
+    true,
+  )
+})
+
+test('dispatcher flushes queued session patches before a full view is queued', async () => {
+  const { win, sent } = createWindowCollector(53)
+
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-view-recovers-patches',
+    data: {
+      type: 'text',
+      messageId: 'message-view-recovers',
+      partId: 'part-before-view',
+      content: 'before-view',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'busy',
+    sessionId: 'session-view-recovers-patches',
+    data: { type: 'busy' },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-view-recovers-patches',
+    data: {
+      type: 'text',
+      messageId: 'message-view-recovers',
+      partId: 'part-after-view-queued',
+      content: 'after-view-queued',
+      mode: 'append',
+    },
+  })
+
+  await wait(80)
+
+  const sessionEvents = sent
+    .filter((entry) => entry.channel === 'session:patch' || entry.channel === 'session:view')
+    .map((entry) => ({
+      channel: entry.channel,
+      sessionId: (entry.payload as { sessionId?: string }).sessionId,
+      content: (entry.payload as { content?: string }).content,
+    }))
+  assert.deepEqual(sessionEvents, [
+    {
+      channel: 'session:patch',
+      sessionId: 'session-view-recovers-patches',
+      content: 'before-view',
+    },
+    {
+      channel: 'session:patch',
+      sessionId: 'session-view-recovers-patches',
+      content: 'after-view-queued',
+    },
+    {
+      channel: 'session:view',
+      sessionId: 'session-view-recovers-patches',
+      content: undefined,
+    },
+  ])
+})
+
+test('history refresh flushes queued session patches before publishing the refreshed view', async () => {
+  const { win, sent } = createWindowCollector(54)
+  setSessionHistoryRefreshHandler(async () => undefined)
+
+  try {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-history-refresh-patches',
+      data: {
+        type: 'text',
+        messageId: 'message-history-refresh',
+        partId: 'part-before-history',
+        content: 'before-history-refresh',
+        mode: 'append',
+      },
+    })
+    dispatchRuntimeSessionEvent(win as any, eventOf('history_refresh', 'session-history-refresh-patches'))
+
+    await wait(30)
+
+    const sessionEvents = sent
+      .filter((entry) => entry.channel === 'session:patch' || entry.channel === 'session:view')
+      .map((entry) => ({
+        channel: entry.channel,
+        sessionId: (entry.payload as { sessionId?: string }).sessionId,
+        content: (entry.payload as { content?: string }).content,
+      }))
+    assert.deepEqual(sessionEvents, [
+      {
+        channel: 'session:patch',
+        sessionId: 'session-history-refresh-patches',
+        content: 'before-history-refresh',
+      },
+      {
+        channel: 'session:view',
+        sessionId: 'session-history-refresh-patches',
+        content: undefined,
+      },
+    ])
+  } finally {
+    setSessionHistoryRefreshHandler(null)
+  }
 })
 
 test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {

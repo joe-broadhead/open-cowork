@@ -56,17 +56,6 @@ function readManagedSkillMirrorRegistry(root: string): ManagedSkillMirrorRegistr
   }
 }
 
-export function readManagedSkillMirrorNames(root: string): Set<string> {
-  const registry = readManagedSkillMirrorRegistry(root)
-  if (!registry) {
-    return new Set()
-  }
-  const names = registry.skills?.length
-    ? registry.skills.map((skill) => skill.name)
-    : registry.skillNames || []
-  return new Set(normalizeSkillNames(names))
-}
-
 export function readCurrentManagedSkillMirrorNames(root: string): Set<string> {
   const registry = readManagedSkillMirrorRegistry(root)
   if (!registry?.skills?.length) return new Set()
