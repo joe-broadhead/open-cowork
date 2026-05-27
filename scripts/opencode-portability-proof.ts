@@ -12,22 +12,23 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { Phase0ControlPlaneProofStore } from '../apps/desktop/src/main/cloud/phase0-control-plane.ts'
+import { RuntimePortabilityProofStore } from './support/runtime-portability-proof-store.ts'
 import {
-  buildPhase0PortableRuntimeManifest,
-  isPhase0SecretBearingPath,
-  runtimePathsForPhase0,
-  type Phase0PortableRuntimeEntry,
-} from '../apps/desktop/src/main/cloud/phase0-runtime-portability.ts'
+  buildPortableRuntimeManifest,
+  isRuntimeSnapshotSecretBearingPath,
+  runtimePathsForPortability,
+  type PortableRuntimeEntry,
+} from '../apps/desktop/src/main/cloud/runtime-portability.ts'
 import { createManagedOpencodeServerAuth } from '../apps/desktop/src/main/runtime-managed-server-core.ts'
 import { createNodeManagedOpencodeServer } from '../apps/desktop/src/main/runtime-node-managed-server.ts'
 
-type RuntimePathSet = ReturnType<typeof runtimePathsForPhase0>
+type RuntimePathSet = ReturnType<typeof runtimePathsForPortability>
 
 type ProofCliOptions = {
   keep: boolean
@@ -49,7 +50,7 @@ type SdkSnapshot = {
 type ManifestCopyResult = {
   source: string
   target: string
-  kind: Phase0PortableRuntimeEntry['kind']
+  kind: PortableRuntimeEntry['kind']
   required: boolean
   secretBearing: boolean
   digest: string | null
@@ -72,7 +73,7 @@ function parseArgs(argv: string[]): ProofCliOptions {
     keep: false,
     json: false,
     opencodeBinPath: defaultOpencodeBinPath,
-    root: mkdtempSync(join(tmpdir(), 'open-cowork-phase0-proof-')),
+    root: mkdtempSync(join(tmpdir(), 'open-cowork-portability-proof-')),
     timeoutMs: 60_000,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -96,9 +97,9 @@ function parseArgs(argv: string[]): ProofCliOptions {
 }
 
 function printHelp() {
-  writeStdout(`Usage: pnpm proof:phase0:opencode-portability [--json] [--keep] [--root DIR] [--opencode-bin PATH] [--timeout-ms MS]
+  writeStdout(`Usage: pnpm proof:cloud:opencode-portability [--json] [--keep] [--root DIR] [--opencode-bin PATH] [--timeout-ms MS]
 
-Runs the Phase 0 OpenCode portability proof with isolated runtime homes:
+Runs the OpenCode portability proof with isolated runtime homes:
   1. start OpenCode runtime A through the Node RuntimeLauncher
   2. create and prompt a session without model credentials using noReply
   3. snapshot OpenCode/Cowork/workspace/artifact state
@@ -110,7 +111,7 @@ Runs the Phase 0 OpenCode portability proof with isolated runtime homes:
 
 function runtimePaths(root: string, name: string): RuntimePathSet {
   const home = join(root, name, 'runtime-home')
-  return runtimePathsForPhase0({
+  return runtimePathsForPortability({
     home,
     configHome: join(home, '.config'),
     dataHome: join(home, '.local', 'share'),
@@ -221,7 +222,19 @@ async function startRuntime(input: {
 }
 
 async function findAvailablePort() {
-  return 41_000 + Math.floor(Math.random() * 10_000)
+  return await new Promise<number>((resolvePort, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address ? address.port : null
+      server.close((error) => {
+        if (error) reject(error)
+        else if (port) resolvePort(port)
+        else reject(new Error('Could not reserve an available OpenCode runtime port.'))
+      })
+    })
+  })
 }
 
 function seedPortableRuntimeContent(input: {
@@ -231,12 +244,12 @@ function seedPortableRuntimeContent(input: {
   workspaceDir: string
 }) {
   const files = [
-    [join(input.runtimePaths.home, 'runtime-skill-catalog', 'catalog.json'), '{"skills":["phase0"]}\n'],
-    [join(input.runtimePaths.home, 'managed-skills', 'phase0', 'SKILL.md'), '# Managed Phase 0 Skill\n'],
-    [join(input.workspaceDir, 'README.md'), 'Phase 0 workspace fixture\n'],
-    [join(input.workspaceDir, '.env.phase0'), 'PHASE0_DUMMY_SECRET=secret\n'],
+    [join(input.runtimePaths.home, 'runtime-skill-catalog', 'catalog.json'), '{"skills":["portability"]}\n'],
+    [join(input.runtimePaths.home, 'managed-skills', 'portability', 'SKILL.md'), '# Managed Portability Skill\n'],
+    [join(input.workspaceDir, 'README.md'), 'Portability proof workspace fixture\n'],
+    [join(input.workspaceDir, '.env.portability'), 'PORTABILITY_DUMMY_SECRET=secret\n'],
     [join(input.artifactDir, 'chart-artifact.json'), '{"artifact":true}\n'],
-    [input.metadataPath, '{"sessions":[],"phase0":true}\n'],
+    [input.metadataPath, '{"sessions":[],"portabilityProof":true}\n'],
     [join(dirname(input.metadataPath), 'settings.enc'), 'dummy encrypted settings fixture\n'],
   ] as const
 
@@ -253,10 +266,10 @@ function writeCoworkSessionMetadata(input: {
 }) {
   mkdirSync(dirname(input.metadataPath), { recursive: true })
   writeFileSync(input.metadataPath, `${JSON.stringify({
-    phase0: true,
+    portabilityProof: true,
     sessions: [{
       id: input.sessionId,
-      title: 'Phase 0 portability proof',
+      title: 'OpenCode portability proof',
       kind: 'chat',
       opencodeDirectory: input.workspaceDir,
     }],
@@ -299,11 +312,11 @@ function cleanupProofRoot(root: string) {
     rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    writeStderr(`Warning: Phase 0 proof passed, but temporary root cleanup failed: ${message}`)
+    writeStderr(`Warning: OpenCode portability proof passed, but temporary root cleanup failed: ${message}`)
   }
 }
 
-export function mapPhase0PortableEntryPath(input: {
+export function mapPortableEntryPath(input: {
   path: string
   sourceArtifactDir: string
   sourceMetadataPath: string
@@ -330,13 +343,13 @@ export function mapPhase0PortableEntryPath(input: {
       return resolve(targetRoot, rel)
     }
   }
-  throw new Error(`No Phase 0 restore mapping for ${input.path}`)
+  throw new Error(`No portable restore mapping for ${input.path}`)
 }
 
 function copyPortableManifest(input: {
   artifactDirA: string
   artifactDirB: string
-  manifest: Phase0PortableRuntimeEntry[]
+  manifest: PortableRuntimeEntry[]
   metadataPathA: string
   metadataPathB: string
   runtimePathsA: RuntimePathSet
@@ -346,7 +359,7 @@ function copyPortableManifest(input: {
 }) {
   const results: ManifestCopyResult[] = []
   for (const entry of input.manifest) {
-    const target = mapPhase0PortableEntryPath({
+    const target = mapPortableEntryPath({
       path: entry.path,
       sourceArtifactDir: input.artifactDirA,
       sourceMetadataPath: input.metadataPathA,
@@ -358,7 +371,7 @@ function copyPortableManifest(input: {
       targetWorkspaceDir: input.workspaceDirB,
     })
     const sourceExists = existsSync(entry.path)
-    if (!sourceExists && entry.required) throw new Error(`Required Phase 0 portable path is missing: ${entry.path}`)
+    if (!sourceExists && entry.required) throw new Error(`Required portable path is missing: ${entry.path}`)
     if (sourceExists && entry.kind !== 'opencode-cache') {
       mkdirSync(dirname(target), { recursive: true })
       cpSync(entry.path, target, { recursive: true })
@@ -368,7 +381,7 @@ function copyPortableManifest(input: {
       target,
       kind: entry.kind,
       required: entry.required,
-      secretBearing: entry.secretBearing || isPhase0SecretBearingPath(entry.path),
+      secretBearing: entry.secretBearing || isRuntimeSnapshotSecretBearingPath(entry.path),
       digest: sourceExists ? hashPath(entry.path) : null,
       copied: sourceExists && entry.kind !== 'opencode-cache',
     })
@@ -406,7 +419,7 @@ export function digestSdkSnapshot(snapshot: SdkSnapshot) {
   }
 }
 
-export function assertPhase0SnapshotsMatch(before: SdkSnapshot, after: SdkSnapshot) {
+export function assertPortabilitySnapshotsMatch(before: SdkSnapshot, after: SdkSnapshot) {
   assert.deepEqual(digestSdkSnapshot(after), digestSdkSnapshot(before))
 }
 
@@ -457,7 +470,7 @@ async function waitForPromptMessage(input: {
 }
 
 function runControlPlaneProof(sessionId: string) {
-  const store = new Phase0ControlPlaneProofStore()
+  const store = new RuntimePortabilityProofStore()
   const first = store.claimSession(sessionId, 'worker-a', new Date('2026-05-26T00:00:00.000Z'), 1000)
   assert.ok(first)
   store.writeProjection(first, 1)
@@ -501,7 +514,7 @@ function runControlPlaneProof(sessionId: string) {
   }
 }
 
-export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions) {
+export async function runOpencodePortabilityProof(options: ProofCliOptions) {
   const runtimePathsA = runtimePaths(options.root, 'a')
   const runtimePathsB = runtimePaths(options.root, 'b')
   const workspaceDirA = join(options.root, 'a', 'workspace')
@@ -511,7 +524,7 @@ export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions
   const metadataPathA = join(options.root, 'a', 'sessions.json')
   const metadataPathB = join(options.root, 'b', 'sessions.json')
   const settingsPathA = join(options.root, 'a', 'settings.enc')
-  const promptText = `phase0 portability proof ${Date.now()}`
+  const promptText = `opencode portability proof ${Date.now()}`
 
   seedPortableRuntimeContent({
     artifactDir: artifactDirA,
@@ -519,7 +532,7 @@ export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions
     runtimePaths: runtimePathsA,
     workspaceDir: workspaceDirA,
   })
-  const manifest = buildPhase0PortableRuntimeManifest({
+  const manifest = buildPortableRuntimeManifest({
     runtimePaths: runtimePathsA,
     workspaceDirs: [workspaceDirA],
     artifactDirs: [artifactDirA],
@@ -537,7 +550,7 @@ export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions
   try {
     const created = await runtimeA.client.session.create({
       directory: workspaceDirA,
-      title: 'Phase 0 portability proof',
+      title: 'OpenCode portability proof',
     }, { throwOnError: true })
     sessionId = created.data.id
     writeCoworkSessionMetadata({
@@ -589,7 +602,7 @@ export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions
       sessionId,
       workspaceDir: workspaceDirB,
     })
-    assertPhase0SnapshotsMatch(before!, after)
+    assertPortabilitySnapshotsMatch(before!, after)
   } finally {
     runtimeB.server.close()
     await delay(2000)
@@ -615,10 +628,10 @@ export async function runPhase0OpencodePortabilityProof(options: ProofCliOptions
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   try {
-    const report = await runPhase0OpencodePortabilityProof(options)
+    const report = await runOpencodePortabilityProof(options)
     if (options.json) writeStdout(JSON.stringify(report, null, 2))
     else {
-      writeStdout(`Phase 0 OpenCode portability proof passed for ${report.sessionId}`)
+      writeStdout(`OpenCode portability proof passed for ${report.sessionId}`)
       writeStdout(`Restored ${report.copied.filter((entry) => entry.copied).length} portable entries; omitted cache as optional.`)
       writeStdout(`Secret-bearing paths classified: ${report.secretBearingPaths.length}`)
     }

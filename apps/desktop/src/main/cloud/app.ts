@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import type { IncomingMessage } from 'node:http'
-import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../config-types.ts'
+import { DEFAULT_CONFIG, type CloudAuthConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import {
   resolveCloudRuntimePolicy,
@@ -29,14 +29,19 @@ import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapte
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import { createCloudSecretAdapterFromEnv } from './secret-adapter.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
-import { CloudScheduler, CloudSessionService, CloudWorker, type CloudPrincipal } from './session-service.ts'
+import { CloudSessionService, type CloudPrincipal } from './session-service.ts'
+import { CloudScheduler } from './scheduler.ts'
+import { CloudWorker } from './worker.ts'
 import {
   createObjectWorkspaceCheckpointStore,
   defaultCloudSessionCheckpointRoots,
   type WorkspaceCheckpointStore,
 } from './workspace-checkpoint-store.ts'
+import type { WorkflowWebhookSecurityStore } from '../workflow/workflow-webhook-server.ts'
 
 type Env = Record<string, string | undefined>
+
+const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
 
 export type CloudRoleRuntimeFactoryInput = {
   paths: PathProvider
@@ -145,20 +150,46 @@ function resolveEnvRef(ref: string | undefined, env: Env) {
   return envValue(env, envName)
 }
 
+function parseCsv(value: string | null) {
+  return value?.split(',').map((entry) => entry.trim()).filter(Boolean) || null
+}
+
+export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = process.env): CloudAuthConfig {
+  const requestedMode = envValue(env, 'OPEN_COWORK_CLOUD_AUTH_MODE')
+  const mode = requestedMode === 'oidc' || requestedMode === 'header' || requestedMode === 'none'
+    ? requestedMode
+    : config.cloud.auth.mode
+  return {
+    ...config.cloud.auth,
+    mode,
+    issuerUrl: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_ISSUER_URL') || config.cloud.auth.issuerUrl,
+    clientId: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_ID') || config.cloud.auth.clientId,
+    clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
+    callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
+    cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
+    allowedEmailDomains: parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains,
+  }
+}
+
 export function resolveCloudControlPlaneUrl(config: OpenCoworkConfig, env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL')
     || resolveEnvRef(config.cloud.storage.controlPlane.urlRef, env)
 }
 
-export function resolveCloudCookieSecret(config: OpenCoworkConfig, env: Env = process.env) {
+export function resolveCloudCookieSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
     || resolveEnvRef(config.cloud.auth.cookieSecretRef, env)
     || envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
 }
 
-export function resolveCloudOidcClientSecret(config: OpenCoworkConfig, env: Env = process.env) {
+export function resolveCloudOidcClientSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET')
     || resolveEnvRef(config.cloud.auth.clientSecretRef, env)
+}
+
+export function resolveCloudInternalToken(env: Env = process.env) {
+  return envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN')
+    || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF') || undefined, env)
 }
 
 export async function createControlPlaneStoreForCloud(
@@ -242,14 +273,53 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
   }
 }
 
+export function createLocalCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}): CloudAuthResolver {
+  return () => ({
+    tenantId: defaults.tenantId || 'default',
+    tenantName: defaults.tenantName || defaults.tenantId || 'Default',
+    userId: defaults.userId || 'local-user',
+    email: defaults.email || 'local@example.test',
+  })
+}
+
 export function createCloudAuthResolverForConfig(
-  config: OpenCoworkConfig,
+  config: Pick<OpenCoworkConfig, 'cloud'>,
   options: OidcCloudAuthResolverOptions = {},
 ): CloudAuthResolver {
   if (config.cloud.auth.mode === 'oidc') {
     return createOidcCloudAuthResolver(config.cloud.auth, options)
   }
-  return createHeaderCloudAuthResolver()
+  if (config.cloud.auth.mode === 'header') {
+    return createHeaderCloudAuthResolver()
+  }
+  return createLocalCloudAuthResolver()
+}
+
+export function isLoopbackCloudHost(hostname: string | null | undefined) {
+  const host = (hostname || '').trim().toLowerCase()
+  if (!host) return false
+  return host === 'localhost'
+    || host === '::1'
+    || host === '[::1]'
+    || host === '::ffff:127.0.0.1'
+    || host === '[::ffff:127.0.0.1]'
+    || host === '127.0.0.1'
+    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+
+export function assertCloudAuthDeploymentSafe(input: {
+  role: CloudRuntimePolicy['role']
+  hostname: string
+  auth: CloudAuthConfig
+  env?: Env
+}) {
+  if (!shouldRunCloudWeb(input.role)) return
+  if (input.auth.mode !== 'none') return
+  if (isLoopbackCloudHost(input.hostname)) return
+  if (parseBoolean(envValue(input.env || process.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) return
+  throw new Error(
+    `Cloud auth mode "none" may only bind to loopback addresses. Set cloud.auth.mode to "oidc" for public browser/JWT auth, "header" for a trusted reverse proxy, or set ${ALLOW_INSECURE_CLOUD_AUTH_ENV}=true for an explicit local/demo override.`,
+  )
 }
 
 async function routeRuntimeEvent(
@@ -264,26 +334,54 @@ async function routeRuntimeEvent(
   await worker.appendRuntimeEvent(session.tenantId, session.sessionId, event)
 }
 
-function startWorkerLoop(worker: CloudWorker, pollMs: number) {
+function loopErrorAttributes(error: unknown) {
+  return {
+    error_name: error instanceof Error ? error.name : 'Error',
+    error_message: error instanceof Error ? error.message : String(error),
+  }
+}
+
+async function recordLoopError(
+  observability: CloudObservabilityAdapter | null,
+  name: string,
+  error: unknown,
+  attributes: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  await observability?.log({
+    level: 'error',
+    name,
+    message: error instanceof Error ? error.message : String(error),
+    attributes: {
+      ...attributes,
+      ...loopErrorAttributes(error),
+    },
+  })
+}
+
+function startWorkerLoop(worker: CloudWorker, pollMs: number, observability: CloudObservabilityAdapter | null) {
   let active = false
   const timer = setInterval(() => {
     if (active) return
     active = true
-    void worker.processAllSessionCommands().finally(() => {
-      active = false
-    })
+    void worker.processAllSessionCommands()
+      .catch((error) => recordLoopError(observability, 'cloud.worker.loop.error', error))
+      .finally(() => {
+        active = false
+      })
   }, pollMs)
   return () => clearInterval(timer)
 }
 
-function startSchedulerLoop(scheduler: CloudScheduler, pollMs: number) {
+function startSchedulerLoop(scheduler: CloudScheduler, pollMs: number, observability: CloudObservabilityAdapter | null) {
   let active = false
   const timer = setInterval(() => {
     if (active) return
     active = true
-    void scheduler.processDueWorkflows().finally(() => {
-      active = false
-    })
+    void scheduler.processDueWorkflows()
+      .catch((error) => recordLoopError(observability, 'cloud.scheduler.loop.error', error))
+      .finally(() => {
+        active = false
+      })
   }, pollMs)
   return () => clearInterval(timer)
 }
@@ -298,6 +396,21 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const envOptions = resolveCloudBootstrapOptionsFromEnv(env)
   const config = options.config || DEFAULT_CONFIG
   const policy = resolveCloudRuntimePolicy(config, env)
+  const authConfig = resolveCloudAuthConfig(config, env)
+  const listenHostname = options.hostname || envOptions.hostname
+  assertCloudAuthDeploymentSafe({
+    role: policy.role,
+    hostname: listenHostname,
+    auth: authConfig,
+    env,
+  })
+  const resolvedAuthConfig = {
+    ...config,
+    cloud: {
+      ...config.cloud,
+      auth: authConfig,
+    },
+  }
   const hasObservabilityOverride = Object.prototype.hasOwnProperty.call(options, 'observability')
   const observability = hasObservabilityOverride
     ? options.observability || null
@@ -325,7 +438,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const service = new CloudSessionService(store, runtime, policy)
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
-  const cookieSecret = resolveCloudCookieSecret(config, env)
+  const cookieSecret = resolveCloudCookieSecret(resolvedAuthConfig, env)
   const sessionCookies = shouldRunCloudWeb(policy.role)
     ? hasSessionCookieOverride
       ? options.sessionCookies || null
@@ -340,9 +453,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const browserAuth = shouldRunCloudWeb(policy.role)
     ? hasBrowserAuthOverride
       ? options.browserAuth || null
-      : sessionCookies && cookieSecret && config.cloud.auth.mode === 'oidc'
-        ? createOidcBrowserAuthProvider(config.cloud.auth, {
-            clientSecret: resolveCloudOidcClientSecret(config, env),
+      : sessionCookies && cookieSecret && authConfig.mode === 'oidc'
+        ? createOidcBrowserAuthProvider(authConfig, {
+            clientSecret: resolveCloudOidcClientSecret(resolvedAuthConfig, env),
             publicUrl: envOptions.publicUrl,
             stateCookieSecret: cookieSecret,
             secureCookies: envOptions.cookieSecure,
@@ -386,16 +499,22 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
 
   const runtimeUnsubscribe = worker && runtime.subscribeEvents
     ? await runtime.subscribeEvents((event) => {
-        void routeRuntimeEvent(store, worker, event).catch(() => {})
+        void routeRuntimeEvent(store, worker, event).catch((error) => recordLoopError(
+          observability,
+          'cloud.worker.runtime_event.error',
+          error,
+          { event_type: event.type },
+        ))
       })
     : null
   const stopWorkerLoop = worker
-    ? startWorkerLoop(worker, options.workerPollMs || envOptions.workerPollMs)
+    ? startWorkerLoop(worker, options.workerPollMs || envOptions.workerPollMs, observability)
     : null
   const stopSchedulerLoop = scheduler
-    ? startSchedulerLoop(scheduler, options.schedulerPollMs || envOptions.schedulerPollMs)
+    ? startSchedulerLoop(scheduler, options.schedulerPollMs || envOptions.schedulerPollMs, observability)
     : null
 
+  const webhookSecurity = isWorkflowWebhookSecurityStore(store) ? store : undefined
   const server = shouldRunCloudWeb(policy.role)
       ? createCloudHttpServer({
         service,
@@ -405,13 +524,15 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         sessionCookies,
         observability,
         browserAuth,
-        auth: options.auth || createCloudAuthResolverForConfig(config),
+        auth: options.auth || createCloudAuthResolverForConfig(resolvedAuthConfig),
+        internalToken: resolveCloudInternalToken(env),
+        webhookSecurity,
         autoProcessCommands: options.autoProcessCommands ?? (policy.role === 'all-in-one' && envOptions.autoProcessCommands),
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
       })
     : null
   const url = server
-    ? await server.listen(options.port ?? envOptions.port, options.hostname || envOptions.hostname)
+    ? await server.listen(options.port ?? envOptions.port, listenHostname)
     : null
 
   return {
@@ -438,4 +559,13 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       await store.close?.()
     },
   }
+}
+
+function isWorkflowWebhookSecurityStore(store: ControlPlaneStore): store is ControlPlaneStore & WorkflowWebhookSecurityStore {
+  const candidate = store as Partial<WorkflowWebhookSecurityStore>
+  return typeof candidate.claimRequest === 'function'
+    && typeof candidate.checkAuthBackoff === 'function'
+    && typeof candidate.recordAuthFailure === 'function'
+    && typeof candidate.claimSignature === 'function'
+    && typeof candidate.clear === 'function'
 }

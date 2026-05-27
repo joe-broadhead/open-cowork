@@ -9,10 +9,22 @@ fullnameOverride: ""
 cloud:
   profile: full
   root: /data/open-cowork-cloud
+  allowInsecureAuth: false
+  allowInsecurePublicAuth: false
+  auth:
+    mode: none
+    oidcIssuerUrl: ""
+    oidcClientId: ""
+    oidcClientSecretRef: ""
+    oidcCallbackPath: /auth/callback
+    allowedEmailDomains: []
   controlPlaneUrl: ""
   secretKey: ""
   secretKeyRef: ""
   cookieSecret: ""
+  cookieSecretRef: ""
+  internalToken: ""
+  internalTokenRef: ""
   cookieSecure: true
   publicUrl: ""
   oidcClientSecret: ""
@@ -26,7 +38,7 @@ cloud:
   checkpoints:
     enabled: false
   objectStore:
-    kind: s3
+    kind: filesystem
     bucket: ""
     region: ""
     endpoint: ""
@@ -40,22 +52,22 @@ cloud:
 roles:
   web:
     enabled: true
-    replicas: 2
+    replicas: 1
     port: 8787
     autoProcessCommands: false
     resources: {}
   worker:
-    enabled: true
+    enabled: false
     replicas: 1
     pollMs: 1000
     checkpointsEnabled: true
     resources: {}
     persistence:
-      enabled: true
+      enabled: false
       size: 20Gi
       storageClassName: ""
   scheduler:
-    enabled: true
+    enabled: false
     replicas: 1
     pollMs: 1000
     resources: {}
@@ -63,6 +75,18 @@ roles:
 service:
   type: ClusterIP
   port: 80
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 
 ingress:
   enabled: false

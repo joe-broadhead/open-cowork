@@ -58,7 +58,7 @@ export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'scheduler'])
-const CLOUD_AUTH_MODES = new Set(['none', 'oidc'])
+const CLOUD_AUTH_MODES = new Set(['none', 'header', 'oidc'])
 const CLOUD_CONTROL_PLANE_KINDS = new Set(['local', 'postgres'])
 const CLOUD_OBJECT_STORE_KINDS = new Set(['filesystem', 's3', 'gcs', 'azure-blob', 'digitalocean-spaces', 'minio'])
 

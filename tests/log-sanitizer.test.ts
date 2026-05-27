@@ -53,6 +53,27 @@ test('sanitizeForExport redacts generic bearer authorization headers', () => {
   assert.match(exported, /\[REDACTED_TOKEN\]/)
 })
 
+test('sanitizeForExport redacts managed runtime Basic authorization headers', () => {
+  const exported = sanitizeForExport('Authorization: Basic b3BlbmNvd29yazpzZWNyZXQ=')
+  assert.ok(!exported.includes('b3BlbmNvd29yazpzZWNyZXQ='))
+  assert.match(exported, /\[REDACTED_TOKEN\]/)
+})
+
+test('sanitizeLogMessage redacts managed runtime env-backed secrets', () => {
+  process.env.OPENCODE_SERVER_PASSWORD = 'managed-runtime-password'
+  process.env.OPENCODE_CONFIG_CONTENT = '{"provider":{"secret":"value"}}'
+
+  const sanitized = sanitizeLogMessage(
+    'password managed-runtime-password config {"provider":{"secret":"value"}}',
+  )
+
+  assert.ok(!sanitized.includes('managed-runtime-password'))
+  assert.ok(!sanitized.includes('provider'))
+  assert.equal((sanitized.match(/\[REDACTED_SECRET\]/g) || []).length, 2)
+  delete process.env.OPENCODE_SERVER_PASSWORD
+  delete process.env.OPENCODE_CONFIG_CONTENT
+})
+
 test('sanitizeLogMessage redacts cloud connection strings and keyed high-entropy values', () => {
   const googleSecret = ['GOC', 'SPX', '-abcdefghijklmnopqrstuvwxyz1234567890'].join('')
   const genericSecret = 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ'

@@ -238,7 +238,7 @@ export type CloudProfileConfig = {
 }
 
 export type CloudAuthConfig = {
-  mode: 'none' | 'oidc'
+  mode: 'none' | 'header' | 'oidc'
   issuerUrl?: string
   clientId?: string
   clientSecretRef?: string

@@ -1,4 +1,4 @@
-export type Phase0Lease = {
+export type PortabilityProofLease = {
   sessionId: string
   leasedBy: string
   leaseToken: string
@@ -6,25 +6,25 @@ export type Phase0Lease = {
   checkpointVersion: number
 }
 
-export type Phase0CommandKind =
+export type PortabilityProofCommandKind =
   | 'prompt'
   | 'abort'
   | 'permission.respond'
   | 'question.reply'
 
-export type Phase0CommandStatus = 'pending' | 'running' | 'acked' | 'failed'
+export type PortabilityProofCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 
-export type Phase0SessionCommand = {
+export type PortabilityProofSessionCommand = {
   commandId: string
   tenantId: string
   userId: string
   sessionId: string
-  kind: Phase0CommandKind
+  kind: PortabilityProofCommandKind
   payload: Record<string, unknown>
   targetLeaseToken: string | null
   createdSeq: number
   createdAt: string
-  status: Phase0CommandStatus
+  status: PortabilityProofCommandStatus
   ackedBy: string | null
   ackedAt: string | null
   error: string | null
@@ -32,12 +32,12 @@ export type Phase0SessionCommand = {
 
 type SessionState = {
   sessionId: string
-  lease: Phase0Lease | null
+  lease: PortabilityProofLease | null
   nextLeaseAttempt: number
   nextCommandSeq: number
   checkpointVersion: number
   projectionSeq: number
-  commands: Phase0SessionCommand[]
+  commands: PortabilityProofSessionCommand[]
 }
 
 type EnqueueCommandInput = {
@@ -45,7 +45,7 @@ type EnqueueCommandInput = {
   tenantId: string
   userId: string
   sessionId: string
-  kind: Phase0CommandKind
+  kind: PortabilityProofCommandKind
   payload?: Record<string, unknown>
   targetLeaseToken?: string | null
   createdAt?: Date
@@ -62,18 +62,18 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function cloneCommand(command: Phase0SessionCommand): Phase0SessionCommand {
+function cloneCommand(command: PortabilityProofSessionCommand): PortabilityProofSessionCommand {
   return {
     ...command,
     payload: { ...command.payload },
   }
 }
 
-function cloneLease(lease: Phase0Lease): Phase0Lease {
+function cloneLease(lease: PortabilityProofLease): PortabilityProofLease {
   return { ...lease }
 }
 
-export class Phase0ControlPlaneProofStore {
+export class RuntimePortabilityProofStore {
   private readonly sessions = new Map<string, SessionState>()
 
   ensureSession(sessionId: string) {
@@ -92,12 +92,12 @@ export class Phase0ControlPlaneProofStore {
     return session
   }
 
-  claimSession(sessionId: string, workerId: string, now = new Date(), ttlMs = 30_000): Phase0Lease | null {
+  claimSession(sessionId: string, workerId: string, now = new Date(), ttlMs = 30_000): PortabilityProofLease | null {
     const session = this.ensureSession(sessionId)
     const nowMs = now.getTime()
     if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
     const attempt = session.nextLeaseAttempt += 1
-    const lease: Phase0Lease = {
+    const lease: PortabilityProofLease = {
       sessionId,
       leasedBy: workerId,
       leaseToken: `${sessionId}:${attempt}:${workerId}`,
@@ -108,7 +108,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneLease(lease)
   }
 
-  renewLease(lease: Phase0Lease, now = new Date(), ttlMs = 30_000): Phase0Lease {
+  renewLease(lease: PortabilityProofLease, now = new Date(), ttlMs = 30_000): PortabilityProofLease {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     session.lease = {
@@ -118,7 +118,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneLease(session.lease)
   }
 
-  checkpoint(lease: Phase0Lease): Phase0Lease {
+  checkpoint(lease: PortabilityProofLease): PortabilityProofLease {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     if (lease.checkpointVersion !== session.checkpointVersion) {
@@ -132,7 +132,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneLease(session.lease)
   }
 
-  writeProjection(lease: Phase0Lease, sequence: number) {
+  writeProjection(lease: PortabilityProofLease, sequence: number) {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     if (lease.checkpointVersion !== session.checkpointVersion) {
@@ -145,7 +145,7 @@ export class Phase0ControlPlaneProofStore {
     return { sessionId: session.sessionId, projectionSeq: session.projectionSeq }
   }
 
-  enqueueCommand(input: EnqueueCommandInput): Phase0SessionCommand {
+  enqueueCommand(input: EnqueueCommandInput): PortabilityProofSessionCommand {
     const session = this.ensureSession(input.sessionId)
     const payload = input.payload || {}
     const existing = session.commands.find((command) => command.commandId === input.commandId)
@@ -162,7 +162,7 @@ export class Phase0ControlPlaneProofStore {
       }
       return cloneCommand(existing)
     }
-    const command: Phase0SessionCommand = {
+    const command: PortabilityProofSessionCommand = {
       commandId: input.commandId,
       tenantId: input.tenantId,
       userId: input.userId,
@@ -181,7 +181,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneCommand(command)
   }
 
-  claimNextCommand(lease: Phase0Lease): Phase0SessionCommand | null {
+  claimNextCommand(lease: PortabilityProofLease): PortabilityProofSessionCommand | null {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     const command = session.commands.find((entry) => (
@@ -194,7 +194,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneCommand(command)
   }
 
-  ackCommand(lease: Phase0Lease, commandId: string, now = new Date()): Phase0SessionCommand {
+  ackCommand(lease: PortabilityProofLease, commandId: string, now = new Date()): PortabilityProofSessionCommand {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     const command = this.requireCommand(session, commandId)
@@ -208,7 +208,7 @@ export class Phase0ControlPlaneProofStore {
     return cloneCommand(command)
   }
 
-  failCommand(lease: Phase0Lease, commandId: string, error: string): Phase0SessionCommand {
+  failCommand(lease: PortabilityProofLease, commandId: string, error: string): PortabilityProofSessionCommand {
     const session = this.requireSession(lease.sessionId)
     this.assertCurrentLease(session, lease)
     const command = this.requireCommand(session, commandId)
@@ -237,7 +237,7 @@ export class Phase0ControlPlaneProofStore {
     return command
   }
 
-  private assertCurrentLease(session: SessionState, lease: Phase0Lease) {
+  private assertCurrentLease(session: SessionState, lease: PortabilityProofLease) {
     if (!session.lease || session.lease.leaseToken !== lease.leaseToken) {
       throw new Error('Worker lease is stale.')
     }

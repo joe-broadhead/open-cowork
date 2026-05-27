@@ -21,6 +21,9 @@ Example Helm overrides:
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud \
   --set cloud.profile=full \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl=https://accounts.google.com \
+  --set cloud.auth.oidcClientId=CLIENT_ID \
   --set cloud.checkpoints.enabled=true \
   --set cloud.objectStore.kind=gcs \
   --set cloud.objectStore.bucket=OPEN_COWORK_BUCKET \

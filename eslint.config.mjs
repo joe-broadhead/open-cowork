@@ -111,6 +111,38 @@ export default [
       'jsx-a11y/no-static-element-interactions': 'error',
       'jsx-a11y/no-noninteractive-element-interactions': 'error',
       'jsx-a11y/label-has-associated-control': 'error',
+      'no-restricted-imports': ['error', {
+        paths: [
+          'electron',
+          'fs',
+          'fs/promises',
+          'node:fs',
+          'node:fs/promises',
+          'net',
+          'node:net',
+          'child_process',
+          'node:child_process',
+          'os',
+          'node:os',
+          'process',
+          'node:process',
+        ],
+        patterns: [
+          {
+            group: [
+              '../main/**',
+              '../../main/**',
+              '../../../main/**',
+              'apps/desktop/src/main/**',
+              '../preload/**',
+              '../../preload/**',
+              '../../../preload/**',
+              'apps/desktop/src/preload/**',
+            ],
+            message: 'Renderer code must stay behind the preload bridge and must not import main or preload code.',
+          },
+        ],
+      }],
     },
   },
   {

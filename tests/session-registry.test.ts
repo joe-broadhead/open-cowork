@@ -194,8 +194,7 @@ test('legacy session registry migration keeps only Cowork-created sessions from 
     assert.deepEqual(persisted.map((record) => record.id), [managedId])
     assert.equal(persisted[0]?.managedByCowork, true)
   } finally {
-    closeLogger()
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await closeLogger()
     clearSessionRegistryCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR

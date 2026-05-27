@@ -7,10 +7,14 @@ import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import {
+  assertCloudAuthDeploymentSafe,
   createControlPlaneStoreForCloud,
   createHeaderCloudAuthResolver,
+  createCloudAuthResolverForConfig,
+  resolveCloudAuthConfig,
   resolveCloudControlPlaneUrl,
   resolveCloudBootstrapOptionsFromEnv,
+  resolveCloudInternalToken,
   resolveCloudOidcClientSecret,
   shouldRunCloudScheduler,
   shouldRunCloudWeb,
@@ -195,6 +199,100 @@ test('cloud OIDC client secret resolves from explicit env before config refs', (
   }), 'from-env')
 })
 
+test('cloud internal token resolves from explicit env before env refs', () => {
+  assert.equal(resolveCloudInternalToken({
+    OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF: 'INTERNAL_TOKEN_REF',
+    INTERNAL_TOKEN_REF: 'from-ref',
+  }), 'from-ref')
+  assert.equal(resolveCloudInternalToken({
+    OPEN_COWORK_CLOUD_INTERNAL_TOKEN: 'from-env',
+    OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF: 'INTERNAL_TOKEN_REF',
+    INTERNAL_TOKEN_REF: 'from-ref',
+  }), 'from-env')
+})
+
+test('cloud auth config resolves OIDC deployment settings from env', () => {
+  const resolved = resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_OIDC_ISSUER_URL: 'https://issuer.example.test',
+    OPEN_COWORK_CLOUD_OIDC_CLIENT_ID: 'open-cowork-cloud',
+    OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF: 'env:OIDC_CLIENT_SECRET',
+    OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH: '/auth/oidc/callback',
+    OPEN_COWORK_CLOUD_COOKIE_SECRET_REF: 'env:COOKIE_SECRET',
+    OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: 'example.test,example.org',
+  })
+
+  assert.equal(resolved.mode, 'oidc')
+  assert.equal(resolved.issuerUrl, 'https://issuer.example.test')
+  assert.equal(resolved.clientId, 'open-cowork-cloud')
+  assert.equal(resolved.clientSecretRef, 'env:OIDC_CLIENT_SECRET')
+  assert.equal(resolved.callbackPath, '/auth/oidc/callback')
+  assert.equal(resolved.cookieSecretRef, 'env:COOKIE_SECRET')
+  assert.deepEqual(resolved.allowedEmailDomains, ['example.test', 'example.org'])
+})
+
+test('cloud auth config supports explicit trusted header mode', async () => {
+  const resolved = resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+  })
+  assert.equal(resolved.mode, 'header')
+
+  const resolver = createCloudAuthResolverForConfig({
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      auth: resolved,
+    },
+  })
+  const principal = await resolver({
+    headers: {
+      'x-open-cowork-tenant-id': 'tenant-from-proxy',
+      'x-open-cowork-user-id': 'user-from-proxy',
+      'x-open-cowork-user-email': 'proxy@example.test',
+    },
+  } as unknown as IncomingMessage)
+  assert.equal(principal.tenantId, 'tenant-from-proxy')
+  assert.equal(principal.userId, 'user-from-proxy')
+})
+
+test('cloud auth mode none is local-only and ignores caller identity headers', async () => {
+  const resolver = createCloudAuthResolverForConfig(DEFAULT_CONFIG)
+  const principal = await resolver({
+    headers: {
+      'x-open-cowork-tenant-id': 'attacker-tenant',
+      'x-open-cowork-user-id': 'attacker-user',
+      'x-open-cowork-user-email': 'attacker@example.test',
+    },
+  } as unknown as IncomingMessage)
+
+  assert.equal(principal.tenantId, 'default')
+  assert.equal(principal.userId, 'local-user')
+  assert.equal(principal.email, 'local@example.test')
+})
+
+test('cloud auth mode none refuses non-loopback web binds without explicit local override', () => {
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: {},
+  }), /may only bind to loopback/)
+
+  assert.doesNotThrow(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '127.0.0.1',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: {},
+  }))
+
+  assert.doesNotThrow(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: DEFAULT_CONFIG.cloud.auth,
+    env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+  }))
+})
+
 test('cloud control plane local adapter remains default without a postgres URL', async () => {
   const store = await createControlPlaneStoreForCloud({
     config: DEFAULT_CONFIG,
@@ -261,8 +359,9 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
     config: DEFAULT_CONFIG,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -321,8 +420,9 @@ test('cloud web role starts transport without processing worker commands inline'
     config: DEFAULT_CONFIG,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -359,8 +459,9 @@ test('cloud web and worker roles hand off session runtime creation through the c
     config: DEFAULT_CONFIG,
     store,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -370,8 +471,9 @@ test('cloud web and worker roles hand off session runtime creation through the c
     store,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
     },
     workerPollMs: 60_000,
@@ -445,8 +547,9 @@ test('cloud worker reclaims stale running commands after worker lease expiry', a
     config: DEFAULT_CONFIG,
     store,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -456,8 +559,9 @@ test('cloud worker reclaims stale running commands after worker lease expiry', a
     store,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-b',
     },
     workerPollMs: 60_000,
@@ -510,8 +614,9 @@ test('cloud worker applies durable question replies and permission responses to 
     config: DEFAULT_CONFIG,
     store,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -521,8 +626,9 @@ test('cloud worker applies durable question replies and permission responses to 
     store,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
     },
     workerPollMs: 60_000,
@@ -580,8 +686,9 @@ test('cloud worker can checkpoint workspace state to object storage after comman
     objectStore,
     paths: createCloudPathProvider(join(root, 'web')),
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -593,8 +700,9 @@ test('cloud worker can checkpoint workspace state to object storage after comman
     runtime,
     paths: workerPaths,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
       OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
       OPEN_COWORK_CLOUD_SECRET_KEY: 'local-test-secret',
@@ -655,8 +763,9 @@ test('cloud web and worker roles hand off workflow run execution through the con
     config: DEFAULT_CONFIG,
     store,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'web',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'web',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
     },
     hostname: '127.0.0.1',
     port: 0,
@@ -666,8 +775,9 @@ test('cloud web and worker roles hand off workflow run execution through the con
     store,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
     },
     workerPollMs: 60_000,
@@ -760,8 +870,9 @@ test('cloud scheduler role claims due workflows for workers without owning runti
     config: DEFAULT_CONFIG,
     store,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'scheduler',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'scheduler',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_SCHEDULER_ID: 'scheduler-a',
     },
     schedulerPollMs: 60_000,
@@ -771,8 +882,9 @@ test('cloud scheduler role claims due workflows for workers without owning runti
     store,
     runtime,
     env: {
-      OPEN_COWORK_CLOUD_ROLE: 'worker',
-      OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_ROLE: 'worker',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
       OPEN_COWORK_CLOUD_WORKER_ID: 'worker-a',
     },
     workerPollMs: 60_000,

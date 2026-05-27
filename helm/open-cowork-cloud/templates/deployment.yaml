@@ -1,5 +1,20 @@
 {{- range $roleName, $role := .Values.roles }}
 {{- if $role.enabled }}
+{{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "oidc") (or (not $.Values.cloud.auth.oidcIssuerUrl) (not $.Values.cloud.auth.oidcClientId)) }}
+{{- fail "cloud.auth.mode=oidc requires cloud.auth.oidcIssuerUrl and cloud.auth.oidcClientId." }}
+{{- end }}
+{{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "none") (not $.Values.cloud.allowInsecureAuth) }}
+{{- fail "cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true for local/demo Kubernetes installs; set cloud.auth.mode=oidc/header for production." }}
+{{- end }}
+{{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "none") $.Values.cloud.allowInsecureAuth (or $.Values.ingress.enabled (ne $.Values.service.type "ClusterIP")) (not $.Values.cloud.allowInsecurePublicAuth) }}
+{{- fail "cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true; set cloud.auth.mode=oidc/header for production." }}
+{{- end }}
+{{- if and (or (eq $roleName "worker") (eq $roleName "scheduler")) (not $.Values.cloud.controlPlaneUrl) (not $.Values.cloud.existingSecret) }}
+{{- fail "worker and scheduler roles require a shared control plane; set cloud.controlPlaneUrl or cloud.existingSecret." }}
+{{- end }}
+{{- if and (eq $roleName "worker") $role.persistence.enabled (gt (int $role.replicas) 1) }}
+{{- fail "roles.worker.persistence.enabled cannot be used with roles.worker.replicas > 1; use object-store checkpoints and ephemeral worker roots for horizontally scaled workers." }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,10 +35,18 @@ spec:
         {{- include "open-cowork-cloud.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: {{ $roleName }}
     spec:
+      {{- with $.Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: open-cowork-cloud
           image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- with $.Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "open-cowork-cloud.fullname" $ }}-config
@@ -73,16 +96,20 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if and (eq $roleName "worker") $role.persistence.enabled }}
+          {{- if eq $roleName "worker" }}
           volumeMounts:
             - name: worker-data
               mountPath: {{ $.Values.cloud.root }}
           {{- end }}
-      {{- if and (eq $roleName "worker") $role.persistence.enabled }}
+      {{- if eq $roleName "worker" }}
       volumes:
         - name: worker-data
+          {{- if $role.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "open-cowork-cloud.fullname" $ }}-worker-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
       {{- end }}
 {{- end }}
 {{- end }}

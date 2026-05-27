@@ -62,14 +62,30 @@ point:
 helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
   --set cloud.profile=full \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl='https://issuer.example.com' \
+  --set cloud.auth.oidcClientId='open-cowork-cloud' \
   --set cloud.controlPlaneUrl='postgres://...' \
   --set cloud.objectStore.kind=s3 \
-  --set cloud.objectStore.bucket='open-cowork'
+  --set cloud.objectStore.bucket='open-cowork' \
+  --set roles.worker.enabled=true \
+  --set roles.scheduler.enabled=true
 ```
 
 Use `cloud.existingSecret` in production so database URLs, object-store
 credentials, and envelope keys come from your platform secret manager rather
 than from Helm values.
+
+The chart fails closed when `cloud.auth.mode=none` is used without
+`cloud.allowInsecureAuth=true`. Keep that override for local demos only; use
+`oidc` or a trusted `header` identity proxy for shared clusters.
+
+The Helm chart uses an ephemeral worker runtime root by default. That is the
+scalable path: workers externalize durable session state through Postgres and
+object-store checkpoints. A single-worker PVC can be enabled for controlled
+pilots, but the chart rejects `roles.worker.persistence.enabled=true` with more
+than one worker replica because a shared ReadWriteOnce runtime volume is not a
+horizontal scaling model.
 
 For workers that write runtime/workspace checkpoints, provide either
 `OPEN_COWORK_CLOUD_SECRET_KEY` or `OPEN_COWORK_CLOUD_SECRET_KEY_REF`. The ref
@@ -92,10 +108,10 @@ That gate proves Postgres row-lock behavior for worker leases, ordered event
 sequence writes, session command idempotency/reclaim, scheduler claims, and
 webhook replay claims.
 
-CI runs the same cloud gates in the `cloud-gates` job: Phase 0 OpenCode
-portability proof, real Postgres concurrency tests, Compose config validation,
-cloud OCI image build, split-role Compose `/healthz` smoke, and Helm
-lint/render validation.
+CI runs the same cloud gates in the `cloud-gates` job: OpenCode portability
+proof, real Postgres concurrency tests, Compose config validation, cloud OCI
+image build, split-role Compose `/healthz` smoke, and Helm lint/render
+validation.
 
 ## Configuration
 
@@ -111,9 +127,19 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_SECRET_KEY` | Envelope key for local/dev encrypted secret storage. |
 | `OPEN_COWORK_CLOUD_SECRET_KEY_REF` | Optional cloud secret-manager ref for the envelope key when the key is not injected directly. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET` | HMAC key for signed browser session cookies; falls back to `OPEN_COWORK_CLOUD_SECRET_KEY` for local demos. |
+| `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. |
+| `OPEN_COWORK_CLOUD_AUTH_MODE` | `none` for loopback/local demos, `header` for a trusted identity proxy, or `oidc` for public browser/JWT auth. |
+| `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override that permits `auth.mode=none` on a non-loopback bind. Do not use for public deployments. |
+| `OPEN_COWORK_CLOUD_OIDC_ISSUER_URL` | HTTPS OIDC issuer used for discovery and JWT verification. |
+| `OPEN_COWORK_CLOUD_OIDC_CLIENT_ID` | OIDC audience/client id expected in browser login and bearer tokens. |
 | `OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET` | Optional OIDC confidential-client secret; config `clientSecretRef` can point at a platform secret env var instead. |
+| `OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF` | Optional env secret ref for the OIDC client secret. |
+| `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal-only token for operational endpoints such as scheduler tick probes. Keep it in a platform secret store. |
+| `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
+| `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
+| `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_SERVICE_NAME` | Service name included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_SERVICE_VERSION` | Optional version string included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_LOG_FORMAT` | `json`, `pretty`, or `silent`; defaults to JSON for cloud logs. |
@@ -192,5 +218,7 @@ browser is not the only protection.
 - OIDC browser login is exposed through `/auth/login` and the configured
   callback path. The flow uses signed state cookies, PKCE, nonce validation,
   and the same verified identity mapping as bearer JWT auth.
-- Public workflow webhooks require HMAC timestamp signatures; shared-secret
-  bearer/header modes are local/demo-only.
+- Public workflow webhooks require HMAC timestamp signatures. Direct `none`
+  mode is loopback/local-only. `header` mode is only for a reverse proxy that
+  strips caller-supplied identity headers and injects trusted
+  `x-open-cowork-*` headers.

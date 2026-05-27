@@ -165,8 +165,7 @@ describe('mapResponseToModels', () => {
       assert.deepEqual(models, [{ id: 'x', name: 'X', description: undefined, contextLength: undefined }])
     } finally {
       globalThis.fetch = previousFetch
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      closeLogger()
+      await closeLogger()
       if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
       else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
       clearConfigCaches()
@@ -199,8 +198,7 @@ describe('mapResponseToModels', () => {
       assert.equal(mode, 0o600)
     } finally {
       globalThis.fetch = previousFetch
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      closeLogger()
+      await closeLogger()
       if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
       else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
       clearConfigCaches()

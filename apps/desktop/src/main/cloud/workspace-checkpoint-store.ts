@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { readdir, readFile, lstat, mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import type { Phase0PortableRuntimeEntryKind } from './phase0-runtime-portability.ts'
-import { isPhase0SecretBearingPath } from './phase0-runtime-portability.ts'
+import type { PortableRuntimeEntryKind } from './runtime-portability.ts'
+import { isRuntimeSnapshotSecretBearingPath } from './runtime-portability.ts'
 import type { ObjectStoreAdapter } from './object-store.ts'
 import { assertSafeObjectKey } from './object-store.ts'
 import type { PathProvider } from './path-provider.ts'
 import type { SecretAdapter } from './secret-adapter.ts'
 
-export type WorkspaceCheckpointRootKind = Phase0PortableRuntimeEntryKind
+export type WorkspaceCheckpointRootKind = PortableRuntimeEntryKind
 
 export type WorkspaceCheckpointRoot = {
   rootId: string
@@ -360,7 +360,7 @@ export function createObjectWorkspaceCheckpointStore(
         const files = await collectRootFiles(root, { maxFiles, maxBytes }, totals)
         for (const file of files) {
           const body = await readFile(file.absolutePath)
-          const fileSecretBearing = root.secretBearing || isPhase0SecretBearingPath(file.absolutePath)
+          const fileSecretBearing = root.secretBearing || isRuntimeSnapshotSecretBearingPath(file.absolutePath)
           const context = secretContext({
             tenantId,
             sessionId,

@@ -20,6 +20,9 @@ Example Helm overrides:
 helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set image.repository=registry.digitalocean.com/REGISTRY/open-cowork-cloud \
   --set cloud.profile=full \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl=https://ISSUER.example.com \
+  --set cloud.auth.oidcClientId=CLIENT_ID \
   --set cloud.checkpoints.enabled=true \
   --set cloud.objectStore.kind=digitalocean-spaces \
   --set cloud.objectStore.bucket=OPEN_COWORK_SPACE \

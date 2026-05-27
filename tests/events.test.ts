@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { BrowserWindow } from 'electron'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -84,8 +83,7 @@ async function withCapturedLogs(fn: (lines: string[]) => Promise<void>) {
     await fn(lines)
   } finally {
     console.log = originalConsoleLog
-    closeLogger()
-    await delay(25)
+    await closeLogger()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     clearConfigCaches()
