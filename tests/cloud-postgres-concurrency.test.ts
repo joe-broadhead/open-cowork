@@ -30,8 +30,8 @@ function withSearchPath(connectionString: string, schema: string) {
 
 async function withIsolatedPostgresSchema<T>(fn: (connectionString: string) => Promise<T>) {
   assert.ok(POSTGRES_URL)
-  const schema = `pg_${randomUUID().replaceAll('-', '_')}`
-  assert.match(schema, /^pg_[a-z0-9_]+$/)
+  const schema = `ocw_${randomUUID().replaceAll('-', '_')}`
+  assert.match(schema, /^ocw_[a-z0-9_]+$/)
   const pool = pgPool(POSTGRES_URL)
   try {
     await pool.query(`CREATE SCHEMA ${schema}`)
