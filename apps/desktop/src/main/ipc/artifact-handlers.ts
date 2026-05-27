@@ -50,7 +50,7 @@ function safeRealPath(path: string) {
 }
 
 export function decodeCloudArtifactDataUrl(url: string) {
-  const match = /^data:([^;,]+)?;base64,(.*)$/s.exec(url)
+  const match = /^data:([^,]*);base64,(.*)$/s.exec(url)
   if (!match) throw new Error('Cloud artifact attachment is not a base64 data URL.')
   const dataBase64 = (match[2] || '').replace(/\s+/g, '')
   if (!BASE64_RE.test(dataBase64) || dataBase64.length % 4 === 1) {

@@ -1935,6 +1935,10 @@ test('cloud artifact export helpers validate data URLs and sanitize default file
     decodeCloudArtifactDataUrl(`data:text/plain;base64,${Buffer.from('hello').toString('base64')}`),
     Buffer.from('hello'),
   )
+  assert.deepEqual(
+    decodeCloudArtifactDataUrl(`data:text/plain; charset=utf-8;base64,${Buffer.from('hello').toString('base64')}`),
+    Buffer.from('hello'),
+  )
   assert.throws(
     () => decodeCloudArtifactDataUrl('https://cloud.example.test/artifact.txt'),
     /base64 data URL/,
