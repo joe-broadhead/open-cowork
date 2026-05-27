@@ -1168,7 +1168,8 @@ export class WorkspaceGateway {
   private applyCredentialStatus(workspace: WorkspaceRegistration): WorkspaceRegistration {
     if (workspace.kind !== 'cloud') return workspace
     const accessToken = this.cloudCredentialStore?.getUsableAccessToken(workspace.id)
-    if (!accessToken) return workspace
+    const credential = accessToken ? null : this.cloudCredentialStore?.get(workspace.id)
+    if (!accessToken && !credential?.refreshToken) return workspace
     return {
       ...workspace,
       status: 'online',

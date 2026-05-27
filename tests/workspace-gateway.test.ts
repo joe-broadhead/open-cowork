@@ -988,6 +988,8 @@ test('workspace gateway refreshes expired cloud tokens before adapter calls', as
     },
   })
 
+  assert.equal(gateway.list(event(1)).find((entry) => entry.id === persisted.id)?.status, 'online')
+
   const syncResult = await gateway.sync(event(1), persisted.id)
 
   assert.equal(syncResult.ok, true)
