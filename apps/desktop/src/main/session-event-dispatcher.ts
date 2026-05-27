@@ -260,8 +260,9 @@ function sessionHasQueuedView(windowId: number, sessionId: string) {
 }
 
 function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string) {
-  if (win.isDestroyed() || win.webContents.isDestroyed()) return
-  const windowId = win.webContents.id
+  const webContents = win.webContents as BrowserWindow['webContents'] & { isDestroyed?: () => boolean }
+  if (win.isDestroyed() || webContents.isDestroyed?.()) return
+  const windowId = webContents.id
   const pending = pendingPatchFlushByWindowId.get(windowId)
   if (!pending || pending.patches.length === 0) return
 
