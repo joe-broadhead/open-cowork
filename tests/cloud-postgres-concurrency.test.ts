@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { createRequire } from 'node:module'
 
 import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
 
@@ -9,6 +10,37 @@ const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
 const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres cloud concurrency tests.'
+const require = createRequire(import.meta.url)
+
+type PgPool = {
+  query(text: string, values?: unknown[]): Promise<unknown>
+  end(): Promise<void>
+}
+
+function pgPool(connectionString: string): PgPool {
+  const pg = require('pg') as { Pool: new (options: { connectionString: string }) => PgPool }
+  return new pg.Pool({ connectionString })
+}
+
+function withSearchPath(connectionString: string, schema: string) {
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schema}`)
+  return url.toString()
+}
+
+async function withIsolatedPostgresSchema<T>(fn: (connectionString: string) => Promise<T>) {
+  assert.ok(POSTGRES_URL)
+  const schema = `pg_${randomUUID().replaceAll('-', '_')}`
+  assert.match(schema, /^pg_[a-z0-9_]+$/)
+  const pool = pgPool(POSTGRES_URL)
+  try {
+    await pool.query(`CREATE SCHEMA ${schema}`)
+    return await fn(withSearchPath(POSTGRES_URL, schema))
+  } finally {
+    await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)
+    await pool.end()
+  }
+}
 
 async function withPostgresStore<T>(fn: (store: Awaited<ReturnType<typeof createPostgresControlPlaneStore>>, ids: {
   tenantId: string
@@ -44,6 +76,22 @@ async function withPostgresStore<T>(fn: (store: Awaited<ReturnType<typeof create
     await store.close?.()
   }
 }
+
+test('real Postgres cloud store serializes concurrent schema migrations', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresSchema(async (connectionString) => {
+    const stores = await Promise.all(Array.from({ length: 6 }, () => (
+      createPostgresControlPlaneStore({ connectionString })
+    )))
+    try {
+      const migrations = await stores[0]?.listSchemaMigrations()
+      assert.deepEqual(migrations?.map((migration) => migration.id), ['001_cloud_control_plane'])
+    } finally {
+      await Promise.all(stores.map((store) => store.close?.()))
+    }
+  })
+})
 
 test('real Postgres cloud store serializes worker leases and fences stale projection writes', {
   skip: POSTGRES_SKIP,

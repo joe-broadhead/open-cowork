@@ -66,6 +66,7 @@ export type PostgresControlPlaneStoreOptions = {
 const require = createRequire(import.meta.url)
 
 const MIGRATION_ID = '001_cloud_control_plane'
+const MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 const THREAD_TAG_NAME_MAX_LENGTH = 48
 const THREAD_SMART_FILTER_NAME_MAX_LENGTH = 64
 const THREAD_DEFAULT_TAG_COLOR = '#64748b'
@@ -579,6 +580,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async runMigrations() {
     await this.withTransaction(async (client) => {
+      await client.query(
+        'SELECT pg_advisory_xact_lock($1, $2)',
+        [...MIGRATION_ADVISORY_LOCK_KEYS],
+      )
       for (const statement of SCHEMA_STATEMENTS) await client.query(statement)
       await client.query(
         `INSERT INTO cloud_schema_migrations (id, applied_at)
