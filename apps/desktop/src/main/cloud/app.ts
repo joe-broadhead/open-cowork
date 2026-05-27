@@ -261,7 +261,7 @@ async function routeRuntimeEvent(
   if (!sessionId) return
   const session = await store.findSession(sessionId)
   if (!session) return
-  await worker.appendRuntimeEvent(session.tenantId, sessionId, event)
+  await worker.appendRuntimeEvent(session.tenantId, session.sessionId, event)
 }
 
 function startWorkerLoop(worker: CloudWorker, pollMs: number) {

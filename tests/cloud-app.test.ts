@@ -421,6 +421,17 @@ test('cloud web and worker roles hand off session runtime creation through the c
     }))
     const messages = asArray(asRecord(asRecord(view.projection).view).messages)
     assert.equal(asRecord(messages.at(-1)).content, 'runtime answer')
+
+    await runtime.emitAssistant('session-1', 'subscription event')
+    const streamed = await readJson(await fetch(`${web.url}/api/sessions/${coworkSessionId}`, {
+      headers: {
+        'x-open-cowork-tenant-id': 'tenant-a',
+        'x-open-cowork-user-id': 'user-a',
+        'x-open-cowork-user-email': 'a@example.test',
+      },
+    }))
+    const streamedMessages = asArray(asRecord(asRecord(streamed.projection).view).messages)
+    assert.equal(asRecord(streamedMessages.at(-1)).content, 'subscription event')
   } finally {
     await worker.close()
     await web.close()
