@@ -77,6 +77,7 @@ const MAX_SESSION_PATCHES_PER_FLUSH = 128
 
 const pendingViewFlushByWindowId = new Map<number, PendingViewFlush>()
 const pendingPatchFlushByWindowId = new Map<number, PendingPatchFlush>()
+const patchViewRecoverySessionIdsByWindowId = new Map<number, Set<string>>()
 let sessionHistoryRefreshHandler: ((sessionId: string) => Promise<void>) | null = null
 const historyRefreshQueue = new Map<string, {
   win: BrowserWindow
@@ -220,6 +221,32 @@ export function publishSessionPatch(
   win.webContents.send('session:patch', patch)
 }
 
+function markSessionPatchViewRecovery(windowId: number, sessionId: string) {
+  const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
+  if (existing) {
+    existing.add(sessionId)
+    return
+  }
+  patchViewRecoverySessionIdsByWindowId.set(windowId, new Set([sessionId]))
+}
+
+function clearSessionPatchViewRecovery(windowId: number, sessionId: string) {
+  const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
+  if (!existing) return
+  existing.delete(sessionId)
+  if (existing.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
+}
+
+function sessionNeedsPatchViewRecovery(windowId: number, sessionId: string) {
+  return patchViewRecoverySessionIdsByWindowId.get(windowId)?.has(sessionId) === true
+}
+
+function dropQueuedSessionPatches(pending: PendingPatchFlush, sessionId: string) {
+  const before = pending.patches.length
+  pending.patches = pending.patches.filter((queuedPatch) => queuedPatch.sessionId !== sessionId)
+  return before - pending.patches.length
+}
+
 function flushPendingSessionPatches(windowId: number) {
   const pending = pendingPatchFlushByWindowId.get(windowId)
   if (!pending) return
@@ -286,9 +313,15 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
   }
 
   if (pending.patches.length >= MAX_PENDING_SESSION_PATCHES_PER_WINDOW) {
-    pending.droppedPatches += 1
+    pending.droppedPatches += dropQueuedSessionPatches(pending, patch.sessionId) + 1
     pending.overflowSessionIds.add(patch.sessionId)
+    markSessionPatchViewRecovery(windowId, patch.sessionId)
     queueSessionViewPublish(win, patch.sessionId)
+    return
+  }
+
+  if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId)) {
+    pending.droppedPatches += 1
     return
   }
 
@@ -299,7 +332,10 @@ function flushPendingSessionViews(windowId: number) {
   const pending = pendingViewFlushByWindowId.get(windowId)
   if (!pending) return
   pendingViewFlushByWindowId.delete(windowId)
-  if (pending.win.isDestroyed()) return
+  if (pending.win.isDestroyed()) {
+    for (const sessionId of pending.sessionIds) clearSessionPatchViewRecovery(windowId, sessionId)
+    return
+  }
   incrementPerfCounter('session.view.flushes')
   observePerf('session.view.flush.wait', Date.now() - pending.queuedAt, {
     unit: 'ms',
@@ -310,6 +346,7 @@ function flushPendingSessionViews(windowId: number) {
   measurePerf('session.view.flush.duration', () => {
     for (const sessionId of pending.sessionIds) {
       publishSessionView(pending.win, sessionId)
+      clearSessionPatchViewRecovery(windowId, sessionId)
     }
   }, {
     slowThresholdMs: 8,
@@ -395,8 +432,12 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
 // publishSessionView (the session is gone by then) but is otherwise benign.
 export function dropSessionFromDispatcherQueues(sessionId: string) {
   historyRefreshQueue.delete(sessionId)
+  for (const [windowId, recoverySessionIds] of patchViewRecoverySessionIdsByWindowId.entries()) {
+    recoverySessionIds.delete(sessionId)
+    if (recoverySessionIds.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
+  }
   for (const [windowId, pending] of pendingPatchFlushByWindowId.entries()) {
-    pending.patches = pending.patches.filter((patch) => patch.sessionId !== sessionId)
+    dropQueuedSessionPatches(pending, sessionId)
     pending.overflowSessionIds.delete(sessionId)
     if (pending.patches.length === 0 && pending.overflowSessionIds.size === 0) {
       if (pending.timer) clearTimeout(pending.timer)

@@ -149,8 +149,68 @@ test('dispatcher bounds queued patches and schedules full-view catch-up on overf
   await wait(80)
 
   const patchCount = sent.filter((entry) => entry.channel === 'session:patch').length
-  assert.equal(patchCount, 512)
+  assert.equal(patchCount, 0)
   assert.equal(sent.some((entry) => entry.channel === 'session:view'), true)
+})
+
+test('dispatcher overflow drops only patches for the recovering session', async () => {
+  const { win, sent } = createWindowCollector(52)
+
+  for (let index = 0; index < 511; index += 1) {
+    dispatchRuntimeSessionEvent(win as any, {
+      type: 'text',
+      sessionId: 'session-patch-overflow-scoped',
+      data: {
+        type: 'text',
+        messageId: 'message-overflow-scoped',
+        partId: `part-${index}`,
+        content: `overflow-${index}`,
+        mode: 'append',
+      },
+    })
+  }
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-neighbor',
+    data: {
+      type: 'text',
+      messageId: 'message-neighbor',
+      partId: 'part-neighbor',
+      content: 'neighbor',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-patch-overflow-scoped',
+    data: {
+      type: 'text',
+      messageId: 'message-overflow-scoped',
+      partId: 'part-overflow-trigger',
+      content: 'overflow-trigger',
+      mode: 'append',
+    },
+  })
+
+  await wait(80)
+
+  const patchPayloads = sent
+    .filter((entry) => entry.channel === 'session:patch')
+    .map((entry) => {
+      const payload = entry.payload as { sessionId?: string; content?: string }
+      return {
+        sessionId: payload.sessionId,
+        content: payload.content,
+      }
+    })
+  assert.deepEqual(patchPayloads, [{
+    sessionId: 'session-patch-neighbor',
+    content: 'neighbor',
+  }])
+  assert.equal(
+    sent.some((entry) => entry.channel === 'session:view' && (entry.payload as { sessionId?: string }).sessionId === 'session-patch-overflow-scoped'),
+    true,
+  )
 })
 
 test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {
