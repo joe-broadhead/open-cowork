@@ -1,0 +1,201 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
+
+import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+import {
+  buildNodeOpencodeCloudRuntimeClientConfig,
+  createNodeOpencodeCloudRuntimeAdapter,
+  subscribeToOpencodeCloudRuntimeEvents,
+  translateOpencodeRuntimeEvent,
+} from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
+
+function writeExecutable(root: string, name: string, source: string) {
+  const path = join(root, name)
+  writeFileSync(path, `#!/bin/sh\n${source}`)
+  chmodSync(path, 0o755)
+  return path
+}
+
+test('cloud OpenCode event translator maps SDK message, status, idle, and error events', () => {
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'message.part.updated.1',
+      data: {
+        sessionID: 'session-1',
+        messageID: 'message-1',
+        role: 'assistant',
+        part: {
+          id: 'part-1',
+          type: 'text',
+          text: 'hello from opencode',
+        },
+      },
+    },
+  }), [{
+    type: 'assistant.message',
+    payload: {
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      content: 'hello from opencode',
+    },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'session.status',
+      properties: {
+        sessionID: 'session-1',
+        status: { type: 'busy' },
+      },
+    },
+  }), [{
+    type: 'session.status',
+    payload: {
+      sessionId: 'session-1',
+      statusType: 'busy',
+    },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'session.idle',
+      properties: { sessionID: 'session-1' },
+    },
+  }), [{
+    type: 'session.idle',
+    payload: { sessionId: 'session-1' },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'session.error',
+      properties: {
+        sessionID: 'session-1',
+        error: { message: 'provider failed' },
+      },
+    },
+  }), [{
+    type: 'runtime.error',
+    payload: {
+      sessionId: 'session-1',
+      message: 'provider failed',
+    },
+  }])
+})
+
+test('cloud OpenCode event translator ignores user text echoes', () => {
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'message.part.updated.1',
+      data: {
+        sessionID: 'session-1',
+        messageID: 'message-1',
+        role: 'user',
+        part: {
+          id: 'part-1',
+          type: 'text',
+          text: 'user echo',
+        },
+      },
+    },
+  }), [])
+})
+
+test('cloud OpenCode runtime subscription translates stream events and reports failures', async () => {
+  const delivered: unknown[] = []
+  const errors: unknown[] = []
+  const client = {
+    event: {
+      async subscribe() {
+        return {
+          stream: (async function* stream() {
+            yield {
+              payload: {
+                type: 'message.part.updated',
+                data: {
+                  sessionID: 'session-1',
+                  messageID: 'message-1',
+                  part: {
+                    id: 'part-1',
+                    type: 'text',
+                    text: 'streamed answer',
+                  },
+                },
+              },
+            }
+          })(),
+        }
+      },
+    },
+  }
+
+  subscribeToOpencodeCloudRuntimeEvents(
+    client,
+    (event) => delivered.push(event),
+    { onError: (error) => errors.push(error) },
+  )
+
+  for (let attempt = 0; delivered.length === 0 && attempt < 20; attempt += 1) {
+    await delay(10)
+  }
+
+  assert.deepEqual(delivered, [{
+    type: 'assistant.message',
+    payload: {
+      sessionId: 'session-1',
+      messageId: 'message-1',
+      content: 'streamed answer',
+    },
+  }])
+  assert.deepEqual(errors, [])
+})
+
+test('cloud Node OpenCode runtime adapter starts with managed env and client auth', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-cloud-node-runtime-'))
+  const pidFile = join(root, 'pid')
+  const envFile = join(root, 'env')
+  const argsFile = join(root, 'args')
+  const executable = writeExecutable(root, 'fake-opencode', `
+printf '%s' "$$" > ${JSON.stringify(pidFile)}
+printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}
+printf '%s\\n%s\\n%s\\n%s\\n%s\\n' "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$OPENCODE_SERVER_USERNAME" "$OPENCODE_SERVER_PASSWORD" > ${JSON.stringify(envFile)}
+printf '%s\\n' 'opencode server listening on http://127.0.0.1:43230'
+while true; do sleep 1; done
+`)
+
+  const provider = createCloudPathProvider(join(root, 'cloud-root'))
+  const adapter = await createNodeOpencodeCloudRuntimeAdapter({
+    paths: provider,
+    env: { PATH: process.env.PATH || '' },
+    hostname: '127.0.0.1',
+    port: 0,
+    opencodeBinPath: executable,
+    timeout: 5000,
+    config: { logLevel: 'warn' },
+  })
+
+  try {
+    assert.equal(adapter.url, 'http://127.0.0.1:43230')
+    assert.match(readFileSync(argsFile, 'utf8'), /--hostname=127\.0\.0\.1/)
+    assert.match(readFileSync(argsFile, 'utf8'), /--port=0/)
+    const env = readFileSync(envFile, 'utf8').split('\n')
+    assert.equal(env[0], provider.getRuntimeXdgRoots().home)
+    assert.equal(env[1], provider.getRuntimeXdgRoots().configHome)
+    assert.equal(env[2], provider.getRuntimeXdgRoots().dataHome)
+    assert.equal(env[3], adapter.auth.username)
+    assert.equal(env[4], adapter.auth.password)
+    assert.deepEqual(buildNodeOpencodeCloudRuntimeClientConfig(adapter.url, adapter.auth), {
+      baseUrl: adapter.url,
+      headers: {
+        Authorization: adapter.auth.authorizationHeader,
+      },
+    })
+  } finally {
+    await adapter.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})

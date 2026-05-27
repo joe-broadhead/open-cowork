@@ -118,6 +118,7 @@ nav:
       - Security Model: security-model.md
       - Telemetry and Privacy: privacy.md
   - Operate:
+      - Open Cowork Cloud: open-cowork-cloud.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md

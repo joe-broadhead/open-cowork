@@ -4,15 +4,14 @@ import type {
   WorkflowDetail,
   WorkflowListPayload,
   WorkflowRun,
-  WorkflowTrigger,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import {
   attachWorkflowRunSession,
+  claimDueWorkflowRun,
   createWorkflowRun,
   getWorkflow,
   getWorkflowRun,
-  listDueWorkflows,
   listWorkflows as listWorkflowState,
   markWorkflowRunCompleted,
   markWorkflowRunFailed,
@@ -176,13 +175,13 @@ export function configureWorkflowService(options: { getMainWindow: () => Browser
     if (!workflow || !webhook) {
       throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     }
-    const replayClaim = claimWorkflowWebhookSignatureOnce(auth, workflowId)
+    const replayClaim = await claimWorkflowWebhookSignatureOnce(auth, workflowId)
     if (!replayClaim) throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     try {
       await runWorkflow(workflowId, 'webhook', payload)
-      replayClaim.accept()
+      await replayClaim.accept()
     } catch (error) {
-      replayClaim.release()
+      await replayClaim.release()
       throw error
     }
   })
@@ -240,22 +239,26 @@ export async function startWorkflowDraft(directory?: string | null) {
 
 async function runWorkflow(workflowId: string, triggerType: WorkflowTriggerType, payload: Record<string, unknown> | null = null) {
   const run = createWorkflowRun(workflowId, triggerType, payload)
+  return startClaimedWorkflowRun(run)
+}
+
+async function startClaimedWorkflowRun(run: WorkflowRun | null) {
   if (!run) return null
-  const workflow = getWorkflow(workflowId, workflowWebhookBaseUrl())
+  const workflow = getWorkflow(run.workflowId, workflowWebhookBaseUrl())
   if (!workflow) return null
   try {
     await createWorkflowThread({
       title: `Run ${workflow.title}`,
       directory: workflow.projectDirectory,
       kind: 'workflow_run',
-      workflowId,
+      workflowId: workflow.id,
       runId: run.id,
       agent: workflow.agentName || 'build',
       prompt: workflowRunPrompt(workflow, run),
       onSessionCreated: (sessionId) => {
-        attachWorkflowRunSession(workflowId, run.id, sessionId)
+        attachWorkflowRunSession(workflow.id, run.id, sessionId)
       },
-  })
+    })
     publishWorkflowUpdated()
     return getWorkflowRun(run.id)
   } catch (error) {
@@ -295,19 +298,13 @@ export function regenerateWebhookSecret(workflowId: string) {
 }
 
 async function runWorkflowSchedulerTickNow(now = new Date()) {
-  const due = listDueWorkflows(now, workflowWebhookBaseUrl())
-  for (const workflow of due) {
-    const trigger = workflow.triggers.find((entry: WorkflowTrigger) => (
-      entry.enabled && entry.type === 'schedule' && entry.schedule && workflow.nextRunAt
-    ))
-    if (!trigger) continue
+  while (true) {
+    const run = claimDueWorkflowRun(now)
+    if (!run) break
     try {
-      await runWorkflow(workflow.id, 'schedule', {
-        source: 'schedule',
-        scheduledFor: workflow.nextRunAt,
-      })
+      await startClaimedWorkflowRun(run)
     } catch (error) {
-      log('error', `Failed to start workflow ${workflow.id}: ${sdkErrorMessage(error)}`)
+      log('error', `Failed to start workflow ${run.workflowId}: ${sdkErrorMessage(error)}`)
     }
   }
 }

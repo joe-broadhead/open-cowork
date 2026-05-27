@@ -28,7 +28,7 @@
 
 It brings the power of OpenCode into a desktop experience that developers love and less technical teams can actually use.
 
-[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
+[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Open Cowork Cloud](docs/open-cowork-cloud.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
 
 </div>
 
@@ -94,6 +94,9 @@ It helps technical users move faster, while making agentic workflows accessible 
 
 - **Downstream-ready distribution**
   Configure branding, providers, defaults, bundled tools, bundled skills, docs, and release workflows.
+
+- **Provider-neutral cloud shape**
+  Run Open Cowork Cloud as all-in-one, web, worker, or scheduler roles on Docker, Helm/Kubernetes, or managed cloud infrastructure.
 
 - **Production-grade gates**
   CI, CodeQL, smoke tests, docs, audits, checksums, SBOMs, and provenance support.

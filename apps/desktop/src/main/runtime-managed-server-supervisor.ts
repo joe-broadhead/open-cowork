@@ -1,5 +1,5 @@
-import electron from 'electron'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { createRequire } from 'node:module'
 import type {
   ManagedOpencodeServerParentMessage,
   ManagedOpencodeServerSupervisorMessage,
@@ -15,7 +15,17 @@ type ParentPortLike = {
   on(event: 'message', listener: (message: { data: unknown } | unknown) => void): unknown
 }
 
-const electronParentPort = (electron as { parentPort?: ParentPortLike }).parentPort
+function loadElectronParentPort() {
+  try {
+    const require = createRequire(import.meta.url)
+    const electron = require('electron') as { parentPort?: ParentPortLike }
+    return electron.parentPort
+  } catch {
+    return undefined
+  }
+}
+
+const electronParentPort = loadElectronParentPort()
 const processParentPort = (process as unknown as { parentPort?: ParentPortLike }).parentPort
 
 function nodeParentPort(): ParentPortLike | null {

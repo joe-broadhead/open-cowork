@@ -201,6 +201,77 @@ export type UpdateReleaseSourceConfig =
     }
   }
 
+export type CloudRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
+
+export type CloudFeatureKey =
+  | 'chat'
+  | 'agents'
+  | 'artifacts'
+  | 'threadIndex'
+  | 'workflows'
+  | 'webhooks'
+  | 'settings'
+  | 'customSkills'
+  | 'customAgents'
+  | 'customMcps'
+
+export type CloudFeatureConfig = Record<CloudFeatureKey, boolean>
+
+export type CloudRuntimePolicyConfig = {
+  configSource: 'app'
+  launcher: 'node'
+  allowMachineRuntimeConfig: boolean
+  allowLocalStdioMcps: boolean
+  allowHostProjectDirectories: boolean
+  allowedLocalMcpNames: string[]
+  allowedHostProjectDirectories: string[]
+}
+
+export type CloudProfileConfig = {
+  label?: string
+  description?: string
+  agents?: string[]
+  tools?: string[]
+  mcps?: string[]
+  features?: Partial<CloudFeatureConfig>
+  runtime?: Partial<CloudRuntimePolicyConfig>
+}
+
+export type CloudAuthConfig = {
+  mode: 'none' | 'oidc'
+  issuerUrl?: string
+  clientId?: string
+  clientSecretRef?: string
+  callbackPath?: string
+  cookieSecretRef?: string
+  allowedEmailDomains?: string[]
+}
+
+export type CloudStorageConfig = {
+  controlPlane: {
+    kind: 'local' | 'postgres'
+    urlRef?: string
+  }
+  objectStore: {
+    kind: 'filesystem' | 's3' | 'gcs' | 'azure-blob' | 'digitalocean-spaces' | 'minio'
+    bucket?: string
+    region?: string
+    endpoint?: string
+    prefix?: string
+    credentialsRef?: string
+  }
+}
+
+export type CloudConfig = {
+  role: CloudRole
+  profiles: Record<string, CloudProfileConfig>
+  defaultProfile: string
+  auth: CloudAuthConfig
+  storage: CloudStorageConfig
+  runtime: CloudRuntimePolicyConfig
+  features: CloudFeatureConfig
+}
+
 export type OpenCoworkConfig = {
   allowedEnvPlaceholders: string[]
   branding: BrandingConfig
@@ -263,6 +334,7 @@ export type OpenCoworkConfig = {
       temperature?: number
     }
   }
+  cloud: CloudConfig
   // Optional translation + locale overlay. Downstream forks set
   // `i18n.locale` to e.g. "de-DE" so Intl.NumberFormat / Intl.DateTimeFormat
   // produce locale-appropriate output, and `i18n.strings` to a
@@ -291,6 +363,29 @@ export type OpenCoworkConfig = {
 // is the same data structure that `model:info` IPC returns and that the
 // renderer consumes.
 export type ModelFallbackInfo = ModelInfoSnapshot
+
+const DEFAULT_CLOUD_FEATURES: CloudFeatureConfig = {
+  chat: true,
+  agents: true,
+  artifacts: true,
+  threadIndex: true,
+  workflows: true,
+  webhooks: false,
+  settings: true,
+  customSkills: true,
+  customAgents: true,
+  customMcps: true,
+}
+
+const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {
+  configSource: 'app',
+  launcher: 'node',
+  allowMachineRuntimeConfig: false,
+  allowLocalStdioMcps: false,
+  allowHostProjectDirectories: false,
+  allowedLocalMcpNames: [],
+  allowedHostProjectDirectories: [],
+}
 
 export const DEFAULT_CONFIG: OpenCoworkConfig = {
   allowedEnvPlaceholders: [],
@@ -336,5 +431,53 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     auto: true,
     prune: true,
     reserved: 10_000,
+  },
+  cloud: {
+    role: 'all-in-one',
+    defaultProfile: 'full',
+    auth: {
+      mode: 'none',
+    },
+    storage: {
+      controlPlane: {
+        kind: 'local',
+      },
+      objectStore: {
+        kind: 'filesystem',
+      },
+    },
+    runtime: DEFAULT_CLOUD_RUNTIME,
+    features: DEFAULT_CLOUD_FEATURES,
+    profiles: {
+      full: {
+        label: 'Full app',
+        description: 'Expose the complete Open Cowork product surface while keeping cloud runtime hardening enabled.',
+        features: DEFAULT_CLOUD_FEATURES,
+        runtime: DEFAULT_CLOUD_RUNTIME,
+      },
+      'focused-agent': {
+        label: 'Focused agent',
+        description: 'Expose only an allowlisted agent and its approved tools for single-purpose deployments.',
+        agents: [],
+        tools: [],
+        mcps: [],
+        features: {
+          ...DEFAULT_CLOUD_FEATURES,
+          workflows: false,
+          webhooks: false,
+          settings: false,
+          customSkills: false,
+          customAgents: false,
+          customMcps: false,
+        },
+        runtime: DEFAULT_CLOUD_RUNTIME,
+      },
+      custom: {
+        label: 'Custom',
+        description: 'Use deployer-supplied allowlists and feature flags.',
+        features: DEFAULT_CLOUD_FEATURES,
+        runtime: DEFAULT_CLOUD_RUNTIME,
+      },
+    },
   },
 }

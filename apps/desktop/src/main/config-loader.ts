@@ -21,6 +21,10 @@ import {
   validateConfigSemantics,
 } from './config-layer-utils.ts'
 import type {
+  CloudConfig,
+  CloudFeatureConfig,
+  CloudProfileConfig,
+  CloudRole,
   ConfiguredTool,
   ModelFallbackInfo,
   OpenCoworkConfig,
@@ -35,6 +39,10 @@ export type {
   BundleEnvSetting,
   BundleHeaderSetting,
   BundleMcp,
+  CloudConfig,
+  CloudFeatureConfig,
+  CloudProfileConfig,
+  CloudRole,
   ConfiguredAgent,
   ConfiguredModelInfo,
   ConfiguredProviderDescriptor,
@@ -49,6 +57,10 @@ export { normalizeProviderModelId } from './config-public.ts'
 export { resolveConfigEnvPlaceholders } from './config-layer-utils.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
+const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'scheduler'])
+const CLOUD_AUTH_MODES = new Set(['none', 'oidc'])
+const CLOUD_CONTROL_PLANE_KINDS = new Set(['local', 'postgres'])
+const CLOUD_OBJECT_STORE_KINDS = new Set(['filesystem', 's3', 'gcs', 'azure-blob', 'digitalocean-spaces', 'minio'])
 
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
@@ -191,6 +203,107 @@ function readConfigFile(path: string, source: string): Partial<OpenCoworkConfig>
   }
 }
 
+function stringArray(value: unknown, fallback: string[] = []) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : fallback
+}
+
+function normalizeCloudFeatures(raw: Partial<CloudFeatureConfig> | undefined): CloudFeatureConfig {
+  return {
+    ...DEFAULT_CONFIG.cloud.features,
+    ...(raw || {}),
+  }
+}
+
+function normalizeCloudProfile(raw: CloudProfileConfig | undefined): CloudProfileConfig {
+  return {
+    ...(raw || {}),
+    agents: stringArray(raw?.agents),
+    tools: stringArray(raw?.tools),
+    mcps: stringArray(raw?.mcps),
+    features: raw?.features ? normalizeCloudFeatures(raw.features) : undefined,
+    runtime: raw?.runtime
+      ? {
+          ...raw.runtime,
+          configSource: 'app',
+          launcher: 'node',
+          allowedLocalMcpNames: stringArray(raw.runtime.allowedLocalMcpNames),
+          allowedHostProjectDirectories: stringArray(raw.runtime.allowedHostProjectDirectories),
+        }
+      : undefined,
+  }
+}
+
+function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
+  const source = raw || DEFAULT_CONFIG.cloud
+  const profiles: Record<string, CloudProfileConfig> = {}
+  for (const [name, profile] of Object.entries(DEFAULT_CONFIG.cloud.profiles)) {
+    profiles[name] = normalizeCloudProfile(profile)
+  }
+  for (const [name, profile] of Object.entries(source.profiles || {})) {
+    if (!name.trim()) continue
+    profiles[name] = normalizeCloudProfile({
+      ...(profiles[name] || {}),
+      ...profile,
+      features: {
+        ...(profiles[name]?.features || {}),
+        ...(profile.features || {}),
+      },
+      runtime: {
+        ...(profiles[name]?.runtime || {}),
+        ...(profile.runtime || {}),
+      },
+    })
+  }
+
+  const role = CLOUD_ROLES.has(source.role) ? source.role : DEFAULT_CONFIG.cloud.role
+  const defaultProfile = source.defaultProfile && profiles[source.defaultProfile]
+    ? source.defaultProfile
+    : DEFAULT_CONFIG.cloud.defaultProfile
+
+  return {
+    ...DEFAULT_CONFIG.cloud,
+    ...source,
+    role,
+    defaultProfile,
+    profiles,
+    auth: {
+      ...DEFAULT_CONFIG.cloud.auth,
+      ...(source.auth || {}),
+      mode: CLOUD_AUTH_MODES.has(source.auth?.mode || '')
+        ? source.auth.mode
+        : DEFAULT_CONFIG.cloud.auth.mode,
+      allowedEmailDomains: stringArray(source.auth?.allowedEmailDomains),
+    },
+    storage: {
+      controlPlane: {
+        ...DEFAULT_CONFIG.cloud.storage.controlPlane,
+        ...(source.storage?.controlPlane || {}),
+        kind: CLOUD_CONTROL_PLANE_KINDS.has(source.storage?.controlPlane?.kind || '')
+          ? source.storage!.controlPlane.kind
+          : DEFAULT_CONFIG.cloud.storage.controlPlane.kind,
+      },
+      objectStore: {
+        ...DEFAULT_CONFIG.cloud.storage.objectStore,
+        ...(source.storage?.objectStore || {}),
+        kind: CLOUD_OBJECT_STORE_KINDS.has(source.storage?.objectStore?.kind || '')
+          ? source.storage!.objectStore.kind
+          : DEFAULT_CONFIG.cloud.storage.objectStore.kind,
+      },
+    },
+    runtime: {
+      ...DEFAULT_CONFIG.cloud.runtime,
+      ...(source.runtime || {}),
+      configSource: 'app',
+      launcher: 'node',
+      allowedLocalMcpNames: stringArray(source.runtime?.allowedLocalMcpNames),
+      allowedHostProjectDirectories: stringArray(source.runtime?.allowedHostProjectDirectories),
+    },
+    features: normalizeCloudFeatures(source.features),
+  }
+}
+
 function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
   return {
     ...raw,
@@ -248,6 +361,7 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       ...(raw.compaction || {}),
       ...(raw.compaction?.agent ? { agent: { ...raw.compaction.agent } } : {}),
     },
+    cloud: normalizeCloudConfig(raw.cloud),
   }
 }
 

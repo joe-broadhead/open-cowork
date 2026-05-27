@@ -3,15 +3,46 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `ff00a2a0fc3c5f6f35234d9e63bcb53eaf28398880a8eb87910ca448582253f2`
-- Production package entries: 420
-- Bundled license directories: 399 (21 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `9f4285ac2709700dd4390fda09ad44d547ff436efa0557116335e0a98a9e1d9c`
+- Production package entries: 481
+- Bundled license directories: 453 (28 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
 | Package | Version | License | License files | Source |
 | --- | --- | --- | --- | --- |
 | @antfu/install-pkg | 1.1.0 | MIT | THIRD_PARTY_LICENSES/@antfu__install-pkg@1.1.0/ | git+https://github.com/antfu/install-pkg.git |
+| @aws-crypto/crc32 | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__crc32@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/crc32c | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__crc32c@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/sha1-browser | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__sha1-browser@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/sha256-browser | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__sha256-browser@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/sha256-js | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__sha256-js@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/supports-web-crypto | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__supports-web-crypto@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-crypto/util | 5.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-crypto__util@5.2.0/ | git@github.com:aws/aws-sdk-js-crypto-helpers.git |
+| @aws-sdk/client-s3 | 3.1054.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__client-s3@3.1054.0/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/core | 3.974.14 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__core@3.974.14/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/crc64-nvme | 3.972.9 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__crc64-nvme@3.972.9/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-env | 3.972.40 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-env@3.972.40/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-http | 3.972.42 | Apache-2.0 |  | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-ini | 3.972.44 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-ini@3.972.44/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-login | 3.972.44 | Apache-2.0 |  | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-node | 3.972.45 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-node@3.972.45/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-process | 3.972.40 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-process@3.972.40/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-sso | 3.972.44 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-sso@3.972.44/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/credential-provider-web-identity | 3.972.44 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__credential-provider-web-identity@3.972.44/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-bucket-endpoint | 3.972.16 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-bucket-endpoint@3.972.16/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-expect-continue | 3.972.13 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-expect-continue@3.972.13/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-flexible-checksums | 3.974.22 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-flexible-checksums@3.974.22/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-location-constraint | 3.972.11 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-location-constraint@3.972.11/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-sdk-s3 | 3.972.43 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-sdk-s3@3.972.43/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/middleware-ssec | 3.972.11 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__middleware-ssec@3.972.11/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/nested-clients | 3.997.12 | Apache-2.0 |  | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/signature-v4-multi-region | 3.996.29 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__signature-v4-multi-region@3.996.29/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/token-providers | 3.1054.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__token-providers@3.1054.0/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/types | 3.973.9 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__types@3.973.9/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/util-locate-window | 3.965.5 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__util-locate-window@3.965.5/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws-sdk/xml-builder | 3.972.26 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws-sdk__xml-builder@3.972.26/ | https://github.com/aws/aws-sdk-js-v3.git |
+| @aws/lambda-invoke-store | 0.2.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.2.4/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
@@ -19,8 +50,18 @@ Each package remains licensed under its own license terms. The table below is pr
 | @iconify/utils | 3.1.0 | MIT | THIRD_PARTY_LICENSES/@iconify__utils@3.1.0/ | https://github.com/iconify/iconify.git |
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
+| @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
+| @smithy/core | 3.24.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.24.4/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/credential-provider-imds | 4.3.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.3.4/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/fetch-http-handler | 5.4.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__fetch-http-handler@5.4.4/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/is-array-buffer | 2.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__is-array-buffer@2.2.0/ | https://github.com/awslabs/smithy-typescript.git |
+| @smithy/node-http-handler | 4.7.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__node-http-handler@4.7.4/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/signature-v4 | 5.4.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__signature-v4@5.4.4/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/types | 4.14.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__types@4.14.2/ | https://github.com/smithy-lang/smithy-typescript.git |
+| @smithy/util-buffer-from | 2.2.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__util-buffer-from@2.2.0/ | https://github.com/awslabs/smithy-typescript.git |
+| @smithy/util-utf8 | 2.3.0 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__util-utf8@2.3.0/ | https://github.com/awslabs/smithy-typescript.git |
 | @tanstack/react-virtual | 3.13.24 | MIT | THIRD_PARTY_LICENSES/@tanstack__react-virtual@3.13.24/ | git+https://github.com/TanStack/virtual.git |
 | @tanstack/virtual-core | 3.14.0 | MIT | THIRD_PARTY_LICENSES/@tanstack__virtual-core@3.14.0/ | git+https://github.com/TanStack/virtual.git |
 | @types/d3 | 7.4.3 | MIT | THIRD_PARTY_LICENSES/@types__d3@7.4.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
@@ -79,6 +120,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | base64-js | 1.5.1 | MIT | THIRD_PARTY_LICENSES/base64-js@1.5.1/ | git://github.com/beatgammit/base64-js.git |
 | bignumber.js | 9.3.1 | MIT |  | https://github.com/MikeMcl/bignumber.js.git |
 | body-parser | 2.2.2 | MIT | THIRD_PARTY_LICENSES/body-parser@2.2.2/ | expressjs/body-parser |
+| bowser | 2.14.1 | MIT | THIRD_PARTY_LICENSES/bowser@2.14.1/ | git+https://github.com/bowser-js/bowser.git |
 | buffer-equal-constant-time | 1.0.1 | BSD-3-Clause | THIRD_PARTY_LICENSES/buffer-equal-constant-time@1.0.1/ | git@github.com:goinstant/buffer-equal-constant-time.git |
 | builder-util-runtime | 9.5.1 | MIT | THIRD_PARTY_LICENSES/builder-util-runtime@9.5.1/ | git+https://github.com/electron-userland/electron-builder.git |
 | bytes | 3.1.2 | MIT | THIRD_PARTY_LICENSES/bytes@3.1.2/ | visionmedia/bytes.js |
@@ -176,6 +218,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | fast-deep-equal | 3.1.3 | MIT | THIRD_PARTY_LICENSES/fast-deep-equal@3.1.3/ | git+https://github.com/epoberezkin/fast-deep-equal.git |
 | fast-json-patch | 3.1.1 | MIT | THIRD_PARTY_LICENSES/fast-json-patch@3.1.1/ | git://github.com/Starcounter-Jack/JSON-Patch.git |
 | fast-uri | 3.1.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/fast-uri@3.1.2/ | git+https://github.com/fastify/fast-uri.git |
+| fast-xml-builder | 1.2.0 | MIT | THIRD_PARTY_LICENSES/fast-xml-builder@1.2.0/ | git+https://github.com/NaturalIntelligence/fast-xml-builder.git |
+| fast-xml-parser | 5.7.3 | MIT | THIRD_PARTY_LICENSES/fast-xml-parser@5.7.3/ | git+https://github.com/NaturalIntelligence/fast-xml-parser.git |
 | fetch-blob | 3.2.0 | MIT | THIRD_PARTY_LICENSES/fetch-blob@3.2.0/ | https://github.com/node-fetch/fetch-blob.git |
 | finalhandler | 2.1.1 | MIT | THIRD_PARTY_LICENSES/finalhandler@2.1.1/ | pillarjs/finalhandler |
 | formdata-polyfill | 4.0.10 | MIT | THIRD_PARTY_LICENSES/formdata-polyfill@4.0.10/ | git+https://jimmywarting@github.com/jimmywarting/FormData.git |
@@ -314,13 +358,26 @@ Each package remains licensed under its own license terms. The table below is pr
 | parse-entities | 4.0.2 | MIT | THIRD_PARTY_LICENSES/parse-entities@4.0.2/ | wooorm/parse-entities |
 | parseurl | 1.3.3 | MIT | THIRD_PARTY_LICENSES/parseurl@1.3.3/ | pillarjs/parseurl |
 | path-data-parser | 0.1.0 | MIT | THIRD_PARTY_LICENSES/path-data-parser@0.1.0/ | git+https://github.com/pshihn/path-data-parser.git |
+| path-expression-matcher | 1.5.0 | MIT | THIRD_PARTY_LICENSES/path-expression-matcher@1.5.0/ | https://github.com/NaturalIntelligence/path-expression-matcher |
 | path-key | 3.1.1 | MIT | THIRD_PARTY_LICENSES/path-key@3.1.1/ | sindresorhus/path-key |
 | path-to-regexp | 8.4.2 | MIT | THIRD_PARTY_LICENSES/path-to-regexp@8.4.2/ | https://github.com/pillarjs/path-to-regexp.git |
 | pathe | 2.0.3 | MIT | THIRD_PARTY_LICENSES/pathe@2.0.3/ | unjs/pathe |
+| pg | 8.21.0 | MIT | THIRD_PARTY_LICENSES/pg@8.21.0/ | git://github.com/brianc/node-postgres.git |
+| pg-cloudflare | 1.4.0 | MIT | THIRD_PARTY_LICENSES/pg-cloudflare@1.4.0/ | git://github.com/brianc/node-postgres.git |
+| pg-connection-string | 2.13.0 | MIT | THIRD_PARTY_LICENSES/pg-connection-string@2.13.0/ | git://github.com/brianc/node-postgres.git |
+| pg-int8 | 1.0.1 | ISC | THIRD_PARTY_LICENSES/pg-int8@1.0.1/ | https://github.com/charmander/pg-int8 |
+| pg-pool | 3.14.0 | MIT | THIRD_PARTY_LICENSES/pg-pool@3.14.0/ | git://github.com/brianc/node-postgres.git |
+| pg-protocol | 1.14.0 | MIT | THIRD_PARTY_LICENSES/pg-protocol@1.14.0/ | git://github.com/brianc/node-postgres.git |
+| pg-types | 2.2.0 | MIT |  | git://github.com/brianc/node-pg-types.git |
+| pgpass | 1.0.5 | MIT |  | https://github.com/hoegaarden/pgpass.git |
 | pkce-challenge | 5.0.1 | MIT | THIRD_PARTY_LICENSES/pkce-challenge@5.0.1/ | git+https://github.com/crouchcd/pkce-challenge.git |
 | pkg-types | 1.3.1 | MIT | THIRD_PARTY_LICENSES/pkg-types@1.3.1/ | unjs/pkg-types |
 | points-on-curve | 0.2.0 | MIT | THIRD_PARTY_LICENSES/points-on-curve@0.2.0/ | git+https://github.com/pshihn/bezier-points.git |
 | points-on-path | 0.2.1 | MIT | THIRD_PARTY_LICENSES/points-on-path@0.2.1/ | git+https://github.com/pshihn/points-on-path.git |
+| postgres-array | 2.0.0 | MIT | THIRD_PARTY_LICENSES/postgres-array@2.0.0/ | bendrucker/postgres-array |
+| postgres-bytea | 1.0.1 | MIT | THIRD_PARTY_LICENSES/postgres-bytea@1.0.1/ | bendrucker/postgres-bytea |
+| postgres-date | 1.0.7 | MIT | THIRD_PARTY_LICENSES/postgres-date@1.0.7/ | bendrucker/postgres-date |
+| postgres-interval | 1.2.0 | MIT | THIRD_PARTY_LICENSES/postgres-interval@1.2.0/ | bendrucker/postgres-interval |
 | property-information | 7.1.0 | MIT | THIRD_PARTY_LICENSES/property-information@7.1.0/ | wooorm/property-information |
 | proxy-addr | 2.0.7 | MIT | THIRD_PARTY_LICENSES/proxy-addr@2.0.7/ | jshttp/proxy-addr |
 | qs | 6.15.2 | BSD-3-Clause | THIRD_PARTY_LICENSES/qs@6.15.2/ | https://github.com/ljharb/qs.git |
@@ -354,10 +411,12 @@ Each package remains licensed under its own license terms. The table below is pr
 | side-channel-map | 1.0.1 | MIT | THIRD_PARTY_LICENSES/side-channel-map@1.0.1/ | git+https://github.com/ljharb/side-channel-map.git |
 | side-channel-weakmap | 1.0.2 | MIT | THIRD_PARTY_LICENSES/side-channel-weakmap@1.0.2/ | git+https://github.com/ljharb/side-channel-weakmap.git |
 | space-separated-tokens | 2.0.2 | MIT | THIRD_PARTY_LICENSES/space-separated-tokens@2.0.2/ | wooorm/space-separated-tokens |
+| split2 | 4.2.0 | ISC | THIRD_PARTY_LICENSES/split2@4.2.0/ | https://github.com/mcollina/split2.git |
 | statuses | 2.0.2 | MIT | THIRD_PARTY_LICENSES/statuses@2.0.2/ | jshttp/statuses |
 | string-width | 7.2.0 | MIT | THIRD_PARTY_LICENSES/string-width@7.2.0/ | sindresorhus/string-width |
 | stringify-entities | 4.0.4 | MIT | THIRD_PARTY_LICENSES/stringify-entities@4.0.4/ | wooorm/stringify-entities |
 | strip-ansi | 7.2.0 | MIT | THIRD_PARTY_LICENSES/strip-ansi@7.2.0/ | chalk/strip-ansi |
+| strnum | 2.3.0 | MIT | THIRD_PARTY_LICENSES/strnum@2.3.0/ | https://github.com/NaturalIntelligence/strnum |
 | style-to-js | 1.1.21 | MIT | THIRD_PARTY_LICENSES/style-to-js@1.1.21/ | git+https://github.com/remarkablemark/style-to-js.git |
 | style-to-object | 1.0.14 | MIT | THIRD_PARTY_LICENSES/style-to-object@1.0.14/ | git+https://github.com/remarkablemark/style-to-object.git |
 | stylis | 4.3.6 | MIT | THIRD_PARTY_LICENSES/stylis@4.3.6/ | https://github.com/thysultan/stylis.js |
@@ -423,6 +482,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | which | 2.0.2 | ISC | THIRD_PARTY_LICENSES/which@2.0.2/ | git://github.com/isaacs/node-which.git |
 | wrap-ansi | 9.0.2 | MIT | THIRD_PARTY_LICENSES/wrap-ansi@9.0.2/ | chalk/wrap-ansi |
 | wrappy | 1.0.2 | ISC | THIRD_PARTY_LICENSES/wrappy@1.0.2/ | https://github.com/npm/wrappy |
+| xml-naming | 0.1.0 | MIT |  | https://github.com/NaturalIntelligence/xml-naming |
+| xtend | 4.0.2 | MIT | THIRD_PARTY_LICENSES/xtend@4.0.2/ | git://github.com/Raynos/xtend.git |
 | y18n | 5.0.8 | ISC | THIRD_PARTY_LICENSES/y18n@5.0.8/ | yargs/y18n |
 | yargs | 18.0.0 | MIT | THIRD_PARTY_LICENSES/yargs@18.0.0/ | https://github.com/yargs/yargs.git |
 | yargs-parser | 22.0.0 | ISC | THIRD_PARTY_LICENSES/yargs-parser@22.0.0/ | https://github.com/yargs/yargs-parser.git |

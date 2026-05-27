@@ -145,6 +145,81 @@ test('downstream i18n and telemetry overlays validate', () => {
   assert.doesNotThrow(() => validateResolvedConfig(config, 'downstream config'))
 })
 
+test('cloud deployment config validates role, profile, storage, and runtime policy', () => {
+  const config = cloneConfig()
+  config.cloud = {
+    role: 'worker',
+    defaultProfile: 'data-analyst',
+    auth: {
+      mode: 'oidc',
+      issuerUrl: 'https://auth.example.test',
+      clientId: 'open-cowork-cloud',
+      clientSecretRef: 'secret/oidc-client',
+      cookieSecretRef: 'secret/cookie',
+      allowedEmailDomains: ['example.test'],
+    },
+    storage: {
+      controlPlane: {
+        kind: 'postgres',
+        urlRef: 'secret/database-url',
+      },
+      objectStore: {
+        kind: 's3',
+        bucket: 'open-cowork-cloud',
+        region: 'us-east-1',
+        prefix: 'prod',
+        credentialsRef: 'secret/object-store',
+      },
+    },
+    runtime: {
+      configSource: 'app',
+      launcher: 'node',
+      allowMachineRuntimeConfig: false,
+      allowLocalStdioMcps: false,
+      allowHostProjectDirectories: false,
+      allowedLocalMcpNames: [],
+      allowedHostProjectDirectories: [],
+    },
+    features: {
+      chat: true,
+      agents: true,
+      artifacts: true,
+      threadIndex: true,
+      workflows: false,
+      webhooks: false,
+      settings: false,
+      customSkills: false,
+      customAgents: false,
+      customMcps: false,
+    },
+    profiles: {
+      'data-analyst': {
+        label: 'Data analyst',
+        description: 'Only expose the data analyst agent and warehouse MCP.',
+        agents: ['data-analyst'],
+        tools: ['warehouse'],
+        mcps: ['warehouse'],
+      },
+    },
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'cloud config'))
+})
+
+test('cloud deployment config rejects machine runtime config and unknown cloud keys', () => {
+  const config = cloneConfig()
+  config.cloud = {
+    role: 'worker',
+    runtime: {
+      configSource: 'machine',
+      launcher: 'node',
+      html: '<script></script>',
+    },
+  }
+
+  assert.throws(() => validateResolvedConfig(config, 'cloud config'), /cloud\.runtime/)
+})
+
 test('downstream tool trace rules validate', () => {
   const config = cloneConfig()
   config.toolTrace = {

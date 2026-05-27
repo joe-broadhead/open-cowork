@@ -1,0 +1,197 @@
+import { resolve } from 'path'
+import type { AppSettings, CustomMcpConfig } from '@open-cowork/shared'
+import { DEFAULT_CONFIG } from '../config-types.ts'
+import type {
+  BundleMcp,
+  CloudFeatureConfig,
+  CloudProfileConfig,
+  CloudRole,
+  OpenCoworkConfig,
+} from '../config-types.ts'
+
+type Env = Record<string, string | undefined>
+
+const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'scheduler'])
+
+export type CloudRuntimePolicy = {
+  role: CloudRole
+  profileName: string
+  profile: CloudProfileConfig
+  features: CloudFeatureConfig
+  runtimeConfigSource: 'app'
+  allowMachineRuntimeConfig: boolean
+  allowLocalStdioMcps: boolean
+  allowHostProjectDirectories: boolean
+  allowedAgents: string[] | null
+  allowedTools: string[] | null
+  allowedMcps: string[] | null
+  allowedLocalMcpNames: string[]
+  allowedHostProjectDirectories: string[]
+}
+
+export type CloudPolicyVerdict = {
+  allowed: boolean
+  reason: string | null
+}
+
+function configuredCloud(config: Pick<OpenCoworkConfig, 'cloud'>) {
+  return config.cloud || DEFAULT_CONFIG.cloud
+}
+
+function envValue(env: Env, key: string) {
+  const value = env[key]?.trim()
+  return value || null
+}
+
+function unique(values: readonly string[] | undefined) {
+  return Array.from(new Set((values || []).map((value) => value.trim()).filter(Boolean)))
+}
+
+function allowlist(values: readonly string[] | undefined) {
+  const list = unique(values)
+  return list.length > 0 ? list : null
+}
+
+function hasName(list: string[] | null | undefined, name: string) {
+  return !list || list.includes(name)
+}
+
+function isPathInside(candidate: string, root: string) {
+  const resolvedCandidate = resolve(candidate)
+  const resolvedRoot = resolve(root)
+  return resolvedCandidate === resolvedRoot || resolvedCandidate.startsWith(`${resolvedRoot}/`)
+}
+
+export function resolveCloudRole(
+  config: Pick<OpenCoworkConfig, 'cloud'>,
+  env: Env = process.env,
+): CloudRole {
+  const requested = envValue(env, 'OPEN_COWORK_CLOUD_ROLE') || configuredCloud(config).role
+  if (!CLOUD_ROLES.has(requested as CloudRole)) {
+    throw new Error(`Invalid cloud role "${requested}".`)
+  }
+  return requested as CloudRole
+}
+
+export function resolveCloudProfileName(
+  config: Pick<OpenCoworkConfig, 'cloud'>,
+  env: Env = process.env,
+) {
+  const cloud = configuredCloud(config)
+  const requested = envValue(env, 'OPEN_COWORK_CLOUD_PROFILE') || cloud.defaultProfile
+  if (!cloud.profiles[requested]) {
+    throw new Error(`Unknown cloud profile "${requested}".`)
+  }
+  return requested
+}
+
+export function resolveCloudRuntimePolicy(
+  config: Pick<OpenCoworkConfig, 'cloud'>,
+  env: Env = process.env,
+): CloudRuntimePolicy {
+  const cloud = configuredCloud(config)
+  const profileName = resolveCloudProfileName(config, env)
+  const profile = cloud.profiles[profileName] || {}
+  const runtime = {
+    ...cloud.runtime,
+    ...(profile.runtime || {}),
+  }
+  return {
+    role: resolveCloudRole(config, env),
+    profileName,
+    profile,
+    features: {
+      ...cloud.features,
+      ...(profile.features || {}),
+    },
+    runtimeConfigSource: 'app',
+    allowMachineRuntimeConfig: runtime.allowMachineRuntimeConfig === true,
+    allowLocalStdioMcps: runtime.allowLocalStdioMcps === true,
+    allowHostProjectDirectories: runtime.allowHostProjectDirectories === true,
+    allowedAgents: allowlist(profile.agents),
+    allowedTools: allowlist(profile.tools),
+    allowedMcps: allowlist(profile.mcps),
+    allowedLocalMcpNames: unique(runtime.allowedLocalMcpNames),
+    allowedHostProjectDirectories: unique(runtime.allowedHostProjectDirectories),
+  }
+}
+
+export function assertCloudRuntimeSettingsAllowed(
+  settings: Pick<AppSettings, 'runtimeConfigSource'>,
+  policy: CloudRuntimePolicy,
+) {
+  if (settings.runtimeConfigSource === 'machine' && !policy.allowMachineRuntimeConfig) {
+    throw new Error('Cloud profiles must use app-managed runtime config unless machine config is explicitly enabled.')
+  }
+}
+
+export function coerceCloudRuntimeSettings<T extends Pick<AppSettings, 'runtimeConfigSource'>>(
+  settings: T,
+  policy: CloudRuntimePolicy,
+): T {
+  if (settings.runtimeConfigSource !== 'machine' || policy.allowMachineRuntimeConfig) return settings
+  return {
+    ...settings,
+    runtimeConfigSource: 'app',
+  }
+}
+
+export function evaluateCloudMcpPolicy(
+  mcp: Pick<CustomMcpConfig, 'name' | 'type'> | Pick<BundleMcp, 'name' | 'type'>,
+  policy: CloudRuntimePolicy,
+): CloudPolicyVerdict {
+  if (!hasName(policy.allowedMcps, mcp.name)) {
+    return { allowed: false, reason: `MCP "${mcp.name}" is not enabled for cloud profile "${policy.profileName}".` }
+  }
+
+  const isLocal = mcp.type === 'stdio' || mcp.type === 'local'
+  if (!isLocal) return { allowed: true, reason: null }
+
+  if (policy.allowLocalStdioMcps || policy.allowedLocalMcpNames.includes(mcp.name)) {
+    return { allowed: true, reason: null }
+  }
+
+  return {
+    allowed: false,
+    reason: 'Local stdio MCPs are disabled for this cloud profile.',
+  }
+}
+
+export function isCloudMcpAllowed(
+  mcp: Pick<CustomMcpConfig, 'name' | 'type'> | Pick<BundleMcp, 'name' | 'type'>,
+  policy: CloudRuntimePolicy,
+) {
+  return evaluateCloudMcpPolicy(mcp, policy).allowed
+}
+
+export function evaluateCloudProjectDirectoryPolicy(
+  directory: string | null | undefined,
+  policy: CloudRuntimePolicy,
+  extraAllowedRoots: readonly string[] = [],
+): CloudPolicyVerdict {
+  if (!directory?.trim()) {
+    return { allowed: false, reason: 'Cloud sessions require an app-managed workspace directory.' }
+  }
+  const allowedRoots = [
+    ...policy.allowedHostProjectDirectories,
+    ...extraAllowedRoots,
+  ].filter(Boolean)
+  if (allowedRoots.some((root) => isPathInside(directory, root))) {
+    return { allowed: true, reason: null }
+  }
+  if (policy.allowHostProjectDirectories) {
+    return { allowed: true, reason: null }
+  }
+  return {
+    allowed: false,
+    reason: 'Arbitrary host project directories are disabled for this cloud profile.',
+  }
+}
+
+export function isCloudProjectDirectoryAllowed(
+  directory: string | null | undefined,
+  policy: CloudRuntimePolicy,
+  extraAllowedRoots: readonly string[] = [],
+) {
+  return evaluateCloudProjectDirectoryPolicy(directory, policy, extraAllowedRoots).allowed
+}
