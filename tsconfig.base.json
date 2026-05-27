@@ -6,6 +6,14 @@
     "paths": {
       "@open-cowork/cloud-client": ["./packages/cloud-client/src/index.ts"],
       "@open-cowork/cloud-client/*": ["./packages/cloud-client/src/*"],
+      "@open-cowork/gateway-channel": ["./packages/gateway-channel/src/index.ts"],
+      "@open-cowork/gateway-channel/*": ["./packages/gateway-channel/src/*"],
+      "@open-cowork/gateway-provider-telegram": ["./packages/gateway-provider-telegram/src/index.ts"],
+      "@open-cowork/gateway-provider-telegram/*": ["./packages/gateway-provider-telegram/src/*"],
+      "@open-cowork/gateway-provider-webhook": ["./packages/gateway-provider-webhook/src/index.ts"],
+      "@open-cowork/gateway-provider-webhook/*": ["./packages/gateway-provider-webhook/src/*"],
+      "@open-cowork/gateway-testing": ["./packages/gateway-testing/src/index.ts"],
+      "@open-cowork/gateway-testing/*": ["./packages/gateway-testing/src/*"],
       "@open-cowork/shared": ["./packages/shared/src/index.ts"],
       "@open-cowork/shared/*": ["./packages/shared/src/*"]
     },

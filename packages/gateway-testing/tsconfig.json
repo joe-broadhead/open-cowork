@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "paths": {
+      "@open-cowork/gateway-channel": ["../gateway-channel/dist/index.d.ts"],
+      "@open-cowork/gateway-channel/*": ["../gateway-channel/dist/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
