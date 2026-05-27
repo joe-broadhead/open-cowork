@@ -8,9 +8,19 @@ import type {
   SessionPatch,
   SessionView,
   UpdateInstallEvent,
+  WorkspaceSessionsUpdatedEvent,
 } from '@open-cowork/shared'
 
 const PRELOAD_INVOKE_CHANNELS = [
+  'workspace:list',
+  'workspace:activate',
+  'workspace:add-cloud',
+  'workspace:remove',
+  'workspace:login',
+  'workspace:logout',
+  'workspace:policy',
+  'workspace:support',
+  'workspace:sync',
   'auth:status',
   'auth:login',
   'auth:logout',
@@ -41,6 +51,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'dialog:save-text',
   'chart:render-svg',
   'chart:save-artifact',
+  'artifact:list',
+  'artifact:upload',
   'artifact:export',
   'artifact:reveal',
   'artifact:read-attachment',
@@ -157,6 +169,7 @@ const PRELOAD_LISTEN_CHANNELS = [
   'runtime:loading-status',
   'session:updated',
   'session:deleted',
+  'workspace:sessions-updated',
   'workflow:updated',
 ] as const
 
@@ -192,19 +205,30 @@ function listen(channel: PreloadListenChannel, handler: IpcRendererListener) {
 }
 
 const api: CoworkAPI = {
+  workspace: {
+    list: () => invoke('workspace:list'),
+    activate: (workspaceId) => invoke('workspace:activate', workspaceId),
+    addCloud: (input) => invoke('workspace:add-cloud', input),
+    remove: (workspaceId) => invoke('workspace:remove', workspaceId),
+    login: (workspaceId) => invoke('workspace:login', workspaceId),
+    logout: (workspaceId) => invoke('workspace:logout', workspaceId),
+    policy: (workspaceId) => invoke('workspace:policy', workspaceId),
+    support: (workspaceId) => invoke('workspace:support', workspaceId),
+    sync: (workspaceId) => invoke('workspace:sync', workspaceId),
+  },
   auth: {
     status: () => invoke('auth:status'),
     login: () => invoke('auth:login'),
     logout: () => invoke('auth:logout'),
   },
   session: {
-    create: (directory?) => invoke('session:create', directory),
+    create: (directory?, options?) => invoke('session:create', directory, options),
     activate: (sessionId, options) => invoke('session:activate', sessionId, options),
     prompt: (sessionId, text, attachments, agent, options) => invoke('session:prompt', sessionId, text, attachments, agent, options),
     setComposerPreferences: (sessionId, preferences) => invoke('session:set-composer-preferences', sessionId, preferences),
-    list: () => invoke('session:list'),
-    get: (id) => invoke('session:get', id),
-    abort: (sessionId) => invoke('session:abort', sessionId),
+    list: (options?) => invoke('session:list', options),
+    get: (id, options?) => invoke('session:get', id, options),
+    abort: (sessionId, options) => invoke('session:abort', sessionId, options),
     abortTask: (rootSessionId, childSessionId) => invoke('session:abort-task', rootSessionId, childSessionId),
     rename: (sessionId, title) => invoke('session:rename', sessionId, title),
     delete: (sessionId, confirmationToken) => invoke('session:delete', sessionId, confirmationToken),
@@ -231,6 +255,8 @@ const api: CoworkAPI = {
     saveArtifact: (request) => invoke('chart:save-artifact', request),
   },
   artifact: {
+    list: (request) => invoke('artifact:list', request),
+    upload: (request) => invoke('artifact:upload', request),
     export: (request) => invoke('artifact:export', request),
     reveal: (request) => invoke('artifact:reveal', request),
     readAttachment: (request) => invoke('artifact:read-attachment', request),
@@ -258,7 +284,7 @@ const api: CoworkAPI = {
     reject: (sessionId, requestId) => invoke('question:reject', sessionId, requestId),
   },
   settings: {
-    get: () => invoke('settings:get'),
+    get: (options) => invoke('settings:get', options),
     getProviderCredentials: (providerId) => invoke('settings:get-provider-credentials', providerId),
     getIntegrationCredentials: (integrationId) => invoke('settings:get-integration-credentials', integrationId),
     set: (updates) => invoke('settings:set', updates),
@@ -313,31 +339,31 @@ const api: CoworkAPI = {
     },
   },
   workflows: {
-    list: () => invoke('workflows:list'),
-    get: (workflowId) => invoke('workflows:get', workflowId),
+    list: (options) => options ? invoke('workflows:list', options) : invoke('workflows:list'),
+    get: (workflowId, options) => options ? invoke('workflows:get', workflowId, options) : invoke('workflows:get', workflowId),
     startDraft: (directory) => invoke('workflows:start-draft', directory),
-    runNow: (workflowId) => invoke('workflows:run-now', workflowId),
-    pause: (workflowId) => invoke('workflows:pause', workflowId),
-    resume: (workflowId) => invoke('workflows:resume', workflowId),
-    archive: (workflowId) => invoke('workflows:archive', workflowId),
+    runNow: (workflowId, options) => options ? invoke('workflows:run-now', workflowId, options) : invoke('workflows:run-now', workflowId),
+    pause: (workflowId, options) => options ? invoke('workflows:pause', workflowId, options) : invoke('workflows:pause', workflowId),
+    resume: (workflowId, options) => options ? invoke('workflows:resume', workflowId, options) : invoke('workflows:resume', workflowId),
+    archive: (workflowId, options) => options ? invoke('workflows:archive', workflowId, options) : invoke('workflows:archive', workflowId),
     regenerateWebhookSecret: (workflowId) => invoke('workflows:regenerate-webhook-secret', workflowId),
   },
   threads: {
     search: (query) => invoke('threads:search', query),
     facets: (query) => invoke('threads:facets', query),
     tags: {
-      list: () => invoke('threads:tags:list'),
-      create: (input) => invoke('threads:tags:create', input),
-      update: (tagId, input) => invoke('threads:tags:update', tagId, input),
-      delete: (tagId) => invoke('threads:tags:delete', tagId),
-      apply: (sessionIds, tagIds) => invoke('threads:tags:apply', sessionIds, tagIds),
-      remove: (sessionIds, tagIds) => invoke('threads:tags:remove', sessionIds, tagIds),
+      list: (options) => options ? invoke('threads:tags:list', options) : invoke('threads:tags:list'),
+      create: (input, options) => options ? invoke('threads:tags:create', input, options) : invoke('threads:tags:create', input),
+      update: (tagId, input, options) => options ? invoke('threads:tags:update', tagId, input, options) : invoke('threads:tags:update', tagId, input),
+      delete: (tagId, options) => options ? invoke('threads:tags:delete', tagId, options) : invoke('threads:tags:delete', tagId),
+      apply: (sessionIds, tagIds, options) => options ? invoke('threads:tags:apply', sessionIds, tagIds, options) : invoke('threads:tags:apply', sessionIds, tagIds),
+      remove: (sessionIds, tagIds, options) => options ? invoke('threads:tags:remove', sessionIds, tagIds, options) : invoke('threads:tags:remove', sessionIds, tagIds),
     },
     smartFilters: {
-      list: () => invoke('threads:smart-filters:list'),
-      create: (input) => invoke('threads:smart-filters:create', input),
-      update: (filterId, input) => invoke('threads:smart-filters:update', filterId, input),
-      delete: (filterId) => invoke('threads:smart-filters:delete', filterId),
+      list: (options) => options ? invoke('threads:smart-filters:list', options) : invoke('threads:smart-filters:list'),
+      create: (input, options) => options ? invoke('threads:smart-filters:create', input, options) : invoke('threads:smart-filters:create', input),
+      update: (filterId, input, options) => options ? invoke('threads:smart-filters:update', filterId, input, options) : invoke('threads:smart-filters:update', filterId, input),
+      delete: (filterId, options) => options ? invoke('threads:smart-filters:delete', filterId, options) : invoke('threads:smart-filters:delete', filterId),
     },
     suggestions: {
       accept: (suggestionId) => invoke('threads:suggestions:accept', suggestionId),
@@ -390,7 +416,7 @@ const api: CoworkAPI = {
       return listen('runtime:notification', handler)
     },
     sessionView: (callback) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; view: SessionView }) => callback(data)
+      const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; workspaceId?: string | null; view: SessionView }) => callback(data)
       return listen('session:view', handler)
     },
     permissionRequest: (callback: (request: PermissionRequest) => void) => {
@@ -432,6 +458,10 @@ const api: CoworkAPI = {
     sessionDeleted: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) => callback(data)
       return listen('session:deleted', handler)
+    },
+    workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: WorkspaceSessionsUpdatedEvent) => callback(data)
+      return listen('workspace:sessions-updated', handler)
     },
     workflowUpdated: (callback: () => void) => {
       const handler = () => callback()

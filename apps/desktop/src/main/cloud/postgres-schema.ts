@@ -47,6 +47,41 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_session_events_sequence_idx
     ON cloud_session_events (tenant_id, session_id, sequence)`,
+  `CREATE TABLE IF NOT EXISTS cloud_workspace_event_counters (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    next_sequence integer NOT NULL DEFAULT 0,
+    PRIMARY KEY (tenant_id, user_id),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_workspace_events (
+    tenant_id text NOT NULL,
+    user_id text NOT NULL,
+    event_id text NOT NULL,
+    sequence integer NOT NULL,
+    session_id text,
+    entity_type text NOT NULL DEFAULT 'session',
+    entity_id text NOT NULL,
+    operation text NOT NULL DEFAULT 'update',
+    projection_version integer NOT NULL DEFAULT 0,
+    type text NOT NULL,
+    payload jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, user_id, event_id),
+    UNIQUE (tenant_id, user_id, sequence),
+    FOREIGN KEY (tenant_id, user_id) REFERENCES cloud_users(tenant_id, user_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, session_id) REFERENCES cloud_sessions(tenant_id, session_id) ON DELETE CASCADE
+  )`,
+  `ALTER TABLE cloud_workspace_events
+    ADD COLUMN IF NOT EXISTS entity_type text NOT NULL DEFAULT 'session'`,
+  `ALTER TABLE cloud_workspace_events
+    ADD COLUMN IF NOT EXISTS entity_id text NOT NULL DEFAULT ''`,
+  `ALTER TABLE cloud_workspace_events
+    ADD COLUMN IF NOT EXISTS operation text NOT NULL DEFAULT 'update'`,
+  `ALTER TABLE cloud_workspace_events
+    ADD COLUMN IF NOT EXISTS projection_version integer NOT NULL DEFAULT 0`,
+  `CREATE INDEX IF NOT EXISTS cloud_workspace_events_sequence_idx
+    ON cloud_workspace_events (tenant_id, user_id, sequence)`,
   `CREATE TABLE IF NOT EXISTS cloud_session_projections (
     tenant_id text NOT NULL,
     session_id text NOT NULL,

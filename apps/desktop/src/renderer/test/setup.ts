@@ -32,6 +32,61 @@ function createDefaultSettings(overrides: Partial<EffectiveAppSettings> = {}): E
 
 function installCoworkApi(overrides: TestCoworkApi = {}) {
   const api: TestCoworkApi = {
+    workspace: {
+      list: vi.fn(async () => [{
+        id: 'local',
+        kind: 'local',
+        label: 'Local',
+        status: 'online',
+        active: true,
+        lastSyncedAt: null,
+      }]),
+      activate: vi.fn(async () => ({
+        id: 'local',
+        kind: 'local',
+        label: 'Local',
+        status: 'online',
+        active: true,
+        lastSyncedAt: null,
+      })),
+      addCloud: vi.fn(async (input: { baseUrl: string; label?: string }) => ({
+        id: 'cloud:test',
+        kind: 'cloud',
+        label: input.label || 'Cloud',
+        status: 'disabled',
+        active: false,
+        baseUrl: input.baseUrl,
+        lastSyncedAt: null,
+      })),
+      remove: vi.fn(async () => true),
+      login: vi.fn(async () => ({
+        id: 'local',
+        kind: 'local',
+        label: 'Local',
+        status: 'online',
+        active: true,
+        lastSyncedAt: null,
+      })),
+      logout: vi.fn(async () => ({
+        id: 'local',
+        kind: 'local',
+        label: 'Local',
+        status: 'online',
+        active: true,
+        lastSyncedAt: null,
+      })),
+      policy: vi.fn(async () => ({
+        features: {},
+        allowedAgents: null,
+        allowedTools: null,
+        allowedMcps: null,
+        localFiles: 'enabled',
+        localStdioMcps: 'enabled',
+        machineRuntimeConfig: 'allowlisted',
+      })),
+      support: vi.fn(async () => []),
+      sync: vi.fn(async () => ({ ok: true, syncedAt: new Date().toISOString() })),
+    },
     app: {
       builtinAgents: vi.fn(async () => []),
       metadata: vi.fn(async () => ({ version: '0.0.0', preview: true })),
@@ -376,6 +431,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       runtimeLoadingStatus: vi.fn(() => () => undefined),
       sessionUpdated: vi.fn(() => () => undefined),
       sessionDeleted: vi.fn(() => () => undefined),
+      workspaceSessionsUpdated: vi.fn(() => () => undefined),
       workflowUpdated: vi.fn(() => () => undefined),
     },
   }

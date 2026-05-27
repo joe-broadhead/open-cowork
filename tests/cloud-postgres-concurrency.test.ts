@@ -168,6 +168,57 @@ test('real Postgres cloud store assigns unique ordered event sequences under con
   })
 })
 
+test('real Postgres cloud store assigns one ordered workspace stream across sessions', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const secondSessionId = `${ids.sessionId}-two`
+    await store.createSession({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: secondSessionId,
+      opencodeSessionId: `${secondSessionId}-opencode`,
+      profileName: 'full',
+    })
+
+    const writes = await Promise.all([
+      store.appendWorkspaceEvent({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        sessionId: ids.sessionId,
+        eventId: `${ids.sessionId}:event-1`,
+        type: 'assistant.message',
+        payload: { messageId: 'm-1', content: 'first' },
+      }),
+      store.appendWorkspaceEvent({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        sessionId: secondSessionId,
+        eventId: `${secondSessionId}:event-1`,
+        type: 'assistant.message',
+        payload: { messageId: 'm-2', content: 'second' },
+      }),
+      store.appendWorkspaceEvent({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        sessionId: ids.sessionId,
+        eventId: `${ids.sessionId}:event-2`,
+        type: 'assistant.message',
+        payload: { messageId: 'm-3', content: 'third' },
+      }),
+    ])
+
+    assert.deepEqual(
+      writes.map((event) => event.sequence).sort((left, right) => left - right),
+      [1, 2, 3],
+    )
+    assert.deepEqual(
+      (await store.listWorkspaceEvents(ids.tenantId, ids.userId, 0)).map((event) => event.sequence),
+      [1, 2, 3],
+    )
+  })
+})
+
 test('real Postgres cloud store keeps session commands idempotent and lease-fenced', {
   skip: POSTGRES_SKIP,
 }, async () => {

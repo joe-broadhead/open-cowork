@@ -10,6 +10,7 @@ import { getSessionRecord } from './session-registry.ts'
 export type RuntimeSessionEvent = {
   type?: string
   sessionId?: string | null
+  workspaceId?: string | null
   data?: {
     type?: string
     content?: string
@@ -57,7 +58,7 @@ export type RuntimeSessionEvent = {
 
 type PendingViewFlush = {
   win: BrowserWindow
-  sessionIds: Set<string>
+  sessions: Map<string, { sessionId: string; workspaceId?: string | null }>
   queuedAt: number
   timer: ReturnType<typeof setTimeout> | null
 }
@@ -85,8 +86,16 @@ const historyRefreshQueue = new Map<string, {
   promise: Promise<void>
 }>()
 
+function sessionFlushKey(sessionId: string, workspaceId?: string | null) {
+  return `${workspaceId || 'local'}:${sessionId}`
+}
+
 function getEventType(event: RuntimeSessionEvent) {
   return String(event.data?.type || event.type || '')
+}
+
+function workspacePatch(workspaceId?: string | null) {
+  return workspaceId ? { workspaceId } : {}
 }
 
 export function shouldPublishSessionView(event: RuntimeSessionEvent) {
@@ -109,6 +118,7 @@ export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null
     return {
       type: isReasoning ? 'task_reasoning' : 'task_text',
       sessionId: event.sessionId,
+      ...workspacePatch(event.workspaceId),
       taskRunId: event.data.taskRunId,
       segmentId: typeof event.data.partId === 'string' && event.data.partId
         ? event.data.partId
@@ -133,6 +143,7 @@ export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null
     return {
       type: 'message_reasoning',
       sessionId: event.sessionId,
+      ...workspacePatch(event.workspaceId),
       messageId,
       segmentId,
       content,
@@ -144,6 +155,7 @@ export function getSessionPatch(event: RuntimeSessionEvent): SessionPatch | null
   return {
     type: 'message_text',
     sessionId: event.sessionId,
+    ...workspacePatch(event.workspaceId),
     messageId,
     segmentId,
     content,
@@ -160,6 +172,7 @@ export function getRuntimeNotification(event: RuntimeSessionEvent): RuntimeNotif
     return {
       type: 'done',
       sessionId: event.sessionId || null,
+      ...workspacePatch(event.workspaceId),
       synthetic: Boolean(event.data?.synthetic),
     }
   }
@@ -167,6 +180,7 @@ export function getRuntimeNotification(event: RuntimeSessionEvent): RuntimeNotif
     return {
       type: 'error',
       sessionId: null,
+      ...workspacePatch(event.workspaceId),
       message: typeof event.data?.message === 'string' ? event.data.message : 'An error occurred',
     }
   }
@@ -188,11 +202,16 @@ export function publishNotification(
   win.webContents.send('runtime:notification', notification)
 }
 
-export function publishSessionView(win: BrowserWindow | null | undefined, sessionId: string | null | undefined) {
+export function publishSessionView(
+  win: BrowserWindow | null | undefined,
+  sessionId: string | null | undefined,
+  workspaceId?: string | null,
+) {
   if (!win || win.isDestroyed() || !sessionId) return
   incrementPerfCounter('session.view.published')
   win.webContents.send('session:view', {
     sessionId,
+    workspaceId: workspaceId || undefined,
     view: sessionEngine.getSessionView(sessionId),
   })
 }
@@ -221,45 +240,47 @@ export function publishSessionPatch(
   win.webContents.send('session:patch', patch)
 }
 
-function markSessionPatchViewRecovery(windowId: number, sessionId: string) {
+function markSessionPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
   const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
+  const key = sessionFlushKey(sessionId, workspaceId)
   if (existing) {
-    existing.add(sessionId)
+    existing.add(key)
     return
   }
-  patchViewRecoverySessionIdsByWindowId.set(windowId, new Set([sessionId]))
+  patchViewRecoverySessionIdsByWindowId.set(windowId, new Set([key]))
 }
 
-function clearSessionPatchViewRecovery(windowId: number, sessionId: string) {
+function clearSessionPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
   const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
   if (!existing) return
-  existing.delete(sessionId)
+  existing.delete(sessionFlushKey(sessionId, workspaceId))
   if (existing.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
 }
 
-function sessionNeedsPatchViewRecovery(windowId: number, sessionId: string) {
-  return patchViewRecoverySessionIdsByWindowId.get(windowId)?.has(sessionId) === true
+function sessionNeedsPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
+  return patchViewRecoverySessionIdsByWindowId.get(windowId)?.has(sessionFlushKey(sessionId, workspaceId)) === true
 }
 
-function dropQueuedSessionPatches(pending: PendingPatchFlush, sessionId: string) {
+function dropQueuedSessionPatches(pending: PendingPatchFlush, sessionId: string, workspaceId?: string | null) {
+  const key = sessionFlushKey(sessionId, workspaceId)
   const before = pending.patches.length
-  pending.patches = pending.patches.filter((queuedPatch) => queuedPatch.sessionId !== sessionId)
+  pending.patches = pending.patches.filter((queuedPatch) => sessionFlushKey(queuedPatch.sessionId, queuedPatch.workspaceId) !== key)
   return before - pending.patches.length
 }
 
-function recoverSessionWithViewOnlyCatchUp(windowId: number, sessionId: string, pending?: PendingPatchFlush) {
-  markSessionPatchViewRecovery(windowId, sessionId)
+function recoverSessionWithViewOnlyCatchUp(windowId: number, sessionId: string, workspaceId?: string | null, pending?: PendingPatchFlush) {
+  markSessionPatchViewRecovery(windowId, sessionId, workspaceId)
   if (!pending) return
-  const dropped = dropQueuedSessionPatches(pending, sessionId)
+  const dropped = dropQueuedSessionPatches(pending, sessionId, workspaceId)
   if (dropped > 0) pending.droppedPatches += dropped
-  pending.overflowSessionIds.add(sessionId)
+  pending.overflowSessionIds.add(sessionFlushKey(sessionId, workspaceId))
 }
 
-function sessionHasQueuedView(windowId: number, sessionId: string) {
-  return pendingViewFlushByWindowId.get(windowId)?.sessionIds.has(sessionId) === true
+function sessionHasQueuedView(windowId: number, sessionId: string, workspaceId?: string | null) {
+  return pendingViewFlushByWindowId.get(windowId)?.sessions.has(sessionFlushKey(sessionId, workspaceId)) === true
 }
 
-function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string) {
+function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
   const webContents = win.webContents as BrowserWindow['webContents'] & { isDestroyed?: () => boolean }
   if (win.isDestroyed() || webContents.isDestroyed?.()) return
   const windowId = webContents.id
@@ -267,8 +288,9 @@ function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: stri
   if (!pending || pending.patches.length === 0) return
 
   const queuedForSession: SessionPatch[] = []
+  const key = sessionFlushKey(sessionId, workspaceId)
   pending.patches = pending.patches.filter((patch) => {
-    if (patch.sessionId !== sessionId) return true
+    if (sessionFlushKey(patch.sessionId, patch.workspaceId) !== key) return true
     queuedForSession.push(patch)
     return false
   })
@@ -324,7 +346,7 @@ function flushPendingSessionPatches(windowId: number) {
 function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null | undefined) {
   if (!patch) return
   const windowId = win.webContents.id
-  if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId)) {
+  if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId, patch.workspaceId)) {
     let pending = pendingPatchFlushByWindowId.get(windowId)
     if (!pending) {
       pending = {
@@ -341,11 +363,11 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
       pendingPatchFlushByWindowId.set(windowId, pending)
     }
     pending.droppedPatches += 1
-    pending.overflowSessionIds.add(patch.sessionId)
+    pending.overflowSessionIds.add(sessionFlushKey(patch.sessionId, patch.workspaceId))
     return
   }
 
-  if (sessionHasQueuedView(windowId, patch.sessionId)) {
+  if (sessionHasQueuedView(windowId, patch.sessionId, patch.workspaceId)) {
     publishSessionPatch(win, patch)
     return
   }
@@ -367,9 +389,9 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
   }
 
   if (pending.patches.length >= MAX_PENDING_SESSION_PATCHES_PER_WINDOW) {
-    recoverSessionWithViewOnlyCatchUp(windowId, patch.sessionId, pending)
+    recoverSessionWithViewOnlyCatchUp(windowId, patch.sessionId, patch.workspaceId, pending)
     pending.droppedPatches += 1
-    queueSessionViewPublish(win, patch.sessionId)
+    queueSessionViewPublish(win, patch.sessionId, patch.workspaceId)
     return
   }
 
@@ -381,44 +403,45 @@ function flushPendingSessionViews(windowId: number) {
   if (!pending) return
   pendingViewFlushByWindowId.delete(windowId)
   if (pending.win.isDestroyed()) {
-    for (const sessionId of pending.sessionIds) clearSessionPatchViewRecovery(windowId, sessionId)
+    for (const entry of pending.sessions.values()) clearSessionPatchViewRecovery(windowId, entry.sessionId, entry.workspaceId)
     return
   }
   incrementPerfCounter('session.view.flushes')
   observePerf('session.view.flush.wait', Date.now() - pending.queuedAt, {
     unit: 'ms',
   })
-  observePerf('session.view.flush.batch_size', pending.sessionIds.size, {
+  observePerf('session.view.flush.batch_size', pending.sessions.size, {
     unit: 'count',
   })
   measurePerf('session.view.flush.duration', () => {
-    for (const sessionId of pending.sessionIds) {
-      publishSessionView(pending.win, sessionId)
-      clearSessionPatchViewRecovery(windowId, sessionId)
+    for (const entry of pending.sessions.values()) {
+      publishSessionView(pending.win, entry.sessionId, entry.workspaceId)
+      clearSessionPatchViewRecovery(windowId, entry.sessionId, entry.workspaceId)
     }
   }, {
     slowThresholdMs: 8,
     slowData: {
       windowId,
-      sessionCount: pending.sessionIds.size,
+      sessionCount: pending.sessions.size,
     },
   })
 }
 
-function queueSessionViewPublish(win: BrowserWindow, sessionId: string) {
+function queueSessionViewPublish(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
   const windowId = win.webContents.id
-  if (!sessionNeedsPatchViewRecovery(windowId, sessionId)) {
-    flushQueuedSessionPatchesBeforeView(win, sessionId)
+  if (!sessionNeedsPatchViewRecovery(windowId, sessionId, workspaceId)) {
+    flushQueuedSessionPatchesBeforeView(win, sessionId, workspaceId)
   }
+  const key = sessionFlushKey(sessionId, workspaceId)
   const existing = pendingViewFlushByWindowId.get(windowId)
   if (existing) {
-    existing.sessionIds.add(sessionId)
+    existing.sessions.set(key, { sessionId, workspaceId })
     return
   }
 
   const pending: PendingViewFlush = {
     win,
-    sessionIds: new Set([sessionId]),
+    sessions: new Map([[key, { sessionId, workspaceId }]]),
     queuedAt: Date.now(),
     timer: null,
   }
@@ -485,20 +508,20 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
 export function dropSessionFromDispatcherQueues(sessionId: string) {
   historyRefreshQueue.delete(sessionId)
   for (const [windowId, recoverySessionIds] of patchViewRecoverySessionIdsByWindowId.entries()) {
-    recoverySessionIds.delete(sessionId)
+    recoverySessionIds.delete(sessionFlushKey(sessionId))
     if (recoverySessionIds.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
   }
   for (const [windowId, pending] of pendingPatchFlushByWindowId.entries()) {
     dropQueuedSessionPatches(pending, sessionId)
-    pending.overflowSessionIds.delete(sessionId)
+    pending.overflowSessionIds.delete(sessionFlushKey(sessionId))
     if (pending.patches.length === 0 && pending.overflowSessionIds.size === 0) {
       if (pending.timer) clearTimeout(pending.timer)
       pendingPatchFlushByWindowId.delete(windowId)
     }
   }
   for (const [windowId, pending] of pendingViewFlushByWindowId.entries()) {
-    if (!pending.sessionIds.delete(sessionId)) continue
-    if (pending.sessionIds.size === 0) {
+    if (!pending.sessions.delete(sessionFlushKey(sessionId))) continue
+    if (pending.sessions.size === 0) {
       if (pending.timer) clearTimeout(pending.timer)
       pendingViewFlushByWindowId.delete(windowId)
     }
@@ -526,6 +549,6 @@ export function dispatchRuntimeSessionEvent(
   }
   queueSessionPatchPublish(win, getSessionPatch(event))
   if (event.sessionId && shouldPublishSessionView(event)) {
-    queueSessionViewPublish(win, event.sessionId)
+    queueSessionViewPublish(win, event.sessionId, event.workspaceId)
   }
 }

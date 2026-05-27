@@ -20,6 +20,8 @@ import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-st
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
+import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
+import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 
 function createBaseContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
@@ -31,6 +33,7 @@ function createBaseContext() {
       },
       on() {},
     },
+    workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
     getMainWindow: () => null,
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
@@ -214,6 +217,140 @@ test('session:prompt rejects malformed argument tuples before runtime dispatch',
     /session id to be a string/,
   )
   assert.equal(clientRequested, false)
+})
+
+test('session handlers route cloud workspace calls through the workspace gateway', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => {
+      calls.push('list')
+      return [{
+        id: 'cloud-session-1',
+        title: 'Cloud thread',
+        directory: null,
+        createdAt: '2026-05-27T10:00:00.000Z',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }]
+    },
+    createSession: async () => {
+      calls.push('create')
+      return {
+        id: 'cloud-session-2',
+        title: 'New cloud thread',
+        directory: null,
+        createdAt: '2026-05-27T10:00:00.000Z',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }
+    },
+    getSessionInfo: async (sessionId) => {
+      calls.push(`get:${sessionId}`)
+      return {
+        id: sessionId,
+        title: 'Cloud thread',
+        directory: null,
+        createdAt: '2026-05-27T10:00:00.000Z',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }
+    },
+    getSessionView: async (sessionId) => {
+      calls.push(`activate:${sessionId}`)
+      return {
+        messages: [],
+        toolCalls: [],
+        taskRuns: [],
+        compactions: [],
+        pendingApprovals: [],
+        pendingQuestions: [],
+        errors: [],
+        todos: [],
+        executionPlan: [],
+        sessionCost: 0,
+        sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+        lastInputTokens: 0,
+        contextState: 'idle',
+        compactionCount: 0,
+        lastCompactedAt: null,
+        activeAgent: null,
+        lastItemWasTool: false,
+        revision: 0,
+        lastEventAt: 0,
+        isGenerating: false,
+        isAwaitingPermission: false,
+        isAwaitingQuestion: false,
+      }
+    },
+    promptSession: async (sessionId, input) => {
+      calls.push(`prompt:${sessionId}:${input.text}:${input.agent}`)
+    },
+    abortSession: async (sessionId) => {
+      calls.push(`abort:${sessionId}`)
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => ({
+        workspaceId: 'cloud:test',
+        accessToken: 'cloud-access-token',
+        refreshToken: null,
+        expiresAt: '2030-05-27T12:00:00.000Z',
+        tokenType: 'Bearer',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }),
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => ({
+        workspaceId: 'cloud:test',
+        accessToken: 'cloud-access-token',
+        refreshToken: null,
+        expiresAt: '2030-05-27T12:00:00.000Z',
+        tokenType: 'Bearer',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }),
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerSessionHandlers(context)
+
+  assert.equal((await handlers.get('session:list')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.id, 'cloud-session-1')
+  assert.equal((await handlers.get('session:create')?.({}, undefined, { workspaceId: 'cloud:test' }))?.id, 'cloud-session-2')
+  await assert.rejects(
+    () => handlers.get('session:create')?.({}, '/Users/joe/project', { workspaceId: 'cloud:test' }),
+    /Local project directories/,
+  )
+  assert.equal((await handlers.get('session:get')?.({}, 'cloud-session-1', { workspaceId: 'cloud:test' }))?.id, 'cloud-session-1')
+  assert.equal((await handlers.get('session:activate')?.({}, 'cloud-session-1', { workspaceId: 'cloud:test' }))?.messages.length, 0)
+  await handlers.get('session:prompt')?.({}, 'cloud-session-1', 'hello', [], 'data-analyst', { workspaceId: 'cloud:test' })
+  await handlers.get('session:abort')?.({}, 'cloud-session-1', { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(calls, [
+    'list',
+    'create',
+    'get:cloud-session-1',
+    'activate:cloud-session-1',
+    'prompt:cloud-session-1:hello:data-analyst',
+    'abort:cloud-session-1',
+  ])
 })
 
 test('session:prompt rejects too many attachments before runtime dispatch', async () => {
@@ -449,6 +586,101 @@ test('workflow mutation handlers reject malformed workflow ids before service ca
   await assert.rejects(
     () => handler({}, { id: 'workflow-1' }),
     /workflow id to be a string/,
+  )
+})
+
+test('workflow handlers route cloud workspace operations through the workspace gateway', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { workflows: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    listWorkflows: async () => {
+      calls.push('list')
+      return { workflows: [], runs: [] }
+    },
+    getWorkflow: async (workflowId) => {
+      calls.push(`get:${workflowId}`)
+      return null
+    },
+    runWorkflow: async (workflowId) => {
+      calls.push(`run:${workflowId}`)
+      return null
+    },
+    pauseWorkflow: async (workflowId) => {
+      calls.push(`pause:${workflowId}`)
+      return null
+    },
+    resumeWorkflow: async (workflowId) => {
+      calls.push(`resume:${workflowId}`)
+      return null
+    },
+    archiveWorkflow: async (workflowId) => {
+      calls.push(`archive:${workflowId}`)
+      return null
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerWorkflowHandlers(context)
+
+  await handlers.get('workflows:list')?.({}, { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:get')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:run-now')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:pause')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:resume')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+  await handlers.get('workflows:archive')?.({}, 'workflow-1', { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(calls, [
+    'list',
+    'get:workflow-1',
+    'run:workflow-1',
+    'pause:workflow-1',
+    'resume:workflow-1',
+    'archive:workflow-1',
+  ])
+
+  context.workspaceGateway.activate({}, 'cloud:test')
+  await assert.rejects(
+    () => handlers.get('workflows:start-draft')?.({}, undefined),
+    /Local workspace/,
   )
 })
 
@@ -971,6 +1203,97 @@ test('settings:set rejects unknown and malformed settings payloads before saving
   )
 })
 
+test('settings handlers sync only portable settings for cloud workspaces', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { settings: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    getSetting: async (key) => {
+      calls.push(`get:${key}`)
+      return {
+        key,
+        value: { selectedProviderId: 'anthropic', selectedModelId: 'claude-test' },
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }
+    },
+    setSetting: async (key, value) => {
+      calls.push(`set:${key}:${value.selectedProviderId}`)
+      return {
+        key,
+        value,
+        updatedAt: '2026-05-27T10:01:00.000Z',
+      }
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerAppHandlers(context)
+
+  const current = await handlers.get('settings:get')?.({}, { workspaceId: 'cloud:test' })
+  assert.equal(current.selectedProviderId, 'anthropic')
+  assert.deepEqual(current.providerCredentials, {})
+
+  await assert.rejects(
+    () => handlers.get('settings:set')?.({}, {
+      workspaceId: 'cloud:test',
+      providerCredentials: { openai: { apiKey: 'secret' } },
+    }),
+    /do not sync raw/,
+  )
+
+  const updated = await handlers.get('settings:set')?.({}, {
+    workspaceId: 'cloud:test',
+    selectedProviderId: 'openai',
+    selectedModelId: 'gpt-test',
+  })
+  assert.equal(updated.selectedProviderId, 'openai')
+  assert.deepEqual(updated.providerCredentials, {})
+
+  assert.deepEqual(calls, [
+    'get:portable-settings',
+    'get:portable-settings',
+    'set:portable-settings:openai',
+  ])
+})
+
 test('custom MCP IPC rejects malformed nested records before persistence', async () => {
   const { context, handlers } = createBaseContext()
 
@@ -1007,6 +1330,482 @@ test('thread object IPC validates query and tag payload shape before store acces
     () => createTag({}, { color: '#ffffff' }),
     /Tag name must be a string/,
   )
+})
+
+test('thread handlers route cloud workspace calls through the workspace gateway', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { threadIndex: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    searchThreads: async () => {
+      calls.push('search')
+      return { threads: [], nextCursor: null, totalEstimate: 0 }
+    },
+    threadFacets: async () => {
+      calls.push('facets')
+      return { projects: [], providers: [], models: [], agents: [], tools: [], mcps: [], statuses: [], tags: [] }
+    },
+    listThreadTags: async () => {
+      calls.push('tags:list')
+      return []
+    },
+    createThreadTag: async (input) => {
+      calls.push(`tags:create:${input.name}`)
+      return { id: 'tag-1', name: input.name, color: input.color || '#64748b', createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' }
+    },
+    updateThreadTag: async (tagId, input) => {
+      calls.push(`tags:update:${tagId}:${input.name}`)
+      return { id: tagId, name: input.name, color: input.color || '#64748b', createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' }
+    },
+    deleteThreadTag: async (tagId) => {
+      calls.push(`tags:delete:${tagId}`)
+      return true
+    },
+    applyThreadTags: async (sessionIds, tagIds) => {
+      calls.push(`tags:apply:${sessionIds.join(',')}:${tagIds.join(',')}`)
+      return true
+    },
+    removeThreadTags: async (sessionIds, tagIds) => {
+      calls.push(`tags:remove:${sessionIds.join(',')}:${tagIds.join(',')}`)
+      return true
+    },
+    listThreadSmartFilters: async () => {
+      calls.push('filters:list')
+      return []
+    },
+    createThreadSmartFilter: async (input) => {
+      calls.push(`filters:create:${input.name}`)
+      return { id: 'filter-1', name: input.name, query: input.query, createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' }
+    },
+    updateThreadSmartFilter: async (filterId, input) => {
+      calls.push(`filters:update:${filterId}:${input.name}`)
+      return { id: filterId, name: input.name, query: input.query, createdAt: '2026-05-27T10:00:00.000Z', updatedAt: '2026-05-27T10:00:00.000Z' }
+    },
+    deleteThreadSmartFilter: async (filterId) => {
+      calls.push(`filters:delete:${filterId}`)
+      return true
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerThreadHandlers(context)
+
+  await handlers.get('threads:search')?.({}, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:facets')?.({}, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:list')?.({}, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:create')?.({}, { name: 'Important' }, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:update')?.({}, 'tag-1', { name: 'Renamed' }, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:apply')?.({}, ['session-1'], ['tag-1'], { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:remove')?.({}, ['session-1'], ['tag-1'], { workspaceId: 'cloud:test' })
+  await handlers.get('threads:tags:delete')?.({}, 'tag-1', { workspaceId: 'cloud:test' })
+  await handlers.get('threads:smart-filters:list')?.({}, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:smart-filters:create')?.({}, { name: 'Mine', query: {} }, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:smart-filters:update')?.({}, 'filter-1', { name: 'Updated', query: {} }, { workspaceId: 'cloud:test' })
+  await handlers.get('threads:smart-filters:delete')?.({}, 'filter-1', { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(calls, [
+    'search',
+    'facets',
+    'tags:list',
+    'tags:create:Important',
+    'tags:update:tag-1:Renamed',
+    'tags:apply:session-1:tag-1',
+    'tags:remove:session-1:tag-1',
+    'tags:delete:tag-1',
+    'filters:list',
+    'filters:create:Mine',
+    'filters:update:filter-1:Updated',
+    'filters:delete:filter-1',
+  ])
+})
+
+test('artifact handlers route cloud workspace calls through the workspace gateway', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { artifacts: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    listArtifacts: async (sessionId) => {
+      calls.push(`list:${sessionId}`)
+      return [{
+        id: 'artifact-1',
+        toolId: 'cloud-artifact',
+        toolName: 'cloud.artifact',
+        filePath: 'cloud-artifact://artifact-1/result.txt',
+        filename: 'result.txt',
+        order: 0,
+        source: 'cloud',
+        cloudArtifactId: 'artifact-1',
+        mime: 'text/plain',
+      }]
+    },
+    uploadArtifact: async (input) => {
+      calls.push(`upload:${input.sessionId}:${input.filename}`)
+      return {
+        id: 'artifact-2',
+        toolId: 'cloud-artifact',
+        toolName: 'cloud.artifact',
+        filePath: 'cloud-artifact://artifact-2/upload.txt',
+        filename: input.filename,
+        order: 0,
+        source: 'cloud',
+        cloudArtifactId: 'artifact-2',
+        mime: input.contentType || undefined,
+      }
+    },
+    readArtifactAttachment: async (sessionId, filePath) => {
+      calls.push(`read:${sessionId}:${filePath}`)
+      return {
+        mime: 'text/plain',
+        filename: 'result.txt',
+        url: `data:text/plain;base64,${Buffer.from('hello').toString('base64')}`,
+      }
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerArtifactHandlers(context)
+
+  assert.equal((await handlers.get('artifact:list')?.({}, { sessionId: 'session-1', workspaceId: 'cloud:test' }))?.[0]?.cloudArtifactId, 'artifact-1')
+  assert.equal((await handlers.get('artifact:upload')?.({}, {
+    sessionId: 'session-1',
+    workspaceId: 'cloud:test',
+    filename: 'upload.txt',
+    contentType: 'text/plain',
+    dataBase64: Buffer.from('hello').toString('base64'),
+  }))?.cloudArtifactId, 'artifact-2')
+  assert.equal((await handlers.get('artifact:read-attachment')?.({}, {
+    sessionId: 'session-1',
+    workspaceId: 'cloud:test',
+    filePath: 'cloud-artifact://artifact-1/result.txt',
+  }))?.filename, 'result.txt')
+  await assert.rejects(
+    () => handlers.get('artifact:reveal')?.({}, {
+      sessionId: 'session-1',
+      workspaceId: 'cloud:test',
+      filePath: 'cloud-artifact://artifact-1/result.txt',
+    }),
+    /Cloud artifacts cannot be revealed/,
+  )
+
+  assert.deepEqual(calls, [
+    'list:session-1',
+    'upload:session-1:upload.txt',
+    'read:session-1:cloud-artifact://artifact-1/result.txt',
+  ])
+})
+
+test('capability handlers route cloud workspace calls through the workspace gateway', async () => {
+  const { context, handlers } = createBaseContext()
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { capabilities: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    listCapabilityTools: async () => {
+      calls.push('tools')
+      return [{
+        id: 'read',
+        name: 'Read',
+        description: 'Read files',
+        kind: 'built-in',
+        source: 'builtin',
+        patterns: ['read'],
+        agentNames: ['build'],
+      }]
+    },
+    getCapabilityTool: async (toolId) => {
+      calls.push(`tool:${toolId}`)
+      return {
+        id: toolId,
+        name: 'Read',
+        description: 'Read files',
+        kind: 'built-in',
+        source: 'builtin',
+        patterns: ['read'],
+        agentNames: ['build'],
+      }
+    },
+    listCapabilitySkills: async () => {
+      calls.push('skills')
+      return [{
+        name: 'analysis',
+        label: 'Analysis',
+        description: 'Analyze data',
+        source: 'builtin',
+        toolIds: ['read'],
+        agentNames: ['data-analyst'],
+      }]
+    },
+    getCapabilitySkillBundle: async (skillName) => {
+      calls.push(`bundle:${skillName}`)
+      return {
+        name: skillName,
+        source: 'builtin',
+        content: '# Analysis',
+        files: [{ path: 'examples/report.md' }],
+      }
+    },
+    readCapabilitySkillBundleFile: async (skillName, filePath) => {
+      calls.push(`file:${skillName}:${filePath}`)
+      return 'report example'
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerCatalogHandlers(context)
+
+  assert.equal((await handlers.get('capabilities:tools')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.id, 'read')
+  assert.equal((await handlers.get('capabilities:tool')?.({}, 'read', { workspaceId: 'cloud:test' }))?.name, 'Read')
+  assert.equal((await handlers.get('capabilities:skills')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.name, 'analysis')
+  assert.equal((await handlers.get('capabilities:skill-bundle')?.({}, 'analysis', { workspaceId: 'cloud:test' }))?.name, 'analysis')
+  assert.equal(await handlers.get('capabilities:skill-bundle-file')?.({}, 'analysis', 'examples/report.md', { workspaceId: 'cloud:test' }), 'report example')
+
+  assert.deepEqual(calls, [
+    'tools',
+    'tool:read',
+    'skills',
+    'bundle:analysis',
+    'file:analysis:examples/report.md',
+  ])
+})
+
+test('custom content handlers sync portable cloud metadata and block local-only content', async () => {
+  const { context, handlers } = createBaseContext()
+  const settings = new Map<string, Record<string, unknown>>()
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { customMcps: true, customSkills: true, agents: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      throw new Error('not used')
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    listCapabilityTools: async () => [{
+      id: 'read',
+      name: 'Read',
+      description: 'Read files',
+      kind: 'built-in',
+      source: 'builtin',
+      patterns: ['read'],
+      agentNames: ['build'],
+    }],
+    listCapabilitySkills: async () => [{
+      name: 'analysis',
+      label: 'Analysis',
+      description: 'Analyze data',
+      source: 'builtin',
+      toolIds: ['read'],
+      agentNames: ['build'],
+    }],
+    getSetting: async (key) => ({
+      key,
+      value: settings.get(key) || { items: [] },
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }),
+    setSetting: async (key, value) => {
+      settings.set(key, value)
+      return {
+        key,
+        value,
+        updatedAt: '2026-05-27T10:01:00.000Z',
+      }
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerCustomContentHandlers(context)
+  registerCatalogHandlers(context)
+
+  assert.equal(await handlers.get('custom:add-mcp')?.({}, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'remote_docs',
+    type: 'http',
+    url: 'https://mcp.example.test',
+  }), true)
+  assert.equal((await handlers.get('custom:list-mcps')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.name, 'remote_docs')
+  await assert.rejects(
+    () => handlers.get('custom:add-mcp')?.({}, {
+      workspaceId: 'cloud:test',
+      scope: 'machine',
+      name: 'local_shell',
+      type: 'stdio',
+      command: 'node',
+    }),
+    /Local stdio MCPs stay in the Local workspace/,
+  )
+
+  assert.equal(await handlers.get('custom:add-skill')?.({}, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'analysis',
+    content: '# Analysis\n\nUse the read tool.',
+    toolIds: ['read'],
+  }), true)
+  assert.equal((await handlers.get('custom:list-skills')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.name, 'analysis')
+
+  assert.equal(await handlers.get('agents:create')?.({}, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'analyst',
+    description: 'Analyze data',
+    instructions: 'Use the analysis skill.',
+    skillNames: ['analysis'],
+    toolIds: ['read'],
+    enabled: true,
+    color: 'primary',
+  }), true)
+  assert.equal((await handlers.get('agents:list')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.name, 'analyst')
+  assert.equal((await handlers.get('agents:catalog')?.({}, { workspaceId: 'cloud:test' }))?.tools[0]?.id, 'read')
+  assert.equal(await handlers.get('agents:remove')?.({}, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'analyst',
+  }, 'confirm'), true)
 })
 
 test('artifact IPC validates request shape before resolving private paths', async () => {

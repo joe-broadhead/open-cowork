@@ -19,6 +19,8 @@ test('preload exposes the expected coworkApi surface', async () => {
           workflowsStartDraft: typeof api.workflows?.startDraft,
           chartRenderSvg: typeof api.chart?.renderSvg,
           artifactReadAttachment: typeof api.artifact?.readAttachment,
+          workspaceList: typeof api.workspace?.list,
+          workspaceActivate: typeof api.workspace?.activate,
           onSessionPatch: typeof api.on?.sessionPatch,
         },
       }
@@ -32,6 +34,8 @@ test('preload exposes the expected coworkApi surface', async () => {
       workflowsStartDraft: 'function',
       chartRenderSvg: 'function',
       artifactReadAttachment: 'function',
+      workspaceList: 'function',
+      workspaceActivate: 'function',
       onSessionPatch: 'function',
     })
     assert.deepEqual(surface.groups, [
@@ -62,6 +66,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       'tools',
       'updates',
       'workflows',
+      'workspace',
     ])
   } finally {
     await cleanup()

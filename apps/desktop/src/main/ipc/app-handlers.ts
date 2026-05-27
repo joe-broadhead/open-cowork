@@ -1,7 +1,7 @@
 import electron from 'electron'
 import type { IpcHandlerContext } from './context.ts'
-import { objectArg, registerIpcInvoke } from './schema.ts'
-import { validateChartSaveArtifactRequest, validateSettingsUpdate } from './object-validators.ts'
+import { objectArg, optionalObjectArg, registerIpcInvoke } from './schema.ts'
+import { validateChartSaveArtifactRequest, validateSettingsUpdate, validateWorkspaceOptions } from './object-validators.ts'
 import {
   ensureRuntimeAfterAuthLogin,
   MAX_CLIPBOARD_TEXT_LENGTH,
@@ -57,7 +57,10 @@ import { writeFileAtomic } from '../fs-atomic.ts'
 import type {
   ChartSaveArtifactRequest,
   DestructiveConfirmationRequest,
+  EffectiveAppSettings,
+  WorkspaceOptions,
 } from '@open-cowork/shared'
+import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 export {
   ensureRuntimeAfterAuthLogin,
@@ -67,6 +70,80 @@ export {
 
 async function loadAuthModule() {
   return import('../auth.ts')
+}
+
+const CLOUD_PORTABLE_SETTINGS_KEY = 'portable-settings'
+const CLOUD_PORTABLE_SETTING_KEYS = new Set<keyof CoworkSettings>([
+  'selectedProviderId',
+  'selectedModelId',
+  'selectedSmallModelId',
+  'workflowDesktopNotifications',
+  'workflowQuietHoursStart',
+  'workflowQuietHoursEnd',
+])
+const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
+  'providerCredentials',
+  'integrationCredentials',
+  'integrationEnabled',
+  'bashPermission',
+  'fileWritePermission',
+  'enableBash',
+  'enableFileWrite',
+  'runtimeConfigSource',
+  'runtimeToolingBridgeEnabled',
+  'workflowLaunchAtLogin',
+  'workflowRunInBackground',
+])
+
+function pickPortableCloudSettings(updates: Partial<CoworkSettings>) {
+  const value: Record<string, unknown> = {}
+  for (const key of CLOUD_PORTABLE_SETTING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(updates, key)) value[key] = updates[key]
+  }
+  return value
+}
+
+function assertCloudSettingsUpdateIsPortable(updates: Partial<CoworkSettings>) {
+  for (const key of CLOUD_FORBIDDEN_SETTING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(updates, key)) {
+      throw new Error(`Cloud settings do not sync raw or local-only setting "${key}".`)
+    }
+  }
+}
+
+function buildCloudEffectiveSettings(base: EffectiveAppSettings, value: Record<string, unknown>): EffectiveAppSettings {
+  const selectedProviderId = typeof value.selectedProviderId === 'string' || value.selectedProviderId === null
+    ? value.selectedProviderId
+    : base.selectedProviderId
+  const selectedModelId = typeof value.selectedModelId === 'string' || value.selectedModelId === null
+    ? value.selectedModelId
+    : base.selectedModelId
+  const selectedSmallModelId = typeof value.selectedSmallModelId === 'string' || value.selectedSmallModelId === null
+    ? value.selectedSmallModelId
+    : base.selectedSmallModelId
+  return {
+    ...base,
+    selectedProviderId,
+    selectedModelId,
+    selectedSmallModelId,
+    providerCredentials: {},
+    integrationCredentials: {},
+    integrationEnabled: {},
+    runtimeConfigSource: 'app',
+    runtimeToolingBridgeEnabled: false,
+    workflowDesktopNotifications: typeof value.workflowDesktopNotifications === 'boolean'
+      ? value.workflowDesktopNotifications
+      : base.workflowDesktopNotifications,
+    workflowQuietHoursStart: typeof value.workflowQuietHoursStart === 'string' || value.workflowQuietHoursStart === null
+      ? value.workflowQuietHoursStart
+      : base.workflowQuietHoursStart,
+    workflowQuietHoursEnd: typeof value.workflowQuietHoursEnd === 'string' || value.workflowQuietHoursEnd === null
+      ? value.workflowQuietHoursEnd
+      : base.workflowQuietHoursEnd,
+    effectiveProviderId: selectedProviderId,
+    effectiveModel: selectedModelId,
+    effectiveSmallModel: selectedSmallModelId,
+  }
 }
 
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
@@ -214,11 +291,15 @@ export function registerAppHandlers(context: IpcHandlerContext) {
 
   registerProviderHandlers(context, electronShell)
 
-  context.ipcMain.handle('settings:get', async () => {
+  registerIpcInvoke(context, 'settings:get', optionalObjectArg<WorkspaceOptions>('workspace options', validateWorkspaceOptions), async (event, options) => {
     // Default surface returns credentials masked so the raw API keys
     // don't live in the renderer heap / DevTools for every consumer that
     // only needs provider ids + model ids + feature flags.
-    return maskEffectiveSettingsCredentials(getEffectiveSettings())
+    const base = maskEffectiveSettingsCredentials(getEffectiveSettings())
+    const workspaceId = readWorkspaceIdOption(options)
+    if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) return base
+    const setting = await context.workspaceGateway.getCloudSetting(event, CLOUD_PORTABLE_SETTINGS_KEY, workspaceId)
+    return buildCloudEffectiveSettings(base, setting?.value || {})
   })
 
   context.ipcMain.handle('settings:get-provider-credentials', async (_event, providerId: unknown) => {
@@ -233,7 +314,19 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 
-  registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings>>('settings update', validateSettingsUpdate), async (_event, updates) => {
+  registerIpcInvoke(context, 'settings:set', objectArg<Partial<CoworkSettings> & WorkspaceOptions>('settings update', validateSettingsUpdate), async (_event, updates) => {
+    const workspaceId = readWorkspaceIdOption(updates)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      assertCloudSettingsUpdateIsPortable(updates)
+      const base = maskEffectiveSettingsCredentials(getEffectiveSettings())
+      const existing = await context.workspaceGateway.getCloudSetting(_event, CLOUD_PORTABLE_SETTINGS_KEY, workspaceId)
+      const nextValue = {
+        ...(existing?.value || {}),
+        ...pickPortableCloudSettings(updates),
+      }
+      await context.workspaceGateway.setCloudSetting(_event, CLOUD_PORTABLE_SETTINGS_KEY, nextValue, workspaceId)
+      return buildCloudEffectiveSettings(base, nextValue)
+    }
     const result = saveSettings(updates)
     const { invalidateRuntimeCatalogSnapshotCache } = await import('../runtime-catalog-snapshot.ts')
     invalidateRuntimeCatalogSnapshotCache()

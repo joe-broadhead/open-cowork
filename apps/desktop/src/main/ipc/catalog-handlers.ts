@@ -1,5 +1,14 @@
-import type { RuntimeAgentDescriptor, RuntimeContextOptions, ScopedArtifactRef, ToolListOptions, CustomAgentConfig } from '@open-cowork/shared'
+import type {
+  CapabilitySkill,
+  CapabilityTool,
+  CustomAgentConfig,
+  RuntimeAgentDescriptor,
+  RuntimeContextOptions,
+  ScopedArtifactRef,
+  ToolListOptions,
+} from '@open-cowork/shared'
 import { performance } from 'node:perf_hooks'
+import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import {
   objectAndObjectArgs,
@@ -20,7 +29,7 @@ import {
 import { getClient } from '../runtime.ts'
 import { invalidateRuntimeToolCache } from '../runtime-tool-cache.ts'
 import { listBuiltInAgentDetails } from '../built-in-agent-details.ts'
-import { getCustomAgentCatalog, getCustomAgentSummaries, invalidateCustomAgentCatalogCache, normalizeCustomAgent, validateCustomAgent } from '../custom-agents.ts'
+import { getCustomAgentCatalog, getCustomAgentSummaries, invalidateCustomAgentCatalogCache, normalizeCustomAgent, validateCustomAgent, type CustomAgentCatalog } from '../custom-agents.ts'
 import { listCustomAgents, removeCustomAgent, saveCustomAgent } from '../native-customizations.ts'
 import { getCapabilitySkillBundle, getCapabilityTool, listCapabilitySkills, listCapabilityTools } from '../capability-catalog.ts'
 import { readEffectiveSkillBundleFile } from '../effective-skills.ts'
@@ -28,6 +37,7 @@ import { expandMcpToolPermissionPatterns, getConfiguredToolPatterns, getConfigur
 import { log } from '../logger.ts'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { preflightConfiguredApiTokenMcp } from '../mcp-preflight.ts'
+import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 function resolveContext(context: IpcHandlerContext, options?: RuntimeContextOptions) {
   return {
@@ -59,10 +69,70 @@ const runMcpTransitionForName = createKeyedPromiseChain()
 
 const WRITE_TOOL_IDS = new Set(['edit', 'write', 'apply_patch', 'todowrite'])
 const WRITE_PERMISSION_ACTIONS = new Set(['ask', 'allow'])
+const AGENT_COLORS: CustomAgentCatalog['colors'] = ['primary', 'warning', 'accent', 'success', 'info', 'secondary']
 
 function invalidateRuntimeCapabilityCaches() {
   invalidateRuntimeToolCache()
   invalidateCustomAgentCatalogCache()
+}
+
+function cloudCatalogTool(tool: CapabilityTool): CustomAgentCatalog['tools'][number] {
+  return {
+    id: tool.id,
+    name: tool.name,
+    icon: tool.kind === 'mcp' ? 'plug' : 'terminal',
+    description: tool.description,
+    supportsWrite: tool.patterns.some((pattern) => WRITE_TOOL_IDS.has(pattern) || pattern.includes('write') || pattern.includes('edit')),
+    source: tool.source === 'custom' ? 'custom' : 'builtin',
+    patterns: tool.patterns,
+    allowPatterns: tool.patterns,
+    askPatterns: [],
+  }
+}
+
+function cloudCatalogSkill(skill: CapabilitySkill): CustomAgentCatalog['skills'][number] {
+  return {
+    name: skill.name,
+    label: skill.label,
+    description: skill.description,
+    source: skill.source,
+    origin: skill.origin,
+    scope: skill.scope,
+    location: null,
+    toolIds: skill.toolIds,
+  }
+}
+
+async function getCloudAgentCatalog(context: IpcHandlerContext, event: IpcMainInvokeEvent, workspaceId: string | null): Promise<CustomAgentCatalog> {
+  const [tools, skills, customAgents] = await Promise.all([
+    context.workspaceGateway.listCloudCapabilityTools(event, workspaceId),
+    context.workspaceGateway.listCloudCapabilitySkills(event, workspaceId),
+    context.workspaceGateway.listCloudCustomAgents(event, workspaceId),
+  ])
+  return {
+    tools: tools.map(cloudCatalogTool),
+    skills: skills.map(cloudCatalogSkill),
+    reservedNames: customAgents.map((agent) => agent.name).sort((a, b) => a.localeCompare(b)),
+    colors: AGENT_COLORS,
+  }
+}
+
+function assertCloudAgentIsPortable(agent: CustomAgentConfig): CustomAgentConfig {
+  if (agent.scope === 'project' || agent.directory) throw new Error('Cloud custom agents cannot reference local project paths.')
+  return {
+    ...agent,
+    scope: 'machine',
+    directory: null,
+  }
+}
+
+function cloudAgentSummary(agent: CustomAgentConfig) {
+  return {
+    ...agent,
+    writeAccess: agent.toolIds.some((toolId) => WRITE_TOOL_IDS.has(toolId) || toolId === 'bash'),
+    valid: true,
+    issues: [],
+  }
 }
 
 async function timeAgentCatalogHandler<T>(name: 'agents:list' | 'agents:catalog' | 'agents:runtime', work: () => Promise<T>) {
@@ -290,11 +360,20 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'agents:catalog', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return timeAgentCatalogHandler('agents:catalog', () => getCloudAgentCatalog(context, _event, workspaceId))
+    }
     return timeAgentCatalogHandler('agents:catalog', () =>
       getCustomAgentCatalog(resolveContext(context, options)))
   })
 
   registerIpcInvoke(context, 'agents:list', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return timeAgentCatalogHandler('agents:list', async () =>
+        (await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId)).map(cloudAgentSummary))
+    }
     return timeAgentCatalogHandler('agents:list', () =>
       getCustomAgentSummaries(resolveContext(context, options)))
   })
@@ -339,6 +418,15 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'agents:create', objectArg<CustomAgentConfig>('custom agent', validateCustomAgentConfig), async (_event, agent) => {
     const normalized = normalizeCustomAgent(agent)
+    const workspaceId = readWorkspaceIdOption(agent)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      const portable = assertCloudAgentIsPortable(normalized)
+      const catalog = await getCloudAgentCatalog(context, _event, workspaceId)
+      const siblingNames = (await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId)).map((entry) => normalizeCustomAgent(entry).name)
+      const issues = validateCustomAgent(portable, catalog, siblingNames)
+      if (issues.length > 0) throw new Error(issues[0]?.message || 'Invalid custom agent')
+      return context.workspaceGateway.saveCloudCustomAgent(_event, portable, workspaceId)
+    }
     const catalogContext = {
       directory: agent.scope === 'project' ? context.resolveScopedTarget(agent).directory : null,
     }
@@ -359,6 +447,18 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'agents:update', objectAndObjectArgs<ScopedArtifactRef, CustomAgentConfig>('custom agent target', 'custom agent', validateScopedArtifactRef, validateCustomAgentConfig), async (_event, target, agent) => {
     const normalized = normalizeCustomAgent(agent)
+    const workspaceId = readWorkspaceIdOption(agent) || readWorkspaceIdOption(target)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      const portable = assertCloudAgentIsPortable(normalized)
+      const catalog = await getCloudAgentCatalog(context, _event, workspaceId)
+      const siblingNames = (await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId))
+        .filter((entry) => !(entry.name === target.name && entry.scope === target.scope && (entry.directory || null) === (target.directory || null)))
+        .map((entry) => normalizeCustomAgent(entry).name)
+      const issues = validateCustomAgent(portable, catalog, siblingNames)
+      if (issues.length > 0) throw new Error(issues[0]?.message || 'Invalid custom agent')
+      await context.workspaceGateway.removeCloudCustomAgent(_event, target, workspaceId)
+      return context.workspaceGateway.saveCloudCustomAgent(_event, portable, workspaceId)
+    }
     const resolvedTarget = context.resolveScopedTarget(target)
     const catalogContext = {
       directory: normalized.scope === 'project' ? context.resolveScopedTarget(normalized).directory : resolvedTarget.directory,
@@ -382,6 +482,13 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'agents:remove', objectAndOptionalStringArgs<ScopedArtifactRef>('custom agent target', 'confirmation token', validateScopedArtifactRef), async (_event, target, confirmationToken) => {
+    const workspaceId = readWorkspaceIdOption(target)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      if (!context.consumeDestructiveConfirmation({ action: 'agent.remove', target }, confirmationToken)) {
+        throw new Error('Confirmation required before deleting an agent.')
+      }
+      return context.workspaceGateway.removeCloudCustomAgent(_event, target, workspaceId)
+    }
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'agent.remove', target: resolvedTarget }, confirmationToken)) {
@@ -401,6 +508,10 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'capabilities:tools', optionalObjectArg<ToolListOptions>('tool list options', validateToolListOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.listCloudCapabilityTools(_event, workspaceId)
+    }
     const runtimeTools = await context.listRuntimeTools(options)
     // List view — render just the cards; skip the expensive
     // per-MCP method probe. `deep` defaults to false in shared types
@@ -414,6 +525,10 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'capabilities:tool', stringAndOptionalObjectArgs<ToolListOptions>('tool id', 'tool list options', {}, validateToolListOptions), async (_event, id, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.getCloudCapabilityTool(_event, id, workspaceId)
+    }
     const runtimeTools = await context.listRuntimeTools(options)
     // Detail view — user actually opened one tool; spend the time
     // probing its MCP so the method table renders. Scoped to a single
@@ -429,14 +544,26 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'capabilities:skills', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.listCloudCapabilitySkills(_event, workspaceId)
+    }
     return await listCapabilitySkills(resolveContext(context, options))
   })
 
   registerIpcInvoke(context, 'capabilities:skill-bundle', stringAndOptionalObjectArgs<RuntimeContextOptions>('skill name', 'runtime context options', {}, validateRuntimeContextOptions), async (_event, skillName, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.getCloudCapabilitySkillBundle(_event, skillName, workspaceId)
+    }
     return await getCapabilitySkillBundle(skillName, resolveContext(context, options))
   })
 
   registerIpcInvoke(context, 'capabilities:skill-bundle-file', twoStringsAndOptionalObjectArgs<RuntimeContextOptions>('skill name', 'file path', 'runtime context options', {}, validateRuntimeContextOptions), async (_event, skillName, filePath, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.readCloudCapabilitySkillBundleFile(_event, skillName, filePath, workspaceId)
+    }
     return await readEffectiveSkillBundleFile(skillName, filePath, resolveContext(context, options))
   })
 }

@@ -7,6 +7,7 @@ import type {
 } from '@open-cowork/shared'
 import type {
   AttachWorkflowRunSessionInput,
+  AppendWorkspaceEventInput,
   ClaimDueWorkflowRunInput,
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
@@ -39,6 +40,7 @@ import type {
   WorkerHeartbeatRecord,
   WorkerLeaseRecord,
   WorkerRole,
+  WorkspaceEventRecord,
 } from './control-plane-store.ts'
 import type {
   WebhookAuthFailureRecord,
@@ -98,6 +100,16 @@ function stableJson(value: unknown): string {
       .join(',')}}`
   }
   return JSON.stringify(value)
+}
+
+function workspaceOperationFromType(type: string) {
+  if (/\b(created|submitted|uploaded|started)\b/.test(type)) return 'create'
+  if (/\b(deleted|removed|archived)\b/.test(type)) return 'delete'
+  return 'update'
+}
+
+function optionalTrimmedText(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function iso(value: unknown) {
@@ -209,6 +221,23 @@ function eventFromRow(row: QueryRow): SessionEventRecord {
     sessionId: String(row.session_id),
     eventId: String(row.event_id),
     sequence: numberValue(row.sequence),
+    type: String(row.type),
+    payload: jsonRecord(row.payload),
+    createdAt: iso(row.created_at),
+  }
+}
+
+function workspaceEventFromRow(row: QueryRow): WorkspaceEventRecord {
+  return {
+    tenantId: String(row.tenant_id),
+    userId: String(row.user_id),
+    sessionId: stringOrNull(row.session_id),
+    eventId: String(row.event_id),
+    sequence: numberValue(row.sequence),
+    entityType: String(row.entity_type),
+    entityId: String(row.entity_id),
+    operation: String(row.operation),
+    projectionVersion: numberValue(row.projection_version),
     type: String(row.type),
     payload: jsonRecord(row.payload),
     createdAt: iso(row.created_at),
@@ -601,6 +630,101 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [tenantId, sessionId, afterSequence],
     )
     return result.rows.map(eventFromRow)
+  }
+
+  async appendWorkspaceEvent(input: AppendWorkspaceEventInput) {
+    return this.withTransaction(async (client) => {
+      await this.requireTenantUser(input.tenantId, input.userId, client)
+      if (input.sessionId) {
+        const session = await this.requireSession(input.tenantId, input.sessionId, client, true)
+        if (String(session.user_id) !== input.userId) {
+          throw new Error(`Session ${input.sessionId} does not belong to user ${input.userId}.`)
+        }
+      }
+
+      const payload = input.payload || {}
+      const sessionId = input.sessionId || null
+      const entityType = optionalTrimmedText(input.entityType) || (sessionId ? 'session' : 'workspace')
+      const entityId = optionalTrimmedText(input.entityId) || sessionId || input.userId
+      const operation = optionalTrimmedText(input.operation) || workspaceOperationFromType(input.type)
+      await client.query(
+        `INSERT INTO cloud_workspace_event_counters (tenant_id, user_id, next_sequence)
+         VALUES ($1, $2, 0)
+         ON CONFLICT (tenant_id, user_id) DO NOTHING`,
+        [input.tenantId, input.userId],
+      )
+      const counter = await this.one(
+        `SELECT next_sequence
+         FROM cloud_workspace_event_counters
+         WHERE tenant_id = $1 AND user_id = $2
+         FOR UPDATE`,
+        [input.tenantId, input.userId],
+        client,
+      )
+      if (input.eventId) {
+        const existing = await this.findWorkspaceEvent(input.tenantId, input.userId, input.eventId, client)
+        if (existing) {
+          const projectionVersion = Number.isFinite(input.projectionVersion)
+            ? Math.max(0, Math.floor(input.projectionVersion || 0))
+            : existing.projectionVersion
+          return this.replayOrRejectWorkspaceEvent(existing, input.type, payload, {
+            sessionId,
+            entityType,
+            entityId,
+            operation,
+            projectionVersion,
+          })
+        }
+      }
+
+      const sequence = numberValue(counter.next_sequence) + 1
+      const eventId = input.eventId || `${input.userId}:${sequence}`
+      const projectionVersion = Number.isFinite(input.projectionVersion)
+        ? Math.max(0, Math.floor(input.projectionVersion || 0))
+        : sequence
+      await client.query(
+        `UPDATE cloud_workspace_event_counters
+         SET next_sequence = $3
+         WHERE tenant_id = $1 AND user_id = $2`,
+        [input.tenantId, input.userId, sequence],
+      )
+      const createdAt = nowIso(input.createdAt)
+      const inserted = await client.query(
+        `INSERT INTO cloud_workspace_events (
+          tenant_id, user_id, event_id, sequence, session_id,
+          entity_type, entity_id, operation, projection_version,
+          type, payload, created_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.userId,
+          eventId,
+          sequence,
+          sessionId,
+          entityType,
+          entityId,
+          operation,
+          projectionVersion,
+          input.type,
+          JSON.stringify(payload),
+          createdAt,
+        ],
+      )
+      return workspaceEventFromRow(inserted.rows[0])
+    })
+  }
+
+  async listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0) {
+    await this.requireTenantUser(tenantId, userId)
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_workspace_events
+       WHERE tenant_id = $1 AND user_id = $2 AND sequence > $3
+       ORDER BY sequence`,
+      [tenantId, userId, afterSequence],
+    )
+    return result.rows.map(workspaceEventFromRow)
   }
 
   async writeSessionProjection(input: {
@@ -1826,6 +1950,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return row ? eventFromRow(row) : null
   }
 
+  private async findWorkspaceEvent(
+    tenantId: string,
+    userId: string,
+    eventId: string,
+    executor: PgExecutor,
+  ) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_workspace_events
+       WHERE tenant_id = $1 AND user_id = $2 AND event_id = $3`,
+      [tenantId, userId, eventId],
+      executor,
+    )
+    return row ? workspaceEventFromRow(row) : null
+  }
+
   private replayOrRejectEvent(
     existing: SessionEventRecord,
     type: string,
@@ -1833,6 +1972,32 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   ) {
     if (existing.type !== type || stableJson(existing.payload) !== stableJson(payload)) {
       throw new Error(`Event id ${existing.eventId} was reused with different content.`)
+    }
+    return existing
+  }
+
+  private replayOrRejectWorkspaceEvent(
+    existing: WorkspaceEventRecord,
+    type: string,
+    payload: Record<string, unknown>,
+    expected: {
+      sessionId: string | null
+      entityType: string
+      entityId: string
+      operation: string
+      projectionVersion: number
+    },
+  ) {
+    if (
+      existing.type !== type
+      || stableJson(existing.payload) !== stableJson(payload)
+      || existing.sessionId !== expected.sessionId
+      || existing.entityType !== expected.entityType
+      || existing.entityId !== expected.entityId
+      || existing.operation !== expected.operation
+      || existing.projectionVersion !== expected.projectionVersion
+    ) {
+      throw new Error(`Workspace event id ${existing.eventId} was reused with different content.`)
     }
     return existing
   }

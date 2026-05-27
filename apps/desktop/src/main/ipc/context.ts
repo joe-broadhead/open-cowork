@@ -12,6 +12,7 @@ import type {
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { SessionRecord } from '../session-registry'
 import type { NativeConfirmationOptions } from '../native-confirmation.ts'
+import type { WorkspaceGateway } from '../workspace-gateway.ts'
 
 export type SessionClientContext = {
   client: OpencodeClient
@@ -26,6 +27,7 @@ export type SessionV2ClientContext = {
 
 export type IpcHandlerContext = {
   ipcMain: Pick<IpcMain, 'handle' | 'on'>
+  workspaceGateway: WorkspaceGateway
   getMainWindow: () => BrowserWindow | null
   normalizeDirectory: (directory?: string | null) => string
   ensureSessionRecord: (sessionId: string) => SessionRecord | null

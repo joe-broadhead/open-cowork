@@ -49,6 +49,7 @@ export function listSessionArtifacts(
     ...view.taskRuns.flatMap((taskRun) =>
       taskRun.toolCalls.map((tool) => artifactFromTool(tool, taskRun.id)),
     ),
+    ...(view.artifacts || []),
     // Extras typically come from renderer-side state (e.g. chart PNG
     // captures) that aren't represented as tool-call inputs. Dedupe
     // treats them the same as any other artifact.

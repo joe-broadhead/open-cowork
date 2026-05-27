@@ -7,6 +7,7 @@ import {
   type SessionViewState,
 } from '../../lib/session-view-model'
 import { useSessionStore } from './session'
+import { sessionWorkspaceKey } from './session-workspace-keys'
 
 function resetStore() {
   useSessionStore.setState(useSessionStore.getInitialState(), true)
@@ -104,6 +105,37 @@ describe('useSessionStore', () => {
     expect(useSessionStore.getState().busySessions.has('ses_1')).toBe(false)
     expect(useSessionStore.getState().awaitingPermissionSessions.has('ses_1')).toBe(false)
     expect(useSessionStore.getState().totalCost).toBe(2)
+  })
+
+  it('keeps same-id session state separate across workspaces', () => {
+    const store = useSessionStore.getState()
+
+    store.setSessions([session('shared', 'Local shared')])
+    store.setCurrentSession('shared')
+    useSessionStore.getState().setSessionView('shared', view({ sessionCost: 1 }))
+    expect(useSessionStore.getState().currentView.sessionCost).toBe(1)
+
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+    useSessionStore.getState().setSessions([session('shared', 'Cloud shared')])
+    useSessionStore.getState().setCurrentSession('shared')
+    useSessionStore.getState().setSessionView('shared', view({
+      isAwaitingQuestion: true,
+      sessionCost: 2,
+    }))
+
+    const cloudState = useSessionStore.getState()
+    expect(cloudState.sessions[0]?.title).toBe('Cloud shared')
+    expect(cloudState.currentView.sessionCost).toBe(2)
+    expect(cloudState.awaitingQuestionSessions.has(sessionWorkspaceKey('cloud:acme', 'shared'))).toBe(true)
+    expect(cloudState.awaitingQuestionSessions.has('shared')).toBe(false)
+
+    useSessionStore.getState().setActiveWorkspace('local')
+    useSessionStore.getState().setCurrentSession('shared')
+
+    const localState = useSessionStore.getState()
+    expect(localState.sessions[0]?.title).toBe('Local shared')
+    expect(localState.currentView.sessionCost).toBe(1)
+    expect(localState.currentView.isAwaitingQuestion).toBe(false)
   })
 
   it('applies message and task text patches to the visible session', () => {

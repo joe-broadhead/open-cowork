@@ -19,6 +19,7 @@ import { VALID_OPENCODE_SKILL_NAME } from '../skill-bundle-validation.ts'
 import { assertCustomMcpContentLimits, assertCustomSkillContent } from '../custom-content-limits.ts'
 import { computeCustomSkillBundleDigest } from '../custom-skill-integrity.ts'
 import { invalidateCustomAgentCatalogCache } from '../custom-agents.ts'
+import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 const VALID_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/
 
@@ -38,6 +39,31 @@ function resolveCustomContext(context: IpcHandlerContext, options?: RuntimeConte
   return {
     ...options,
     directory: context.resolveContextDirectory(options),
+  }
+}
+
+function assertCloudMcpIsPortable(mcp: CustomMcpConfig): CustomMcpConfig {
+  if (mcp.type !== 'http') throw new Error('Cloud custom MCPs must be remote HTTP MCPs. Local stdio MCPs stay in the Local workspace.')
+  if (mcp.scope === 'project' || mcp.directory) throw new Error('Cloud custom MCPs cannot reference local project paths.')
+  if (mcp.env && Object.keys(mcp.env).length > 0) throw new Error('Cloud custom MCPs cannot sync raw environment secrets.')
+  if (mcp.headers && Object.keys(mcp.headers).length > 0) throw new Error('Cloud custom MCPs cannot sync raw header secrets.')
+  if (mcp.allowPrivateNetwork) throw new Error('Cloud custom MCPs cannot enable private-network access from desktop metadata.')
+  return {
+    ...mcp,
+    scope: 'machine',
+    directory: null,
+    env: undefined,
+    headers: undefined,
+    allowPrivateNetwork: false,
+  }
+}
+
+function assertCloudSkillIsPortable(skill: CustomSkillConfig): CustomSkillConfig {
+  if (skill.scope === 'project' || skill.directory) throw new Error('Cloud custom skills cannot reference local project paths.')
+  return {
+    ...skill,
+    scope: 'machine',
+    directory: null,
   }
 }
 
@@ -78,12 +104,26 @@ async function confirmUnsignedSkillWrite(
 
 export function registerCustomContentHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'custom:list-mcps', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.listCloudCustomMcps(_event, workspaceId)
+    }
     return listCustomMcps(resolveCustomContext(context, options))
   })
 
   registerIpcInvoke(context, 'custom:test-mcp', objectArg<CustomMcpConfig>('custom MCP', validateCustomMcpConfig), async (_event, mcp): Promise<CustomMcpTestResult> => {
     try {
       assertCustomMcpContentLimits(mcp)
+      const workspaceId = readWorkspaceIdOption(mcp)
+      if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+        assertCloudMcpIsPortable(mcp)
+        return {
+          ok: false,
+          methods: [],
+          authRequired: false,
+          error: 'Cloud MCP connection testing runs in the cloud worker and is not available from desktop yet.',
+        }
+      }
       if (mcp.type === 'stdio') {
         validateCustomMcpStdioCommand(mcp)
       }
@@ -131,6 +171,11 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'custom:add-mcp', objectArg<CustomMcpConfig>('custom MCP', validateCustomMcpConfig), async (_event, mcp) => {
     validateName(mcp.name, 'MCP')
     assertCustomMcpContentLimits(mcp)
+    const workspaceId = readWorkspaceIdOption(mcp)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      const portable = assertCloudMcpIsPortable(mcp)
+      return context.workspaceGateway.saveCloudCustomMcp(_event, portable, workspaceId)
+    }
     const resolved = context.resolveScopedTarget(mcp) as CustomMcpConfig
     if (resolved.type === 'stdio') {
       validateCustomMcpStdioCommand(resolved)
@@ -159,6 +204,13 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'custom:remove-mcp', objectAndOptionalStringArgs<ScopedArtifactRef>('custom MCP target', 'confirmation token', validateScopedArtifactRef), async (_event, target, confirmationToken) => {
+    const workspaceId = readWorkspaceIdOption(target)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      if (!context.consumeDestructiveConfirmation({ action: 'mcp.remove', target }, confirmationToken)) {
+        throw new Error('Confirmation required before removing an MCP.')
+      }
+      return context.workspaceGateway.removeCloudCustomMcp(_event, target, workspaceId)
+    }
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'mcp.remove', target: resolvedTarget }, confirmationToken)) {
@@ -178,12 +230,21 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'custom:list-skills', optionalObjectArg<RuntimeContextOptions>('runtime context options', validateRuntimeContextOptions), async (_event, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      return context.workspaceGateway.listCloudCustomSkills(_event, workspaceId)
+    }
     return listCustomSkills(resolveCustomContext(context, options))
   })
 
   registerIpcInvoke(context, 'custom:add-skill', objectArg<CustomSkillConfig>('custom skill', validateCustomSkillConfig), async (_event, skill) => {
     validateSkillName(skill.name)
     assertCustomSkillContent(skill.content || '')
+    const workspaceId = readWorkspaceIdOption(skill)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      const portable = assertCloudSkillIsPortable(skill)
+      return context.workspaceGateway.saveCloudCustomSkill(_event, portable, workspaceId)
+    }
     const resolved = context.resolveScopedTarget(skill) as CustomSkillConfig
     const existing = listCustomSkills({ directory: resolved.directory || null })
       .find((entry) => entry.name === resolved.name && entry.scope === resolved.scope) || null
@@ -214,6 +275,10 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'custom:import-skill-directory', stringAndObjectArgs<ScopedArtifactRef>('selection token', 'skill import target', {}, validateScopedArtifactRef), async (_event, selectionToken, target) => {
+    const workspaceId = readWorkspaceIdOption(target)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      throw new Error('Importing local skill directories into Cloud workspaces is not supported.')
+    }
     const resolvedTarget = context.resolveScopedTarget(target)
     const directory = context.approvedSkillImportDirectories.get(selectionToken)
     context.approvedSkillImportDirectories.delete(selectionToken)
@@ -239,6 +304,13 @@ export function registerCustomContentHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'custom:remove-skill', objectAndOptionalStringArgs<ScopedArtifactRef>('custom skill target', 'confirmation token', validateScopedArtifactRef), async (_event, target, confirmationToken) => {
+    const workspaceId = readWorkspaceIdOption(target)
+    if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      if (!context.consumeDestructiveConfirmation({ action: 'skill.remove', target }, confirmationToken)) {
+        throw new Error('Confirmation required before removing a skill.')
+      }
+      return context.workspaceGateway.removeCloudCustomSkill(_event, target, workspaceId)
+    }
     const resolvedTarget = context.resolveScopedTarget(target)
     try {
       if (!context.consumeDestructiveConfirmation({ action: 'skill.remove', target: resolvedTarget }, confirmationToken)) {

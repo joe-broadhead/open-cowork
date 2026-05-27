@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
+import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
@@ -21,6 +22,7 @@ const ESTIMATED_ROW_HEIGHT = 48
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
   const busySessions = useSessionStore((s) => s.busySessions)
@@ -190,8 +192,9 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const renderRow = (session: typeof filtered[number]) => {
     const isActive = session.id === currentSessionId
     const isEditing = editingId === session.id
-    const isAwaitingQuestion = awaitingQuestionSessions.has(session.id)
-    const isBusy = busySessions.has(session.id) && !isAwaitingQuestion
+    const sessionKey = sessionWorkspaceKey(activeWorkspaceId, session.id)
+    const isAwaitingQuestion = awaitingQuestionSessions.has(sessionKey)
+    const isBusy = busySessions.has(sessionKey) && !isAwaitingQuestion
     return (
       <div key={session.id} className="relative group">
         {isEditing ? (

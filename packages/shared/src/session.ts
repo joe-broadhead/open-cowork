@@ -1,3 +1,5 @@
+import type { SessionArtifact } from './artifacts.js'
+
 // Aggregate diff stats for a session, mirroring SDK Session.summary (additions
 // + deletions + file count across the session's snapshot diff). Distinct from
 // SessionUsageSummary below, which is our product-side cost/token rollup.
@@ -42,6 +44,7 @@ export interface SessionInfo {
 
 export interface SessionPromptOptions {
   variant?: string | null
+  workspaceId?: string
 }
 
 export interface SessionComposerPreferences {
@@ -246,6 +249,7 @@ export interface SessionView {
   compactions: CompactionNotice[]
   pendingApprovals: PendingApproval[]
   pendingQuestions: PendingQuestion[]
+  artifacts?: SessionArtifact[]
   errors: SessionError[]
   todos: TodoItem[]
   executionPlan: ExecutionPlanItem[]
@@ -267,6 +271,7 @@ export interface SessionView {
 export interface SessionMessageTextPatch {
   type: 'message_text'
   sessionId: string
+  workspaceId?: string | null
   messageId: string
   segmentId: string
   content: string
@@ -279,6 +284,7 @@ export interface SessionMessageTextPatch {
 export interface SessionTaskTextPatch {
   type: 'task_text'
   sessionId: string
+  workspaceId?: string | null
   taskRunId: string
   segmentId: string
   content: string
@@ -289,6 +295,7 @@ export interface SessionTaskTextPatch {
 export interface SessionMessageReasoningPatch {
   type: 'message_reasoning'
   sessionId: string
+  workspaceId?: string | null
   messageId: string
   segmentId: string
   content: string
@@ -299,6 +306,7 @@ export interface SessionMessageReasoningPatch {
 export interface SessionTaskReasoningPatch {
   type: 'task_reasoning'
   sessionId: string
+  workspaceId?: string | null
   taskRunId: string
   segmentId: string
   content: string
@@ -315,6 +323,7 @@ export type SessionPatch =
 export interface RuntimeNotification {
   type: 'done' | 'error'
   sessionId?: string | null
+  workspaceId?: string | null
   synthetic?: boolean
   message?: string
 }

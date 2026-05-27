@@ -111,7 +111,7 @@ export function stringAndOptionalObjectArgs<T extends object>(
 ) {
   return createIpcArgsSchema<[string, T | undefined]>((channel, args) => {
     if (args.length < 1 || args.length > 2) {
-      throw new Error(`${channel} requires ${stringLabel}.`)
+      throw new Error(`${channel} requires ${stringLabel} and accepts optional ${objectLabel}.`)
     }
     if (typeof args[0] !== 'string') {
       throw new Error(`${channel} requires ${stringLabel} to be a string.`)
@@ -162,6 +162,50 @@ export function objectAndObjectArgs<TFirst extends object, TSecond extends objec
     return [
       normalizeObjectArg<TFirst>(channel, firstLabel, args[0], firstValidator),
       normalizeObjectArg<TSecond>(channel, secondLabel, args[1], secondValidator),
+    ]
+  })
+}
+
+export function objectAndOptionalObjectArgs<TFirst extends object, TSecond extends object>(
+  firstLabel: string,
+  secondLabel: string,
+  firstValidator?: IpcObjectValidator<TFirst>,
+  secondValidator?: IpcObjectValidator<TSecond>,
+) {
+  return createIpcArgsSchema<[TFirst, TSecond | undefined]>((channel, args) => {
+    if (args.length < 1 || args.length > 2) {
+      throw new Error(`${channel} requires ${firstLabel} and accepts optional ${secondLabel}.`)
+    }
+    return [
+      normalizeObjectArg<TFirst>(channel, firstLabel, args[0], firstValidator),
+      args[1] === undefined || args[1] === null
+        ? undefined
+        : normalizeObjectArg<TSecond>(channel, secondLabel, args[1], secondValidator),
+    ]
+  })
+}
+
+export function stringAndObjectAndOptionalObjectArgs<TFirst extends object, TSecond extends object>(
+  stringLabel: string,
+  firstObjectLabel: string,
+  secondObjectLabel: string,
+  options: { maxBytes?: number } = {},
+  firstValidator?: IpcObjectValidator<TFirst>,
+  secondValidator?: IpcObjectValidator<TSecond>,
+) {
+  return createIpcArgsSchema<[string, TFirst, TSecond | undefined]>((channel, args) => {
+    if (args.length < 2 || args.length > 3) {
+      throw new Error(`${channel} requires ${stringLabel} and ${firstObjectLabel}.`)
+    }
+    if (typeof args[0] !== 'string') {
+      throw new Error(`${channel} requires ${stringLabel} to be a string.`)
+    }
+    return [
+      normalizeStringArg(channel, stringLabel, args[0], options.maxBytes),
+      normalizeObjectArg<TFirst>(channel, firstObjectLabel, args[1], firstValidator),
+      args[2] === undefined || args[2] === null
+        ? undefined
+        : normalizeObjectArg<TSecond>(channel, secondObjectLabel, args[2], secondValidator),
     ]
   })
 }

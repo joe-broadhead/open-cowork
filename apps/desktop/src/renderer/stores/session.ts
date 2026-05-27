@@ -24,6 +24,12 @@ import {
   sumSessionCosts,
   updateSessionState,
 } from './session-view-reducer.ts'
+import {
+  activeSessionWorkspaceKey,
+  LOCAL_WORKSPACE_ID,
+  normalizeWorkspaceId,
+  sessionWorkspaceKey,
+} from './session-workspace-keys.ts'
 
 export type {
   CompactionNotice,
@@ -52,10 +58,13 @@ export interface McpConnection {
 }
 
 export interface SessionStore {
+  activeWorkspaceId: string
+  sessionsByWorkspace: Record<string, Session[]>
   sessions: Session[]
   currentSessionId: string | null
   currentView: SessionView
   globalErrors: SessionError[]
+  setActiveWorkspace: (workspaceId: string) => void
   setSessions: (sessions: Session[]) => void
   setCurrentSession: (id: string | null) => void
   addSession: (session: Session) => void
@@ -74,7 +83,7 @@ export interface SessionStore {
     composerReasoningVariant?: string | null
   }) => void
   removeSession: (id: string) => void
-  setSessionView: (sessionId: string, view: SessionView) => void
+  setSessionView: (sessionId: string, view: SessionView, workspaceId?: string | null) => void
   applySessionPatch: (patch: SessionPatch) => void
   applySessionPatches: (patches: SessionPatch[]) => void
   addPendingApproval: (approval: PermissionRequest) => void
@@ -112,11 +121,39 @@ export interface SessionStore {
 }
 
 export const useSessionStore = create<SessionStore>((set) => ({
+  activeWorkspaceId: LOCAL_WORKSPACE_ID,
+  sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [] },
   sessions: [],
   currentSessionId: null,
   currentView: deriveVisibleSessionPatch(createEmptySessionViewState({}, sessionViewTiming()), null, new Set<string>(), new Set<string>(), sessionViewTiming()),
   globalErrors: [],
-  setSessions: (sessions) => set({ sessions }),
+  setActiveWorkspace: (workspaceId) => set((state) => {
+    const nextWorkspaceId = normalizeWorkspaceId(workspaceId)
+    if (nextWorkspaceId === normalizeWorkspaceId(state.activeWorkspaceId)) return {}
+    const timing = sessionViewTiming()
+    return {
+      activeWorkspaceId: nextWorkspaceId,
+      sessions: state.sessionsByWorkspace[nextWorkspaceId] || [],
+      currentSessionId: null,
+      currentView: deriveVisibleSessionPatch(
+        createEmptySessionViewState({}, timing),
+        null,
+        state.busySessions,
+        state.awaitingPermissionSessions,
+        timing,
+      ),
+    }
+  }),
+  setSessions: (sessions) => set((state) => {
+    const workspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
+    return {
+      sessions,
+      sessionsByWorkspace: {
+        ...state.sessionsByWorkspace,
+        [workspaceId]: sessions,
+      },
+    }
+  }),
   setCurrentSession: (id) => set((state) => {
     let sessionStateById = { ...state.sessionStateById }
     if (!id) {
@@ -134,19 +171,20 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
 
     const timing = sessionViewTiming()
-    const next = getOrCreateSessionState(sessionStateById, id, timing)
-    sessionStateById[id] = {
+    const sessionKey = activeSessionWorkspaceKey(state, id)
+    const next = getOrCreateSessionState(sessionStateById, sessionKey, timing)
+    sessionStateById[sessionKey] = {
       ...next,
       lastViewedAt: timing.nowMs,
     }
-    sessionStateById = pruneSessionDetailCache(sessionStateById, id, state.busySessions)
+    sessionStateById = pruneSessionDetailCache(sessionStateById, sessionKey, state.busySessions)
 
     return {
       sessionStateById,
       currentSessionId: id,
       currentView: deriveVisibleSessionPatch(
-        sessionStateById[id],
-        id,
+        sessionStateById[sessionKey],
+        sessionKey,
         state.busySessions,
         state.awaitingPermissionSessions,
         timing,
@@ -155,9 +193,17 @@ export const useSessionStore = create<SessionStore>((set) => ({
   }),
   addSession: (session) => set((state) => ({
     sessions: [session, ...state.sessions],
+    sessionsByWorkspace: {
+      ...state.sessionsByWorkspace,
+      [normalizeWorkspaceId(state.activeWorkspaceId)]: [session, ...state.sessions],
+    },
   })),
   renameSession: (id, title) => set((state) => ({
     sessions: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
+    sessionsByWorkspace: {
+      ...state.sessionsByWorkspace,
+      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => (session.id === id ? { ...session, title } : session)),
+    },
   })),
   setSessionComposerPreferences: (id, preferences) => set((state) => ({
     sessions: state.sessions.map((session) => {
@@ -172,6 +218,21 @@ export const useSessionStore = create<SessionStore>((set) => ({
           : {}),
       }
     }),
+    sessionsByWorkspace: {
+      ...state.sessionsByWorkspace,
+      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => {
+        if (session.id !== id) return session
+        return {
+          ...session,
+          ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
+            ? { composerModelId: preferences.modelId ?? null }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(preferences, 'reasoningVariant')
+            ? { composerReasoningVariant: preferences.reasoningVariant ?? null }
+            : {}),
+        }
+      }),
+    },
   })),
   applySessionMetadata: (patch) => set((state) => ({
     sessions: state.sessions.map((session) => {
@@ -187,29 +248,49 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
       return next
     }),
+    sessionsByWorkspace: {
+      ...state.sessionsByWorkspace,
+      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => {
+        if (session.id !== patch.id) return session
+        const next: Session = { ...session }
+        if (patch.title !== null && patch.title !== undefined) next.title = patch.title
+        if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
+        if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
+        if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
+        if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
+        if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
+        return next
+      }),
+    },
   })),
   removeSession: (id) => set((state) => {
+    const sessionKey = activeSessionWorkspaceKey(state, id)
     const sessionStateById = { ...state.sessionStateById }
-    delete sessionStateById[id]
+    delete sessionStateById[sessionKey]
     const chartArtifactsBySession = { ...state.chartArtifactsBySession }
-    delete chartArtifactsBySession[id]
+    delete chartArtifactsBySession[sessionKey]
 
     // Drop the id from the status Sets too — otherwise a session that was
     // busy / awaiting-permission / awaiting-question at delete time leaves
     // a stale entry that leaks memory and could mis-color a future row if
     // an id ever collides.
-    const nextBusy = state.busySessions.has(id)
-      ? new Set(Array.from(state.busySessions).filter((sid) => sid !== id))
+    const nextBusy = state.busySessions.has(sessionKey)
+      ? new Set(Array.from(state.busySessions).filter((sid) => sid !== sessionKey))
       : state.busySessions
-    const nextAwaitingPermission = state.awaitingPermissionSessions.has(id)
-      ? new Set(Array.from(state.awaitingPermissionSessions).filter((sid) => sid !== id))
+    const nextAwaitingPermission = state.awaitingPermissionSessions.has(sessionKey)
+      ? new Set(Array.from(state.awaitingPermissionSessions).filter((sid) => sid !== sessionKey))
       : state.awaitingPermissionSessions
-    const nextAwaitingQuestion = state.awaitingQuestionSessions.has(id)
-      ? new Set(Array.from(state.awaitingQuestionSessions).filter((sid) => sid !== id))
+    const nextAwaitingQuestion = state.awaitingQuestionSessions.has(sessionKey)
+      ? new Set(Array.from(state.awaitingQuestionSessions).filter((sid) => sid !== sessionKey))
       : state.awaitingQuestionSessions
+    const nextSessions = state.sessions.filter((session) => session.id !== id)
 
     const patch: Partial<SessionStore> = {
-      sessions: state.sessions.filter((session) => session.id !== id),
+      sessions: nextSessions,
+      sessionsByWorkspace: {
+        ...state.sessionsByWorkspace,
+        [normalizeWorkspaceId(state.activeWorkspaceId)]: nextSessions,
+      },
       sessionStateById,
       totalCost: sumSessionCosts(sessionStateById),
       busySessions: nextBusy,
@@ -233,23 +314,28 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
     return patch
   }),
-  setSessionView: (sessionId, view) => set((state) => {
-    const existing = state.sessionStateById[sessionId]
+  setSessionView: (sessionId, view, workspaceId) => set((state) => {
+    if (workspaceId && normalizeWorkspaceId(workspaceId) !== normalizeWorkspaceId(state.activeWorkspaceId)) return {}
+    const sessionKey = workspaceId
+      ? sessionWorkspaceKey(workspaceId, sessionId)
+      : activeSessionWorkspaceKey(state, sessionId)
+    const currentSessionKey = state.currentSessionId ? activeSessionWorkspaceKey(state, state.currentSessionId) : null
+    const existing = state.sessionStateById[sessionKey]
     const timing = sessionViewTiming()
     const next = buildSessionStateFromView(view, existing, timing)
     const busySessions = new Set(state.busySessions)
-    if (view.isGenerating || view.isAwaitingPermission || view.isAwaitingQuestion) busySessions.add(sessionId)
-    else busySessions.delete(sessionId)
+    if (view.isGenerating || view.isAwaitingPermission || view.isAwaitingQuestion) busySessions.add(sessionKey)
+    else busySessions.delete(sessionKey)
     const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
-    if (view.isAwaitingPermission) awaitingPermissionSessions.add(sessionId)
-    else awaitingPermissionSessions.delete(sessionId)
+    if (view.isAwaitingPermission) awaitingPermissionSessions.add(sessionKey)
+    else awaitingPermissionSessions.delete(sessionKey)
     const awaitingQuestionSessions = new Set(state.awaitingQuestionSessions)
-    if (view.isAwaitingQuestion) awaitingQuestionSessions.add(sessionId)
-    else awaitingQuestionSessions.delete(sessionId)
+    if (view.isAwaitingQuestion) awaitingQuestionSessions.add(sessionKey)
+    else awaitingQuestionSessions.delete(sessionKey)
 
     const sessionStateById = pruneSessionDetailCache(
-      { ...state.sessionStateById, [sessionId]: next },
-      state.currentSessionId,
+      { ...state.sessionStateById, [sessionKey]: next },
+      currentSessionKey,
       busySessions,
     )
 
@@ -262,8 +348,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
     if (state.currentSessionId === sessionId) {
       patch.currentView = deriveVisibleSessionPatch(
-        sessionStateById[sessionId],
-        sessionId,
+        sessionStateById[sessionKey],
+        sessionKey,
         busySessions,
         awaitingPermissionSessions,
         timing,
@@ -271,7 +357,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
     }
     return patch
   }),
-  applySessionPatch: (patch) => set((state) => applySessionPatchToState(state, patch)),
+  applySessionPatch: (patch) => set((state) => {
+    if (patch.workspaceId && normalizeWorkspaceId(patch.workspaceId) !== normalizeWorkspaceId(state.activeWorkspaceId)) return {}
+    return applySessionPatchToState(state, patch)
+  }),
   applySessionPatches: (patches) => {
     if (patches.length === 0) return
 
@@ -279,7 +368,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
       let nextState = state
       let combinedPatch: Partial<SessionStore> = {}
 
-      for (const patch of orderSessionPatches(patches)) {
+      for (const patch of orderSessionPatches(patches).filter((candidate) => (
+        !candidate.workspaceId || normalizeWorkspaceId(candidate.workspaceId) === normalizeWorkspaceId(state.activeWorkspaceId)
+      ))) {
         const partial = applySessionPatchToState(nextState, patch)
         combinedPatch = {
           ...combinedPatch,
@@ -295,10 +386,14 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })
   },
   addPendingApproval: (approval) => set((state) => {
+    if (approval.workspaceId && normalizeWorkspaceId(approval.workspaceId) !== normalizeWorkspaceId(state.activeWorkspaceId)) return {}
+    const sessionKey = approval.workspaceId
+      ? sessionWorkspaceKey(approval.workspaceId, approval.sessionId)
+      : activeSessionWorkspaceKey(state, approval.sessionId)
     const awaitingPermissionSessions = new Set(state.awaitingPermissionSessions)
-    awaitingPermissionSessions.add(approval.sessionId)
+    awaitingPermissionSessions.add(sessionKey)
     const busySessions = new Set(state.busySessions)
-    busySessions.add(approval.sessionId)
+    busySessions.add(sessionKey)
 
     const patch = updateSessionState(
       {
@@ -317,7 +412,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           },
         ],
       }),
-      { eventAt: state.sessionStateById[approval.sessionId]?.lastEventAt ?? 0 },
+      { eventAt: state.sessionStateById[sessionKey]?.lastEventAt ?? 0 },
     )
 
     return {
@@ -358,14 +453,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   chartArtifactsBySession: {},
   registerChartArtifact: (sessionId, artifact) => set((state) => {
-    const current = state.chartArtifactsBySession[sessionId] || []
+    const sessionKey = activeSessionWorkspaceKey(state, sessionId)
+    const current = state.chartArtifactsBySession[sessionKey] || []
     // De-dupe on filePath so repeat captures (HMR, re-render) replace
     // the older record in place rather than stacking duplicates.
     const next = [...current.filter((entry) => entry.filePath !== artifact.filePath), artifact]
     return {
       chartArtifactsBySession: {
         ...state.chartArtifactsBySession,
-        [sessionId]: next,
+        [sessionKey]: next,
       },
     }
   }),

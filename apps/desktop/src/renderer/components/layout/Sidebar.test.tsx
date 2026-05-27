@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
+import { installRendererTestCoworkApi } from '../../test/setup'
 
 describe('Sidebar', () => {
   it('keeps the upstream sidebar layout when no branding config is provided', () => {
@@ -15,6 +16,159 @@ describe('Sidebar', () => {
     expect(screen.getByText('Workflows')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
+  })
+
+  it('renders the workspace switcher and activates a selected workspace', async () => {
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              label: 'Local',
+              status: 'online',
+              active: true,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'cloud:acme',
+              kind: 'cloud',
+              label: 'Acme Cloud',
+              status: 'disabled',
+              active: false,
+              baseUrl: 'https://cloud.acme.test',
+              lastSyncedAt: null,
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              label: 'Local',
+              status: 'online',
+              active: false,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'cloud:acme',
+              kind: 'cloud',
+              label: 'Acme Cloud',
+              status: 'disabled',
+              active: true,
+              baseUrl: 'https://cloud.acme.test',
+              lastSyncedAt: null,
+            },
+          ]),
+        activate: vi.fn(async () => ({
+          id: 'cloud:acme',
+          kind: 'cloud',
+          label: 'Acme Cloud',
+          status: 'disabled',
+          active: true,
+          baseUrl: 'https://cloud.acme.test',
+          lastSyncedAt: null,
+        })),
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    const switcher = await screen.findByRole('button', { name: /Local.*Online.*Local workspace/i })
+    fireEvent.click(switcher)
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Disabled/i }))
+
+    await waitFor(() => {
+      expect(window.coworkApi.workspace.activate).toHaveBeenCalledWith('cloud:acme')
+    })
+  })
+
+  it('starts login when selecting an auth-required cloud workspace', async () => {
+    const sessionList = vi.fn(async () => [])
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              label: 'Local',
+              status: 'online',
+              active: true,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'cloud:acme',
+              kind: 'cloud',
+              label: 'Acme Cloud',
+              status: 'auth_required',
+              active: false,
+              baseUrl: 'https://cloud.acme.test',
+              lastSyncedAt: null,
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              label: 'Local',
+              status: 'online',
+              active: false,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'cloud:acme',
+              kind: 'cloud',
+              label: 'Acme Cloud',
+              status: 'online',
+              active: true,
+              baseUrl: 'https://cloud.acme.test',
+              lastSyncedAt: '2026-05-27T10:00:00.000Z',
+            },
+          ]),
+        activate: vi.fn(async () => ({
+          id: 'cloud:acme',
+          kind: 'cloud',
+          label: 'Acme Cloud',
+          status: 'auth_required',
+          active: true,
+          baseUrl: 'https://cloud.acme.test',
+          lastSyncedAt: null,
+        })),
+        login: vi.fn(async () => ({
+          id: 'cloud:acme',
+          kind: 'cloud',
+          label: 'Acme Cloud',
+          status: 'online',
+          active: true,
+          baseUrl: 'https://cloud.acme.test',
+          lastSyncedAt: '2026-05-27T10:00:00.000Z',
+        })),
+      },
+      session: {
+        list: sessionList,
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Sign in/i }))
+
+    await waitFor(() => {
+      expect(window.coworkApi.workspace.login).toHaveBeenCalledWith('cloud:acme')
+      expect(sessionList).toHaveBeenCalledWith({ workspaceId: 'cloud:acme' })
+    })
   })
 
   it('renders configured top and lower downstream branding surfaces', () => {

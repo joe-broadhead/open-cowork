@@ -9,6 +9,7 @@ import {
   normalizeRuntimeEventEnvelope,
   normalizeSessionInfo,
 } from '../opencode-adapter.ts'
+import { normalizePermissionEvent } from '../runtime-event-normalizers.ts'
 import { buildManagedRuntimeEnvironment } from '../runtime-environment.ts'
 import {
   createManagedOpencodeServerAuth,
@@ -70,6 +71,14 @@ function readNestedString(record: Record<string, unknown>, keys: string[]) {
   return null
 }
 
+function readNestedRecord(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const nested = asRecord(record[key])
+    if (Object.keys(nested).length > 0) return nested
+  }
+  return {}
+}
+
 function readSessionId(properties: Record<string, unknown>) {
   const part = asRecord(properties.part)
   const info = asRecord(properties.info)
@@ -97,7 +106,48 @@ function readErrorMessage(properties: Record<string, unknown>) {
 
 function eventFromMessagePartUpdated(properties: Record<string, unknown>): CloudRuntimeEvent[] {
   const part = normalizeMessagePart(properties.part)
-  if (!part || part.type !== 'text' || !part.text) return []
+  if (!part) return []
+
+  if (part.type === 'tool') {
+    const state = part.state
+    const isError = state.status === 'error' || state.error !== undefined
+    const isComplete = !isError && (state.status === 'completed' || state.status === 'complete' || state.output !== undefined)
+    const status = isError ? 'error' : isComplete ? 'complete' : 'running'
+    const input = Object.keys(state.input).length > 0 ? state.input : state.args
+    const sessionId = readSessionId(properties)
+    return [{
+      type: 'tool.call',
+      payload: {
+        ...(sessionId ? { sessionId } : {}),
+        id: part.callId || part.id || undefined,
+        name: part.tool || part.name || part.title || 'tool',
+        input,
+        status,
+        ...(state.output !== undefined ? { output: state.output } : state.result !== undefined ? { output: state.result } : {}),
+        ...(state.attachments.length > 0 ? { attachments: state.attachments } : part.attachments.length > 0 ? { attachments: part.attachments } : {}),
+        ...(part.agent ? { agent: part.agent } : {}),
+      },
+    }]
+  }
+
+  if (part.type === 'step-finish' && (part.cost !== null || part.tokens)) {
+    const sessionId = readSessionId(properties)
+    return [{
+      type: 'cost.updated',
+      payload: {
+        ...(sessionId ? { sessionId } : {}),
+        id: [
+          sessionId || 'session',
+          readMessageId(properties) || 'message',
+          part.id || 'step-finish',
+        ].join(':'),
+        cost: part.cost || 0,
+        tokens: part.tokens,
+      },
+    }]
+  }
+
+  if (part.type !== 'text' || !part.text) return []
   const role = readString(properties.role)
     || readString(asRecord(properties.info).role)
     || readString(asRecord(properties.message).role)
@@ -109,6 +159,110 @@ function eventFromMessagePartUpdated(properties: Record<string, unknown>): Cloud
       ...(sessionId ? { sessionId } : {}),
       messageId: readMessageId(properties) || part.id || undefined,
       content: part.text,
+    },
+  }]
+}
+
+function eventsFromPermissionRequested(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const normalized = normalizePermissionEvent(properties)
+  if (!normalized.id) return []
+  return [{
+    type: 'permission.requested',
+    payload: {
+      permissionId: normalized.id,
+      id: normalized.id,
+      ...(normalized.sessionId ? { sessionId: normalized.sessionId } : {}),
+      tool: normalized.title,
+      input: normalized.input,
+      description: normalized.title || `Permission requested for ${normalized.permissionType}`,
+    },
+  }]
+}
+
+function eventsFromPermissionResolved(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const normalized = normalizePermissionEvent(properties)
+  if (!normalized.id) return []
+  return [{
+    type: 'permission.resolved',
+    payload: {
+      permissionId: normalized.id,
+      id: normalized.id,
+      ...(normalized.sessionId ? { sessionId: normalized.sessionId } : {}),
+    },
+  }]
+}
+
+function normalizeQuestionPrompt(value: unknown) {
+  const record = asRecord(value)
+  return {
+    header: readString(record.header) || '',
+    question: readString(record.question) || '',
+    options: Array.isArray(record.options)
+      ? record.options.map((option) => {
+          const optionRecord = asRecord(option)
+          return {
+            label: readString(optionRecord.label) || '',
+            description: readString(optionRecord.description) || '',
+          }
+        })
+      : [],
+    multiple: record.multiple === true,
+    custom: record.custom !== false,
+  }
+}
+
+function eventsFromQuestionAsked(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const requestId = readNestedString(properties, ['id', 'requestID', 'requestId'])
+  if (!requestId) return []
+  const tool = readNestedRecord(properties, ['tool'])
+  return [{
+    type: 'question.asked',
+    payload: {
+      requestId,
+      id: requestId,
+      ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+      questions: Array.isArray(properties.questions) ? properties.questions.map(normalizeQuestionPrompt) : [],
+      ...(Object.keys(tool).length > 0
+        ? {
+            tool: {
+              messageId: readNestedString(tool, ['messageID', 'messageId']) || '',
+              callId: readNestedString(tool, ['callID', 'callId']) || '',
+            },
+          }
+        : {}),
+    },
+  }]
+}
+
+function eventsFromQuestionResolved(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  const requestId = readNestedString(properties, ['requestID', 'requestId', 'id'])
+  if (!requestId) return []
+  return [{
+    type: 'question.resolved',
+    payload: {
+      requestId,
+      id: requestId,
+      ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+    },
+  }]
+}
+
+function normalizeTodo(value: unknown) {
+  const record = asRecord(value)
+  return {
+    ...(readString(record.id) ? { id: readString(record.id) } : {}),
+    content: readString(record.content) || '',
+    status: readString(record.status) || 'pending',
+    priority: readString(record.priority) || 'medium',
+  }
+}
+
+function eventsFromTodosUpdated(properties: Record<string, unknown>): CloudRuntimeEvent[] {
+  return [{
+    type: 'todos.updated',
+    payload: {
+      ...(readSessionId(properties) ? { sessionId: readSessionId(properties) } : {}),
+      todos: Array.isArray(properties.todos) ? properties.todos.map(normalizeTodo) : [],
     },
   }]
 }
@@ -178,6 +332,22 @@ export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[]
           message: readErrorMessage(properties),
         },
       }]
+    case 'permission.asked':
+    case 'permission.updated':
+      return eventsFromPermissionRequested(properties)
+    case 'permission.replied':
+    case 'permission.rejected':
+    case 'permission.resolved':
+      return eventsFromPermissionResolved(properties)
+    case 'question.asked':
+      return eventsFromQuestionAsked(properties)
+    case 'question.replied':
+    case 'question.rejected':
+    case 'question.resolved':
+      return eventsFromQuestionResolved(properties)
+    case 'todo.updated':
+    case 'todos.updated':
+      return eventsFromTodosUpdated(properties)
     default:
       return []
   }

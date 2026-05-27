@@ -12,6 +12,7 @@ import {
   getRuntimeHomeDir,
 } from './runtime.ts'
 import { getEffectiveSettings } from './settings.ts'
+import { getAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
 import { shortSessionId } from './log-sanitizer.ts'
@@ -31,6 +32,7 @@ import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
+import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
@@ -49,6 +51,7 @@ import { createIpcRuntimeContext } from './ipc-runtime-context.ts'
 import { getThreadIndexService } from './thread-index/thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
 import { sdkErrorMessage } from './sdk-error.ts'
+import { createWorkspaceGateway } from './workspace-gateway.ts'
 
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
@@ -141,6 +144,9 @@ export function setupIpcHandlers(
 
 
   const destructiveConfirmations = createDestructiveConfirmationManager()
+  const workspaceGateway = createWorkspaceGateway({
+    cloudDesktop: getAppConfig().cloudDesktop,
+  })
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
   const approvedSkillImportDirectories = new Map<string, string>()
 
@@ -305,6 +311,7 @@ export function setupIpcHandlers(
 
   const context: IpcHandlerContext = {
     ipcMain: instrumentedIpcMain,
+    workspaceGateway,
     getMainWindow,
     normalizeDirectory,
     ensureSessionRecord,
@@ -343,6 +350,7 @@ export function setupIpcHandlers(
 
   getThreadIndexService().reconcileThreadIndexFromRegistry()
 
+  registerWorkspaceHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)

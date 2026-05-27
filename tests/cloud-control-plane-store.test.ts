@@ -53,6 +53,70 @@ test('cloud control plane appends ordered idempotent session events', () => {
   }), /reused/)
 })
 
+test('cloud control plane appends user-scoped workspace events across sessions', () => {
+  const store = seededStore()
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    opencodeSessionId: 'oc-session-2',
+    profileName: 'full',
+  })
+  store.ensureUser({ tenantId: 'tenant-1', userId: 'user-2', email: 'b@example.com' })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-2',
+    sessionId: 'session-other',
+    opencodeSessionId: 'oc-session-other',
+    profileName: 'full',
+  })
+
+  const first = store.appendWorkspaceEvent({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    eventId: 'session-1:event-1',
+    type: 'assistant.message',
+    payload: { content: 'first' },
+  })
+  const second = store.appendWorkspaceEvent({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    eventId: 'session-2:event-1',
+    type: 'assistant.message',
+    payload: { content: 'second' },
+  })
+  const replay = store.appendWorkspaceEvent({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    eventId: 'session-1:event-1',
+    type: 'assistant.message',
+    payload: { content: 'first' },
+  })
+
+  assert.equal(first.sequence, 1)
+  assert.equal(first.entityType, 'session')
+  assert.equal(first.entityId, 'session-1')
+  assert.equal(first.operation, 'update')
+  assert.equal(first.projectionVersion, 1)
+  assert.equal(second.sequence, 2)
+  assert.deepEqual(replay, first)
+  assert.deepEqual(
+    store.listWorkspaceEvents('tenant-1', 'user-1', 1).map((event) => [event.sequence, event.sessionId]),
+    [[2, 'session-2']],
+  )
+  assert.deepEqual(store.listWorkspaceEvents('tenant-1', 'user-2', 0), [])
+  assert.throws(() => store.appendWorkspaceEvent({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-other',
+    eventId: 'bad-owner',
+    type: 'assistant.message',
+  }), /does not belong/)
+})
+
 test('cloud control plane fences projection writes by worker lease token', () => {
   const store = seededStore()
   const firstLease = store.claimSessionLease(
