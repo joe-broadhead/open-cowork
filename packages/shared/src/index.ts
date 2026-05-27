@@ -42,7 +42,9 @@ import type {
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactExportRequest,
+  SessionArtifactListRequest,
   SessionArtifactRequest,
+  SessionArtifactUploadRequest,
 } from './artifacts.js'
 import type {
   AgentCatalog,
@@ -80,9 +82,17 @@ import type {
   RuntimeProviderDescriptor,
 } from './providers.js'
 import type {
+  AddCloudWorkspaceInput,
   SandboxCleanupResult,
   SandboxStorageStats,
   SkillImportSelection,
+  WorkspaceInfo,
+  WorkspaceApiSupport,
+  WorkspaceOptions,
+  WorkspacePolicy,
+  WorkspaceScoped,
+  WorkspaceSessionsUpdatedEvent,
+  WorkspaceSyncResult,
 } from './workspace.js'
 import type {
   ThreadFacetSummary,
@@ -120,19 +130,30 @@ export * from './workspace.js'
 export * from './workflow.js'
 
 export interface CoworkAPI {
+  workspace: {
+    list: () => Promise<WorkspaceInfo[]>
+    activate: (workspaceId: string) => Promise<WorkspaceInfo>
+    addCloud: (input: AddCloudWorkspaceInput) => Promise<WorkspaceInfo>
+    remove: (workspaceId: string) => Promise<boolean>
+    login: (workspaceId: string) => Promise<WorkspaceInfo>
+    logout: (workspaceId: string) => Promise<WorkspaceInfo>
+    policy: (workspaceId?: string) => Promise<WorkspacePolicy>
+    support: (workspaceId?: string) => Promise<WorkspaceApiSupport[]>
+    sync: (workspaceId?: string) => Promise<WorkspaceSyncResult>
+  }
   auth: {
     status: () => Promise<AuthState>
     login: () => Promise<AuthState>
     logout: () => Promise<AuthState>
   }
   session: {
-    create: (directory?: string) => Promise<SessionInfo>
-    activate: (sessionId: string, options?: { force?: boolean }) => Promise<SessionView>
+    create: (directory?: string, options?: WorkspaceOptions) => Promise<SessionInfo>
+    activate: (sessionId: string, options?: WorkspaceScoped<{ force?: boolean }>) => Promise<SessionView>
     prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string, options?: SessionPromptOptions) => Promise<void>
     setComposerPreferences: (sessionId: string, preferences: SessionComposerPreferences) => Promise<SessionInfo | null>
-    list: () => Promise<SessionInfo[]>
-    get: (id: string) => Promise<SessionInfo | null>
-    abort: (sessionId: string) => Promise<void>
+    list: (options?: WorkspaceOptions) => Promise<SessionInfo[]>
+    get: (id: string, options?: WorkspaceOptions) => Promise<SessionInfo | null>
+    abort: (sessionId: string, options?: WorkspaceOptions) => Promise<void>
     // Aborts a single sub-agent task under a root session without
     // cancelling the root or its siblings. Used by the task drill-in
     // drawer's per-task abort button.
@@ -152,21 +173,21 @@ export interface CoworkAPI {
     todo: (sessionId: string) => Promise<TodoItem[]>
   }
   permission: {
-    respond: (id: string, allowed: boolean, sessionId?: string | null) => Promise<void>
+    respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
   }
   question: {
-    reply: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>
-    reject: (sessionId: string, requestId: string) => Promise<void>
+    reply: (sessionId: string, requestId: string, answers: string[][], options?: WorkspaceOptions) => Promise<void>
+    reject: (sessionId: string, requestId: string, options?: WorkspaceOptions) => Promise<void>
   }
   settings: {
     // Returns credentials masked ('••••••••' for set values). Safe default
     // for any consumer that only needs non-secret fields.
-    get: () => Promise<EffectiveAppSettings>
+    get: (options?: WorkspaceOptions) => Promise<EffectiveAppSettings>
     // Scoped unmasked reads for credential editor surfaces. The renderer
     // never receives the full effective settings object with every secret.
     getProviderCredentials: (providerId: string) => Promise<Record<string, string>>
     getIntegrationCredentials: (integrationId: string) => Promise<Record<string, string>>
-    set: (updates: Partial<AppSettings>) => Promise<EffectiveAppSettings>
+    set: (updates: WorkspaceScoped<Partial<AppSettings>>) => Promise<EffectiveAppSettings>
   }
   mcp: {
     auth: (mcpName: string) => Promise<boolean>
@@ -193,6 +214,8 @@ export interface CoworkAPI {
     saveArtifact: (request: ChartSaveArtifactRequest) => Promise<SessionArtifact>
   }
   artifact: {
+    list: (request: SessionArtifactListRequest) => Promise<SessionArtifact[]>
+    upload: (request: SessionArtifactUploadRequest) => Promise<SessionArtifact>
     export: (request: SessionArtifactExportRequest) => Promise<string | null>
     reveal: (request: SessionArtifactRequest) => Promise<boolean>
     readAttachment: (request: SessionArtifactRequest) => Promise<SessionArtifactAttachment>
@@ -275,31 +298,31 @@ export interface CoworkAPI {
     onInstallEvent: (callback: (event: UpdateInstallEvent) => void) => () => void
   }
   workflows: {
-    list: () => Promise<WorkflowListPayload>
-    get: (workflowId: string) => Promise<WorkflowDetail | null>
-    startDraft: (directory?: string | null) => Promise<SessionInfo>
-    runNow: (workflowId: string) => Promise<WorkflowRun | null>
-    pause: (workflowId: string) => Promise<WorkflowDetail | null>
-    resume: (workflowId: string) => Promise<WorkflowDetail | null>
-    archive: (workflowId: string) => Promise<WorkflowDetail | null>
+    list: (options?: WorkspaceOptions) => Promise<WorkflowListPayload>
+    get: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
+    startDraft: (directory?: string | null, options?: WorkspaceOptions) => Promise<SessionInfo>
+    runNow: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowRun | null>
+    pause: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
+    resume: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
+    archive: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
     regenerateWebhookSecret: (workflowId: string) => Promise<WorkflowDetail | null>
   }
   threads: {
-    search: (query?: ThreadSearchQuery) => Promise<ThreadSearchResult>
-    facets: (query?: ThreadSearchQuery) => Promise<ThreadFacetSummary>
+    search: (query?: WorkspaceScoped<ThreadSearchQuery>) => Promise<ThreadSearchResult>
+    facets: (query?: WorkspaceScoped<ThreadSearchQuery>) => Promise<ThreadFacetSummary>
     tags: {
-      list: () => Promise<ThreadTag[]>
-      create: (input: ThreadTagInput) => Promise<ThreadTag>
-      update: (tagId: string, input: ThreadTagInput) => Promise<ThreadTag | null>
-      delete: (tagId: string) => Promise<boolean>
-      apply: (sessionIds: string[], tagIds: string[]) => Promise<boolean>
-      remove: (sessionIds: string[], tagIds: string[]) => Promise<boolean>
+      list: (options?: WorkspaceOptions) => Promise<ThreadTag[]>
+      create: (input: ThreadTagInput, options?: WorkspaceOptions) => Promise<ThreadTag>
+      update: (tagId: string, input: ThreadTagInput, options?: WorkspaceOptions) => Promise<ThreadTag | null>
+      delete: (tagId: string, options?: WorkspaceOptions) => Promise<boolean>
+      apply: (sessionIds: string[], tagIds: string[], options?: WorkspaceOptions) => Promise<boolean>
+      remove: (sessionIds: string[], tagIds: string[], options?: WorkspaceOptions) => Promise<boolean>
     }
     smartFilters: {
-      list: () => Promise<ThreadSmartFilter[]>
-      create: (input: ThreadSmartFilterInput) => Promise<ThreadSmartFilter>
-      update: (filterId: string, input: ThreadSmartFilterInput) => Promise<ThreadSmartFilter | null>
-      delete: (filterId: string) => Promise<boolean>
+      list: (options?: WorkspaceOptions) => Promise<ThreadSmartFilter[]>
+      create: (input: ThreadSmartFilterInput, options?: WorkspaceOptions) => Promise<ThreadSmartFilter>
+      update: (filterId: string, input: ThreadSmartFilterInput, options?: WorkspaceOptions) => Promise<ThreadSmartFilter | null>
+      delete: (filterId: string, options?: WorkspaceOptions) => Promise<boolean>
     }
     suggestions: {
       accept: (suggestionId: string) => Promise<boolean>
@@ -345,7 +368,7 @@ export interface CoworkAPI {
   on: {
     sessionPatch: (callback: (patch: SessionPatch) => void) => () => void
     notification: (callback: (event: RuntimeNotification) => void) => () => void
-    sessionView: (callback: (data: { sessionId: string; view: SessionView }) => void) => () => void
+    sessionView: (callback: (data: { sessionId: string; workspaceId?: string | null; view: SessionView }) => void) => () => void
     permissionRequest: (callback: (request: PermissionRequest) => void) => () => void
     mcpStatus: (callback: (statuses: McpStatus[]) => void) => () => void
     authExpired: (callback: () => void) => () => void
@@ -364,6 +387,7 @@ export interface CoworkAPI {
       composerReasoningVariant?: string | null
     }) => void) => () => void
     sessionDeleted: (callback: (data: { id: string }) => void) => () => void
+    workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void
   }
 }

@@ -5,6 +5,7 @@ import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-c
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
 import type { CloudPrincipal, CloudSessionService } from './session-service.ts'
+import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
@@ -36,12 +37,20 @@ export type CloudBrowserAuthProvider = {
   callback(req: IncomingMessage, url: URL): Promise<CloudBrowserAuthCallback> | CloudBrowserAuthCallback
 }
 
+export type CloudDesktopAuthConfig = {
+  mode: 'oidc'
+  issuerUrl: string
+  clientId: string
+  scope: string
+}
+
 export type CloudHttpServerOptions = {
   service: CloudSessionService
   artifacts?: CloudArtifactService | null
   policy: CloudRuntimePolicy
   auth?: CloudAuthResolver
   browserAuth?: CloudBrowserAuthProvider | null
+  desktopAuth?: CloudDesktopAuthConfig | null
   worker?: CloudWorker | null
   webhookSecurity?: WorkflowWebhookSecurityStore | null
   internalToken?: string | null
@@ -145,6 +154,23 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
 
 function writeError(res: ServerResponse, status: number, message: string, origin?: string | null) {
   writeJson(res, status, { error: message }, origin)
+}
+
+function writePolicyError(
+  res: ServerResponse,
+  status: number,
+  message: string,
+  policyCode: string,
+  origin?: string | null,
+) {
+  writeJson(res, status, {
+    error: message,
+    verdict: {
+      allowed: false,
+      reason: message,
+      policyCode,
+    },
+  }, origin)
 }
 
 function writeRedirect(
@@ -262,10 +288,41 @@ function extractSignatureWebhookAuth(req: IncomingMessage, rawBody: string): Wor
   return { kind: 'signature', timestamp, signature, rawBody }
 }
 
-function writeSseEvent(res: ServerResponse, event: { sequence: number, type: string, eventId: string, payload: Record<string, unknown> }) {
+function writeSseEvent(res: ServerResponse, event: {
+  tenantId?: string
+  userId?: string
+  sessionId?: string | null
+  sequence: number
+  entityType?: string
+  entityId?: string
+  operation?: string
+  projectionVersion?: number
+  type: string
+  eventId: string
+  payload: Record<string, unknown>
+  createdAt?: string
+}) {
   res.write(`id: ${event.sequence}\n`)
   res.write(`event: ${event.type}\n`)
   res.write(`data: ${JSON.stringify(event)}\n\n`)
+}
+
+function writeSnapshotRequiredEvent(
+  res: ServerResponse,
+  afterSequence: number,
+  payload: Record<string, unknown>,
+) {
+  writeSseEvent(res, {
+    sequence: afterSequence,
+    type: 'snapshot.required',
+    eventId: `snapshot-required:${afterSequence}`,
+    entityType: 'workspace',
+    entityId: 'workspace',
+    operation: 'snapshot_required',
+    projectionVersion: afterSequence,
+    createdAt: new Date().toISOString(),
+    payload,
+  })
 }
 
 function ssePollMs(options: CloudHttpServerOptions) {
@@ -419,6 +476,87 @@ async function handleSse(
   })
 }
 
+async function handleWorkspaceSse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: CloudHttpServerOptions,
+  context: RouteContext,
+) {
+  const afterSequence = parseAfterSequence(req, context.url)
+  writeCorsHeaders(res, options.corsOrigin)
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-store, no-transform',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  })
+  res.write(': connected\n\n')
+  let lastSequence = afterSequence
+  const writeIfNew = (event: {
+    tenantId?: string
+    userId?: string
+    sessionId?: string | null
+    sequence: number
+    entityType?: string
+    entityId?: string
+    operation?: string
+    projectionVersion?: number
+    type: string
+    eventId: string
+    payload: Record<string, unknown>
+    createdAt?: string
+  }) => {
+    if (event.sequence <= lastSequence) return
+    writeSseEvent(res, event)
+    lastSequence = event.sequence
+  }
+
+  const retainedEvents = await options.service.listWorkspaceEvents(context.principal, 0)
+  const earliestSequence = retainedEvents[0]?.sequence
+  const hasReplayGap = afterSequence > 0
+    && earliestSequence !== undefined
+    && earliestSequence > afterSequence + 1
+
+  if (hasReplayGap) {
+    const latestSequence = retainedEvents[retainedEvents.length - 1]?.sequence || afterSequence
+    writeSnapshotRequiredEvent(res, afterSequence, {
+      reason: 'event_retention_gap',
+      afterSequence,
+      earliestSequence,
+      latestSequence,
+    })
+    lastSequence = Math.max(lastSequence, latestSequence)
+  } else {
+    for (const event of retainedEvents) writeIfNew(event)
+  }
+
+  const unsubscribe = options.service.workspaceEventBus.subscribe({
+    tenantId: context.principal.tenantId,
+    userId: context.principal.userId,
+    afterSequence: lastSequence,
+  }, (event) => {
+    writeIfNew(event)
+  })
+  let pollActive = false
+  const pollTimer = setInterval(() => {
+    if (pollActive) return
+    pollActive = true
+    void options.service.listWorkspaceEvents(context.principal, lastSequence)
+      .then((events) => {
+        for (const event of events) writeIfNew(event)
+        res.write(': keep-alive\n\n')
+      })
+      .catch(() => {})
+      .finally(() => {
+        pollActive = false
+      })
+  }, ssePollMs(options))
+  req.on('close', () => {
+    clearInterval(pollTimer)
+    unsubscribe()
+  })
+}
+
 async function handleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -453,6 +591,31 @@ async function handleApiRequest(
     return
   }
 
+  if (resource === 'workspace' && !sessionId && req.method === 'GET') {
+    writeJson(res, 200, {
+      tenantId: context.principal.tenantId,
+      tenantName: context.principal.tenantName || null,
+      userId: context.principal.userId,
+      email: context.principal.email,
+      profileName: options.policy.profileName,
+      policy: {
+        features: options.policy.features,
+        allowedAgents: options.policy.allowedAgents,
+        allowedTools: options.policy.allowedTools,
+        allowedMcps: options.policy.allowedMcps,
+        localFiles: 'disabled',
+        localStdioMcps: 'disabled',
+        machineRuntimeConfig: 'disabled',
+      },
+    }, options.corsOrigin)
+    return
+  }
+
+  if (resource === 'events' && !sessionId && req.method === 'GET') {
+    await handleWorkspaceSse(req, res, options, context)
+    return
+  }
+
   if (resource === 'workers' && sessionId === 'heartbeats' && !action && req.method === 'GET') {
     writeJson(res, 200, {
       heartbeats: await options.service.listWorkerHeartbeats(),
@@ -478,7 +641,7 @@ async function handleApiRequest(
 
   if (resource === 'capabilities') {
     if (!options.policy.features.agents && !options.policy.features.customSkills && !options.policy.features.customMcps) {
-      writeError(res, 403, 'Capabilities are disabled for this cloud profile.', options.corsOrigin)
+      writePolicyError(res, 403, 'Capabilities are disabled for this cloud profile.', 'capabilities.disabled', options.corsOrigin)
       return
     }
     const collection = sessionId
@@ -533,7 +696,7 @@ async function handleApiRequest(
 
   if (resource === 'settings') {
     if (!options.policy.features.settings) {
-      writeError(res, 403, 'Settings are disabled for this cloud profile.', options.corsOrigin)
+      writePolicyError(res, 403, 'Settings are disabled for this cloud profile.', 'settings.disabled', options.corsOrigin)
       return
     }
     const settingKey = sessionId ? decodeURIComponent(sessionId) : null
@@ -571,7 +734,7 @@ async function handleApiRequest(
 
   if (resource === 'threads') {
     if (!options.policy.features.threadIndex) {
-      writeError(res, 403, 'Thread index is disabled for this cloud profile.', options.corsOrigin)
+      writePolicyError(res, 403, 'Thread index is disabled for this cloud profile.', 'thread_index.disabled', options.corsOrigin)
       return
     }
     const collection = sessionId
@@ -689,7 +852,7 @@ async function handleApiRequest(
 
   if (resource === 'workflows') {
     if (!options.policy.features.workflows) {
-      writeError(res, 403, 'Workflows are disabled for this cloud profile.', options.corsOrigin)
+      writePolicyError(res, 403, 'Workflows are disabled for this cloud profile.', 'workflows.disabled', options.corsOrigin)
       return
     }
 
@@ -831,6 +994,16 @@ async function handleApiRequest(
     return
   }
 
+  if (action === 'view' && req.method === 'GET') {
+    const cloudView = await options.service.getSessionView(context.principal, sessionId)
+    writeJson(res, 200, {
+      session: cloudView.session,
+      projection: cloudView.projection,
+      view: cloudSessionViewToSessionView(cloudView),
+    }, options.corsOrigin)
+    return
+  }
+
   if (action === 'events' && req.method === 'GET') {
     await handleSse(req, res, options, context, sessionId)
     return
@@ -838,7 +1011,7 @@ async function handleApiRequest(
 
   if (action === 'artifacts') {
     if (!options.policy.features.artifacts) {
-      writeError(res, 403, 'Artifacts are disabled for this cloud profile.', options.corsOrigin)
+      writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
       return
     }
     if (!options.artifacts) {
@@ -915,6 +1088,21 @@ async function handleApiRequest(
     return
   }
 
+  if (action === 'question-reject' && req.method === 'POST') {
+    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const requestId = readString(body.requestId)
+    if (!requestId) {
+      writeError(res, 400, 'Question rejection requires requestId.', options.corsOrigin)
+      return
+    }
+    const command = await options.service.enqueueQuestionReject(context.principal, sessionId, {
+      requestId,
+    })
+    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
+    writeJson(res, 202, { command, processed }, options.corsOrigin)
+    return
+  }
+
   if (action === 'permission-respond' && req.method === 'POST') {
     const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const permissionId = readString(body.permissionId)
@@ -952,6 +1140,15 @@ async function handleAuthRequest(
       csrfToken: context.cookieSession?.csrfToken || null,
       expiresAt: context.cookieSession?.expiresAt || null,
     }, options.corsOrigin)
+    return
+  }
+
+  if (url.pathname === '/auth/desktop/config' && req.method === 'GET') {
+    if (!options.desktopAuth) {
+      writeError(res, 404, 'Cloud desktop auth is not configured.', options.corsOrigin)
+      return
+    }
+    writeJson(res, 200, options.desktopAuth, options.corsOrigin)
     return
   }
 

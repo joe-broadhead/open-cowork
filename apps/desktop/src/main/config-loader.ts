@@ -22,6 +22,7 @@ import {
 } from './config-layer-utils.ts'
 import type {
   CloudConfig,
+  CloudDesktopConfig,
   CloudFeatureConfig,
   CloudProfileConfig,
   CloudRole,
@@ -304,6 +305,35 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
   }
 }
 
+function normalizeCloudDesktopConfig(raw: CloudDesktopConfig | undefined): CloudDesktopConfig {
+  const source = raw || DEFAULT_CONFIG.cloudDesktop
+  const cacheModes = new Set(['full', 'metadata-only', 'disabled'])
+  const fallbackModes = new Set(['metadata-only', 'disabled', 'fail-startup'])
+  return {
+    ...DEFAULT_CONFIG.cloudDesktop,
+    ...source,
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : DEFAULT_CONFIG.cloudDesktop.enabled,
+    allowUserAddedConnections: typeof source.allowUserAddedConnections === 'boolean'
+      ? source.allowUserAddedConnections
+      : DEFAULT_CONFIG.cloudDesktop.allowUserAddedConnections,
+    preconfiguredConnections: Array.isArray(source.preconfiguredConnections)
+      ? source.preconfiguredConnections
+        .filter((connection) => connection && typeof connection.baseUrl === 'string' && connection.baseUrl.trim())
+        .map((connection) => ({
+          baseUrl: connection.baseUrl.trim(),
+          ...(typeof connection.label === 'string' && connection.label.trim() ? { label: connection.label.trim() } : {}),
+        }))
+      : DEFAULT_CONFIG.cloudDesktop.preconfiguredConnections,
+    requireManagedOrg: typeof source.requireManagedOrg === 'boolean'
+      ? source.requireManagedOrg
+      : DEFAULT_CONFIG.cloudDesktop.requireManagedOrg,
+    cacheMode: cacheModes.has(source.cacheMode) ? source.cacheMode : DEFAULT_CONFIG.cloudDesktop.cacheMode,
+    cacheEncryptionFallback: fallbackModes.has(source.cacheEncryptionFallback)
+      ? source.cacheEncryptionFallback
+      : DEFAULT_CONFIG.cloudDesktop.cacheEncryptionFallback,
+  }
+}
+
 function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
   return {
     ...raw,
@@ -362,6 +392,7 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
       ...(raw.compaction?.agent ? { agent: { ...raw.compaction.agent } } : {}),
     },
     cloud: normalizeCloudConfig(raw.cloud),
+    cloudDesktop: normalizeCloudDesktopConfig(raw.cloudDesktop),
   }
 }
 

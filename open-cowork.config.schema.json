@@ -212,6 +212,7 @@
       }
     },
     "cloud": { "$ref": "#/$defs/cloudConfig" },
+    "cloudDesktop": { "$ref": "#/$defs/cloudDesktopConfig" },
     "i18n": {
       "type": "object",
       "additionalProperties": false,
@@ -275,6 +276,30 @@
     "cloudRole": {
       "type": "string",
       "enum": ["all-in-one", "web", "worker", "scheduler"]
+    },
+    "cloudDesktopConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allowUserAddedConnections": { "type": "boolean" },
+        "preconfiguredConnections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cloudDesktopConnection" }
+        },
+        "requireManagedOrg": { "type": "boolean" },
+        "cacheMode": { "type": "string", "enum": ["full", "metadata-only", "disabled"] },
+        "cacheEncryptionFallback": { "type": "string", "enum": ["metadata-only", "disabled", "fail-startup"] }
+      }
+    },
+    "cloudDesktopConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 80 }
+      },
+      "required": ["baseUrl"]
     },
     "cloudName": {
       "type": "string",

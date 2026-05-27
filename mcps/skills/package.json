@@ -15,6 +15,7 @@
   "scripts": {
     "build": "node ../build.mjs",
     "dev": "node ../build.mjs",
+    "typecheck": "tsc --noEmit --rootDir ../..",
     "test": "pnpm build && node --no-warnings --experimental-strip-types --test tests/*.test.ts",
     "security": "pnpm audit --prod --audit-level high"
   },
@@ -24,6 +25,8 @@
     "zod": "^4.4.2"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "@types/node": "^22.12.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.3"
   }
 }

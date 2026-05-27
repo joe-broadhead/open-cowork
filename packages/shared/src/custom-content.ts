@@ -3,6 +3,7 @@ import type { WorkflowSurface } from './workflow.js'
 export type CustomMcpPermissionMode = 'ask' | 'allow'
 
 export interface CustomMcpConfig {
+  workspaceId?: string
   scope: 'machine' | 'project'
   directory?: string | null
   name: string
@@ -56,6 +57,7 @@ export interface McpPreflightResult {
 }
 
 export interface CustomSkillConfig {
+  workspaceId?: string
   scope: 'machine' | 'project'
   directory?: string | null
   name: string
@@ -83,6 +85,7 @@ export interface AgentInferenceOptions {
 }
 
 export interface CustomAgentConfig extends AgentInferenceOptions {
+  workspaceId?: string
   scope: 'machine' | 'project'
   directory?: string | null
   name: string
@@ -130,6 +133,7 @@ export interface CustomAgentSummary extends CustomAgentConfig {
 }
 
 export interface ScopedArtifactRef {
+  workspaceId?: string
   name: string
   scope: 'machine' | 'project'
   directory?: string | null

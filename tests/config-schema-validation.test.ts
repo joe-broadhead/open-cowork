@@ -220,6 +220,26 @@ test('cloud deployment config rejects machine runtime config and unknown cloud k
   assert.throws(() => validateResolvedConfig(config, 'cloud config'), /cloud\.runtime/)
 })
 
+test('cloud desktop managed org config validates and rejects unsafe values', () => {
+  const config = cloneConfig()
+  config.cloudDesktop = {
+    enabled: true,
+    allowUserAddedConnections: false,
+    requireManagedOrg: true,
+    cacheMode: 'metadata-only',
+    cacheEncryptionFallback: 'disabled',
+    preconfiguredConnections: [{
+      baseUrl: 'https://cloud.example.test',
+      label: 'Acme Cloud',
+    }],
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'cloud desktop config'))
+
+  config.cloudDesktop.preconfiguredConnections[0].baseUrl = 'http://cloud.example.test'
+  assert.throws(() => validateResolvedConfig(config, 'cloud desktop config'), /cloudDesktop/)
+})
+
 test('downstream tool trace rules validate', () => {
   const config = cloneConfig()
   config.toolTrace = {

@@ -105,6 +105,109 @@ test('cloud OpenCode event translator ignores user text echoes', () => {
   }), [])
 })
 
+test('cloud OpenCode event translator preserves projection-critical runtime events', () => {
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'permission.asked',
+      properties: {
+        sessionID: 'session-1',
+        permission: {
+          id: 'permission-1',
+          tool: 'bash',
+          input: { command: 'git status' },
+        },
+      },
+    },
+  }), [{
+    type: 'permission.requested',
+    payload: {
+      permissionId: 'permission-1',
+      id: 'permission-1',
+      sessionId: 'session-1',
+      tool: 'bash',
+      input: { command: 'git status' },
+      description: 'bash',
+    },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'question.asked',
+      properties: {
+        sessionID: 'session-1',
+        id: 'question-1',
+        questions: [{
+          header: 'Pick',
+          question: 'Proceed?',
+          options: [{ label: 'Yes', description: 'Continue' }],
+        }],
+        tool: { messageID: 'message-1', callID: 'call-1' },
+      },
+    },
+  }), [{
+    type: 'question.asked',
+    payload: {
+      requestId: 'question-1',
+      id: 'question-1',
+      sessionId: 'session-1',
+      questions: [{
+        header: 'Pick',
+        question: 'Proceed?',
+        options: [{ label: 'Yes', description: 'Continue' }],
+        multiple: false,
+        custom: true,
+      }],
+      tool: { messageId: 'message-1', callId: 'call-1' },
+    },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'message.part.updated',
+      data: {
+        sessionID: 'session-1',
+        part: {
+          id: 'part-1',
+          callID: 'tool-call-1',
+          type: 'tool',
+          tool: 'read',
+          state: {
+            input: { file: 'README.md' },
+            output: 'contents',
+            status: 'completed',
+          },
+        },
+      },
+    },
+  }), [{
+    type: 'tool.call',
+    payload: {
+      sessionId: 'session-1',
+      id: 'tool-call-1',
+      name: 'read',
+      input: { file: 'README.md' },
+      status: 'complete',
+      output: 'contents',
+    },
+  }])
+
+  assert.deepEqual(translateOpencodeRuntimeEvent({
+    payload: {
+      type: 'todo.updated',
+      properties: {
+        sessionID: 'session-1',
+        todos: [{ content: 'Ship sync', status: 'in_progress', priority: 'high', id: 'todo-1' }],
+      },
+    },
+  }), [{
+    type: 'todos.updated',
+    payload: {
+      sessionId: 'session-1',
+      todos: [{ id: 'todo-1', content: 'Ship sync', status: 'in_progress', priority: 'high' }],
+    },
+  }])
+})
+
 test('cloud OpenCode runtime subscription translates stream events and reports failures', async () => {
   const delivered: unknown[] = []
   const errors: unknown[] = []

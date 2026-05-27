@@ -9,7 +9,7 @@ import type {
 
 export type ControlPlaneRole = 'owner' | 'member'
 export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
-export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply'
+export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
 
@@ -44,6 +44,21 @@ export type SessionEventRecord = {
   sessionId: string
   eventId: string
   sequence: number
+  type: string
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export type WorkspaceEventRecord = {
+  tenantId: string
+  userId: string
+  sessionId: string | null
+  eventId: string
+  sequence: number
+  entityType: string
+  entityId: string
+  operation: string
+  projectionVersion: number
   type: string
   payload: Record<string, unknown>
   createdAt: string
@@ -178,6 +193,20 @@ export type AppendEventInput = {
   tenantId: string
   sessionId: string
   eventId?: string
+  type: string
+  payload?: Record<string, unknown>
+  createdAt?: Date
+}
+
+export type AppendWorkspaceEventInput = {
+  tenantId: string
+  userId: string
+  sessionId?: string | null
+  eventId?: string
+  entityType?: string
+  entityId?: string
+  operation?: string
+  projectionVersion?: number
   type: string
   payload?: Record<string, unknown>
   createdAt?: Date
@@ -336,6 +365,8 @@ export type ControlPlaneStore = {
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number): MaybePromise<SessionEventRecord[]>
+  appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
+  listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number): MaybePromise<WorkspaceEventRecord[]>
   writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
   getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
   claimSessionLease(
@@ -429,6 +460,16 @@ function key(...parts: string[]) {
   return parts.join('\0')
 }
 
+function workspaceOperationFromType(type: string) {
+  if (/\b(created|submitted|uploaded|started)\b/.test(type)) return 'create'
+  if (/\b(deleted|removed|archived)\b/.test(type)) return 'delete'
+  return 'update'
+}
+
+function optionalTrimmedText(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -482,6 +523,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly threadTagLinks = new Map<string, Set<string>>()
   private readonly threadSmartFilters = new Map<string, ThreadSmartFilterRecord>()
   private readonly migrations = new Map<string, SchemaMigrationRecord>()
+  private readonly workspaceEvents = new Map<string, { nextSequence: number, events: WorkspaceEventRecord[] }>()
 
   createTenant(input: { tenantId: string, name: string, createdAt?: Date }): TenantRecord {
     const existing = this.tenants.get(input.tenantId)
@@ -638,6 +680,71 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   listSessionEvents(tenantId: string, sessionId: string, afterSequence = 0): SessionEventRecord[] {
     const session = this.requireSession(tenantId, sessionId)
     return session.events
+      .filter((event) => event.sequence > afterSequence)
+      .map((event) => clone(event))
+  }
+
+  appendWorkspaceEvent(input: AppendWorkspaceEventInput): WorkspaceEventRecord {
+    this.requireTenantUser(input.tenantId, input.userId)
+    if (input.sessionId) {
+      const session = this.requireSession(input.tenantId, input.sessionId)
+      if (session.record.userId !== input.userId) {
+        throw new Error(`Session ${input.sessionId} does not belong to user ${input.userId}.`)
+      }
+    }
+    const workspaceKey = `${input.tenantId}:${input.userId}`
+    const state = this.workspaceEvents.get(workspaceKey) || { nextSequence: 0, events: [] }
+    const payload = input.payload || {}
+    const eventId = input.eventId || `${input.userId}:${state.nextSequence + 1}`
+    const sequence = state.nextSequence + 1
+    const entityType = optionalTrimmedText(input.entityType) || (input.sessionId ? 'session' : 'workspace')
+    const entityId = optionalTrimmedText(input.entityId) || input.sessionId || input.userId
+    const operation = optionalTrimmedText(input.operation) || workspaceOperationFromType(input.type)
+    const projectionVersion = Number.isFinite(input.projectionVersion)
+      ? Math.max(0, Math.floor(input.projectionVersion || 0))
+      : sequence
+    const existing = state.events.find((event) => event.eventId === eventId)
+    if (existing) {
+      const expectedProjectionVersion = Number.isFinite(input.projectionVersion)
+        ? projectionVersion
+        : existing.projectionVersion
+      if (
+        existing.type !== input.type
+        || stableJson(existing.payload) !== stableJson(payload)
+        || (existing.sessionId || null) !== (input.sessionId || null)
+        || existing.entityType !== entityType
+        || existing.entityId !== entityId
+        || existing.operation !== operation
+        || existing.projectionVersion !== expectedProjectionVersion
+      ) {
+        throw new Error(`Workspace event id ${eventId} was reused with different content.`)
+      }
+      return clone(existing)
+    }
+    const event: WorkspaceEventRecord = {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      sessionId: input.sessionId || null,
+      eventId,
+      sequence,
+      entityType,
+      entityId,
+      operation,
+      projectionVersion,
+      type: input.type,
+      payload,
+      createdAt: nowIso(input.createdAt),
+    }
+    state.nextSequence = sequence
+    state.events.push(event)
+    this.workspaceEvents.set(workspaceKey, state)
+    return clone(event)
+  }
+
+  listWorkspaceEvents(tenantId: string, userId: string, afterSequence = 0): WorkspaceEventRecord[] {
+    this.requireTenantUser(tenantId, userId)
+    const workspaceKey = `${tenantId}:${userId}`
+    return (this.workspaceEvents.get(workspaceKey)?.events || [])
       .filter((event) => event.sequence > afterSequence)
       .map((event) => clone(event))
   }

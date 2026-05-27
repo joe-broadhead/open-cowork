@@ -3,6 +3,7 @@ import type { SessionViewState } from './session-view-model.ts'
 
 type SessionStreamingFlushSnapshot = {
   currentSessionId: string | null
+  currentSessionKey?: string | null
   sessionStateById: Record<string, SessionViewState>
 }
 
@@ -12,7 +13,7 @@ export function shouldCommitStreamingTextImmediately(
 ) {
   if (snapshot.currentSessionId !== part.sessionId) return false
 
-  const sessionState = snapshot.sessionStateById[part.sessionId]
+  const sessionState = snapshot.sessionStateById[snapshot.currentSessionKey || part.sessionId]
   if (!sessionState) return true
 
   if (part.type === 'task_text' || part.type === 'task_reasoning') {

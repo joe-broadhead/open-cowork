@@ -64,6 +64,23 @@ test('listSessionArtifacts extracts downloadable files from write tools', () => 
   ])
 })
 
+test('listSessionArtifacts includes cloud projection artifacts', () => {
+  const view = emptyView()
+  view.artifacts = [{
+    id: 'artifact-1',
+    toolId: 'cloud-artifact',
+    toolName: 'cloud.artifact',
+    filePath: 'cloud-artifact://artifact-1/result.txt',
+    filename: 'result.txt',
+    order: 3,
+    source: 'cloud',
+    cloudArtifactId: 'artifact-1',
+    mime: 'text/plain',
+  }]
+
+  assert.equal(listSessionArtifacts(view)[0]?.cloudArtifactId, 'artifact-1')
+})
+
 test('sanitizeArtifactToolInput hides sandbox file paths behind artifact urls', () => {
   const artifact = artifactForTool(tool({
     id: 'write-2',

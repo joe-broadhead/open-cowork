@@ -10,6 +10,8 @@ import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
+import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
+import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -25,6 +27,7 @@ function createTestContext() {
         listeners.set(channel, listener)
       },
     },
+    workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
     getMainWindow: () => null,
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
@@ -79,6 +82,7 @@ function readPreloadApiGroups(source: string) {
 test('IPC handler modules register their core channels', () => {
   const { context, handlers, listeners } = createTestContext()
 
+  registerWorkspaceHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)
@@ -94,6 +98,10 @@ test('IPC handler modules register their core channels', () => {
   // reporter going missing.
   assert.equal(listeners.has('diagnostics:renderer-error'), true)
 
+  assert.equal(handlers.has('workspace:list'), true)
+  assert.equal(handlers.has('workspace:activate'), true)
+  assert.equal(handlers.has('workspace:policy'), true)
+  assert.equal(handlers.has('workspace:support'), true)
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)
   assert.equal(handlers.has('settings:get-provider-credentials'), true)
@@ -130,6 +138,7 @@ test('IPC handler modules register their core channels', () => {
 test('preload invoke/send channels match registered main-process IPC channels', () => {
   const { context, handlers, listeners } = createTestContext()
 
+  registerWorkspaceHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)

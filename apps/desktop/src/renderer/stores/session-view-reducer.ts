@@ -13,6 +13,7 @@ import {
   type SessionViewState,
 } from '../../lib/session-view-model.ts'
 import type { SessionStore } from './session.ts'
+import { activeSessionWorkspaceKey } from './session-workspace-keys.ts'
 
 export function sumSessionCosts(sessionStateById: Record<string, SessionViewState>) {
   return Object.values(sessionStateById)
@@ -70,25 +71,27 @@ export function updateSessionState(
 ) {
   const sessionStateById = { ...state.sessionStateById }
   const timing = sessionViewTiming()
-  const current = getOrCreateSessionState(sessionStateById, sessionId, timing)
+  const sessionKey = activeSessionWorkspaceKey(state, sessionId)
+  const currentSessionKey = state.currentSessionId ? activeSessionWorkspaceKey(state, state.currentSessionId) : null
+  const current = getOrCreateSessionState(sessionStateById, sessionKey, timing)
   const updated = updater(current)
   const next = {
     ...updated,
     revision: current.revision + 1,
     lastEventAt: options?.eventAt ?? timing.nowMs,
   }
-  sessionStateById[sessionId] = next
-  const prunedSessionStateById = pruneSessionDetailCache(sessionStateById, state.currentSessionId, state.busySessions)
+  sessionStateById[sessionKey] = next
+  const prunedSessionStateById = pruneSessionDetailCache(sessionStateById, currentSessionKey, state.busySessions)
 
   const patch: Partial<SessionStore> = {
     sessionStateById: prunedSessionStateById,
     totalCost: sumSessionCosts(prunedSessionStateById),
   }
   if (state.currentSessionId === sessionId) {
-    const visibleState = prunedSessionStateById[sessionId] || next
+    const visibleState = prunedSessionStateById[sessionKey] || next
     patch.currentView = deriveVisibleSessionPatch(
       visibleState,
-      sessionId,
+      sessionKey,
       state.busySessions,
       state.awaitingPermissionSessions,
       timing,

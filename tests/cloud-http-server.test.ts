@@ -9,7 +9,10 @@ import {
   createCloudHttpServer,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
+  type CloudDesktopAuthConfig,
 } from '../apps/desktop/src/main/cloud/http-server.ts'
+import { createHttpSseCloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
@@ -49,6 +52,11 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
           messageId: `${input.sessionId}:assistant:${this.prompts.length}`,
           content: `echo: ${text}`,
         },
+      }, {
+        type: 'session.idle',
+        payload: {
+          sessionId: input.sessionId,
+        },
       }],
     }
   }
@@ -65,6 +73,7 @@ function createFixture(options: {
     sessionCookies?: ReturnType<typeof createCloudSessionCookieManager> | null
     auth?: CloudAuthResolver
     browserAuth?: CloudBrowserAuthProvider | null
+    desktopAuth?: CloudDesktopAuthConfig | null
     observability?: CloudObservabilityAdapter | null
     internalToken?: string | null
   } = {}) {
@@ -89,6 +98,7 @@ function createFixture(options: {
     ssePollMs: options.ssePollMs,
     sessionCookies: options.sessionCookies,
       browserAuth: options.browserAuth,
+      desktopAuth: options.desktopAuth,
       observability: options.observability,
       internalToken: options.internalToken,
       auth: options.auth || (() => ({
@@ -193,6 +203,11 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(runtimeStatus.canExecute, true)
     assert.equal(runtimeStatus.commandProcessing, 'inline')
 
+    const workspace = await readJson(await fetch(`${baseUrl}/api/workspace`))
+    assert.equal(workspace.tenantId, 'tenant-1')
+    assert.equal(workspace.userId, 'user-1')
+    assert.equal(asRecord(workspace.policy).localFiles, 'disabled')
+
     const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -224,6 +239,12 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const sessionView = asRecord(asRecord(session.projection).view)
     assert.equal(sessionView.isGenerating, false)
     assert.equal(asRecord(asArray(sessionView.messages)[0]).content, 'hello cloud')
+
+    const sharedViewResponse = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/view`))
+    const sharedView = asRecord(sharedViewResponse.view)
+    assert.equal(asArray(sharedView.messages).length, 2)
+    assert.equal(asRecord(asArray(sharedView.messages)[0]).content, 'hello cloud')
+    assert.equal(sharedView.isGenerating, false)
 
     const abortResponse = await fetch(`${baseUrl}/api/sessions/oc-session-1/abort`, { method: 'POST' })
     assert.equal(abortResponse.status, 202)
@@ -355,6 +376,32 @@ test('cloud HTTP browser session cookies use secure flags and enforce CSRF on mu
   }
 })
 
+test('cloud HTTP exposes public desktop OIDC config without cookies', async () => {
+  const fixture = createFixture({
+    desktopAuth: {
+      mode: 'oidc',
+      issuerUrl: 'https://issuer.example.test',
+      clientId: 'open-cowork-desktop',
+      scope: 'openid email profile offline_access',
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+
+  try {
+    const response = await fetch(`${baseUrl}/auth/desktop/config`)
+    assert.equal(response.status, 200)
+    const body = await readJson(response)
+    assert.deepEqual(body, {
+      mode: 'oidc',
+      issuerUrl: 'https://issuer.example.test',
+      clientId: 'open-cowork-desktop',
+      scope: 'openid email profile offline_access',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP bearer auth remains usable without CSRF when session cookies are configured', async () => {
   const sessionCookies = createCloudSessionCookieManager({
     secret: TEST_COOKIE_KEY,
@@ -476,6 +523,216 @@ test('cloud HTTP SSE streams durable session events without sticky renderer stat
     assert.equal(asRecord(event.payload).content, 'echo: stream me')
   } finally {
     controller.abort()
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP workspace event feed streams owned session deltas', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const controller = new AbortController()
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    const stream = await fetch(`${baseUrl}/api/events?after=1`, {
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+
+    await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'workspace stream', agent: 'build' }),
+    })
+
+    const event = await readSseUntil(stream, (entry) => entry.type === 'assistant.message')
+    assert.equal(event.sessionId, 'oc-session-1')
+    assert.equal(event.entityType, 'session')
+    assert.equal(event.entityId, 'oc-session-1')
+    assert.equal(event.operation, 'update')
+    assert.equal(event.projectionVersion, event.sequence)
+    assert.equal(asRecord(event.payload).content, 'echo: workspace stream')
+  } finally {
+    controller.abort()
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP workspace event feed replays one ordered user stream across sessions', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const controller = new AbortController()
+  const principal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'user-1',
+    email: 'user@example.test',
+  }
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    await fetch(`${baseUrl}/api/sessions/oc-session-1/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'first session', agent: 'build' }),
+    })
+    await fetch(`${baseUrl}/api/sessions/oc-session-2/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'second session', agent: 'build' }),
+    })
+
+    const events = await fixture.service.listWorkspaceEvents(principal, 0)
+    assert.deepEqual(
+      events.map((event) => event.sequence),
+      Array.from({ length: events.length }, (_, index) => index + 1),
+    )
+    assert.deepEqual(
+      events.filter((event) => event.type === 'assistant.message').map((event) => event.sessionId),
+      ['oc-session-1', 'oc-session-2'],
+    )
+
+    const firstAssistant = events.find((event) => event.type === 'assistant.message' && event.sessionId === 'oc-session-1')
+    assert.ok(firstAssistant)
+    const stream = await fetch(`${baseUrl}/api/events?after=${firstAssistant.sequence}`, {
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+    const replayed = await readSseUntil(stream, (entry) => (
+      entry.type === 'assistant.message' && entry.sessionId === 'oc-session-2'
+    ))
+    assert.equal(asRecord(replayed.payload).content, 'echo: second session')
+  } finally {
+    controller.abort()
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP workspace event feed polls durable events written by another service instance', async () => {
+  const fixture = createFixture({ autoProcessCommands: false, ssePollMs: 10 })
+  const baseUrl = await fixture.server.listen()
+  const controller = new AbortController()
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+
+    const stream = await fetch(`${baseUrl}/api/events?after=0`, {
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+
+    const workerSideService = new CloudSessionService(fixture.store, fixture.runtime, fixture.policy)
+    await workerSideService.appendRuntimeEvent({
+      tenantId: 'tenant-1',
+      sessionId: 'oc-session-1',
+      event: {
+        type: 'assistant.message',
+        payload: {
+          messageId: 'external-workspace-message',
+          content: 'from another workspace worker',
+        },
+      },
+    })
+
+    const event = await readSseUntil(stream, (entry) => entry.type === 'assistant.message')
+    assert.equal(event.sessionId, 'oc-session-1')
+    assert.equal(asRecord(event.payload).messageId, 'external-workspace-message')
+  } finally {
+    controller.abort()
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP workspace event feed asks clients to refresh snapshots after retention gaps', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const controller = new AbortController()
+  const originalListWorkspaceEvents = fixture.service.listWorkspaceEvents.bind(fixture.service)
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    fixture.service.listWorkspaceEvents = async (principal, afterSequence = 0) => {
+      if (afterSequence === 0) {
+        return [{
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          sessionId: 'oc-session-1',
+          eventId: 'oc-session-1:retained-event-10',
+          sequence: 10,
+          type: 'assistant.message',
+          payload: { content: 'retained only' },
+          createdAt: '2026-01-01T00:00:00.000Z',
+        }]
+      }
+      return originalListWorkspaceEvents(principal, afterSequence)
+    }
+
+    const stream = await fetch(`${baseUrl}/api/events?after=1`, {
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+
+    const event = await readSseUntil(stream, (entry) => entry.type === 'snapshot.required')
+    assert.equal(asRecord(event.payload).reason, 'event_retention_gap')
+    assert.equal(asRecord(event.payload).afterSequence, 1)
+    assert.equal(asRecord(event.payload).earliestSequence, 10)
+    assert.equal(asRecord(event.payload).latestSequence, 10)
+  } finally {
+    controller.abort()
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP clients share session state across desktop adapter and web transport', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const web = createHttpSseCloudTransportAdapter({ baseUrl })
+    const desktop = new CloudWorkspaceAdapter({
+      connection: {
+        id: 'cloud:test',
+        baseUrl,
+        label: 'Test Cloud',
+        createdAt: '2026-05-27T10:00:00.000Z',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+        lastSyncedAt: null,
+      },
+      transport: createHttpSseCloudTransportAdapter({ baseUrl }),
+      cache: null,
+    })
+
+    const created = await desktop.createSession()
+    assert.equal((await web.listSessions()).some((session) => session.sessionId === created.id), true)
+
+    await web.promptSession(created.id, { text: 'from web', agent: 'build' })
+    const desktopAfterWebPrompt = await desktop.getSessionView(created.id)
+    assert.equal(desktopAfterWebPrompt.messages.some((message) => message.content === 'echo: from web'), true)
+
+    await desktop.promptSession(created.id, { text: 'from desktop', agent: 'build' })
+    const webAfterDesktopPrompt = await web.getSession(created.id)
+    assert.equal(
+      webAfterDesktopPrompt.projection?.view.messages.some((message) => message.content === 'echo: from desktop'),
+      true,
+    )
+  } finally {
     await fixture.server.close()
   }
 })
@@ -627,6 +884,35 @@ test('cloud HTTP exposes a read-only capability catalog filtered by profile allo
   }
 })
 
+test('cloud HTTP returns policy verdicts when capabilities are disabled', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        agents: false,
+        customSkills: false,
+        customMcps: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/capabilities`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Capabilities are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Capabilities are disabled for this cloud profile.',
+      policyCode: 'capabilities.disabled',
+    })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP exposes user-scoped settings metadata', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -665,7 +951,13 @@ test('cloud HTTP rejects settings APIs when the cloud profile disables them', as
   try {
     const response = await fetch(`${baseUrl}/api/settings`)
     assert.equal(response.status, 403)
-    assert.match(String((await readJson(response)).error), /Settings are disabled/)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Settings are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Settings are disabled for this cloud profile.',
+      policyCode: 'settings.disabled',
+    })
   } finally {
     await fixture.server.close()
   }
@@ -751,7 +1043,13 @@ test('cloud HTTP rejects thread-index APIs when the cloud profile disables them'
   try {
     const response = await fetch(`${baseUrl}/api/threads/tags`)
     assert.equal(response.status, 403)
-    assert.match(String((await readJson(response)).error), /Thread index is disabled/)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Thread index is disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Thread index is disabled for this cloud profile.',
+      policyCode: 'thread_index.disabled',
+    })
   } finally {
     await fixture.server.close()
   }
@@ -978,7 +1276,13 @@ test('cloud HTTP rejects workflow APIs when the cloud profile disables them', as
   try {
     const response = await fetch(`${baseUrl}/api/workflows`)
     assert.equal(response.status, 403)
-    assert.match(String((await readJson(response)).error), /Workflows are disabled/)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Workflows are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Workflows are disabled for this cloud profile.',
+      policyCode: 'workflows.disabled',
+    })
   } finally {
     await fixture.server.close()
   }
@@ -1017,6 +1321,33 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
     const read = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts/${uploaded.artifactId}`))
     const artifact = asRecord(read.artifact)
     assert.equal(Buffer.from(String(artifact.dataBase64), 'base64').toString('utf8'), 'cloud artifact')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP returns policy verdicts when artifacts are disabled', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        artifacts: false,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts`)
+    assert.equal(response.status, 403)
+    const body = await readJson(response)
+    assert.match(String(body.error), /Artifacts are disabled/)
+    assert.deepEqual(asRecord(body.verdict), {
+      allowed: false,
+      reason: 'Artifacts are disabled for this cloud profile.',
+      policyCode: 'artifacts.disabled',
+    })
   } finally {
     await fixture.server.close()
   }

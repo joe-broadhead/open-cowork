@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { SessionPatch } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { normalizeWorkspaceId, sessionWorkspaceKey } from '../stores/session-workspace-keys'
 import { shouldCommitStreamingTextImmediately } from '../../lib/session-streaming-flush.ts'
 
 const STREAM_FLUSH_INTERVAL_MS = 32
@@ -45,9 +46,15 @@ export function useOpenCodeEvents() {
       textBuffers.push({ ...part })
     }
 
-    const pruneCoveredTextBuffers = (sessionId: string, lastEventAt: number) => {
+    const isActiveWorkspaceEvent = (workspaceId?: string | null) => {
+      return normalizeWorkspaceId(workspaceId) === normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId)
+    }
+
+    const pruneCoveredTextBuffers = (sessionId: string, lastEventAt: number, workspaceId?: string | null) => {
       textBuffers = textBuffers.filter((buffer) => (
-        buffer.sessionId !== sessionId || buffer.eventAt > lastEventAt
+        buffer.sessionId !== sessionId
+          || normalizeWorkspaceId(buffer.workspaceId) !== normalizeWorkspaceId(workspaceId)
+          || buffer.eventAt > lastEventAt
       ))
     }
 
@@ -61,15 +68,29 @@ export function useOpenCodeEvents() {
     }
 
     const shouldCommitTextImmediately = (part: SessionPatch) => {
-      const { currentSessionId, sessionStateById } = useSessionStore.getState()
-      return shouldCommitStreamingTextImmediately(part, { currentSessionId, sessionStateById })
+      const { activeWorkspaceId, currentSessionId, sessionStateById } = useSessionStore.getState()
+      return shouldCommitStreamingTextImmediately(part, {
+        currentSessionId,
+        currentSessionKey: sessionWorkspaceKey(part.workspaceId || activeWorkspaceId, part.sessionId),
+        sessionStateById,
+      })
     }
 
-    const flushTextBuffers = (store: ReturnType<typeof useSessionStore.getState>, sessionId?: string) => {
+    const flushTextBuffers = (
+      store: ReturnType<typeof useSessionStore.getState>,
+      sessionId?: string,
+      workspaceId?: string | null,
+    ) => {
       const parts: SessionPatch[] = []
       const retained: SessionPatch[] = []
       for (const buffer of textBuffers) {
-        if (sessionId && buffer.sessionId !== sessionId) {
+        if (
+          sessionId
+          && (
+            buffer.sessionId !== sessionId
+            || normalizeWorkspaceId(buffer.workspaceId) !== normalizeWorkspaceId(workspaceId)
+          )
+        ) {
           retained.push(buffer)
           continue
         }
@@ -131,9 +152,10 @@ export function useOpenCodeEvents() {
     }
 
     const unsubSessionPatch = window.coworkApi.on.sessionPatch((patch: SessionPatch) => {
+      if (!isActiveWorkspaceEvent(patch.workspaceId)) return
       if (shouldCommitTextImmediately(patch)) {
         const store = useSessionStore.getState()
-        flushTextBuffers(store, patch.sessionId)
+        flushTextBuffers(store, patch.sessionId, patch.workspaceId)
         commitTextParts(useSessionStore.getState(), [patch])
         lastFlushAt = performance.now()
       } else {
@@ -143,6 +165,7 @@ export function useOpenCodeEvents() {
     })
 
     const unsubNotification = window.coworkApi.on.notification((event) => {
+      if (!isActiveWorkspaceEvent(event.workspaceId)) return
       switch (event.type) {
         case 'done':
           if (!event.synthetic) playDoneSound()
@@ -155,12 +178,14 @@ export function useOpenCodeEvents() {
       }
     })
 
-    const unsubSessionView = window.coworkApi.on.sessionView(({ sessionId, view }) => {
-      pruneCoveredTextBuffers(sessionId, view.lastEventAt || 0)
-      useSessionStore.getState().setSessionView(sessionId, view)
+    const unsubSessionView = window.coworkApi.on.sessionView(({ sessionId, workspaceId, view }) => {
+      if (!isActiveWorkspaceEvent(workspaceId)) return
+      pruneCoveredTextBuffers(sessionId, view.lastEventAt || 0, workspaceId)
+      useSessionStore.getState().setSessionView(sessionId, view, workspaceId)
     })
 
     const unsubPermissionRequest = window.coworkApi.on.permissionRequest((request) => {
+      if (!isActiveWorkspaceEvent(request.workspaceId)) return
       useSessionStore.getState().addPendingApproval(request)
     })
 
@@ -181,6 +206,12 @@ export function useOpenCodeEvents() {
       useSessionStore.getState().removeSession(data.id)
     })
 
+    const unsubWorkspaceSessions = window.coworkApi.on.workspaceSessionsUpdated((data) => {
+      const store = useSessionStore.getState()
+      if (normalizeWorkspaceId(data.workspaceId) !== normalizeWorkspaceId(store.activeWorkspaceId)) return
+      store.setSessions(data.sessions)
+    })
+
     const unsubAuth = window.coworkApi.on.authExpired(() => {
       window.dispatchEvent(new CustomEvent('open-cowork:auth-expired'))
     })
@@ -197,6 +228,7 @@ export function useOpenCodeEvents() {
     const unsubscribeAll = combineSubscriptions(
       unsubSessionUpdate,
       unsubSessionDelete,
+      unsubWorkspaceSessions,
       unsubPermissionRequest,
       unsubSessionView,
       unsubSessionPatch,

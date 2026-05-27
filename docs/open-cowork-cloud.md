@@ -164,6 +164,51 @@ directories, arbitrary local stdio MCPs, and machine-native runtime config
 unless a deployer explicitly allows a controlled image or volume-backed
 environment.
 
+## Desktop Sync Configuration
+
+Desktop-to-cloud sync is configured separately from the cloud service roles.
+Downstream desktop builds can preconfigure managed cloud orgs without changing
+renderer code by setting `cloudDesktop` in `open-cowork.config.json` or a
+managed config layer:
+
+```json
+{
+  "cloudDesktop": {
+    "enabled": true,
+    "allowUserAddedConnections": false,
+    "requireManagedOrg": true,
+    "cacheMode": "metadata-only",
+    "cacheEncryptionFallback": "disabled",
+    "preconfiguredConnections": [
+      {
+        "baseUrl": "https://cowork.acme.example",
+        "label": "Acme Cloud"
+      }
+    ]
+  }
+}
+```
+
+`enabled: false` hides cloud workspaces and keeps the desktop fully local.
+`requireManagedOrg: true` limits desktop sync to the configured org list and
+blocks user-added cloud URLs. `cacheMode` controls the local cloud cache:
+
+- `full` caches encrypted session projections and metadata.
+- `metadata-only` caches lists, cursors, and metadata but strips message
+  bodies and full projections.
+- `disabled` avoids durable cloud cache state.
+
+When `cacheMode` is `full`, the desktop requires OS-backed encrypted storage or
+uses `cacheEncryptionFallback` to degrade to `metadata-only`, `disabled`, or
+fail startup. OAuth access and refresh tokens are stored in OS secure storage,
+not in the cloud cache.
+
+Every workspace-scoped API also has a typed support matrix exposed through
+`workspace.support()`. Cloud-only clients should use it to distinguish
+`supported`, `blocked_by_policy`, `not_supported`, and later-phase surfaces
+instead of assuming local desktop APIs such as host-path diffs or local stdio
+MCPs are available in cloud workspaces.
+
 ## Provider Mapping
 
 Provider-specific recipes should remain thin compositions of the same image,

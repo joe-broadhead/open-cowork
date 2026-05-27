@@ -1,5 +1,6 @@
 import type { IpcHandlerContext } from './context.ts'
 import type { SessionChangeSummary } from '@open-cowork/shared'
+import type { IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
 import { getProviderDescriptor } from '../config-loader.ts'
@@ -32,6 +33,8 @@ import { registerSessionFileHandlers } from './session-file-handlers.ts'
 import { registerSessionInteractionHandlers } from './session-interaction-handlers.ts'
 import { registerIpcInvoke, sessionPromptArgs, stringAndObjectArgs } from './schema.ts'
 import { sdkErrorMessage } from '../sdk-error.ts'
+import { readWorkspaceIdOption } from '../workspace-gateway.ts'
+import type { CloudTransportSessionEvent } from '../cloud/transport-adapter.ts'
 import {
   normalizeComposerPreferences,
   normalizePromptAgent,
@@ -45,6 +48,241 @@ type PromptAttachment = ReturnType<typeof normalizePromptAttachments>[number]
 type PromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
   | { type: 'text'; text: string }
+
+function payloadString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function payloadRecord(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function payloadQuestionTool(payload: Record<string, unknown>) {
+  const value = payload.tool
+  if (typeof value === 'string') return value
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const tool = value as Record<string, unknown>
+  return {
+    messageId: typeof tool.messageId === 'string' ? tool.messageId : typeof tool.messageID === 'string' ? tool.messageID : '',
+    callId: typeof tool.callId === 'string' ? tool.callId : typeof tool.callID === 'string' ? tool.callID : '',
+  }
+}
+
+function dispatchCloudWorkspaceSessionEvent(
+  context: IpcHandlerContext,
+  event: CloudTransportSessionEvent,
+  sourceEvent?: IpcMainInvokeEvent,
+  workspaceId?: string | null,
+) {
+  const sessionId = event.sessionId
+  if (!sessionId) return
+  const win = context.getMainWindow()
+  if (!win || win.isDestroyed()) return
+  const payload = event.payload || {}
+  const eventAt = event.sequence || Date.now()
+  let shouldRefreshCloudProjection = false
+  const publishCloudProjection = () => {
+    void context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
+      .then((view) => {
+        if (!win.isDestroyed()) win.webContents.send('session:view', { sessionId, workspaceId: workspaceId || undefined, view })
+      })
+      .catch((error) => context.logHandlerError(`cloud session:view ${shortSessionId(sessionId)}`, error))
+  }
+  const dispatchCloudRuntimeEvent = (runtimeEvent: Parameters<typeof dispatchRuntimeSessionEvent>[1]) => {
+    dispatchRuntimeSessionEvent(win, {
+      ...runtimeEvent,
+      workspaceId: workspaceId || undefined,
+    })
+  }
+  if (event.type === 'prompt.submitted') {
+    const messageId = payloadString(payload, 'messageId') || `${sessionId}:${event.sequence}:cloud-user`
+    dispatchCloudRuntimeEvent({
+      type: 'text',
+      sessionId,
+      data: {
+        type: 'text',
+        role: 'user',
+        content: payloadString(payload, 'text'),
+        mode: 'replace',
+        messageId,
+        partId: `${messageId}:text`,
+        eventAt,
+      },
+    })
+    dispatchCloudRuntimeEvent({
+      type: 'busy',
+      sessionId,
+      data: { type: 'busy' },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'assistant.message') {
+    const messageId = payloadString(payload, 'messageId') || `${sessionId}:${event.sequence}:cloud-assistant`
+    dispatchCloudRuntimeEvent({
+      type: 'text',
+      sessionId,
+      data: {
+        type: 'text',
+        role: 'assistant',
+        content: payloadString(payload, 'content'),
+        mode: 'replace',
+        messageId,
+        partId: `${messageId}:text`,
+        eventAt,
+      },
+    })
+    dispatchCloudRuntimeEvent({
+      type: 'done',
+      sessionId,
+      data: { type: 'done', synthetic: true },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'tool.call') {
+    dispatchCloudRuntimeEvent({
+      type: 'tool_call',
+      sessionId,
+      data: {
+        type: 'tool_call',
+        id: payloadString(payload, 'id') || payloadString(payload, 'callId') || `${sessionId}:tool:${event.sequence}`,
+        name: payloadString(payload, 'name') || payloadString(payload, 'tool') || 'tool',
+        input: payloadRecord(payload, 'input'),
+        status: payloadString(payload, 'status') || 'running',
+        output: payload.output,
+        agent: payloadString(payload, 'agent') || null,
+        taskRunId: payloadString(payload, 'taskRunId') || null,
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'task.run') {
+    dispatchCloudRuntimeEvent({
+      type: 'task_run',
+      sessionId,
+      data: {
+        type: 'task_run',
+        id: payloadString(payload, 'taskRunId') || payloadString(payload, 'id') || `${sessionId}:task:${event.sequence}`,
+        title: payloadString(payload, 'title') || 'Task',
+        agent: payloadString(payload, 'agent') || null,
+        status: payloadString(payload, 'status') || 'queued',
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || null,
+        parentSessionId: payloadString(payload, 'parentSessionId') || null,
+        startedAt: payloadString(payload, 'startedAt') || null,
+        finishedAt: payloadString(payload, 'finishedAt') || null,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'permission.requested') {
+    const permissionId = payloadString(payload, 'permissionId') || payloadString(payload, 'id') || `${sessionId}:permission:${event.sequence}`
+    dispatchCloudRuntimeEvent({
+      type: 'approval',
+      sessionId,
+      data: {
+        type: 'approval',
+        id: permissionId,
+        taskRunId: payloadString(payload, 'taskRunId') || null,
+        tool: payloadString(payload, 'tool') || 'permission',
+        input: payloadRecord(payload, 'input'),
+        description: payloadString(payload, 'description') || payloadString(payload, 'tool') || 'Permission requested',
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'permission.resolved') {
+    dispatchCloudRuntimeEvent({
+      type: 'approval_resolved',
+      sessionId,
+      data: {
+        type: 'approval_resolved',
+        id: payloadString(payload, 'permissionId') || payloadString(payload, 'id'),
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'question.asked') {
+    dispatchCloudRuntimeEvent({
+      type: 'question_asked',
+      sessionId,
+      data: {
+        type: 'question_asked',
+        id: payloadString(payload, 'requestId') || payloadString(payload, 'id') || `${sessionId}:question:${event.sequence}`,
+        questions: Array.isArray(payload.questions) ? payload.questions as NonNullable<Parameters<typeof dispatchRuntimeSessionEvent>[1]['data']>['questions'] : [],
+        tool: payloadQuestionTool(payload),
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'question.resolved') {
+    dispatchCloudRuntimeEvent({
+      type: 'question_resolved',
+      sessionId,
+      data: {
+        type: 'question_resolved',
+        id: payloadString(payload, 'requestId') || payloadString(payload, 'id'),
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'todos.updated') {
+    dispatchCloudRuntimeEvent({
+      type: 'todos',
+      sessionId,
+      data: {
+        type: 'todos',
+        todos: Array.isArray(payload.todos) ? payload.todos as NonNullable<Parameters<typeof dispatchRuntimeSessionEvent>[1]['data']>['todos'] : [],
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'cost.updated') {
+    dispatchCloudRuntimeEvent({
+      type: 'cost',
+      sessionId,
+      data: {
+        type: 'cost',
+        id: payloadString(payload, 'id') || `${sessionId}:cost:${event.sequence}`,
+        cost: typeof payload.cost === 'number' ? payload.cost : 0,
+        tokens: payloadRecord(payload, 'tokens') as NonNullable<Parameters<typeof dispatchRuntimeSessionEvent>[1]['data']>['tokens'],
+        taskRunId: payloadString(payload, 'taskRunId') || null,
+        sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
+      },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'artifact.created') {
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'session.status') {
+    const statusType = payloadString(payload, 'statusType')
+    dispatchCloudRuntimeEvent({
+      type: statusType === 'busy' || statusType === 'running' ? 'busy' : 'done',
+      sessionId,
+      data: statusType === 'busy' || statusType === 'running'
+        ? { type: 'busy' }
+        : { type: 'done', synthetic: true },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'session.aborted' || event.type === 'session.idle') {
+    dispatchCloudRuntimeEvent({
+      type: 'done',
+      sessionId,
+      data: { type: 'done', synthetic: true },
+    })
+    shouldRefreshCloudProjection = true
+  } else if (event.type === 'runtime.error') {
+    dispatchCloudRuntimeEvent({
+      type: 'error',
+      sessionId,
+      data: {
+        type: 'error',
+        message: payloadString(payload, 'message') || 'Cloud runtime command failed.',
+      },
+    })
+    dispatchCloudRuntimeEvent({
+      type: 'done',
+      sessionId,
+      data: { type: 'done', synthetic: true },
+    })
+    shouldRefreshCloudProjection = true
+  }
+  if (shouldRefreshCloudProjection) publishCloudProjection()
+}
 
 function resolvePromptModel(
   settings: ReturnType<typeof getEffectiveSettings>,
@@ -223,7 +461,14 @@ async function assertSelectedProviderReadyForPrompt(
 }
 
 export function registerSessionHandlers(context: IpcHandlerContext) {
-  context.ipcMain.handle('session:create', async (_event, directory?: string) => {
+  context.ipcMain.handle('session:create', async (event, directory?: string, options?: unknown) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      if (typeof directory === 'string' && directory.trim()) {
+        throw new Error('Local project directories are not available in Cloud workspaces.')
+      }
+      return context.workspaceGateway.createCloudSession(event, workspaceId)
+    }
     const opencodeDirectory = context.normalizeDirectory(directory)
     await ensureRuntimeContextDirectory(opencodeDirectory)
     const client = getClientForDirectory(opencodeDirectory)
@@ -261,10 +506,19 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
         })
   })
 
-  registerIpcInvoke(context, 'session:prompt', sessionPromptArgs(), async (_event, sessionId, text, attachments, agent, options) => {
+  registerIpcInvoke(context, 'session:prompt', sessionPromptArgs(), async (event, sessionId, text, attachments, agent, options) => {
+    const workspaceId = readWorkspaceIdOption(options)
     const promptText = normalizePromptText(text)
     const promptAttachments = normalizePromptAttachments(attachments)
     const requestedAgent = normalizePromptAgent(agent)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      await context.workspaceGateway.promptCloudSession(event, sessionId, {
+        text: promptText,
+        attachments: promptAttachments,
+        agent: requestedAgent,
+      }, workspaceId)
+      return
+    }
     const promptOptions = normalizePromptOptions(options)
     const { client, record } = await context.getSessionClient(sessionId)
     const settings = getEffectiveSettings()
@@ -354,8 +608,18 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:activate', async (_event, sessionIdInput: unknown, options?: { force?: boolean }) => {
+  context.ipcMain.handle('session:activate', async (event, sessionIdInput: unknown, options?: { force?: boolean; workspaceId?: string }) => {
+    const workspaceId = readWorkspaceIdOption(options)
     const sessionId = normalizeSessionId(sessionIdInput)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      const cloudWorkspaceId = workspaceId || context.workspaceGateway.activeWorkspaceId(event)
+      await context.workspaceGateway.subscribeCloudSessionEvents(event, sessionId, {
+        workspaceId: cloudWorkspaceId,
+        onEvent: (cloudEvent) => dispatchCloudWorkspaceSessionEvent(context, cloudEvent, event, cloudWorkspaceId),
+        onError: (error) => context.logHandlerError(`cloud session:events ${shortSessionId(sessionId)}`, error),
+      })
+      return context.workspaceGateway.getCloudSessionView(event, sessionId, cloudWorkspaceId)
+    }
     try {
       const shouldRetryFullHydration = !options?.force && isSessionPartiallyHydrated(sessionId)
       const progressive = !options?.force && (
@@ -405,7 +669,11 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:list', async () => {
+  context.ipcMain.handle('session:list', async (event, options?: unknown) => {
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.listCloudSessions(event, workspaceId)
+    }
     return listSessionRecords().map(toRendererSession)
   })
 
@@ -425,8 +693,12 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     return record ? toRendererSession(record) : null
   })
 
-  context.ipcMain.handle('session:get', async (_event, idInput: unknown) => {
+  context.ipcMain.handle('session:get', async (event, idInput: unknown, options?: unknown) => {
+    const workspaceId = readWorkspaceIdOption(options)
     const id = normalizeSessionId(idInput)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.getCloudSessionInfo(event, id, workspaceId)
+    }
     const record = context.ensureSessionRecord(id)
     if (!record) return null
     try {
@@ -450,8 +722,13 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     }
   })
 
-  context.ipcMain.handle('session:abort', async (_event, sessionIdInput: unknown) => {
+  context.ipcMain.handle('session:abort', async (event, sessionIdInput: unknown, options?: unknown) => {
     const sessionId = normalizeSessionId(sessionIdInput)
+    const workspaceId = readWorkspaceIdOption(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      await context.workspaceGateway.abortCloudSession(event, sessionId, workspaceId)
+      return
+    }
     const { client } = await context.getSessionClient(sessionId)
     log('session', `Aborting ${shortSessionId(sessionId)}`)
     stopSessionStatusReconciliation(sessionId)

@@ -9,6 +9,7 @@ overrides:
   ip-address@<=10.1.0: '>=10.1.1'
   mermaid>uuid: ^14.0.0
   qs@>=6.11.1 <=6.15.1: 6.15.2
+  tmp@<0.2.7: 0.2.7
 
 importers:
 
@@ -190,9 +191,15 @@ importers:
         specifier: ^4.4.2
         version: 4.4.2
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   mcps/charts:
     dependencies:
@@ -203,9 +210,15 @@ importers:
         specifier: ^4.4.2
         version: 4.4.2
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   mcps/clock:
     dependencies:
@@ -216,9 +229,15 @@ importers:
         specifier: ^4.4.2
         version: 4.4.2
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   mcps/skills:
     dependencies:
@@ -232,9 +251,15 @@ importers:
         specifier: ^4.4.2
         version: 4.4.2
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   mcps/workflows:
     dependencies:
@@ -245,9 +270,15 @@ importers:
         specifier: ^4.4.2
         version: 4.4.2
     devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/shared:
     devDependencies:
@@ -4254,8 +4285,8 @@ packages:
   tmp-promise@3.0.3:
     resolution: {integrity: sha512-RwM7MoPojPxsOBYnyd2hy0bxtIlVrihNs9pj5SUvY8Zz1sQcQG2tG1hSr8PDxfgEB8RNKDhqbIlroIarSNDNsQ==}
 
-  tmp@0.2.5:
-    resolution: {integrity: sha512-voyz6MApa1rQGUxT3E+BK7/ROe8itEx7vD8/HEvt4xwXucvQ5G5oeEiHkmHZJuBO21RpOf+YYm9MOivj709jow==}
+  tmp@0.2.7:
+    resolution: {integrity: sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==}
     engines: {node: '>=14.14'}
 
   toidentifier@1.0.1:
@@ -9458,9 +9489,9 @@ snapshots:
 
   tmp-promise@3.0.3:
     dependencies:
-      tmp: 0.2.5
+      tmp: 0.2.7
 
-  tmp@0.2.5: {}
+  tmp@0.2.7: {}
 
   toidentifier@1.0.1: {}
 

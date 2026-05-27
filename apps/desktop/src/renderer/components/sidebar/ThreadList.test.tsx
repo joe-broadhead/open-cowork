@@ -55,6 +55,8 @@ function emptySessionView(): SessionView {
 
 beforeEach(() => {
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
+    sessionsByWorkspace: { local: sessions },
     sessions,
     currentSessionId: 'session-1',
     currentView: emptySessionView(),
@@ -104,5 +106,27 @@ describe('ThreadList', () => {
     fireEvent.keyDown(menu, { key: 'Escape' })
     await waitFor(() => expect(row).toHaveFocus())
     expect(row).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('hides local-only thread action menus in cloud workspaces', () => {
+    useSessionStore.setState({
+      activeWorkspaceId: 'cloud:acme',
+      sessionsByWorkspace: { 'cloud:acme': sessions },
+      sessions,
+      currentSessionId: 'session-1',
+    })
+
+    render(<ThreadList />)
+
+    const row = screen.getByRole('button', { name: /Current thread/ })
+    expect(row).not.toHaveAttribute('aria-haspopup')
+    expect(row).not.toHaveAttribute('aria-expanded')
+
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    fireEvent.contextMenu(row)
+
+    expect(screen.queryByRole('menu', { name: 'Thread actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
   })
 })

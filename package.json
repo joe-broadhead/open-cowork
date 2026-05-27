@@ -32,7 +32,8 @@
     "build:shared": "pnpm --filter @open-cowork/shared build",
     "docs:build": "mkdocs build --strict",
     "docs:serve": "mkdocs serve",
-    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm typecheck:mcps && pnpm --filter @open-cowork/desktop build:electron && pnpm --filter @open-cowork/desktop typecheck",
+    "typecheck:mcps": "pnpm --filter=./mcps/* typecheck",
     "dist": "pnpm build && pnpm --filter @open-cowork/desktop dist",
     "lint": "eslint . --max-warnings 0 && node scripts/lint.mjs && node scripts/check-preload-channels.mjs && node scripts/check-shared-dist.mjs",
     "lint:dead-code": "knip --production --files",
@@ -72,7 +73,8 @@
       "electron-builder-squirrel-windows": "26.8.1",
       "ip-address@<=10.1.0": ">=10.1.1",
       "mermaid>uuid": "^14.0.0",
-      "qs@>=6.11.1 <=6.15.1": "6.15.2"
+      "qs@>=6.11.1 <=6.15.1": "6.15.2",
+      "tmp@<0.2.7": "0.2.7"
     }
   },
   "devDependencies": {

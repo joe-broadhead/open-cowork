@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react'
-import type { BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig } from '@open-cowork/shared'
+import type { BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig, WorkspaceInfo } from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
+import { useSessionStore } from '../../stores/session'
 
 interface Props {
   currentView: AppView
@@ -213,6 +214,172 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
   )
 }
 
+const LOCAL_WORKSPACE_FALLBACK: WorkspaceInfo = {
+  id: 'local',
+  kind: 'local',
+  label: 'Local',
+  status: 'online',
+  active: true,
+  lastSyncedAt: null,
+}
+
+function workspaceStatusLabel(status: WorkspaceInfo['status']) {
+  switch (status) {
+    case 'online':
+      return t('workspace.status.online', 'Online')
+    case 'offline':
+      return t('workspace.status.offline', 'Offline')
+    case 'auth_required':
+      return t('workspace.status.authRequired', 'Sign in')
+    case 'disabled':
+      return t('workspace.status.disabled', 'Disabled')
+    case 'error':
+      return t('workspace.status.error', 'Error')
+    default:
+      return status
+  }
+}
+
+function workspaceStatusClass(status: WorkspaceInfo['status']) {
+  if (status === 'online') return 'border-green-500/30 text-green-200'
+  if (status === 'offline') return 'border-amber-500/30 text-amber-200'
+  if (status === 'auth_required') return 'border-sky-400/30 text-sky-200'
+  return 'border-red-400/30 text-red-200'
+}
+
+function WorkspaceSwitcher() {
+  const setSessions = useSessionStore((state) => state.setSessions)
+  const setCurrentSession = useSessionStore((state) => state.setCurrentSession)
+  const setActiveWorkspace = useSessionStore((state) => state.setActiveWorkspace)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([LOCAL_WORKSPACE_FALLBACK])
+  const [open, setOpen] = useState(false)
+
+  const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
+
+  useEffect(() => {
+    let cancelled = false
+    const workspaceApi = window.coworkApi?.workspace
+    if (!workspaceApi) return
+    workspaceApi.list()
+      .then(async (next) => {
+        if (cancelled) return
+        const listedWorkspaces = next.length > 0 ? next : [LOCAL_WORKSPACE_FALLBACK]
+        setWorkspaces(listedWorkspaces)
+        const active = listedWorkspaces.find((workspace) => workspace.active) || listedWorkspaces[0] || LOCAL_WORKSPACE_FALLBACK
+        setActiveWorkspace(active.id)
+        if (active.kind === 'local' || active.status === 'online') {
+          const sessions = await window.coworkApi.session.list({ workspaceId: active.id })
+          if (!cancelled) setSessions(sessions)
+        } else if (!cancelled) {
+          setSessions([])
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaces([LOCAL_WORKSPACE_FALLBACK])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [setActiveWorkspace, setSessions])
+
+  const activateWorkspace = async (workspace: WorkspaceInfo) => {
+    const previousId = activeWorkspace.id
+    setOpen(false)
+    try {
+      if (workspace.kind === 'cloud' && workspace.status === 'auth_required') {
+        await window.coworkApi.workspace.login(workspace.id)
+      }
+      let activated = await window.coworkApi.workspace.activate(workspace.id)
+      if (activated.kind === 'cloud' && activated.status === 'auth_required') {
+        await window.coworkApi.workspace.login(activated.id)
+        activated = await window.coworkApi.workspace.activate(activated.id)
+      }
+      const nextWorkspaces = await window.coworkApi.workspace.list()
+      setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [activated])
+      if (activated.id !== previousId) {
+        setActiveWorkspace(activated.id)
+        setCurrentSession(null)
+      }
+      if (activated.kind === 'local' || activated.status === 'online') {
+        setSessions(await window.coworkApi.session.list({ workspaceId: activated.id }))
+      } else {
+        setSessions([])
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        const restored = await window.coworkApi.workspace.activate(previousId)
+        const restoredWorkspaces = await window.coworkApi.workspace.list()
+        setWorkspaces(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored])
+        setActiveWorkspace(restored.id)
+        if (restored.kind === 'local' || restored.status === 'online') {
+          setSessions(await window.coworkApi.session.list({ workspaceId: restored.id }))
+        } else {
+          setSessions([])
+        }
+      } catch {
+        // Leave the visible workspace unchanged if rollback also fails; the
+        // original login error is still the actionable user-facing failure.
+      }
+      addGlobalError(message || t('workspace.switchFailed', 'Could not switch workspace.'))
+    }
+  }
+
+  return (
+    <div className="relative px-3 pb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="w-full rounded-lg border border-border-subtle px-3 py-2 text-start text-[12px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+      >
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <span className="min-w-0 truncate font-medium">{activeWorkspace.label}</span>
+          <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(activeWorkspace.status)}`}>
+            {workspaceStatusLabel(activeWorkspace.status)}
+          </span>
+        </div>
+        <div className="mt-0.5 truncate text-[10px] text-text-muted">
+          {activeWorkspace.kind === 'local'
+            ? t('workspace.local', 'Local workspace')
+            : activeWorkspace.profileName || activeWorkspace.baseUrl || t('workspace.cloud', 'Cloud workspace')}
+        </div>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute start-3 end-3 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border-subtle bg-elevated shadow-card"
+        >
+          {workspaces.map((workspace) => (
+            <button
+              key={workspace.id}
+              type="button"
+              role="menuitem"
+              onClick={() => void activateWorkspace(workspace)}
+              className={`w-full px-3 py-2 text-start text-[12px] transition-colors hover:bg-surface-hover ${workspace.active ? 'text-text' : 'text-text-secondary'}`}
+            >
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate font-medium">{workspace.label}</span>
+                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(workspace.status)}`}>
+                  {workspaceStatusLabel(workspace.status)}
+                </span>
+              </div>
+              <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                {workspace.kind === 'local'
+                  ? t('workspace.local', 'Local workspace')
+                  : workspace.profileName || workspace.baseUrl || t('workspace.cloud', 'Cloud workspace')}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Sidebar({
   currentView,
   onViewChange,
@@ -252,6 +419,7 @@ export function Sidebar({
       ) : (
         <>
           <SidebarBrandTop top={branding?.top} />
+          <WorkspaceSwitcher />
           <div className="p-3 pb-1 flex gap-2">
             <div className="flex-1">
               <NewThreadButton onClick={() => onViewChange('chat')} />

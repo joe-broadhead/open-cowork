@@ -7,9 +7,12 @@ import type {
   RuntimeContextOptions,
   ScopedArtifactRef,
   SessionArtifactExportRequest,
+  SessionArtifactListRequest,
   SessionArtifactRequest,
+  SessionArtifactUploadRequest,
   ThreadSearchQuery,
   ToolListOptions,
+  WorkspaceOptions,
 } from '@open-cowork/shared'
 import type { CoworkSettings } from '../settings.ts'
 import { assertCustomMcpContentLimits, assertCustomSkillContent, assertCustomSkillFiles } from '../custom-content-limits.ts'
@@ -20,6 +23,7 @@ const MAX_IPC_STRING_BYTES = 64 * 1024
 const MAX_IPC_ID_BYTES = 512
 const MAX_SETTINGS_UPDATE_BYTES = 512 * 1024
 const MAX_CHART_DATA_URL_BYTES = 8 * 1024 * 1024 + 128
+const MAX_ARTIFACT_UPLOAD_BASE64_BYTES = 35 * 1024 * 1024
 const SCOPES = new Set(['machine', 'project'])
 const MCP_TYPES = new Set(['stdio', 'http'])
 const MCP_PERMISSION_MODES = new Set(['ask', 'allow'])
@@ -47,6 +51,7 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'workflowDesktopNotifications',
   'workflowQuietHoursStart',
   'workflowQuietHoursEnd',
+  'workspaceId',
 ])
 
 function byteLength(value: string) {
@@ -191,8 +196,15 @@ function requiredScope(record: Record<string, unknown>) {
 
 export function validateRuntimeContextOptions(record: Record<string, unknown>): RuntimeContextOptions {
   return {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     sessionId: optionalString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
     directory: optionalNullableString(record, 'directory', 'Directory'),
+  }
+}
+
+export function validateWorkspaceOptions(record: Record<string, unknown>): WorkspaceOptions {
+  return {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
   }
 }
 
@@ -207,6 +219,7 @@ export function validateToolListOptions(record: Record<string, unknown>): ToolLi
 
 export function validateScopedArtifactRef(record: Record<string, unknown>): ScopedArtifactRef {
   return {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     name: requiredString(record, 'name', 'Name', MAX_IPC_ID_BYTES),
     scope: requiredScope(record),
     directory: optionalNullableString(record, 'directory', 'Directory'),
@@ -217,6 +230,7 @@ export function validateSessionArtifactRequest(record: Record<string, unknown>):
   return {
     sessionId: requiredString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
     filePath: requiredString(record, 'filePath', 'Artifact path'),
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
   }
 }
 
@@ -224,6 +238,23 @@ export function validateSessionArtifactExportRequest(record: Record<string, unkn
   return {
     ...validateSessionArtifactRequest(record),
     suggestedName: optionalString(record, 'suggestedName', 'Suggested filename', MAX_IPC_ID_BYTES),
+  }
+}
+
+export function validateSessionArtifactListRequest(record: Record<string, unknown>): SessionArtifactListRequest {
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
+  }
+}
+
+export function validateSessionArtifactUploadRequest(record: Record<string, unknown>): SessionArtifactUploadRequest {
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
+    filename: requiredString(record, 'filename', 'Artifact filename', MAX_IPC_ID_BYTES),
+    contentType: optionalNullableString(record, 'contentType', 'Artifact content type', MAX_IPC_ID_BYTES),
+    dataBase64: requiredString(record, 'dataBase64', 'Artifact data', MAX_ARTIFACT_UPLOAD_BASE64_BYTES),
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
   }
 }
 
@@ -243,18 +274,19 @@ export function validateChartSaveArtifactRequest(record: Record<string, unknown>
   }
 }
 
-export function validateSettingsUpdate(record: Record<string, unknown>): Partial<CoworkSettings> {
+export function validateSettingsUpdate(record: Record<string, unknown>): Partial<CoworkSettings> & WorkspaceOptions {
   assertJsonSize(record, 'Settings update', MAX_SETTINGS_UPDATE_BYTES)
   for (const key of Object.keys(record)) {
     if (!SETTINGS_UPDATE_KEYS.has(key)) throw new Error(`Unknown settings key: ${key}`)
   }
-  const update: Partial<CoworkSettings> = {}
+  const update: Partial<CoworkSettings> & WorkspaceOptions = {}
   if (record._schemaVersion !== undefined) {
     if (typeof record._schemaVersion !== 'number' || !Number.isInteger(record._schemaVersion)) {
       throw new Error('Settings schema version must be an integer.')
     }
     update._schemaVersion = record._schemaVersion
   }
+  update.workspaceId = optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES)
   update.selectedProviderId = optionalNullableString(record, 'selectedProviderId', 'Selected provider id', MAX_IPC_ID_BYTES) as string | null | undefined
   update.selectedModelId = optionalNullableString(record, 'selectedModelId', 'Selected model id', MAX_IPC_ID_BYTES) as string | null | undefined
   update.selectedSmallModelId = optionalNullableString(record, 'selectedSmallModelId', 'Selected small model id', MAX_IPC_ID_BYTES) as string | null | undefined
@@ -297,6 +329,7 @@ export function validateCustomMcpConfig(record: Record<string, unknown>): Custom
     throw new Error('MCP permission mode must be ask or allow.')
   }
   const config: CustomMcpConfig = {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     scope: requiredScope(record),
     directory: optionalNullableString(record, 'directory', 'Directory'),
     name: requiredString(record, 'name', 'MCP name', MAX_IPC_ID_BYTES),
@@ -334,6 +367,7 @@ export function validateCustomSkillConfig(record: Record<string, unknown>): Cust
     })
   }
   const skill: CustomSkillConfig = {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     scope: requiredScope(record),
     directory: optionalNullableString(record, 'directory', 'Directory'),
     name: requiredString(record, 'name', 'Skill name', MAX_IPC_ID_BYTES),
@@ -348,6 +382,7 @@ export function validateCustomSkillConfig(record: Record<string, unknown>): Cust
 
 export function validateCustomAgentConfig(record: Record<string, unknown>): CustomAgentConfig {
   const agent: CustomAgentConfig = {
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     scope: requiredScope(record),
     directory: optionalNullableString(record, 'directory', 'Directory'),
     name: requiredString(record, 'name', 'Agent name', MAX_IPC_ID_BYTES),

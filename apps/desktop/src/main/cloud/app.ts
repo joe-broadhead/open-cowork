@@ -11,6 +11,7 @@ import {
   createCloudHttpServer,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
+  type CloudDesktopAuthConfig,
   type CloudHttpServer,
 } from './http-server.ts'
 import {
@@ -242,6 +243,7 @@ function createUnavailableRuntimeAdapter(): CloudRuntimeAdapter {
     promptSession: fail,
     abortSession: fail,
     replyToQuestion: fail,
+    rejectQuestion: fail,
     respondToPermission: fail,
   }
 }
@@ -293,6 +295,16 @@ export function createCloudAuthResolverForConfig(
     return createHeaderCloudAuthResolver()
   }
   return createLocalCloudAuthResolver()
+}
+
+export function createCloudDesktopAuthConfig(auth: CloudAuthConfig): CloudDesktopAuthConfig | null {
+  if (auth.mode !== 'oidc' || !auth.issuerUrl?.trim() || !auth.clientId?.trim()) return null
+  return {
+    mode: 'oidc',
+    issuerUrl: auth.issuerUrl.trim(),
+    clientId: auth.clientId.trim(),
+    scope: 'openid email profile offline_access',
+  }
 }
 
 export function isLoopbackCloudHost(hostname: string | null | undefined) {
@@ -524,6 +536,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         sessionCookies,
         observability,
         browserAuth,
+        desktopAuth: createCloudDesktopAuthConfig(authConfig),
         auth: options.auth || createCloudAuthResolverForConfig(resolvedAuthConfig),
         internalToken: resolveCloudInternalToken(env),
         webhookSecurity,

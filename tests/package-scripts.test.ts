@@ -7,9 +7,10 @@ type PackageJson = {
 }
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
+const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
 
-function requireScript(name: string): string {
-  const script = packageJson.scripts?.[name]
+function requireScript(name: string, source: PackageJson = packageJson): string {
+  const script = source.scripts?.[name]
   assert.equal(typeof script, 'string', `Missing package script: ${name}`)
   return script
 }
@@ -35,5 +36,49 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./mcps/* test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
+  ])
+})
+
+test('root lint script runs all release gate checks', () => {
+  assert.deepEqual(splitScriptSteps(requireScript('lint')), [
+    'eslint . --max-warnings 0',
+    'node scripts/lint.mjs',
+    'node scripts/check-preload-channels.mjs',
+    'node scripts/check-shared-dist.mjs',
+  ])
+})
+
+test('root build and dist scripts preserve release build prerequisites', () => {
+  assert.deepEqual(splitScriptSteps(requireScript('build')), [
+    'pnpm --filter @open-cowork/shared build',
+    'pnpm build:mcps',
+    'pnpm --filter @open-cowork/desktop build',
+  ])
+
+  assert.deepEqual(splitScriptSteps(requireScript('dist')), [
+    'pnpm build',
+    'pnpm --filter @open-cowork/desktop dist',
+  ])
+})
+
+test('root typecheck script covers shared, MCP, and desktop packages', () => {
+  assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
+    'pnpm --filter @open-cowork/shared build',
+    'pnpm typecheck:mcps',
+    'pnpm --filter @open-cowork/desktop build:electron',
+    'pnpm --filter @open-cowork/desktop typecheck',
+  ])
+
+  assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
+})
+
+test('packaged e2e script fails before smoke discovery without a packaged executable', () => {
+  assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged')), [
+    'pnpm --filter @open-cowork/desktop test:e2e:packaged',
+  ])
+
+  assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged', desktopPackageJson)), [
+    'node ../../scripts/require-packaged-executable.mjs',
+    'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
 })

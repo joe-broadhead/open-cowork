@@ -1,4 +1,5 @@
 import type { PendingApproval } from '../../stores/session'
+import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 
 // Map tool names to user-friendly descriptions
@@ -31,9 +32,12 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
 }
 
 export function ApprovalCard({ approval }: { approval: PendingApproval }) {
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const respond = async (allowed: boolean) => {
     try {
-      await window.coworkApi.permission.respond(approval.id, allowed, approval.sessionId)
+      await window.coworkApi.permission.respond(approval.id, allowed, approval.sessionId, {
+        workspaceId: approval.workspaceId || activeWorkspaceId,
+      })
     } catch {
       // Permission response errors are surfaced through the session error channel.
     }

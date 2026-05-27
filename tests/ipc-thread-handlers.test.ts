@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
+import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 
 function createThreadHandlerContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
@@ -12,6 +13,7 @@ function createThreadHandlerContext() {
       },
       on() {},
     },
+    workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
     getMainWindow: () => null,
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,

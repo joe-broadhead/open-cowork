@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeNotification, SessionPatch, SessionView } from '@open-cowork/shared'
+import type { RuntimeNotification, SessionPatch, SessionView, WorkspaceSessionsUpdatedEvent } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../test/setup'
 import { useSessionStore } from '../stores/session'
 import { useOpenCodeEvents } from './useOpenCodeEvents'
@@ -14,6 +14,7 @@ describe('useOpenCodeEvents', () => {
   let notify: ((event: RuntimeNotification) => void) | null = null
   let sessionPatch: ((event: SessionPatch) => void) | null = null
   let sessionView: ((event: { sessionId: string; view: SessionView }) => void) | null = null
+  let workspaceSessionsUpdated: ((event: WorkspaceSessionsUpdatedEvent) => void) | null = null
   let closeAudioContext: ReturnType<typeof vi.fn>
 
   const tokens = {
@@ -54,11 +55,13 @@ describe('useOpenCodeEvents', () => {
 
   function resetSessionStore() {
     useSessionStore.setState({
+      activeWorkspaceId: 'local',
+      sessionsByWorkspace: { local: [] },
       sessions: [],
       currentSessionId: 'session-1',
       currentView: view(),
       globalErrors: [],
-      mcpConnections: [],
+    mcpConnections: [],
       agentMode: 'build',
       reasoningVariant: null,
       totalCost: 0,
@@ -67,7 +70,7 @@ describe('useOpenCodeEvents', () => {
       awaitingPermissionSessions: new Set(),
       awaitingQuestionSessions: new Set(),
       sessionStateById: {},
-      chartArtifactsBySession: {},
+    chartArtifactsBySession: {},
     })
   }
 
@@ -75,6 +78,7 @@ describe('useOpenCodeEvents', () => {
     notify = null
     sessionPatch = null
     sessionView = null
+    workspaceSessionsUpdated = null
     closeAudioContext = vi.fn(async () => undefined)
     resetSessionStore()
 
@@ -133,6 +137,10 @@ describe('useOpenCodeEvents', () => {
         sessionUpdated: vi.fn(() => vi.fn()),
         sessionView: vi.fn((callback: (event: { sessionId: string; view: SessionView }) => void) => {
           sessionView = callback
+          return vi.fn()
+        }),
+        workspaceSessionsUpdated: vi.fn((callback: (event: WorkspaceSessionsUpdatedEvent) => void) => {
+          workspaceSessionsUpdated = callback
           return vi.fn()
         }),
       },
@@ -222,6 +230,41 @@ describe('useOpenCodeEvents', () => {
     requestFrame.mockRestore()
     cancelFrame.mockRestore()
     vi.useRealTimers()
+  })
+
+  it('applies workspace session-list updates only for the active workspace', () => {
+    render(<Harness />)
+    useSessionStore.getState().setActiveWorkspace('cloud:active')
+    useSessionStore.getState().setSessions([])
+
+    act(() => {
+      workspaceSessionsUpdated?.({
+        workspaceId: 'cloud:other',
+        sessions: [{
+          id: 'other-session',
+          title: 'Other',
+          createdAt: '2026-05-27T10:00:00.000Z',
+          updatedAt: '2026-05-27T10:00:00.000Z',
+        }],
+        syncedAt: '2026-05-27T10:00:00.000Z',
+      })
+    })
+    expect(useSessionStore.getState().sessions).toEqual([])
+
+    act(() => {
+      workspaceSessionsUpdated?.({
+        workspaceId: 'cloud:active',
+        sessions: [{
+          id: 'active-session',
+          title: 'Active',
+          createdAt: '2026-05-27T10:00:00.000Z',
+          updatedAt: '2026-05-27T10:00:00.000Z',
+        }],
+        syncedAt: '2026-05-27T10:00:01.000Z',
+      })
+    })
+
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['active-session'])
   })
 
   it('flushes older buffered text before immediately committing a newer task patch', () => {

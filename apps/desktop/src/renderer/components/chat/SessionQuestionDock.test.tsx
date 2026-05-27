@@ -33,6 +33,7 @@ function installQuestionApi() {
 function resetSessionStore() {
   const currentView = useSessionStore.getState().currentView
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
     currentSessionId: 'session-1',
     currentView: {
       ...currentView,
@@ -97,7 +98,7 @@ describe('SessionQuestionDock', () => {
     await waitFor(() => expect(api.question.reply).toHaveBeenCalledWith('session-1', 'question-1', [
       ['Use the safe path'],
       ['Run tests', 'Capture screenshots'],
-    ]))
+    ], { workspaceId: 'local' }))
   })
 
   it('surfaces the scoped tool call and scrolls to it on request', async () => {
@@ -133,7 +134,7 @@ describe('SessionQuestionDock', () => {
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }))
 
-    await waitFor(() => expect(api.question.reject).toHaveBeenCalledWith('session-1', 'question-1'))
+    await waitFor(() => expect(api.question.reject).toHaveBeenCalledWith('session-1', 'question-1', { workspaceId: 'local' }))
     expect(api.question.reply).not.toHaveBeenCalled()
   })
 
@@ -178,6 +179,6 @@ describe('SessionQuestionDock', () => {
 
     await waitFor(() => expect(api.question.reply).toHaveBeenCalledWith('session-1', 'question-2', [
       ['Continue'],
-    ]))
+    ], { workspaceId: 'local' }))
   })
 })

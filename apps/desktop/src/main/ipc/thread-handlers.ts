@@ -6,10 +6,19 @@ import {
   type ThreadSearchQuery,
   type ThreadSmartFilterInput,
   type ThreadTagInput,
+  type WorkspaceOptions,
+  type WorkspaceScoped,
 } from '@open-cowork/shared'
-import { objectArg, optionalObjectArg, registerIpcInvoke, stringAndObjectArgs } from './schema.ts'
+import {
+  objectAndOptionalObjectArgs,
+  optionalObjectArg,
+  registerIpcInvoke,
+  stringAndObjectAndOptionalObjectArgs,
+  stringAndOptionalObjectArgs,
+} from './schema.ts'
 import { validateThreadSearchQuery } from './object-validators.ts'
 import { normalizeSmartFilterInput, normalizeTagInput } from '../thread-index/thread-index-normalizers.ts'
+import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 function requireStringArray(value: unknown, label: string, max = THREAD_BULK_MAX_SESSION_IDS) {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
@@ -22,60 +31,145 @@ function requireStringArray(value: unknown, label: string, max = THREAD_BULK_MAX
   })
 }
 
+function normalizeWorkspaceOptions(value: Record<string, unknown>): WorkspaceOptions {
+  const workspaceId = readWorkspaceIdOption(value)
+  return workspaceId ? { workspaceId } : {}
+}
+
+function validateThreadSearchWorkspaceQuery(record: Record<string, unknown>): WorkspaceScoped<ThreadSearchQuery> {
+  const workspaceId = readWorkspaceIdOption(record)
+  const query = validateThreadSearchQuery(record)
+  return workspaceId ? { ...query, workspaceId } : query
+}
+
+function workspaceIdFromOptions(options?: WorkspaceOptions | null) {
+  return readWorkspaceIdOption(options || undefined)
+}
+
 export function registerThreadHandlers(context: IpcHandlerContext) {
   const threads = () => getThreadIndexService()
 
-  registerIpcInvoke(context, 'threads:search', optionalObjectArg<ThreadSearchQuery>('thread search query', validateThreadSearchQuery), async (_event, query) => (
-    threads().search(query)
-  ))
+  registerIpcInvoke(context, 'threads:search', optionalObjectArg<WorkspaceScoped<ThreadSearchQuery>>('thread search query', validateThreadSearchWorkspaceQuery), async (event, query) => {
+    const workspaceId = workspaceIdFromOptions(query)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.searchCloudThreads(event, query, workspaceId)
+    }
+    return threads().search(query)
+  })
 
-  registerIpcInvoke(context, 'threads:facets', optionalObjectArg<ThreadSearchQuery>('thread facet query', validateThreadSearchQuery), async (_event, query) => (
-    threads().facets(query)
-  ))
+  registerIpcInvoke(context, 'threads:facets', optionalObjectArg<WorkspaceScoped<ThreadSearchQuery>>('thread facet query', validateThreadSearchWorkspaceQuery), async (event, query) => {
+    const workspaceId = workspaceIdFromOptions(query)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.cloudThreadFacets(event, query, workspaceId)
+    }
+    return threads().facets(query)
+  })
 
-  context.ipcMain.handle('threads:tags:list', async () => (
-    threads().listTags()
-  ))
+  registerIpcInvoke(context, 'threads:tags:list', optionalObjectArg<WorkspaceOptions>('workspace options', normalizeWorkspaceOptions), async (event, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.listCloudThreadTags(event, workspaceId)
+    }
+    return threads().listTags()
+  })
 
-  registerIpcInvoke(context, 'threads:tags:create', objectArg<ThreadTagInput>('thread tag input', (input) => normalizeTagInput(input as unknown as ThreadTagInput)), async (_event, input) => (
-    threads().createTag(input)
-  ))
+  registerIpcInvoke(context, 'threads:tags:create', objectAndOptionalObjectArgs<ThreadTagInput, WorkspaceOptions>(
+    'thread tag input',
+    'workspace options',
+    (input) => normalizeTagInput(input as unknown as ThreadTagInput),
+    normalizeWorkspaceOptions,
+  ), async (event, input, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.createCloudThreadTag(event, input, workspaceId)
+    }
+    return threads().createTag(input)
+  })
 
-  registerIpcInvoke(context, 'threads:tags:update', stringAndObjectArgs<ThreadTagInput>('thread tag id', 'thread tag input', {}, (input) => normalizeTagInput(input as unknown as ThreadTagInput)), async (_event, tagId, input) => (
-    threads().updateTag(tagId, input)
-  ))
+  registerIpcInvoke(context, 'threads:tags:update', stringAndObjectAndOptionalObjectArgs<ThreadTagInput, WorkspaceOptions>(
+    'thread tag id',
+    'thread tag input',
+    'workspace options',
+    {},
+    (input) => normalizeTagInput(input as unknown as ThreadTagInput),
+    normalizeWorkspaceOptions,
+  ), async (event, tagId, input, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.updateCloudThreadTag(event, tagId, input, workspaceId)
+    }
+    return threads().updateTag(tagId, input)
+  })
 
-  context.ipcMain.handle('threads:tags:delete', async (_event, tagId: unknown) => {
-    if (typeof tagId !== 'string') throw new Error('Tag id must be a string.')
+  registerIpcInvoke(context, 'threads:tags:delete', stringAndOptionalObjectArgs<WorkspaceOptions>('thread tag id', 'workspace options', {}, normalizeWorkspaceOptions), async (event, tagId, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.deleteCloudThreadTag(event, tagId, workspaceId)
+    }
     return threads().deleteTag(tagId)
   })
 
-  context.ipcMain.handle('threads:tags:apply', async (_event, sessionIds: unknown, tagIds: unknown) => {
+  context.ipcMain.handle('threads:tags:apply', async (event, sessionIds: unknown, tagIds: unknown, options?: unknown) => {
     const normalizedSessionIds = requireStringArray(sessionIds, 'sessionIds')
     const normalizedTagIds = requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
+    const workspaceId = readWorkspaceIdOption(options || undefined)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.applyCloudThreadTags(event, normalizedSessionIds, normalizedTagIds, workspaceId)
+    }
     return threads().applyTags(normalizedSessionIds, normalizedTagIds)
   })
 
-  context.ipcMain.handle('threads:tags:remove', async (_event, sessionIds: unknown, tagIds: unknown) => {
+  context.ipcMain.handle('threads:tags:remove', async (event, sessionIds: unknown, tagIds: unknown, options?: unknown) => {
     const normalizedSessionIds = requireStringArray(sessionIds, 'sessionIds')
     const normalizedTagIds = requireStringArray(tagIds, 'tagIds', THREAD_FILTER_MAX_VALUES)
+    const workspaceId = readWorkspaceIdOption(options || undefined)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.removeCloudThreadTags(event, normalizedSessionIds, normalizedTagIds, workspaceId)
+    }
     return threads().removeTags(normalizedSessionIds, normalizedTagIds)
   })
 
-  context.ipcMain.handle('threads:smart-filters:list', async () => (
-    threads().listSmartFilters()
-  ))
+  registerIpcInvoke(context, 'threads:smart-filters:list', optionalObjectArg<WorkspaceOptions>('workspace options', normalizeWorkspaceOptions), async (event, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.listCloudThreadSmartFilters(event, workspaceId)
+    }
+    return threads().listSmartFilters()
+  })
 
-  registerIpcInvoke(context, 'threads:smart-filters:create', objectArg<ThreadSmartFilterInput>('smart filter input', (input) => normalizeSmartFilterInput(input as unknown as ThreadSmartFilterInput)), async (_event, input) => (
-    threads().createSmartFilter(input)
-  ))
+  registerIpcInvoke(context, 'threads:smart-filters:create', objectAndOptionalObjectArgs<ThreadSmartFilterInput, WorkspaceOptions>(
+    'smart filter input',
+    'workspace options',
+    (input) => normalizeSmartFilterInput(input as unknown as ThreadSmartFilterInput),
+    normalizeWorkspaceOptions,
+  ), async (event, input, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.createCloudThreadSmartFilter(event, input, workspaceId)
+    }
+    return threads().createSmartFilter(input)
+  })
 
-  registerIpcInvoke(context, 'threads:smart-filters:update', stringAndObjectArgs<ThreadSmartFilterInput>('smart filter id', 'smart filter input', {}, (input) => normalizeSmartFilterInput(input as unknown as ThreadSmartFilterInput)), async (_event, filterId, input) => (
-    threads().updateSmartFilter(filterId, input)
-  ))
+  registerIpcInvoke(context, 'threads:smart-filters:update', stringAndObjectAndOptionalObjectArgs<ThreadSmartFilterInput, WorkspaceOptions>(
+    'smart filter id',
+    'smart filter input',
+    'workspace options',
+    {},
+    (input) => normalizeSmartFilterInput(input as unknown as ThreadSmartFilterInput),
+    normalizeWorkspaceOptions,
+  ), async (event, filterId, input, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.updateCloudThreadSmartFilter(event, filterId, input, workspaceId)
+    }
+    return threads().updateSmartFilter(filterId, input)
+  })
 
-  context.ipcMain.handle('threads:smart-filters:delete', async (_event, filterId: unknown) => {
-    if (typeof filterId !== 'string') throw new Error('Smart filter id must be a string.')
+  registerIpcInvoke(context, 'threads:smart-filters:delete', stringAndOptionalObjectArgs<WorkspaceOptions>('smart filter id', 'workspace options', {}, normalizeWorkspaceOptions), async (event, filterId, options) => {
+    const workspaceId = workspaceIdFromOptions(options)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return context.workspaceGateway.deleteCloudThreadSmartFilter(event, filterId, workspaceId)
+    }
     return threads().deleteSmartFilter(filterId)
   })
 

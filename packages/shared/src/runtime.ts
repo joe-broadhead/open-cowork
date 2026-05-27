@@ -75,6 +75,7 @@ export interface RecentProject {
 }
 
 export interface ToolListOptions {
+  workspaceId?: string
   sessionId?: string
   directory?: string | null
   provider?: string | null
@@ -95,6 +96,7 @@ export interface RuntimeToolDescriptor {
 }
 
 export interface RuntimeContextOptions {
+  workspaceId?: string
   sessionId?: string
   directory?: string | null
 }

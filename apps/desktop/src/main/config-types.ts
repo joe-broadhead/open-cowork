@@ -262,6 +262,20 @@ export type CloudStorageConfig = {
   }
 }
 
+export type CloudDesktopConnectionConfig = {
+  baseUrl: string
+  label?: string
+}
+
+export type CloudDesktopConfig = {
+  enabled: boolean
+  allowUserAddedConnections: boolean
+  preconfiguredConnections: CloudDesktopConnectionConfig[]
+  requireManagedOrg: boolean
+  cacheMode: 'full' | 'metadata-only' | 'disabled'
+  cacheEncryptionFallback: 'metadata-only' | 'disabled' | 'fail-startup'
+}
+
 export type CloudConfig = {
   role: CloudRole
   profiles: Record<string, CloudProfileConfig>
@@ -335,6 +349,7 @@ export type OpenCoworkConfig = {
     }
   }
   cloud: CloudConfig
+  cloudDesktop: CloudDesktopConfig
   // Optional translation + locale overlay. Downstream forks set
   // `i18n.locale` to e.g. "de-DE" so Intl.NumberFormat / Intl.DateTimeFormat
   // produce locale-appropriate output, and `i18n.strings` to a
@@ -385,6 +400,15 @@ const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {
   allowHostProjectDirectories: false,
   allowedLocalMcpNames: [],
   allowedHostProjectDirectories: [],
+}
+
+const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
+  enabled: true,
+  allowUserAddedConnections: true,
+  preconfiguredConnections: [],
+  requireManagedOrg: false,
+  cacheMode: 'full',
+  cacheEncryptionFallback: 'metadata-only',
 }
 
 export const DEFAULT_CONFIG: OpenCoworkConfig = {
@@ -480,4 +504,5 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
       },
     },
   },
+  cloudDesktop: DEFAULT_CLOUD_DESKTOP,
 }

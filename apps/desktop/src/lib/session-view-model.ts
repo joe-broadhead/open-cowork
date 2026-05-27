@@ -4,6 +4,7 @@ import type {
   MessageAttachment,
   PendingApproval,
   PendingQuestion,
+  SessionArtifact,
   SessionError,
   SessionTokens,
   SessionView,
@@ -140,6 +141,7 @@ export interface SessionViewState {
   compactions: CompactionNotice[]
   pendingApprovals: PendingApproval[]
   pendingQuestions: PendingQuestion[]
+  artifacts: SessionArtifact[]
   errors: SessionError[]
   todos: TodoItem[]
   executionPlan: ExecutionPlanItem[]
@@ -168,6 +170,7 @@ export function createEmptySessionViewState(
     compactions: [],
     pendingApprovals: [],
     pendingQuestions: [],
+    artifacts: [],
     errors: [],
     todos: [],
     executionPlan: [],
@@ -250,6 +253,7 @@ export function deriveVisibleSessionPatch(
     compactions: state.compactions,
     pendingApprovals: state.pendingApprovals,
     pendingQuestions: state.pendingQuestions,
+    ...(state.artifacts.length > 0 ? { artifacts: state.artifacts } : {}),
     errors: state.errors,
     todos: state.todos,
     executionPlan,
@@ -278,6 +282,7 @@ export function buildSessionStateFromItems(
     hydrated: true,
     pendingApprovals: existing?.pendingApprovals || [],
     pendingQuestions: existing?.pendingQuestions || [],
+    artifacts: existing?.artifacts || [],
     errors: existing?.errors || [],
     todos: existing?.todos || [],
     executionPlan: existing?.executionPlan || [],
@@ -500,6 +505,7 @@ export function buildSessionStateFromView(view: SessionView, existing?: SessionV
     hydrated: true,
     pendingApprovals: view.pendingApprovals || [],
     pendingQuestions: view.pendingQuestions || [],
+    artifacts: view.artifacts || [],
     errors: view.errors || [],
     todos: view.todos || [],
     executionPlan: view.executionPlan || [],

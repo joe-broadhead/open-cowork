@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ModelInfoSnapshot, SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
+import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
 import { listSessionArtifacts } from './session-artifacts'
 import { SessionArtifactList } from './SessionArtifactList'
@@ -145,6 +146,7 @@ function MessageList({ messages }: { messages: Message[] }) {
 
 export function SessionInspector({ onClose }: InspectorProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const sessions = useSessionStore((state) => state.sessions)
   const currentView = useSessionStore((state) => state.currentView)
   // Subscribe to the whole map so the selector returns a stable
@@ -153,8 +155,11 @@ export function SessionInspector({ onClose }: InspectorProps) {
   // locally inside useMemo for the merged list.
   const chartArtifactsBySession = useSessionStore((state) => state.chartArtifactsBySession)
   const chartArtifacts = useMemo(
-    () => (currentSessionId ? chartArtifactsBySession[currentSessionId] || [] : []),
-    [chartArtifactsBySession, currentSessionId],
+    () => {
+      if (!currentSessionId) return []
+      return chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, currentSessionId)] || []
+    },
+    [activeWorkspaceId, chartArtifactsBySession, currentSessionId],
   )
   const [tab, setTab] = useState<InspectorTab>('context')
   const [runtimeModel, setRuntimeModel] = useState<RuntimeModelState>({
