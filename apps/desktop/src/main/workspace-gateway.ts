@@ -31,6 +31,7 @@ import type {
   ScopedArtifactRef,
 } from '@open-cowork/shared'
 import {
+  cloudWorkspaceCacheKey,
   createCloudWorkspaceAdapter,
   type CloudPromptInput,
   type CloudWorkspaceSessionAdapter,
@@ -56,6 +57,10 @@ import {
   createFileCloudWorkspaceCredentialStore,
   type CloudWorkspaceCredentialStore,
 } from './cloud-workspace-credentials.ts'
+import {
+  createFileCloudWorkspaceCache,
+  type CloudWorkspaceCache,
+} from './cloud-workspace-cache.ts'
 import { DEFAULT_CONFIG, type CloudDesktopConfig } from './config-types.ts'
 
 export const LOCAL_WORKSPACE_ID = 'local'
@@ -69,6 +74,7 @@ export type WorkspaceGatewayOptions = {
   cloudDesktop?: CloudDesktopConfig
   cloudRegistry?: CloudWorkspaceRegistry | null
   cloudCredentialStore?: CloudWorkspaceCredentialStore | null
+  cloudCache?: CloudWorkspaceCache | null
   cloudAdapterFactory?: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   cloudLogin?: (connection: CloudWorkspaceConnectionRecord) => Promise<CloudWorkspaceLoginResult>
   cloudRefresh?: (connection: CloudWorkspaceConnectionRecord, refreshToken: string) => Promise<CloudWorkspaceLoginResult>
@@ -149,6 +155,16 @@ const CLOUD_CUSTOM_AGENTS_KEY = 'custom-agents'
 const CLOUD_CUSTOM_MCPS_KEY = 'custom-mcps'
 const CLOUD_CUSTOM_SKILLS_KEY = 'custom-skills'
 
+function cloudRefreshErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function isCredentialRefreshAuthFailure(error: unknown) {
+  const message = cloudRefreshErrorMessage(error).toLowerCase()
+  return /\b(invalid_grant|invalid_token|invalid_request|unauthorized_client|access_denied)\b/.test(message)
+    || /\bhttp\s+(400|401|403)\b/.test(message)
+}
+
 function senderKey(event: WorkspaceEventLike) {
   const id = event?.sender?.id
   return typeof id === 'number' && Number.isFinite(id) ? id : 0
@@ -220,6 +236,7 @@ export class WorkspaceGateway {
   private readonly cloudDesktopConfig: CloudDesktopConfig
   private readonly cloudRegistry: CloudWorkspaceRegistry | null
   private readonly cloudCredentialStore: CloudWorkspaceCredentialStore | null
+  private cloudCache: CloudWorkspaceCache | null | undefined
   private readonly cloudAdapterFactory: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   private readonly cloudLogin: (connection: CloudWorkspaceConnectionRecord) => Promise<CloudWorkspaceLoginResult>
   private readonly cloudRefresh: (connection: CloudWorkspaceConnectionRecord, refreshToken: string) => Promise<CloudWorkspaceLoginResult>
@@ -228,7 +245,9 @@ export class WorkspaceGateway {
     this.cloudDesktopConfig = options.cloudDesktop || DEFAULT_CONFIG.cloudDesktop
     this.cloudRegistry = options.cloudRegistry === undefined ? createFileCloudWorkspaceRegistry() : options.cloudRegistry
     this.cloudCredentialStore = options.cloudCredentialStore === undefined ? createFileCloudWorkspaceCredentialStore() : options.cloudCredentialStore
+    this.cloudCache = options.cloudCache
     this.cloudAdapterFactory = options.cloudAdapterFactory || ((connection, accessToken) => createCloudWorkspaceAdapter(connection, accessToken, {
+      cache: this.getCloudCache(),
       cacheMode: this.cloudDesktopConfig.cacheMode,
       cacheEncryptionFallback: this.cloudDesktopConfig.cacheEncryptionFallback,
     }))
@@ -317,8 +336,11 @@ export class WorkspaceGateway {
     const workspaceId = normalizeWorkspaceId(workspaceIdInput)
     if (!workspaceId || workspaceId === LOCAL_WORKSPACE_ID) return false
     if (this.cloudDesktopConfig.requireManagedOrg && this.managedCloudWorkspaceIds.has(workspaceId)) return false
+    const connection = this.cloudConnections.get(workspaceId)
     const removed = this.workspaces.delete(workspaceId)
     const persistedRemoved = this.cloudRegistry?.remove(workspaceId) || false
+    this.cloudCredentialStore?.remove(workspaceId)
+    this.clearCloudCache(connection)
     this.cloudConnections.delete(workspaceId)
     this.cloudAdapters.delete(workspaceId)
     this.closeCloudSubscriptionsForWorkspace(workspaceId)
@@ -945,6 +967,25 @@ export class WorkspaceGateway {
     return this.getWorkspace(workspaceId)
   }
 
+  private getCloudCache() {
+    if (this.cloudCache !== undefined) return this.cloudCache
+    this.cloudCache = createFileCloudWorkspaceCache({
+      mode: this.cloudDesktopConfig.cacheMode,
+      encryptionFallback: this.cloudDesktopConfig.cacheEncryptionFallback,
+    })
+    return this.cloudCache
+  }
+
+  private clearCloudCache(connection?: CloudWorkspaceConnectionRecord) {
+    if (!connection) return
+    try {
+      this.getCloudCache()?.removeWorkspace(cloudWorkspaceCacheKey(connection))
+    } catch {
+      // Cache cleanup is best-effort; credential and registry removal still
+      // need to complete if secure storage is unavailable or the cache is corrupt.
+    }
+  }
+
   private getWorkspace(workspaceIdInput: string): WorkspaceRegistration {
     const workspaceId = normalizeWorkspaceId(workspaceIdInput)
     if (!workspaceId) throw new Error('Workspace id is required.')
@@ -959,7 +1000,8 @@ export class WorkspaceGateway {
     if (!connection) throw new Error('Cloud workspace connection is missing.')
     const accessToken = await this.ensureCloudAccessToken(workspace, connection)
     if (!accessToken) {
-      throw new Error(workspace.error || 'Cloud workspace is not available.')
+      const latestWorkspace = this.workspaces.get(workspace.id) || workspace
+      throw new Error(latestWorkspace.error || 'Cloud workspace is not available.')
     }
     const existing = this.cloudAdapters.get(workspace.id)
     if (existing) return existing
@@ -1009,14 +1051,22 @@ export class WorkspaceGateway {
         error: null,
       })
       return refreshed.accessToken
-    } catch {
-      this.cloudCredentialStore.remove(workspace.id)
+    } catch (error) {
       this.cloudAdapters.delete(workspace.id)
-      this.workspaces.set(workspace.id, {
-        ...workspace,
-        status: 'auth_required',
-        error: 'Sign in to this cloud workspace to enable sync.',
-      })
+      if (isCredentialRefreshAuthFailure(error)) {
+        this.cloudCredentialStore.remove(workspace.id)
+        this.workspaces.set(workspace.id, {
+          ...workspace,
+          status: 'auth_required',
+          error: 'Sign in to this cloud workspace to enable sync.',
+        })
+      } else {
+        this.workspaces.set(workspace.id, {
+          ...workspace,
+          status: 'offline',
+          error: 'Cloud workspace is offline or unavailable. Retry when the connection recovers.',
+        })
+      }
       return null
     }
   }

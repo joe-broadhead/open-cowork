@@ -421,7 +421,10 @@ export class FileCloudWorkspaceCache implements CloudWorkspaceCache {
   removeWorkspace(workspaceId: string): void {
     const id = normalizeWorkspaceId(workspaceId)
     if (!id) return
-    this.writeRecords(this.readRecords().filter((record) => record.workspaceId !== id))
+    const records = this.readRecords()
+    const next = records.filter((record) => record.workspaceId !== id)
+    if (next.length === records.length) return
+    this.writeRecords(next)
   }
 
   private emptyRecord(workspaceId: string, now = new Date()): CloudWorkspaceCacheRecord {

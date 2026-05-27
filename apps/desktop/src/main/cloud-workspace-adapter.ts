@@ -516,6 +516,7 @@ export function createCloudWorkspaceAdapter(
   connection: CloudWorkspaceConnectionRecord,
   accessToken?: string | null,
   options: {
+    cache?: CloudWorkspaceCache | null
     cacheMode?: CloudWorkspaceCacheMode
     cacheEncryptionFallback?: CloudWorkspaceCacheEncryptionFallback
   } = {},
@@ -523,6 +524,7 @@ export function createCloudWorkspaceAdapter(
   return new CloudWorkspaceAdapter({
     connection,
     accessToken,
+    cache: options.cache,
     cacheMode: options.cacheMode,
     cacheEncryptionFallback: options.cacheEncryptionFallback,
   })

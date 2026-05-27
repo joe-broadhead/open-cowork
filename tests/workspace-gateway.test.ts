@@ -10,7 +10,11 @@ import {
   createWorkspaceGateway,
   readWorkspaceIdOption,
 } from '../apps/desktop/src/main/workspace-gateway.ts'
-import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
+import {
+  cloudWorkspaceCacheKey,
+  type CloudWorkspaceSessionAdapter,
+} from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
+import type { CloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
 
 function event(senderId: number) {
   return { sender: { id: senderId } } as never
@@ -21,6 +25,32 @@ function encryptedStorage() {
     mode: 'encrypted' as const,
     encryptString: (plaintext: string) => Buffer.from(plaintext, 'utf-8'),
     decryptString: (encrypted: Buffer) => encrypted.toString('utf-8'),
+  }
+}
+
+function recordingCloudCache(removedWorkspaceIds: string[]): CloudWorkspaceCache {
+  return {
+    mode: 'full',
+    listSessions: () => null,
+    getSessionInfo: () => null,
+    getSessionView: () => null,
+    getEventCursor: () => null,
+    setEventCursor: () => {},
+    resetEventCursor: () => {},
+    getWorkflowList: () => null,
+    upsertWorkflowList: () => {},
+    listSettings: () => null,
+    getSetting: () => null,
+    upsertSettings: () => {},
+    upsertSetting: () => {},
+    listArtifacts: () => null,
+    upsertArtifactList: () => {},
+    upsertSessionList: () => {},
+    upsertSessionInfo: () => {},
+    upsertSessionView: () => {},
+    removeWorkspace: (workspaceId) => {
+      removedWorkspaceIds.push(workspaceId)
+    },
   }
 }
 
@@ -146,18 +176,35 @@ test('workspace gateway registers cloud connections without enabling unauthentic
 })
 
 test('workspace gateway loads and removes persisted cloud connections', () => {
-  const path = join(mkdtempSync(join(tmpdir(), 'open-cowork-workspace-gateway-')), 'cloud-workspaces.json')
-  const registry = new FileCloudWorkspaceRegistry(path)
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-workspace-gateway-'))
+  const registry = new FileCloudWorkspaceRegistry(join(root, 'cloud-workspaces.json'))
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(root, 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
   const persisted = registry.upsert({ baseUrl: 'https://cloud.example.test', label: 'Acme' }, new Date('2026-05-27T10:00:00.000Z'))
-  const gateway = createWorkspaceGateway({ cloudRegistry: registry, cloudCredentialStore: null })
+  const removedCacheWorkspaceIds: string[] = []
+  credentials.save({
+    workspaceId: persisted.id,
+    accessToken: 'cloud-access-token',
+    refreshToken: 'cloud-refresh-token',
+    expiresAt: '2030-05-27T12:00:00.000Z',
+  })
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: registry,
+    cloudCredentialStore: credentials,
+    cloudCache: recordingCloudCache(removedCacheWorkspaceIds),
+  })
 
   const workspace = gateway.list(event(1)).find((entry) => entry.id === persisted.id)
   assert.equal(workspace?.kind, 'cloud')
-  assert.equal(workspace?.status, 'auth_required')
+  assert.equal(workspace?.status, 'online')
   assert.equal(workspace?.label, 'Acme')
 
   assert.equal(gateway.remove(event(1), persisted.id), true)
   assert.equal(registry.list().length, 0)
+  assert.equal(credentials.get(persisted.id), null)
+  assert.deepEqual(removedCacheWorkspaceIds, [cloudWorkspaceCacheKey(persisted)])
 })
 
 test('workspace gateway routes online cloud session calls through the cloud adapter', async () => {
@@ -830,6 +877,73 @@ test('workspace gateway refreshes expired cloud tokens before adapter calls', as
   assert.equal(credentials.get(persisted.id)?.accessToken, 'fresh-access-token')
   assert.equal(credentials.get(persisted.id)?.refreshToken, 'refresh-token-2')
   assert.equal(gateway.list(event(1)).find((entry) => entry.id === persisted.id)?.status, 'online')
+})
+
+test('workspace gateway preserves cloud credentials on transient refresh failures', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-workspace-refresh-transient-'))
+  const registry = new FileCloudWorkspaceRegistry(join(root, 'cloud-workspaces.json'))
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(root, 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  const persisted = registry.upsert({ baseUrl: 'https://cloud.example.test', label: 'Acme' }, new Date('2026-05-27T10:00:00.000Z'))
+  credentials.save({
+    workspaceId: persisted.id,
+    accessToken: 'expired-access-token',
+    refreshToken: 'refresh-token-1',
+    expiresAt: '2026-05-27T10:00:00.000Z',
+  }, new Date('2026-05-27T10:00:00.000Z'))
+  let adapterCalls = 0
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: registry,
+    cloudCredentialStore: credentials,
+    cloudRefresh: async () => {
+      throw new Error('fetch failed')
+    },
+    cloudAdapterFactory: () => {
+      adapterCalls += 1
+      throw new Error('adapter should not be created without a usable access token')
+    },
+  })
+
+  await assert.rejects(() => gateway.sync(event(1), persisted.id), /offline or unavailable/)
+
+  const stored = credentials.get(persisted.id)
+  assert.equal(adapterCalls, 0)
+  assert.equal(stored?.accessToken, 'expired-access-token')
+  assert.equal(stored?.refreshToken, 'refresh-token-1')
+  assert.equal(gateway.list(event(1)).find((entry) => entry.id === persisted.id)?.status, 'offline')
+})
+
+test('workspace gateway clears cloud credentials on refresh auth failures', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-workspace-refresh-auth-'))
+  const registry = new FileCloudWorkspaceRegistry(join(root, 'cloud-workspaces.json'))
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(root, 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  const persisted = registry.upsert({ baseUrl: 'https://cloud.example.test', label: 'Acme' }, new Date('2026-05-27T10:00:00.000Z'))
+  credentials.save({
+    workspaceId: persisted.id,
+    accessToken: 'expired-access-token',
+    refreshToken: 'refresh-token-1',
+    expiresAt: '2026-05-27T10:00:00.000Z',
+  }, new Date('2026-05-27T10:00:00.000Z'))
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: registry,
+    cloudCredentialStore: credentials,
+    cloudRefresh: async () => {
+      throw new Error('invalid_grant')
+    },
+    cloudAdapterFactory: () => {
+      throw new Error('adapter should not be created without a usable access token')
+    },
+  })
+
+  await assert.rejects(() => gateway.sync(event(1), persisted.id), /Sign in to this cloud workspace/)
+
+  assert.equal(credentials.get(persisted.id), null)
+  assert.equal(gateway.list(event(1)).find((entry) => entry.id === persisted.id)?.status, 'auth_required')
 })
 
 test('workspace option reader accepts optional workspace id only from objects', () => {
