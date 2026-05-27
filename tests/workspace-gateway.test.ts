@@ -679,6 +679,124 @@ test('workspace gateway subscribes cloud workspace events once per sender', asyn
   assert.deepEqual(calls, ['subscribe:cached', 'subscribe:5', 'close', 'close'])
 })
 
+test('workspace gateway drops failed cloud event subscriptions before retry', async () => {
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-workspace-event-retry-')), 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  credentials.save({
+    workspaceId: 'cloud:test',
+    accessToken: 'cloud-access-token',
+    expiresAt: '2030-05-27T12:00:00.000Z',
+  })
+  type WorkspaceSubscriptionInput = Parameters<NonNullable<CloudWorkspaceSessionAdapter['subscribeWorkspaceEvents']>>[0]
+  type SessionSubscriptionInput = Parameters<NonNullable<CloudWorkspaceSessionAdapter['subscribeSessionEvents']>>[1]
+  const calls: string[] = []
+  const errors: string[] = []
+  const workspaceInputs: WorkspaceSubscriptionInput[] = []
+  const sessionInputs: SessionSubscriptionInput[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => ({
+      id: 'cloud-session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }),
+    getSessionInfo: async () => null,
+    getSessionView: async () => ({
+      messages: [],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      pendingApprovals: [],
+      pendingQuestions: [],
+      errors: [],
+      todos: [],
+      executionPlan: [],
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      lastInputTokens: 0,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      activeAgent: null,
+      lastItemWasTool: false,
+      revision: 0,
+      lastEventAt: 0,
+      isGenerating: false,
+      isAwaitingPermission: false,
+      isAwaitingQuestion: false,
+    }),
+    promptSession: async () => undefined,
+    abortSession: async () => undefined,
+    subscribeWorkspaceEvents: (input) => {
+      calls.push('workspace:subscribe')
+      workspaceInputs.push(input)
+      return { close() { calls.push('workspace:close') } }
+    },
+    subscribeSessionEvents: (sessionId, input) => {
+      calls.push(`session:subscribe:${sessionId}`)
+      sessionInputs.push(input)
+      return { close() { calls.push(`session:close:${sessionId}`) } }
+    },
+  }
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: credentials,
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  await gateway.subscribeCloudWorkspaceEvents(event(1), {
+    workspaceId: 'cloud:test',
+    onEvent: () => {},
+    onError: (error) => { errors.push(error instanceof Error ? error.message : String(error)) },
+  })
+  workspaceInputs[0]?.onError?.(new Error('workspace 401'))
+  await gateway.subscribeCloudWorkspaceEvents(event(1), {
+    workspaceId: 'cloud:test',
+    onEvent: () => {},
+  })
+  await gateway.subscribeCloudSessionEvents(event(1), 'cloud-session-1', {
+    workspaceId: 'cloud:test',
+    onEvent: () => {},
+    onError: (error) => { errors.push(error instanceof Error ? error.message : String(error)) },
+  })
+  sessionInputs[0]?.onError?.(new Error('session 401'))
+  await gateway.subscribeCloudSessionEvents(event(1), 'cloud-session-1', {
+    workspaceId: 'cloud:test',
+    onEvent: () => {},
+  })
+
+  assert.deepEqual(calls, [
+    'workspace:subscribe',
+    'workspace:close',
+    'workspace:subscribe',
+    'session:subscribe:cloud-session-1',
+    'session:close:cloud-session-1',
+    'session:subscribe:cloud-session-1',
+  ])
+  assert.deepEqual(errors, ['workspace 401', 'session 401'])
+})
+
 test('workspace gateway marks persisted cloud workspaces online when a usable token exists', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-workspace-token-'))
   const registry = new FileCloudWorkspaceRegistry(join(root, 'cloud-workspaces.json'))

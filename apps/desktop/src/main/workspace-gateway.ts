@@ -932,11 +932,25 @@ export class WorkspaceGateway {
     if (!adapter.subscribeSessionEvents) return
     const key = this.cloudSessionSubscriptionKey(workspace.id, sessionId)
     if (this.cloudSessionSubscriptions.has(key)) return
-    const subscription = adapter.subscribeSessionEvents(sessionId, {
+    let subscription: CloudTransportSubscription | null = null
+    let failedDuringSubscribe = false
+    const onError = (error: unknown) => {
+      failedDuringSubscribe = true
+      if (subscription && this.cloudSessionSubscriptions.get(key) === subscription) {
+        this.cloudSessionSubscriptions.delete(key)
+        try { subscription.close() } catch { /* best effort */ }
+      }
+      input.onError?.(error)
+    }
+    subscription = adapter.subscribeSessionEvents(sessionId, {
       afterSequence: input.afterSequence,
       onEvent: input.onEvent,
-      onError: input.onError,
+      onError,
     })
+    if (failedDuringSubscribe) {
+      try { subscription.close() } catch { /* best effort */ }
+      return
+    }
     this.cloudSessionSubscriptions.set(key, subscription)
   }
 
@@ -954,11 +968,25 @@ export class WorkspaceGateway {
     if (!adapter.subscribeWorkspaceEvents) return
     const key = this.cloudWorkspaceSubscriptionKey(workspace.id, senderKey(event))
     if (this.cloudWorkspaceSubscriptions.has(key)) return
-    const subscription = adapter.subscribeWorkspaceEvents({
+    let subscription: CloudTransportSubscription | null = null
+    let failedDuringSubscribe = false
+    const onError = (error: unknown) => {
+      failedDuringSubscribe = true
+      if (subscription && this.cloudWorkspaceSubscriptions.get(key) === subscription) {
+        this.cloudWorkspaceSubscriptions.delete(key)
+        try { subscription.close() } catch { /* best effort */ }
+      }
+      input.onError?.(error)
+    }
+    subscription = adapter.subscribeWorkspaceEvents({
       afterSequence: input.afterSequence,
       onEvent: input.onEvent,
-      onError: input.onError,
+      onError,
     })
+    if (failedDuringSubscribe) {
+      try { subscription.close() } catch { /* best effort */ }
+      return
+    }
     this.cloudWorkspaceSubscriptions.set(key, subscription)
   }
 
