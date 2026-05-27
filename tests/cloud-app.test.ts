@@ -36,6 +36,7 @@ const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
   questionReplies: Array<{ requestId: string, answers: unknown[] }> = []
+  questionRejects: Array<{ requestId: string }> = []
   permissionResponses: Array<{ permissionId: string, allowed: boolean }> = []
   listeners: CloudRuntimeEventListener[] = []
   closed = false
@@ -69,6 +70,10 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
   async replyToQuestion(input: { requestId: string, answers: unknown[] }) {
     this.questionReplies.push(input)
+  }
+
+  async rejectQuestion(input: { requestId: string }) {
+    this.questionRejects.push(input)
   }
 
   async respondToPermission(input: { permissionId: string, allowed: boolean }) {
@@ -653,6 +658,11 @@ test('cloud worker applies durable question replies and permission responses to 
       headers,
       body: JSON.stringify({ requestId: 'question-1', answers: [{ value: 'yes' }] }),
     }))
+    const questionReject = await readJson(await fetch(`${web.url}/api/sessions/${sessionId}/question-reject`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ requestId: 'question-2' }),
+    }))
     const permission = await readJson(await fetch(`${web.url}/api/sessions/${sessionId}/permission-respond`, {
       method: 'POST',
       headers,
@@ -660,9 +670,11 @@ test('cloud worker applies durable question replies and permission responses to 
     }))
 
     assert.equal(question.processed, 0)
+    assert.equal(questionReject.processed, 0)
     assert.equal(permission.processed, 0)
-    assert.equal(await worker.worker?.processAllSessionCommands(), 2)
+    assert.equal(await worker.worker?.processAllSessionCommands(), 3)
     assert.deepEqual(runtime.questionReplies, [{ requestId: 'question-1', answers: [{ value: 'yes' }] }])
+    assert.deepEqual(runtime.questionRejects, [{ requestId: 'question-2' }])
     assert.deepEqual(runtime.permissionResponses, [{ permissionId: 'permission-1', allowed: true }])
 
     const events = await store.listSessionEvents('tenant-a', sessionId)

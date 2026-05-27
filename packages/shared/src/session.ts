@@ -204,6 +204,7 @@ export interface TaskRun {
 export interface PendingApproval {
   id: string
   sessionId: string
+  workspaceId?: string | null
   taskRunId?: string | null
   tool: string
   input: Record<string, unknown>
@@ -227,6 +228,7 @@ export interface PendingQuestionPrompt {
 export interface PendingQuestion {
   id: string
   sessionId: string
+  workspaceId?: string | null
   sourceSessionId?: string | null
   questions: PendingQuestionPrompt[]
   tool?: {

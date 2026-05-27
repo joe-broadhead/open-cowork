@@ -28,7 +28,7 @@ describe('ApprovalCard', () => {
     await user.click(screen.getByRole('button', { name: 'Deny' }))
 
     await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(2))
-    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', true, 'session-1')
-    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(2, 'permission-1', false, 'session-1')
+    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', true, 'session-1', { workspaceId: 'local' })
+    expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(2, 'permission-1', false, 'session-1', { workspaceId: 'local' })
   })
 })

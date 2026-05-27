@@ -524,6 +524,41 @@ export class WorkspaceGateway {
     await (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).abortSession(sessionId)
   }
 
+  async replyCloudQuestion(
+    event: WorkspaceEventLike,
+    sessionId: string,
+    requestId: string,
+    answers: unknown[],
+    workspaceIdInput?: string | null,
+  ): Promise<void> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.replyToQuestion) throw new Error('Cloud question replies are not supported by this workspace.')
+    await adapter.replyToQuestion(sessionId, requestId, answers)
+  }
+
+  async rejectCloudQuestion(
+    event: WorkspaceEventLike,
+    sessionId: string,
+    requestId: string,
+    workspaceIdInput?: string | null,
+  ): Promise<void> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.rejectQuestion) throw new Error('Cloud question rejection is not supported by this workspace.')
+    await adapter.rejectQuestion(sessionId, requestId)
+  }
+
+  async respondCloudPermission(
+    event: WorkspaceEventLike,
+    sessionId: string,
+    permissionId: string,
+    allowed: boolean,
+    workspaceIdInput?: string | null,
+  ): Promise<void> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.respondToPermission) throw new Error('Cloud permission responses are not supported by this workspace.')
+    await adapter.respondToPermission(sessionId, permissionId, allowed)
+  }
+
   async listCloudWorkflows(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkflowListPayload> {
     const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
     if (!adapter.listWorkflows) throw new Error('Cloud workflows are not supported by this workspace.')

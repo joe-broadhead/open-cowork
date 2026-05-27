@@ -43,8 +43,11 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
     if (url.endsWith('/api/sessions/session-1/question-reply')) {
       return jsonResponse({ command: { commandId: 'cmd-2' }, processed: 0 }, 202)
     }
-    if (url.endsWith('/api/sessions/session-1/permission-respond')) {
+    if (url.endsWith('/api/sessions/session-1/question-reject')) {
       return jsonResponse({ command: { commandId: 'cmd-3' }, processed: 0 }, 202)
+    }
+    if (url.endsWith('/api/sessions/session-1/permission-respond')) {
+      return jsonResponse({ command: { commandId: 'cmd-4' }, processed: 0 }, 202)
     }
     if (url.endsWith('/api/sessions/session-1/artifacts')) {
       if (init?.method === 'POST') {
@@ -240,6 +243,7 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
   assert.equal((await transport.createSession()).session.sessionId, 'session-1')
   assert.equal((await transport.promptSession('session-1', { text: 'hello' })).processed, 0)
   assert.equal((await transport.replyToQuestion('session-1', { requestId: 'q1', answers: ['A'] })).processed, 0)
+  assert.equal((await transport.rejectQuestion('session-1', { requestId: 'q2' })).processed, 0)
   assert.equal((await transport.respondToPermission('session-1', { permissionId: 'p1', response: { allowed: true } })).processed, 0)
   assert.equal((await transport.listWorkflows?.())?.workflows[0]?.id, 'workflow-1')
   assert.equal((await transport.getWorkflow?.('workflow-1'))?.id, 'workflow-1')
@@ -289,6 +293,7 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
       '/api/sessions',
       '/api/sessions/session-1/prompt',
       '/api/sessions/session-1/question-reply',
+      '/api/sessions/session-1/question-reject',
       '/api/sessions/session-1/permission-respond',
       '/api/workflows/workflow-1/run',
       '/api/workflows/workflow-1/pause',

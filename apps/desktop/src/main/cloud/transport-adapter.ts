@@ -127,6 +127,10 @@ export type CloudTransportAdapter = {
     command: SessionCommandRecord
     processed: number
   }>
+  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<{
+    command: SessionCommandRecord
+    processed: number
+  }>
   respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<{
     command: SessionCommandRecord
     processed: number
@@ -565,6 +569,12 @@ export function createHttpSseCloudTransportAdapter(
     },
     replyToQuestion(sessionId, input) {
       return request(`/api/sessions/${encodePath(sessionId)}/question-reply`, {
+        method: 'POST',
+        body: input,
+      })
+    },
+    rejectQuestion(sessionId, input) {
+      return request(`/api/sessions/${encodePath(sessionId)}/question-reject`, {
         method: 'POST',
         body: input,
       })

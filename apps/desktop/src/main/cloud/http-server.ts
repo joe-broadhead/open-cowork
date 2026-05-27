@@ -1088,6 +1088,21 @@ async function handleApiRequest(
     return
   }
 
+  if (action === 'question-reject' && req.method === 'POST') {
+    const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const requestId = readString(body.requestId)
+    if (!requestId) {
+      writeError(res, 400, 'Question rejection requires requestId.', options.corsOrigin)
+      return
+    }
+    const command = await options.service.enqueueQuestionReject(context.principal, sessionId, {
+      requestId,
+    })
+    const processed = await processCommandIfConfigured(options, context.principal, sessionId)
+    writeJson(res, 202, { command, processed }, options.corsOrigin)
+    return
+  }
+
   if (action === 'permission-respond' && req.method === 'POST') {
     const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const permissionId = readString(body.permissionId)

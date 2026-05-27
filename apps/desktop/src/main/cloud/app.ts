@@ -243,6 +243,7 @@ function createUnavailableRuntimeAdapter(): CloudRuntimeAdapter {
     promptSession: fail,
     abortSession: fail,
     replyToQuestion: fail,
+    rejectQuestion: fail,
     respondToPermission: fail,
   }
 }

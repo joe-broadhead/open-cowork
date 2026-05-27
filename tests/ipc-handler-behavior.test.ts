@@ -73,6 +73,59 @@ function createBaseContext() {
   return { context, handlers, errors }
 }
 
+function emptySessionView(overrides: Record<string, unknown> = {}) {
+  return {
+    messages: [],
+    toolCalls: [],
+    taskRuns: [],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    artifacts: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision: 0,
+    lastEventAt: 0,
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+    ...overrides,
+  }
+}
+
+function installCloudWorkspace(context: IpcHandlerContext, adapter: CloudWorkspaceSessionAdapter) {
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+}
+
 function withPromptProviderConfig() {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-prompt-provider-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')
@@ -1010,6 +1063,67 @@ test('permission:respond can answer a reopened approval using the hydrated sessi
   }])
 })
 
+test('permission:respond routes cloud approvals through the cloud workspace adapter', async () => {
+  const { context, handlers } = createBaseContext()
+  const permissionResponses: Array<Record<string, unknown>> = []
+  const sentViews: unknown[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => emptySessionView({
+      revision: 10,
+      lastEventAt: 10,
+    }) as any,
+    promptSession: async () => {},
+    abortSession: async () => {},
+    respondToPermission: async (sessionId, permissionId, allowed) => {
+      permissionResponses.push({ sessionId, permissionId, allowed })
+    },
+  }
+  installCloudWorkspace(context, adapter)
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 301,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  context.getSessionV2Client = async () => {
+    throw new Error('local runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('permission:respond')
+  assert.ok(handler, 'expected permission:respond handler to be registered')
+
+  await handler({ sender: { id: 301 } }, 'permission-cloud', true, 'cloud-session-1', { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(permissionResponses, [{
+    sessionId: 'cloud-session-1',
+    permissionId: 'permission-cloud',
+    allowed: true,
+  }])
+  assert.deepEqual(sentViews, [{
+    sessionId: 'cloud-session-1',
+    workspaceId: 'cloud:test',
+    view: await adapter.getSessionView('cloud-session-1'),
+  }])
+})
+
 test('question:reply clears the answered request locally so queued questions advance', async () => {
   const { context, handlers } = createBaseContext()
   const sessionId = 'question-ipc-reply-session'
@@ -1086,6 +1200,67 @@ test('question:reply clears the answered request locally so queued questions adv
     stopSessionStatusReconciliation(sessionId)
     sessionEngine.removeSession(sessionId)
   }
+})
+
+test('question:reply routes cloud answers through the cloud workspace adapter', async () => {
+  const { context, handlers } = createBaseContext()
+  const questionReplies: Array<Record<string, unknown>> = []
+  const sentViews: unknown[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => emptySessionView({
+      revision: 11,
+      lastEventAt: 11,
+    }) as any,
+    promptSession: async () => {},
+    abortSession: async () => {},
+    replyToQuestion: async (sessionId, requestId, answers) => {
+      questionReplies.push({ sessionId, requestId, answers })
+    },
+  }
+  installCloudWorkspace(context, adapter)
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 302,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  context.getSessionV2Client = async () => {
+    throw new Error('local runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('question:reply')
+  assert.ok(handler, 'expected question:reply handler to be registered')
+
+  await handler({ sender: { id: 302 } }, 'cloud-session-1', 'question-cloud', [['Yes']], { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(questionReplies, [{
+    sessionId: 'cloud-session-1',
+    requestId: 'question-cloud',
+    answers: [['Yes']],
+  }])
+  assert.deepEqual(sentViews, [{
+    sessionId: 'cloud-session-1',
+    workspaceId: 'cloud:test',
+    view: await adapter.getSessionView('cloud-session-1'),
+  }])
 })
 
 test('session:file-snippet rejects oversized files before reading snippet contents', async () => {
@@ -1233,6 +1408,66 @@ test('question:reject clears the rejected request locally', async () => {
     stopSessionStatusReconciliation(sessionId)
     sessionEngine.removeSession(sessionId)
   }
+})
+
+test('question:reject routes cloud dismissals through the cloud workspace adapter', async () => {
+  const { context, handlers } = createBaseContext()
+  const questionRejects: Array<Record<string, unknown>> = []
+  const sentViews: unknown[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => emptySessionView({
+      revision: 12,
+      lastEventAt: 12,
+    }) as any,
+    promptSession: async () => {},
+    abortSession: async () => {},
+    rejectQuestion: async (sessionId, requestId) => {
+      questionRejects.push({ sessionId, requestId })
+    },
+  }
+  installCloudWorkspace(context, adapter)
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 303,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  context.getSessionV2Client = async () => {
+    throw new Error('local runtime should not be reached')
+  }
+
+  registerSessionHandlers(context)
+  const handler = handlers.get('question:reject')
+  assert.ok(handler, 'expected question:reject handler to be registered')
+
+  await handler({ sender: { id: 303 } }, 'cloud-session-1', 'question-cloud', { workspaceId: 'cloud:test' })
+
+  assert.deepEqual(questionRejects, [{
+    sessionId: 'cloud-session-1',
+    requestId: 'question-cloud',
+  }])
+  assert.deepEqual(sentViews, [{
+    sessionId: 'cloud-session-1',
+    workspaceId: 'cloud:test',
+    view: await adapter.getSessionView('cloud-session-1'),
+  }])
 })
 
 test('custom:test-mcp reports OAuth guidance for remote MCP auth errors', async () => {

@@ -53,6 +53,9 @@ export type CloudWorkspaceSessionAdapter = {
   getSessionView(sessionId: string): Promise<SessionView>
   promptSession(sessionId: string, input: CloudPromptInput): Promise<void>
   abortSession(sessionId: string): Promise<void>
+  replyToQuestion?(sessionId: string, requestId: string, answers: unknown[]): Promise<void>
+  rejectQuestion?(sessionId: string, requestId: string): Promise<void>
+  respondToPermission?(sessionId: string, permissionId: string, allowed: boolean): Promise<void>
   listWorkflows?(): Promise<WorkflowListPayload>
   getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   runWorkflow?(workflowId: string): Promise<WorkflowRun | null>
@@ -222,6 +225,21 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
 
   async abortSession(sessionId: string): Promise<void> {
     await this.transport.abortSession(sessionId)
+  }
+
+  async replyToQuestion(sessionId: string, requestId: string, answers: unknown[]): Promise<void> {
+    await this.transport.replyToQuestion(sessionId, { requestId, answers })
+  }
+
+  async rejectQuestion(sessionId: string, requestId: string): Promise<void> {
+    await this.transport.rejectQuestion(sessionId, { requestId })
+  }
+
+  async respondToPermission(sessionId: string, permissionId: string, allowed: boolean): Promise<void> {
+    await this.transport.respondToPermission(sessionId, {
+      permissionId,
+      response: { allowed },
+    })
   }
 
   async listWorkflows(): Promise<WorkflowListPayload> {

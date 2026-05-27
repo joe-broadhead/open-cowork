@@ -123,6 +123,10 @@ type QuestionReplyPayload = {
   answers: unknown[]
 }
 
+type QuestionRejectPayload = {
+  requestId: string
+}
+
 type PermissionRespondPayload = {
   permissionId: string
   response: unknown
@@ -853,6 +857,12 @@ function normalizeQuestionReplyPayload(payload: Record<string, unknown>): Questi
   }
 }
 
+function normalizeQuestionRejectPayload(payload: Record<string, unknown>): QuestionRejectPayload {
+  return {
+    requestId: readString(payload.requestId),
+  }
+}
+
 function normalizePermissionPayload(payload: Record<string, unknown>): PermissionRespondPayload {
   return {
     permissionId: readString(payload.permissionId),
@@ -1345,6 +1355,22 @@ export class CloudSessionService {
     })
   }
 
+  async enqueueQuestionReject(
+    principal: CloudPrincipal,
+    sessionId: string,
+    payload: QuestionRejectPayload,
+  ): Promise<SessionCommandRecord> {
+    await this.getSessionView(principal, sessionId)
+    return this.store.enqueueSessionCommand({
+      commandId: this.ids.randomUUID(),
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      sessionId,
+      kind: 'question.reject',
+      payload,
+    })
+  }
+
   async enqueuePermissionResponse(
     principal: CloudPrincipal,
     sessionId: string,
@@ -1372,6 +1398,9 @@ export class CloudSessionService {
           break
         case 'question.reply':
           await this.executeQuestionReplyCommand(lease, command)
+          break
+        case 'question.reject':
+          await this.executeQuestionRejectCommand(lease, command)
           break
         case 'permission.respond':
           await this.executePermissionCommand(lease, command)
@@ -1516,6 +1545,26 @@ export class CloudSessionService {
       payload: {
         commandId: command.commandId,
         requestId: payload.requestId,
+      },
+      leaseToken: lease.leaseToken,
+    })
+  }
+
+  private async executeQuestionRejectCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+    const payload = normalizeQuestionRejectPayload(command.payload)
+    if (!payload.requestId) throw new Error('Question rejection requires a request id.')
+    if (!this.runtime.rejectQuestion) throw new Error('OpenCode question rejection is not available.')
+    await this.runtime.rejectQuestion({
+      requestId: payload.requestId,
+    })
+    await this.appendProjectedEvent({
+      tenantId: command.tenantId,
+      sessionId: command.sessionId,
+      type: 'question.resolved',
+      payload: {
+        commandId: command.commandId,
+        requestId: payload.requestId,
+        rejected: true,
       },
       leaseToken: lease.leaseToken,
     })

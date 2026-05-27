@@ -277,11 +277,11 @@ const api: CoworkAPI = {
     run: (sessionId, name) => invoke('command:run', sessionId, name),
   },
   permission: {
-    respond: (id, allowed, sessionId) => invoke('permission:respond', id, allowed, sessionId),
+    respond: (id, allowed, sessionId, options) => invoke('permission:respond', id, allowed, sessionId, options),
   },
   question: {
-    reply: (sessionId, requestId, answers) => invoke('question:reply', sessionId, requestId, answers),
-    reject: (sessionId, requestId) => invoke('question:reject', sessionId, requestId),
+    reply: (sessionId, requestId, answers, options) => invoke('question:reply', sessionId, requestId, answers, options),
+    reject: (sessionId, requestId, options) => invoke('question:reject', sessionId, requestId, options),
   },
   settings: {
     get: (options) => invoke('settings:get', options),

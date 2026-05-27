@@ -10,6 +10,7 @@ type Props = {
 
 export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const toolCalls = useSessionStore((s) => s.currentView.toolCalls)
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<string[][]>([])
@@ -96,7 +97,9 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
 
     setSubmitting(true)
     try {
-      await window.coworkApi.question.reply(currentSessionId, request.id, answers)
+      await window.coworkApi.question.reply(currentSessionId, request.id, answers, {
+        workspaceId: request.workspaceId || activeWorkspaceId,
+      })
     } finally {
       setSubmitting(false)
     }
@@ -106,7 +109,9 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     if (!currentSessionId || submitting) return
     setSubmitting(true)
     try {
-      await window.coworkApi.question.reject(currentSessionId, request.id)
+      await window.coworkApi.question.reject(currentSessionId, request.id, {
+        workspaceId: request.workspaceId || activeWorkspaceId,
+      })
     } finally {
       setSubmitting(false)
     }

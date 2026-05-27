@@ -9,7 +9,7 @@ import type {
 
 export type ControlPlaneRole = 'owner' | 'member'
 export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
-export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply'
+export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
 

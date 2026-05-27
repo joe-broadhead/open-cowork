@@ -173,11 +173,11 @@ export interface CoworkAPI {
     todo: (sessionId: string) => Promise<TodoItem[]>
   }
   permission: {
-    respond: (id: string, allowed: boolean, sessionId?: string | null) => Promise<void>
+    respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
   }
   question: {
-    reply: (sessionId: string, requestId: string, answers: string[][]) => Promise<void>
-    reject: (sessionId: string, requestId: string) => Promise<void>
+    reply: (sessionId: string, requestId: string, answers: string[][], options?: WorkspaceOptions) => Promise<void>
+    reject: (sessionId: string, requestId: string, options?: WorkspaceOptions) => Promise<void>
   }
   settings: {
     // Returns credentials masked ('••••••••' for set values). Safe default

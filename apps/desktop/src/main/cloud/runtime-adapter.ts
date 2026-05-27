@@ -31,6 +31,7 @@ export type CloudRuntimeAdapter = {
   }): Promise<CloudPromptResult | void>
   abortSession(input: { sessionId: string }): Promise<void>
   replyToQuestion?(input: { requestId: string, answers: unknown[] }): Promise<void>
+  rejectQuestion?(input: { requestId: string }): Promise<void>
   respondToPermission?(input: { permissionId: string, allowed: boolean }): Promise<void>
   subscribeEvents?: (
     listener: CloudRuntimeEventListener,
@@ -51,6 +52,7 @@ type SdkLikeClient = {
   }
   question?: {
     reply?: unknown
+    reject?: unknown
   }
   permission?: {
     reply?: unknown
@@ -95,6 +97,16 @@ export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntim
       await reply.call(client.question, {
         requestID: input.requestId,
         answers: input.answers,
+      }, { throwOnError: true })
+    },
+    async rejectQuestion(input) {
+      if (typeof client.question?.reject !== 'function') throw new Error('OpenCode question rejection is not available.')
+      const reject = client.question.reject as (
+        request: { requestID: string },
+        options?: { throwOnError?: boolean },
+      ) => Promise<unknown>
+      await reject.call(client.question, {
+        requestID: input.requestId,
       }, { throwOnError: true })
     },
     async respondToPermission(input) {
