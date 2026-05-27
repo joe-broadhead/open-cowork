@@ -247,12 +247,30 @@ function dropQueuedSessionPatches(pending: PendingPatchFlush, sessionId: string)
   return before - pending.patches.length
 }
 
-function recoverSessionWithQueuedView(windowId: number, sessionId: string, pending?: PendingPatchFlush) {
+function recoverSessionWithViewOnlyCatchUp(windowId: number, sessionId: string, pending?: PendingPatchFlush) {
   markSessionPatchViewRecovery(windowId, sessionId)
   if (!pending) return
   const dropped = dropQueuedSessionPatches(pending, sessionId)
   if (dropped > 0) pending.droppedPatches += dropped
   pending.overflowSessionIds.add(sessionId)
+}
+
+function sessionHasQueuedView(windowId: number, sessionId: string) {
+  return pendingViewFlushByWindowId.get(windowId)?.sessionIds.has(sessionId) === true
+}
+
+function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string) {
+  const windowId = win.webContents.id
+  const pending = pendingPatchFlushByWindowId.get(windowId)
+  if (!pending || pending.patches.length === 0) return
+
+  const queuedForSession: SessionPatch[] = []
+  pending.patches = pending.patches.filter((patch) => {
+    if (patch.sessionId !== sessionId) return true
+    queuedForSession.push(patch)
+    return false
+  })
+  for (const patch of queuedForSession) publishSessionPatch(win, patch)
 }
 
 function flushPendingSessionPatches(windowId: number) {
@@ -304,6 +322,32 @@ function flushPendingSessionPatches(windowId: number) {
 function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null | undefined) {
   if (!patch) return
   const windowId = win.webContents.id
+  if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId)) {
+    let pending = pendingPatchFlushByWindowId.get(windowId)
+    if (!pending) {
+      pending = {
+        win,
+        patches: [],
+        overflowSessionIds: new Set(),
+        droppedPatches: 0,
+        queuedAt: Date.now(),
+        timer: null,
+      }
+      pending.timer = setTimeout(() => {
+        flushPendingSessionPatches(windowId)
+      }, SESSION_PATCH_FLUSH_INTERVAL_MS)
+      pendingPatchFlushByWindowId.set(windowId, pending)
+    }
+    pending.droppedPatches += 1
+    pending.overflowSessionIds.add(patch.sessionId)
+    return
+  }
+
+  if (sessionHasQueuedView(windowId, patch.sessionId)) {
+    publishSessionPatch(win, patch)
+    return
+  }
+
   let pending = pendingPatchFlushByWindowId.get(windowId)
   if (!pending) {
     pending = {
@@ -320,14 +364,8 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
     pendingPatchFlushByWindowId.set(windowId, pending)
   }
 
-  if (sessionNeedsPatchViewRecovery(windowId, patch.sessionId)) {
-    pending.droppedPatches += 1
-    pending.overflowSessionIds.add(patch.sessionId)
-    return
-  }
-
   if (pending.patches.length >= MAX_PENDING_SESSION_PATCHES_PER_WINDOW) {
-    recoverSessionWithQueuedView(windowId, patch.sessionId, pending)
+    recoverSessionWithViewOnlyCatchUp(windowId, patch.sessionId, pending)
     pending.droppedPatches += 1
     queueSessionViewPublish(win, patch.sessionId)
     return
@@ -367,7 +405,9 @@ function flushPendingSessionViews(windowId: number) {
 
 function queueSessionViewPublish(win: BrowserWindow, sessionId: string) {
   const windowId = win.webContents.id
-  recoverSessionWithQueuedView(windowId, sessionId, pendingPatchFlushByWindowId.get(windowId))
+  if (!sessionNeedsPatchViewRecovery(windowId, sessionId)) {
+    flushQueuedSessionPatchesBeforeView(win, sessionId)
+  }
   const existing = pendingViewFlushByWindowId.get(windowId)
   if (existing) {
     existing.sessionIds.add(sessionId)

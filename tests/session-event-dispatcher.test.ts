@@ -213,7 +213,7 @@ test('dispatcher overflow drops only patches for the recovering session', async 
   )
 })
 
-test('dispatcher drops queued session patches when a full view is queued', async () => {
+test('dispatcher flushes queued session patches before a full view is queued', async () => {
   const { win, sent } = createWindowCollector(53)
 
   dispatchRuntimeSessionEvent(win as any, {
@@ -246,11 +246,30 @@ test('dispatcher drops queued session patches when a full view is queued', async
 
   await wait(80)
 
-  assert.equal(sent.some((entry) => entry.channel === 'session:patch'), false)
-  assert.equal(
-    sent.some((entry) => entry.channel === 'session:view' && (entry.payload as { sessionId?: string }).sessionId === 'session-view-recovers-patches'),
-    true,
-  )
+  const sessionEvents = sent
+    .filter((entry) => entry.channel === 'session:patch' || entry.channel === 'session:view')
+    .map((entry) => ({
+      channel: entry.channel,
+      sessionId: (entry.payload as { sessionId?: string }).sessionId,
+      content: (entry.payload as { content?: string }).content,
+    }))
+  assert.deepEqual(sessionEvents, [
+    {
+      channel: 'session:patch',
+      sessionId: 'session-view-recovers-patches',
+      content: 'before-view',
+    },
+    {
+      channel: 'session:patch',
+      sessionId: 'session-view-recovers-patches',
+      content: 'after-view-queued',
+    },
+    {
+      channel: 'session:view',
+      sessionId: 'session-view-recovers-patches',
+      content: undefined,
+    },
+  ])
 })
 
 test('dispatcher derives renderer-safe reasoning patches without forcing full view publishes', () => {
