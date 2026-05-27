@@ -10,7 +10,7 @@ const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
 const POSTGRES_SKIP = POSTGRES_URL
   ? false
   : 'Set OPEN_COWORK_TEST_POSTGRES_URL to run real Postgres cloud concurrency tests.'
-const require = createRequire(import.meta.url)
+const require = createRequire(new URL('../apps/desktop/src/main/cloud/postgres-control-plane-store.ts', import.meta.url))
 
 type PgPool = {
   query(text: string, values?: unknown[]): Promise<unknown>
