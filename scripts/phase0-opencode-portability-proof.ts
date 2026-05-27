@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import type { Dirent } from 'node:fs'
 import {
   cpSync,
   existsSync,
@@ -9,7 +10,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -274,22 +274,33 @@ function assertRestoredCoworkMetadata(input: {
 }
 
 function hashPath(path: string): string | null {
-  if (!existsSync(path)) return null
-  const stat = statSync(path)
   const hash = createHash('sha256')
-  if (stat.isFile()) {
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(path, { withFileTypes: true })
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return null
+    if (code !== 'ENOTDIR') throw error
     hash.update(readFileSync(path))
     return hash.digest('hex')
   }
-  const entries = readdirSync(path)
-    .map((entry) => join(path, entry))
-    .sort()
+  entries.sort((a, b) => a.name.localeCompare(b.name))
   for (const entry of entries) {
-    const entryHash = hashPath(entry)
-    hash.update(relative(path, entry))
+    const entryHash = hashPath(join(path, entry.name))
+    hash.update(entry.name)
     if (entryHash) hash.update(entryHash)
   }
   return hash.digest('hex')
+}
+
+function cleanupProofRoot(root: string) {
+  try {
+    rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    writeStderr(`Warning: Phase 0 proof passed, but temporary root cleanup failed: ${message}`)
+  }
 }
 
 export function mapPhase0PortableEntryPath(input: {
@@ -612,7 +623,7 @@ async function main() {
       writeStdout(`Secret-bearing paths classified: ${report.secretBearingPaths.length}`)
     }
   } finally {
-    if (!options.keep) rmSync(options.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    if (!options.keep) cleanupProofRoot(options.root)
   }
 }
 

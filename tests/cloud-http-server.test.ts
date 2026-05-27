@@ -232,6 +232,22 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
   }
 })
 
+test('cloud HTTP server returns public errors for malformed request bodies', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"broken"',
+    })
+    assert.equal(response.status, 400)
+    assert.deepEqual(await readJson(response), { error: 'Request body must be valid JSON.' })
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server attaches request ids and emits observability records', async () => {
   const logs: unknown[] = []
   const metrics: unknown[] = []

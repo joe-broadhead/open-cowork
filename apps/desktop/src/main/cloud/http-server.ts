@@ -152,14 +152,19 @@ async function readJsonBodyWithRaw(req: IncomingMessage, maxBodyBytes: number) {
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     total += buffer.byteLength
-    if (total > maxBodyBytes) throw new Error('Request body is too large.')
+    if (total > maxBodyBytes) throw new CloudHttpError(413, 'Request body is too large.')
     chunks.push(buffer)
   }
   if (chunks.length === 0) return { body: {}, rawBody: '' }
   const rawBody = Buffer.concat(chunks).toString('utf8')
   const text = rawBody.trim()
   if (!text) return { body: {}, rawBody }
-  const parsed = JSON.parse(text) as unknown
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text) as unknown
+  } catch {
+    throw new CloudHttpError(400, 'Request body must be valid JSON.')
+  }
   const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? parsed as Record<string, unknown>
     : {}
@@ -1094,12 +1099,11 @@ export class CloudHttpServer {
         segments,
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
       if (error instanceof CloudHttpError) {
         writeError(res, error.status, error.publicMessage, this.options.corsOrigin)
         return
       }
-      writeError(res, /JSON/.test(message) ? 400 : 500, message, this.options.corsOrigin)
+      writeError(res, 500, 'Internal server error.', this.options.corsOrigin)
     }
   }
 }
