@@ -13,7 +13,11 @@ cleanup() {
 
 trap cleanup EXIT
 
-docker compose -p "${project_name}" -f "${compose_file}" up --build -d
+if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; then
+  docker compose -p "${project_name}" -f "${compose_file}" ps || true
+  docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200 || true
+  exit 1
+fi
 
 for _ in $(seq 1 90); do
   if curl -fsS "http://127.0.0.1:8787/healthz" >"${health_file}"; then
