@@ -82,6 +82,14 @@ function dispatchCloudWorkspaceSessionEvent(
   if (!win || win.isDestroyed()) return
   const payload = event.payload || {}
   const eventAt = event.sequence || Date.now()
+  let shouldRefreshCloudProjection = false
+  const publishCloudProjection = () => {
+    void context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
+      .then((view) => {
+        if (!win.isDestroyed()) win.webContents.send('session:view', { sessionId, workspaceId: workspaceId || undefined, view })
+      })
+      .catch((error) => context.logHandlerError(`cloud session:view ${shortSessionId(sessionId)}`, error))
+  }
   const dispatchCloudRuntimeEvent = (runtimeEvent: Parameters<typeof dispatchRuntimeSessionEvent>[1]) => {
     dispatchRuntimeSessionEvent(win, {
       ...runtimeEvent,
@@ -108,6 +116,7 @@ function dispatchCloudWorkspaceSessionEvent(
       sessionId,
       data: { type: 'busy' },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'assistant.message') {
     const messageId = payloadString(payload, 'messageId') || `${sessionId}:${event.sequence}:cloud-assistant`
     dispatchCloudRuntimeEvent({
@@ -128,6 +137,7 @@ function dispatchCloudWorkspaceSessionEvent(
       sessionId,
       data: { type: 'done', synthetic: true },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'tool.call') {
     dispatchCloudRuntimeEvent({
       type: 'tool_call',
@@ -144,6 +154,7 @@ function dispatchCloudWorkspaceSessionEvent(
         sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'task.run') {
     dispatchCloudRuntimeEvent({
       type: 'task_run',
@@ -160,6 +171,7 @@ function dispatchCloudWorkspaceSessionEvent(
         finishedAt: payloadString(payload, 'finishedAt') || null,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'permission.requested') {
     const permissionId = payloadString(payload, 'permissionId') || payloadString(payload, 'id') || `${sessionId}:permission:${event.sequence}`
     dispatchCloudRuntimeEvent({
@@ -175,6 +187,7 @@ function dispatchCloudWorkspaceSessionEvent(
         sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'permission.resolved') {
     dispatchCloudRuntimeEvent({
       type: 'approval_resolved',
@@ -184,6 +197,7 @@ function dispatchCloudWorkspaceSessionEvent(
         id: payloadString(payload, 'permissionId') || payloadString(payload, 'id'),
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'question.asked') {
     dispatchCloudRuntimeEvent({
       type: 'question_asked',
@@ -196,6 +210,7 @@ function dispatchCloudWorkspaceSessionEvent(
         sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'question.resolved') {
     dispatchCloudRuntimeEvent({
       type: 'question_resolved',
@@ -206,6 +221,7 @@ function dispatchCloudWorkspaceSessionEvent(
         sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'todos.updated') {
     dispatchCloudRuntimeEvent({
       type: 'todos',
@@ -215,6 +231,7 @@ function dispatchCloudWorkspaceSessionEvent(
         todos: Array.isArray(payload.todos) ? payload.todos as NonNullable<Parameters<typeof dispatchRuntimeSessionEvent>[1]['data']>['todos'] : [],
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'cost.updated') {
     dispatchCloudRuntimeEvent({
       type: 'cost',
@@ -228,12 +245,9 @@ function dispatchCloudWorkspaceSessionEvent(
         sourceSessionId: payloadString(payload, 'sourceSessionId') || sessionId,
       },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'artifact.created') {
-    void context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
-      .then((view) => {
-        if (!win.isDestroyed()) win.webContents.send('session:view', { sessionId, workspaceId: workspaceId || undefined, view })
-      })
-      .catch((error) => context.logHandlerError(`cloud artifact ${shortSessionId(sessionId)}`, error))
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'session.status') {
     const statusType = payloadString(payload, 'statusType')
     dispatchCloudRuntimeEvent({
@@ -243,12 +257,14 @@ function dispatchCloudWorkspaceSessionEvent(
         ? { type: 'busy' }
         : { type: 'done', synthetic: true },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'session.aborted' || event.type === 'session.idle') {
     dispatchCloudRuntimeEvent({
       type: 'done',
       sessionId,
       data: { type: 'done', synthetic: true },
     })
+    shouldRefreshCloudProjection = true
   } else if (event.type === 'runtime.error') {
     dispatchCloudRuntimeEvent({
       type: 'error',
@@ -263,7 +279,9 @@ function dispatchCloudWorkspaceSessionEvent(
       sessionId,
       data: { type: 'done', synthetic: true },
     })
+    shouldRefreshCloudProjection = true
   }
+  if (shouldRefreshCloudProjection) publishCloudProjection()
 }
 
 function resolvePromptModel(

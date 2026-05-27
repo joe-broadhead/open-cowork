@@ -100,6 +100,7 @@ function workspacePatch(workspaceId?: string | null) {
 
 export function shouldPublishSessionView(event: RuntimeSessionEvent) {
   if (!event.sessionId) return false
+  if (event.workspaceId && event.workspaceId !== 'local') return false
   const eventType = getEventType(event)
   return eventType !== 'text' && eventType !== 'reasoning' && eventType !== 'history_refresh'
 }
@@ -428,6 +429,7 @@ function flushPendingSessionViews(windowId: number) {
 }
 
 function queueSessionViewPublish(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
+  if (workspaceId && workspaceId !== 'local') return
   const windowId = win.webContents.id
   if (!sessionNeedsPatchViewRecovery(windowId, sessionId, workspaceId)) {
     flushQueuedSessionPatchesBeforeView(win, sessionId, workspaceId)

@@ -4,6 +4,7 @@ import { basename, join } from 'path'
 import { chmodSync, copyFileSync, existsSync, realpathSync, writeFileSync } from 'fs'
 import type {
   SessionArtifact,
+  SessionArtifactAttachment,
   SessionArtifactExportRequest,
   SessionArtifactListRequest,
   SessionArtifactRequest,
@@ -26,9 +27,18 @@ import { sessionEngine } from '../session-engine.ts'
 import { isReadableSessionArtifact } from '../session-artifact-access.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
+const MAX_CLOUD_ARTIFACT_EXPORT_BYTES = 50 * 1024 * 1024
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/
+
 export function copyArtifactForExport(source: string, destination: string) {
   copyFileSync(source, destination)
   chmodSync(destination, 0o600)
+}
+
+export function safeArtifactExportFilename(input: string | null | undefined) {
+  const candidate = basename(input || '').trim()
+  if (!candidate || candidate === '.' || candidate === '..') return 'artifact'
+  return candidate
 }
 
 function safeRealPath(path: string) {
@@ -39,10 +49,31 @@ function safeRealPath(path: string) {
   }
 }
 
-function decodeAttachmentDataUrl(url: string) {
+export function decodeCloudArtifactDataUrl(url: string) {
   const match = /^data:([^;,]+)?;base64,(.*)$/s.exec(url)
   if (!match) throw new Error('Cloud artifact attachment is not a base64 data URL.')
-  return Buffer.from(match[2] || '', 'base64')
+  const dataBase64 = (match[2] || '').replace(/\s+/g, '')
+  if (!BASE64_RE.test(dataBase64) || dataBase64.length % 4 === 1) {
+    throw new Error('Cloud artifact attachment is not valid base64.')
+  }
+  const estimatedBytes = Math.floor((dataBase64.length * 3) / 4)
+  if (estimatedBytes > MAX_CLOUD_ARTIFACT_EXPORT_BYTES) {
+    throw new Error('Cloud artifact exceeds the export size limit.')
+  }
+  const bytes = Buffer.from(dataBase64, 'base64')
+  if (bytes.length > MAX_CLOUD_ARTIFACT_EXPORT_BYTES) {
+    throw new Error('Cloud artifact exceeds the export size limit.')
+  }
+  return bytes
+}
+
+export function writeCloudArtifactForExport(destination: string, attachment: Pick<SessionArtifactAttachment, 'url'>) {
+  const bytes = decodeCloudArtifactDataUrl(attachment.url)
+  // User-selected cloud artifact export. The bytes are validated as a bounded
+  // base64 data URL above and only written after an explicit save dialog.
+  // codeql[js/network-data-written-to-file]
+  writeFileSync(destination, bytes)
+  chmodSync(destination, 0o600)
 }
 
 export function registerArtifactHandlers(context: IpcHandlerContext) {
@@ -66,15 +97,14 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
     const { dialog } = await import('electron')
     const workspaceId = readWorkspaceIdOption(request)
     if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
-      const defaultName = request.suggestedName || basename(request.filePath) || 'artifact'
+      const defaultName = safeArtifactExportFilename(request.suggestedName || basename(request.filePath))
       const result = await dialog.showSaveDialog({
         title: 'Save Artifact As',
         defaultPath: join(app.getPath('downloads'), defaultName),
       })
       if (result.canceled || !result.filePath) return null
       const attachment = await context.workspaceGateway.readCloudArtifactAttachment(_event, request.sessionId, request.filePath, workspaceId)
-      writeFileSync(result.filePath, decodeAttachmentDataUrl(attachment.url))
-      chmodSync(result.filePath, 0o600)
+      writeCloudArtifactForExport(result.filePath, attachment)
       log('artifact', `Exported cloud artifact ${attachment.filename} from ${shortSessionId(request.sessionId)}`)
       return result.filePath
     }
@@ -83,7 +113,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
 
     const result = await dialog.showSaveDialog({
       title: 'Save Artifact As',
-      defaultPath: join(app.getPath('downloads'), request.suggestedName || basename(source)),
+      defaultPath: join(app.getPath('downloads'), safeArtifactExportFilename(request.suggestedName || basename(source))),
     })
     if (result.canceled || !result.filePath) return null
 

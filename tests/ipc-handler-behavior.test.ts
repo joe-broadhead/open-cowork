@@ -6,7 +6,11 @@ import { join } from 'node:path'
 import type { CustomMcpConfig } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
-import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
+import {
+  decodeCloudArtifactDataUrl,
+  registerArtifactHandlers,
+  safeArtifactExportFilename,
+} from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/custom-content-handlers.ts'
 import { normalizeFindTextPattern, registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
@@ -351,6 +355,125 @@ test('session handlers route cloud workspace calls through the workspace gateway
     'prompt:cloud-session-1:hello:data-analyst',
     'abort:cloud-session-1',
   ])
+})
+
+test('cloud session SSE publishes authoritative cloud projections instead of local views', async () => {
+  const { context, handlers } = createBaseContext()
+  const sentViews: unknown[] = []
+  let subscribedEventHandler: ((event: any) => void) | null = null
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => ({
+      messages: [{
+        id: 'cloud-projected-message',
+        role: 'assistant',
+        segments: [{ id: 'segment-1', kind: 'text', text: 'from cloud projection' }],
+        attachments: [],
+        createdAt: 1,
+      }],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      pendingApprovals: [{
+        id: 'permission-1',
+        taskRunId: null,
+        tool: 'read',
+        description: 'Read file',
+        input: {},
+        sourceSessionId: 'cloud-session-1',
+      }],
+      pendingQuestions: [],
+      errors: [],
+      todos: [],
+      executionPlan: [],
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      lastInputTokens: 0,
+      contextState: 'running',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      activeAgent: null,
+      lastItemWasTool: false,
+      revision: 7,
+      lastEventAt: 42,
+      isGenerating: true,
+      isAwaitingPermission: true,
+      isAwaitingQuestion: false,
+    }),
+    promptSession: async () => {},
+    abortSession: async () => {},
+    subscribeSessionEvents: (_sessionId, input) => {
+      subscribedEventHandler = input.onEvent
+      return { close: () => {} }
+    },
+  }
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 202,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: {
+      get: () => null,
+      getUsableAccessToken: () => 'cloud-access-token',
+      listMetadata: () => [],
+      save: () => {
+        throw new Error('not used')
+      },
+      remove: () => true,
+    },
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Test Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  registerSessionHandlers(context)
+  await handlers.get('session:activate')?.({}, 'cloud-session-1', { workspaceId: 'cloud:test' })
+  assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
+
+  subscribedEventHandler({
+    type: 'permission.requested',
+    sessionId: 'cloud-session-1',
+    sequence: 42,
+    payload: {
+      permissionId: 'permission-1',
+      tool: 'read',
+      description: 'Read file',
+    },
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 25))
+
+  assert.equal(sentViews.length, 1)
+  assert.deepEqual(sentViews[0], {
+    sessionId: 'cloud-session-1',
+    workspaceId: 'cloud:test',
+    view: await adapter.getSessionView('cloud-session-1'),
+  })
 })
 
 test('session:prompt rejects too many attachments before runtime dispatch', async () => {
@@ -1568,6 +1691,25 @@ test('artifact handlers route cloud workspace calls through the workspace gatewa
     'upload:session-1:upload.txt',
     'read:session-1:cloud-artifact://artifact-1/result.txt',
   ])
+})
+
+test('cloud artifact export helpers validate data URLs and sanitize default filenames', () => {
+  assert.deepEqual(
+    decodeCloudArtifactDataUrl(`data:text/plain;base64,${Buffer.from('hello').toString('base64')}`),
+    Buffer.from('hello'),
+  )
+  assert.throws(
+    () => decodeCloudArtifactDataUrl('https://cloud.example.test/artifact.txt'),
+    /base64 data URL/,
+  )
+  assert.throws(
+    () => decodeCloudArtifactDataUrl('data:text/plain;base64,not valid base64!'),
+    /valid base64/,
+  )
+
+  assert.equal(safeArtifactExportFilename('../report.txt'), 'report.txt')
+  assert.equal(safeArtifactExportFilename('/tmp/report.txt'), 'report.txt')
+  assert.equal(safeArtifactExportFilename(''), 'artifact')
 })
 
 test('capability handlers route cloud workspace calls through the workspace gateway', async () => {

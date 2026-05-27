@@ -368,6 +368,30 @@ test('dispatcher publishes session views for non-text session state transitions'
   assert.equal(shouldPublishSessionView(eventOf('error', 'session-1')), true)
   assert.equal(shouldPublishSessionView(eventOf('done', 'session-1')), true)
   assert.equal(shouldPublishSessionView(eventOf('busy')), false)
+  assert.equal(shouldPublishSessionView({
+    ...eventOf('tool_call', 'session-1'),
+    workspaceId: 'cloud:test',
+  }), false)
+})
+
+test('dispatcher never publishes local full views for cloud workspace events', async () => {
+  const { win, sent } = createWindowCollector(55)
+
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'tool_call',
+    sessionId: 'cloud-session-view-skip',
+    workspaceId: 'cloud:test',
+    data: {
+      type: 'tool_call',
+      id: 'tool-1',
+      name: 'read',
+      status: 'running',
+    },
+  })
+
+  await wait(40)
+
+  assert.equal(sent.some((entry) => entry.channel === 'session:view'), false)
 })
 
 test('dispatcher derives notifications for completion and global errors', () => {
