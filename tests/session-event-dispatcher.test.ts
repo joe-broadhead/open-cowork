@@ -8,6 +8,7 @@ import {
   dispatchRuntimeSessionEvent,
   getRuntimeNotification,
   getSessionPatch,
+  publishSessionView,
   setSessionHistoryRefreshHandler,
   shouldPublishSessionView,
 } from '../apps/desktop/src/main/session-event-dispatcher.ts'
@@ -390,6 +391,14 @@ test('dispatcher never publishes local full views for cloud workspace events', a
   })
 
   await wait(40)
+
+  assert.equal(sent.some((entry) => entry.channel === 'session:view'), false)
+})
+
+test('publishSessionView refuses cloud workspace views from the local session engine', () => {
+  const { win, sent } = createWindowCollector(56)
+
+  publishSessionView(win as any, 'cloud-session-view-direct', 'cloud:test')
 
   assert.equal(sent.some((entry) => entry.channel === 'session:view'), false)
 })

@@ -209,6 +209,7 @@ export function publishSessionView(
   workspaceId?: string | null,
 ) {
   if (!win || win.isDestroyed() || !sessionId) return
+  if (workspaceId && workspaceId !== 'local') return
   incrementPerfCounter('session.view.published')
   win.webContents.send('session:view', {
     sessionId,
