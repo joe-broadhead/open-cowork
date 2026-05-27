@@ -16,6 +16,15 @@ export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored
 export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
+export type ChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type HeadlessAgentStatus = 'active' | 'disabled'
+export type ChannelBindingStatus = 'active' | 'disabled' | 'auth_required' | 'error'
+export type ChannelIdentityRole = ControlPlaneRole | 'approver' | 'viewer'
+export type ChannelIdentityStatus = 'active' | 'disabled' | 'pending'
+export type ChannelSessionBindingStatus = 'active' | 'archived'
+export type ChannelInteractionKind = 'permission' | 'question'
+export type ChannelInteractionStatus = 'pending' | 'used' | 'expired' | 'revoked'
+export type ChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
 
 export type TenantRecord = {
   tenantId: string
@@ -96,6 +105,108 @@ export type AuditEventRecord = {
   targetId: string | null
   metadata: Record<string, unknown>
   createdAt: string
+}
+
+export type HeadlessAgentRecord = {
+  agentId: string
+  orgId: string
+  tenantId: string
+  profileName: string
+  name: string
+  status: HeadlessAgentStatus
+  managed: boolean
+  createdByAccountId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelBindingRecord = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  provider: ChannelProviderId
+  externalWorkspaceId: string | null
+  displayName: string
+  status: ChannelBindingStatus
+  credentialRef: string | null
+  settings: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelIdentityRecord = {
+  identityId: string
+  orgId: string
+  provider: ChannelProviderId
+  externalWorkspaceId: string | null
+  externalUserId: string
+  accountId: string | null
+  role: ChannelIdentityRole
+  status: ChannelIdentityStatus
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelSessionBindingRecord = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  provider: ChannelProviderId
+  externalWorkspaceId: string | null
+  externalThreadId: string
+  externalChatId: string
+  sessionId: string
+  lastEventSequence: number
+  lastWorkspaceSequence: number
+  lastChatMessageId: string | null
+  status: ChannelSessionBindingStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelInteractionRecord = {
+  interactionId: string
+  orgId: string
+  agentId: string
+  sessionId: string
+  provider: ChannelProviderId
+  externalInteractionId: string | null
+  tokenHash: string
+  kind: ChannelInteractionKind
+  targetId: string
+  status: ChannelInteractionStatus
+  createdByIdentityId: string | null
+  expiresAt: string
+  usedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type IssuedChannelInteractionRecord = {
+  interaction: ChannelInteractionRecord
+  plaintextToken: string
+}
+
+export type ChannelDeliveryRecord = {
+  deliveryId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  sessionBindingId: string | null
+  provider: ChannelProviderId
+  target: Record<string, unknown>
+  eventType: string
+  payload: Record<string, unknown>
+  status: ChannelDeliveryStatus
+  attemptCount: number
+  claimedBy: string | null
+  claimExpiresAt: string | null
+  nextAttemptAt: string
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type SessionRecord = {
@@ -314,6 +425,154 @@ export type RecordAuditEventInput = {
   createdAt?: Date
 }
 
+export type CreateHeadlessAgentInput = {
+  agentId: string
+  orgId: string
+  tenantId: string
+  profileName: string
+  name: string
+  status?: HeadlessAgentStatus
+  managed?: boolean
+  createdByAccountId?: string | null
+  createdAt?: Date
+}
+
+export type UpdateHeadlessAgentInput = {
+  orgId: string
+  agentId: string
+  profileName?: string
+  name?: string
+  status?: HeadlessAgentStatus
+  managed?: boolean
+  updatedAt?: Date
+}
+
+export type CreateChannelBindingInput = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  provider: ChannelProviderId
+  externalWorkspaceId?: string | null
+  displayName: string
+  status?: ChannelBindingStatus
+  credentialRef?: string | null
+  settings?: Record<string, unknown>
+  createdAt?: Date
+}
+
+export type UpdateChannelBindingInput = {
+  orgId: string
+  bindingId: string
+  displayName?: string
+  status?: ChannelBindingStatus
+  credentialRef?: string | null
+  settings?: Record<string, unknown>
+  updatedAt?: Date
+}
+
+export type UpsertChannelIdentityInput = {
+  identityId?: string
+  orgId: string
+  provider: ChannelProviderId
+  externalWorkspaceId?: string | null
+  externalUserId: string
+  accountId?: string | null
+  role?: ChannelIdentityRole
+  status?: ChannelIdentityStatus
+  metadata?: Record<string, unknown>
+  updatedAt?: Date
+}
+
+export type BindChannelSessionInput = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  provider: ChannelProviderId
+  externalWorkspaceId?: string | null
+  externalThreadId: string
+  externalChatId: string
+  sessionId: string
+  lastEventSequence?: number
+  lastWorkspaceSequence?: number
+  lastChatMessageId?: string | null
+  status?: ChannelSessionBindingStatus
+  createdAt?: Date
+}
+
+export type UpdateChannelCursorInput = {
+  orgId: string
+  bindingId: string
+  lastEventSequence: number
+  lastWorkspaceSequence: number
+  lastChatMessageId?: string | null
+  updatedAt?: Date
+}
+
+export type CreateChannelInteractionInput = {
+  interactionId: string
+  orgId: string
+  agentId: string
+  sessionId: string
+  provider: ChannelProviderId
+  externalInteractionId?: string | null
+  kind: ChannelInteractionKind
+  targetId: string
+  createdByIdentityId?: string | null
+  expiresAt: Date
+  tokenSecret?: string
+  createdAt?: Date
+}
+
+export type ResolveChannelInteractionInput = {
+  orgId: string
+  token?: string | null
+  externalInteractionId?: string | null
+  provider?: ChannelProviderId | null
+  identityId: string
+  usedAt?: Date
+}
+
+export type FindChannelInteractionInput = Omit<ResolveChannelInteractionInput, 'identityId' | 'usedAt'> & {
+  now?: Date
+}
+
+export type ResolveChannelInteractionWithCommandInput = ResolveChannelInteractionInput & {
+  command: EnqueueCommandInput
+}
+
+export type CreateChannelDeliveryInput = {
+  deliveryId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  sessionBindingId?: string | null
+  provider: ChannelProviderId
+  target: Record<string, unknown>
+  eventType: string
+  payload: Record<string, unknown>
+  status?: ChannelDeliveryStatus
+  nextAttemptAt?: Date
+  createdAt?: Date
+}
+
+export type ClaimChannelDeliveryInput = {
+  orgId: string
+  claimedBy: string
+  now?: Date
+  ttlMs?: number
+}
+
+export type AckChannelDeliveryInput = {
+  orgId: string
+  deliveryId: string
+  claimedBy?: string | null
+  status: Extract<ChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
+  lastError?: string | null
+  nextAttemptAt?: Date | null
+  updatedAt?: Date
+}
+
 export type AppendEventInput = {
   tenantId: string
   sessionId: string
@@ -480,6 +739,43 @@ export type ControlPlaneStore = {
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
+  createHeadlessAgent(input: CreateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord>
+  updateHeadlessAgent(input: UpdateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord | null>
+  getHeadlessAgent(orgId: string, agentId: string): MaybePromise<HeadlessAgentRecord | null>
+  listHeadlessAgents(orgId: string): MaybePromise<HeadlessAgentRecord[]>
+  createChannelBinding(input: CreateChannelBindingInput): MaybePromise<ChannelBindingRecord>
+  updateChannelBinding(input: UpdateChannelBindingInput): MaybePromise<ChannelBindingRecord | null>
+  getChannelBinding(orgId: string, bindingId: string): MaybePromise<ChannelBindingRecord | null>
+  listChannelBindings(orgId: string, agentId?: string | null): MaybePromise<ChannelBindingRecord[]>
+  upsertChannelIdentity(input: UpsertChannelIdentityInput): MaybePromise<ChannelIdentityRecord>
+  getChannelIdentity(orgId: string, identityId: string): MaybePromise<ChannelIdentityRecord | null>
+  findChannelIdentity(input: {
+    orgId: string
+    provider: ChannelProviderId
+    externalWorkspaceId?: string | null
+    externalUserId: string
+  }): MaybePromise<ChannelIdentityRecord | null>
+  bindChannelSession(input: BindChannelSessionInput): MaybePromise<ChannelSessionBindingRecord>
+  getChannelSessionBinding(orgId: string, bindingId: string): MaybePromise<ChannelSessionBindingRecord | null>
+  findChannelSessionBindingByThread(input: {
+    orgId: string
+    provider: ChannelProviderId
+    externalWorkspaceId?: string | null
+    externalChatId: string
+    externalThreadId: string
+  }): MaybePromise<ChannelSessionBindingRecord | null>
+  listChannelSessionBindingsForSession(orgId: string, sessionId: string): MaybePromise<ChannelSessionBindingRecord[]>
+  updateChannelCursor(input: UpdateChannelCursorInput): MaybePromise<ChannelSessionBindingRecord | null>
+  createChannelInteraction(input: CreateChannelInteractionInput): MaybePromise<IssuedChannelInteractionRecord>
+  findChannelInteraction(input: FindChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
+  resolveChannelInteraction(input: ResolveChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
+  resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput): MaybePromise<{
+    interaction: ChannelInteractionRecord
+    command: SessionCommandRecord
+  } | null>
+  createChannelDelivery(input: CreateChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord>
+  claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
+  ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
   getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
@@ -577,6 +873,9 @@ const THREAD_FILTER_MAX_VALUES = 50
 const THREAD_BULK_MAX_SESSION_IDS = 500
 const SMART_FILTER_QUERY_MAX_BYTES = 16_384
 const WORKFLOW_RUN_LIST_LIMIT = 100
+const CHANNEL_TEXT_MAX_LENGTH = 256
+const CHANNEL_METADATA_MAX_BYTES = 16_384
+const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
 
 function nowIso(now: Date | undefined) {
   return (now || new Date()).toISOString()
@@ -590,6 +889,10 @@ export function hashCloudApiToken(plaintext: string) {
   return `scrypt:${scryptSync(plaintext, 'open-cowork-cloud-api-token-hash-v1', 32).toString('base64url')}`
 }
 
+export function hashChannelInteractionToken(plaintext: string) {
+  return `scrypt:${scryptSync(plaintext, 'open-cowork-channel-interaction-token-v1', 32).toString('base64url')}`
+}
+
 export function generateCloudApiToken(input: { tokenId?: string, secret?: string } = {}) {
   const tokenId = input.tokenId || `tok_${randomBytes(12).toString('base64url')}`
   const secret = input.secret || randomBytes(32).toString('base64url')
@@ -597,6 +900,11 @@ export function generateCloudApiToken(input: { tokenId?: string, secret?: string
     tokenId,
     plaintext: `occ_${tokenId}_${secret}`,
   }
+}
+
+export function generateChannelInteractionToken(input: { interactionId: string, secret?: string }) {
+  const secret = input.secret || randomBytes(24).toString('base64url')
+  return `occi_${input.interactionId}_${secret}`
 }
 
 function constantTimeStringEquals(left: string, right: string) {
@@ -687,6 +995,52 @@ function normalizeThreadQuery(value: unknown) {
   return query
 }
 
+function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
+  const record = value && typeof value === 'object' && !Array.isArray(value)
+    ? clone(value as Record<string, unknown>)
+    : {}
+  const serialized = stableJson(record)
+  if (Buffer.byteLength(serialized, 'utf8') > maxBytes) {
+    throw new Error(`${label} exceeds ${maxBytes} bytes.`)
+  }
+  return record
+}
+
+function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
+  if (value === undefined || value === null || value === '') return null
+  return normalizeText(value, maxLength, label)
+}
+
+function normalizeNonNegativeInteger(value: unknown, label: string) {
+  const parsed = Number(value ?? 0)
+  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative integer.`)
+  return parsed
+}
+
+function normalizeProvider(value: unknown): ChannelProviderId {
+  const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
+  if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
+    throw new Error(`Unsupported channel provider ${provider}.`)
+  }
+  return provider
+}
+
+function normalizeChannelIdentityRole(value: unknown): ChannelIdentityRole {
+  const role = normalizeText(value || 'viewer', 32, 'Channel identity role') as ChannelIdentityRole
+  if (!['owner', 'admin', 'member', 'approver', 'viewer'].includes(role)) {
+    throw new Error(`Unsupported channel identity role ${role}.`)
+  }
+  return role
+}
+
+function channelScopeKey(provider: ChannelProviderId, externalWorkspaceId: string | null, externalId: string) {
+  return key(provider, externalWorkspaceId || '', externalId)
+}
+
+function channelThreadKey(provider: ChannelProviderId, externalWorkspaceId: string | null, externalChatId: string, externalThreadId: string) {
+  return key(provider, externalWorkspaceId || '', externalChatId, externalThreadId)
+}
+
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly tenants = new Map<string, TenantRecord>()
   private readonly users = new Map<string, UserRecord>()
@@ -698,6 +1052,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly memberships = new Map<string, MembershipRecord>()
   private readonly apiTokens = new Map<string, ApiTokenRecord>()
   private readonly auditEvents = new Map<string, AuditEventRecord>()
+  private readonly headlessAgents = new Map<string, HeadlessAgentRecord>()
+  private readonly channelBindings = new Map<string, ChannelBindingRecord>()
+  private readonly channelIdentities = new Map<string, ChannelIdentityRecord>()
+  private readonly channelIdentitiesByExternal = new Map<string, string>()
+  private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
+  private readonly channelSessionBindingsByThread = new Map<string, string>()
+  private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
+  private readonly channelInteractionsByTokenHash = new Map<string, string>()
+  private readonly channelInteractionsByExternal = new Map<string, string>()
+  private readonly channelDeliveries = new Map<string, ChannelDeliveryRecord>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly heartbeats = new Map<string, WorkerHeartbeatRecord>()
   private readonly settings = new Map<string, SettingMetadataRecord>()
@@ -955,6 +1319,409 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  createHeadlessAgent(input: CreateHeadlessAgentInput): HeadlessAgentRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    this.requireTenant(input.tenantId)
+    if (input.createdByAccountId && !this.accounts.has(input.createdByAccountId)) {
+      throw new Error(`Unknown account ${input.createdByAccountId}.`)
+    }
+    const existing = this.headlessAgents.get(input.agentId)
+    if (existing) return clone(existing)
+    const now = nowIso(input.createdAt)
+    const record: HeadlessAgentRecord = {
+      agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
+      orgId: input.orgId,
+      tenantId: input.tenantId,
+      profileName: normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
+      name: normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
+      status: input.status || 'active',
+      managed: input.managed === true,
+      createdByAccountId: input.createdByAccountId || null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.headlessAgents.set(record.agentId, record)
+    this.recordAuditEvent({
+      orgId: record.orgId,
+      accountId: record.createdByAccountId,
+      actorType: 'system',
+      actorId: 'headless_agent.create',
+      eventType: 'headless_agent.created',
+      targetType: 'headless_agent',
+      targetId: record.agentId,
+      metadata: { name: record.name, profileName: record.profileName, managed: record.managed },
+      createdAt: input.createdAt,
+    })
+    return clone(record)
+  }
+
+  updateHeadlessAgent(input: UpdateHeadlessAgentInput): HeadlessAgentRecord | null {
+    const existing = this.headlessAgents.get(input.agentId)
+    if (!existing || existing.orgId !== input.orgId) return null
+    const updatedAt = nowIso(input.updatedAt)
+    existing.profileName = input.profileName === undefined ? existing.profileName : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile')
+    existing.name = input.name === undefined ? existing.name : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name')
+    existing.status = input.status || existing.status
+    existing.managed = input.managed === undefined ? existing.managed : input.managed
+    existing.updatedAt = updatedAt
+    return clone(existing)
+  }
+
+  getHeadlessAgent(orgId: string, agentId: string): HeadlessAgentRecord | null {
+    const agent = this.headlessAgents.get(agentId)
+    return agent && agent.orgId === orgId ? clone(agent) : null
+  }
+
+  listHeadlessAgents(orgId: string): HeadlessAgentRecord[] {
+    return Array.from(this.headlessAgents.values())
+      .filter((agent) => agent.orgId === orgId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.agentId.localeCompare(right.agentId))
+      .map((agent) => clone(agent))
+  }
+
+  createChannelBinding(input: CreateChannelBindingInput): ChannelBindingRecord {
+    const agent = this.headlessAgents.get(input.agentId)
+    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const existing = this.channelBindings.get(input.bindingId)
+    if (existing) return clone(existing)
+    const now = nowIso(input.createdAt)
+    const record: ChannelBindingRecord = {
+      bindingId: normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
+      orgId: input.orgId,
+      agentId: input.agentId,
+      provider: normalizeProvider(input.provider),
+      externalWorkspaceId: normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
+      displayName: normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
+      status: input.status || 'active',
+      credentialRef: normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
+      settings: normalizeRecord(input.settings, 'Channel binding settings'),
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.channelBindings.set(record.bindingId, record)
+    this.recordAuditEvent({
+      orgId: record.orgId,
+      actorType: 'system',
+      actorId: 'channel_binding.create',
+      eventType: 'channel_binding.created',
+      targetType: 'channel_binding',
+      targetId: record.bindingId,
+      metadata: { provider: record.provider, displayName: record.displayName, credentialRef: record.credentialRef },
+      createdAt: input.createdAt,
+    })
+    return clone(record)
+  }
+
+  updateChannelBinding(input: UpdateChannelBindingInput): ChannelBindingRecord | null {
+    const existing = this.channelBindings.get(input.bindingId)
+    if (!existing || existing.orgId !== input.orgId) return null
+    existing.displayName = input.displayName === undefined ? existing.displayName : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name')
+    existing.status = input.status || existing.status
+    existing.credentialRef = input.credentialRef === undefined ? existing.credentialRef : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref')
+    existing.settings = input.settings === undefined ? existing.settings : normalizeRecord(input.settings, 'Channel binding settings')
+    existing.updatedAt = nowIso(input.updatedAt)
+    return clone(existing)
+  }
+
+  getChannelBinding(orgId: string, bindingId: string): ChannelBindingRecord | null {
+    const binding = this.channelBindings.get(bindingId)
+    return binding && binding.orgId === orgId ? clone(binding) : null
+  }
+
+  listChannelBindings(orgId: string, agentId?: string | null): ChannelBindingRecord[] {
+    return Array.from(this.channelBindings.values())
+      .filter((binding) => binding.orgId === orgId && (!agentId || binding.agentId === agentId))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.bindingId.localeCompare(right.bindingId))
+      .map((binding) => clone(binding))
+  }
+
+  upsertChannelIdentity(input: UpsertChannelIdentityInput): ChannelIdentityRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    if (input.accountId && !this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
+    const externalKey = key(input.orgId, channelScopeKey(provider, externalWorkspaceId, externalUserId))
+    const existingId = this.channelIdentitiesByExternal.get(externalKey)
+    const existing = existingId ? this.channelIdentities.get(existingId) : null
+    const now = nowIso(input.updatedAt)
+    const record: ChannelIdentityRecord = {
+      identityId: existing?.identityId || input.identityId || stableId('chid', input.orgId, provider, externalWorkspaceId || '', externalUserId),
+      orgId: input.orgId,
+      provider,
+      externalWorkspaceId,
+      externalUserId,
+      accountId: input.accountId === undefined ? existing?.accountId || null : input.accountId || null,
+      role: input.role === undefined ? existing?.role || 'viewer' : normalizeChannelIdentityRole(input.role),
+      status: input.status || existing?.status || 'pending',
+      metadata: input.metadata === undefined ? existing?.metadata || {} : normalizeRecord(input.metadata, 'Channel identity metadata'),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    }
+    this.channelIdentities.set(record.identityId, record)
+    this.channelIdentitiesByExternal.set(externalKey, record.identityId)
+    return clone(record)
+  }
+
+  getChannelIdentity(orgId: string, identityId: string): ChannelIdentityRecord | null {
+    const identity = this.channelIdentities.get(identityId)
+    return identity && identity.orgId === orgId ? clone(identity) : null
+  }
+
+  findChannelIdentity(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalUserId: string }): ChannelIdentityRecord | null {
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
+    const identityId = this.channelIdentitiesByExternal.get(key(input.orgId, channelScopeKey(provider, externalWorkspaceId, externalUserId)))
+    return identityId ? clone(this.channelIdentities.get(identityId) || null) : null
+  }
+
+  bindChannelSession(input: BindChannelSessionInput): ChannelSessionBindingRecord {
+    const channelBinding = this.channelBindings.get(input.channelBindingId)
+    if (!channelBinding || channelBinding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
+    if (!this.headlessAgents.has(input.agentId)) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const externalChatId = normalizeText(input.externalChatId, CHANNEL_TEXT_MAX_LENGTH, 'External chat id')
+    const externalThreadId = normalizeText(input.externalThreadId, CHANNEL_TEXT_MAX_LENGTH, 'External thread id')
+    const threadKey = key(input.orgId, channelThreadKey(provider, externalWorkspaceId, externalChatId, externalThreadId))
+    const existingId = this.channelSessionBindingsByThread.get(threadKey)
+    if (existingId) return clone(this.channelSessionBindings.get(existingId) as ChannelSessionBindingRecord)
+    const session = this.getSessionForTenant(this.orgs.get(input.orgId)?.tenantId || input.orgId, input.sessionId)
+    if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
+    const now = nowIso(input.createdAt)
+    const record: ChannelSessionBindingRecord = {
+      bindingId: normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
+      orgId: input.orgId,
+      agentId: input.agentId,
+      channelBindingId: input.channelBindingId,
+      provider,
+      externalWorkspaceId,
+      externalThreadId,
+      externalChatId,
+      sessionId: input.sessionId,
+      lastEventSequence: normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence'),
+      lastWorkspaceSequence: normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence'),
+      lastChatMessageId: normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id'),
+      status: input.status || 'active',
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.channelSessionBindings.set(record.bindingId, record)
+    this.channelSessionBindingsByThread.set(threadKey, record.bindingId)
+    this.recordAuditEvent({
+      orgId: record.orgId,
+      actorType: 'system',
+      actorId: 'channel_session.bind',
+      eventType: 'channel_session_bound',
+      targetType: 'channel_session_binding',
+      targetId: record.bindingId,
+      metadata: { provider: record.provider, sessionId: record.sessionId },
+      createdAt: input.createdAt,
+    })
+    return clone(record)
+  }
+
+  getChannelSessionBinding(orgId: string, bindingId: string): ChannelSessionBindingRecord | null {
+    const binding = this.channelSessionBindings.get(bindingId)
+    return binding && binding.orgId === orgId ? clone(binding) : null
+  }
+
+  findChannelSessionBindingByThread(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalChatId: string, externalThreadId: string }): ChannelSessionBindingRecord | null {
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const externalChatId = normalizeText(input.externalChatId, CHANNEL_TEXT_MAX_LENGTH, 'External chat id')
+    const externalThreadId = normalizeText(input.externalThreadId, CHANNEL_TEXT_MAX_LENGTH, 'External thread id')
+    const bindingId = this.channelSessionBindingsByThread.get(key(input.orgId, channelThreadKey(provider, externalWorkspaceId, externalChatId, externalThreadId)))
+    return bindingId ? clone(this.channelSessionBindings.get(bindingId) || null) : null
+  }
+
+  listChannelSessionBindingsForSession(orgId: string, sessionId: string): ChannelSessionBindingRecord[] {
+    return Array.from(this.channelSessionBindings.values())
+      .filter((binding) => binding.orgId === orgId && binding.sessionId === sessionId && binding.status === 'active')
+      .map((binding) => clone(binding))
+  }
+
+  updateChannelCursor(input: UpdateChannelCursorInput): ChannelSessionBindingRecord | null {
+    const existing = this.channelSessionBindings.get(input.bindingId)
+    if (!existing || existing.orgId !== input.orgId) return null
+    const lastEventSequence = normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence')
+    const lastWorkspaceSequence = normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence')
+    if (lastEventSequence < existing.lastEventSequence || lastWorkspaceSequence < existing.lastWorkspaceSequence) {
+      throw new Error('Channel cursor updates must be monotonic.')
+    }
+    existing.lastEventSequence = lastEventSequence
+    existing.lastWorkspaceSequence = lastWorkspaceSequence
+    if (input.lastChatMessageId !== undefined) {
+      existing.lastChatMessageId = normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id')
+    }
+    existing.updatedAt = nowIso(input.updatedAt)
+    return clone(existing)
+  }
+
+  createChannelInteraction(input: CreateChannelInteractionInput): IssuedChannelInteractionRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
+    const tokenHash = hashChannelInteractionToken(plaintextToken)
+    const existing = this.channelInteractions.get(input.interactionId)
+    if (existing) throw new Error(`Channel interaction ${input.interactionId} already exists.`)
+    const now = nowIso(input.createdAt)
+    const record: ChannelInteractionRecord = {
+      interactionId: normalizeText(input.interactionId, CHANNEL_TEXT_MAX_LENGTH, 'Channel interaction id'),
+      orgId: input.orgId,
+      agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
+      sessionId: normalizeText(input.sessionId, CHANNEL_TEXT_MAX_LENGTH, 'Session id'),
+      provider: normalizeProvider(input.provider),
+      externalInteractionId: normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id'),
+      tokenHash,
+      kind: input.kind,
+      targetId: normalizeText(input.targetId, CHANNEL_TEXT_MAX_LENGTH, 'Interaction target id'),
+      status: 'pending',
+      createdByIdentityId: input.createdByIdentityId || null,
+      expiresAt: input.expiresAt.toISOString(),
+      usedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.channelInteractions.set(record.interactionId, record)
+    this.channelInteractionsByTokenHash.set(record.tokenHash, record.interactionId)
+    if (record.externalInteractionId) {
+      this.channelInteractionsByExternal.set(key(record.orgId, record.provider, record.externalInteractionId), record.interactionId)
+    }
+    return { interaction: clone(record), plaintextToken }
+  }
+
+  private findChannelInteractionMutable(input: FindChannelInteractionInput): ChannelInteractionRecord | null {
+    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
+    const interactionId = tokenHash
+      ? this.channelInteractionsByTokenHash.get(tokenHash)
+      : input.externalInteractionId && input.provider
+        ? this.channelInteractionsByExternal.get(key(input.orgId, input.provider, input.externalInteractionId))
+        : undefined
+    const interaction = interactionId ? this.channelInteractions.get(interactionId) : null
+    if (!interaction || interaction.orgId !== input.orgId) return null
+    const now = input.now || new Date()
+    if (interaction.status !== 'pending') return null
+    if (new Date(interaction.expiresAt).getTime() <= now.getTime()) {
+      interaction.status = 'expired'
+      interaction.updatedAt = now.toISOString()
+      return null
+    }
+    return interaction
+  }
+
+  findChannelInteraction(input: FindChannelInteractionInput): ChannelInteractionRecord | null {
+    const interaction = this.findChannelInteractionMutable(input)
+    return interaction ? clone(interaction) : null
+  }
+
+  resolveChannelInteraction(input: ResolveChannelInteractionInput): ChannelInteractionRecord | null {
+    const now = input.usedAt || new Date()
+    const interaction = this.findChannelInteractionMutable({ ...input, now })
+    if (!interaction) return null
+    interaction.status = 'used'
+    interaction.usedAt = now.toISOString()
+    interaction.updatedAt = interaction.usedAt
+    this.recordAuditEvent({
+      orgId: interaction.orgId,
+      actorType: 'system',
+      actorId: input.identityId,
+      eventType: 'channel_interaction.used',
+      targetType: 'channel_interaction',
+      targetId: interaction.interactionId,
+      metadata: { kind: interaction.kind, targetId: interaction.targetId, tokenHash: interaction.tokenHash },
+      createdAt: now,
+    })
+    return clone(interaction)
+  }
+
+  resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput): {
+    interaction: ChannelInteractionRecord
+    command: SessionCommandRecord
+  } | null {
+    const now = input.usedAt || new Date()
+    const interaction = this.findChannelInteractionMutable({ ...input, now })
+    if (!interaction) return null
+    if (input.command.sessionId !== interaction.sessionId) throw new Error('Channel interaction command session does not match interaction session.')
+    const command = this.enqueueSessionCommand(input.command)
+    interaction.status = 'used'
+    interaction.usedAt = now.toISOString()
+    interaction.updatedAt = interaction.usedAt
+    this.recordAuditEvent({
+      orgId: interaction.orgId,
+      actorType: 'system',
+      actorId: input.identityId,
+      eventType: 'channel_interaction.used',
+      targetType: 'channel_interaction',
+      targetId: interaction.interactionId,
+      metadata: { kind: interaction.kind, targetId: interaction.targetId },
+      createdAt: now,
+    })
+    return { interaction: clone(interaction), command }
+  }
+
+  createChannelDelivery(input: CreateChannelDeliveryInput): ChannelDeliveryRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const existing = this.channelDeliveries.get(input.deliveryId)
+    if (existing) return clone(existing)
+    const now = nowIso(input.createdAt)
+    const record: ChannelDeliveryRecord = {
+      deliveryId: normalizeText(input.deliveryId, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery id'),
+      orgId: input.orgId,
+      agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
+      channelBindingId: normalizeText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
+      sessionBindingId: normalizeNullableText(input.sessionBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
+      provider: normalizeProvider(input.provider),
+      target: normalizeRecord(input.target, 'Channel delivery target'),
+      eventType: normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery event type'),
+      payload: normalizeRecord(input.payload, 'Channel delivery payload'),
+      status: input.status || 'pending',
+      attemptCount: 0,
+      claimedBy: null,
+      claimExpiresAt: null,
+      nextAttemptAt: (input.nextAttemptAt || input.createdAt || new Date()).toISOString(),
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.channelDeliveries.set(record.deliveryId, record)
+    return clone(record)
+  }
+
+  claimNextChannelDelivery(input: ClaimChannelDeliveryInput): ChannelDeliveryRecord | null {
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const candidate = Array.from(this.channelDeliveries.values())
+      .filter((delivery) => delivery.orgId === input.orgId)
+      .filter((delivery) => (
+        (delivery.status === 'pending' && new Date(delivery.nextAttemptAt).getTime() <= nowMs)
+        || (delivery.status === 'failed' && new Date(delivery.nextAttemptAt).getTime() <= nowMs)
+        || (delivery.status === 'claimed' && delivery.claimExpiresAt && new Date(delivery.claimExpiresAt).getTime() <= nowMs)
+      ))
+      .sort((left, right) => left.nextAttemptAt.localeCompare(right.nextAttemptAt) || left.createdAt.localeCompare(right.createdAt))[0]
+    if (!candidate) return null
+    candidate.status = 'claimed'
+    candidate.claimedBy = normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Delivery claimant')
+    candidate.claimExpiresAt = new Date(nowMs + (input.ttlMs || 30_000)).toISOString()
+    candidate.attemptCount += 1
+    candidate.updatedAt = now.toISOString()
+    return clone(candidate)
+  }
+
+  ackChannelDelivery(input: AckChannelDeliveryInput): ChannelDeliveryRecord | null {
+    const delivery = this.channelDeliveries.get(input.deliveryId)
+    if (!delivery || delivery.orgId !== input.orgId) return null
+    if (input.claimedBy && delivery.claimedBy !== input.claimedBy) return null
+    const updatedAt = nowIso(input.updatedAt)
+    delivery.status = input.status
+    delivery.claimedBy = null
+    delivery.claimExpiresAt = null
+    delivery.lastError = input.lastError ? normalizeText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null
+    delivery.nextAttemptAt = (input.nextAttemptAt || input.updatedAt || new Date()).toISOString()
+    delivery.updatedAt = updatedAt
+    return clone(delivery)
   }
 
   createSession(input: CreateSessionInput): SessionRecord {

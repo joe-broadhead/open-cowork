@@ -319,6 +319,133 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
     ON cloud_audit_events (org_id, created_at DESC)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_MIGRATION_ID = '003_headless_channels'
+
+export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS headless_agents (
+    agent_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text NOT NULL REFERENCES cloud_tenants(tenant_id) ON DELETE CASCADE,
+    profile_name text NOT NULL,
+    name text NOT NULL,
+    status text NOT NULL,
+    managed boolean NOT NULL DEFAULT false,
+    created_by_account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS headless_agents_org_idx
+    ON headless_agents (org_id, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_bindings (
+    binding_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
+    provider text NOT NULL,
+    external_workspace_id text,
+    display_name text NOT NULL,
+    status text NOT NULL,
+    credential_ref text,
+    settings jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_bindings_org_agent_idx
+    ON cloud_channel_bindings (org_id, agent_id, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_identities (
+    identity_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    provider text NOT NULL,
+    external_workspace_id text,
+    external_user_id text NOT NULL,
+    account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    role text NOT NULL,
+    status text NOT NULL,
+    metadata jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_identities_external_idx
+    ON cloud_channel_identities (org_id, provider, COALESCE(external_workspace_id, ''), external_user_id)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_session_bindings (
+    binding_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
+    channel_binding_id text NOT NULL REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE,
+    provider text NOT NULL,
+    external_workspace_id text,
+    external_thread_id text NOT NULL,
+    external_chat_id text NOT NULL,
+    session_id text NOT NULL,
+    last_event_sequence integer NOT NULL DEFAULT 0,
+    last_workspace_sequence integer NOT NULL DEFAULT 0,
+    last_chat_message_id text,
+    status text NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `ALTER TABLE cloud_channel_session_bindings
+    ADD COLUMN IF NOT EXISTS external_workspace_id text`,
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1
+       FROM pg_indexes
+       WHERE schemaname = current_schema()
+         AND indexname = 'cloud_channel_session_bindings_thread_idx'
+         AND indexdef NOT LIKE '%COALESCE(external_workspace_id%'
+     ) THEN
+       DROP INDEX cloud_channel_session_bindings_thread_idx;
+     END IF;
+   END $$`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_session_bindings_thread_idx
+    ON cloud_channel_session_bindings (org_id, provider, COALESCE(external_workspace_id, ''), external_chat_id, external_thread_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_session_bindings_session_idx
+    ON cloud_channel_session_bindings (org_id, session_id)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_interactions (
+    interaction_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
+    session_id text NOT NULL,
+    provider text NOT NULL,
+    external_interaction_id text,
+    token_hash text UNIQUE NOT NULL,
+    kind text NOT NULL,
+    target_id text NOT NULL,
+    status text NOT NULL,
+    created_by_identity_id text REFERENCES cloud_channel_identities(identity_id) ON DELETE SET NULL,
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_interactions_external_idx
+    ON cloud_channel_interactions (org_id, provider, external_interaction_id)
+    WHERE external_interaction_id IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_interactions_session_idx
+    ON cloud_channel_interactions (org_id, session_id, status)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_deliveries (
+    delivery_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    agent_id text NOT NULL REFERENCES headless_agents(agent_id) ON DELETE CASCADE,
+    channel_binding_id text NOT NULL REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE,
+    session_binding_id text REFERENCES cloud_channel_session_bindings(binding_id) ON DELETE SET NULL,
+    provider text NOT NULL,
+    target jsonb NOT NULL,
+    event_type text NOT NULL,
+    payload jsonb NOT NULL,
+    status text NOT NULL,
+    attempt_count integer NOT NULL DEFAULT 0,
+    claimed_by text,
+    claim_expires_at timestamptz,
+    next_attempt_at timestamptz NOT NULL,
+    last_error text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_deliveries_claim_idx
+    ON cloud_channel_deliveries (org_id, status, next_attempt_at, created_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -327,5 +454,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS,
   },
 ] as const

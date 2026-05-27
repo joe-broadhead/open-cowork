@@ -1,5 +1,10 @@
 import { createRequire } from 'node:module'
-import { generateCloudApiToken, hashCloudApiToken } from './control-plane-store.ts'
+import {
+  generateChannelInteractionToken,
+  generateCloudApiToken,
+  hashChannelInteractionToken,
+  hashCloudApiToken,
+} from './control-plane-store.ts'
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
@@ -12,7 +17,16 @@ import type {
   AccountRecord,
   ApiTokenRecord,
   AuditEventRecord,
+  AckChannelDeliveryInput,
+  BindChannelSessionInput,
+  ChannelBindingRecord,
+  ChannelDeliveryRecord,
+  ChannelIdentityRecord,
+  ChannelInteractionRecord,
+  ChannelProviderId,
+  ChannelSessionBindingRecord,
   ClaimDueWorkflowRunInput,
+  ClaimChannelDeliveryInput,
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
@@ -21,19 +35,28 @@ import type {
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
+  CreateChannelBindingInput,
+  CreateChannelDeliveryInput,
+  CreateChannelInteractionInput,
   CreateAccountInput,
+  CreateHeadlessAgentInput,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   CreateThreadSmartFilterInput,
   CreateThreadTagInput,
   FailWorkflowRunInput,
+  FindChannelInteractionInput,
+  HeadlessAgentRecord,
   IssuedApiTokenRecord,
+  IssuedChannelInteractionRecord,
   IssueApiTokenInput,
   MembershipRecord,
   OrgRecord,
   PrincipalMembershipRecord,
   RecordAuditEventInput,
   RevokeApiTokenInput,
+  ResolveChannelInteractionInput,
+  ResolveChannelInteractionWithCommandInput,
   SchemaMigrationRecord,
   SessionCommandRecord,
   SessionEventRecord,
@@ -45,9 +68,13 @@ import type {
   ThreadSmartFilterRecord,
   ThreadTagLinkInput,
   ThreadTagRecord,
+  UpdateChannelBindingInput,
+  UpdateChannelCursorInput,
+  UpdateHeadlessAgentInput,
   UpdateWorkflowStatusInput,
   UpdateThreadSmartFilterInput,
   UpdateThreadTagInput,
+  UpsertChannelIdentityInput,
   UpsertMembershipInput,
   UserRecord,
   WorkerHeartbeatRecord,
@@ -91,6 +118,9 @@ const THREAD_FILTER_MAX_VALUES = 50
 const THREAD_BULK_MAX_SESSION_IDS = 500
 const SMART_FILTER_QUERY_MAX_BYTES = 16_384
 const WORKFLOW_RUN_LIST_LIMIT = 100
+const CHANNEL_TEXT_MAX_LENGTH = 256
+const CHANNEL_METADATA_MAX_BYTES = 16_384
+const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
 
 function loadPgPool(connectionString: string): PgPool {
   const pg = require('pg') as {
@@ -195,6 +225,34 @@ function normalizeThreadQuery(value: unknown) {
   return query
 }
 
+function normalizeRecord(value: unknown, label: string, maxBytes = CHANNEL_METADATA_MAX_BYTES): Record<string, unknown> {
+  const record = jsonRecord(value)
+  const serialized = stableJson(record)
+  if (Buffer.byteLength(serialized, 'utf8') > maxBytes) {
+    throw new Error(`${label} exceeds ${maxBytes} bytes.`)
+  }
+  return record
+}
+
+function normalizeNullableText(value: unknown, maxLength: number, label: string): string | null {
+  if (value === undefined || value === null || value === '') return null
+  return normalizeText(value, maxLength, label)
+}
+
+function normalizeNonNegativeInteger(value: unknown, label: string) {
+  const parsed = Number(value ?? 0)
+  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${label} must be a non-negative integer.`)
+  return parsed
+}
+
+function normalizeProvider(value: unknown): ChannelProviderId {
+  const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
+  if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
+    throw new Error(`Unsupported channel provider ${provider}.`)
+  }
+  return provider
+}
+
 function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
   const redacted: Record<string, unknown> = {}
   for (const [field, entry] of Object.entries(value || {})) {
@@ -292,6 +350,115 @@ function auditEventFromRow(row: QueryRow): AuditEventRecord {
     targetId: stringOrNull(row.target_id),
     metadata: jsonRecord(row.metadata),
     createdAt: iso(row.created_at),
+  }
+}
+
+function headlessAgentFromRow(row: QueryRow): HeadlessAgentRecord {
+  return {
+    agentId: String(row.agent_id),
+    orgId: String(row.org_id),
+    tenantId: String(row.tenant_id),
+    profileName: String(row.profile_name),
+    name: String(row.name),
+    status: String(row.status) as HeadlessAgentRecord['status'],
+    managed: row.managed === true,
+    createdByAccountId: stringOrNull(row.created_by_account_id),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function channelBindingFromRow(row: QueryRow): ChannelBindingRecord {
+  return {
+    bindingId: String(row.binding_id),
+    orgId: String(row.org_id),
+    agentId: String(row.agent_id),
+    provider: String(row.provider) as ChannelProviderId,
+    externalWorkspaceId: stringOrNull(row.external_workspace_id),
+    displayName: String(row.display_name),
+    status: String(row.status) as ChannelBindingRecord['status'],
+    credentialRef: stringOrNull(row.credential_ref),
+    settings: jsonRecord(row.settings),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function channelIdentityFromRow(row: QueryRow): ChannelIdentityRecord {
+  return {
+    identityId: String(row.identity_id),
+    orgId: String(row.org_id),
+    provider: String(row.provider) as ChannelProviderId,
+    externalWorkspaceId: stringOrNull(row.external_workspace_id),
+    externalUserId: String(row.external_user_id),
+    accountId: stringOrNull(row.account_id),
+    role: String(row.role) as ChannelIdentityRecord['role'],
+    status: String(row.status) as ChannelIdentityRecord['status'],
+    metadata: jsonRecord(row.metadata),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function channelSessionBindingFromRow(row: QueryRow): ChannelSessionBindingRecord {
+  return {
+    bindingId: String(row.binding_id),
+    orgId: String(row.org_id),
+    agentId: String(row.agent_id),
+    channelBindingId: String(row.channel_binding_id),
+    provider: String(row.provider) as ChannelProviderId,
+    externalWorkspaceId: stringOrNull(row.external_workspace_id),
+    externalThreadId: String(row.external_thread_id),
+    externalChatId: String(row.external_chat_id),
+    sessionId: String(row.session_id),
+    lastEventSequence: numberValue(row.last_event_sequence),
+    lastWorkspaceSequence: numberValue(row.last_workspace_sequence),
+    lastChatMessageId: stringOrNull(row.last_chat_message_id),
+    status: String(row.status) as ChannelSessionBindingRecord['status'],
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function channelInteractionFromRow(row: QueryRow): ChannelInteractionRecord {
+  return {
+    interactionId: String(row.interaction_id),
+    orgId: String(row.org_id),
+    agentId: String(row.agent_id),
+    sessionId: String(row.session_id),
+    provider: String(row.provider) as ChannelProviderId,
+    externalInteractionId: stringOrNull(row.external_interaction_id),
+    tokenHash: String(row.token_hash),
+    kind: String(row.kind) as ChannelInteractionRecord['kind'],
+    targetId: String(row.target_id),
+    status: String(row.status) as ChannelInteractionRecord['status'],
+    createdByIdentityId: stringOrNull(row.created_by_identity_id),
+    expiresAt: iso(row.expires_at),
+    usedAt: isoOrNull(row.used_at),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
+  return {
+    deliveryId: String(row.delivery_id),
+    orgId: String(row.org_id),
+    agentId: String(row.agent_id),
+    channelBindingId: String(row.channel_binding_id),
+    sessionBindingId: stringOrNull(row.session_binding_id),
+    provider: String(row.provider) as ChannelProviderId,
+    target: jsonRecord(row.target),
+    eventType: String(row.event_type),
+    payload: jsonRecord(row.payload),
+    status: String(row.status) as ChannelDeliveryRecord['status'],
+    attemptCount: numberValue(row.attempt_count),
+    claimedBy: stringOrNull(row.claimed_by),
+    claimExpiresAt: isoOrNull(row.claim_expires_at),
+    nextAttemptAt: iso(row.next_attempt_at),
+    lastError: stringOrNull(row.last_error),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   }
 }
 
@@ -793,6 +960,626 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(auditEventFromRow)
+  }
+
+  async createHeadlessAgent(input: CreateHeadlessAgentInput) {
+    return this.withTransaction(async (client) => {
+      const now = nowIso(input.createdAt)
+      const result = await client.query(
+        `INSERT INTO headless_agents (
+          agent_id, org_id, tenant_id, profile_name, name, status, managed,
+          created_by_account_id, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+         ON CONFLICT (agent_id) DO NOTHING
+         RETURNING *`,
+        [
+          normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
+          input.orgId,
+          input.tenantId,
+          normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
+          normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
+          input.status || 'active',
+          input.managed === true,
+          input.createdByAccountId || null,
+          now,
+        ],
+      )
+      const row = result.rows[0] || await this.one(
+        `SELECT * FROM headless_agents WHERE agent_id = $1 AND org_id = $2`,
+        [input.agentId, input.orgId],
+        client,
+      )
+      const agent = headlessAgentFromRow(row)
+      if (result.rows[0]) {
+        await this.recordAuditEventWithExecutor(client, {
+          orgId: agent.orgId,
+          accountId: agent.createdByAccountId,
+          actorType: 'system',
+          actorId: 'headless_agent.create',
+          eventType: 'headless_agent.created',
+          targetType: 'headless_agent',
+          targetId: agent.agentId,
+          metadata: { name: agent.name, profileName: agent.profileName, managed: agent.managed },
+          createdAt: input.createdAt,
+        })
+      }
+      return agent
+    })
+  }
+
+  async updateHeadlessAgent(input: UpdateHeadlessAgentInput) {
+    const result = await this.pool.query(
+      `UPDATE headless_agents
+       SET profile_name = CASE WHEN $3::boolean THEN $4 ELSE profile_name END,
+           name = CASE WHEN $5::boolean THEN $6 ELSE name END,
+           status = COALESCE($7, status),
+           managed = CASE WHEN $8::boolean THEN $9 ELSE managed END,
+           updated_at = $10
+       WHERE org_id = $1 AND agent_id = $2
+       RETURNING *`,
+      [
+        input.orgId,
+        input.agentId,
+        input.profileName !== undefined,
+        input.profileName === undefined ? null : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
+        input.name !== undefined,
+        input.name === undefined ? null : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
+        input.status || null,
+        input.managed !== undefined,
+        input.managed ?? null,
+        nowIso(input.updatedAt),
+      ],
+    )
+    return result.rows[0] ? headlessAgentFromRow(result.rows[0]) : null
+  }
+
+  async getHeadlessAgent(orgId: string, agentId: string) {
+    const row = await this.maybeOne(`SELECT * FROM headless_agents WHERE org_id = $1 AND agent_id = $2`, [orgId, agentId])
+    return row ? headlessAgentFromRow(row) : null
+  }
+
+  async listHeadlessAgents(orgId: string) {
+    const result = await this.pool.query(
+      `SELECT * FROM headless_agents WHERE org_id = $1 ORDER BY updated_at DESC, agent_id`,
+      [orgId],
+    )
+    return result.rows.map(headlessAgentFromRow)
+  }
+
+  async createChannelBinding(input: CreateChannelBindingInput) {
+    return this.withTransaction(async (client) => {
+      const now = nowIso(input.createdAt)
+      const result = await client.query(
+        `INSERT INTO cloud_channel_bindings (
+          binding_id, org_id, agent_id, provider, external_workspace_id,
+          display_name, status, credential_ref, settings, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)
+         ON CONFLICT (binding_id) DO NOTHING
+         RETURNING *`,
+        [
+          normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
+          input.orgId,
+          input.agentId,
+          normalizeProvider(input.provider),
+          normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
+          normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
+          input.status || 'active',
+          normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
+          JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
+          now,
+        ],
+      )
+      const row = result.rows[0] || await this.one(
+        `SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`,
+        [input.orgId, input.bindingId],
+        client,
+      )
+      const binding = channelBindingFromRow(row)
+      if (result.rows[0]) {
+        await this.recordAuditEventWithExecutor(client, {
+          orgId: binding.orgId,
+          actorType: 'system',
+          actorId: 'channel_binding.create',
+          eventType: 'channel_binding.created',
+          targetType: 'channel_binding',
+          targetId: binding.bindingId,
+          metadata: { provider: binding.provider, displayName: binding.displayName, credentialRef: binding.credentialRef },
+          createdAt: input.createdAt,
+        })
+      }
+      return binding
+    })
+  }
+
+  async updateChannelBinding(input: UpdateChannelBindingInput) {
+    const result = await this.pool.query(
+      `UPDATE cloud_channel_bindings
+       SET display_name = CASE WHEN $3::boolean THEN $4 ELSE display_name END,
+           status = COALESCE($5, status),
+           credential_ref = CASE WHEN $6::boolean THEN $7 ELSE credential_ref END,
+           settings = CASE WHEN $8::boolean THEN $9::jsonb ELSE settings END,
+           updated_at = $10
+       WHERE org_id = $1 AND binding_id = $2
+       RETURNING *`,
+      [
+        input.orgId,
+        input.bindingId,
+        input.displayName !== undefined,
+        input.displayName === undefined ? null : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
+        input.status || null,
+        input.credentialRef !== undefined,
+        input.credentialRef === undefined ? null : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
+        input.settings !== undefined,
+        input.settings === undefined ? null : JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
+        nowIso(input.updatedAt),
+      ],
+    )
+    return result.rows[0] ? channelBindingFromRow(result.rows[0]) : null
+  }
+
+  async getChannelBinding(orgId: string, bindingId: string) {
+    const row = await this.maybeOne(`SELECT * FROM cloud_channel_bindings WHERE org_id = $1 AND binding_id = $2`, [orgId, bindingId])
+    return row ? channelBindingFromRow(row) : null
+  }
+
+  async listChannelBindings(orgId: string, agentId?: string | null) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_channel_bindings
+       WHERE org_id = $1 AND ($2::text IS NULL OR agent_id = $2)
+       ORDER BY updated_at DESC, binding_id`,
+      [orgId, agentId || null],
+    )
+    return result.rows.map(channelBindingFromRow)
+  }
+
+  async upsertChannelIdentity(input: UpsertChannelIdentityInput) {
+    const now = nowIso(input.updatedAt)
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
+    const result = await this.pool.query(
+      `INSERT INTO cloud_channel_identities (
+        identity_id, org_id, provider, external_workspace_id, external_user_id,
+        account_id, role, status, metadata, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)
+       ON CONFLICT (org_id, provider, (COALESCE(external_workspace_id, '')), external_user_id) DO UPDATE
+       SET account_id = CASE
+             WHEN EXCLUDED.account_id IS NOT NULL THEN EXCLUDED.account_id
+             ELSE cloud_channel_identities.account_id
+           END,
+           role = EXCLUDED.role,
+           status = EXCLUDED.status,
+           metadata = EXCLUDED.metadata,
+           updated_at = EXCLUDED.updated_at
+       RETURNING *`,
+      [
+        input.identityId || `chid_${provider}_${externalUserId}`,
+        input.orgId,
+        provider,
+        externalWorkspaceId,
+        externalUserId,
+        input.accountId || null,
+        input.role || 'viewer',
+        input.status || 'pending',
+        JSON.stringify(normalizeRecord(input.metadata, 'Channel identity metadata')),
+        now,
+      ],
+    )
+    return channelIdentityFromRow(result.rows[0])
+  }
+
+  async getChannelIdentity(orgId: string, identityId: string) {
+    const row = await this.maybeOne(`SELECT * FROM cloud_channel_identities WHERE org_id = $1 AND identity_id = $2`, [orgId, identityId])
+    return row ? channelIdentityFromRow(row) : null
+  }
+
+  async findChannelIdentity(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalUserId: string }) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_channel_identities
+       WHERE org_id = $1
+         AND provider = $2
+         AND COALESCE(external_workspace_id, '') = COALESCE($3, '')
+         AND external_user_id = $4`,
+      [
+        input.orgId,
+        normalizeProvider(input.provider),
+        normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id'),
+        normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id'),
+      ],
+    )
+    return row ? channelIdentityFromRow(row) : null
+  }
+
+  async bindChannelSession(input: BindChannelSessionInput) {
+    const provider = normalizeProvider(input.provider)
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const now = nowIso(input.createdAt)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_channel_session_bindings (
+        binding_id, org_id, agent_id, channel_binding_id, provider,
+        external_workspace_id, external_thread_id, external_chat_id, session_id,
+        last_event_sequence, last_workspace_sequence, last_chat_message_id,
+        status, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+       ON CONFLICT DO NOTHING
+       RETURNING *`,
+      [
+        normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
+        input.orgId,
+        input.agentId,
+        input.channelBindingId,
+        provider,
+        externalWorkspaceId,
+        normalizeText(input.externalThreadId, CHANNEL_TEXT_MAX_LENGTH, 'External thread id'),
+        normalizeText(input.externalChatId, CHANNEL_TEXT_MAX_LENGTH, 'External chat id'),
+        input.sessionId,
+        normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence'),
+        normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence'),
+        normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id'),
+        input.status || 'active',
+        now,
+      ],
+    )
+    const row = result.rows[0] || await this.one(
+      `SELECT * FROM cloud_channel_session_bindings
+       WHERE org_id = $1 AND provider = $2 AND COALESCE(external_workspace_id, '') = COALESCE($3::text, '')
+         AND external_chat_id = $4 AND external_thread_id = $5`,
+      [input.orgId, provider, externalWorkspaceId, input.externalChatId, input.externalThreadId],
+    )
+    const binding = channelSessionBindingFromRow(row)
+    if (result.rows[0]) {
+      await this.recordAuditEvent({
+        orgId: binding.orgId,
+        actorType: 'system',
+        actorId: 'channel_session.bind',
+        eventType: 'channel_session_bound',
+        targetType: 'channel_session_binding',
+        targetId: binding.bindingId,
+        metadata: { provider: binding.provider, sessionId: binding.sessionId },
+        createdAt: input.createdAt,
+      })
+    }
+    return binding
+  }
+
+  async getChannelSessionBinding(orgId: string, bindingId: string) {
+    const row = await this.maybeOne(`SELECT * FROM cloud_channel_session_bindings WHERE org_id = $1 AND binding_id = $2`, [orgId, bindingId])
+    return row ? channelSessionBindingFromRow(row) : null
+  }
+
+  async findChannelSessionBindingByThread(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalChatId: string, externalThreadId: string }) {
+    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_channel_session_bindings
+       WHERE org_id = $1 AND provider = $2 AND COALESCE(external_workspace_id, '') = COALESCE($3::text, '')
+         AND external_chat_id = $4 AND external_thread_id = $5`,
+      [input.orgId, normalizeProvider(input.provider), externalWorkspaceId, input.externalChatId, input.externalThreadId],
+    )
+    return row ? channelSessionBindingFromRow(row) : null
+  }
+
+  async listChannelSessionBindingsForSession(orgId: string, sessionId: string) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_channel_session_bindings
+       WHERE org_id = $1 AND session_id = $2 AND status = 'active'
+       ORDER BY updated_at DESC, binding_id`,
+      [orgId, sessionId],
+    )
+    return result.rows.map(channelSessionBindingFromRow)
+  }
+
+  async updateChannelCursor(input: UpdateChannelCursorInput) {
+    const result = await this.pool.query(
+      `UPDATE cloud_channel_session_bindings
+       SET last_event_sequence = $3,
+           last_workspace_sequence = $4,
+           last_chat_message_id = CASE WHEN $5::boolean THEN $6 ELSE last_chat_message_id END,
+           updated_at = $7
+       WHERE org_id = $1
+         AND binding_id = $2
+         AND last_event_sequence <= $3
+         AND last_workspace_sequence <= $4
+       RETURNING *`,
+      [
+        input.orgId,
+        input.bindingId,
+        normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence'),
+        normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence'),
+        input.lastChatMessageId !== undefined,
+        normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id'),
+        nowIso(input.updatedAt),
+      ],
+    )
+    return result.rows[0] ? channelSessionBindingFromRow(result.rows[0]) : null
+  }
+
+  async createChannelInteraction(input: CreateChannelInteractionInput): Promise<IssuedChannelInteractionRecord> {
+    const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
+    const result = await this.pool.query(
+      `INSERT INTO cloud_channel_interactions (
+        interaction_id, org_id, agent_id, session_id, provider, external_interaction_id,
+        token_hash, kind, target_id, status, created_by_identity_id,
+        expires_at, used_at, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, NULL, $12, $12)
+       ON CONFLICT (interaction_id) DO NOTHING
+       RETURNING *`,
+      [
+        input.interactionId,
+        input.orgId,
+        input.agentId,
+        input.sessionId,
+        normalizeProvider(input.provider),
+        normalizeNullableText(input.externalInteractionId, CHANNEL_TEXT_MAX_LENGTH, 'External interaction id'),
+        hashChannelInteractionToken(plaintextToken),
+        input.kind,
+        normalizeText(input.targetId, CHANNEL_TEXT_MAX_LENGTH, 'Interaction target id'),
+        input.createdByIdentityId || null,
+        input.expiresAt.toISOString(),
+        nowIso(input.createdAt),
+      ],
+    )
+    if (!result.rows[0]) throw new Error(`Channel interaction ${input.interactionId} already exists.`)
+    return { interaction: channelInteractionFromRow(result.rows[0]), plaintextToken }
+  }
+
+  async findChannelInteraction(input: FindChannelInteractionInput) {
+    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
+    const now = nowIso(input.now)
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_channel_interactions
+       WHERE org_id = $1
+         AND status = 'pending'
+         AND expires_at > $5
+         AND (
+           ($2::text IS NOT NULL AND token_hash = $2)
+           OR (
+             $3::text IS NOT NULL
+             AND $4::text IS NOT NULL
+             AND provider = $3
+             AND external_interaction_id = $4
+           )
+         )`,
+      [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, now],
+    )
+    return row ? channelInteractionFromRow(row) : null
+  }
+
+  async resolveChannelInteraction(input: ResolveChannelInteractionInput) {
+    const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
+    const now = nowIso(input.usedAt)
+    const result = await this.pool.query(
+      `UPDATE cloud_channel_interactions
+       SET status = 'used', used_at = $5, updated_at = $5
+       WHERE org_id = $1
+         AND status = 'pending'
+         AND expires_at > $5
+         AND (
+           ($2::text IS NOT NULL AND token_hash = $2)
+           OR (
+             $3::text IS NOT NULL
+             AND $4::text IS NOT NULL
+             AND provider = $3
+             AND external_interaction_id = $4
+           )
+         )
+       RETURNING *`,
+      [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, now],
+    )
+    const interaction = result.rows[0] ? channelInteractionFromRow(result.rows[0]) : null
+    if (interaction) {
+      await this.recordAuditEvent({
+        orgId: interaction.orgId,
+        actorType: 'system',
+        actorId: input.identityId,
+        eventType: 'channel_interaction.used',
+        targetType: 'channel_interaction',
+        targetId: interaction.interactionId,
+        metadata: { kind: interaction.kind, targetId: interaction.targetId },
+        createdAt: input.usedAt,
+      })
+    }
+    return interaction
+  }
+
+  async resolveChannelInteractionWithCommand(input: ResolveChannelInteractionWithCommandInput) {
+    return this.withTransaction(async (client) => {
+      const tokenHash = input.token ? hashChannelInteractionToken(input.token) : null
+      const usedAt = nowIso(input.usedAt)
+      const selected = await this.maybeOne(
+        `SELECT * FROM cloud_channel_interactions
+         WHERE org_id = $1
+           AND status = 'pending'
+           AND expires_at > $5
+           AND (
+             ($2::text IS NOT NULL AND token_hash = $2)
+             OR (
+               $3::text IS NOT NULL
+               AND $4::text IS NOT NULL
+               AND provider = $3
+               AND external_interaction_id = $4
+             )
+           )
+         FOR UPDATE`,
+        [input.orgId, tokenHash, input.provider || null, input.externalInteractionId || null, usedAt],
+        client,
+      )
+      if (!selected) return null
+      const interaction = channelInteractionFromRow(selected)
+      if (input.command.sessionId !== interaction.sessionId) {
+        throw new Error('Channel interaction command session does not match interaction session.')
+      }
+      await this.requireTenantUser(input.command.tenantId, input.command.userId, client)
+      await this.requireSession(input.command.tenantId, input.command.sessionId, client, true)
+      const payload = input.command.payload || {}
+      const existingCommand = await this.maybeOne(
+        `SELECT * FROM cloud_session_commands WHERE command_id = $1`,
+        [input.command.commandId],
+        client,
+      )
+      let command: SessionCommandRecord
+      if (existingCommand) {
+        command = commandFromRow(existingCommand)
+        if (
+          command.tenantId !== input.command.tenantId
+          || command.userId !== input.command.userId
+          || command.sessionId !== input.command.sessionId
+          || command.kind !== input.command.kind
+          || command.targetLeaseToken !== (input.command.targetLeaseToken ?? null)
+          || stableJson(command.payload) !== stableJson(payload)
+        ) {
+          throw new Error(`Command id ${input.command.commandId} was reused with different content.`)
+        }
+      } else {
+        const createdAt = nowIso(input.command.createdAt)
+        const sequence = await this.incrementSessionCounter(
+          client,
+          input.command.tenantId,
+          input.command.sessionId,
+          'next_command_sequence',
+        )
+        const commandResult = await client.query(
+          `INSERT INTO cloud_session_commands (
+            command_id, tenant_id, user_id, session_id, kind, payload,
+            target_lease_token, created_sequence, created_at, status
+           )
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, 'pending')
+           RETURNING *`,
+          [
+            input.command.commandId,
+            input.command.tenantId,
+            input.command.userId,
+            input.command.sessionId,
+            input.command.kind,
+            JSON.stringify(payload),
+            input.command.targetLeaseToken ?? null,
+            sequence,
+            createdAt,
+          ],
+        )
+        command = commandFromRow(commandResult.rows[0])
+      }
+      const updated = await client.query(
+        `UPDATE cloud_channel_interactions
+         SET status = 'used', used_at = $2, updated_at = $2
+         WHERE interaction_id = $1
+         RETURNING *`,
+        [interaction.interactionId, usedAt],
+      )
+      const resolvedInteraction = channelInteractionFromRow(updated.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: resolvedInteraction.orgId,
+        actorType: 'system',
+        actorId: input.identityId,
+        eventType: 'channel_interaction.used',
+        targetType: 'channel_interaction',
+        targetId: resolvedInteraction.interactionId,
+        metadata: { kind: resolvedInteraction.kind, targetId: resolvedInteraction.targetId },
+        createdAt: input.usedAt,
+      })
+      return { interaction: resolvedInteraction, command }
+    })
+  }
+
+  async createChannelDelivery(input: CreateChannelDeliveryInput) {
+    const now = nowIso(input.createdAt)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_channel_deliveries (
+        delivery_id, org_id, agent_id, channel_binding_id, session_binding_id,
+        provider, target, event_type, payload, status, attempt_count,
+        claimed_by, claim_expires_at, next_attempt_at, last_error, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10, 0, NULL, NULL, $11, NULL, $12, $12)
+       ON CONFLICT (delivery_id) DO NOTHING
+       RETURNING *`,
+      [
+        input.deliveryId,
+        input.orgId,
+        input.agentId,
+        input.channelBindingId,
+        input.sessionBindingId || null,
+        normalizeProvider(input.provider),
+        JSON.stringify(normalizeRecord(input.target, 'Channel delivery target')),
+        normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery event type'),
+        JSON.stringify(normalizeRecord(input.payload, 'Channel delivery payload')),
+        input.status || 'pending',
+        (input.nextAttemptAt || input.createdAt || new Date()).toISOString(),
+        now,
+      ],
+    )
+    const row = result.rows[0] || await this.one(
+      `SELECT * FROM cloud_channel_deliveries WHERE org_id = $1 AND delivery_id = $2`,
+      [input.orgId, input.deliveryId],
+    )
+    return channelDeliveryFromRow(row)
+  }
+
+  async claimNextChannelDelivery(input: ClaimChannelDeliveryInput) {
+    return this.withTransaction(async (client) => {
+      const now = input.now || new Date()
+      const selected = await this.maybeOne(
+        `SELECT * FROM cloud_channel_deliveries
+         WHERE org_id = $1
+           AND (
+             (status = 'pending' AND next_attempt_at <= $2)
+             OR (status = 'failed' AND next_attempt_at <= $2)
+             OR (status = 'claimed' AND claim_expires_at <= $2)
+           )
+         ORDER BY next_attempt_at, created_at
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1`,
+        [input.orgId, now.toISOString()],
+        client,
+      )
+      if (!selected) return null
+      const result = await client.query(
+        `UPDATE cloud_channel_deliveries
+         SET status = 'claimed',
+             claimed_by = $2,
+             claim_expires_at = $3,
+             attempt_count = attempt_count + 1,
+             updated_at = $4
+         WHERE delivery_id = $1
+         RETURNING *`,
+        [
+          String(selected.delivery_id),
+          normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Delivery claimant'),
+          new Date(now.getTime() + (input.ttlMs || 30_000)).toISOString(),
+          now.toISOString(),
+        ],
+      )
+      return channelDeliveryFromRow(result.rows[0])
+    })
+  }
+
+  async ackChannelDelivery(input: AckChannelDeliveryInput) {
+    const result = await this.pool.query(
+      `UPDATE cloud_channel_deliveries
+       SET status = $3,
+           claimed_by = NULL,
+           claim_expires_at = NULL,
+           last_error = $4,
+           next_attempt_at = $5,
+           updated_at = $6
+       WHERE org_id = $1
+         AND delivery_id = $2
+         AND ($7::text IS NULL OR claimed_by = $7)
+       RETURNING *`,
+      [
+        input.orgId,
+        input.deliveryId,
+        input.status,
+        input.lastError ? normalizeText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null,
+        (input.nextAttemptAt || input.updatedAt || new Date()).toISOString(),
+        nowIso(input.updatedAt),
+        input.claimedBy || null,
+      ],
+    )
+    return result.rows[0] ? channelDeliveryFromRow(result.rows[0]) : null
   }
 
   async createSession(input: {

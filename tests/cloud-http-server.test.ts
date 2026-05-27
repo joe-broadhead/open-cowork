@@ -30,6 +30,7 @@ const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
   aborted: string[] = []
+  permissions: Array<{ permissionId: string, allowed: boolean }> = []
   private nextSession = 0
 
   async createSession() {
@@ -64,6 +65,10 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
 
   async abortSession(input: { sessionId: string }) {
     this.aborted.push(input.sessionId)
+  }
+
+  async respondToPermission(input: { permissionId: string, allowed: boolean }) {
+    this.permissions.push(input)
   }
 }
 
@@ -318,6 +323,301 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
       headers: { authorization: `Bearer ${issued.plaintext}` },
     })
     assert.equal(rejected.status, 401)
+  } finally {
+    await server.close()
+  }
+})
+
+test('cloud HTTP server exposes gateway channel identity, binding, interaction, and delivery APIs', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const account = store.createAccount({
+    accountId: 'account-1',
+    idpSubject: 'subject-1',
+    email: 'member@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-1', userId: account.accountId, email: account.email, role: 'admin' })
+  store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Gateway token',
+    scopes: ['gateway', 'admin'],
+  })
+
+  const runtime = new FakeRuntimeAdapter()
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  let nextId = 0
+  const service = new CloudSessionService(store, runtime, policy, undefined, {
+    randomUUID: () => `channel-id-${nextId += 1}`,
+  })
+  const worker = new CloudWorker(store, service, 'worker-1')
+  const server = createCloudHttpServer({
+    service,
+    worker,
+    policy,
+    auth: createApiTokenCloudAuthResolver(store),
+    autoProcessCommands: true,
+    ssePollMs: 10,
+  })
+  const baseUrl = await server.listen()
+  const headers = {
+    authorization: `Bearer ${issued.plaintext}`,
+    'content-type': 'application/json',
+  }
+  try {
+    const agentResponse = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        agentId: 'agent-1',
+        name: 'Data analyst',
+        profileName: 'data-analyst',
+      }),
+    })
+    assert.equal(agentResponse.status, 201)
+    assert.equal(asRecord((await readJson(agentResponse)).agent).agentId, 'agent-1')
+
+    const bindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        bindingId: 'telegram-binding',
+        agentId: 'agent-1',
+        provider: 'telegram',
+        displayName: 'Telegram',
+        externalWorkspaceId: 'bot-1',
+        credentialRef: 'secret/telegram',
+      }),
+    })
+    assert.equal(bindingResponse.status, 201)
+    const channelBinding = asRecord((await readJson(bindingResponse)).binding)
+    assert.equal(channelBinding.credentialRef, 'secret/telegram')
+
+    const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-1',
+        externalUserId: 'tg-user-1',
+        accountId: account.accountId,
+        role: 'member',
+        status: 'active',
+      }),
+    })
+    assert.equal(identityResponse.status, 200)
+    const identity = asRecord((await readJson(identityResponse)).identity)
+    assert.equal(identity.status, 'active')
+
+    const wrongWorkspaceIdentityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-2',
+        externalUserId: 'tg-user-2',
+        accountId: account.accountId,
+        role: 'member',
+        status: 'active',
+      }),
+    })
+    assert.equal(wrongWorkspaceIdentityResponse.status, 200)
+    const wrongWorkspaceIdentity = asRecord((await readJson(wrongWorkspaceIdentityResponse)).identity)
+
+    const secondBindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        bindingId: 'telegram-binding-2',
+        agentId: 'agent-1',
+        provider: 'telegram',
+        displayName: 'Telegram second workspace',
+        externalWorkspaceId: 'bot-2',
+        credentialRef: 'secret/telegram-2',
+      }),
+    })
+    assert.equal(secondBindingResponse.status, 201)
+    const secondChannelBinding = asRecord((await readJson(secondBindingResponse)).binding)
+
+    store.ensureUser({ tenantId: 'tenant-1', userId: 'other-user', email: 'other@example.test' })
+    store.createSession({
+      tenantId: 'tenant-1',
+      userId: 'other-user',
+      sessionId: 'other-session',
+      opencodeSessionId: 'other-opencode-session',
+      profileName: 'full',
+    })
+    const stolenSessionBind = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: channelBinding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'chat-1',
+        externalThreadId: 'thread-stolen',
+        sessionId: 'other-session',
+      }),
+    })
+    assert.equal(stolenSessionBind.status, 403)
+
+    const bindResponse = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: channelBinding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'chat-1',
+        externalThreadId: 'thread-1',
+        title: 'Telegram thread',
+      }),
+    })
+    assert.equal(bindResponse.status, 200)
+    const bound = await readJson(bindResponse)
+    const sessionBinding = asRecord(bound.binding)
+    const cloudSession = asRecord(asRecord(bound.session).session)
+    assert.equal(sessionBinding.sessionId, cloudSession.sessionId)
+    assert.equal(sessionBinding.externalWorkspaceId, 'bot-1')
+
+    const secondWorkspaceBindResponse = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: wrongWorkspaceIdentity.identityId,
+        channelBindingId: secondChannelBinding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'chat-1',
+        externalThreadId: 'thread-1',
+        title: 'Telegram thread in second workspace',
+      }),
+    })
+    assert.equal(secondWorkspaceBindResponse.status, 200)
+    const secondWorkspaceSessionBinding = asRecord((await readJson(secondWorkspaceBindResponse)).binding)
+    assert.equal(secondWorkspaceSessionBinding.externalWorkspaceId, 'bot-2')
+    assert.notEqual(secondWorkspaceSessionBinding.bindingId, sessionBinding.bindingId)
+
+    const wrongWorkspacePrompt = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: wrongWorkspaceIdentity.identityId,
+        bindingId: sessionBinding.bindingId,
+        text: 'should not run',
+      }),
+    })
+    assert.equal(wrongWorkspacePrompt.status, 403)
+
+    const promptResponse = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        bindingId: sessionBinding.bindingId,
+        text: 'summarize revenue',
+        agent: 'data-analyst',
+      }),
+    })
+    assert.equal(promptResponse.status, 202)
+    assert.equal((await readJson(promptResponse)).processed, 1)
+    assert.equal(runtime.prompts[0]?.agent, 'data-analyst')
+
+    const interactionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        interactionId: 'interaction-1',
+        agentId: 'agent-1',
+        sessionId: cloudSession.sessionId,
+        provider: 'telegram',
+        kind: 'permission',
+        targetId: 'permission-1',
+        tokenSecret: 'test-secret',
+      }),
+    })
+    assert.equal(interactionResponse.status, 201)
+    const issuedInteraction = await readJson(interactionResponse)
+    assert.equal(typeof issuedInteraction.plaintextToken, 'string')
+    assert.equal('tokenHash' in asRecord(issuedInteraction.interaction), false)
+
+    const serviceTokenOnlyApproval = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        token: issuedInteraction.plaintextToken,
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(serviceTokenOnlyApproval.status, 403)
+
+    const wrongWorkspaceApproval = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: wrongWorkspaceIdentity.identityId,
+        token: issuedInteraction.plaintextToken,
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(wrongWorkspaceApproval.status, 403)
+
+    const approvalResponse = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        token: issuedInteraction.plaintextToken,
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(approvalResponse.status, 202)
+    const approval = await readJson(approvalResponse)
+    assert.equal(asRecord(approval.command).kind, 'permission.respond')
+    assert.equal(approval.processed, 1)
+    assert.deepEqual(runtime.permissions, [{ permissionId: 'permission-1', allowed: true }])
+
+    const deliveryResponse = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        deliveryId: 'delivery-1',
+        agentId: 'agent-1',
+        channelBindingId: channelBinding.bindingId,
+        sessionBindingId: sessionBinding.bindingId,
+        provider: 'telegram',
+        target: { externalChatId: 'chat-1', externalThreadId: 'thread-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-1' },
+      }),
+    })
+    assert.equal(deliveryResponse.status, 201)
+
+    const controller = new AbortController()
+    const stream = await fetch(`${baseUrl}/api/channels/deliveries/stream?claimedBy=test-gateway`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+    const deliveryEvent = await readSseUntil(stream, (event) => (
+      asRecord(event.delivery).deliveryId === 'delivery-1'
+    ))
+    controller.abort()
+    assert.equal(asRecord(deliveryEvent.delivery).status, 'claimed')
+
+    const ackResponse = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/ack`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ status: 'sent', claimedBy: 'test-gateway' }),
+    })
+    assert.equal(ackResponse.status, 200)
+    assert.equal(asRecord((await readJson(ackResponse)).delivery).status, 'sent')
   } finally {
     await server.close()
   }

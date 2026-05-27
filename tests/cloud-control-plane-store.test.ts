@@ -304,6 +304,212 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
   assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'api_token.created'), true)
 })
 
+test('cloud control plane stores headless channel bindings, interactions, cursors, and deliveries', () => {
+  const store = seededStore()
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })
+
+  const agent = store.createHeadlessAgent({
+    agentId: 'agent-1',
+    orgId: org.orgId,
+    tenantId: 'tenant-1',
+    profileName: 'data-analyst',
+    name: 'Data analyst',
+    createdByAccountId: 'user-1',
+  })
+  const channelBinding = store.createChannelBinding({
+    bindingId: 'telegram-binding',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    displayName: 'Telegram',
+    credentialRef: 'secret/telegram',
+    settings: { parseMode: 'markdown' },
+  })
+  const identity = store.upsertChannelIdentity({
+    orgId: org.orgId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalUserId: 'tg-user-1',
+    accountId: 'user-1',
+    role: 'member',
+    status: 'active',
+    metadata: { username: 'alice' },
+  })
+
+  assert.equal(agent.status, 'active')
+  assert.equal(channelBinding.credentialRef, 'secret/telegram')
+  assert.equal(store.findChannelIdentity({
+    orgId: org.orgId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalUserId: 'tg-user-1',
+  })?.identityId, identity.identityId)
+
+  const sessionBinding = store.bindChannelSession({
+    bindingId: 'session-binding-1',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+    sessionId: 'session-1',
+  })
+  assert.equal(sessionBinding.sessionId, 'session-1')
+  assert.equal(sessionBinding.externalWorkspaceId, 'bot-1')
+  assert.equal(store.findChannelSessionBindingByThread({
+    orgId: org.orgId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+  })?.bindingId, sessionBinding.bindingId)
+
+  const cursor = store.updateChannelCursor({
+    orgId: org.orgId,
+    bindingId: sessionBinding.bindingId,
+    lastEventSequence: 7,
+    lastWorkspaceSequence: 3,
+    lastChatMessageId: 'message-7',
+  })
+  assert.equal(cursor?.lastEventSequence, 7)
+  assert.throws(() => store.updateChannelCursor({
+    orgId: org.orgId,
+    bindingId: sessionBinding.bindingId,
+    lastEventSequence: 6,
+    lastWorkspaceSequence: 3,
+  }), /monotonic/)
+
+  const issued = store.createChannelInteraction({
+    interactionId: 'interaction-1',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    sessionId: 'session-1',
+    provider: 'telegram',
+    externalInteractionId: 'button-1',
+    kind: 'permission',
+    targetId: 'permission-1',
+    createdByIdentityId: identity.identityId,
+    expiresAt: new Date('2026-01-01T01:00:00.000Z'),
+    tokenSecret: 'test-secret',
+  })
+  assert.match(issued.plaintextToken, /^occi_interaction-1_/)
+  assert.notEqual(issued.interaction.tokenHash, issued.plaintextToken)
+  assert.throws(() => store.createChannelInteraction({
+    interactionId: 'interaction-1',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    sessionId: 'session-1',
+    provider: 'telegram',
+    kind: 'permission',
+    targetId: 'permission-1',
+    expiresAt: new Date('2026-01-01T01:00:00.000Z'),
+  }), /already exists/)
+  assert.equal(store.resolveChannelInteraction({
+    orgId: org.orgId,
+    token: issued.plaintextToken,
+    identityId: identity.identityId,
+    usedAt: new Date('2026-01-01T00:01:00.000Z'),
+  })?.status, 'used')
+  assert.equal(store.resolveChannelInteraction({
+    orgId: org.orgId,
+    token: issued.plaintextToken,
+    identityId: identity.identityId,
+    usedAt: new Date('2026-01-01T00:02:00.000Z'),
+  }), null)
+
+  const delivery = store.createChannelDelivery({
+    deliveryId: 'delivery-1',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    sessionBindingId: sessionBinding.bindingId,
+    provider: 'telegram',
+    target: { externalChatId: 'chat-1' },
+    eventType: 'workflow.completed',
+    payload: { runId: 'run-1' },
+    nextAttemptAt: new Date('2026-01-01T00:00:10.000Z'),
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  assert.equal(delivery.status, 'pending')
+  assert.equal(store.claimNextChannelDelivery({
+    orgId: org.orgId,
+    claimedBy: 'gateway-early',
+    now: new Date('2026-01-01T00:00:01.000Z'),
+  }), null)
+  const claimed = store.claimNextChannelDelivery({
+    orgId: org.orgId,
+    claimedBy: 'gateway-1',
+    now: new Date('2026-01-01T00:00:10.000Z'),
+    ttlMs: 30_000,
+  })
+  assert.equal(claimed?.deliveryId, delivery.deliveryId)
+  assert.equal(store.claimNextChannelDelivery({
+    orgId: org.orgId,
+    claimedBy: 'gateway-2',
+    now: new Date('2026-01-01T00:00:02.000Z'),
+  }), null)
+  assert.equal(store.ackChannelDelivery({
+    orgId: org.orgId,
+    deliveryId: delivery.deliveryId,
+    claimedBy: 'wrong-gateway',
+    status: 'sent',
+    updatedAt: new Date('2026-01-01T00:00:03.000Z'),
+  }), null)
+  assert.equal(store.ackChannelDelivery({
+    orgId: org.orgId,
+    deliveryId: delivery.deliveryId,
+    claimedBy: 'gateway-1',
+    status: 'sent',
+    updatedAt: new Date('2026-01-01T00:00:03.000Z'),
+  })?.status, 'sent')
+
+  const secondInteraction = store.createChannelInteraction({
+    interactionId: 'interaction-2',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    sessionId: 'session-1',
+    provider: 'telegram',
+    kind: 'question',
+    targetId: 'question-1',
+    expiresAt: new Date('2027-01-01T01:00:00.000Z'),
+  })
+  assert.throws(() => store.resolveChannelInteractionWithCommand({
+    orgId: org.orgId,
+    token: secondInteraction.plaintextToken,
+    identityId: identity.identityId,
+    command: {
+      commandId: 'bad-command',
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      sessionId: 'missing-session',
+      kind: 'question.reply',
+      payload: { requestId: 'question-1', answers: [] },
+    },
+  }), /does not match/)
+  assert.equal(store.findChannelInteraction({
+    orgId: org.orgId,
+    token: secondInteraction.plaintextToken,
+  })?.status, 'pending')
+  const resolvedWithCommand = store.resolveChannelInteractionWithCommand({
+    orgId: org.orgId,
+    token: secondInteraction.plaintextToken,
+    identityId: identity.identityId,
+    command: {
+      commandId: 'question-command',
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      sessionId: 'session-1',
+      kind: 'question.reply',
+      payload: { requestId: 'question-1', answers: ['ok'] },
+    },
+  })
+  assert.equal(resolvedWithCommand?.interaction.status, 'used')
+  assert.equal(resolvedWithCommand?.command.kind, 'question.reply')
+})
+
 test('cloud control plane persists tenant-scoped thread tags and session links', () => {
   const store = seededStore()
   const tag = store.createThreadTag({

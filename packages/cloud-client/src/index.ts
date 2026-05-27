@@ -52,6 +52,119 @@ function cloudArtifactIdFromFilePath(filePath: string) {
 export type CloudClientSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
 export type CloudClientCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type CloudClientCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
+export type CloudChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type CloudChannelIdentityRole = 'owner' | 'admin' | 'member' | 'approver' | 'viewer'
+export type CloudChannelIdentityStatus = 'active' | 'disabled' | 'pending'
+export type CloudChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
+
+export type HeadlessAgentRecord = {
+  agentId: string
+  orgId: string
+  tenantId: string
+  profileName: string
+  name: string
+  status: 'active' | 'disabled'
+  managed: boolean
+  createdByAccountId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelBindingRecord = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  provider: CloudChannelProviderId
+  externalWorkspaceId: string | null
+  displayName: string
+  status: 'active' | 'disabled' | 'auth_required' | 'error'
+  credentialRef: string | null
+  settings: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelIdentityRecord = {
+  identityId: string
+  orgId: string
+  provider: CloudChannelProviderId
+  externalWorkspaceId: string | null
+  externalUserId: string
+  accountId: string | null
+  role: CloudChannelIdentityRole
+  status: CloudChannelIdentityStatus
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelSessionBindingRecord = {
+  bindingId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  provider: CloudChannelProviderId
+  externalWorkspaceId: string | null
+  externalThreadId: string
+  externalChatId: string
+  sessionId: string
+  lastEventSequence: number
+  lastWorkspaceSequence: number
+  lastChatMessageId: string | null
+  status: 'active' | 'archived'
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelInteractionRecord = {
+  interactionId: string
+  orgId: string
+  agentId: string
+  sessionId: string
+  provider: CloudChannelProviderId
+  externalInteractionId: string | null
+  tokenHash?: string
+  kind: 'permission' | 'question'
+  targetId: string
+  status: 'pending' | 'used' | 'expired' | 'revoked'
+  createdByIdentityId: string | null
+  expiresAt: string
+  usedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type IssuedChannelInteractionRecord = {
+  interaction: ChannelInteractionRecord
+  plaintextToken: string
+}
+
+export type ChannelDeliveryRecord = {
+  deliveryId: string
+  orgId: string
+  agentId: string
+  channelBindingId: string
+  sessionBindingId: string | null
+  provider: CloudChannelProviderId
+  target: Record<string, unknown>
+  eventType: string
+  payload: Record<string, unknown>
+  status: CloudChannelDeliveryStatus
+  attemptCount: number
+  claimedBy: string | null
+  claimExpiresAt: string | null
+  nextAttemptAt: string
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelActorInput = {
+  identityId?: string | null
+  provider?: CloudChannelProviderId | null
+  externalWorkspaceId?: string | null
+  externalUserId?: string | null
+}
 
 export type SessionRecord = {
   tenantId: string
@@ -234,6 +347,108 @@ export type CloudTransportAdapter = {
   listSettings?(): Promise<CloudTransportSettingMetadata[]>
   getSetting?(key: string): Promise<CloudTransportSettingMetadata | null>
   setSetting?(key: string, value: Record<string, unknown>): Promise<CloudTransportSettingMetadata>
+  listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
+  createHeadlessAgent?(input: {
+    name: string
+    profileName?: string | null
+    status?: 'active' | 'disabled'
+    managed?: boolean
+    agentId?: string | null
+  }): Promise<HeadlessAgentRecord>
+  updateHeadlessAgent?(agentId: string, input: {
+    name?: string
+    profileName?: string
+    status?: 'active' | 'disabled'
+    managed?: boolean
+  }): Promise<HeadlessAgentRecord | null>
+  listChannelBindings?(agentId?: string | null): Promise<ChannelBindingRecord[]>
+  createChannelBinding?(input: {
+    agentId: string
+    provider: CloudChannelProviderId
+    displayName: string
+    externalWorkspaceId?: string | null
+    status?: 'active' | 'disabled' | 'auth_required' | 'error'
+    credentialRef?: string | null
+    settings?: Record<string, unknown>
+    bindingId?: string | null
+  }): Promise<ChannelBindingRecord>
+  resolveChannelIdentity?(input: {
+    provider: CloudChannelProviderId
+    externalUserId: string
+    externalWorkspaceId?: string | null
+    identityId?: string | null
+    accountId?: string | null
+    role?: CloudChannelIdentityRole
+    status?: CloudChannelIdentityStatus
+    metadata?: Record<string, unknown>
+  }): Promise<ChannelIdentityRecord>
+  bindChannelSession?(input: ChannelActorInput & {
+    channelBindingId: string
+    provider: CloudChannelProviderId
+    externalChatId: string
+    externalThreadId: string
+    sessionId?: string | null
+    title?: string | null
+  }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView }>
+  getChannelSessionByThread?(input: {
+    provider: CloudChannelProviderId
+    externalWorkspaceId?: string | null
+    externalChatId: string
+    externalThreadId: string
+  }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null>
+  promptChannelSession?(input: ChannelActorInput & {
+    bindingId: string
+    text: string
+    agent?: string | null
+  }): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, processed: number }>
+  updateChannelCursor?(input: {
+    bindingId: string
+    lastEventSequence: number
+    lastWorkspaceSequence: number
+    lastChatMessageId?: string | null
+  }): Promise<ChannelSessionBindingRecord | null>
+  createChannelInteraction?(input: {
+    agentId: string
+    sessionId: string
+    provider: CloudChannelProviderId
+    kind: 'permission' | 'question'
+    targetId: string
+    externalInteractionId?: string | null
+    createdByIdentityId?: string | null
+    expiresAt?: string | null
+    interactionId?: string | null
+  }): Promise<IssuedChannelInteractionRecord>
+  resolveChannelInteraction?(input: ChannelActorInput & {
+    token?: string | null
+    externalInteractionId?: string | null
+    response?: unknown
+    answers?: unknown[]
+    reject?: boolean
+  }): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord, processed: number }>
+  createChannelDelivery?(input: {
+    agentId: string
+    channelBindingId: string
+    sessionBindingId?: string | null
+    provider: CloudChannelProviderId
+    target: Record<string, unknown>
+    eventType: string
+    payload: Record<string, unknown>
+    deliveryId?: string | null
+    nextAttemptAt?: string | null
+  }): Promise<ChannelDeliveryRecord>
+  ackChannelDelivery?(deliveryId: string, input: {
+    claimedBy?: string | null
+    status: Extract<CloudChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
+    lastError?: string | null
+    nextAttemptAt?: string | null
+  }): Promise<ChannelDeliveryRecord | null>
+  channelDeliveriesUrl?(input?: { claimedBy?: string, ttlMs?: number }): string
+  subscribeChannelDeliveries?(input: {
+    claimedBy?: string
+    ttlMs?: number
+    onDelivery: (delivery: ChannelDeliveryRecord) => void
+    onError?: (error: unknown) => void
+  }): CloudTransportSubscription
   workspaceEventsUrl(afterSequence?: number): string
   sessionEventsUrl(sessionId: string, afterSequence?: number): string
   subscribeWorkspaceEvents(input: {
@@ -415,6 +630,10 @@ function workspaceEventUrl(baseUrl: string, afterSequence = 0) {
   return afterSequence > 0 ? `${path}?after=${afterSequence}` : path
 }
 
+function channelDeliveriesUrl(baseUrl: string, input: { claimedBy?: string, ttlMs?: number } = {}) {
+  return `${baseUrl}/api/channels/deliveries/stream${queryString(input)}`
+}
+
 const CLOUD_EVENT_TYPES = [
   'session.created',
   'prompt.submitted',
@@ -433,6 +652,7 @@ const CLOUD_EVENT_TYPES = [
   'session.aborted',
   'runtime.error',
   'snapshot.required',
+  'channel.delivery',
 ] as const
 
 function subscribeEventSource(
@@ -841,6 +1061,115 @@ export function createHttpSseCloudTransportAdapter(
       })).setting)
       if (!setting) throw new Error('Cloud setting response was invalid.')
       return setting
+    },
+    async listHeadlessAgents() {
+      return (await request<{ agents: HeadlessAgentRecord[] }>('/api/channels/agents')).agents
+    },
+    async createHeadlessAgent(input) {
+      return (await request<{ agent: HeadlessAgentRecord }>('/api/channels/agents', {
+        method: 'POST',
+        body: input,
+      })).agent
+    },
+    async updateHeadlessAgent(agentId, input) {
+      return (await request<{ agent: HeadlessAgentRecord | null }>(`/api/channels/agents/${encodePath(agentId)}`, {
+        method: 'PATCH',
+        body: input,
+      })).agent
+    },
+    async listChannelBindings(agentId) {
+      return (await request<{ bindings: ChannelBindingRecord[] }>(`/api/channels/bindings${queryString({ agentId })}`)).bindings
+    },
+    async createChannelBinding(input) {
+      return (await request<{ binding: ChannelBindingRecord }>('/api/channels/bindings', {
+        method: 'POST',
+        body: input,
+      })).binding
+    },
+    async resolveChannelIdentity(input) {
+      return (await request<{ identity: ChannelIdentityRecord }>('/api/channels/identities/resolve', {
+        method: 'POST',
+        body: input,
+      })).identity
+    },
+    bindChannelSession(input) {
+      return request('/api/channels/sessions/bind', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    async getChannelSessionByThread(input) {
+      try {
+        return await request(`/api/channels/sessions/by-thread${queryString(input)}`)
+      } catch (error) {
+        if (error instanceof Error && /not found/i.test(error.message)) return null
+        throw error
+      }
+    },
+    promptChannelSession(input) {
+      return request('/api/channels/sessions/prompt', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    async updateChannelCursor(input) {
+      return (await request<{ binding: ChannelSessionBindingRecord | null }>('/api/channels/cursor', {
+        method: 'POST',
+        body: input,
+      })).binding
+    },
+    createChannelInteraction(input) {
+      return request('/api/channels/interactions', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    resolveChannelInteraction(input) {
+      return request('/api/channels/interactions/resolve', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    async createChannelDelivery(input) {
+      return (await request<{ delivery: ChannelDeliveryRecord }>('/api/channels/deliveries', {
+        method: 'POST',
+        body: input,
+      })).delivery
+    },
+    async ackChannelDelivery(deliveryId, input) {
+      return (await request<{ delivery: ChannelDeliveryRecord | null }>(`/api/channels/deliveries/${encodePath(deliveryId)}/ack`, {
+        method: 'POST',
+        body: input,
+      })).delivery
+    },
+    channelDeliveriesUrl(input = {}) {
+      return channelDeliveriesUrl(baseUrl, input)
+    },
+    subscribeChannelDeliveries(input) {
+      const url = channelDeliveriesUrl(baseUrl, {
+        claimedBy: input.claimedBy,
+        ttlMs: input.ttlMs,
+      })
+      const onEvent = (event: unknown) => {
+        const record = asRecord(event)
+        const delivery = record.delivery
+        if (delivery && typeof delivery === 'object') input.onDelivery(delivery as ChannelDeliveryRecord)
+      }
+      if (Object.keys(headers).length > 0) {
+        return subscribeFetchSse(fetcher, url, {
+          headers,
+          credentials: options.credentials,
+          onEvent,
+          onError: input.onError,
+        })
+      }
+      const EventSourceImpl = options.eventSource || (globalThis as unknown as { EventSource?: CloudTransportEventSource }).EventSource
+      if (!EventSourceImpl) throw new Error('EventSource is not available for cloud delivery subscriptions.')
+      return subscribeEventSource(EventSourceImpl, url, {
+        credentials: options.credentials,
+        onEvent,
+        onError: input.onError,
+      })
     },
     workspaceEventsUrl(afterSequence = 0) {
       return workspaceEventUrl(baseUrl, afterSequence)

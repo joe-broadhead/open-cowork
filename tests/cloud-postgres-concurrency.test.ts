@@ -89,6 +89,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
       assert.deepEqual(migrations?.map((migration) => migration.id), [
         '001_cloud_control_plane',
         '002_org_identity_tokens_audit',
+        '003_headless_channels',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
@@ -314,6 +315,112 @@ test('real Postgres cloud store keeps session commands idempotent and lease-fenc
     assert.equal(reclaimed?.commandId, `${ids.tenantId}-cmd`)
     assert.equal(reclaimed?.claimedLeaseToken, takeoverLease.leaseToken)
     assert.equal((await store.ackSessionCommand(takeoverLease, `${ids.tenantId}-cmd`)).status, 'acked')
+  })
+})
+
+test('real Postgres cloud store keeps channel identities, cursors, and delivery claims atomic', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const org = await store.ensureOrgForTenant({ tenantId: ids.tenantId, name: 'Tenant' })
+    const agent = await store.createHeadlessAgent({
+      agentId: `${ids.tenantId}-agent`,
+      orgId: org.orgId,
+      tenantId: ids.tenantId,
+      profileName: 'data-analyst',
+      name: 'Data analyst',
+      createdByAccountId: ids.userId,
+    })
+    const channelBinding = await store.createChannelBinding({
+      bindingId: `${ids.tenantId}-telegram`,
+      orgId: org.orgId,
+      agentId: agent.agentId,
+      provider: 'telegram',
+      externalWorkspaceId: 'bot-1',
+      displayName: 'Telegram',
+    })
+
+    const identities = await Promise.all(Array.from({ length: 6 }, (_, index) => (
+      store.upsertChannelIdentity({
+        orgId: org.orgId,
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-1',
+        externalUserId: 'tg-user-1',
+        accountId: ids.userId,
+        role: index % 2 === 0 ? 'member' : 'approver',
+        status: 'active',
+        metadata: { index },
+      })
+    )))
+    assert.equal(new Set(identities.map((identity) => identity.identityId)).size, 1)
+    assert.equal((await store.findChannelIdentity({
+      orgId: org.orgId,
+      provider: 'telegram',
+      externalWorkspaceId: 'bot-1',
+      externalUserId: 'tg-user-1',
+    }))?.status, 'active')
+
+    const sessionBinding = await store.bindChannelSession({
+      bindingId: `${ids.tenantId}-channel-session`,
+      orgId: org.orgId,
+      agentId: agent.agentId,
+      channelBindingId: channelBinding.bindingId,
+      provider: 'telegram',
+      externalWorkspaceId: 'bot-1',
+      externalChatId: 'chat-1',
+      externalThreadId: 'thread-1',
+      sessionId: ids.sessionId,
+    })
+    assert.equal((await store.updateChannelCursor({
+      orgId: org.orgId,
+      bindingId: sessionBinding.bindingId,
+      lastEventSequence: 10,
+      lastWorkspaceSequence: 8,
+    }))?.lastEventSequence, 10)
+    assert.equal(await store.updateChannelCursor({
+      orgId: org.orgId,
+      bindingId: sessionBinding.bindingId,
+      lastEventSequence: 9,
+      lastWorkspaceSequence: 8,
+    }), null)
+
+    await store.createChannelDelivery({
+      deliveryId: `${ids.tenantId}-delivery`,
+      orgId: org.orgId,
+      agentId: agent.agentId,
+      channelBindingId: channelBinding.bindingId,
+      sessionBindingId: sessionBinding.bindingId,
+      provider: 'telegram',
+      target: { externalChatId: 'chat-1' },
+      eventType: 'workflow.completed',
+      payload: { runId: 'run-1' },
+      nextAttemptAt: new Date('2026-01-01T00:00:10.000Z'),
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+    assert.equal(await store.claimNextChannelDelivery({
+      orgId: org.orgId,
+      claimedBy: 'gateway-early',
+      now: new Date('2026-01-01T00:00:01.000Z'),
+      ttlMs: 30_000,
+    }), null)
+    const claims = await Promise.all(Array.from({ length: 8 }, (_, index) => (
+      store.claimNextChannelDelivery({
+        orgId: org.orgId,
+        claimedBy: `gateway-${index}`,
+        now: new Date('2026-01-01T00:00:10.000Z'),
+        ttlMs: 30_000,
+      })
+    )))
+    const claimed = claims.filter((delivery) => delivery !== null)
+    assert.equal(claimed.length, 1)
+    assert.equal(claimed[0]?.deliveryId, `${ids.tenantId}-delivery`)
+    assert.equal((await store.ackChannelDelivery({
+      orgId: org.orgId,
+      deliveryId: `${ids.tenantId}-delivery`,
+      claimedBy: claimed[0]?.claimedBy,
+      status: 'sent',
+      updatedAt: new Date('2026-01-01T00:00:02.000Z'),
+    }))?.status, 'sent')
   })
 })
 
