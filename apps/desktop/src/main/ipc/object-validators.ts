@@ -319,6 +319,8 @@ export function validateCustomMcpConfig(record: Record<string, unknown>): Custom
 }
 
 export function validateCustomSkillConfig(record: Record<string, unknown>): CustomSkillConfig {
+  const content = rawString(record, 'content', 'Skill content')
+  if (!content.trim()) throw new Error('Skill content is required.')
   const filesInput = record.files
   let files: CustomSkillConfig['files']
   if (filesInput !== undefined && filesInput !== null) {
@@ -335,7 +337,7 @@ export function validateCustomSkillConfig(record: Record<string, unknown>): Cust
     scope: requiredScope(record),
     directory: optionalNullableString(record, 'directory', 'Directory'),
     name: requiredString(record, 'name', 'Skill name', MAX_IPC_ID_BYTES),
-    content: requiredString(record, 'content', 'Skill content'),
+    content,
     files,
     toolIds: optionalStringArray(record, 'toolIds', 'Skill tool ids'),
   }

@@ -498,20 +498,26 @@ test('custom content write handlers reject malformed objects before save paths',
   assert.equal(confirmed, false)
 })
 
-test('custom skill IPC validation preserves supporting file content bytes', () => {
+test('custom skill IPC validation preserves authored content bytes', () => {
+  const skillContent = '  Skill body\n\nkeep intentional trailing newline\n'
   const paddedContent = '  keep leading whitespace\nand trailing whitespace  \n'
   const validated = validateCustomSkillConfig({
     scope: 'machine',
     name: 'test-skill',
-    content: 'Skill body',
+    content: skillContent,
     files: [
       { path: 'notes.txt', content: paddedContent },
       { path: 'empty.txt', content: '' },
     ],
   })
 
+  assert.equal(validated.content, skillContent)
   assert.equal(validated.files?.[0]?.content, paddedContent)
   assert.equal(validated.files?.[1]?.content, '')
+  assert.throws(
+    () => validateCustomSkillConfig({ scope: 'machine', name: 'empty-skill', content: '   \n' }),
+    /Skill content is required/,
+  )
 })
 
 test('explorer:file-read returns null for ungranted renderer-supplied directories', async () => {
