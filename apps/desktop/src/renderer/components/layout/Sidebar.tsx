@@ -287,9 +287,13 @@ function WorkspaceSwitcher() {
     const previousId = activeWorkspace.id
     setOpen(false)
     try {
+      if (workspace.kind === 'cloud' && workspace.status === 'auth_required') {
+        await window.coworkApi.workspace.login(workspace.id)
+      }
       let activated = await window.coworkApi.workspace.activate(workspace.id)
       if (activated.kind === 'cloud' && activated.status === 'auth_required') {
-        activated = await window.coworkApi.workspace.login(activated.id)
+        await window.coworkApi.workspace.login(activated.id)
+        activated = await window.coworkApi.workspace.activate(activated.id)
       }
       const nextWorkspaces = await window.coworkApi.workspace.list()
       setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [activated])
@@ -304,6 +308,20 @@ function WorkspaceSwitcher() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      try {
+        const restored = await window.coworkApi.workspace.activate(previousId)
+        const restoredWorkspaces = await window.coworkApi.workspace.list()
+        setWorkspaces(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored])
+        setActiveWorkspace(restored.id)
+        if (restored.kind === 'local' || restored.status === 'online') {
+          setSessions(await window.coworkApi.session.list({ workspaceId: restored.id }))
+        } else {
+          setSessions([])
+        }
+      } catch {
+        // Leave the visible workspace unchanged if rollback also fails; the
+        // original login error is still the actionable user-facing failure.
+      }
       addGlobalError(message || t('workspace.switchFailed', 'Could not switch workspace.'))
     }
   }
