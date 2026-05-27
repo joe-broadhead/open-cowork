@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
-import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
+import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { DiffViewer } from '../chat/DiffViewer'
 import { confirmSessionDelete } from '../../helpers/destructive-actions'
@@ -27,6 +27,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const removeSession = useSessionStore((s) => s.removeSession)
   const busySessions = useSessionStore((s) => s.busySessions)
   const awaitingQuestionSessions = useSessionStore((s) => s.awaitingQuestionSessions)
+  const activeWorkspaceIsLocal = normalizeWorkspaceId(activeWorkspaceId) === LOCAL_WORKSPACE_ID
 
   const [menuId, setMenuId] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -91,6 +92,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     if (focusRowTimerRef.current) window.clearTimeout(focusRowTimerRef.current)
   }, [])
 
+  useEffect(() => {
+    if (activeWorkspaceIsLocal) return
+    setMenuId(null)
+    setEditingId(null)
+    setDiffSessionId(null)
+  }, [activeWorkspaceIsLocal])
+
   if (interactiveSessions.length === 0) {
     return <div className="px-2 py-3 text-[11px] text-text-muted text-center">{t('sidebar.noThreads', 'No threads yet')}</div>
   }
@@ -107,6 +115,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   const handleRename = async (id: string) => {
+    if (!activeWorkspaceIsLocal) { setEditingId(null); setMenuId(null); return }
     if (!editTitle.trim()) { setEditingId(null); return }
     const ok = await window.coworkApi.session.rename(id, editTitle.trim())
     if (ok) renameSession(id, editTitle.trim())
@@ -115,6 +124,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   const handleDelete = async (id: string) => {
+    if (!activeWorkspaceIsLocal) { setMenuId(null); return }
     const confirmation = await confirmSessionDelete(id)
     if (!confirmation) {
       setMenuId(null)
@@ -126,6 +136,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   const openMenuAt = (xInput: number, yInput: number, sessionId: string) => {
+    if (!activeWorkspaceIsLocal) return
     // Clamp so the menu doesn't go off-screen
     const y = Math.min(yInput, window.innerHeight - 140)
     const x = Math.min(xInput, window.innerWidth - 170)
@@ -212,10 +223,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   else rowRefs.current.delete(session.id)
                 }}
                 onClick={() => handleSelect(session.id)}
-                onContextMenu={(e) => openMenu(e, session.id)}
-                onKeyDown={(e) => openMenuFromKeyboard(e, session.id)}
-                aria-haspopup="menu"
-                aria-expanded={menuId === session.id}
+                onContextMenu={activeWorkspaceIsLocal ? (e) => openMenu(e, session.id) : undefined}
+                onKeyDown={activeWorkspaceIsLocal ? (e) => openMenuFromKeyboard(e, session.id) : undefined}
+                aria-haspopup={activeWorkspaceIsLocal ? 'menu' : undefined}
+                aria-expanded={activeWorkspaceIsLocal ? menuId === session.id : undefined}
                 className={`w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
@@ -284,11 +295,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     via the row's onContextMenu handler — native
                     "context-menu key" / Shift+F10 path works because
                     the outer button owns that listener. */}
-                <span onClick={(e) => openMenu(e, session.id)}
-                  aria-hidden="true"
-                  className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>
-                </span>
+                {activeWorkspaceIsLocal && (
+                  <span onClick={(e) => openMenu(e, session.id)}
+                    aria-hidden="true"
+                    className="opacity-0 group-hover:opacity-100 shrink-0 w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text-secondary transition-opacity cursor-pointer">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="3" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="9" r="1"/></svg>
+                  </span>
+                )}
               </button>
             )}
       </div>
