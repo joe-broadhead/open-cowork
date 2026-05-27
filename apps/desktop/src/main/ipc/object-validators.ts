@@ -84,6 +84,13 @@ function requiredString(record: Record<string, unknown>, key: string, label: str
   return trimmed
 }
 
+function rawString(record: Record<string, unknown>, key: string, label: string, maxBytes = MAX_IPC_STRING_BYTES) {
+  const value = record[key]
+  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
+  if (byteLength(value) > maxBytes) throw new Error(`${label} exceeds ${maxBytes} bytes.`)
+  return value
+}
+
 function optionalString(record: Record<string, unknown>, key: string, label: string, maxBytes = MAX_IPC_STRING_BYTES) {
   const value = record[key]
   if (value === undefined || value === null) return undefined
@@ -320,7 +327,7 @@ export function validateCustomSkillConfig(record: Record<string, unknown>): Cust
       const file = plainRecord(entry, `Skill file ${index + 1}`)
       return {
         path: requiredString(file, 'path', `Skill file ${index + 1} path`, MAX_IPC_ID_BYTES),
-        content: requiredString(file, 'content', `Skill file ${index + 1} content`),
+        content: rawString(file, 'content', `Skill file ${index + 1} content`),
       }
     })
   }

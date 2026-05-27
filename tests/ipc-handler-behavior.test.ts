@@ -14,6 +14,7 @@ import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
+import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-state.ts'
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
@@ -495,6 +496,22 @@ test('custom content write handlers reject malformed objects before save paths',
     /custom MCP to be an object/,
   )
   assert.equal(confirmed, false)
+})
+
+test('custom skill IPC validation preserves supporting file content bytes', () => {
+  const paddedContent = '  keep leading whitespace\nand trailing whitespace  \n'
+  const validated = validateCustomSkillConfig({
+    scope: 'machine',
+    name: 'test-skill',
+    content: 'Skill body',
+    files: [
+      { path: 'notes.txt', content: paddedContent },
+      { path: 'empty.txt', content: '' },
+    ],
+  })
+
+  assert.equal(validated.files?.[0]?.content, paddedContent)
+  assert.equal(validated.files?.[1]?.content, '')
 })
 
 test('explorer:file-read returns null for ungranted renderer-supplied directories', async () => {
