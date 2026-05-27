@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
+import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import {
@@ -269,6 +270,56 @@ test('cloud HTTP server returns public errors for malformed request bodies', asy
     assert.deepEqual(await readJson(response), { error: 'Request body must be valid JSON.' })
   } finally {
     await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server authenticates bearer API tokens and rejects revoked tokens', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const account = store.createAccount({
+    accountId: 'account-1',
+    idpSubject: 'subject-1',
+    email: 'member@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-1', userId: account.accountId, email: account.email })
+  store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Gateway token',
+    scopes: ['gateway'],
+  })
+
+  const runtime = new FakeRuntimeAdapter()
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const service = new CloudSessionService(store, runtime, policy)
+  const server = createCloudHttpServer({
+    service,
+    policy,
+    auth: createApiTokenCloudAuthResolver(store),
+    autoProcessCommands: true,
+  })
+  const baseUrl = await server.listen()
+  try {
+    const ok = await readJson(await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    }))
+    assert.equal(ok.tenantId, 'tenant-1')
+    assert.equal(ok.userId, account.accountId)
+
+    store.revokeApiToken({ tokenId: issued.token.tokenId })
+    const rejected = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.equal(rejected.status, 401)
+  } finally {
+    await server.close()
   }
 })
 

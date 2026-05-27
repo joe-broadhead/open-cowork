@@ -1,6 +1,11 @@
 export const CLOUD_CONTROL_PLANE_MIGRATION_ID = '001_cloud_control_plane'
 export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_762_083_497] as const
 
+export type CloudControlPlaneMigration = {
+  id: string
+  statements: readonly string[]
+}
+
 export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS cloud_tenants (
     tenant_id text PRIMARY KEY,
@@ -237,4 +242,90 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     seen_at_ms bigint NOT NULL,
     status text NOT NULL
   )`,
+] as const
+
+export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_MIGRATION_ID = '002_org_identity_tokens_audit'
+
+export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_orgs (
+    org_id text PRIMARY KEY,
+    tenant_id text UNIQUE NOT NULL REFERENCES cloud_tenants(tenant_id) ON DELETE CASCADE,
+    name text NOT NULL,
+    plan_key text,
+    status text NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `INSERT INTO cloud_orgs (org_id, tenant_id, name, plan_key, status, created_at, updated_at)
+    SELECT tenant_id, tenant_id, name, NULL, 'active', created_at, created_at
+    FROM cloud_tenants
+    ON CONFLICT (org_id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS cloud_accounts (
+    account_id text PRIMARY KEY,
+    idp_subject text UNIQUE,
+    email text NOT NULL,
+    display_name text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_accounts_email_idx
+    ON cloud_accounts (lower(email))`,
+  `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
+    SELECT DISTINCT user_id, user_id, email, NULL, created_at, created_at
+    FROM cloud_users
+    ON CONFLICT (account_id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS cloud_memberships (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    account_id text NOT NULL REFERENCES cloud_accounts(account_id) ON DELETE CASCADE,
+    role text NOT NULL,
+    status text NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, account_id)
+  )`,
+  `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
+    SELECT u.tenant_id, u.user_id, u.role, 'active', u.created_at, u.created_at
+    FROM cloud_users u
+    ON CONFLICT (org_id, account_id) DO NOTHING`,
+  `CREATE TABLE IF NOT EXISTS cloud_api_tokens (
+    token_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    name text NOT NULL,
+    token_hash text UNIQUE NOT NULL,
+    scopes jsonb NOT NULL,
+    last4 text NOT NULL,
+    expires_at timestamptz,
+    revoked_at timestamptz,
+    last_used_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_api_tokens_org_idx
+    ON cloud_api_tokens (org_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_audit_events (
+    event_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    actor_type text NOT NULL,
+    actor_id text,
+    event_type text NOT NULL,
+    target_type text,
+    target_id text,
+    metadata jsonb NOT NULL,
+    created_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_audit_events_org_created_idx
+    ON cloud_audit_events (org_id, created_at DESC)`,
+] as const
+
+export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
+  {
+    id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS,
+  },
 ] as const

@@ -51,6 +51,7 @@ test('root lint script runs all release gate checks', () => {
 test('root build and dist scripts preserve release build prerequisites', () => {
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm --filter @open-cowork/shared build',
+    'pnpm --filter @open-cowork/cloud-client build',
     'pnpm build:mcps',
     'pnpm --filter @open-cowork/desktop build',
   ])
@@ -64,6 +65,7 @@ test('root build and dist scripts preserve release build prerequisites', () => {
 test('root typecheck script covers shared, MCP, and desktop packages', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm --filter @open-cowork/shared build',
+    'pnpm --filter @open-cowork/cloud-client build',
     'pnpm typecheck:mcps',
     'pnpm --filter @open-cowork/desktop build:electron',
     'pnpm --filter @open-cowork/desktop typecheck',

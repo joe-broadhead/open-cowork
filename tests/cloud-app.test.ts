@@ -1056,8 +1056,12 @@ test('cloud header auth resolver maps request headers to tenant principal', asyn
 
   assert.deepEqual(principal, {
     tenantId: 'tenant-1',
+    orgId: 'tenant-1',
     tenantName: 'Tenant 1',
     userId: 'user-1',
+    accountId: 'user-1',
     email: 'user@example.test',
+    role: 'member',
+    authSource: 'header',
   })
 })

@@ -1,3 +1,4 @@
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import type {
   WorkflowDraft,
   WorkflowRun,
@@ -7,7 +8,10 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 
-export type ControlPlaneRole = 'owner' | 'member'
+export type ControlPlaneRole = 'owner' | 'admin' | 'member'
+export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
+export type ApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'worker-internal'
+export type AuditActorType = 'user' | 'api_token' | 'system'
 export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
 export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
@@ -24,6 +28,73 @@ export type UserRecord = {
   userId: string
   email: string
   role: ControlPlaneRole
+  createdAt: string
+}
+
+export type OrgRecord = {
+  orgId: string
+  tenantId: string
+  name: string
+  planKey: string | null
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AccountRecord = {
+  accountId: string
+  idpSubject: string | null
+  email: string
+  displayName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type MembershipRecord = {
+  orgId: string
+  accountId: string
+  role: ControlPlaneRole
+  status: ControlPlaneMembershipStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type PrincipalMembershipRecord = {
+  org: OrgRecord
+  account: AccountRecord
+  membership: MembershipRecord
+}
+
+export type ApiTokenRecord = {
+  tokenId: string
+  orgId: string
+  accountId: string | null
+  name: string
+  tokenHash: string
+  scopes: ApiTokenScope[]
+  last4: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type IssuedApiTokenRecord = {
+  token: ApiTokenRecord
+  plaintext: string
+}
+
+export type AuditEventRecord = {
+  eventId: string
+  orgId: string
+  accountId: string | null
+  actorType: AuditActorType
+  actorId: string | null
+  eventType: string
+  targetType: string | null
+  targetId: string | null
+  metadata: Record<string, unknown>
   createdAt: string
 }
 
@@ -189,6 +260,60 @@ export type CreateSessionInput = {
   createdAt?: Date
 }
 
+export type CreateAccountInput = {
+  accountId: string
+  idpSubject?: string | null
+  email: string
+  displayName?: string | null
+  createdAt?: Date
+}
+
+export type UpsertMembershipInput = {
+  orgId: string
+  accountId: string
+  role: ControlPlaneRole
+  status?: ControlPlaneMembershipStatus
+  updatedAt?: Date
+  actor?: AuditActorInput
+}
+
+export type AuditActorInput = {
+  actorType: AuditActorType
+  actorId?: string | null
+  accountId?: string | null
+}
+
+export type IssueApiTokenInput = {
+  orgId: string
+  accountId?: string | null
+  name: string
+  scopes: ApiTokenScope[]
+  expiresAt?: Date | null
+  createdAt?: Date
+  tokenId?: string
+  secret?: string
+  actor?: AuditActorInput
+}
+
+export type RevokeApiTokenInput = {
+  tokenId: string
+  revokedAt?: Date
+  actor?: AuditActorInput
+}
+
+export type RecordAuditEventInput = {
+  eventId?: string
+  orgId: string
+  accountId?: string | null
+  actorType: AuditActorType
+  actorId?: string | null
+  eventType: string
+  targetType?: string | null
+  targetId?: string | null
+  metadata?: Record<string, unknown>
+  createdAt?: Date
+}
+
 export type AppendEventInput = {
   tenantId: string
   sessionId: string
@@ -343,6 +468,18 @@ export type ControlPlaneStore = {
     role?: ControlPlaneRole
     createdAt?: Date
   }): MaybePromise<UserRecord>
+  ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }): MaybePromise<OrgRecord>
+  createAccount(input: CreateAccountInput): MaybePromise<AccountRecord>
+  findAccountBySubject(idpSubject: string): MaybePromise<AccountRecord | null>
+  findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
+  upsertMembership(input: UpsertMembershipInput): MaybePromise<MembershipRecord>
+  listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
+  resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
+  issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
+  findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
+  revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
+  recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
+  listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
   getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
@@ -445,6 +582,45 @@ function nowIso(now: Date | undefined) {
   return (now || new Date()).toISOString()
 }
 
+function stableId(prefix: string, ...parts: string[]) {
+  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
+}
+
+export function hashCloudApiToken(plaintext: string) {
+  return `scrypt:${scryptSync(plaintext, 'open-cowork-cloud-api-token-hash-v1', 32).toString('base64url')}`
+}
+
+export function generateCloudApiToken(input: { tokenId?: string, secret?: string } = {}) {
+  const tokenId = input.tokenId || `tok_${randomBytes(12).toString('base64url')}`
+  const secret = input.secret || randomBytes(32).toString('base64url')
+  return {
+    tokenId,
+    plaintext: `occ_${tokenId}_${secret}`,
+  }
+}
+
+function constantTimeStringEquals(left: string, right: string) {
+  const leftBytes = Buffer.from(left)
+  const rightBytes = Buffer.from(right)
+  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
+}
+
+function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
+  const redacted: Record<string, unknown> = {}
+  for (const [field, entry] of Object.entries(value || {})) {
+    if (/token|secret|key|password|credential/i.test(field)) {
+      redacted[field] = '[redacted]'
+    } else if (entry && typeof entry === 'object') {
+      redacted[field] = '[object]'
+    } else if (typeof entry === 'string') {
+      redacted[field] = entry.length > 256 ? `${entry.slice(0, 253)}...` : entry
+    } else {
+      redacted[field] = entry
+    }
+  }
+  return redacted
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -514,6 +690,14 @@ function normalizeThreadQuery(value: unknown) {
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly tenants = new Map<string, TenantRecord>()
   private readonly users = new Map<string, UserRecord>()
+  private readonly orgs = new Map<string, OrgRecord>()
+  private readonly orgsByTenant = new Map<string, string>()
+  private readonly accounts = new Map<string, AccountRecord>()
+  private readonly accountsBySubject = new Map<string, string>()
+  private readonly accountsByEmail = new Map<string, string>()
+  private readonly memberships = new Map<string, MembershipRecord>()
+  private readonly apiTokens = new Map<string, ApiTokenRecord>()
+  private readonly auditEvents = new Map<string, AuditEventRecord>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly heartbeats = new Map<string, WorkerHeartbeatRecord>()
   private readonly settings = new Map<string, SettingMetadataRecord>()
@@ -527,13 +711,17 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   createTenant(input: { tenantId: string, name: string, createdAt?: Date }): TenantRecord {
     const existing = this.tenants.get(input.tenantId)
-    if (existing) return clone(existing)
+    if (existing) {
+      this.ensureOrgForTenant({ tenantId: input.tenantId, name: existing.name, createdAt: input.createdAt })
+      return clone(existing)
+    }
     const record: TenantRecord = {
       tenantId: input.tenantId,
       name: input.name,
       createdAt: nowIso(input.createdAt),
     }
     this.tenants.set(input.tenantId, record)
+    this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, createdAt: input.createdAt })
     return clone(record)
   }
 
@@ -556,7 +744,217 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: nowIso(input.createdAt),
     }
     this.users.set(userKey, record)
+    const org = this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId, createdAt: input.createdAt })
+    const account = this.createAccount({
+      accountId: input.userId,
+      idpSubject: input.userId,
+      email: input.email,
+      createdAt: input.createdAt,
+    })
+    this.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: input.role || 'member',
+      status: 'active',
+      updatedAt: input.createdAt,
+      actor: { actorType: 'system', actorId: 'compat.ensureUser' },
+    })
     return clone(record)
+  }
+
+  ensureOrgForTenant(input: { tenantId: string, name: string, orgId?: string, planKey?: string | null, status?: string, createdAt?: Date }): OrgRecord {
+    const existingOrgId = this.orgsByTenant.get(input.tenantId)
+    if (existingOrgId) return clone(this.orgs.get(existingOrgId) as OrgRecord)
+    const createdAt = nowIso(input.createdAt)
+    const orgId = input.orgId || input.tenantId
+    const record: OrgRecord = {
+      orgId,
+      tenantId: input.tenantId,
+      name: input.name,
+      planKey: input.planKey ?? null,
+      status: input.status || 'active',
+      createdAt,
+      updatedAt: createdAt,
+    }
+    this.orgs.set(orgId, record)
+    this.orgsByTenant.set(input.tenantId, orgId)
+    return clone(record)
+  }
+
+  createAccount(input: CreateAccountInput): AccountRecord {
+    const bySubject = input.idpSubject ? this.accountsBySubject.get(input.idpSubject) : null
+    const byEmail = this.accountsByEmail.get(input.email.toLowerCase())
+    const existing = this.accounts.get(bySubject || byEmail || input.accountId)
+    if (existing) return clone(existing)
+    const createdAt = nowIso(input.createdAt)
+    const record: AccountRecord = {
+      accountId: input.accountId,
+      idpSubject: input.idpSubject || null,
+      email: input.email.toLowerCase(),
+      displayName: input.displayName || null,
+      createdAt,
+      updatedAt: createdAt,
+    }
+    this.accounts.set(record.accountId, record)
+    if (record.idpSubject) this.accountsBySubject.set(record.idpSubject, record.accountId)
+    this.accountsByEmail.set(record.email, record.accountId)
+    return clone(record)
+  }
+
+  findAccountBySubject(idpSubject: string): AccountRecord | null {
+    const accountId = this.accountsBySubject.get(idpSubject)
+    return accountId ? clone(this.accounts.get(accountId) || null) : null
+  }
+
+  findAccountByEmail(email: string): AccountRecord | null {
+    const accountId = this.accountsByEmail.get(email.toLowerCase())
+    return accountId ? clone(this.accounts.get(accountId) || null) : null
+  }
+
+  upsertMembership(input: UpsertMembershipInput): MembershipRecord {
+    const org = this.orgs.get(input.orgId)
+    if (!org) throw new Error(`Unknown org ${input.orgId}.`)
+    if (!this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
+    const membershipKey = key(input.orgId, input.accountId)
+    const existing = this.memberships.get(membershipKey)
+    const now = nowIso(input.updatedAt)
+    const record: MembershipRecord = {
+      orgId: input.orgId,
+      accountId: input.accountId,
+      role: input.role,
+      status: input.status || 'active',
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    }
+    this.memberships.set(membershipKey, record)
+    this.recordAuditEvent({
+      orgId: input.orgId,
+      accountId: input.accountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: existing ? 'membership.updated' : 'membership.created',
+      targetType: 'membership',
+      targetId: membershipKey,
+      metadata: { role: record.role, status: record.status },
+      createdAt: input.updatedAt,
+    })
+    return clone(record)
+  }
+
+  listMembershipsForAccount(accountId: string): MembershipRecord[] {
+    return Array.from(this.memberships.values())
+      .filter((membership) => membership.accountId === accountId)
+      .map((membership) => clone(membership))
+  }
+
+  resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): PrincipalMembershipRecord | null {
+    const orgId = this.orgsByTenant.get(input.tenantId) || (this.orgs.has(input.tenantId) ? input.tenantId : undefined)
+    if (!orgId) return null
+    const org = this.orgs.get(orgId)
+    const account = (input.accountId ? this.accounts.get(input.accountId) : null)
+      || (input.idpSubject ? this.findAccountBySubject(input.idpSubject) : null)
+      || (input.email ? this.findAccountByEmail(input.email) : null)
+      || (input.userId ? this.accounts.get(input.userId) : null)
+    if (!org || !account) return null
+    const membership = this.memberships.get(key(org.orgId, account.accountId))
+    return membership ? { org: clone(org), account: clone(account), membership: clone(membership) } : null
+  }
+
+  issueApiToken(input: IssueApiTokenInput): IssuedApiTokenRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    if (input.accountId && !this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
+    const generated = generateCloudApiToken(input)
+    const now = nowIso(input.createdAt)
+    const record: ApiTokenRecord = {
+      tokenId: generated.tokenId,
+      orgId: input.orgId,
+      accountId: input.accountId || null,
+      name: normalizeText(input.name, 96, 'API token name'),
+      tokenHash: hashCloudApiToken(generated.plaintext),
+      scopes: [...new Set(input.scopes)],
+      last4: generated.plaintext.slice(-4),
+      expiresAt: input.expiresAt ? input.expiresAt.toISOString() : null,
+      revokedAt: null,
+      lastUsedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.apiTokens.set(record.tokenId, record)
+    this.recordAuditEvent({
+      orgId: input.orgId,
+      accountId: input.accountId || null,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'api_token.created',
+      targetType: 'api_token',
+      targetId: record.tokenId,
+      metadata: { name: record.name, scopes: record.scopes, last4: record.last4 },
+      createdAt: input.createdAt,
+    })
+    return { token: clone(record), plaintext: generated.plaintext }
+  }
+
+  findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
+    const tokenHash = hashCloudApiToken(plaintext)
+    for (const token of this.apiTokens.values()) {
+      if (!constantTimeStringEquals(token.tokenHash, tokenHash)) continue
+      if (token.revokedAt) return null
+      if (token.expiresAt && new Date(token.expiresAt).getTime() <= now.getTime()) return null
+      token.lastUsedAt = now.toISOString()
+      token.updatedAt = token.lastUsedAt
+      return clone(token)
+    }
+    return null
+  }
+
+  revokeApiToken(input: RevokeApiTokenInput): ApiTokenRecord | null {
+    const existing = this.apiTokens.get(input.tokenId)
+    if (!existing) return null
+    const revokedAt = nowIso(input.revokedAt)
+    existing.revokedAt = existing.revokedAt || revokedAt
+    existing.updatedAt = revokedAt
+    this.recordAuditEvent({
+      orgId: existing.orgId,
+      accountId: existing.accountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'api_token.revoked',
+      targetType: 'api_token',
+      targetId: existing.tokenId,
+      metadata: { name: existing.name, scopes: existing.scopes, last4: existing.last4 },
+      createdAt: input.revokedAt,
+    })
+    return clone(existing)
+  }
+
+  recordAuditEvent(input: RecordAuditEventInput): AuditEventRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const eventId = input.eventId || stableId('audit', input.orgId, input.eventType, String(this.auditEvents.size + 1), nowIso(input.createdAt))
+    const existing = this.auditEvents.get(eventId)
+    if (existing) return clone(existing)
+    const record: AuditEventRecord = {
+      eventId,
+      orgId: input.orgId,
+      accountId: input.accountId || null,
+      actorType: input.actorType,
+      actorId: input.actorId || null,
+      eventType: input.eventType,
+      targetType: input.targetType || null,
+      targetId: input.targetId || null,
+      metadata: redactAuditMetadata(input.metadata),
+      createdAt: nowIso(input.createdAt),
+    }
+    this.auditEvents.set(eventId, record)
+    return clone(record)
+  }
+
+  listAuditEvents(orgId: string, limit = 100): AuditEventRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    return Array.from(this.auditEvents.values())
+      .filter((event) => event.orgId === orgId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, limit)
+      .map((event) => clone(event))
   }
 
   createSession(input: CreateSessionInput): SessionRecord {

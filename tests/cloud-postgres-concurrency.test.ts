@@ -86,10 +86,44 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
     )))
     try {
       const migrations = await stores[0]?.listSchemaMigrations()
-      assert.deepEqual(migrations?.map((migration) => migration.id), ['001_cloud_control_plane'])
+      assert.deepEqual(migrations?.map((migration) => migration.id), [
+        '001_cloud_control_plane',
+        '002_org_identity_tokens_audit',
+      ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
     }
+  })
+})
+
+test('real Postgres cloud store persists org identity, API tokens, and audit events', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const org = await store.ensureOrgForTenant({ tenantId: ids.tenantId, name: 'Tenant' })
+    const account = await store.createAccount({
+      accountId: 'pg-account-1',
+      idpSubject: 'pg-subject-1',
+      email: 'pg-account@example.test',
+    })
+    await store.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: 'admin',
+      status: 'active',
+    })
+
+    const issued = await store.issueApiToken({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      name: 'Postgres gateway',
+      scopes: ['gateway'],
+      secret: 'pg-secret',
+    })
+    assert.equal((await store.findApiTokenByPlaintext(issued.plaintext))?.tokenId, issued.token.tokenId)
+    await store.revokeApiToken({ tokenId: issued.token.tokenId })
+    assert.equal(await store.findApiTokenByPlaintext(issued.plaintext), null)
+    assert.equal((await store.listAuditEvents(org.orgId)).some((event) => event.eventType === 'api_token.created'), true)
   })
 })
 

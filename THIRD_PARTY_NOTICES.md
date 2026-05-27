@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `70dd073e872c1667e0e411344074783a9bfd70e12894ae97d10c69f63a4302e6`
-- Production package entries: 481
-- Bundled license directories: 453 (28 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `bddb363a8aea19667c8839e65cfedf12442ffc4592923576b9c02445a284e817`
+- Production package entries: 482
+- Bundled license directories: 453 (29 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -52,6 +52,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
 | @smithy/core | 3.24.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__core@3.24.4/ | https://github.com/smithy-lang/smithy-typescript.git |
 | @smithy/credential-provider-imds | 4.3.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@smithy__credential-provider-imds@4.3.4/ | https://github.com/smithy-lang/smithy-typescript.git |

@@ -99,9 +99,14 @@ function serializeCookie(input: {
 function normalizePrincipal(value: CloudPrincipal): CloudPrincipal {
   return {
     tenantId: value.tenantId,
+    orgId: value.orgId,
     tenantName: value.tenantName,
     userId: value.userId,
+    accountId: value.accountId,
     email: value.email,
+    role: value.role,
+    authSource: value.authSource,
+    tokenId: value.tokenId,
   }
 }
 

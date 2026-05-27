@@ -129,9 +129,13 @@ test('cloud OIDC auth resolves a verified bearer token into a tenant principal',
   const principal = await resolver(requestWithBearer(fixture.token()))
 
   assert.equal(principal.tenantId, 'tenant-a')
+  assert.equal(principal.orgId, 'tenant-a')
   assert.equal(principal.tenantName, 'Tenant A')
   assert.equal(principal.email, 'analyst@example.test')
   assert.equal(principal.userId.length, 32)
+  assert.equal(principal.accountId, principal.userId)
+  assert.equal(principal.role, 'member')
+  assert.equal(principal.authSource, 'user')
 })
 
 test('cloud OIDC auth rejects missing, invalid-audience, and disallowed-domain tokens', async () => {

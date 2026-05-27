@@ -9,6 +9,7 @@ import {
 import { type ControlPlaneStore, InMemoryControlPlaneStore } from './control-plane-store.ts'
 import {
   createCloudHttpServer,
+  CloudHttpError,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
   type CloudDesktopAuthConfig,
@@ -268,9 +269,13 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
     const email = readHeader(req, 'x-open-cowork-user-email') || defaults.email || 'local@example.test'
     return {
       tenantId,
+      orgId: defaults.orgId || tenantId,
       tenantName: readHeader(req, 'x-open-cowork-tenant-name') || defaults.tenantName || tenantId,
       userId,
+      accountId: defaults.accountId || userId,
       email,
+      role: (readHeader(req, 'x-open-cowork-user-role') as CloudPrincipal['role']) || defaults.role || 'member',
+      authSource: 'header',
     }
   }
 }
@@ -278,10 +283,61 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
 export function createLocalCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}): CloudAuthResolver {
   return () => ({
     tenantId: defaults.tenantId || 'default',
+    orgId: defaults.orgId || defaults.tenantId || 'default',
     tenantName: defaults.tenantName || defaults.tenantId || 'Default',
     userId: defaults.userId || 'local-user',
+    accountId: defaults.accountId || defaults.userId || 'local-user',
     email: defaults.email || 'local@example.test',
+    role: defaults.role || 'owner',
+    authSource: 'local',
   })
+}
+
+function readBearerToken(req: IncomingMessage) {
+  const raw = readHeader(req, 'authorization') || ''
+  return raw.toLowerCase().startsWith('bearer ') ? raw.slice('bearer '.length).trim() : ''
+}
+
+export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): CloudAuthResolver {
+  return async (req) => {
+    const token = readBearerToken(req)
+    if (!token) throw new CloudHttpError(401, 'Cloud API token authorization is required.')
+    const record = await store.findApiTokenByPlaintext(token)
+    if (!record) throw new CloudHttpError(401, 'Cloud API token is invalid or expired.')
+    const membership = await store.resolvePrincipalMembership({
+      tenantId: record.orgId,
+      accountId: record.accountId,
+    })
+    if (!membership || membership.membership.status !== 'active') {
+      throw new CloudHttpError(401, 'Cloud API token membership is not active.')
+    }
+    return {
+      tenantId: membership.org.tenantId,
+      orgId: membership.org.orgId,
+      tenantName: membership.org.name,
+      userId: membership.account.accountId,
+      accountId: membership.account.accountId,
+      email: membership.account.email,
+      role: membership.membership.role,
+      authSource: 'api_token',
+      tokenId: record.tokenId,
+    }
+  }
+}
+
+export function createCompositeCloudAuthResolver(...resolvers: CloudAuthResolver[]): CloudAuthResolver {
+  return async (req) => {
+    let lastError: unknown = null
+    for (const resolver of resolvers) {
+      try {
+        return await resolver(req)
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (lastError instanceof CloudHttpError) throw lastError
+    throw new CloudHttpError(401, 'Cloud authentication failed.')
+  }
 }
 
 export function createCloudAuthResolverForConfig(
@@ -537,7 +593,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         observability,
         browserAuth,
         desktopAuth: createCloudDesktopAuthConfig(authConfig),
-        auth: options.auth || createCloudAuthResolverForConfig(resolvedAuthConfig),
+        auth: options.auth || createCompositeCloudAuthResolver(
+          createApiTokenCloudAuthResolver(store),
+          createCloudAuthResolverForConfig(resolvedAuthConfig),
+        ),
         internalToken: resolveCloudInternalToken(env),
         webhookSecurity,
         autoProcessCommands: options.autoProcessCommands ?? (policy.role === 'all-in-one' && envOptions.autoProcessCommands),

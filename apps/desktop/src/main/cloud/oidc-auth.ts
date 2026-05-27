@@ -254,11 +254,16 @@ function claimsToPrincipal(claims: JwtClaims, issuerUrl: string, email: string) 
     || normalizeString(claims.tid)
     || normalizeString(claims.hd)
     || emailDomain(email)
+  const userId = stableUserId(issuerUrl, claims.sub || '')
   return {
     tenantId,
+    orgId: tenantId,
     tenantName: normalizeString(claims.tenant_name) || tenantId,
-    userId: stableUserId(issuerUrl, claims.sub || ''),
+    userId,
+    accountId: userId,
     email,
+    role: 'member' as const,
+    authSource: 'user' as const,
   }
 }
 
