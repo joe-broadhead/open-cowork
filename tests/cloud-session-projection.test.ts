@@ -65,6 +65,7 @@ test('cloud session projection persists approvals questions tools todos costs an
     type: 'permission.requested',
     payload: {
       permissionId: 'permission-1',
+      sessionId: 'opencode-runtime-session-1',
       tool: 'bash',
       input: { command: 'git status' },
       description: 'Run git status',
@@ -74,6 +75,7 @@ test('cloud session projection persists approvals questions tools todos costs an
     type: 'question.asked',
     payload: {
       requestId: 'question-1',
+      sessionId: 'opencode-runtime-session-1',
       questions: [{
         header: 'Pick',
         question: 'Proceed?',
@@ -111,9 +113,13 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asArray(pending.toolCalls).length, 1)
   assert.equal(asRecord(asArray(pending.toolCalls)[0]).name, 'read')
   assert.equal(asArray(pending.pendingApprovals).length, 1)
-  assert.equal(asRecord(asArray(pending.pendingApprovals)[0]).description, 'Run git status')
+  const pendingApproval = asRecord(asArray(pending.pendingApprovals)[0])
+  assert.equal(pendingApproval.sessionId, sessionId)
+  assert.equal(pendingApproval.description, 'Run git status')
   assert.equal(asArray(pending.pendingQuestions).length, 1)
-  assert.equal(asRecord(asArray(pending.pendingQuestions)[0]).id, 'question-1')
+  const pendingQuestion = asRecord(asArray(pending.pendingQuestions)[0])
+  assert.equal(pendingQuestion.sessionId, sessionId)
+  assert.equal(pendingQuestion.id, 'question-1')
   assert.equal(asArray(pending.todos).length, 1)
   assert.equal(asRecord(asArray(pending.todos)[0]).content, 'Ship sync')
   assert.equal(asRecord(asArray(pending.artifacts)[0]).cloudArtifactId, 'artifact-1')

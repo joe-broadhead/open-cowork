@@ -599,7 +599,7 @@ function pendingApprovalFromPayload(
   const id = eventPayloadId(payload, ['permissionId', 'id', 'requestId', 'requestID'], `${session.sessionId}:permission:${event.sequence}`)
   return {
     id,
-    sessionId: readString(payload.sessionId, session.sessionId),
+    sessionId: session.sessionId,
     taskRunId: readNullableString(payload.taskRunId),
     tool: readString(payload.tool, 'permission'),
     input: asRecord(payload.input),
@@ -617,7 +617,7 @@ function pendingQuestionFromPayload(
   const tool = asRecord(payload.tool)
   return {
     id,
-    sessionId: readString(payload.sessionId, session.sessionId),
+    sessionId: session.sessionId,
     sourceSessionId: readNullableString(payload.sourceSessionId),
     questions: Array.isArray(payload.questions)
       ? payload.questions.map(normalizeQuestionPrompt).filter((entry): entry is PendingQuestion['questions'][number] => Boolean(entry))
