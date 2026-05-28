@@ -16,6 +16,7 @@ export type GatewayConfig = {
     host: string
     port: number
     publicBaseUrl: string | null
+    adminToken: string | null
   }
   mode: GatewayMode
   logging: {
@@ -59,6 +60,7 @@ const defaultHost = '127.0.0.1'
 const defaultPort = 8787
 const secretEnvKeys = [
   'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
+  'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
   'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
   'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
   'OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET',
@@ -75,19 +77,20 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   const serviceToken = readString(env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN) || readString(raw.cloud?.serviceToken)
   const allowInsecureHttp = readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP, raw.cloud?.allowInsecureHttp ?? false)
   const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
+  const serverHost = readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost
   if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL or cloud.baseUrl is required.')
   if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN or cloud.serviceToken is required.')
-
-  return {
+  const config: GatewayConfig = {
     cloud: {
       baseUrl: normalizeBaseUrl(cloudBaseUrl, allowInsecureHttp),
       serviceToken,
       allowInsecureHttp,
     },
     server: {
-      host: readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost,
+      host: serverHost,
       port: readPort(env.OPEN_COWORK_GATEWAY_PORT ?? raw.server?.port, defaultPort),
       publicBaseUrl: readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl),
+      adminToken: readNullableString(env.OPEN_COWORK_GATEWAY_ADMIN_TOKEN) ?? readNullableString(raw.server?.adminToken),
     },
     mode,
     logging: {
@@ -101,6 +104,10 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     },
     providers: normalizeProviders(raw.providers, env),
   }
+  assertGatewayConfigSafe(config, {
+    allowPublicFakeProvider: readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false),
+  })
+  return config
 }
 
 export function redactGatewayConfig(config: GatewayConfig): Record<string, unknown> {
@@ -109,6 +116,10 @@ export function redactGatewayConfig(config: GatewayConfig): Record<string, unkno
     cloud: {
       ...config.cloud,
       serviceToken: redactSecret(config.cloud.serviceToken),
+    },
+    server: {
+      ...config.server,
+      adminToken: redactSecret(config.server.adminToken),
     },
     providers: config.providers.map((provider) => ({
       ...provider,
@@ -151,9 +162,15 @@ function parseConfigJson(value: string, source: string): GatewayRawConfig {
 function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv): GatewayProviderConfig[] {
   const envProviders = readProvidersFromEnv(env)
   const providers = rawProviders?.length ? rawProviders : envProviders
-  const normalized = providers?.length ? providers.map((provider, index) => normalizeProvider(provider, index)) : [defaultFakeProvider(env)]
+  const normalized = providers?.length
+    ? providers.map((provider, index) => normalizeProvider(provider, index))
+    : readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false)
+      ? [defaultFakeProvider(env)]
+      : []
   const enabled = normalized.filter((provider) => provider.enabled)
-  if (enabled.length === 0) throw new Error('At least one gateway provider must be enabled.')
+  if (enabled.length === 0) {
+    throw new Error('At least one gateway provider must be enabled. Set OPEN_COWORK_GATEWAY_PROVIDERS, configure Telegram/webhook credentials, or explicitly enable the local fake provider with OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true.')
+  }
   return normalized
 }
 
@@ -214,6 +231,10 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
   const id = readString(raw.id) || `${kind}-${index + 1}`
   const channelBindingId = readString(raw.channelBindingId)
   if (!channelBindingId) throw new Error(`Gateway provider ${id} requires channelBindingId.`)
+  const credentials = cleanStringRecord(raw.credentials)
+  if (kind === 'webhook' && !credentials.sharedSecret) {
+    throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated webhook ingress.`)
+  }
   return {
     id,
     kind,
@@ -221,15 +242,18 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
     channelBindingId,
     externalWorkspaceId: readNullableString(raw.externalWorkspaceId),
     defaultAgent: readNullableString(raw.defaultAgent),
-    credentials: cleanStringRecord(raw.credentials),
+    credentials,
     settings: cleanRecord(raw.settings),
   }
 }
 
 function readProviderKind(value: unknown): GatewayProviderKind {
   const kind = readString(value)
-  if (kind === 'fake' || kind === 'telegram' || kind === 'webhook' || kind === 'cli' || kind === 'slack' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
+  if (kind === 'fake' || kind === 'telegram' || kind === 'webhook') {
     return kind
+  }
+  if (kind === 'cli' || kind === 'slack' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
+    throw new Error(`Gateway provider kind ${kind} is reserved for the roadmap but is not implemented by this gateway build yet.`)
   }
   throw new Error(`Unsupported gateway provider kind: ${kind || String(value)}`)
 }
@@ -246,7 +270,26 @@ function normalizeBaseUrl(value: string, allowInsecureHttp: boolean) {
 }
 
 function isLoopbackHost(hostname: string) {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || hostname === '[::1]'
+    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+}
+
+function isPublicBindHost(hostname: string) {
+  const host = hostname.trim().toLowerCase()
+  return host === '0.0.0.0' || host === '::' || host === '[::]' || !isLoopbackHost(host)
+}
+
+function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFakeProvider: boolean }) {
+  const publicBind = isPublicBindHost(config.server.host)
+  if (publicBind && (config.metrics.enabled || config.diagnostics.enabled) && !config.server.adminToken) {
+    throw new Error('Gateway metrics or diagnostics on a public bind require OPEN_COWORK_GATEWAY_ADMIN_TOKEN.')
+  }
+  if (publicBind && config.providers.some((provider) => provider.enabled && provider.kind === 'fake') && !options.allowPublicFakeProvider) {
+    throw new Error('Gateway fake provider cannot be exposed on a public bind unless OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true is set explicitly for local/demo use.')
+  }
 }
 
 function readString(value: unknown) {

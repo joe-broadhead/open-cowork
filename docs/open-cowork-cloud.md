@@ -97,9 +97,18 @@ That file starts:
 - MinIO for artifacts and checkpoints,
 - Open Cowork Gateway on <http://localhost:8790>.
 
-The gateway starts with the fake channel provider by default so the process can
-boot before a real Telegram or webhook binding is configured. For a real
-self-hosted gateway:
+The gateway requires at least one real provider by default. For local-only
+smoke tests without Telegram or webhook credentials, opt into the fake provider
+explicitly:
+
+```bash
+OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true \
+  docker compose -f docker-compose.cloud-gateway.yml up --build
+```
+
+Do not expose the fake provider publicly. Real public deployments should
+configure Telegram or a signed webhook provider instead. For a real self-hosted
+gateway:
 
 1. Open the dashboard at <http://localhost:8787>.
 2. Configure BYOK provider credentials if your profile requires them.
@@ -117,9 +126,10 @@ Gateway health endpoints:
 
 - `GET /health` reports process liveness.
 - `GET /ready` reports provider readiness.
-- `GET /metrics` exposes Prometheus metrics when enabled.
+- `GET /metrics` exposes Prometheus metrics when enabled. Public binds require
+  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`.
 - `GET /diagnostics` returns redacted gateway config, provider state, and
-  counters for support.
+  counters for support. Public binds require the same admin token.
 
 The gateway image is separate from the cloud image because it owns channel
 secrets, long-polling or webhook connections, and a different scaling profile.
@@ -166,6 +176,15 @@ one parent release.
 The chart fails closed when `cloud.auth.mode=none` is used without
 `cloud.allowInsecureAuth=true`. Keep that override for local demos only; use
 `oidc` or a trusted `header` identity proxy for shared clusters.
+Public `header` auth deployments must also set
+`OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` or
+`OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF`; the proxy must inject that value
+with the identity headers. Public OIDC deployments must set
+`OPEN_COWORK_CLOUD_PUBLIC_URL` so redirect URIs never depend on forwarded
+headers from untrusted callers.
+The gateway chart also fails closed unless at least one provider is configured
+through `gateway.providersJson`, Telegram, generic webhook settings, or an
+existing secret.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
@@ -229,6 +248,9 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
+| `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
+| `OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP` | Explicitly allows first-login OIDC org membership creation. Keep disabled for invite-only managed deployments. |
+| `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS` | Allows `x-forwarded-for` for rate-limit attribution only when the deployment is behind a trusted proxy. |
 | `OPEN_COWORK_CLOUD_SERVICE_NAME` | Service name included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_SERVICE_VERSION` | Optional version string included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_LOG_FORMAT` | `json`, `pretty`, or `silent`; defaults to JSON for cloud logs. |
@@ -242,17 +264,19 @@ Gateway variables:
 | --- | --- |
 | `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
 | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
+| `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required when `/metrics` or `/diagnostics` are enabled on a public bind. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
 | `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public gateway URL for channel webhook registration. |
 | `OPEN_COWORK_GATEWAY_MODE` | `self-host` or `managed`; affects diagnostics and deployment labeling. |
-| `OPEN_COWORK_GATEWAY_METRICS_ENABLED` | Enables `/metrics`. |
-| `OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED` | Enables `/diagnostics`; defaults to `true` for self-host and `false` for managed mode. |
+| `OPEN_COWORK_GATEWAY_METRICS_ENABLED` | Enables `/metrics`; public binds require `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`. |
+| `OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED` | Enables `/diagnostics`; public binds require `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`. |
+| `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER` | Enables the fake local/demo provider when no real provider is configured. Do not expose it publicly. |
 | `OPEN_COWORK_GATEWAY_PROVIDERS` | JSON provider array for multi-provider deployments. Treat as secret when it carries credentials. |
 | `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN` | Telegram bot token for the Telegram provider. |
 | `OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET` | Telegram webhook secret token when running webhook mode. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
-| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Shared secret for generic webhook signing. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress and outbound bridge signing. |
 
 Hosted/public deployments should keep abuse controls enabled. The defaults are
 conservative and can be tuned per deployment; set an individual numeric quota

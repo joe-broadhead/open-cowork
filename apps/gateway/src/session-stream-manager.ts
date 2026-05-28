@@ -168,8 +168,32 @@ export function createGatewaySessionStreamManager(
         state.subscription?.close()
         state.subscription = null
         scheduleRetry(state)
+        return
+      }
+      try {
+        await skipFailedEvent(state, event)
+      } catch {
+        metrics.errors += 1
+        state.subscription?.close()
+        state.subscription = null
+        scheduleRetry(state)
       }
     }
+  }
+
+  async function skipFailedEvent(state: StreamState, event: CloudTransportSessionEvent) {
+    metrics.droppedSessionEvents += 1
+    const updated = await cloud.updateCursor({
+      bindingId: state.binding.bindingId,
+      lastEventSequence: event.sequence,
+      lastWorkspaceSequence: state.lastWorkspaceSequence,
+      lastChatMessageId: state.lastChatMessageId,
+    })
+    state.lastEventSequence = updated?.lastEventSequence ?? event.sequence
+    state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
+    state.lastChatMessageId = updated?.lastChatMessageId ?? state.lastChatMessageId
+    state.renderFailures.delete(event.sequence)
+    if (updated) state.binding = updated
   }
 
   async function hydrateSnapshot(state: StreamState, event: CloudTransportSessionEvent) {

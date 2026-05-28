@@ -124,8 +124,12 @@ function createFixture(options: {
       auth: options.auth || (() => ({
       tenantId: 'tenant-1',
       tenantName: 'Tenant 1',
+      orgId: 'tenant-1',
       userId: 'user-1',
+      accountId: 'user-1',
       email: 'user@example.test',
+      role: 'owner',
+      authSource: 'local',
     })),
   })
   return { runtime, store, objectStore, policy, service, worker, server }
@@ -902,6 +906,60 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
     assert.equal(rejected.status, 401)
   } finally {
     await server.close()
+  }
+})
+
+test('cloud HTTP API token issuance applies default and maximum expirations', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const issued = await readJson(await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Gateway token', scopes: ['gateway'] }),
+    }))
+    const token = asRecord(issued.token)
+    assert.equal(typeof token.expiresAt, 'string')
+    const expiresAt = Date.parse(String(token.expiresAt))
+    assert.equal(Number.isFinite(expiresAt), true)
+    assert.equal(expiresAt > Date.now(), true)
+
+    const tooLong = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Too long',
+        scopes: ['gateway'],
+        expiresAt: new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString(),
+      }),
+    })
+    assert.equal(tooLong.status, 400)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP worker status endpoints require operator privileges', async () => {
+  const memberPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'member-1',
+    accountId: 'member-1',
+    email: 'member@example.test',
+    role: 'member' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({ auth: () => memberPrincipal })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fixture.service.ensurePrincipal(memberPrincipal)
+    const response = await fetch(`${baseUrl}/api/workers/heartbeats`)
+    assert.equal(response.status, 403)
+    const runtimeStatus = await fetch(`${baseUrl}/api/runtime/status`)
+    assert.equal(runtimeStatus.status, 403)
+  } finally {
+    await fixture.server.close()
   }
 })
 

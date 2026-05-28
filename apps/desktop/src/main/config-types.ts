@@ -239,12 +239,14 @@ export type CloudProfileConfig = {
 
 export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
+  headerSecret?: string
   issuerUrl?: string
   clientId?: string
   clientSecretRef?: string
   callbackPath?: string
   cookieSecretRef?: string
   allowedEmailDomains?: string[]
+  allowSelfServiceSignup?: boolean
 }
 
 export type CloudStorageConfig = {
@@ -562,6 +564,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     defaultProfile: 'full',
     auth: {
       mode: 'none',
+      allowSelfServiceSignup: true,
     },
     storage: {
       controlPlane: {

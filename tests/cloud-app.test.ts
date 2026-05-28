@@ -152,6 +152,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     checkpointsEnabled: true,
     cookieSecure: false,
     publicUrl: 'https://cloud.example.test',
+    trustProxyHeaders: false,
   })
 
   assert.equal(shouldRunCloudWeb('all-in-one'), true)
@@ -322,6 +323,37 @@ test('cloud auth mode none refuses non-loopback web binds without explicit local
     hostname: '0.0.0.0',
     auth: DEFAULT_CONFIG.cloud.auth,
     env: { OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+  }))
+})
+
+test('cloud public header and OIDC auth require spoofing-resistant deployment settings', () => {
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'header' },
+    env: {},
+  }), /HEADER_AUTH_SECRET/)
+
+  assert.doesNotThrow(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'header', headerSecret: 'trusted-proxy-secret' },
+    env: {},
+  }))
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: {},
+  }), /PUBLIC_URL/)
+
+  assert.doesNotThrow(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    publicUrl: 'https://cloud.example.test',
+    env: {},
   }))
 })
 
@@ -1068,9 +1100,20 @@ test('cloud app wires OIDC browser login when session cookies are configured', a
 })
 
 test('cloud header auth resolver maps request headers to tenant principal', async () => {
-  const auth = createHeaderCloudAuthResolver()
+  const auth = createHeaderCloudAuthResolver({}, { headerSecret: 'trusted-proxy-secret' })
+  await assert.rejects(async () => {
+    await auth({
+      headers: {
+        'x-open-cowork-header-auth-secret': 'wrong',
+        'x-open-cowork-tenant-id': 'tenant-1',
+        'x-open-cowork-user-id': 'user-1',
+        'x-open-cowork-user-email': 'user@example.test',
+      },
+    } as unknown as IncomingMessage)
+  }, /secret is invalid/)
   const principal = await auth({
     headers: {
+      'x-open-cowork-header-auth-secret': 'trusted-proxy-secret',
       'x-open-cowork-tenant-id': 'tenant-1',
       'x-open-cowork-tenant-name': 'Tenant 1',
       'x-open-cowork-user-id': 'user-1',

@@ -1,9 +1,10 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
+import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
@@ -61,6 +62,7 @@ export type CloudHttpServerOptions = {
   corsOrigin?: string | null
   maxBodyBytes?: number
   ssePollMs?: number
+  trustProxyHeaders?: boolean
 }
 
 export class CloudHttpError extends Error {
@@ -92,8 +94,12 @@ type RouteContext = {
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
   tenantId: 'default',
   tenantName: 'Default',
+  orgId: 'default',
   userId: 'local-user',
+  accountId: 'local-user',
   email: 'local@example.test',
+  role: 'owner',
+  authSource: 'local',
 }
 
 const CLOUD_WEBHOOK_REQUEST_WINDOW_MS = 60 * 1000
@@ -143,7 +149,9 @@ function writeJson(res: ServerResponse, status: number, body: unknown, origin?: 
   res.end(JSON.stringify(body))
 }
 
-function writeHtml(res: ServerResponse, status: number, body: string, origin?: string | null) {
+function writeHtml(res: ServerResponse, status: number, body: string, origin?: string | null, nonce?: string | null) {
+  const scriptSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
+  const styleSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
   writeCorsHeaders(res, origin)
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -152,8 +160,8 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
       "default-src 'self'",
       "connect-src 'self'",
       "img-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      "script-src 'unsafe-inline'",
+      `style-src ${styleSrc}`,
+      `script-src ${scriptSrc}`,
       "base-uri 'none'",
       "frame-ancestors 'none'",
       "form-action 'self'",
@@ -340,8 +348,10 @@ function webhookSource(req: IncomingMessage) {
   return req.socket.remoteAddress || 'unknown'
 }
 
-function requestSource(req: IncomingMessage) {
-  const forwardedFor = firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
+function requestSource(req: IncomingMessage, trustProxyHeaders = false) {
+  const forwardedFor = trustProxyHeaders
+    ? firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
+    : ''
   return forwardedFor || req.socket.remoteAddress || 'unknown'
 }
 
@@ -353,8 +363,8 @@ function requestHeaderRecord(req: IncomingMessage): Record<string, string | unde
   return headers
 }
 
-function authFailureScopes(req: IncomingMessage) {
-  const source = requestSource(req)
+function authFailureScopes(req: IncomingMessage, trustProxyHeaders = false) {
+  const source = requestSource(req, trustProxyHeaders)
   const authorization = firstHeader(req.headers.authorization).trim()
   const scopes = [`ip:${source}`]
   if (!authorization) return scopes
@@ -531,7 +541,7 @@ async function handleBillingWebhook(
     return
   }
 
-  const source = `billing:${requestSource(req)}`
+  const source = `billing:${requestSource(req, options.trustProxyHeaders)}`
   const startedAt = Date.now()
   const securityStore = options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore()
   let replayClaim: Awaited<ReturnType<WorkflowWebhookSecurityStore['claimSignature']>> | null = null
@@ -835,7 +845,7 @@ async function handleApiRequest(
 
   if (resource === 'workers' && sessionId === 'heartbeats' && !action && req.method === 'GET') {
     writeJson(res, 200, {
-      heartbeats: await options.service.listWorkerHeartbeats(),
+      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
     }, options.corsOrigin)
     return
   }
@@ -851,7 +861,7 @@ async function handleApiRequest(
           : 'durable'
         : 'delegated',
       checkpoints: Boolean(options.worker),
-      heartbeats: await options.service.listWorkerHeartbeats(),
+      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
     }, options.corsOrigin)
     return
   }
@@ -1176,319 +1186,30 @@ async function handleApiRequest(
   }
 
   if (resource === 'channels') {
-    const collection = sessionId
-    const itemId = action
-    const itemAction = artifactId
-
-    if (collection === 'agents') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, { agents: await options.service.listHeadlessAgents(context.principal) }, options.corsOrigin)
-        return
-      }
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const name = readString(body.name)
-        if (!name) {
-          writeError(res, 400, 'Headless agent name is required.', options.corsOrigin)
-          return
-        }
-        const agent = await options.service.createHeadlessAgent(context.principal, {
-          agentId: readString(body.agentId),
-          name,
-          profileName: readString(body.profileName),
-          status: readEnum(body.status, ['active', 'disabled'] as const),
-          managed: body.managed === true,
-        })
-        writeJson(res, 201, { agent }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'PATCH') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const agent = await options.service.updateHeadlessAgent(context.principal, itemId, {
-          name: body.name === undefined ? undefined : readString(body.name) || '',
-          profileName: body.profileName === undefined ? undefined : readString(body.profileName) || '',
-          status: body.status === undefined ? undefined : readEnum(body.status, ['active', 'disabled'] as const),
-          managed: body.managed === undefined ? undefined : body.managed === true,
-        })
-        if (!agent) {
-          writeError(res, 404, 'Headless agent was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { agent }, options.corsOrigin)
-        return
-      }
-    }
-
-    if (collection === 'bindings') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, {
-          bindings: await options.service.listChannelBindings(context.principal, context.url.searchParams.get('agentId')),
-        }, options.corsOrigin)
-        return
-      }
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const agentId = readString(body.agentId)
-        const provider = readChannelProvider(body.provider)
-        const displayName = readString(body.displayName)
-        if (!agentId || !provider || !displayName) {
-          writeError(res, 400, 'Channel binding requires agentId, provider, and displayName.', options.corsOrigin)
-          return
-        }
-        const binding = await options.service.createChannelBinding(context.principal, {
-          bindingId: readString(body.bindingId),
-          agentId,
-          provider,
-          externalWorkspaceId: readString(body.externalWorkspaceId),
-          displayName,
-          status: readEnum(body.status, ['active', 'disabled', 'auth_required', 'error'] as const),
-          credentialRef: readString(body.credentialRef),
-          settings: readRecord(body.settings) || {},
-        })
-        writeJson(res, 201, { binding }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'PATCH') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const binding = await options.service.updateChannelBinding(context.principal, itemId, {
-          displayName: body.displayName === undefined ? undefined : readString(body.displayName) || '',
-          status: body.status === undefined ? undefined : readEnum(body.status, ['active', 'disabled', 'auth_required', 'error'] as const),
-          credentialRef: body.credentialRef === undefined ? undefined : readString(body.credentialRef),
-          settings: body.settings === undefined ? undefined : readRecord(body.settings) || {},
-        })
-        if (!binding) {
-          writeError(res, 404, 'Channel binding was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { binding }, options.corsOrigin)
-        return
-      }
-    }
-
-    if (collection === 'identities' && itemId === 'resolve' && !itemAction && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const provider = readChannelProvider(body.provider)
-      const externalUserId = readString(body.externalUserId)
-      if (!provider || !externalUserId) {
-        writeError(res, 400, 'Channel identity resolution requires provider and externalUserId.', options.corsOrigin)
-        return
-      }
-      const identity = await options.service.resolveChannelIdentity(context.principal, {
-        identityId: readString(body.identityId),
-        provider,
-        externalWorkspaceId: readString(body.externalWorkspaceId),
-        externalUserId,
-        accountId: readString(body.accountId),
-        role: readEnum(body.role, ['owner', 'admin', 'member', 'approver', 'viewer'] as const),
-        status: readEnum(body.status, ['active', 'disabled', 'pending'] as const),
-        metadata: readRecord(body.metadata) || {},
-      })
-      writeJson(res, 200, { identity }, options.corsOrigin)
-      return
-    }
-
-    if (collection === 'sessions') {
-      if (itemId === 'bind' && !itemAction && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const channelBindingId = readString(body.channelBindingId)
-        const provider = readChannelProvider(body.provider)
-        const externalChatId = readString(body.externalChatId)
-        const externalThreadId = readString(body.externalThreadId)
-        if (!channelBindingId || !provider || !externalChatId || !externalThreadId) {
-          writeError(res, 400, 'Channel session binding requires channelBindingId, provider, externalChatId, and externalThreadId.', options.corsOrigin)
-          return
-        }
-        const bound = await options.service.bindChannelSession(context.principal, {
-          identityId: readString(body.identityId),
-          externalUserId: readString(body.externalUserId),
-          externalWorkspaceId: readString(body.externalWorkspaceId),
-          channelBindingId,
-          provider,
-          externalChatId,
-          externalThreadId,
-          sessionId: readString(body.sessionId),
-          title: readString(body.title),
-          lastEventSequence: readNonNegativeInteger(body.lastEventSequence),
-          lastWorkspaceSequence: readNonNegativeInteger(body.lastWorkspaceSequence),
-          lastChatMessageId: readString(body.lastChatMessageId),
-        })
-        writeJson(res, 200, bound, options.corsOrigin)
-        return
-      }
-      if (itemId === 'by-thread' && !itemAction && req.method === 'GET') {
-        const provider = readChannelProvider(context.url.searchParams.get('provider'))
-        const externalChatId = context.url.searchParams.get('externalChatId')
-        const externalThreadId = context.url.searchParams.get('externalThreadId')
-        if (!provider || !externalChatId || !externalThreadId) {
-          writeError(res, 400, 'Channel thread lookup requires provider, externalChatId, and externalThreadId.', options.corsOrigin)
-          return
-        }
-        const found = await options.service.getChannelSessionByThread(context.principal, {
-          provider,
-          externalWorkspaceId: context.url.searchParams.get('externalWorkspaceId'),
-          externalChatId,
-          externalThreadId,
-        })
-        if (!found) {
-          writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, found, options.corsOrigin)
-        return
-      }
-      if (itemId === 'prompt' && !itemAction && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const bindingId = readString(body.bindingId)
-        const text = readString(body.text)
-        if (!bindingId || !text) {
-          writeError(res, 400, 'Channel prompt requires bindingId and text.', options.corsOrigin)
-          return
-        }
-        const result = await options.service.enqueueChannelPrompt(context.principal, {
-          bindingId,
-          text,
-          agent: readString(body.agent),
-          identityId: readString(body.identityId),
-          provider: readChannelProvider(body.provider),
-          externalWorkspaceId: readString(body.externalWorkspaceId),
-          externalUserId: readString(body.externalUserId),
-        })
-        const processed = await processSessionCommandIfConfigured(options, context.principal.tenantId, result.binding.sessionId)
-        writeJson(res, 202, { ...result, processed }, options.corsOrigin)
-        return
-      }
-    }
-
-    if (collection === 'cursor' && !itemId && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const bindingId = readString(body.bindingId)
-      if (!bindingId) {
-        writeError(res, 400, 'Channel cursor update requires bindingId.', options.corsOrigin)
-        return
-      }
-      const binding = await options.service.updateChannelCursor(context.principal, {
-        bindingId,
-        lastEventSequence: readNonNegativeInteger(body.lastEventSequence),
-        lastWorkspaceSequence: readNonNegativeInteger(body.lastWorkspaceSequence),
-        lastChatMessageId: body.lastChatMessageId === undefined ? undefined : readString(body.lastChatMessageId),
-      })
-      if (!binding) {
-        writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, { binding }, options.corsOrigin)
-      return
-    }
-
-    if (collection === 'interactions') {
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const agentId = readString(body.agentId)
-        const sessionForInteraction = readString(body.sessionId)
-        const provider = readChannelProvider(body.provider)
-        const kind = readEnum(body.kind, ['permission', 'question'] as const)
-        const targetId = readString(body.targetId)
-        if (!agentId || !sessionForInteraction || !provider || !kind || !targetId) {
-          writeError(res, 400, 'Channel interaction requires agentId, sessionId, provider, kind, and targetId.', options.corsOrigin)
-          return
-        }
-        const issued = await options.service.createChannelInteraction(context.principal, {
-          interactionId: readString(body.interactionId),
-          agentId,
-          sessionId: sessionForInteraction,
-          provider,
-          kind,
-          targetId,
-          externalInteractionId: readString(body.externalInteractionId),
-          createdByIdentityId: readString(body.createdByIdentityId),
-          expiresAt: readOptionalDate(body.expiresAt),
-          tokenSecret: readString(body.tokenSecret),
-        })
-        writeJson(res, 201, {
-          interaction: publicChannelInteraction(issued.interaction),
-          plaintextToken: issued.plaintextToken,
-        }, options.corsOrigin)
-        return
-      }
-      if (itemId === 'resolve' && !itemAction && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const result = await options.service.resolveChannelInteraction(context.principal, {
-          identityId: readString(body.identityId),
-          provider: readChannelProvider(body.provider),
-          externalWorkspaceId: readString(body.externalWorkspaceId),
-          externalUserId: readString(body.externalUserId),
-          token: readString(body.token),
-          externalInteractionId: readString(body.externalInteractionId),
-          response: body.response ?? null,
-          answers: Array.isArray(body.answers) ? body.answers : undefined,
-          reject: body.reject === true,
-        })
-        const processed = await processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
-        writeJson(res, 202, {
-          interaction: publicChannelInteraction(result.interaction),
-          command: result.command,
-          processed,
-        }, options.corsOrigin)
-        return
-      }
-    }
-
-    if (collection === 'deliveries') {
-      if (itemId === 'stream' && !itemAction && req.method === 'GET') {
-        await handleChannelDeliveriesSse(req, res, options, context)
-        return
-      }
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const agentId = readString(body.agentId)
-        const channelBindingId = readString(body.channelBindingId)
-        const provider = readChannelProvider(body.provider)
-        const eventType = readString(body.eventType)
-        const target = readRecord(body.target)
-        const payload = readRecord(body.payload)
-        if (!agentId || !channelBindingId || !provider || !eventType || !target || !payload) {
-          writeError(res, 400, 'Channel delivery requires agentId, channelBindingId, provider, target, eventType, and payload.', options.corsOrigin)
-          return
-        }
-        const delivery = await options.service.createChannelDelivery(context.principal, {
-          deliveryId: readString(body.deliveryId),
-          agentId,
-          channelBindingId,
-          sessionBindingId: readString(body.sessionBindingId),
-          provider,
-          target,
-          eventType,
-          payload,
-          status: readEnum(body.status, ['pending', 'claimed', 'sent', 'failed', 'dead'] as const),
-          nextAttemptAt: readOptionalDate(body.nextAttemptAt),
-        })
-        writeJson(res, 201, { delivery }, options.corsOrigin)
-        return
-      }
-      if (itemId && itemAction === 'ack' && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const status = readString(body.status) as 'sent' | 'failed' | 'dead' | null
-        if (!status || !['sent', 'failed', 'dead'].includes(status)) {
-          writeError(res, 400, 'Channel delivery ack requires status sent, failed, or dead.', options.corsOrigin)
-          return
-        }
-        const delivery = await options.service.ackChannelDelivery(context.principal, {
-          deliveryId: itemId,
-          claimedBy: readString(body.claimedBy) || context.url.searchParams.get('claimedBy') || context.principal.tokenId || context.principal.userId,
-          status,
-          lastError: readString(body.lastError),
-          nextAttemptAt: readOptionalDate(body.nextAttemptAt),
-        })
-        if (!delivery) {
-          writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { delivery }, options.corsOrigin)
-        return
-      }
-    }
-
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    const handled = await handleChannelsApiRoute({
+      req,
+      res,
+      options,
+      context,
+      collection: sessionId,
+      itemId: action,
+      itemAction: artifactId,
+      tools: {
+        readJsonBody,
+        readString,
+        readRecord,
+        readChannelProvider,
+        readEnum,
+        readNonNegativeInteger,
+        readOptionalDate,
+        publicChannelInteraction,
+        writeJson,
+        writeError,
+        processSessionCommandIfConfigured,
+        handleChannelDeliveriesSse,
+      },
+    })
+    if (!handled) writeError(res, 404, 'Not found.', options.corsOrigin)
     return
   }
 
@@ -1891,7 +1612,7 @@ export class CloudHttpServer {
   private async enforceIpRateLimit(req: IncomingMessage) {
     await this.options.service.claimHttpRateLimit({
       scope: 'ip',
-      source: requestSource(req),
+      source: requestSource(req, this.options.trustProxyHeaders),
     })
   }
 
@@ -1909,8 +1630,8 @@ export class CloudHttpServer {
   }
 
   private async resolvePrincipal(req: IncomingMessage, auth: CloudAuthResolver) {
-    const source = requestSource(req)
-    const scopes = authFailureScopes(req)
+    const source = requestSource(req, this.options.trustProxyHeaders)
+    const scopes = authFailureScopes(req, this.options.trustProxyHeaders)
     await Promise.all(scopes.map((scope) => (
       this.options.service.checkCloudAuthBackoff({ scope, source })
     )))
@@ -1957,7 +1678,8 @@ export class CloudHttpServer {
       }
 
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
-        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy), this.options.corsOrigin)
+        const nonce = randomBytes(16).toString('base64url')
+        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, nonce), this.options.corsOrigin, nonce)
         return
       }
 

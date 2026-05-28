@@ -7,11 +7,18 @@ import {
   resolveGatewayConfig,
 } from '../dist/index.js'
 
-test('gateway config resolves a fake provider from minimal env', () => {
+test('gateway config requires providers unless the local fake provider is explicitly enabled', () => {
+  assert.throws(() => resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test/',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'ocgw_secret_token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  }), /At least one gateway provider/)
+
   const config = resolveGatewayConfig({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test/',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'ocgw_secret_token',
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
   })
 
   assert.equal(config.cloud.baseUrl, 'https://cloud.example.test')
@@ -19,6 +26,7 @@ test('gateway config resolves a fake provider from minimal env', () => {
   assert.equal(config.cloud.allowInsecureHttp, false)
   assert.equal(config.server.host, '127.0.0.1')
   assert.equal(config.server.port, 0)
+  assert.equal(config.server.adminToken, null)
   assert.equal(config.mode, 'self-host')
   assert.deepEqual(config.providers.map((provider) => ({
     id: provider.id,
@@ -97,6 +105,10 @@ test('gateway diagnostics default to self-host only unless explicitly enabled', 
       serviceToken: 'service-token',
     },
     mode: 'managed',
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
   })
   assert.equal(managed.diagnostics.enabled, false)
 
@@ -109,6 +121,10 @@ test('gateway diagnostics default to self-host only unless explicitly enabled', 
     diagnostics: {
       enabled: true,
     },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
   })
   assert.equal(explicitlyEnabled.diagnostics.enabled, true)
 })
@@ -127,7 +143,7 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       kind: 'email' as never,
       channelBindingId: 'email-binding',
     }],
-  }), /not implemented|Unsupported/)
+  }), /roadmap|not implemented|Unsupported/)
 
   assert.throws(() => resolveGatewayConfig({
     cloud: {
@@ -151,4 +167,56 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       channelBindingId: 'fake-binding',
     }],
   }).cloud.baseUrl, 'http://cloud.example.test')
+})
+
+test('gateway config rejects unsafe public admin, fake, and webhook ingress defaults', () => {
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
+    },
+    metrics: {
+      enabled: false,
+    },
+    diagnostics: {
+      enabled: false,
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }), /fake provider cannot be exposed/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
+    },
+    metrics: {
+      enabled: true,
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /ADMIN_TOKEN/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      kind: 'webhook',
+      channelBindingId: 'webhook',
+      settings: { deliveryUrl: 'https://bridge.example.test/out' },
+    }],
+  }), /sharedSecret/)
 })

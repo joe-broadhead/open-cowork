@@ -490,6 +490,21 @@ describe("WebhookProvider", () => {
     await provider.stop();
   });
 
+  it("rejects ingress when no shared secret has been configured", async () => {
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway"
+    });
+    await provider.start(async () => {});
+
+    await expect(provider.handleWebhookPayload({
+      target: { chatId: "team-chat" },
+      sender: { userId: "alice" },
+      text: "hello"
+    }, {})).rejects.toThrow("Webhook shared secret is required for ingress");
+
+    await provider.stop();
+  });
+
   it("validates required incoming and outgoing fields", () => {
     expect(() => mapWebhookPayload({})).toThrow("Webhook target must be an object");
     expect(() => mapWebhookPayload({ target: {}, sender: { userId: "alice" } })).toThrow("Webhook target.chatId is required");
@@ -614,6 +629,7 @@ describe("WebhookProvider", () => {
   it("rejects attachments larger than the configured bridge limit before dispatch", async () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
       maxAttachmentBytes: 4
     });
     const seen: string[] = [];
@@ -632,7 +648,7 @@ describe("WebhookProvider", () => {
           bufferBase64: Buffer.from("12345").toString("base64")
         }
       ]
-    }, {})).rejects.toThrow("Webhook attachment exceeds max size of 4 bytes");
+    }, { sharedSecret: "secret" })).rejects.toThrow("Webhook attachment exceeds max size of 4 bytes");
     expect(seen).toEqual([]);
 
     await provider.stop();
