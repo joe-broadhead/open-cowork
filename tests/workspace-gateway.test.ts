@@ -15,6 +15,7 @@ import {
   type CloudWorkspaceSessionAdapter,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import type { CloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
+import type { WorkspaceApiSupport } from '@open-cowork/shared'
 
 function event(senderId: number) {
   return { sender: { id: senderId } } as never
@@ -52,6 +53,12 @@ function recordingCloudCache(removedWorkspaceIds: string[]): CloudWorkspaceCache
       removedWorkspaceIds.push(workspaceId)
     },
   }
+}
+
+function supportStatus(support: WorkspaceApiSupport[], api: string) {
+  const entry = support.find((candidate) => candidate.api === api)
+  assert.ok(entry, `missing support entry for ${api}`)
+  return entry
 }
 
 test('workspace gateway exposes local workspace by default', () => {
@@ -160,6 +167,18 @@ test('workspace gateway keeps local desktop actions local-only', () => {
   )
 })
 
+test('workspace gateway marks local desktop-only capabilities as local supported', async () => {
+  const gateway = createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null })
+  const support = await gateway.supportMatrix(event(1), LOCAL_WORKSPACE_ID)
+
+  assert.equal(supportStatus(support, 'sessions.fileSnippet').status, 'supported')
+  assert.equal(supportStatus(support, 'sessions.diff').status, 'supported')
+  assert.equal(supportStatus(support, 'localFiles').status, 'supported')
+  assert.equal(supportStatus(support, 'localStdioMcps').status, 'supported')
+  assert.equal(supportStatus(support, 'machineRuntimeConfig').status, 'supported')
+  assert.equal(supportStatus(support, 'localFiles').verdict?.allowed, true)
+})
+
 test('workspace gateway registers cloud connections without enabling unauthenticated execution', async () => {
   const gateway = createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null })
   const workspace = gateway.addCloud(event(1), { baseUrl: 'https://cloud.example.test/api/', label: 'Acme' })
@@ -173,6 +192,100 @@ test('workspace gateway registers cloud connections without enabling unauthentic
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.status, 'blocked_by_policy')
   assert.equal(support.find((entry) => entry.api === 'localFiles')?.status, 'not_supported')
   await assert.rejects(() => gateway.sync(event(1), workspace.id), /Sign in|not available/)
+})
+
+test('workspace gateway keeps host paths, local stdio MCPs, and machine config out of cloud support', async () => {
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-workspace-cloud-boundary-')), 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  credentials.save({
+    workspaceId: 'cloud:test',
+    accessToken: 'cloud-access-token',
+    expiresAt: '2030-05-27T12:00:00.000Z',
+  })
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: {
+        sessions: true,
+        threadIndex: true,
+        workflows: true,
+        artifacts: true,
+        settings: true,
+        customAgents: true,
+        customSkills: true,
+        customMcps: true,
+        agents: true,
+      },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'enabled',
+      localStdioMcps: 'allowlisted',
+      machineRuntimeConfig: 'allowlisted',
+    }),
+    listSessions: async () => [],
+    createSession: async () => ({
+      id: 'cloud-session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }),
+    getSessionInfo: async () => null,
+    getSessionView: async () => ({
+      messages: [],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      pendingApprovals: [],
+      pendingQuestions: [],
+      errors: [],
+      todos: [],
+      executionPlan: [],
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      lastInputTokens: 0,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      activeAgent: null,
+      lastItemWasTool: false,
+      revision: 0,
+      lastEventAt: 0,
+      isGenerating: false,
+      isAwaitingPermission: false,
+      isAwaitingQuestion: false,
+    }),
+    promptSession: async () => undefined,
+    abortSession: async () => undefined,
+  }
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: credentials,
+    workspaces: [{
+      id: 'cloud:test',
+      kind: 'cloud',
+      label: 'Cloud',
+      status: 'online',
+      baseUrl: 'https://cloud.example.test',
+      lastSyncedAt: null,
+    }],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  const support = await gateway.supportMatrix(event(1), 'cloud:test')
+
+  assert.equal(supportStatus(support, 'sessions.prompt').status, 'supported')
+  assert.equal(supportStatus(support, 'sessions.fileSnippet').status, 'not_supported')
+  assert.match(supportStatus(support, 'sessions.fileSnippet').verdict?.reason || '', /local host paths/)
+  assert.equal(supportStatus(support, 'sessions.diff').status, 'not_supported')
+  assert.equal(supportStatus(support, 'localFiles').status, 'not_supported')
+  assert.match(supportStatus(support, 'localFiles').verdict?.reason || '', /implicitly upload local files/)
+  assert.equal(supportStatus(support, 'localStdioMcps').status, 'not_supported')
+  assert.match(supportStatus(support, 'localStdioMcps').verdict?.reason || '', /local stdio MCPs/)
+  assert.equal(supportStatus(support, 'machineRuntimeConfig').status, 'not_supported')
+  assert.match(supportStatus(support, 'machineRuntimeConfig').verdict?.reason || '', /machine-native runtime config/)
 })
 
 test('workspace gateway loads and removes persisted cloud connections', () => {

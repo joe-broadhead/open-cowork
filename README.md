@@ -60,6 +60,25 @@ In other words:
 
 **OpenCode is the engine. Open Cowork is the cockpit.**
 
+## Product surfaces and sync contract
+
+Open Cowork is organized around three surfaces on the same OpenCode boundary:
+
+- **Desktop** can run a Local workspace with the current private-on-device
+  behavior, or connect to a Cloud workspace.
+- **Cloud workspace** is the shared control plane. Desktop, web, and gateway
+  clients see the same cloud threads because they read and write the same
+  tenant-scoped sessions, events, projections, artifacts, workflows, settings,
+  and policy verdicts.
+- **Gateway** is a headless client for Telegram, Slack, email, webhooks, and
+  similar channels. It routes channel messages to cloud sessions; it does not
+  spawn OpenCode or own a second runtime.
+
+Local threads stay local. Open Cowork does not upload local projects, local
+stdio MCPs, machine runtime config, provider keys, or local-only artifacts just
+because a user connects a cloud org. Cloud-safe actions are explicit, policy
+gated, and reported through the workspace support matrix.
+
 ## Why it exists
 
 AI coding agents are powerful.

@@ -1,5 +1,11 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react'
-import type { BrandingSidebarConfig, BrandingSidebarLowerConfig, BrandingSidebarTopConfig, WorkspaceInfo } from '@open-cowork/shared'
+import type {
+  BrandingSidebarConfig,
+  BrandingSidebarLowerConfig,
+  BrandingSidebarTopConfig,
+  WorkspaceApiSupport,
+  WorkspaceInfo,
+} from '@open-cowork/shared'
 import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
@@ -228,11 +234,11 @@ function workspaceStatusLabel(status: WorkspaceInfo['status']) {
     case 'online':
       return t('workspace.status.online', 'Online')
     case 'offline':
-      return t('workspace.status.offline', 'Offline')
+      return t('workspace.status.offline', 'Offline cached')
     case 'auth_required':
-      return t('workspace.status.authRequired', 'Sign in')
+      return t('workspace.status.authRequired', 'Auth required')
     case 'disabled':
-      return t('workspace.status.disabled', 'Disabled')
+      return t('workspace.status.disabled', 'Policy disabled')
     case 'error':
       return t('workspace.status.error', 'Error')
     default:
@@ -247,15 +253,60 @@ function workspaceStatusClass(status: WorkspaceInfo['status']) {
   return 'border-red-400/30 text-red-200'
 }
 
+function workspaceSupportReason(support: WorkspaceApiSupport[] | undefined, ...apis: string[]) {
+  for (const api of apis) {
+    const reason = support?.find((entry) => entry.api === api)?.verdict?.reason
+    if (reason) return reason
+  }
+  return null
+}
+
+function workspaceDescription(workspace: WorkspaceInfo, support: WorkspaceApiSupport[] | undefined) {
+  if (workspace.kind === 'local') {
+    return t('workspace.local', 'Local workspace - private on this device')
+  }
+  if (workspace.status === 'offline') {
+    return t('workspace.offlineCached', 'Offline cached - cloud sends are disabled')
+  }
+  if (workspace.status === 'auth_required') {
+    return t('workspace.authRequiredDescription', 'Auth required - sign in to sync this workspace')
+  }
+  if (workspace.status === 'disabled') {
+    const reason = workspaceSupportReason(support, 'sessions.prompt', 'sessions.create') || workspace.error
+    return reason
+      ? `${t('workspace.policyDisabled', 'Policy disabled')} - ${reason}`
+      : t('workspace.policyDisabledDescription', 'Policy disabled - this workspace cannot run cloud actions')
+  }
+  if (workspace.status === 'error') {
+    return workspace.error || t('workspace.errorDescription', 'Cloud workspace error')
+  }
+  const cloudTarget = workspace.profileName || workspace.baseUrl || t('workspace.cloud', 'Cloud workspace')
+  return `${cloudTarget} - ${t('workspace.cloudSynced', 'syncs with web and gateway')}`
+}
+
 function WorkspaceSwitcher() {
   const setSessions = useSessionStore((state) => state.setSessions)
   const setCurrentSession = useSessionStore((state) => state.setCurrentSession)
   const setActiveWorkspace = useSessionStore((state) => state.setActiveWorkspace)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([LOCAL_WORKSPACE_FALLBACK])
+  const [supportByWorkspace, setSupportByWorkspace] = useState<Record<string, WorkspaceApiSupport[]>>({})
   const [open, setOpen] = useState(false)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
+
+  const refreshSupport = async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
+    const workspaceApi = window.coworkApi?.workspace
+    if (!workspaceApi?.support) return
+    const entries = await Promise.all(listedWorkspaces.map(async (workspace) => {
+      try {
+        return [workspace.id, await workspaceApi.support(workspace.id)] as const
+      } catch {
+        return [workspace.id, []] as const
+      }
+    }))
+    if (!cancelled()) setSupportByWorkspace(Object.fromEntries(entries))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -266,6 +317,7 @@ function WorkspaceSwitcher() {
         if (cancelled) return
         const listedWorkspaces = next.length > 0 ? next : [LOCAL_WORKSPACE_FALLBACK]
         setWorkspaces(listedWorkspaces)
+        void refreshSupport(listedWorkspaces, () => cancelled)
         const active = listedWorkspaces.find((workspace) => workspace.active) || listedWorkspaces[0] || LOCAL_WORKSPACE_FALLBACK
         setActiveWorkspace(active.id)
         if (active.kind === 'local' || active.status === 'online') {
@@ -297,6 +349,7 @@ function WorkspaceSwitcher() {
       }
       const nextWorkspaces = await window.coworkApi.workspace.list()
       setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [activated])
+      void refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [activated], () => false)
       if (activated.id !== previousId) {
         setActiveWorkspace(activated.id)
         setCurrentSession(null)
@@ -312,6 +365,7 @@ function WorkspaceSwitcher() {
         const restored = await window.coworkApi.workspace.activate(previousId)
         const restoredWorkspaces = await window.coworkApi.workspace.list()
         setWorkspaces(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored])
+        void refreshSupport(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored], () => false)
         setActiveWorkspace(restored.id)
         if (restored.kind === 'local' || restored.status === 'online') {
           setSessions(await window.coworkApi.session.list({ workspaceId: restored.id }))
@@ -337,14 +391,12 @@ function WorkspaceSwitcher() {
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <span className="min-w-0 truncate font-medium">{activeWorkspace.label}</span>
-          <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(activeWorkspace.status)}`}>
+          <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(activeWorkspace.status)}`}>
             {workspaceStatusLabel(activeWorkspace.status)}
           </span>
         </div>
         <div className="mt-0.5 truncate text-[10px] text-text-muted">
-          {activeWorkspace.kind === 'local'
-            ? t('workspace.local', 'Local workspace')
-            : activeWorkspace.profileName || activeWorkspace.baseUrl || t('workspace.cloud', 'Cloud workspace')}
+          {workspaceDescription(activeWorkspace, supportByWorkspace[activeWorkspace.id])}
         </div>
       </button>
 
@@ -363,14 +415,12 @@ function WorkspaceSwitcher() {
             >
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate font-medium">{workspace.label}</span>
-                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(workspace.status)}`}>
+                <span className={`max-w-[96px] shrink-0 truncate rounded border px-1.5 py-0.5 text-[10px] ${workspaceStatusClass(workspace.status)}`}>
                   {workspaceStatusLabel(workspace.status)}
                 </span>
               </div>
               <div className="mt-0.5 truncate text-[10px] text-text-muted">
-                {workspace.kind === 'local'
-                  ? t('workspace.local', 'Local workspace')
-                  : workspace.profileName || workspace.baseUrl || t('workspace.cloud', 'Cloud workspace')}
+                {workspaceDescription(workspace, supportByWorkspace[workspace.id])}
               </div>
             </button>
           ))}

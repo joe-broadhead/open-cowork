@@ -8,6 +8,34 @@ files.
 
 This page is the reference for that model.
 
+## Distribution modes
+
+Downstream operators should choose the product surface intentionally:
+
+- **Local-only desktop** sets `cloudDesktop.enabled=false`. Users get the
+  current private desktop behavior with local OpenCode runtime ownership,
+  local project directories, local stdio MCPs, local settings, and no cloud
+  dependency.
+- **Cloud-enabled desktop** sets `cloudDesktop.enabled=true` and can allow
+  user-added cloud connections. Local and cloud workspaces appear side by side,
+  but local threads remain local and cloud threads sync through Open Cowork
+  Cloud.
+- **Managed-org-only desktop** sets `cloudDesktop.enabled=true`,
+  `allowUserAddedConnections=false`, `requireManagedOrg=true`, and
+  `preconfiguredConnections[]`. This is the right mode for internal company
+  builds that must pin users to approved cloud orgs.
+- **Gateway-enabled deployment** runs Open Cowork Gateway next to a cloud org.
+  The gateway is a headless client for approved channels; it uses cloud service
+  tokens and channel bindings but does not spawn OpenCode or own a second
+  control plane.
+
+Branding, providers, skills, MCPs, agents, cloud connections, gateway
+credentials, and telemetry are configurable, but the workspace contract is not:
+no build should implicitly upload local threads, local project files, provider
+keys, local stdio MCP commands, or machine runtime config into cloud. Use
+cloud-safe remote MCPs, explicit artifact upload, or admin-managed profiles
+when a capability must be available in cloud.
+
 ## Mental model
 
 Everything downstream-customizable goes through two layers:

@@ -96,6 +96,34 @@ is real drift, not a cosmetic update.
 - runtime composition for the packaged app
 - event projection into a renderer-safe state model
 
+## Product surface contract
+
+Open Cowork exposes three product surfaces without changing the execution
+owner:
+
+- **Desktop Local workspace** uses the local Electron main process and local
+  OpenCode runtime. Threads, local project paths, local stdio MCPs, machine
+  runtime config, local settings, and local artifacts remain on that device.
+- **Cloud workspace** uses Open Cowork Cloud as the control plane. Desktop and
+  web clients sync because both read and write the same tenant-scoped cloud
+  sessions, event log, projections, workflows, artifacts, settings metadata,
+  and policy verdicts.
+- **Gateway** is a headless cloud client. It adapts Telegram, Slack, email,
+  webhooks, and other channels onto the cloud HTTP/SSE contract. It never
+  imports the OpenCode SDK, starts OpenCode, or owns control-plane Postgres
+  state.
+
+A thread belongs to exactly one workspace. Local threads do not become cloud
+threads unless a user intentionally creates or imports cloud-safe content
+through an explicit product flow. Normal sync is product-state sync, not
+OpenCode runtime-home replication and not peer-to-peer desktop sync.
+
+Renderer code should treat `workspace.support()` as the canonical capability
+source for workspace-scoped actions. The support matrix distinguishes local
+actions, cloud-safe actions, policy-disabled actions, offline cached state, and
+future/deferred surfaces before the renderer opens project pickers, exposes
+host-path diffs, enables custom content, or sends mutations.
+
 ## High-level layers
 
 Each layer maps to a small cluster of files. If you are making changes, start
