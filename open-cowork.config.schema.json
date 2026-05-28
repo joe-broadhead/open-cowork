@@ -271,7 +271,8 @@
         "storage": { "$ref": "#/$defs/cloudStorage" },
         "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
         "features": { "$ref": "#/$defs/cloudFeatures" },
-        "abuse": { "$ref": "#/$defs/cloudAbuse" }
+        "abuse": { "$ref": "#/$defs/cloudAbuse" },
+        "billing": { "$ref": "#/$defs/cloudBilling" }
       }
     },
     "cloudRole": {
@@ -370,6 +371,68 @@
         { "$ref": "#/$defs/cloudPositiveInteger" },
         { "type": "null" }
       ]
+    },
+    "cloudBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "provider": { "type": "string", "enum": ["none", "stub", "stripe"] },
+        "defaultPlanKey": { "$ref": "#/$defs/cloudName" },
+        "plans": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/cloudBillingPlan" }
+        },
+        "stripe": { "$ref": "#/$defs/cloudStripeBilling" }
+      }
+    },
+    "cloudBillingPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "maxLength": 80 },
+        "stripePriceId": { "type": "string", "maxLength": 256 },
+        "entitlements": { "$ref": "#/$defs/cloudBillingEntitlements" }
+      }
+    },
+    "cloudBillingEntitlements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "features": { "$ref": "#/$defs/cloudFeatures" },
+        "allowedProfiles": {
+          "anyOf": [
+            { "$ref": "#/$defs/cloudStringList" },
+            { "type": "null" }
+          ]
+        },
+        "allowedProviders": {
+          "anyOf": [
+            { "$ref": "#/$defs/cloudStringList" },
+            { "type": "null" }
+          ]
+        },
+        "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "allowNewSessions": { "type": "boolean" },
+        "allowPrompts": { "type": "boolean" },
+        "allowWorkers": { "type": "boolean" }
+      }
+    },
+    "cloudStripeBilling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiKeyRef": { "type": "string", "maxLength": 512 },
+        "webhookSecretRef": { "type": "string", "maxLength": 512 },
+        "defaultPriceId": { "type": "string", "maxLength": 256 },
+        "successUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+        "cancelUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+        "portalReturnUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" }
+      }
     },
     "cloudRuntimePolicy": {
       "type": "object",

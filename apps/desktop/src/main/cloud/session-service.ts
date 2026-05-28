@@ -28,6 +28,7 @@ import {
 import { ControlPlaneQuotaExceededError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
+  BillingSubscriptionRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
@@ -51,6 +52,17 @@ import type {
   UsageEventRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
+import {
+  BillingAdapterError,
+  evaluateBillingEntitlement,
+  isBillingConfigured,
+  resolvedBillingEntitlements,
+  type BillingAdapter,
+  type BillingAction,
+  type BillingCheckoutResult,
+  type BillingPortalResult,
+  type BillingWebhookResult,
+} from './billing-adapter.ts'
 import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts'
 import type {
   CloudRuntimeAdapter,
@@ -67,7 +79,7 @@ import {
   type WorkflowWebhookAuth,
   type WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
-import type { CloudAbuseConfig } from '../config-types.ts'
+import type { CloudAbuseConfig, CloudBillingConfig } from '../config-types.ts'
 
 export type CloudPrincipal = {
   tenantId: string
@@ -301,6 +313,12 @@ function principalCanManageChannels(principal: CloudPrincipal) {
 }
 
 function principalCanManageByok(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanManageBilling(principal: CloudPrincipal) {
   if (principal.authSource === 'local' || principal.authSource === 'header') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
@@ -1035,6 +1053,8 @@ export class CloudSessionService {
   private readonly byokSecrets: ByokSecretStore | null
   private readonly byokPolicy: ByokManagementPolicy
   private readonly abuse: CloudAbuseConfig
+  private readonly billingConfig: CloudBillingConfig | null
+  private readonly billingAdapter: BillingAdapter | null
 
   constructor(
     store: ControlPlaneStore,
@@ -1046,6 +1066,8 @@ export class CloudSessionService {
     byokSecrets: ByokSecretStore | null = null,
     byokPolicy: ByokManagementPolicy = {},
     abuse: CloudAbuseConfig = DISABLED_ABUSE_POLICY,
+    billingConfig: CloudBillingConfig | null = null,
+    billingAdapter: BillingAdapter | null = null,
   ) {
     this.store = store
     this.runtime = runtime
@@ -1056,6 +1078,8 @@ export class CloudSessionService {
     this.byokSecrets = byokSecrets
     this.byokPolicy = byokPolicy
     this.abuse = abuse
+    this.billingConfig = billingConfig
+    this.billingAdapter = billingAdapter
   }
 
   get eventBus() {
@@ -1090,12 +1114,17 @@ export class CloudSessionService {
     orgId: string
     quotaKey: string
     limit: number | null | undefined
+    entitlementLimitKey?: 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
     quantity?: number
     windowMs: number
     policyCode: QuotaPolicyCode
     message: string
   }) {
-    const limit = this.quotaLimit(input.limit)
+    const limit = this.quotaLimit(await this.effectiveQuotaLimit(
+      input.orgId,
+      input.limit,
+      input.entitlementLimitKey,
+    ))
     if (!limit) return null
     const result = await this.store.consumeUsageQuota({
       orgId: input.orgId,
@@ -1109,6 +1138,19 @@ export class CloudSessionService {
       throw this.quotaError(input.message, input.policyCode, result.retryAfterMs)
     }
     return result
+  }
+
+  private async effectiveQuotaLimit(
+    orgId: string,
+    fallback: number | null | undefined,
+    key?: 'maxConcurrentSessionsPerOrg' | 'maxActiveWorkersPerOrg' | 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay',
+  ) {
+    if (!key || !this.billingConfig || !isBillingConfigured(this.billingConfig)) return fallback
+    const subscription = await this.store.getBillingSubscription(orgId)
+    if (!subscription) return fallback
+    const entitlements = resolvedBillingEntitlements(this.billingConfig, subscription)
+    const value = entitlements[key]
+    return value === undefined ? fallback : value
   }
 
   private async recordUsage(input: {
@@ -1166,6 +1208,11 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     if (!this.policy.features.chat) throw new Error('Chat is disabled for this cloud profile.')
     const profileName = input.profileName || this.policy.profileName
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'session.create',
+      profileName,
+    })
     const session = await this.createCloudSessionRecord({
       tenantId: principal.tenantId,
       userId: principal.userId,
@@ -1570,6 +1617,11 @@ export class CloudSessionService {
     })
     const session = await this.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
     if (!session) throw new CloudServiceError(403, 'Channel prompt requires a session owned by the gateway principal.')
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'prompt.enqueue',
+      profileName: session.profileName,
+    })
     await this.store.recordAuditEvent({
       orgId: this.principalOrgId(principal),
       accountId: actor.accountId,
@@ -1584,6 +1636,7 @@ export class CloudSessionService {
       orgId: this.principalOrgId(principal),
       quotaKey: 'prompts:hour',
       limit: this.abuse.maxPromptsPerHour,
+      entitlementLimitKey: 'maxPromptsPerHour',
       windowMs: HOUR_MS,
       policyCode: 'quota.prompts_per_hour_exceeded',
       message: 'Cloud prompt quota exceeded.',
@@ -1742,15 +1795,20 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     try {
+      const gatewayDeliveryLimit = await this.effectiveQuotaLimit(
+        this.principalOrgId(principal),
+        this.abuse.maxGatewayDeliveriesPerHour,
+        'maxGatewayDeliveriesPerHour',
+      )
       const delivery = await this.store.claimNextChannelDelivery({
         orgId: this.principalOrgId(principal),
         claimedBy: input.claimedBy,
         ttlMs: input.ttlMs,
         now: input.now,
-        quota: this.quotaLimit(this.abuse.maxGatewayDeliveriesPerHour)
+        quota: this.quotaLimit(gatewayDeliveryLimit)
           ? {
               quotaKey: 'gateway_deliveries:hour',
-              limit: this.abuse.maxGatewayDeliveriesPerHour!,
+              limit: gatewayDeliveryLimit!,
               windowMs: HOUR_MS,
               policyCode: 'quota.gateway_deliveries_per_hour_exceeded',
             }
@@ -2154,6 +2212,7 @@ export class CloudSessionService {
       orgId: this.principalOrgId(principal),
       quotaKey: 'artifact_bytes:day',
       limit: this.abuse.maxArtifactBytesPerDay,
+      entitlementLimitKey: 'maxArtifactBytesPerDay',
       quantity: bytes,
       windowMs: DAY_MS,
       policyCode: 'quota.artifact_bytes_per_day_exceeded',
@@ -2200,6 +2259,120 @@ export class CloudSessionService {
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
   }
 
+  async getBillingSubscription(principal: CloudPrincipal) {
+    await this.ensurePrincipal(principal)
+    const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
+    return {
+      enabled: Boolean(this.billingConfig && isBillingConfigured(this.billingConfig)),
+      providerId: this.billingAdapter?.providerId || this.billingConfig?.provider || 'none',
+      subscription,
+      entitlements: this.billingConfig ? resolvedBillingEntitlements(this.billingConfig, subscription) : {},
+      active: this.billingConfig ? evaluateBillingEntitlement({
+        config: this.billingConfig,
+        subscription,
+        action: 'session.create',
+        profileName: this.policy.profileName,
+      }).allowed : true,
+    }
+  }
+
+  async createBillingCheckout(
+    principal: CloudPrincipal,
+    input: { planKey?: string | null, successUrl?: string | null, cancelUrl?: string | null },
+  ): Promise<BillingCheckoutResult> {
+    await this.ensurePrincipal(principal)
+    this.assertBillingAdmin(principal)
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
+      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
+    }
+    const planKey = input.planKey || this.billingConfig.defaultPlanKey
+    if (!this.billingConfig.plans[planKey]) throw new CloudServiceError(400, `Unknown billing plan "${planKey}".`)
+    try {
+      const result = await this.billingAdapter.createCheckoutSession({
+        orgId: this.principalOrgId(principal),
+        accountId: principal.accountId || principal.userId,
+        email: principal.email,
+        planKey,
+        successUrl: input.successUrl,
+        cancelUrl: input.cancelUrl,
+      })
+      if (result.subscription) await this.store.upsertBillingSubscription(result.subscription)
+      await this.store.recordAuditEvent({
+        orgId: this.principalOrgId(principal),
+        accountId: principal.accountId || principal.userId,
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        eventType: 'billing.checkout.created',
+        targetType: 'billing_subscription',
+        targetId: result.providerSessionId || planKey,
+        metadata: { providerId: result.providerId, planKey },
+      })
+      return result
+    } catch (error) {
+      this.translateBillingAdapterError(error)
+    }
+  }
+
+  async createBillingPortal(
+    principal: CloudPrincipal,
+    input: { returnUrl?: string | null },
+  ): Promise<BillingPortalResult> {
+    await this.ensurePrincipal(principal)
+    this.assertBillingAdmin(principal)
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
+      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
+    }
+    try {
+      const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
+      return await this.billingAdapter.createPortalSession({
+        orgId: this.principalOrgId(principal),
+        email: principal.email,
+        subscription,
+        returnUrl: input.returnUrl,
+      })
+    } catch (error) {
+      this.translateBillingAdapterError(error)
+    }
+  }
+
+  async handleBillingWebhook(input: {
+    headers: Record<string, string | undefined>
+    rawBody: string
+    body: Record<string, unknown>
+  }): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
+      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
+    }
+    try {
+      const result = await this.billingAdapter.handleWebhook(input)
+      let subscriptionRecord: BillingSubscriptionRecord | null = null
+      if (result.subscription) {
+        subscriptionRecord = await this.store.upsertBillingSubscription(result.subscription)
+        await this.store.recordAuditEvent({
+          eventId: `billing_${result.providerId}_${result.eventId}`,
+          orgId: result.subscription.orgId,
+          actorType: 'system',
+          actorId: `billing.${result.providerId}`,
+          eventType: 'billing.webhook.processed',
+          targetType: 'billing_subscription',
+          targetId: result.subscription.providerSubscriptionId || result.subscription.orgId,
+          metadata: {
+            providerId: result.providerId,
+            eventType: result.eventType,
+            planKey: result.subscription.planKey,
+            status: result.subscription.status,
+          },
+        })
+      }
+      return {
+        ...result,
+        subscriptionRecord,
+      }
+    } catch (error) {
+      this.translateBillingAdapterError(error)
+    }
+  }
+
   async claimHttpRateLimit(input: {
     scope: string
     source: string
@@ -2244,11 +2417,17 @@ export class CloudSessionService {
     sessionId: string,
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
-    await this.getSessionView(principal, sessionId)
+    const view = await this.getSessionView(principal, sessionId)
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'prompt.enqueue',
+      profileName: view.session.profileName,
+    })
     await this.consumeQuota({
       orgId: this.principalOrgId(principal),
       quotaKey: 'prompts:hour',
       limit: this.abuse.maxPromptsPerHour,
+      entitlementLimitKey: 'maxPromptsPerHour',
       windowMs: HOUR_MS,
       policyCode: 'quota.prompts_per_hour_exceeded',
       message: 'Cloud prompt quota exceeded.',
@@ -2632,6 +2811,11 @@ export class CloudSessionService {
     createdAt?: Date
   }) {
     try {
+      const concurrentSessionLimit = await this.effectiveQuotaLimit(
+        input.orgId || input.tenantId,
+        this.abuse.maxConcurrentSessionsPerOrg,
+        'maxConcurrentSessionsPerOrg',
+      )
       const session = await this.store.createSession({
         tenantId: input.tenantId,
         userId: input.userId,
@@ -2640,10 +2824,10 @@ export class CloudSessionService {
         profileName: input.profileName,
         title: input.title,
         createdAt: input.createdAt,
-        quota: this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)
+        quota: this.quotaLimit(concurrentSessionLimit)
           ? {
               orgId: input.orgId || input.tenantId,
-              maxConcurrentSessionsPerOrg: this.abuse.maxConcurrentSessionsPerOrg,
+              maxConcurrentSessionsPerOrg: concurrentSessionLimit,
               policyCode: 'quota.concurrent_sessions_exceeded',
             }
           : null,
@@ -3012,6 +3196,61 @@ export class CloudSessionService {
     }
   }
 
+  private assertBillingAdmin(principal: CloudPrincipal) {
+    if (!principalCanManageBilling(principal)) {
+      throw new CloudServiceError(403, 'Billing administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private translateBillingAdapterError(error: unknown): never {
+    if (error instanceof BillingAdapterError) {
+      throw new CloudServiceError(error.status, error.publicMessage)
+    }
+    throw error
+  }
+
+  private async assertBillingAllowed(input: {
+    orgId: string
+    action: BillingAction
+    profileName?: string | null
+    providerId?: string | null
+  }) {
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig)) return
+    const subscription = await this.store.getBillingSubscription(input.orgId)
+    const verdict = evaluateBillingEntitlement({
+      config: this.billingConfig,
+      subscription,
+      action: input.action,
+      profileName: input.profileName,
+      providerId: input.providerId,
+    })
+    if (!verdict.allowed) {
+      throw new CloudServiceError(
+        verdict.status || 402,
+        verdict.reason || 'Billing entitlement does not allow this action.',
+        { policyCode: verdict.policyCode || 'billing.entitlement_denied' },
+      )
+    }
+  }
+
+  async assertWorkerExecutionAllowed(tenantId: string) {
+    const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
+    await this.assertBillingAllowed({
+      orgId: org.orgId,
+      action: 'worker.execute',
+      profileName: this.policy.profileName,
+    })
+  }
+
+  async activeWorkerQuotaForTenant(tenantId: string) {
+    const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
+    return this.quotaLimit(await this.effectiveQuotaLimit(
+      org.orgId,
+      this.abuse.maxActiveWorkersPerOrg,
+      'maxActiveWorkersPerOrg',
+    ))
+  }
+
   private byokAuditActor(principal: CloudPrincipal) {
     return {
       actorType: principal.authSource === 'api_token' ? 'api_token' as const : 'user' as const,
@@ -3028,6 +3267,11 @@ export class CloudSessionService {
     if (allowedProviderIds?.size && !allowedProviderIds.has(providerId)) {
       throw new CloudServiceError(403, `Provider "${providerId}" is not enabled for BYOK in this cloud profile.`)
     }
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'byok.provider',
+      providerId,
+    })
     const entitlement = await this.byokPolicy.checkEntitlement?.({
       principal,
       orgId: this.principalOrgId(principal),

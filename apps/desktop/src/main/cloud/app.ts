@@ -1,7 +1,8 @@
 import { resolve } from 'node:path'
 import type { IncomingMessage } from 'node:http'
-import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type OpenCoworkConfig } from '../config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
+import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
 import {
   resolveCloudRuntimePolicy,
   type CloudRuntimePolicy,
@@ -38,6 +39,8 @@ import { createCloudSecretAdapterFromEnv, resolveCloudSecretRef, type SecretAdap
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
+import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
+import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
 import {
@@ -97,6 +100,7 @@ export type CloudAppOptions = {
   secretAdapter?: SecretAdapter
   byokSecretStoreOptions?: Pick<ByokSecretStoreOptions, 'kmsRefResolver' | 'validators'>
   byokPolicy?: ByokManagementPolicy
+  billingAdapter?: BillingAdapter | null
   runtime?: CloudRuntimeAdapter
   runtimeFactory?: CloudRuntimeFactory
   paths?: PathProvider
@@ -250,6 +254,46 @@ export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>,
       backoffMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MS'), defaults.authBackoff.backoffMs),
     },
   }
+}
+
+export function resolveCloudBillingConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudBillingConfig {
+  const defaults = config.cloud.billing
+  const provider = envValue(env, 'OPEN_COWORK_CLOUD_BILLING_PROVIDER') || defaults.provider
+  return {
+    ...defaults,
+    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_BILLING_ENABLED'), defaults.enabled),
+    provider: provider === 'none' || provider === 'stub' || provider === 'stripe' ? provider : defaults.provider,
+    defaultPlanKey: envValue(env, 'OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN') || defaults.defaultPlanKey,
+    stripe: {
+      ...(defaults.stripe || {}),
+      apiKeyRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF') || defaults.stripe?.apiKeyRef,
+      webhookSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF') || defaults.stripe?.webhookSecretRef,
+      defaultPriceId: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PRICE_ID') || defaults.stripe?.defaultPriceId,
+      successUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL') || defaults.stripe?.successUrl,
+      cancelUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL') || defaults.stripe?.cancelUrl,
+      portalReturnUrl: envValue(env, 'OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL') || defaults.stripe?.portalReturnUrl,
+    },
+  }
+}
+
+async function createBillingAdapterForCloud(input: {
+  config: CloudBillingConfig
+  env: Env
+}): Promise<BillingAdapter | null> {
+  if (!input.config.enabled || input.config.provider === 'none') return null
+  if (input.config.provider === 'stub') return createStubBillingAdapter(input.config)
+  if (input.config.provider === 'stripe') {
+    const apiKey = envValue(input.env, 'OPEN_COWORK_CLOUD_STRIPE_API_KEY')
+      || resolveEnvRef(input.config.stripe?.apiKeyRef, input.env)
+    const webhookSecret = envValue(input.env, 'OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET')
+      || resolveEnvRef(input.config.stripe?.webhookSecretRef, input.env)
+    return createStripeBillingAdapter({
+      config: input.config,
+      apiKey,
+      webhookSecret,
+    })
+  }
+  return null
 }
 
 export function resolveCloudOidcClientSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
@@ -544,6 +588,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const policy = resolveCloudRuntimePolicy(config, env)
   const authConfig = resolveCloudAuthConfig(config, env)
   const abuseConfig = resolveCloudAbuseConfig(config, env)
+  const billingConfig = resolveCloudBillingConfig(config, env)
   const listenHostname = options.hostname || envOptions.hostname
   assertCloudAuthDeploymentSafe({
     role: policy.role,
@@ -566,10 +611,30 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env)
+  const billingAdapter = Object.prototype.hasOwnProperty.call(options, 'billingAdapter')
+    ? options.billingAdapter || null
+    : await createBillingAdapterForCloud({ config: billingConfig, env })
   const byokPolicy: ByokManagementPolicy = {
     allowedProviderIds: options.byokPolicy?.allowedProviderIds ?? listConfiguredByokProviderIds(config),
     checkEntitlement: options.byokPolicy?.checkEntitlement ?? null,
-    checkRuntimeEntitlement: options.byokPolicy?.checkRuntimeEntitlement ?? null,
+    checkRuntimeEntitlement: async (input) => {
+      const subscription = await store.getBillingSubscription(input.orgId)
+      if (billingConfig.enabled && billingConfig.provider !== 'none') {
+        const billingVerdict = evaluateBillingEntitlement({
+          config: billingConfig,
+          subscription,
+          action: 'byok.provider',
+          providerId: input.providerId,
+        })
+        if (!billingVerdict.allowed) {
+          return {
+            allowed: false,
+            reason: billingVerdict.reason || 'BYOK provider is not included in this billing entitlement.',
+          }
+        }
+      }
+      return options.byokPolicy?.checkRuntimeEntitlement?.(input) ?? { allowed: true }
+    },
     kmsRefs: options.byokPolicy?.kmsRefs ?? null,
   }
   const byokSecrets = createByokSecretStore(store, secretAdapter, {
@@ -615,6 +680,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     byokSecrets,
     byokPolicy,
     abuseConfig,
+    billingConfig,
+    billingAdapter,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')

@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULT_CONFIG, type CloudAbuseConfig } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
+import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
@@ -21,6 +22,7 @@ import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/o
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import type {
   CloudRuntimeAdapter,
@@ -89,6 +91,8 @@ function createFixture(options: {
     internalToken?: string | null
     byokPolicy?: ByokManagementPolicy
     abuse?: CloudAbuseConfig
+    billing?: CloudBillingConfig | null
+    billingAdapter?: BillingAdapter | null
   } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -100,7 +104,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -173,6 +177,35 @@ function testAbuseConfig(overrides: Partial<CloudAbuseConfig> = {}): CloudAbuseC
     authBackoff: {
       ...DEFAULT_CONFIG.cloud.abuse.authBackoff,
       ...(overrides.authBackoff || {}),
+    },
+  }
+}
+
+function testBillingConfig(overrides: Partial<CloudBillingConfig> = {}): CloudBillingConfig {
+  return {
+    ...DEFAULT_CONFIG.cloud.billing,
+    ...overrides,
+    enabled: overrides.enabled ?? true,
+    provider: overrides.provider || 'stub',
+    defaultPlanKey: overrides.defaultPlanKey || 'pro',
+    plans: {
+      pro: {
+        label: 'Pro',
+        entitlements: {
+          allowNewSessions: true,
+          allowPrompts: true,
+          allowWorkers: true,
+        },
+      },
+      blocked: {
+        label: 'Blocked',
+        entitlements: {
+          allowNewSessions: false,
+          allowPrompts: false,
+          allowWorkers: false,
+        },
+      },
+      ...(overrides.plans || {}),
     },
   }
 }
@@ -581,6 +614,140 @@ test('cloud HTTP BYOK APIs enforce provider availability and org entitlement pol
     })
     assert.equal(blocked.status, 402)
     assert.match(JSON.stringify(await readJson(blocked)), /not included/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions with 402', async () => {
+  const billing = testBillingConfig()
+  const fixture = createFixture({
+    billing,
+    billingAdapter: createStubBillingAdapter(billing),
+    autoProcessCommands: false,
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const initial = await readJson(await fetch(`${baseUrl}/api/billing/subscription`))
+    assert.equal(initial.enabled, true)
+    assert.equal(initial.subscription, null)
+
+    const checkoutResponse = await fetch(`${baseUrl}/api/billing/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ planKey: 'pro' }),
+    })
+    assert.equal(checkoutResponse.status, 200)
+    assert.match(String((await readJson(checkoutResponse)).url), /billing\.local/)
+
+    const active = await readJson(await fetch(`${baseUrl}/api/billing/subscription`))
+    assert.equal(asRecord(active.subscription).status, 'active')
+    assert.equal(active.active, true)
+
+    const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createdResponse.status, 201)
+    const sessionId = String(asRecord((await readJson(createdResponse)).session).sessionId)
+
+    await fixture.store.upsertBillingSubscription({
+      orgId: 'tenant-1',
+      providerId: 'stub',
+      providerCustomerId: 'stub_customer_tenant-1',
+      providerSubscriptionId: 'stub_subscription_tenant-1',
+      planKey: 'pro',
+      status: 'canceled',
+    })
+
+    const blockedCreate = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(blockedCreate.status, 402)
+    const createBody = await readJson(blockedCreate)
+    assert.equal(asRecord(createBody.verdict).policyCode, 'billing.subscription_inactive')
+
+    const blockedPrompt = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'should not run' }),
+    })
+    assert.equal(blockedPrompt.status, 402)
+    const promptBody = await readJson(blockedPrompt)
+    assert.equal(asRecord(promptBody.verdict).policyCode, 'billing.subscription_inactive')
+
+    await fixture.store.enqueueSessionCommand({
+      commandId: 'queued-before-cancel',
+      tenantId: 'tenant-1',
+      userId: 'owner-1',
+      sessionId,
+      kind: 'prompt',
+      payload: { text: 'queued', agent: 'build' },
+    })
+    assert.equal(await fixture.worker.processSessionCommands('tenant-1', sessionId), 0)
+    assert.equal(fixture.runtime.prompts.length, 0)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud billing webhook updates subscriptions idempotently with replay protection', async () => {
+  const billing = testBillingConfig()
+  const fixture = createFixture({
+    billing,
+    billingAdapter: createStubBillingAdapter(billing),
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await readJson(await fetch(`${baseUrl}/api/billing/subscription`))
+    const payload = {
+      id: 'evt_stub_1',
+      type: 'customer.subscription.updated',
+      subscription: {
+        orgId: 'tenant-1',
+        planKey: 'pro',
+        status: 'active',
+      },
+    }
+    const first = await fetch(`${baseUrl}/webhooks/billing`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    assert.equal(first.status, 200)
+    assert.equal(asRecord((await readJson(first)).subscription).status, 'active')
+
+    const replay = await fetch(`${baseUrl}/webhooks/billing`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    assert.equal(replay.status, 200)
+    assert.equal((await readJson(replay)).replayed, true)
+    assert.equal((await fixture.store.listAuditEvents('tenant-1')).filter((event) => event.eventType === 'billing.webhook.processed').length, 1)
   } finally {
     await fixture.server.close()
   }

@@ -7,6 +7,7 @@ import type {
   WorkflowSummary,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
+import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
 
 export type ControlPlaneRole = 'owner' | 'admin' | 'member'
 export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
@@ -33,6 +34,7 @@ export type UsageEventType =
   | 'artifact.uploaded'
   | 'gateway.delivery.claimed'
 export type UsageUnit = 'count' | 'byte' | 'minute'
+export type BillingSubscriptionStatus = CloudSubscriptionStatus
 
 export type QuotaPolicyCode =
   | 'quota.concurrent_sessions_exceeded'
@@ -52,6 +54,22 @@ export type UsageEventRecord = {
   unit: UsageUnit | string
   metadata: Record<string, unknown>
   createdAt: string
+}
+
+export type BillingSubscriptionRecord = {
+  orgId: string
+  planKey: string
+  providerId: string
+  providerCustomerId: string | null
+  providerSubscriptionId: string | null
+  status: BillingSubscriptionStatus
+  seats: number
+  entitlements: CloudBillingEntitlements
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
 }
 
 export type QuotaConsumptionRecord = {
@@ -501,6 +519,21 @@ export type RecordUsageEventInput = {
   createdAt?: Date
 }
 
+export type UpsertBillingSubscriptionInput = {
+  orgId: string
+  planKey: string
+  providerId: string
+  providerCustomerId?: string | null
+  providerSubscriptionId?: string | null
+  status: BillingSubscriptionStatus
+  seats?: number
+  entitlements?: CloudBillingEntitlements
+  currentPeriodEnd?: Date | string | null
+  cancelAtPeriodEnd?: boolean
+  metadata?: Record<string, unknown>
+  updatedAt?: Date
+}
+
 export type ClaimRateLimitInput = {
   scope: string
   source: string
@@ -930,6 +963,13 @@ export type ControlPlaneStore = {
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
+  upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>
+  getBillingSubscription(orgId: string): MaybePromise<BillingSubscriptionRecord | null>
+  findBillingSubscriptionByProvider(input: {
+    providerId: string
+    providerCustomerId?: string | null
+    providerSubscriptionId?: string | null
+  }): MaybePromise<BillingSubscriptionRecord | null>
   claimRateLimit(input: ClaimRateLimitInput): MaybePromise<RateLimitClaimRecord>
   checkCloudAuthBackoff(input: CheckCloudAuthBackoffInput): MaybePromise<CloudAuthBackoffRecord>
   recordCloudAuthFailure(input: RecordCloudAuthFailureInput): MaybePromise<CloudAuthBackoffRecord>
@@ -1083,6 +1123,15 @@ const CHANNEL_METADATA_MAX_BYTES = 16_384
 const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
 const BYOK_PROVIDER_ID_MAX_LENGTH = 64
 const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
+const BILLING_TEXT_MAX_LENGTH = 256
+const BILLING_METADATA_MAX_BYTES = 16_384
+const BILLING_SUBSCRIPTION_STATUSES = new Set<BillingSubscriptionStatus>([
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'incomplete',
+])
 
 function nowIso(now: Date | undefined) {
   return (now || new Date()).toISOString()
@@ -1257,6 +1306,20 @@ function normalizeProvider(value: unknown): ChannelProviderId {
   return provider
 }
 
+function normalizeBillingStatus(value: unknown): BillingSubscriptionStatus {
+  const status = normalizeText(value || 'incomplete', 32, 'Billing subscription status') as BillingSubscriptionStatus
+  return BILLING_SUBSCRIPTION_STATUSES.has(status) ? status : 'incomplete'
+}
+
+function billingProviderKey(providerId: string, providerRecordId: string | null | undefined) {
+  return key(normalizeText(providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id'), providerRecordId || '')
+}
+
+function isoNullable(value: Date | string | null | undefined) {
+  if (!value) return null
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+}
+
 function normalizeByokProviderId(value: unknown) {
   const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
@@ -1291,6 +1354,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly apiTokens = new Map<string, ApiTokenRecord>()
   private readonly auditEvents = new Map<string, AuditEventRecord>()
   private readonly usageEvents = new Map<string, UsageEventRecord>()
+  private readonly billingSubscriptions = new Map<string, BillingSubscriptionRecord>()
+  private readonly billingSubscriptionsByProviderSubscription = new Map<string, string>()
+  private readonly billingSubscriptionsByProviderCustomer = new Map<string, string>()
   private readonly usageCounters = new Map<string, { windowStartedAtMs: number, quantity: number }>()
   private readonly rateLimits = new Map<string, { windowStartedAtMs: number, count: number }>()
   private readonly authFailures = new Map<string, CloudAuthBackoffRecord>()
@@ -1632,6 +1698,82 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  upsertBillingSubscription(input: UpsertBillingSubscriptionInput): BillingSubscriptionRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const existing = this.billingSubscriptions.get(input.orgId)
+    const now = nowIso(input.updatedAt)
+    const providerId = normalizeText(input.providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id')
+    const providerCustomerId = normalizeNullableText(input.providerCustomerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider customer id')
+    const providerSubscriptionId = normalizeNullableText(input.providerSubscriptionId, BILLING_TEXT_MAX_LENGTH, 'Billing provider subscription id')
+    const record: BillingSubscriptionRecord = {
+      orgId: input.orgId,
+      planKey: normalizeText(input.planKey || existing?.planKey, BILLING_TEXT_MAX_LENGTH, 'Billing plan key'),
+      providerId,
+      providerCustomerId,
+      providerSubscriptionId,
+      status: normalizeBillingStatus(input.status),
+      seats: normalizePositiveInteger(input.seats || existing?.seats || 1, 'Billing seats'),
+      entitlements: normalizeRecord(input.entitlements, 'Billing entitlements', BILLING_METADATA_MAX_BYTES) as CloudBillingEntitlements,
+      currentPeriodEnd: isoNullable(input.currentPeriodEnd),
+      cancelAtPeriodEnd: input.cancelAtPeriodEnd === undefined ? existing?.cancelAtPeriodEnd || false : input.cancelAtPeriodEnd === true,
+      metadata: redactAuditMetadata(normalizeRecord(input.metadata, 'Billing metadata', BILLING_METADATA_MAX_BYTES)),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    }
+    if (existing?.providerSubscriptionId) {
+      this.billingSubscriptionsByProviderSubscription.delete(billingProviderKey(existing.providerId, existing.providerSubscriptionId))
+    }
+    if (existing?.providerCustomerId) {
+      this.billingSubscriptionsByProviderCustomer.delete(billingProviderKey(existing.providerId, existing.providerCustomerId))
+    }
+    this.billingSubscriptions.set(record.orgId, record)
+    if (record.providerSubscriptionId) {
+      this.billingSubscriptionsByProviderSubscription.set(billingProviderKey(record.providerId, record.providerSubscriptionId), record.orgId)
+    }
+    if (record.providerCustomerId) {
+      this.billingSubscriptionsByProviderCustomer.set(billingProviderKey(record.providerId, record.providerCustomerId), record.orgId)
+    }
+    this.recordAuditEvent({
+      orgId: record.orgId,
+      actorType: 'system',
+      actorId: 'billing.subscription.upsert',
+      eventType: existing ? 'billing.subscription.updated' : 'billing.subscription.created',
+      targetType: 'billing_subscription',
+      targetId: record.providerSubscriptionId || record.orgId,
+      metadata: {
+        providerId: record.providerId,
+        planKey: record.planKey,
+        status: record.status,
+        seats: record.seats,
+        providerCustomerId: record.providerCustomerId,
+        providerSubscriptionId: record.providerSubscriptionId,
+      },
+      createdAt: input.updatedAt,
+    })
+    return clone(record)
+  }
+
+  getBillingSubscription(orgId: string): BillingSubscriptionRecord | null {
+    const subscription = this.billingSubscriptions.get(orgId)
+    return subscription ? clone(subscription) : null
+  }
+
+  findBillingSubscriptionByProvider(input: {
+    providerId: string
+    providerCustomerId?: string | null
+    providerSubscriptionId?: string | null
+  }): BillingSubscriptionRecord | null {
+    const providerId = normalizeText(input.providerId, BILLING_TEXT_MAX_LENGTH, 'Billing provider id')
+    const bySubscription = input.providerSubscriptionId
+      ? this.billingSubscriptionsByProviderSubscription.get(billingProviderKey(providerId, input.providerSubscriptionId))
+      : null
+    const byCustomer = input.providerCustomerId
+      ? this.billingSubscriptionsByProviderCustomer.get(billingProviderKey(providerId, input.providerCustomerId))
+      : null
+    const subscription = this.billingSubscriptions.get(bySubscription || byCustomer || '')
+    return subscription ? clone(subscription) : null
   }
 
   claimRateLimit(input: ClaimRateLimitInput): RateLimitClaimRecord {
