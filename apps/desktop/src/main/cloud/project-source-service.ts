@@ -186,6 +186,35 @@ function assertSafeSnapshotUpload(input: CloudProjectSnapshotUploadInput, policy
   return counts
 }
 
+function countStoredSnapshot(snapshot: StoredSnapshot) {
+  return countSnapshot({ files: snapshot.files })
+}
+
+function assertStoredSnapshotAllowed(
+  source: CloudProjectSource & { kind: 'snapshot' },
+  snapshot: StoredSnapshot,
+  policy: CloudRuntimePolicy,
+) {
+  const counts = countStoredSnapshot(snapshot)
+  if (snapshot.fileCount !== counts.fileCount || snapshot.byteCount !== counts.byteCount) {
+    throw new Error('Project snapshot metadata is invalid.')
+  }
+  if (source.fileCount !== counts.fileCount || source.byteCount !== counts.byteCount) {
+    throw new Error('Project snapshot source metadata is invalid.')
+  }
+  const verdict = evaluateCloudProjectSourcePolicy({
+    kind: 'snapshot',
+    snapshotId: source.snapshotId,
+    objectKey: source.objectKey,
+    fileCount: counts.fileCount,
+    byteCount: counts.byteCount,
+    title: source.title,
+  }, policy)
+  if (!verdict.allowed) {
+    throw new Error(verdict.reason || 'Project snapshot is blocked by cloud policy.')
+  }
+}
+
 async function restoreSnapshotFiles(workspaceDir: string, snapshot: StoredSnapshot) {
   for (const file of snapshot.files) {
     const reason = cloudProjectSnapshotPathReason(file.path)
@@ -360,6 +389,7 @@ export function createCloudProjectSourceService(input: {
         if (snapshot.version !== SNAPSHOT_FORMAT_VERSION || snapshot.snapshotId !== source.snapshotId) {
           throw new Error('Project snapshot metadata is invalid.')
         }
+        assertStoredSnapshotAllowed(source, snapshot, policy)
         await restoreSnapshotFiles(workspaceDir, snapshot)
       }
       await writeMarker(workspaceDir, source)

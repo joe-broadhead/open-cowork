@@ -99,6 +99,35 @@ test('cloud project source service refuses to restore snapshots across tenants',
   }), /does not belong/)
 })
 
+test('cloud project source service refuses forged snapshot size metadata at restore', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'open-cowork-project-restore-metadata-'))
+  const paths = createCloudPathProvider(root)
+  const objectStore = createInMemoryObjectStore()
+  const service = createCloudProjectSourceService({
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    objectStore,
+  })
+  const uploaded = await service.uploadSnapshot(principal(), {
+    files: [{
+      path: 'README.md',
+      dataBase64: Buffer.from('from snapshot').toString('base64'),
+      byteCount: 'from snapshot'.length,
+    }],
+    fileCount: 1,
+    byteCount: 'from snapshot'.length,
+  })
+
+  await assert.rejects(() => service.restoreProjectSource({
+    tenantId: 'tenant-a',
+    sessionId: 'session-a',
+    source: {
+      ...uploaded.projectSource,
+      byteCount: 0,
+    },
+    paths,
+  }), /source metadata/)
+})
+
 test('cloud project source service restores a git source from a local fixture repo when policy permits file URLs', async (t) => {
   try {
     await execFile('git', ['--version'])
