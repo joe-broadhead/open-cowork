@@ -1,13 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig } from '../apps/desktop/src/main/config-types.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import {
+  CloudHttpError,
   createCloudHttpServer,
   type CloudAuthResolver,
   type CloudBrowserAuthProvider,
@@ -31,6 +32,7 @@ const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
 class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
+  createdSessions: string[] = []
   aborted: string[] = []
   permissions: Array<{ permissionId: string, allowed: boolean }> = []
   private nextSession = 0
@@ -38,6 +40,7 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   async createSession() {
     this.nextSession += 1
     const id = `oc-session-${this.nextSession}`
+    this.createdSessions.push(id)
     return {
       id,
       title: `Session ${this.nextSession}`,
@@ -85,6 +88,7 @@ function createFixture(options: {
     observability?: CloudObservabilityAdapter | null
     internalToken?: string | null
     byokPolicy?: ByokManagementPolicy
+    abuse?: CloudAbuseConfig
   } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -96,11 +100,11 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
-  const worker = new CloudWorker(store, service, 'worker-1')
+  const worker = new CloudWorker(store, service, 'worker-1', 30_000, {}, options.abuse || null)
   const server = createCloudHttpServer({
     service,
     artifacts,
@@ -155,6 +159,22 @@ function cookieValue(headers: string[], name: string) {
     .map((header) => header.split(';')[0])
     .find((entry) => entry.startsWith(prefix))
   return value ? decodeURIComponent(value.slice(prefix.length)) : null
+}
+
+function testAbuseConfig(overrides: Partial<CloudAbuseConfig> = {}): CloudAbuseConfig {
+  return {
+    ...DEFAULT_CONFIG.cloud.abuse,
+    ...overrides,
+    enabled: overrides.enabled ?? true,
+    httpRateLimit: {
+      ...DEFAULT_CONFIG.cloud.abuse.httpRateLimit,
+      ...(overrides.httpRateLimit || {}),
+    },
+    authBackoff: {
+      ...DEFAULT_CONFIG.cloud.abuse.authBackoff,
+      ...(overrides.authBackoff || {}),
+    },
+  }
 }
 
 async function readSseUntil(
@@ -263,6 +283,172 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const abort = await readJson(abortResponse)
     assert.equal(abort.processed, 1)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server enforces prompt quotas before processing commands and exposes usage events', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxPromptsPerHour: 1,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const firstPrompt = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'first' }),
+    })
+    assert.equal(firstPrompt.status, 202)
+    assert.equal(fixture.runtime.prompts.length, 1)
+
+    const blockedPrompt = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'second' }),
+    })
+    assert.equal(blockedPrompt.status, 429)
+    assert.equal(Number(blockedPrompt.headers.get('retry-after')) > 0, true)
+    const blocked = await readJson(blockedPrompt)
+    assert.equal(asRecord(blocked.verdict).policyCode, 'quota.prompts_per_hour_exceeded')
+    assert.equal(fixture.runtime.prompts.length, 1)
+
+    const usage = await readJson(await fetch(`${baseUrl}/api/usage/events`))
+    const events = asArray(usage.events).map(asRecord)
+    assert.equal(events.some((event) => event.eventType === 'prompt.enqueued'), true)
+    assert.equal(events.some((event) => event.eventType === 'worker.minute'), true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server blocks session quotas before eager runtime creation', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxConcurrentSessionsPerOrg: 1,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const first = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(first.status, 201)
+    assert.equal(fixture.runtime.createdSessions.length, 0)
+
+    const blocked = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(fixture.runtime.createdSessions.length, 0)
+    const body = await readJson(blocked)
+    assert.equal(asRecord(body.verdict).policyCode, 'quota.concurrent_sessions_exceeded')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server returns machine-readable rate-limit and auth-backoff responses', async () => {
+  const fixture = createFixture({
+    auth: () => {
+      throw new CloudHttpError(401, 'not authorized')
+    },
+    abuse: testAbuseConfig({
+      httpRateLimit: { enabled: true, windowMs: 60_000, maxRequests: 2 },
+      authBackoff: { enabled: true, windowMs: 60_000, maxFailures: 1, backoffMs: 60_000 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    assert.equal((await fetch(`${baseUrl}/healthz`)).status, 200)
+    assert.equal((await fetch(`${baseUrl}/api/config`)).status, 401)
+    const authBlocked = await fetch(`${baseUrl}/api/config`)
+    assert.equal(authBlocked.status, 429)
+    const authBackoff = await readJson(authBlocked)
+    assert.equal(asRecord(authBackoff.verdict).policyCode, 'auth.backoff')
+    assert.equal(Number(authBlocked.headers.get('retry-after')) > 0, true)
+
+    const rateLimited = await fetch(`${baseUrl}/api/config`)
+    assert.equal(rateLimited.status, 429)
+    const rateBody = await readJson(rateLimited)
+    assert.equal(asRecord(rateBody.verdict).policyCode, 'rate_limit.http_exceeded')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server auth backoff applies to the source when bearer tokens rotate', async () => {
+  const fixture = createFixture({
+    auth: () => {
+      throw new CloudHttpError(401, 'not authorized')
+    },
+    abuse: testAbuseConfig({
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+      authBackoff: { enabled: true, windowMs: 60_000, maxFailures: 1, backoffMs: 60_000 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const first = await fetch(`${baseUrl}/api/config`, {
+      headers: { authorization: 'Bearer one-invalid-token' },
+    })
+    assert.equal(first.status, 401)
+
+    const rotated = await fetch(`${baseUrl}/api/config`, {
+      headers: { authorization: 'Bearer another-invalid-token' },
+    })
+    assert.equal(rotated.status, 429)
+    const blocked = await readJson(rotated)
+    assert.equal(asRecord(blocked.verdict).policyCode, 'auth.backoff')
+    assert.equal(Number(rotated.headers.get('retry-after')) > 0, true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server blocks artifact uploads that exceed daily byte quota', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxArtifactBytesPerDay: 4,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const upload = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'too-large.txt',
+        contentType: 'text/plain',
+        dataBase64: Buffer.from('hello').toString('base64'),
+      }),
+    })
+    assert.equal(upload.status, 429)
+    const body = await readJson(upload)
+    assert.equal(asRecord(body.verdict).policyCode, 'quota.artifact_bytes_per_day_exceeded')
+    const artifacts = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
+    assert.equal(asArray(artifacts.artifacts).length, 0)
   } finally {
     await fixture.server.close()
   }

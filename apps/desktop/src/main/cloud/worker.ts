@@ -1,6 +1,7 @@
 import type { ControlPlaneStore, WorkerLeaseRecord } from './control-plane-store.ts'
 import type { CloudRuntimeEvent } from './runtime-adapter.ts'
 import type { CloudSessionService } from './session-service.ts'
+import type { CloudAbuseConfig } from '../config-types.ts'
 
 export type CloudWorkerCheckpointHooks = {
   restoreBeforeCommands?: (lease: WorkerLeaseRecord) => Promise<void>
@@ -15,6 +16,7 @@ export class CloudWorker {
   private readonly workerId: string
   private readonly leaseTtlMs: number
   private readonly checkpointHooks: CloudWorkerCheckpointHooks
+  private readonly abuse: CloudAbuseConfig | null
 
   constructor(
     store: ControlPlaneStore,
@@ -22,12 +24,14 @@ export class CloudWorker {
     workerId: string,
     leaseTtlMs = 30_000,
     checkpointHooks: CloudWorkerCheckpointHooks = {},
+    abuse: CloudAbuseConfig | null = null,
   ) {
     this.store = store
     this.service = service
     this.workerId = workerId
     this.leaseTtlMs = leaseTtlMs
     this.checkpointHooks = checkpointHooks
+    this.abuse = abuse
   }
 
   async processSessionCommands(tenantId: string, sessionId: string): Promise<number> {
@@ -43,7 +47,17 @@ export class CloudWorker {
     while (true) {
       const command = await this.store.claimNextSessionCommand(lease)
       if (!command) break
-      await this.service.executeCommand(lease, command)
+      const startedAt = Date.now()
+      try {
+        await this.service.executeCommand(lease, command)
+      } finally {
+        await this.service.recordWorkerMinutes({
+          tenantId,
+          sessionId,
+          workerId: this.workerId,
+          elapsedMs: Date.now() - startedAt,
+        })
+      }
       lease = await this.store.checkpointSession(lease)
       await this.checkpointHooks.saveAfterCommand?.(lease)
       this.leases.set(this.leaseKey(tenantId, sessionId), lease)
@@ -93,7 +107,20 @@ export class CloudWorker {
         this.leases.delete(leaseKey)
       }
     }
-    const claimed = await this.store.claimSessionLease(tenantId, sessionId, this.workerId, new Date(), this.leaseTtlMs)
+    const claimed = await this.store.claimSessionLease(
+      tenantId,
+      sessionId,
+      this.workerId,
+      new Date(),
+      this.leaseTtlMs,
+      this.abuse?.enabled && this.abuse.maxActiveWorkersPerOrg
+        ? {
+            orgId: tenantId,
+            maxActiveWorkersPerOrg: this.abuse.maxActiveWorkersPerOrg,
+            policyCode: 'quota.active_workers_exceeded',
+          }
+        : null,
+    )
     if (claimed) this.leases.set(leaseKey, claimed)
     return claimed
   }

@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import {
+  ControlPlaneQuotaExceededError,
   generateChannelInteractionToken,
   generateCloudApiToken,
   hashChannelInteractionToken,
@@ -28,9 +29,12 @@ import type {
   ChannelSessionBindingRecord,
   ClaimDueWorkflowRunInput,
   ClaimChannelDeliveryInput,
+  ClaimRateLimitInput,
   ClaimedWorkflowRunRecord,
+  CloudAuthBackoffRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  ConsumeUsageQuotaInput,
   CompleteWorkflowRunInput,
   ControlPlaneCommandStatus,
   ControlPlaneRole,
@@ -58,6 +62,8 @@ import type {
   PrincipalMembershipRecord,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
+  RecordCloudAuthFailureInput,
+  RecordUsageEventInput,
   RevokeApiTokenInput,
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
@@ -72,6 +78,7 @@ import type {
   ThreadSmartFilterRecord,
   ThreadTagLinkInput,
   ThreadTagRecord,
+  UsageEventRecord,
   UpdateChannelBindingInput,
   UpdateChannelCursorInput,
   UpdateHeadlessAgentInput,
@@ -251,6 +258,20 @@ function normalizeNonNegativeInteger(value: unknown, label: string) {
   return parsed
 }
 
+function normalizePositiveInteger(value: unknown, label: string) {
+  const parsed = Number(value ?? 0)
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer.`)
+  return parsed
+}
+
+function windowStart(nowMs: number, windowMs: number) {
+  return Math.floor(nowMs / windowMs) * windowMs
+}
+
+function retryAfterMs(nowMs: number, windowStartedAtMs: number, windowMs: number) {
+  return Math.max(1, windowStartedAtMs + windowMs - nowMs)
+}
+
 function normalizeProvider(value: unknown): ChannelProviderId {
   const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
   if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
@@ -360,6 +381,19 @@ function auditEventFromRow(row: QueryRow): AuditEventRecord {
     eventType: String(row.event_type),
     targetType: stringOrNull(row.target_type),
     targetId: stringOrNull(row.target_id),
+    metadata: jsonRecord(row.metadata),
+    createdAt: iso(row.created_at),
+  }
+}
+
+function usageEventFromRow(row: QueryRow): UsageEventRecord {
+  return {
+    eventId: String(row.event_id),
+    orgId: String(row.org_id),
+    accountId: stringOrNull(row.account_id),
+    eventType: String(row.event_type),
+    quantity: numberValue(row.quantity),
+    unit: String(row.unit),
     metadata: jsonRecord(row.metadata),
     createdAt: iso(row.created_at),
   }
@@ -679,6 +713,18 @@ function webhookAuthFailureFromRow(row: QueryRow): WebhookAuthFailureRecord {
   }
 }
 
+function cloudAuthBackoffFromRow(row: QueryRow, nowMs: number): CloudAuthBackoffRecord {
+  const blockedUntilMs = numberValue(row.blocked_until_ms)
+  return {
+    allowed: blockedUntilMs <= nowMs,
+    scope: String(row.scope),
+    source: String(row.source),
+    failureCount: numberValue(row.auth_failure_count),
+    blockedUntilMs,
+    retryAfterMs: Math.max(0, blockedUntilMs - nowMs),
+  }
+}
+
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
   private readonly pool: PgPool
   private readonly ownsPool: boolean
@@ -991,6 +1037,116 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(auditEventFromRow)
+  }
+
+  async consumeUsageQuota(input: ConsumeUsageQuotaInput) {
+    return this.withTransaction((client) => this.consumeUsageQuotaWithExecutor(client, input))
+  }
+
+  async recordUsageEvent(input: RecordUsageEventInput) {
+    return this.recordUsageEventWithExecutor(this.pool, input)
+  }
+
+  async listUsageEvents(orgId: string, limit = 100) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_usage_events
+       WHERE org_id = $1
+       ORDER BY created_at DESC, event_id DESC
+       LIMIT $2`,
+      [orgId, Math.max(1, Math.min(limit, 500))],
+    )
+    return result.rows.map(usageEventFromRow)
+  }
+
+  async claimRateLimit(input: ClaimRateLimitInput) {
+    const limit = normalizePositiveInteger(input.limit, 'Rate limit')
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Rate-limit window')
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const startedAtMs = windowStart(nowMs, windowMs)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_rate_limits (scope, source, window_started_at_ms, count)
+       VALUES ($1, $2, $3, 1)
+       ON CONFLICT (scope, source) DO UPDATE
+       SET window_started_at_ms = CASE
+             WHEN cloud_rate_limits.window_started_at_ms = $3 THEN cloud_rate_limits.window_started_at_ms
+             ELSE $3
+           END,
+           count = CASE
+             WHEN cloud_rate_limits.window_started_at_ms = $3 THEN cloud_rate_limits.count + 1
+             ELSE 1
+           END
+       RETURNING count, window_started_at_ms`,
+      [input.scope, input.source, startedAtMs],
+    )
+    const count = numberValue(result.rows[0]?.count)
+    const resetMs = retryAfterMs(nowMs, numberValue(result.rows[0]?.window_started_at_ms), windowMs)
+    return {
+      allowed: count <= limit,
+      scope: input.scope,
+      source: input.source,
+      limit,
+      count,
+      resetAt: new Date(nowMs + resetMs).toISOString(),
+      retryAfterMs: resetMs,
+      policyCode: input.policyCode,
+    }
+  }
+
+  async checkCloudAuthBackoff(input: { scope: string, source?: string, now?: Date }) {
+    const nowMs = (input.now || new Date()).getTime()
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_auth_failures WHERE scope = $1`,
+      [input.scope],
+    )
+    if (!row) {
+      return {
+        allowed: true,
+        scope: input.scope,
+        source: input.source || input.scope,
+        failureCount: 0,
+        blockedUntilMs: 0,
+        retryAfterMs: 0,
+      }
+    }
+    return cloudAuthBackoffFromRow(row, nowMs)
+  }
+
+  async recordCloudAuthFailure(input: RecordCloudAuthFailureInput) {
+    const nowMs = (input.now || new Date()).getTime()
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Auth backoff window')
+    const limit = normalizePositiveInteger(input.limit, 'Auth failure limit')
+    const backoffMs = normalizePositiveInteger(input.backoffMs, 'Auth backoff duration')
+    const startedAtMs = windowStart(nowMs, windowMs)
+    const blockedUntilMs = nowMs + backoffMs
+    const result = await this.pool.query(
+      `INSERT INTO cloud_auth_failures (
+        scope, source, auth_window_started_at_ms, auth_failure_count, blocked_until_ms
+       )
+       VALUES ($1, $2, $3, 1, CASE WHEN $4 <= 1 THEN $5 ELSE 0 END)
+       ON CONFLICT (scope) DO UPDATE
+       SET source = EXCLUDED.source,
+           auth_window_started_at_ms = CASE
+             WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_window_started_at_ms
+             ELSE $3
+           END,
+           auth_failure_count = CASE
+             WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_failure_count + 1
+             ELSE 1
+           END,
+           blocked_until_ms = CASE
+             WHEN (
+               CASE
+                 WHEN cloud_auth_failures.auth_window_started_at_ms = $3 THEN cloud_auth_failures.auth_failure_count + 1
+                 ELSE 1
+               END
+             ) >= $4 THEN GREATEST(cloud_auth_failures.blocked_until_ms, $5)
+             ELSE cloud_auth_failures.blocked_until_ms
+           END
+       RETURNING *`,
+      [input.scope, input.source, startedAtMs, limit, blockedUntilMs],
+    )
+    return cloudAuthBackoffFromRow(result.rows[0], nowMs)
   }
 
   async createByokSecret(input: CreateByokSecretInput) {
@@ -1734,6 +1890,23 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         client,
       )
       if (!selected) return null
+      if (input.quota) {
+        const quota = await this.consumeUsageQuotaWithExecutor(client, {
+          ...input.quota,
+          orgId: input.orgId,
+          now,
+        })
+        if (!quota.allowed) {
+          throw new ControlPlaneQuotaExceededError({
+            message: 'Gateway delivery quota exceeded.',
+            policyCode: quota.policyCode || 'quota.gateway_deliveries_per_hour_exceeded',
+            retryAfterMs: quota.retryAfterMs,
+            limit: quota.limit,
+            used: quota.used,
+            resetAt: quota.resetAt,
+          })
+        }
+      }
       const result = await client.query(
         `UPDATE cloud_channel_deliveries
          SET status = 'claimed',
@@ -1788,27 +1961,63 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     profileName: string
     title?: string | null
     createdAt?: Date
+    quota?: {
+      orgId?: string | null
+      maxConcurrentSessionsPerOrg?: number | null
+      policyCode?: string
+    } | null
   }) {
-    await this.requireTenantUser(input.tenantId, input.userId)
-    const createdAt = nowIso(input.createdAt)
-    await this.pool.query(
-      `INSERT INTO cloud_sessions (
-        tenant_id, session_id, user_id, opencode_session_id, profile_name,
-        status, title, created_at, updated_at
-       )
-       VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $7)
-       ON CONFLICT (tenant_id, session_id) DO NOTHING`,
-      [
-        input.tenantId,
-        input.sessionId,
-        input.userId,
-        input.opencodeSessionId,
-        input.profileName,
-        input.title || null,
-        createdAt,
-      ],
-    )
-    return sessionFromRow(await this.requireSession(input.tenantId, input.sessionId))
+    return this.withTransaction(async (client) => {
+      await this.requireTenantUser(input.tenantId, input.userId, client)
+      const existing = await this.maybeOne(
+        `SELECT * FROM cloud_sessions WHERE tenant_id = $1 AND session_id = $2`,
+        [input.tenantId, input.sessionId],
+        client,
+      )
+      if (existing) return sessionFromRow(existing)
+      const maxConcurrentSessions = input.quota?.maxConcurrentSessionsPerOrg
+      if (maxConcurrentSessions && maxConcurrentSessions > 0) {
+        const orgId = input.quota?.orgId || input.tenantId
+        await this.lockQuota(client, orgId, 'concurrent_sessions')
+        const countRow = await this.one(
+          `SELECT count(*)::int AS count
+           FROM cloud_sessions
+           WHERE tenant_id = $1 AND status <> 'closed'`,
+          [input.tenantId],
+          client,
+        )
+        const activeSessions = numberValue(countRow.count)
+        if (activeSessions >= maxConcurrentSessions) {
+          throw new ControlPlaneQuotaExceededError({
+            message: 'Concurrent cloud session quota exceeded.',
+            policyCode: input.quota?.policyCode || 'quota.concurrent_sessions_exceeded',
+            retryAfterMs: 60_000,
+            limit: maxConcurrentSessions,
+            used: activeSessions,
+            resetAt: new Date(Date.now() + 60_000).toISOString(),
+          })
+        }
+      }
+      const createdAt = nowIso(input.createdAt)
+      const result = await client.query(
+        `INSERT INTO cloud_sessions (
+          tenant_id, session_id, user_id, opencode_session_id, profile_name,
+          status, title, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, 'idle', $6, $7, $7)
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.sessionId,
+          input.userId,
+          input.opencodeSessionId,
+          input.profileName,
+          input.title || null,
+          createdAt,
+        ],
+      )
+      return sessionFromRow(result.rows[0])
+    })
   }
 
   async getSession(tenantId: string, userId: string, sessionId: string) {
@@ -2118,12 +2327,35 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     workerId: string,
     now = new Date(),
     ttlMs = 30_000,
+    quota: {
+      orgId?: string | null
+      maxActiveWorkersPerOrg?: number | null
+      policyCode?: string
+    } | null = null,
   ) {
     return this.withTransaction(async (client) => {
       const session = await this.requireSession(tenantId, sessionId, client, true)
       const lease = await this.getLease(tenantId, sessionId, client, true)
       const nowMs = now.getTime()
       if (lease && lease.leaseExpiresAt > nowMs) return null
+      const maxActiveWorkers = quota?.maxActiveWorkersPerOrg
+      if (maxActiveWorkers && maxActiveWorkers > 0) {
+        const orgId = quota.orgId || tenantId
+        await this.lockQuota(client, orgId, 'active_workers')
+        const countRow = await this.one(
+          `SELECT count(*)::int AS count
+           FROM cloud_worker_leases leases
+           JOIN cloud_sessions sessions
+             ON sessions.tenant_id = leases.tenant_id
+            AND sessions.session_id = leases.session_id
+           WHERE sessions.tenant_id = $1
+             AND leases.lease_expires_at_ms > $2`,
+          [tenantId, nowMs],
+          client,
+        )
+        const activeWorkers = numberValue(countRow.count)
+        if (activeWorkers >= maxActiveWorkers) return null
+      }
       const attempt = numberValue(session.next_lease_attempt) + 1
       const leaseRecord: WorkerLeaseRecord = {
         tenantId,
@@ -3060,6 +3292,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async clear() {
+    await this.pool.query('DELETE FROM cloud_auth_failures')
+    await this.pool.query('DELETE FROM cloud_rate_limits')
+    await this.pool.query('DELETE FROM cloud_quota_locks')
+    await this.pool.query('DELETE FROM cloud_usage_counters')
+    await this.pool.query('DELETE FROM cloud_usage_events')
     await this.pool.query('DELETE FROM cloud_webhook_replay_claims')
     await this.pool.query('DELETE FROM cloud_webhook_auth_failures')
     await this.pool.query('DELETE FROM cloud_webhook_rate_limits')
@@ -3095,6 +3332,115 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const existing = await this.maybeOne(`SELECT * FROM cloud_audit_events WHERE event_id = $1`, [eventId], executor)
     if (!existing) throw new Error(`Audit event ${eventId} was not recorded.`)
     return auditEventFromRow(existing)
+  }
+
+  private async recordUsageEventWithExecutor(
+    executor: PgExecutor,
+    input: RecordUsageEventInput,
+  ): Promise<UsageEventRecord> {
+    const eventId = input.eventId || `usage_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const result = await executor.query(
+      `INSERT INTO cloud_usage_events (
+        event_id, org_id, account_id, event_type, quantity, unit, metadata, created_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING *`,
+      [
+        eventId,
+        input.orgId,
+        input.accountId || null,
+        input.eventType,
+        normalizePositiveInteger(input.quantity || 1, 'Usage quantity'),
+        input.unit || 'count',
+        JSON.stringify(redactAuditMetadata(input.metadata)),
+        nowIso(input.createdAt),
+      ],
+    )
+    if (result.rows[0]) return usageEventFromRow(result.rows[0])
+    const existing = await this.maybeOne(`SELECT * FROM cloud_usage_events WHERE event_id = $1`, [eventId], executor)
+    if (!existing) throw new Error(`Usage event ${eventId} was not recorded.`)
+    return usageEventFromRow(existing)
+  }
+
+  private async consumeUsageQuotaWithExecutor(
+    executor: PgExecutor,
+    input: ConsumeUsageQuotaInput,
+  ) {
+    const limit = normalizePositiveInteger(input.limit, 'Quota limit')
+    const quantity = normalizePositiveInteger(input.quantity || 1, 'Quota quantity')
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Quota window')
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const startedAtMs = windowStart(nowMs, windowMs)
+    await executor.query(
+      `INSERT INTO cloud_usage_counters (org_id, quota_key, window_started_at_ms, quantity)
+       VALUES ($1, $2, $3, 0)
+       ON CONFLICT (org_id, quota_key) DO NOTHING`,
+      [input.orgId, input.quotaKey, startedAtMs],
+    )
+    const row = await this.one(
+      `SELECT * FROM cloud_usage_counters
+       WHERE org_id = $1 AND quota_key = $2
+       FOR UPDATE`,
+      [input.orgId, input.quotaKey],
+      executor,
+    )
+    const currentStartedAtMs = numberValue(row.window_started_at_ms)
+    const currentQuantity = currentStartedAtMs === startedAtMs ? numberValue(row.quantity) : 0
+    const nextQuantity = currentQuantity + quantity
+    const resetMs = retryAfterMs(nowMs, startedAtMs, windowMs)
+    const resetAt = new Date(nowMs + resetMs).toISOString()
+    if (nextQuantity > limit) {
+      return {
+        allowed: false,
+        orgId: input.orgId,
+        quotaKey: input.quotaKey,
+        limit,
+        used: currentQuantity,
+        remaining: Math.max(0, limit - currentQuantity),
+        resetAt,
+        retryAfterMs: resetMs,
+        policyCode: input.policyCode,
+      }
+    }
+    await executor.query(
+      `UPDATE cloud_usage_counters
+       SET window_started_at_ms = $3, quantity = $4
+       WHERE org_id = $1 AND quota_key = $2`,
+      [input.orgId, input.quotaKey, startedAtMs, nextQuantity],
+    )
+    return {
+      allowed: true,
+      orgId: input.orgId,
+      quotaKey: input.quotaKey,
+      limit,
+      used: nextQuantity,
+      remaining: Math.max(0, limit - nextQuantity),
+      resetAt,
+      retryAfterMs: resetMs,
+      policyCode: input.policyCode,
+    }
+  }
+
+  private async lockQuota(
+    executor: PgExecutor,
+    orgId: string,
+    quotaKey: string,
+    now = new Date(),
+  ) {
+    await executor.query(
+      `INSERT INTO cloud_quota_locks (org_id, quota_key, updated_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (org_id, quota_key) DO UPDATE
+       SET updated_at = EXCLUDED.updated_at`,
+      [orgId, quotaKey, now.toISOString()],
+    )
+    await this.one(
+      `SELECT * FROM cloud_quota_locks WHERE org_id = $1 AND quota_key = $2 FOR UPDATE`,
+      [orgId, quotaKey],
+      executor,
+    )
   }
 
   private async requireTenant(tenantId: string, executor: PgExecutor = this.pool) {

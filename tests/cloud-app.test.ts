@@ -393,8 +393,10 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
       body: JSON.stringify({}),
     }))
     assert.equal(asRecord(created.session).tenantId, 'tenant-a')
+    const coworkSessionId = String(asRecord(created.session).sessionId)
+    assert.equal(asRecord(created.session).opencodeSessionId, '')
 
-    const prompted = await readJson(await fetch(`${app.url}/api/sessions/session-1/prompt`, {
+    const prompted = await readJson(await fetch(`${app.url}/api/sessions/${coworkSessionId}/prompt`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -408,7 +410,7 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
     assert.equal(runtime.prompts.length, 1)
 
     await runtime.emitAssistant('session-1', 'external event')
-    const view = await readJson(await fetch(`${app.url}/api/sessions/session-1`, {
+    const view = await readJson(await fetch(`${app.url}/api/sessions/${coworkSessionId}`, {
       headers: {
         'x-open-cowork-tenant-id': 'tenant-a',
         'x-open-cowork-user-id': 'user-a',

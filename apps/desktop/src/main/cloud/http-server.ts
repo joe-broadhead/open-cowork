@@ -66,11 +66,18 @@ export type CloudHttpServerOptions = {
 export class CloudHttpError extends Error {
   readonly status: number
   readonly publicMessage: string
+  readonly policyCode: string | null
+  readonly retryAfterMs: number | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, details: {
+    policyCode?: string | null
+    retryAfterMs?: number | null
+  } = {}) {
     super(message)
     this.status = status
     this.publicMessage = message
+    this.policyCode = details.policyCode || null
+    this.retryAfterMs = details.retryAfterMs || null
   }
 }
 
@@ -153,8 +160,26 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
   res.end(body)
 }
 
-function writeError(res: ServerResponse, status: number, message: string, origin?: string | null) {
-  writeJson(res, status, { error: message }, origin)
+function writeError(
+  res: ServerResponse,
+  status: number,
+  message: string,
+  origin?: string | null,
+  details: { policyCode?: string | null, retryAfterMs?: number | null } = {},
+) {
+  if (details.retryAfterMs && details.retryAfterMs > 0) {
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil(details.retryAfterMs / 1000))))
+  }
+  const body: Record<string, unknown> = { error: message }
+  if (details.retryAfterMs && details.retryAfterMs > 0) body.retryAfterMs = details.retryAfterMs
+  if (details.policyCode) {
+    body.verdict = {
+      allowed: false,
+      reason: message,
+      policyCode: details.policyCode,
+    }
+  }
+  writeJson(res, status, body, origin)
 }
 
 function writePolicyError(
@@ -302,6 +327,21 @@ function workflowScopeKey(workflowId: string) {
 
 function webhookSource(req: IncomingMessage) {
   return req.socket.remoteAddress || 'unknown'
+}
+
+function requestSource(req: IncomingMessage) {
+  const forwardedFor = firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
+  return forwardedFor || req.socket.remoteAddress || 'unknown'
+}
+
+function authFailureScopes(req: IncomingMessage) {
+  const source = requestSource(req)
+  const authorization = firstHeader(req.headers.authorization).trim()
+  const scopes = [`ip:${source}`]
+  if (!authorization) return scopes
+  const tokenHash = createHash('sha256').update(authorization).digest('hex').slice(0, 16)
+  scopes.push(`auth:${tokenHash}`)
+  return scopes
 }
 
 function webhookAuthScope(source: string, workflowId: string) {
@@ -730,6 +770,13 @@ async function handleApiRequest(
         : 'delegated',
       checkpoints: Boolean(options.worker),
       heartbeats: await options.service.listWorkerHeartbeats(),
+    }, options.corsOrigin)
+    return
+  }
+
+  if (resource === 'usage' && sessionId === 'events' && !action && req.method === 'GET') {
+    writeJson(res, 200, {
+      events: await options.service.listUsageEvents(context.principal, parseLimit(context.url)),
     }, options.corsOrigin)
     return
   }
@@ -1698,6 +1745,49 @@ export class CloudHttpServer {
     })
   }
 
+  private async enforceIpRateLimit(req: IncomingMessage) {
+    await this.options.service.claimHttpRateLimit({
+      scope: 'ip',
+      source: requestSource(req),
+    })
+  }
+
+  private async enforcePrincipalRateLimit(principal: CloudPrincipal) {
+    await this.options.service.claimHttpRateLimit({
+      scope: 'org',
+      source: principal.orgId || principal.tenantId,
+    })
+    if (principal.tokenId) {
+      await this.options.service.claimHttpRateLimit({
+        scope: 'token',
+        source: principal.tokenId,
+      })
+    }
+  }
+
+  private async resolvePrincipal(req: IncomingMessage, auth: CloudAuthResolver) {
+    const source = requestSource(req)
+    const scopes = authFailureScopes(req)
+    await Promise.all(scopes.map((scope) => (
+      this.options.service.checkCloudAuthBackoff({ scope, source })
+    )))
+    try {
+      return await auth(req)
+    } catch (error) {
+      const status = error instanceof CloudHttpError
+        ? error.status
+        : error instanceof CloudServiceError
+          ? error.status
+          : 401
+      if (status === 401) {
+        await Promise.all(scopes.map((scope) => (
+          this.options.service.recordCloudAuthFailure({ scope, source })
+        )))
+      }
+      throw error
+    }
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse) {
     const startedAt = Date.now()
     const requestId = firstHeader(req.headers['x-request-id']).trim() || randomUUID()
@@ -1742,14 +1832,18 @@ export class CloudHttpServer {
         return
       }
 
+      await this.enforceIpRateLimit(req)
+
       if (url.pathname.startsWith('/auth/') || this.options.browserAuth?.isCallbackPath(url.pathname)) {
         const auth = this.options.auth || defaultAuthResolver
+        const authWithBackoff: CloudAuthResolver = (request) => this.resolvePrincipal(request, auth)
         const cookieSession = this.options.sessionCookies?.read(req) || null
         const principal = cookieSession?.principal || (
           url.pathname === '/auth/me'
-            ? await auth(req)
+            ? await authWithBackoff(req)
             : null
         )
+        if (principal) await this.enforcePrincipalRateLimit(principal)
         const context = principal
           ? {
               principal,
@@ -1759,12 +1853,13 @@ export class CloudHttpServer {
               segments: url.pathname.split('/').filter(Boolean),
             }
           : null
-        await handleAuthRequest(req, res, this.options, context, auth)
+        await handleAuthRequest(req, res, this.options, context, authWithBackoff)
         return
       }
       const auth = this.options.auth || defaultAuthResolver
       const cookieSession = this.options.sessionCookies?.read(req) || null
-      const principal = cookieSession?.principal || await auth(req)
+      const principal = cookieSession?.principal || await this.resolvePrincipal(req, auth)
+      await this.enforcePrincipalRateLimit(principal)
       const context: RouteContext = {
         principal,
         authSource: cookieSession ? 'cookie' : 'resolver',
@@ -1779,11 +1874,17 @@ export class CloudHttpServer {
       })
     } catch (error) {
       if (error instanceof CloudHttpError) {
-        writeError(res, error.status, error.publicMessage, this.options.corsOrigin)
+        writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
+          policyCode: error.policyCode,
+          retryAfterMs: error.retryAfterMs,
+        })
         return
       }
       if (error instanceof CloudServiceError) {
-        writeError(res, error.status, error.publicMessage, this.options.corsOrigin)
+        writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
+          policyCode: error.policyCode,
+          retryAfterMs: error.retryAfterMs,
+        })
         return
       }
       writeError(res, 500, 'Internal server error.', this.options.corsOrigin)

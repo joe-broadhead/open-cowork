@@ -476,6 +476,50 @@ export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS = [
     WHERE status = 'active'`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_MIGRATION_ID = '005_usage_quotas_rate_limits'
+
+export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_usage_events (
+    event_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    event_type text NOT NULL,
+    quantity bigint NOT NULL,
+    unit text NOT NULL,
+    metadata jsonb NOT NULL,
+    created_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_usage_events_org_created_idx
+    ON cloud_usage_events (org_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_usage_counters (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    quota_key text NOT NULL,
+    window_started_at_ms bigint NOT NULL,
+    quantity bigint NOT NULL,
+    PRIMARY KEY (org_id, quota_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_quota_locks (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    quota_key text NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, quota_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_rate_limits (
+    scope text NOT NULL,
+    source text NOT NULL,
+    window_started_at_ms bigint NOT NULL,
+    count integer NOT NULL,
+    PRIMARY KEY (scope, source)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cloud_auth_failures (
+    scope text PRIMARY KEY,
+    source text NOT NULL,
+    auth_window_started_at_ms bigint NOT NULL,
+    auth_failure_count integer NOT NULL,
+    blocked_until_ms bigint NOT NULL
+  )`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -492,5 +536,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS,
   },
 ] as const

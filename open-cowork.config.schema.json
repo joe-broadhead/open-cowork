@@ -270,7 +270,8 @@
         "auth": { "$ref": "#/$defs/cloudAuth" },
         "storage": { "$ref": "#/$defs/cloudStorage" },
         "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
-        "features": { "$ref": "#/$defs/cloudFeatures" }
+        "features": { "$ref": "#/$defs/cloudFeatures" },
+        "abuse": { "$ref": "#/$defs/cloudAbuse" }
       }
     },
     "cloudRole": {
@@ -326,6 +327,49 @@
         "customAgents": { "type": "boolean" },
         "customMcps": { "type": "boolean" }
       }
+    },
+    "cloudAbuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "httpRateLimit": { "$ref": "#/$defs/cloudRateLimit" },
+        "authBackoff": { "$ref": "#/$defs/cloudAuthBackoff" }
+      }
+    },
+    "cloudRateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "windowMs": { "$ref": "#/$defs/cloudPositiveInteger" },
+        "maxRequests": { "$ref": "#/$defs/cloudPositiveInteger" }
+      }
+    },
+    "cloudAuthBackoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "windowMs": { "$ref": "#/$defs/cloudPositiveInteger" },
+        "maxFailures": { "$ref": "#/$defs/cloudPositiveInteger" },
+        "backoffMs": { "$ref": "#/$defs/cloudPositiveInteger" }
+      }
+    },
+    "cloudPositiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cloudPositiveIntegerOrNull": {
+      "anyOf": [
+        { "$ref": "#/$defs/cloudPositiveInteger" },
+        { "type": "null" }
+      ]
     },
     "cloudRuntimePolicy": {
       "type": "object",

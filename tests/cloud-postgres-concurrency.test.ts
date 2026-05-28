@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 
 import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
+import { ControlPlaneQuotaExceededError } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL
   || process.env.OPEN_COWORK_CLOUD_TEST_POSTGRES_URL
@@ -91,6 +92,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '002_org_identity_tokens_audit',
         '003_headless_channels',
         '004_byok_secrets',
+        '005_usage_quotas_rate_limits',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
@@ -207,6 +209,73 @@ test('real Postgres cloud store serializes worker leases and fences stale projec
       view: { messages: ['current'] },
       leaseToken: secondLease.leaseToken,
     })).sequence, 2)
+  })
+})
+
+test('real Postgres cloud store enforces quota counters under concurrent requests', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const attempts = await Promise.all(Array.from({ length: 8 }, () => (
+      store.consumeUsageQuota({
+        orgId: ids.tenantId,
+        quotaKey: 'prompts:hour',
+        limit: 3,
+        quantity: 1,
+        windowMs: 60_000,
+        now: new Date('2026-01-01T00:00:00.000Z'),
+        policyCode: 'quota.prompts_per_hour_exceeded',
+      })
+    )))
+    assert.equal(attempts.filter((attempt) => attempt.allowed).length, 3)
+    assert.equal(attempts.filter((attempt) => !attempt.allowed).length, 5)
+
+    const createAttempts = await Promise.all(Array.from({ length: 5 }, async (_, index) => {
+      try {
+        await store.createSession({
+          tenantId: ids.tenantId,
+          userId: ids.userId,
+          sessionId: `${ids.tenantId}-quota-session-${index}`,
+          opencodeSessionId: `${ids.tenantId}-quota-oc-${index}`,
+          profileName: 'full',
+          quota: {
+            orgId: ids.tenantId,
+            maxConcurrentSessionsPerOrg: 2,
+            policyCode: 'quota.concurrent_sessions_exceeded',
+          },
+        })
+        return 'created'
+      } catch (error) {
+        assert.equal(error instanceof ControlPlaneQuotaExceededError, true)
+        return 'blocked'
+      }
+    }))
+    assert.equal(createAttempts.filter((result) => result === 'created').length, 1)
+    assert.equal(createAttempts.filter((result) => result === 'blocked').length, 4)
+
+    const workerSessionId = `${ids.tenantId}-worker-quota-session`
+    await store.createSession({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: workerSessionId,
+      opencodeSessionId: `${ids.tenantId}-worker-quota-oc`,
+      profileName: 'full',
+    })
+    const leases = await Promise.all([ids.sessionId, workerSessionId].map((sessionId, index) => (
+      store.claimSessionLease(
+        ids.tenantId,
+        sessionId,
+        `quota-worker-${index}`,
+        new Date('2026-01-01T00:00:00.000Z'),
+        30_000,
+        {
+          orgId: ids.tenantId,
+          maxActiveWorkersPerOrg: 1,
+          policyCode: 'quota.active_workers_exceeded',
+        },
+      )
+    )))
+    assert.equal(leases.filter(Boolean).length, 1)
   })
 })
 

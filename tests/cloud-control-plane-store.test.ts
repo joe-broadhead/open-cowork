@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import {
+  ControlPlaneQuotaExceededError,
+  InMemoryControlPlaneStore,
+} from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 
 function seededStore() {
   const store = new InMemoryControlPlaneStore()
@@ -237,6 +240,99 @@ test('cloud control plane records worker heartbeats, settings metadata, and migr
   assert.equal(store.recordSchemaMigration('001_initial').id, '001_initial')
   assert.equal(store.recordSchemaMigration('001_initial').id, '001_initial')
   assert.equal(store.listSchemaMigrations().length, 1)
+})
+
+test('cloud control plane records usage and enforces windowed quotas', () => {
+  const store = seededStore()
+  const orgId = 'tenant-1'
+
+  const first = store.consumeUsageQuota({
+    orgId,
+    quotaKey: 'prompts:hour',
+    limit: 2,
+    quantity: 1,
+    windowMs: 60_000,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+    policyCode: 'quota.prompts_per_hour_exceeded',
+  })
+  const second = store.consumeUsageQuota({
+    orgId,
+    quotaKey: 'prompts:hour',
+    limit: 2,
+    quantity: 1,
+    windowMs: 60_000,
+    now: new Date('2026-01-01T00:00:01.000Z'),
+    policyCode: 'quota.prompts_per_hour_exceeded',
+  })
+  const denied = store.consumeUsageQuota({
+    orgId,
+    quotaKey: 'prompts:hour',
+    limit: 2,
+    quantity: 1,
+    windowMs: 60_000,
+    now: new Date('2026-01-01T00:00:02.000Z'),
+    policyCode: 'quota.prompts_per_hour_exceeded',
+  })
+
+  assert.equal(first.allowed, true)
+  assert.equal(second.remaining, 0)
+  assert.equal(denied.allowed, false)
+  assert.equal(denied.policyCode, 'quota.prompts_per_hour_exceeded')
+  assert.equal(denied.retryAfterMs > 0, true)
+
+  store.recordUsageEvent({
+    orgId,
+    accountId: 'user-1',
+    eventType: 'prompt.enqueued',
+    quantity: 1,
+    unit: 'count',
+    metadata: { token: 'secret-token', safe: 'yes' },
+    createdAt: new Date('2026-01-01T00:00:03.000Z'),
+  })
+  const usage = store.listUsageEvents(orgId)
+  assert.equal(usage.length, 1)
+  assert.equal(usage[0]?.eventType, 'prompt.enqueued')
+  assert.equal(usage[0]?.metadata.token, '[redacted]')
+  assert.equal(usage[0]?.metadata.safe, 'yes')
+})
+
+test('cloud control plane caps concurrent sessions and active workers', () => {
+  const store = seededStore()
+  assert.throws(() => store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-over-limit',
+    opencodeSessionId: 'oc-session-over-limit',
+    profileName: 'full',
+    quota: {
+      orgId: 'tenant-1',
+      maxConcurrentSessionsPerOrg: 1,
+      policyCode: 'quota.concurrent_sessions_exceeded',
+    },
+  }), (error) => (
+    error instanceof ControlPlaneQuotaExceededError
+    && error.policyCode === 'quota.concurrent_sessions_exceeded'
+  ))
+
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    opencodeSessionId: 'oc-session-2',
+    profileName: 'full',
+  })
+  const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date('2026-01-01T00:00:00.000Z'), 30_000, {
+    orgId: 'tenant-1',
+    maxActiveWorkersPerOrg: 1,
+    policyCode: 'quota.active_workers_exceeded',
+  })
+  const secondLease = store.claimSessionLease('tenant-1', 'session-2', 'worker-b', new Date('2026-01-01T00:00:00.000Z'), 30_000, {
+    orgId: 'tenant-1',
+    maxActiveWorkersPerOrg: 1,
+    policyCode: 'quota.active_workers_exceeded',
+  })
+  assert.ok(firstLease)
+  assert.equal(secondLease, null)
 })
 
 test('cloud control plane resolves org accounts memberships, tokens, and audit events', () => {
