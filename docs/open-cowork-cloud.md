@@ -28,6 +28,27 @@ enabled for your deployment. Multiple workers can claim fenced sessions, and
 checkpointing externalizes the proven OpenCode runtime/XDG and workspace
 portable set so a different worker can restore before resuming a session.
 
+## Workspace sync contract
+
+Cloud is the source of truth only for cloud workspaces. A user can start a
+cloud thread in desktop, continue it in the browser, and interact with the same
+thread through a gateway channel because all three clients read and write the
+same cloud session, command, event, projection, artifact, workflow, settings,
+and policy records.
+
+Local desktop workspaces are separate. Cloud does not automatically ingest
+local threads, host project paths, local stdio MCP commands, machine-native
+runtime config, provider keys, OAuth tokens, or local-only artifacts. The cloud
+worker owns OpenCode execution for cloud threads; the desktop owns OpenCode
+execution for local threads; the gateway owns only channel I/O.
+
+`workspace.support()` is the capability contract between cloud policy and
+clients. It returns `supported`, `read_only`, `blocked_by_policy`,
+`not_supported`, or `deferred` entries with user-facing verdict reasons. Web,
+desktop, and gateway clients should use those verdicts before enabling sends,
+project pickers, host-path diffs, custom content, artifacts, workflows, or
+gateway interactions.
+
 ## Local References
 
 Use the all-in-one reference for quick local checks:

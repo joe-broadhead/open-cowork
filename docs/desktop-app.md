@@ -60,6 +60,27 @@ review a workflow, it does not belong in the primary app navigation.
 Shared visible statuses should stay consistent across Chat, Threads, and
 Workflows: `active`, `running`, `failed`, `paused`, and `archived`.
 
+Workspace copy should also stay stable:
+
+- **Local workspace** means private local desktop state backed by the local
+  OpenCode runtime.
+- **Cloud workspace** means synced cloud state shared with web and gateway
+  clients through Open Cowork Cloud.
+- **Offline cached** means cached cloud state is visible, but cloud sends and
+  mutations are disabled until the connection recovers.
+- **Auth required** means the desktop has a cloud connection but no usable
+  token.
+- **Policy disabled** means the org/profile returned a support-matrix verdict
+  that blocks the action.
+- **Local-only action** means the action depends on local host paths, local
+  stdio MCPs, or machine runtime config and must not run in a cloud workspace.
+- **Cloud-safe action** means the action can be represented through the cloud
+  control plane without implicit local file, local MCP, or secret upload.
+
+The renderer should not infer those states from workspace ids alone. Use
+`workspace.support()` for action-level capability and policy verdicts, then
+show the returned reason when disabling a control.
+
 For dense operational lists, prefer compact tables, split panes, saved filters,
 and bulk-safe actions. Use cards for browse/detail previews, not as the only
 way to manage large inventories. Empty states should offer a direct next

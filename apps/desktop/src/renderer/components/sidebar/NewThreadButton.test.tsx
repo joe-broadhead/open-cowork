@@ -7,6 +7,8 @@ import { NewThreadButton } from './NewThreadButton'
 
 function resetSessionStore() {
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
+    sessionsByWorkspace: { local: [] },
     sessions: [],
     currentSessionId: null,
     globalErrors: [],
@@ -118,5 +120,60 @@ describe('NewThreadButton', () => {
     })
     expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a new thread. Please try again.')
     expect(screen.queryByRole('button', { name: /Blank thread/ })).not.toBeInTheDocument()
+  })
+
+  it('disables local project creation in cloud workspaces using the support matrix reason', async () => {
+    const user = userEvent.setup()
+    const selectDirectory = vi.fn(async () => '/tmp/project')
+    const create = vi.fn(async () => ({
+      id: 'cloud-session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }))
+    installRendererTestCoworkApi({
+      workspace: {
+        support: vi.fn(async () => [
+          {
+            api: 'sessions.create',
+            status: 'supported',
+            verdict: { allowed: true, reason: null },
+          },
+          {
+            api: 'localFiles',
+            status: 'not_supported',
+            verdict: {
+              allowed: false,
+              reason: 'Cloud workspaces do not implicitly upload local files.',
+            },
+          },
+        ]),
+      },
+      dialog: {
+        selectDirectory,
+      },
+      session: {
+        create,
+        activate: vi.fn(async () => undefined),
+      },
+    })
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+
+    render(<NewThreadButton />)
+
+    await user.click(screen.getByRole('button', { name: 'New Thread' }))
+
+    expect(await screen.findByText('Cloud-safe action - start a synced cloud thread')).toBeTruthy()
+    expect(screen.getByText('Local-only action - Cloud workspaces do not implicitly upload local files.')).toBeTruthy()
+    const projectButton = screen.getByRole('button', { name: /Open Project/ })
+    expect(projectButton).toBeDisabled()
+    await user.click(projectButton)
+    expect(selectDirectory).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /Blank thread/ }))
+    await waitFor(() => {
+      expect(create).toHaveBeenCalledWith(undefined, { workspaceId: 'cloud:acme' })
+    })
   })
 })

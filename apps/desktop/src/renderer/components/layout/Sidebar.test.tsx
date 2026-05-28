@@ -79,9 +79,9 @@ describe('Sidebar', () => {
       />,
     )
 
-    const switcher = await screen.findByRole('button', { name: /Local.*Online.*Local workspace/i })
+    const switcher = await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i })
     fireEvent.click(switcher)
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Disabled/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Policy disabled/i }))
 
     await waitFor(() => {
       expect(window.coworkApi.workspace.activate).toHaveBeenCalledWith('cloud:acme')
@@ -162,8 +162,8 @@ describe('Sidebar', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace/i }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Sign in/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Auth required/i }))
 
     await waitFor(() => {
       expect(window.coworkApi.workspace.login).toHaveBeenCalledWith('cloud:acme')
@@ -240,8 +240,8 @@ describe('Sidebar', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace/i }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Sign in/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Acme Cloud.*Auth required/i }))
 
     await waitFor(() => {
       expect(window.coworkApi.workspace.login).toHaveBeenCalledWith('cloud:acme')
@@ -249,6 +249,55 @@ describe('Sidebar', () => {
     })
     expect(activate).not.toHaveBeenCalledWith('cloud:acme')
     expect(sessionList).toHaveBeenCalledWith({ workspaceId: 'local' })
+  })
+
+  it('explains policy-disabled cloud workspaces with workspace support verdicts', async () => {
+    const support = vi.fn(async (workspaceId?: string) => workspaceId === 'cloud:acme'
+      ? [{
+          api: 'sessions.prompt',
+          status: 'blocked_by_policy',
+          verdict: {
+            allowed: false,
+            reason: 'Cloud chat is disabled by this workspace policy.',
+          },
+        }]
+      : [])
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn(async () => [
+          {
+            id: 'local',
+            kind: 'local',
+            label: 'Local',
+            status: 'online',
+            active: false,
+            lastSyncedAt: null,
+          },
+          {
+            id: 'cloud:acme',
+            kind: 'cloud',
+            label: 'Acme Cloud',
+            status: 'disabled',
+            active: true,
+            baseUrl: 'https://cloud.acme.test',
+            lastSyncedAt: null,
+          },
+        ]),
+        support,
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('button', {
+      name: /Acme Cloud.*Policy disabled.*Cloud chat is disabled by this workspace policy/i,
+    })).toBeTruthy()
+    expect(support).toHaveBeenCalledWith('cloud:acme')
   })
 
   it('renders configured top and lower downstream branding surfaces', () => {

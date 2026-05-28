@@ -37,6 +37,28 @@ runtime work:
   to a provider such as OpenAI from setup or Settings.
 - GitHub links opened by the user in their browser.
 
+## Local, cloud, and gateway data boundaries
+
+The workspace selector is a privacy boundary:
+
+- **Local workspace** data stays on the desktop except for the model,
+  provider, MCP, or user-opened network calls needed for that local runtime
+  work.
+- **Cloud workspace** prompts, cloud artifacts, event projections, workflow
+  metadata, portable settings, custom-content metadata, and policy verdicts are
+  sent to the configured Open Cowork Cloud org so desktop, web, and gateway
+  clients can sync.
+- **Gateway** messages are channel input for cloud workspaces. The gateway
+  sends channel text, approved attachments, and interaction decisions to the
+  cloud control plane; it does not receive local desktop runtime state.
+
+Open Cowork does not implicitly sync local threads, local project files, local
+host paths, local stdio MCP commands, machine runtime config, provider API
+keys, OAuth tokens, or refresh tokens. Secrets sync only as metadata or secret
+references where a cloud deployment explicitly supports them. The renderer uses
+the workspace support matrix to disable local-only actions in cloud workspaces
+and to show the server policy reason.
+
 Local workflow webhooks are loopback-only. They listen on
 `127.0.0.1`, require bearer/header/HMAC authentication, and do not send
 webhook payloads to any Open Cowork service. A workflow run may still
