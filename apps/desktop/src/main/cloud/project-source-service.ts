@@ -263,7 +263,7 @@ async function restoreGitSource(
   const env = { ...process.env, ...credentialEnv.env }
   const checkoutDir = source.subdirectory?.trim() ? resolve(workspaceDir, '.open-cowork-git-checkout') : workspaceDir
   try {
-    await execFile('git', ['clone', '--no-checkout', source.repositoryUrl, checkoutDir], { env })
+    await execFile('git', ['clone', '--no-checkout', '--', source.repositoryUrl, checkoutDir], { env })
     const ref = source.ref?.trim() || 'HEAD'
     await execFile('git', ['-C', checkoutDir, 'checkout', '--force', ref], { env })
     if (source.subdirectory?.trim()) {

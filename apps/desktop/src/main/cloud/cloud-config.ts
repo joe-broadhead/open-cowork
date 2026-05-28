@@ -87,6 +87,14 @@ function isSafeSubdirectory(subdirectory: string | null | undefined) {
   return !subdirectory.split('/').some((part) => !part || part === '.' || part === '..')
 }
 
+function isSafeGitRef(ref: string | null | undefined) {
+  if (!ref) return true
+  const trimmed = ref.trim()
+  if (!trimmed || trimmed.startsWith('-') || trimmed.includes('\0') || trimmed.includes('\\')) return false
+  if (trimmed.includes('..') || trimmed.includes('@{') || trimmed.endsWith('.') || trimmed.includes('//')) return false
+  return !trimmed.split('/').some((part) => !part || part === '.' || part === '..')
+}
+
 function isSupportedCloudSecretRef(ref: string | null | undefined) {
   if (!ref) return true
   const trimmed = ref.trim()
@@ -295,6 +303,9 @@ export function evaluateCloudProjectSourcePolicy(
     }
     if (!isSafeSubdirectory(source.subdirectory)) {
       return { allowed: false, reason: 'Git subdirectory must be a safe relative path.', policyCode: 'project_source.git.subdirectory' }
+    }
+    if (!isSafeGitRef(source.ref)) {
+      return { allowed: false, reason: 'Git ref must be a safe branch, tag, or commit reference.', policyCode: 'project_source.git.ref' }
     }
     if (!isSupportedCloudSecretRef(source.credentialRef)) {
       return {
