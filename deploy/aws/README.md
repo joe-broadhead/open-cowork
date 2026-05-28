@@ -1,15 +1,17 @@
 # AWS Recipe
 
-Use the same `open-cowork-cloud` image on AWS with these services:
+Use the same `open-cowork-cloud` and `open-cowork-gateway` images on AWS with
+these services:
 
 | Role | Recommended service |
 | --- | --- |
 | `web` | ECS/Fargate service or EKS Deployment |
 | `worker` | ECS service or EKS Deployment |
 | `scheduler` | ECS service or EKS Deployment |
+| Gateway | ECS/Fargate service or EKS Deployment |
 | Control plane | RDS for PostgreSQL |
 | Object store | S3 |
-| Secrets | Secrets Manager or SSM Parameter Store |
+| Secrets | Secrets Manager or SSM Parameter Store for cloud keys, gateway tokens, and channel credentials |
 
 For Kubernetes-first deployments, install the provider-neutral Helm chart on
 EKS and connect it to RDS, S3, and Secrets Manager through External Secrets or
@@ -30,6 +32,20 @@ helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
   --set cloud.objectStore.region=REGION \
   --set cloud.existingSecret=open-cowork-cloud-secrets
 ```
+
+Install the gateway as a separate ECS service or EKS Deployment:
+
+```bash
+helm upgrade --install open-cowork-gateway ../../helm/open-cowork-gateway \
+  --set image.repository=ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-gateway \
+  --set gateway.cloudBaseUrl=https://cowork.example.com \
+  --set gateway.existingSecret=open-cowork-gateway-secrets
+```
+
+Use Secrets Manager or SSM to inject `OPEN_COWORK_GATEWAY_SERVICE_TOKEN`,
+`OPEN_COWORK_GATEWAY_PROVIDERS`, and channel credentials. Expose gateway ingress
+only for webhook-mode providers; polling gateways can run without public
+inbound traffic.
 
 Keep ECS/Fargate task definitions aligned with the same environment variables
 used by the Helm chart: `OPEN_COWORK_CLOUD_ROLE`, control-plane URL,

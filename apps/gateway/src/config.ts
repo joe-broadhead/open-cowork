@@ -24,6 +24,9 @@ export type GatewayConfig = {
   metrics: {
     enabled: boolean
   }
+  diagnostics: {
+    enabled: boolean
+  }
   providers: GatewayProviderConfig[]
 }
 
@@ -44,6 +47,7 @@ export type GatewayRawConfig = Partial<{
   mode: GatewayMode
   logging: Partial<GatewayConfig['logging']>
   metrics: Partial<GatewayConfig['metrics']>
+  diagnostics: Partial<GatewayConfig['diagnostics']>
   providers: Array<Partial<GatewayProviderConfig> & {
     kind: GatewayProviderKind
   }>
@@ -58,6 +62,7 @@ const secretEnvKeys = [
   'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
   'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
   'OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET',
+  'OPEN_COWORK_GATEWAY_PROVIDERS',
 ]
 
 export function loadGatewayConfig(env: GatewayEnv = process.env): GatewayConfig {
@@ -69,6 +74,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   const cloudBaseUrl = readString(env.OPEN_COWORK_CLOUD_BASE_URL) || readString(raw.cloud?.baseUrl)
   const serviceToken = readString(env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN) || readString(raw.cloud?.serviceToken)
   const allowInsecureHttp = readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP, raw.cloud?.allowInsecureHttp ?? false)
+  const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
   if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL or cloud.baseUrl is required.')
   if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN or cloud.serviceToken is required.')
 
@@ -83,12 +89,15 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
       port: readPort(env.OPEN_COWORK_GATEWAY_PORT ?? raw.server?.port, defaultPort),
       publicBaseUrl: readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl),
     },
-    mode: readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host',
+    mode,
     logging: {
       level: readLogLevel(env.OPEN_COWORK_GATEWAY_LOG_LEVEL) || raw.logging?.level || 'info',
     },
     metrics: {
       enabled: readBoolean(env.OPEN_COWORK_GATEWAY_METRICS_ENABLED, raw.metrics?.enabled ?? true),
+    },
+    diagnostics: {
+      enabled: readBoolean(env.OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED, raw.diagnostics?.enabled ?? mode === 'self-host'),
     },
     providers: normalizeProviders(raw.providers, env),
   }
@@ -306,7 +315,7 @@ function redactUnknown(value: unknown): unknown {
 function redactValue(key: string, value: unknown): unknown {
   if (typeof value === 'string') {
     if (/token|secret|password|credential|authorization|api[_-]?key|private[_-]?key|access[_-]?key/i.test(key)) return redactSecret(value)
-    return redactUrlSecrets(value)
+    return redactLocalPaths(redactUrlSecrets(value))
   }
   return redactUnknown(value)
 }
@@ -326,6 +335,13 @@ function redactUrlSecrets(value: string) {
     }
   }
   return url.toString()
+}
+
+function redactLocalPaths(value: string) {
+  return value
+    .replace(/\/Users\/[^\s"'`:]+/g, '/Users/[redacted]')
+    .replace(/\/home\/[^\s"'`:]+/g, '/home/[redacted]')
+    .replace(/[A-Z]:\\Users\\[^\s"'`:]+/gi, 'C:\\Users\\[redacted]')
 }
 
 function redactSecret(value: string | null | undefined) {

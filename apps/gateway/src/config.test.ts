@@ -56,6 +56,7 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
         deliveryUrl: 'https://webhook.example.test/out?token=provider-token-1234567890',
         callbackSecret: 'provider-secret-1234567890',
         privateKey: 'provider-private-key-1234567890',
+        workspacePath: '/Users/alice/acme-private',
       },
     }],
   })
@@ -72,18 +73,44 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
   assert.equal(providers[0]?.settings.callbackSecret, 'prov...[redacted]...7890')
   assert.equal(providers[0]?.settings.privateKey, 'prov...[redacted]...7890')
   assert.equal(providers[0]?.settings.deliveryUrl, 'https://webhook.example.test/out?token=%5Bredacted%5D')
+  assert.equal(providers[0]?.settings.workspacePath, '/Users/[redacted]')
 })
 
 test('gateway env redaction catches token and secret names', () => {
-  assert.deepEqual(redactGatewayEnv({
+  const redacted = redactGatewayEnv({
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'token-1234567890',
     OPEN_COWORK_GATEWAY_MODE: 'self-host',
+    OPEN_COWORK_GATEWAY_PROVIDERS: '[{"credentials":{"botToken":"telegram-token-1234567890"}}]',
     CUSTOM_PASSWORD_VALUE: 'password-1234567890',
-  }), {
-    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'toke...[redacted]...7890',
-    OPEN_COWORK_GATEWAY_MODE: 'self-host',
-    CUSTOM_PASSWORD_VALUE: 'pass...[redacted]...7890',
   })
+  assert.equal(redacted.OPEN_COWORK_GATEWAY_SERVICE_TOKEN, 'toke...[redacted]...7890')
+  assert.equal(redacted.OPEN_COWORK_GATEWAY_MODE, 'self-host')
+  assert.equal(redacted.CUSTOM_PASSWORD_VALUE, 'pass...[redacted]...7890')
+  assert.equal(redacted.OPEN_COWORK_GATEWAY_PROVIDERS?.includes('telegram-token'), false)
+  assert.match(redacted.OPEN_COWORK_GATEWAY_PROVIDERS || '', /\[redacted\]/)
+})
+
+test('gateway diagnostics default to self-host only unless explicitly enabled', () => {
+  const managed = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    mode: 'managed',
+  })
+  assert.equal(managed.diagnostics.enabled, false)
+
+  const explicitlyEnabled = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    mode: 'managed',
+    diagnostics: {
+      enabled: true,
+    },
+  })
+  assert.equal(explicitlyEnabled.diagnostics.enabled, true)
 })
 
 test('gateway config rejects missing cloud auth and unsupported providers', () => {

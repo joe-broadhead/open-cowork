@@ -137,12 +137,29 @@ jobs:
         run: |
           docker compose -f docker-compose.cloud.yml config --quiet
           docker compose -f docker-compose.cloud.split.yml config --quiet
+          docker compose -f docker-compose.cloud-gateway.yml config --quiet
 
       - name: Build cloud OCI image
-        run: docker build -f docker/open-cowork-cloud/Dockerfile -t open-cowork-cloud:ci .
+        run: |
+          image_tag="${GITHUB_SHA:-ci}"
+          docker build -f docker/open-cowork-cloud/Dockerfile \
+            -t open-cowork-cloud:ci \
+            -t ghcr.io/joe-broadhead/open-cowork-cloud:"${image_tag}" \
+            .
+
+      - name: Build gateway OCI image
+        run: |
+          image_tag="${GITHUB_SHA:-ci}"
+          docker build -f docker/open-cowork-gateway/Dockerfile \
+            -t open-cowork-gateway:ci \
+            -t ghcr.io/joe-broadhead/open-cowork-gateway:"${image_tag}" \
+            .
 
       - name: Run split-role cloud Compose smoke test
         run: bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud.split.yml
+
+      - name: Run cloud plus gateway Compose smoke test
+        run: OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
 
       - name: Install Helm
         run: |
@@ -156,6 +173,7 @@ jobs:
 
       - name: Validate cloud Helm chart
         run: |
+          helm dependency build helm/open-cowork-cloud
           helm lint helm/open-cowork-cloud \
             --set cloud.auth.mode=oidc \
             --set cloud.auth.oidcIssuerUrl=https://issuer.example.com \
@@ -174,6 +192,36 @@ jobs:
             > /tmp/open-cowork-cloud-rendered.yaml
           test -s /tmp/open-cowork-cloud-rendered.yaml
           grep -q "OPEN_COWORK_CLOUD_ROLE" /tmp/open-cowork-cloud-rendered.yaml
+          helm template open-cowork-cloud-with-gateway helm/open-cowork-cloud \
+            --set image.repository=example.com/open-cowork-cloud \
+            --set image.tag=ci \
+            --set cloud.auth.mode=oidc \
+            --set cloud.auth.oidcIssuerUrl=https://issuer.example.com \
+            --set cloud.auth.oidcClientId=open-cowork-cloud-ci \
+            --set cloud.controlPlaneUrl='postgres://postgres:postgres@postgres:5432/open_cowork_cloud_test' \
+            --set cloud.secretKey='ci-secret-key' \
+            --set cloud.cookieSecret='ci-cookie-secret' \
+            --set cloud.objectStore.kind=s3 \
+            --set cloud.objectStore.bucket=open-cowork-cloud-ci \
+            --set gateway.enabled=true \
+            --set gateway.gateway.cloudBaseUrl=https://cloud.example.com \
+            --set gateway.gateway.serviceToken=ci-gateway-token \
+            > /tmp/open-cowork-cloud-with-gateway-rendered.yaml
+          grep -q "OPEN_COWORK_GATEWAY_SERVICE_TOKEN" /tmp/open-cowork-cloud-with-gateway-rendered.yaml
+
+      - name: Validate gateway Helm chart
+        run: |
+          helm lint helm/open-cowork-gateway \
+            --set gateway.cloudBaseUrl=https://cloud.example.com \
+            --set gateway.serviceToken=ci-gateway-token
+          helm template open-cowork-gateway helm/open-cowork-gateway \
+            --set image.repository=example.com/open-cowork-gateway \
+            --set image.tag=ci \
+            --set gateway.cloudBaseUrl=https://cloud.example.com \
+            --set gateway.serviceToken=ci-gateway-token \
+            > /tmp/open-cowork-gateway-rendered.yaml
+          test -s /tmp/open-cowork-gateway-rendered.yaml
+          grep -q "OPEN_COWORK_GATEWAY_SERVICE_TOKEN" /tmp/open-cowork-gateway-rendered.yaml
 
   # Run the desktop smoke suite and package the app on macOS so
   # platform-specific regressions (IPC, renderer boot, native modules,

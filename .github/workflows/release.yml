@@ -363,12 +363,60 @@ jobs:
       - name: Confirm release policy
         run: echo "Release policy passed for ${GITHUB_REF_NAME}; GitHub Release publication may proceed."
 
+  publish-oci-images:
+    if: startsWith(github.ref, 'refs/tags/v') && needs.release-policy.result == 'success'
+    needs:
+      - release-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build and publish cloud OCI image
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${owner}/open-cowork-cloud"
+          docker build -f docker/open-cowork-cloud/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${version}" \
+            -t "${image}:${GITHUB_REF_NAME}" \
+            -t "${image}:${version}" \
+            .
+          docker push "${image}:${GITHUB_REF_NAME}"
+          docker push "${image}:${version}"
+
+      - name: Build and publish gateway OCI image
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${owner}/open-cowork-gateway"
+          docker build -f docker/open-cowork-gateway/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${version}" \
+            -t "${image}:${GITHUB_REF_NAME}" \
+            -t "${image}:${version}" \
+            .
+          docker push "${image}:${GITHUB_REF_NAME}"
+          docker push "${image}:${version}"
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v') && needs.release-policy.result == 'success'
     needs:
       - build-macos
       - build-linux
       - release-policy
+      - publish-oci-images
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

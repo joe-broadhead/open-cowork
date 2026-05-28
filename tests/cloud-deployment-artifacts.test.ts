@@ -31,6 +31,20 @@ test('split cloud compose declares web, worker, and scheduler roles', () => {
   assert.match(compose, /minio:/)
 })
 
+test('combined cloud and gateway compose declares self-host gateway wiring', () => {
+  const compose = readRepoFile('docker-compose.cloud-gateway.yml')
+  assert.match(compose, /open-cowork-cloud:/)
+  assert.match(compose, /open-cowork-gateway:/)
+  assert.match(compose, /docker\/open-cowork-gateway\/Dockerfile/)
+  assert.match(compose, /OPEN_COWORK_CLOUD_BASE_URL: http:\/\/open-cowork-cloud:8787/)
+  assert.match(compose, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.match(compose, /OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: "true"/)
+  assert.match(compose, /OPEN_COWORK_GATEWAY_FAKE_CHANNEL_BINDING_ID/)
+  assert.match(compose, /OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN/)
+  assert.match(compose, /OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL/)
+  assert.match(compose, /8790:8790/)
+})
+
 test('cloud deployment docs cover provider-neutral split deployment', () => {
   const docs = readRepoFile('docs/open-cowork-cloud.md')
   for (const provider of ['GCP', 'AWS', 'Azure', 'DigitalOcean', 'Kubernetes']) {
@@ -66,6 +80,13 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/api\/workers\/heartbeats/)
   assert.match(docs, /web app at `\/`/)
   assert.match(docs, /createHttpSseCloudTransportAdapter/)
+  assert.match(docs, /Generic Docker: Cloud \+ Gateway/)
+  assert.match(docs, /docker-compose\.cloud-gateway\.yml/)
+  assert.match(docs, /GET \/ready/)
+  assert.match(docs, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.match(docs, /OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED/)
+  assert.match(docs, /helm\/open-cowork-gateway/)
+  assert.match(docs, /cloud-managed-operations\.md/)
 })
 
 test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
@@ -76,9 +97,11 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   const secret = readRepoFile('helm/open-cowork-cloud/templates/secret.yaml')
 
   assert.match(chart, /name: open-cowork-cloud/)
+  assert.match(chart, /open-cowork-gateway/)
   assert.match(values, /web:/)
   assert.match(values, /worker:/)
   assert.match(values, /scheduler:/)
+  assert.match(values, /gateway:/)
   assert.equal(values.includes('worker:\n    enabled: false\n    replicas: 1'), true)
   assert.match(values, /checkpoints:/)
   assert.match(values, /secretKeyRef: ""/)
@@ -134,6 +157,38 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(secret, /OPEN_COWORK_CLOUD_OTLP_HEADERS/)
 })
 
+test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => {
+  const chart = readRepoFile('helm/open-cowork-gateway/Chart.yaml')
+  const values = readRepoFile('helm/open-cowork-gateway/values.yaml')
+  const deployment = readRepoFile('helm/open-cowork-gateway/templates/deployment.yaml')
+  const configMap = readRepoFile('helm/open-cowork-gateway/templates/configmap.yaml')
+  const secret = readRepoFile('helm/open-cowork-gateway/templates/secret.yaml')
+
+  assert.match(chart, /name: open-cowork-gateway/)
+  assert.match(values, /repository: ghcr\.io\/joe-broadhead\/open-cowork-gateway/)
+  assert.match(values, /mode: self-host/)
+  assert.match(values, /cloudBaseUrl: ""/)
+  assert.match(values, /serviceToken: ""/)
+  assert.match(values, /providersJson: ""/)
+  assert.match(values, /telegram:/)
+  assert.match(values, /webhook:/)
+  assert.match(values, /podSecurityContext:/)
+  assert.match(values, /runAsNonRoot: true/)
+  assert.match(values, /containerSecurityContext:/)
+  assert.match(values, /allowPrivilegeEscalation: false/)
+  assert.match(deployment, /gateway\.cloudBaseUrl is required/)
+  assert.match(deployment, /gateway\.serviceToken or gateway\.existingSecret is required/)
+  assert.match(deployment, /\/health/)
+  assert.match(deployment, /\/ready/)
+  assert.match(configMap, /OPEN_COWORK_CLOUD_BASE_URL/)
+  assert.match(configMap, /OPEN_COWORK_GATEWAY_MODE/)
+  assert.match(configMap, /OPEN_COWORK_GATEWAY_METRICS_ENABLED/)
+  assert.match(secret, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.match(secret, /OPEN_COWORK_GATEWAY_PROVIDERS/)
+  assert.match(secret, /OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN/)
+  assert.match(secret, /OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET/)
+})
+
 test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap', () => {
   const script = readRepoFile('scripts/open-cowork-cloud.ts')
   assert.match(script, /getAppConfig/)
@@ -143,6 +198,7 @@ test('cloud CLI entrypoint uses the shared config loader and cloud app bootstrap
 
 test('cloud image builds workspace packages required by package entrypoints', () => {
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
+  const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
 
   assert.match(buildScript, /cloudElectronShimPlugin/)
@@ -156,19 +212,29 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   assert.match(dockerfile, /USER node/)
   assert.match(dockerfile, /HEALTHCHECK/)
   assert.match(dockerfile, /CMD \["pnpm", "cloud:start"\]/)
+
+  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/gateway build/)
+  assert.match(gatewayDockerfile, /pnpm --filter @open-cowork\/shared build/)
+  assert.match(gatewayDockerfile, /COPY scripts \.\/scripts/)
+  assert.match(gatewayDockerfile, /pnpm install --frozen-lockfile --prod/)
+  assert.match(gatewayDockerfile, /OPEN_COWORK_GATEWAY_PORT=8790/)
+  assert.match(gatewayDockerfile, /USER node/)
+  assert.match(gatewayDockerfile, /\/ready/)
+  assert.match(gatewayDockerfile, /CMD \["pnpm", "--dir", "apps\/gateway", "start"\]/)
 })
 
 test('cloud provider recipes stay thin compositions of the shared image and adapters', () => {
   const index = readRepoFile('deploy/README.md')
-  assert.match(index, /same\n`open-cowork-cloud` image/)
+  assert.match(index, /`open-cowork-cloud` and `open-cowork-gateway` images/)
+  assert.match(index, /open-cowork-gateway/)
   assert.match(index, /Postgres/)
   assert.match(index, /OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true/)
 
   const recipes = {
-    gcp: ['Cloud SQL for PostgreSQL', 'Cloud Storage', 'Secret Manager', 'GKE'],
-    aws: ['RDS for PostgreSQL', 'S3', 'Secrets Manager', 'EKS'],
-    azure: ['Azure Database for PostgreSQL', 'Azure Blob Storage', 'Key Vault', 'AKS'],
-    digitalocean: ['Managed PostgreSQL', 'Spaces', 'DOKS', 'App Platform'],
+    gcp: ['Cloud SQL for PostgreSQL', 'Cloud Storage', 'Secret Manager', 'GKE', 'open-cowork-gateway'],
+    aws: ['RDS for PostgreSQL', 'S3', 'Secrets Manager', 'EKS', 'open-cowork-gateway'],
+    azure: ['Azure Database for PostgreSQL', 'Azure Blob Storage', 'Key Vault', 'AKS', 'open-cowork-gateway'],
+    digitalocean: ['Managed PostgreSQL', 'Spaces', 'DOKS', 'App Platform', 'open-cowork-gateway'],
   }
 
   for (const [provider, expected] of Object.entries(recipes)) {
@@ -176,9 +242,33 @@ test('cloud provider recipes stay thin compositions of the shared image and adap
     assert.match(readme, /open-cowork-cloud/)
     assert.match(readme, /cloud.checkpoints.enabled=true/)
     assert.match(readme, /helm upgrade --install open-cowork-cloud/)
+    assert.match(readme, /helm upgrade --install open-cowork-gateway/)
+    assert.match(readme, /gateway.existingSecret=open-cowork-gateway-secrets/)
     for (const phrase of expected) {
       assert.match(readme, new RegExp(phrase))
     }
+  }
+})
+
+test('managed operations runbook covers readiness, rollback, diagnostics, and gateway backlog', () => {
+  const runbook = readRepoFile('docs/runbooks/cloud-managed-operations.md')
+
+  for (const phrase of [
+    'GET /healthz',
+    'GET /api/workers/heartbeats',
+    'GET /ready',
+    'Rollback',
+    'Worker Drains',
+    'Gateway Backlog',
+    'Secret Rotation',
+    'Diagnostics',
+    'API tokens',
+    'BYOK keys',
+    'object-store signed URLs',
+    'local host paths',
+    'Restore Check',
+  ]) {
+    assert.match(runbook, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
 })
 
@@ -192,13 +282,36 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /cloud-postgres-concurrency\.test\.ts/)
   assert.match(workflow, /docker compose -f docker-compose\.cloud\.yml config --quiet/)
   assert.match(workflow, /docker compose -f docker-compose\.cloud\.split\.yml config --quiet/)
+  assert.match(workflow, /docker compose -f docker-compose\.cloud-gateway\.yml config --quiet/)
   assert.match(workflow, /docker build -f docker\/open-cowork-cloud\/Dockerfile/)
+  assert.match(workflow, /docker build -f docker\/open-cowork-gateway\/Dockerfile/)
   assert.match(workflow, /bash scripts\/ci-cloud-compose-smoke\.sh docker-compose\.cloud\.split\.yml/)
+  assert.match(workflow, /OPEN_COWORK_GATEWAY_SMOKE_URL=http:\/\/127\.0\.0\.1:8790\/ready bash scripts\/ci-cloud-compose-smoke\.sh docker-compose\.cloud-gateway\.yml/)
+  assert.match(workflow, /helm dependency build helm\/open-cowork-cloud/)
   assert.match(workflow, /helm lint helm\/open-cowork-cloud/)
   assert.match(workflow, /helm template open-cowork-cloud helm\/open-cowork-cloud/)
+  assert.match(workflow, /gateway\.enabled=true/)
+  assert.match(workflow, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
+  assert.match(workflow, /helm lint helm\/open-cowork-gateway/)
+  assert.match(workflow, /helm template open-cowork-gateway helm\/open-cowork-gateway/)
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)
   assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/healthz/)
+  assert.match(smoke, /OPEN_COWORK_GATEWAY_SMOKE_URL/)
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" logs --no-color --tail=200/)
+})
+
+test('release workflow publishes versioned cloud and gateway OCI images', () => {
+  const workflow = readRepoFile('.github/workflows/release.yml')
+
+  assert.match(workflow, /publish-oci-images:/)
+  assert.match(workflow, /packages: write/)
+  assert.match(workflow, /docker login ghcr\.io/)
+  assert.match(workflow, /docker\/open-cowork-cloud\/Dockerfile/)
+  assert.match(workflow, /docker\/open-cowork-gateway\/Dockerfile/)
+  assert.match(workflow, /image="ghcr\.io\/\$\{owner\}\/open-cowork-cloud"/)
+  assert.match(workflow, /image="ghcr\.io\/\$\{owner\}\/open-cowork-gateway"/)
+  assert.match(workflow, /-t "\$\{image\}:\$\{GITHUB_REF_NAME\}"/)
+  assert.match(workflow, /docker push "\$\{image\}:\$\{version\}"/)
 })

@@ -1,0 +1,57 @@
+{{- if not .Values.gateway.cloudBaseUrl }}
+{{- fail "gateway.cloudBaseUrl is required." }}
+{{- end }}
+{{- if and (not .Values.gateway.serviceToken) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.serviceToken or gateway.existingSecret is required." }}
+{{- end }}
+{{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
+{{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-cowork-gateway.fullname" . }}
+  labels:
+    {{- include "open-cowork-gateway.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "open-cowork-gateway.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "open-cowork-gateway.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: open-cowork-gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-cowork-gateway.fullname" . }}-config
+            - secretRef:
+                name: {{ include "open-cowork-gateway.secretName" . }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.gateway.port }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

@@ -81,6 +81,51 @@ Self-hosted deployments can run with the stub/no billing adapter. In that mode
 the dashboard keeps the billing panel non-blocking while BYOK, desktop token,
 gateway token, and usage surfaces remain available.
 
+## Generic Docker: Cloud + Gateway
+
+Use the combined self-host reference when validating the browser dashboard,
+desktop token flow, and headless gateway together:
+
+```bash
+docker compose -f docker-compose.cloud-gateway.yml up --build
+```
+
+That file starts:
+
+- Open Cowork Cloud in `all-in-one` mode on <http://localhost:8787>,
+- Postgres for the control plane,
+- MinIO for artifacts and checkpoints,
+- Open Cowork Gateway on <http://localhost:8790>.
+
+The gateway starts with the fake channel provider by default so the process can
+boot before a real Telegram or webhook binding is configured. For a real
+self-hosted gateway:
+
+1. Open the dashboard at <http://localhost:8787>.
+2. Configure BYOK provider credentials if your profile requires them.
+3. Create a scoped gateway API token from the dashboard.
+4. Create a headless agent and channel binding.
+5. Restart the gateway with `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` set to that
+   one-time token and provider credentials such as
+   `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`.
+
+For local demos the cloud compose file uses `auth.mode=none` and explicit
+insecure overrides. Public deployments must use OIDC or a trusted identity
+proxy for the cloud web role and a real gateway service token.
+
+Gateway health endpoints:
+
+- `GET /health` reports process liveness.
+- `GET /ready` reports provider readiness.
+- `GET /metrics` exposes Prometheus metrics when enabled.
+- `GET /diagnostics` returns redacted gateway config, provider state, and
+  counters for support.
+
+The gateway image is separate from the cloud image because it owns channel
+secrets, long-polling or webhook connections, and a different scaling profile.
+It does not import the OpenCode SDK and does not own control-plane Postgres
+state.
+
 For Kubernetes, use the provider-neutral Helm chart as the scalable starting
 point:
 
@@ -101,6 +146,22 @@ helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
 Use `cloud.existingSecret` in production so database URLs, object-store
 credentials, and envelope keys come from your platform secret manager rather
 than from Helm values.
+
+Install the gateway chart next to cloud when you want channel access:
+
+```bash
+helm upgrade --install open-cowork-gateway helm/open-cowork-gateway \
+  --set image.repository=ghcr.io/joe-broadhead/open-cowork-gateway \
+  --set gateway.cloudBaseUrl='https://cowork.example.com' \
+  --set gateway.serviceToken='replace-with-secret-manager-value'
+```
+
+For production, set `gateway.existingSecret` and inject
+`OPEN_COWORK_GATEWAY_SERVICE_TOKEN`, `OPEN_COWORK_GATEWAY_PROVIDERS`, and
+provider-specific credentials through External Secrets, sealed secrets, or the
+platform secret manager. The cloud chart also exposes the gateway as an
+optional dependency under `gateway.enabled=true` for installations that prefer
+one parent release.
 
 The chart fails closed when `cloud.auth.mode=none` is used without
 `cloud.allowInsecureAuth=true`. Keep that override for local demos only; use
@@ -174,6 +235,24 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` | Optional OpenTelemetry OTLP HTTP base endpoint; exports traces to `/v1/traces` and metrics to `/v1/metrics`. |
 | `OPEN_COWORK_CLOUD_OTLP_HEADERS` | Optional JSON object of OTLP HTTP headers, stored as a secret when it contains collector credentials. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
+
+Gateway variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
+| `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
+| `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
+| `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
+| `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public gateway URL for channel webhook registration. |
+| `OPEN_COWORK_GATEWAY_MODE` | `self-host` or `managed`; affects diagnostics and deployment labeling. |
+| `OPEN_COWORK_GATEWAY_METRICS_ENABLED` | Enables `/metrics`. |
+| `OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED` | Enables `/diagnostics`; defaults to `true` for self-host and `false` for managed mode. |
+| `OPEN_COWORK_GATEWAY_PROVIDERS` | JSON provider array for multi-provider deployments. Treat as secret when it carries credentials. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN` | Telegram bot token for the Telegram provider. |
+| `OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET` | Telegram webhook secret token when running webhook mode. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Shared secret for generic webhook signing. |
 
 Hosted/public deployments should keep abuse controls enabled. The defaults are
 conservative and can be tuned per deployment; set an individual numeric quota
@@ -265,16 +344,16 @@ MCPs are available in cloud workspaces.
 
 ## Provider Mapping
 
-Provider-specific recipes should remain thin compositions of the same image,
+Provider-specific recipes should remain thin compositions of the same images,
 roles, Postgres control plane, object-store adapter, and secret adapter.
 
-| Provider | Web | Worker/Scheduler | Control plane | Object store | Secret store |
-| --- | --- | --- | --- | --- | --- |
-| Kubernetes | Deployment + Service/Ingress | Deployments or jobs with HPA/KEDA as needed | Managed or in-cluster Postgres | S3-compatible, GCS, Azure Blob, or MinIO | External Secrets or sealed secrets |
-| GCP | Cloud Run or GKE | GKE for production workers; Cloud Run all-in-one demo only | Cloud SQL for PostgreSQL | Cloud Storage | Secret Manager |
-| AWS | ECS/Fargate or EKS | ECS services or EKS deployments | RDS PostgreSQL | S3 | Secrets Manager |
-| Azure | Container Apps or AKS | Container Apps jobs/services or AKS | Azure Database for PostgreSQL | Azure Blob Storage | Key Vault |
-| DigitalOcean | App Platform for demos; DOKS for scale | DOKS deployments | Managed PostgreSQL | Spaces | App Platform/DOKS secrets |
+| Provider | Web | Worker/Scheduler | Gateway | Control plane | Object store | Secret store |
+| --- | --- | --- | --- | --- | --- | --- |
+| Kubernetes | Deployment + Service/Ingress | Deployments or jobs with HPA/KEDA as needed | Separate Deployment + Service/Ingress for webhook channels | Managed or in-cluster Postgres | S3-compatible, GCS, Azure Blob, or MinIO | External Secrets or sealed secrets |
+| GCP | Cloud Run or GKE | GKE for production workers; Cloud Run all-in-one demo only | Cloud Run or GKE Deployment | Cloud SQL for PostgreSQL | Cloud Storage | Secret Manager |
+| AWS | ECS/Fargate or EKS | ECS services or EKS deployments | ECS service or EKS Deployment | RDS PostgreSQL | S3 | Secrets Manager |
+| Azure | Container Apps or AKS | Container Apps jobs/services or AKS | Container Apps service or AKS Deployment | Azure Database for PostgreSQL | Azure Blob Storage | Key Vault |
+| DigitalOcean | App Platform for demos; DOKS for scale | DOKS deployments | App Platform component or DOKS Deployment | Managed PostgreSQL | Spaces | App Platform/DOKS secrets |
 
 The app core should not contain provider-specific branches. Provider behavior
 belongs in config, adapters, and deployment recipes.
@@ -282,6 +361,11 @@ belongs in config, adapters, and deployment recipes.
 Recipe starting points live under `deploy/gcp`, `deploy/aws`, `deploy/azure`,
 and `deploy/digitalocean`. Each one maps provider services back to the same
 role, Postgres, object-store, and secret-manager contract.
+
+Managed operators should also keep the runbook in
+[`docs/runbooks/cloud-managed-operations.md`](runbooks/cloud-managed-operations.md)
+current for readiness, rollback, gateway backlog, secret rotation, and
+diagnostic export procedures.
 
 ## Focused Agent Deployments
 

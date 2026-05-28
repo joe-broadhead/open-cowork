@@ -3,6 +3,17 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+gateway:
+  enabled: false
+  image:
+    repository: ghcr.io/joe-broadhead/open-cowork-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  gateway:
+    cloudBaseUrl: ""
+    serviceToken: ""
+    existingSecret: ""
+
 nameOverride: ""
 fullnameOverride: ""
 
