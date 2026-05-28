@@ -97,10 +97,18 @@ That file starts:
 - MinIO for artifacts and checkpoints,
 - Open Cowork Gateway on <http://localhost:8790>.
 
-The local compose file explicitly enables the fake channel provider so the
-process can boot before a real Telegram or webhook binding is configured. Real
-public deployments should configure Telegram or a signed webhook provider
-instead of exposing the fake provider. For a real self-hosted gateway:
+The gateway requires at least one real provider by default. For local-only
+smoke tests without Telegram or webhook credentials, opt into the fake provider
+explicitly:
+
+```bash
+OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true \
+  docker compose -f docker-compose.cloud-gateway.yml up --build
+```
+
+Do not expose the fake provider publicly. Real public deployments should
+configure Telegram or a signed webhook provider instead. For a real self-hosted
+gateway:
 
 1. Open the dashboard at <http://localhost:8787>.
 2. Configure BYOK provider credentials if your profile requires them.
