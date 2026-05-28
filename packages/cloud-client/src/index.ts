@@ -371,6 +371,7 @@ export type CloudTransportAdapter = {
   listByokSecrets?(): Promise<CloudByokSecretMetadata[]>
   getByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   setByokSecret?(providerId: string, input: CloudSetByokSecretInput): Promise<CloudByokSecretMetadata>
+  validateByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent?(input: {
@@ -1098,6 +1099,12 @@ export function createHttpSseCloudTransportAdapter(
         method: 'POST',
         body: input,
       })).secret
+    },
+    async validateByokSecret(providerId) {
+      return (await request<{ secret: CloudByokSecretMetadata | null }>(
+        `/api/byok/${encodePath(providerId)}/validate`,
+        { method: 'POST' },
+      )).secret
     },
     async deleteByokSecret(providerId) {
       return (await request<{ secret: CloudByokSecretMetadata | null }>(`/api/byok/${encodePath(providerId)}`, {

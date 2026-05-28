@@ -1,6 +1,6 @@
 import type { OpenCoworkConfig } from '../config-types.ts'
 import type { ByokSecretStore } from './byok-secret-store.ts'
-import { buildCloudByokRuntimeConfig } from './byok-runtime-config.ts'
+import { buildCloudByokRuntimeConfig, type CloudByokRuntimeProviderPolicy } from './byok-runtime-config.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { PathProvider } from './path-provider.ts'
 import { createCloudSessionPathProvider } from './path-provider.ts'
@@ -32,6 +32,7 @@ export type WorkerScopedRuntimeAdapterOptions = {
   env: Env
   config: OpenCoworkConfig
   byokSecrets: ByokSecretStore
+  byokPolicy?: CloudByokRuntimeProviderPolicy | null
   runtimeFactory: WorkerScopedRuntimeFactory
 }
 
@@ -96,6 +97,8 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       appConfig: options.config,
       byokSecrets: options.byokSecrets,
       context,
+      allowKmsRef: true,
+      byokPolicy: options.byokPolicy,
     })
     const adapter = await options.runtimeFactory({
       paths: scopedPaths,
