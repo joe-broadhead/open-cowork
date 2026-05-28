@@ -1,0 +1,25 @@
+{
+  "name": "@open-cowork/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless Open Cowork channel gateway daemon",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "pnpm --filter @open-cowork/cloud-client build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc",
+    "typecheck": "pnpm --filter @open-cowork/cloud-client build && pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc --noEmit",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@open-cowork/cloud-client": "workspace:*",
+    "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/gateway-provider-telegram": "workspace:*",
+    "@open-cowork/gateway-provider-webhook": "workspace:*",
+    "@open-cowork/gateway-testing": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^6.0.0"
+  }
+}

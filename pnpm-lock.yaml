@@ -182,6 +182,31 @@ importers:
         specifier: ^0.1.0
         version: 0.1.0(vitest@4.1.5)
 
+  apps/gateway:
+    dependencies:
+      '@open-cowork/cloud-client':
+        specifier: workspace:*
+        version: link:../../packages/cloud-client
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../../packages/gateway-channel
+      '@open-cowork/gateway-provider-telegram':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-telegram
+      '@open-cowork/gateway-provider-webhook':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-webhook
+      '@open-cowork/gateway-testing':
+        specifier: workspace:*
+        version: link:../../packages/gateway-testing
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.0
+        version: 6.0.3
+
   mcps/agents:
     dependencies:
       '@modelcontextprotocol/sdk':

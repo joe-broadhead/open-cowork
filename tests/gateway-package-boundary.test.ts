@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const gatewayPackages = [
+  'apps/gateway',
   'packages/gateway-channel',
   'packages/gateway-provider-telegram',
   'packages/gateway-provider-webhook',
@@ -19,6 +20,8 @@ const forbiddenImportPatterns = [
   /packages\/db/,
   /control-plane-store/,
   /postgres-control-plane-store/,
+  /node:child_process/,
+  /from ['"]child_process/,
   /from ['"]pg['"]/,
   /from ['"]drizzle-orm/,
 ]
@@ -26,7 +29,7 @@ const forbiddenImportPatterns = [
 test('gateway package names and imports stay inside channel-adapter boundaries', () => {
   for (const packageDir of gatewayPackages) {
     const packageJson = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as { name?: string }
-    assert.match(packageJson.name || '', /^@open-cowork\/gateway-/)
+    assert.match(packageJson.name || '', /^@open-cowork\/gateway(?:-|$)/)
 
     for (const filePath of sourceFiles(packageDir)) {
       const contents = readFileSync(filePath, 'utf8')
