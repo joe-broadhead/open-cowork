@@ -84,6 +84,7 @@ export class WebhookProvider implements ChannelProvider {
     maxButtonsPerMessage: 8,
     maxButtonRowsPerMessage: 4,
     maxButtonTokenBytes: 64,
+    maxFileBytes: 25 * 1024 * 1024,
     supportsEphemeralResponses: false
   };
 

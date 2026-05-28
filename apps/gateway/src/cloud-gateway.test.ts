@@ -22,6 +22,10 @@ test('cloud gateway wraps all required channel and session operations', async ()
       calls.push(`by-thread:${JSON.stringify(input)}`)
       return null
     },
+    async getSession(sessionId: string) {
+      calls.push(`session:${sessionId}`)
+      return { session: { sessionId }, projection: null }
+    },
     async promptChannelSession(input: unknown) {
       calls.push(`prompt:${JSON.stringify(input)}`)
       return { binding: { bindingId: 'binding-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
@@ -50,6 +54,10 @@ test('cloud gateway wraps all required channel and session operations', async ()
       calls.push(`interaction-create:${JSON.stringify(input)}`)
       return { interaction: { interactionId: 'interaction-created' }, plaintextToken: 'token-created' }
     },
+    async readArtifactAttachment(sessionId: string, artifactId: string) {
+      calls.push(`artifact:${sessionId}:${artifactId}`)
+      return { filename: 'artifact.txt', mime: 'text/plain', url: 'data:text/plain;base64,b2s=' }
+    },
     subscribeSessionEvents(sessionId: string, input: { onEvent: (event: unknown) => void }) {
       calls.push(`session-events:${sessionId}`)
       input.onEvent({ eventId: 'event-1', sequence: 1, type: 'assistant.message', payload: {} })
@@ -77,6 +85,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
   await gateway.resolveIdentity({ provider: 'telegram', externalUserId: 'user-1' })
   await gateway.bindSession({ channelBindingId: 'channel-1', provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
   await gateway.findSessionByThread({ provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
+  await gateway.getSession('session-1')
   await gateway.prompt({ bindingId: 'binding-1', text: 'hello' })
   await gateway.abortSession('session-1')
   await gateway.respondToPermission('session-1', { permissionId: 'permission-1', response: { allowed: true } })
@@ -90,6 +99,8 @@ test('cloud gateway wraps all required channel and session operations', async ()
     kind: 'permission',
     targetId: 'permission-1',
   })
+  await gateway.readArtifactAttachment?.('session-1', 'artifact-1')
+  assert.equal(gateway.artifactUrl('session-1', 'artifact-1'), 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1')
   const sessionEvents = gateway.subscribeSessionEvents({ sessionId: 'session-1', onEvent() {} })
   const deliveries = gateway.subscribeDeliveries({ onDelivery() {} })
   await gateway.updateCursor({ bindingId: 'binding-1', lastEventSequence: 5, lastWorkspaceSequence: 7 })
@@ -103,6 +114,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'identity',
     'bind',
     'by-thread',
+    'session',
     'prompt',
     'abort',
     'permission',
@@ -110,6 +122,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'question-reject',
     'interaction',
     'interaction-create',
+    'artifact',
     'session-events',
     'deliveries',
     'cursor',

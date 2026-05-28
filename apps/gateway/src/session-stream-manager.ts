@@ -10,6 +10,7 @@ import type {
 import type { CloudGateway } from './cloud-gateway.js'
 import { renderGatewaySessionEvent } from './event-renderer.js'
 import type { GatewayMetrics } from './metrics.js'
+import { classifyProviderFailure } from './provider-errors.js'
 import {
   createGatewaySessionRenderState,
   type GatewaySessionRenderState,
@@ -27,6 +28,7 @@ export type GatewaySessionStreamManager = {
 
 export type GatewaySessionStreamManagerOptions = {
   retryDelayMs?: number
+  maxRenderAttempts?: number
 }
 
 type StreamState = {
@@ -37,6 +39,7 @@ type StreamState = {
   lastWorkspaceSequence: number
   lastChatMessageId: string | null
   renderState: GatewaySessionRenderState
+  renderFailures: Map<number, number>
   queue: Promise<void>
   closed: boolean
   retryTimer?: ReturnType<typeof setTimeout>
@@ -49,6 +52,7 @@ export function createGatewaySessionStreamManager(
 ): GatewaySessionStreamManager {
   const streams = new Map<string, StreamState>()
   const retryDelayMs = options.retryDelayMs ?? 250
+  const maxRenderAttempts = options.maxRenderAttempts ?? 5
 
   const manager: GatewaySessionStreamManager = {
     ensure(input) {
@@ -69,6 +73,7 @@ export function createGatewaySessionStreamManager(
         lastWorkspaceSequence: input.binding.lastWorkspaceSequence,
         lastChatMessageId: input.binding.lastChatMessageId,
         renderState: createGatewaySessionRenderState(),
+        renderFailures: new Map(),
         queue: Promise.resolve(),
         closed: false,
       }
@@ -92,6 +97,7 @@ export function createGatewaySessionStreamManager(
 
   function subscribe(state: StreamState) {
     if (state.closed) return
+    state.subscription?.close()
     state.subscription = cloud.subscribeSessionEvents({
       sessionId: state.binding.sessionId,
       afterSequence: state.lastEventSequence,
@@ -118,6 +124,14 @@ export function createGatewaySessionStreamManager(
 
   async function handleEvent(state: StreamState, event: CloudTransportSessionEvent) {
     if (state.closed) return
+    if (event.type === 'snapshot.required') {
+      try {
+        await hydrateSnapshot(state, event)
+      } catch {
+        metrics.errors += 1
+      }
+      return
+    }
     if (event.sequence <= state.lastEventSequence) return
 
     try {
@@ -143,13 +157,48 @@ export function createGatewaySessionStreamManager(
       state.lastEventSequence = updated?.lastEventSequence ?? event.sequence
       state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
       state.lastChatMessageId = updated?.lastChatMessageId ?? lastChatMessageId
+      state.renderFailures.delete(event.sequence)
       if (updated) state.binding = updated
-    } catch {
+    } catch (error) {
       metrics.errors += 1
+      const attempts = (state.renderFailures.get(event.sequence) ?? 0) + 1
+      state.renderFailures.set(event.sequence, attempts)
+      const failure = classifyProviderFailure(error)
+      if (failure.transient && attempts < maxRenderAttempts) {
+        state.subscription?.close()
+        state.subscription = null
+        scheduleRetry(state)
+      }
     }
   }
 
+  async function hydrateSnapshot(state: StreamState, event: CloudTransportSessionEvent) {
+    const snapshot = await cloud.getSession(state.binding.sessionId)
+    const latestSequence = Math.max(
+      state.lastEventSequence,
+      numberField(event.payload, 'latestSequence'),
+      snapshot.projection?.sequence ?? 0,
+      event.sequence,
+    )
+    if (latestSequence <= state.lastEventSequence) return
+    const updated = await cloud.updateCursor({
+      bindingId: state.binding.bindingId,
+      lastEventSequence: latestSequence,
+      lastWorkspaceSequence: state.lastWorkspaceSequence,
+      lastChatMessageId: state.lastChatMessageId,
+    })
+    state.lastEventSequence = updated?.lastEventSequence ?? latestSequence
+    state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
+    state.lastChatMessageId = updated?.lastChatMessageId ?? state.lastChatMessageId
+    if (updated) state.binding = updated
+  }
+
   return manager
+}
+
+function numberField(payload: Record<string, unknown>, key: string): number {
+  const value = payload[key]
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
 function closeState(state: StreamState) {

@@ -55,6 +55,7 @@ export class TelegramProvider implements ChannelProvider {
     maxButtonsPerMessage: 8,
     maxButtonRowsPerMessage: 4,
     maxButtonTokenBytes: 64,
+    maxFileBytes: 20 * 1024 * 1024,
     supportsEphemeralResponses: true
   };
 

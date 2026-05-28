@@ -9,6 +9,7 @@ import type {
 } from '@open-cowork/cloud-client'
 
 import type { CloudGateway } from './cloud-gateway.js'
+import { renderArtifactCreated } from './render/artifact-renderer.js'
 import { renderApprovalRequest } from './render/approval-renderer.js'
 import { renderQuestionRequest } from './render/question-renderer.js'
 import type { GatewaySessionRenderState } from './render/state.js'
@@ -57,6 +58,10 @@ export async function renderGatewaySessionEvent(
 
   if (input.event.type === 'question.asked') {
     return renderQuestionRequest({ ...input, target })
+  }
+
+  if (input.event.type === 'artifact.created') {
+    return renderArtifactCreated({ ...input, target })
   }
 
   return { handled: false }

@@ -40,6 +40,7 @@ const defaultFakeCapabilities: ChannelCapabilities = {
   maxButtonsPerMessage: 8,
   maxButtonRowsPerMessage: 4,
   maxButtonTokenBytes: 128,
+  maxFileBytes: 25 * 1024 * 1024,
   supportsEphemeralResponses: true
 };
 
@@ -94,6 +95,9 @@ export class FakeChannelProvider implements ChannelProvider {
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
     if (!this.capabilities.fileDownloads) {
       throw new Error("Fake channel provider does not support outgoing files");
+    }
+    if (file.data && file.data.byteLength > (this.capabilities.maxFileBytes ?? 25 * 1024 * 1024)) {
+      throw new Error(`Fake channel file exceeds maxFileBytes ${this.capabilities.maxFileBytes}`);
     }
     this.sent.push({ kind: "file", target, file });
     return sent(target, this.sent.length, this.now());

@@ -5,6 +5,7 @@ import {
   type ChannelIdentityRecord,
   type ChannelSessionBindingRecord,
   type CloudChannelProviderId,
+  type SessionArtifactAttachment,
   type CloudSessionView,
   type CloudTransportAdapter,
   type CloudTransportSessionEvent,
@@ -36,6 +37,7 @@ export type CloudGateway = {
     externalChatId: string
     externalThreadId: string
   }): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null>
+  getSession(sessionId: string): Promise<CloudSessionView>
   prompt(input: ChannelActorInput & {
     bindingId: string
     text: string
@@ -72,6 +74,8 @@ export type CloudGateway = {
     command: SessionCommandRecord
     processed: number
   }>
+  readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
+  artifactUrl(sessionId: string, artifactId: string): string
   subscribeSessionEvents(input: {
     sessionId: string
     afterSequence?: number
@@ -112,6 +116,9 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
       assertMethod(adapter.getChannelSessionByThread, 'getChannelSessionByThread')
       return adapter.getChannelSessionByThread(input)
     },
+    getSession(sessionId) {
+      return adapter.getSession(sessionId)
+    },
     async prompt(input) {
       assertMethod(adapter.promptChannelSession, 'promptChannelSession')
       return adapter.promptChannelSession(input)
@@ -135,6 +142,13 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
     },
     rejectQuestion(sessionId, input) {
       return adapter.rejectQuestion(sessionId, input)
+    },
+    readArtifactAttachment(sessionId, filePathOrArtifactId) {
+      assertMethod(adapter.readArtifactAttachment, 'readArtifactAttachment')
+      return adapter.readArtifactAttachment(sessionId, filePathOrArtifactId)
+    },
+    artifactUrl(sessionId, artifactId) {
+      return `${normalizeBaseUrl(config.cloud.baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`
     },
     subscribeSessionEvents(input) {
       return adapter.subscribeSessionEvents(input.sessionId, {
@@ -165,6 +179,12 @@ function createCloudAdapter(config: GatewayConfig): CloudTransportAdapter {
       authorization: `Bearer ${config.cloud.serviceToken}`,
     },
   })
+}
+
+function normalizeBaseUrl(value: string) {
+  let normalized = value.trim()
+  while (normalized.endsWith('/')) normalized = normalized.slice(0, -1)
+  return normalized
 }
 
 function assertMethod<T>(method: T, name: string): asserts method is NonNullable<T> {

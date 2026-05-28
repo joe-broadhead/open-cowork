@@ -275,6 +275,100 @@ test('session stream manager reconnects from the last persisted cursor', async (
   manager.closeAll()
 })
 
+test('session stream manager hydrates snapshot-required retention gaps', async () => {
+  const provider = new FakeChannelProvider()
+  let onEvent: ((event: unknown) => void) | null = null
+  const cursorUpdates: unknown[] = []
+  let hydrated = 0
+  const cloud = {
+    subscribeSessionEvents(input: { onEvent: (event: unknown) => void }) {
+      onEvent = input.onEvent
+      return { close() {} }
+    },
+    async getSession(sessionId: string) {
+      hydrated += 1
+      return {
+        session: { sessionId },
+        projection: {
+          tenantId: 'tenant-1',
+          sessionId,
+          sequence: 42,
+          view: {},
+          updatedAt: new Date(0).toISOString(),
+        },
+      }
+    },
+    async updateCursor(input: unknown) {
+      cursorUpdates.push(input)
+      return {
+        bindingId: 'binding-1',
+        orgId: 'tenant-1',
+        agentId: 'agent-1',
+        channelBindingId: 'channel-binding-1',
+        provider: 'cli',
+        externalWorkspaceId: null,
+        externalThreadId: 'thread-1',
+        externalChatId: 'chat-1',
+        sessionId: 'session-1',
+        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
+        lastWorkspaceSequence: 0,
+        lastChatMessageId: null,
+        status: 'active',
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async createChannelInteraction() {
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'token-1',
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, createGatewayMetrics())
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 10,
+      lastWorkspaceSequence: 0,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+  onEvent?.({
+    eventId: 'snapshot-required:10',
+    sequence: 10,
+    type: 'snapshot.required',
+    payload: {
+      reason: 'event_retention_gap',
+      latestSequence: 42,
+    },
+  })
+  await waitFor(() => cursorUpdates.length === 1)
+
+  assert.equal(hydrated, 1)
+  assert.deepEqual(cursorUpdates, [{
+    bindingId: 'binding-1',
+    lastEventSequence: 42,
+    lastWorkspaceSequence: 0,
+    lastChatMessageId: null,
+  }])
+  assert.equal(provider.sent.length, 0)
+  manager.closeAll()
+})
+
 test('session stream manager leaves failed provider sends retryable', async () => {
   const provider = new FakeChannelProvider()
   const originalSendText = provider.sendText.bind(provider)
@@ -287,11 +381,11 @@ test('session stream manager leaves failed provider sends retryable', async () =
     return originalSendText(...args)
   }
   const metrics = createGatewayMetrics()
-  let onEvent: ((event: unknown) => void) | null = null
+  const subscriptions: Array<{ onEvent: (event: unknown) => void }> = []
   const cursorUpdates: unknown[] = []
   const cloud = {
     subscribeSessionEvents(input: { onEvent: (event: unknown) => void }) {
-      onEvent = input.onEvent
+      subscriptions.push(input)
       return { close() {} }
     },
     async updateCursor(input: unknown) {
@@ -321,7 +415,7 @@ test('session stream manager leaves failed provider sends retryable', async () =
       }
     },
   } as CloudGateway
-  const manager = createGatewaySessionStreamManager(cloud, metrics)
+  const manager = createGatewaySessionStreamManager(cloud, metrics, { retryDelayMs: 1 })
 
   manager.ensure({
     provider,
@@ -350,11 +444,12 @@ test('session stream manager leaves failed provider sends retryable', async () =
     type: 'assistant.message',
     payload: { content: 'retry me' },
   }
-  onEvent?.(event)
+  subscriptions[0].onEvent(event)
   await waitFor(() => metrics.errors === 1)
   assert.equal(cursorUpdates.length, 0)
+  await waitFor(() => subscriptions.length === 2)
 
-  onEvent?.(event)
+  subscriptions[1].onEvent(event)
   await waitFor(() => cursorUpdates.length === 1)
   assert.deepEqual(provider.sent.map((entry) => entry.text), ['retry me'])
   manager.closeAll()

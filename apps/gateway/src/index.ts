@@ -45,6 +45,9 @@ export {
   type GatewaySessionRenderState,
 } from './render/state.js'
 export {
+  renderArtifactCreated,
+} from './render/artifact-renderer.js'
+export {
   mergeStreamingText,
 } from './render/text-stream-renderer.js'
 export {
