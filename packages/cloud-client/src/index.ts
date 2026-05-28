@@ -1,7 +1,10 @@
+import { CLOUD_SESSION_EVENT_TYPES } from '@open-cowork/shared'
 import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  CloudSessionProjectionRecord,
+  CloudSessionViewRecord,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
@@ -216,18 +219,9 @@ export type SessionCommandRecord = {
   error: string | null
 }
 
-export type SessionProjectionRecord = {
-  tenantId: string
-  sessionId: string
-  sequence: number
-  view: Record<string, unknown>
-  updatedAt: string
-}
+export type SessionProjectionRecord = CloudSessionProjectionRecord
 
-export type CloudSessionView = {
-  session: SessionRecord
-  projection: SessionProjectionRecord | null
-}
+export type CloudSessionView = CloudSessionViewRecord<SessionRecord>
 
 export type CloudRuntimeStatus = {
   role: string
@@ -764,27 +758,6 @@ function channelDeliveriesUrl(baseUrl: string, input: { claimedBy?: string, ttlM
   return `${baseUrl}/api/channels/deliveries/stream${queryString(input)}`
 }
 
-const CLOUD_EVENT_TYPES = [
-  'session.created',
-  'prompt.submitted',
-  'assistant.message',
-  'tool.call',
-  'task.run',
-  'permission.requested',
-  'permission.resolved',
-  'question.asked',
-  'question.resolved',
-  'todos.updated',
-  'cost.updated',
-  'artifact.created',
-  'session.status',
-  'session.idle',
-  'session.aborted',
-  'runtime.error',
-  'snapshot.required',
-  'channel.delivery',
-] as const
-
 function subscribeEventSource(
   EventSourceImpl: CloudTransportEventSource,
   url: string,
@@ -802,7 +775,7 @@ function subscribeEventSource(
     input.onEvent(parsed)
   }
   source.onmessage = onEvent
-  for (const type of CLOUD_EVENT_TYPES) source.addEventListener(type, onEvent)
+  for (const type of CLOUD_SESSION_EVENT_TYPES) source.addEventListener(type, onEvent)
   source.onerror = (error) => input.onError?.(error)
   return {
     close() {

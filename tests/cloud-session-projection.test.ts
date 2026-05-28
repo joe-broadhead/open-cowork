@@ -9,7 +9,7 @@ import type {
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
-import { cloudSessionViewToSessionView } from '../apps/desktop/src/main/cloud/session-view-contract.ts'
+import { cloudSessionViewToSessionView } from '../packages/shared/dist/cloud-session-projection.js'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   async createSession() {

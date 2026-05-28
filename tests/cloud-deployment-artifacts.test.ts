@@ -173,7 +173,7 @@ test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => 
   assert.match(values, /cloudBaseUrl: ""/)
   assert.match(values, /serviceToken: ""/)
   assert.match(values, /adminToken: ""/)
-  assert.match(values, /diagnostics:\n    enabled: false/)
+  assert.match(values, /diagnostics:\n {4}enabled: false/)
   assert.match(values, /providersJson: ""/)
   assert.match(values, /telegram:/)
   assert.match(values, /webhook:/)
