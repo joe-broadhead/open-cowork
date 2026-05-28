@@ -10,6 +10,10 @@ import type {
 import type { CloudGateway } from './cloud-gateway.js'
 import { renderGatewaySessionEvent } from './event-renderer.js'
 import type { GatewayMetrics } from './metrics.js'
+import {
+  createGatewaySessionRenderState,
+  type GatewaySessionRenderState,
+} from './render/state.js'
 
 export type GatewaySessionStreamManager = {
   ensure(input: {
@@ -32,6 +36,7 @@ type StreamState = {
   lastEventSequence: number
   lastWorkspaceSequence: number
   lastChatMessageId: string | null
+  renderState: GatewaySessionRenderState
   queue: Promise<void>
   closed: boolean
   retryTimer?: ReturnType<typeof setTimeout>
@@ -63,6 +68,7 @@ export function createGatewaySessionStreamManager(
         lastEventSequence: input.binding.lastEventSequence,
         lastWorkspaceSequence: input.binding.lastWorkspaceSequence,
         lastChatMessageId: input.binding.lastChatMessageId,
+        renderState: createGatewaySessionRenderState(),
         queue: Promise.resolve(),
         closed: false,
       }
@@ -125,6 +131,7 @@ export function createGatewaySessionStreamManager(
           lastChatMessageId: state.lastChatMessageId,
         },
         event,
+        state: state.renderState,
       })
       const lastChatMessageId = rendered.lastChatMessageId ?? state.lastChatMessageId
       const updated = await cloud.updateCursor({

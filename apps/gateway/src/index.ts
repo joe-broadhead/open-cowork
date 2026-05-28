@@ -41,6 +41,13 @@ export {
   type NormalizedChannelCapabilities,
 } from './render/operations.js'
 export {
+  createGatewaySessionRenderState,
+  type GatewaySessionRenderState,
+} from './render/state.js'
+export {
+  mergeStreamingText,
+} from './render/text-stream-renderer.js'
+export {
   routeGatewayInteraction,
 } from './interaction-router.js'
 export {

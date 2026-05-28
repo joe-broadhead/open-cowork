@@ -215,8 +215,12 @@ test('session stream manager renders permission requests as channel buttons', as
   assert.equal(provider.sent[0].text, 'Run command\nAllow shell command?')
   assert.deepEqual(provider.sent[0].buttons, [[{
     label: 'Approve',
-    token: 'approve-token',
+    token: 'apv:approve-token',
     style: 'success',
+  }, {
+    label: 'Deny',
+    token: 'den:approve-token',
+    style: 'danger',
   }]])
   manager.closeAll()
 })
