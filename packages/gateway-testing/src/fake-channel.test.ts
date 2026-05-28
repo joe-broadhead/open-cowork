@@ -18,6 +18,7 @@ describe("FakeChannelProvider", () => {
       messageId: "1"
     });
     await provider.sendButtons(target, "approve?", [[{ label: "Approve", token: "p:abc123" }]]);
+    await provider.answerInteraction("callback-1", "Approved");
     await provider.sendFile(target, { filename: "result.txt", data: new TextEncoder().encode("ok") });
 
     expect(provider.sent).toHaveLength(3);
@@ -28,6 +29,7 @@ describe("FakeChannelProvider", () => {
     expect(provider.sent[2]).toMatchObject({
       file: { filename: "result.txt" }
     });
+    expect(provider.answered).toEqual([{ interactionId: "callback-1", text: "Approved", alert: undefined }]);
   });
 
   it("dispatches emitted messages only while started", async () => {

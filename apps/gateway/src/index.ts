@@ -24,9 +24,24 @@ export {
   type GatewayRuntime,
 } from './gateway-runtime.js'
 export {
+  createGatewayMetrics,
+  renderPrometheusMetrics,
+  type GatewayMetrics,
+} from './metrics.js'
+export {
+  renderGatewaySessionEvent,
+} from './event-renderer.js'
+export {
+  routeGatewayInteraction,
+} from './interaction-router.js'
+export {
   createGatewayProviderRegistry,
   type GatewayProviderRegistry,
 } from './provider-registry.js'
+export {
+  createGatewaySessionStreamManager,
+  type GatewaySessionStreamManager,
+} from './session-stream-manager.js'
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const daemon = createGatewayDaemon(loadGatewayConfig())

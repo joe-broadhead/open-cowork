@@ -9,6 +9,7 @@ import {
   type CloudTransportAdapter,
   type CloudTransportSessionEvent,
   type CloudTransportSubscription,
+  type IssuedChannelInteractionRecord,
   type SessionCommandRecord,
 } from '@open-cowork/cloud-client'
 
@@ -47,6 +48,17 @@ export type CloudGateway = {
     answers?: unknown[]
     reject?: boolean
   }): Promise<{ interaction: unknown, command: SessionCommandRecord, processed: number }>
+  createChannelInteraction(input: {
+    agentId: string
+    sessionId: string
+    provider: CloudChannelProviderId
+    kind: 'permission' | 'question'
+    targetId: string
+    externalInteractionId?: string | null
+    createdByIdentityId?: string | null
+    expiresAt?: string | null
+    interactionId?: string | null
+  }): Promise<IssuedChannelInteractionRecord>
   abortSession(sessionId: string): Promise<{ command: SessionCommandRecord, processed: number, view: CloudSessionView }>
   respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<{
     command: SessionCommandRecord
@@ -107,6 +119,10 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
     async resolveChannelInteraction(input) {
       assertMethod(adapter.resolveChannelInteraction, 'resolveChannelInteraction')
       return adapter.resolveChannelInteraction(input)
+    },
+    async createChannelInteraction(input) {
+      assertMethod(adapter.createChannelInteraction, 'createChannelInteraction')
+      return adapter.createChannelInteraction(input)
     },
     abortSession(sessionId) {
       return adapter.abortSession(sessionId)

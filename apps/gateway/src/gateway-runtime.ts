@@ -8,12 +8,15 @@ import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'
+import { routeGatewayInteraction } from './interaction-router.js'
 import { createGatewayMetrics, type GatewayMetrics } from './metrics.js'
 import { createGatewayProviderRegistry, type GatewayProviderRegistry, type ProviderRegistration } from './provider-registry.js'
+import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } from './session-stream-manager.js'
 
 export type GatewayRuntime = {
   readonly metrics: GatewayMetrics
   readonly providers: GatewayProviderRegistry
+  readonly streams: GatewaySessionStreamManager
   start(): Promise<void>
   stop(): Promise<void>
   ready(): boolean
@@ -30,15 +33,17 @@ export function createGatewayRuntime(
   options: GatewayRuntimeOptions = {},
 ): GatewayRuntime {
   const metrics = createGatewayMetrics()
+  const streams = createGatewaySessionStreamManager(cloud, metrics)
   const deliverySubscriptions: Array<{ close(): void }> = []
   let started = false
 
   const runtime: GatewayRuntime = {
     metrics,
     providers,
+    streams,
     async start() {
       if (started) return
-      await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, metrics))
+      await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, providers, streams, metrics))
       started = true
       if (options.subscribeDeliveries !== false) {
         deliverySubscriptions.push(cloud.subscribeDeliveries({
@@ -53,6 +58,7 @@ export function createGatewayRuntime(
       }
     },
     async stop() {
+      streams.closeAll()
       for (const subscription of deliverySubscriptions.splice(0)) subscription.close()
       await providers.stop()
       started = false
@@ -69,6 +75,8 @@ async function handleMessage(
   providerConfig: GatewayProviderConfig,
   message: IncomingChannelMessage,
   cloud: CloudGateway,
+  providers: GatewayProviderRegistry,
+  streams: GatewaySessionStreamManager,
   metrics: GatewayMetrics,
 ) {
   metrics.incomingMessages += 1
@@ -78,14 +86,9 @@ async function handleMessage(
 
   try {
     if (message.interaction?.token) {
-      await cloud.resolveChannelInteraction({
-        provider,
-        externalWorkspaceId,
-        externalUserId,
-        token: message.interaction.token,
-        externalInteractionId: message.interaction.id,
-      })
-      metrics.interactionsResolved += 1
+      const registration = providers.get(providerConfig.id)
+      if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
+      await routeGatewayInteraction({ cloud, provider: registration.provider, providerConfig, message, metrics })
       return
     }
 
@@ -111,6 +114,9 @@ async function handleMessage(
       externalThreadId: message.target.threadId || message.target.chatId,
       title: text.slice(0, 80),
     })
+    const registration = providers.get(providerConfig.id)
+    if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
+    streams.ensure({ binding: bound.binding, provider: registration.provider })
     await cloud.prompt({
       bindingId: bound.binding.bindingId,
       text,
@@ -173,10 +179,7 @@ async function sendDelivery(provider: ChannelProvider, delivery: ChannelDelivery
 }
 
 function findDeliveryProvider(providers: GatewayProviderRegistry, delivery: ChannelDeliveryRecord): ProviderRegistration | null {
-  return providers.registrations.find((entry) => (
-    entry.config.channelBindingId === delivery.channelBindingId
-    || entry.provider.id === delivery.provider
-  )) || null
+  return providers.registrations.find((entry) => entry.config.channelBindingId === delivery.channelBindingId) || null
 }
 
 function readDeliveryTarget(delivery: ChannelDeliveryRecord): ChannelTarget {

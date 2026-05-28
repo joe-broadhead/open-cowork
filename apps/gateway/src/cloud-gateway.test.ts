@@ -46,6 +46,10 @@ test('cloud gateway wraps all required channel and session operations', async ()
       calls.push(`interaction:${JSON.stringify(input)}`)
       return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-interaction' }, processed: 1 }
     },
+    async createChannelInteraction(input: unknown) {
+      calls.push(`interaction-create:${JSON.stringify(input)}`)
+      return { interaction: { interactionId: 'interaction-created' }, plaintextToken: 'token-created' }
+    },
     subscribeSessionEvents(sessionId: string, input: { onEvent: (event: unknown) => void }) {
       calls.push(`session-events:${sessionId}`)
       input.onEvent({ eventId: 'event-1', sequence: 1, type: 'assistant.message', payload: {} })
@@ -79,6 +83,13 @@ test('cloud gateway wraps all required channel and session operations', async ()
   await gateway.replyToQuestion('session-1', { requestId: 'question-1', answers: ['yes'] })
   await gateway.rejectQuestion('session-1', { requestId: 'question-2' })
   await gateway.resolveChannelInteraction({ token: 'token-1', response: { allowed: true } })
+  await gateway.createChannelInteraction({
+    agentId: 'agent-1',
+    sessionId: 'session-1',
+    provider: 'telegram',
+    kind: 'permission',
+    targetId: 'permission-1',
+  })
   const sessionEvents = gateway.subscribeSessionEvents({ sessionId: 'session-1', onEvent() {} })
   const deliveries = gateway.subscribeDeliveries({ onDelivery() {} })
   await gateway.updateCursor({ bindingId: 'binding-1', lastEventSequence: 5, lastWorkspaceSequence: 7 })
@@ -98,6 +109,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'question-reply',
     'question-reject',
     'interaction',
+    'interaction-create',
     'session-events',
     'deliveries',
     'cursor',

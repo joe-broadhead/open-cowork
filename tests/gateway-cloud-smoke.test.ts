@@ -40,6 +40,14 @@ class FakeRuntime implements CloudRuntimeAdapter {
           content: 'gateway smoke response',
         },
       }, {
+        type: 'permission.requested',
+        payload: {
+          sessionId: input.sessionId,
+          permissionId: `${input.sessionId}:permission:${this.prompts.length}`,
+          title: 'Approve smoke permission',
+          description: 'Allow the fake runtime action?',
+        },
+      }, {
         type: 'session.idle',
         payload: { sessionId: input.sessionId },
       }],
@@ -308,6 +316,11 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     }))
     const promptsBeforeDaemon = runtime.prompts.length
     const gatewayUrl = await gateway.start()
+    const fakeProvider = gateway.runtime.providers.get('fake')?.provider as {
+      sent: Array<{ text?: string, buttons?: Array<Array<{ token: string }>> }>
+      answered: Array<{ interactionId: string, text?: string }>
+    } | undefined
+    assert.ok(fakeProvider)
 
     try {
       assert.equal((await fetch(`${gatewayUrl}/health`)).status, 200)
@@ -324,6 +337,28 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       assert.equal(prompt.status, 202)
       assert.equal(runtime.prompts.length, promptsBeforeDaemon + 1)
       assert.equal(runtime.prompts.at(-1)?.parts.find((part) => part.type === 'text')?.text, 'summarize this repo')
+      await waitUntil(() => fakeProvider.sent.some((entry) => entry.text === 'gateway smoke response'))
+      await waitUntil(() => fakeProvider.sent.some((entry) => entry.buttons))
+      const approveToken = fakeProvider.sent.find((entry) => entry.buttons)?.buttons?.[0]?.[0]?.token
+      assert.ok(approveToken)
+
+      const approval = await fetch(`${gatewayUrl}/webhooks/fake`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          text: approveToken,
+          chatId: 'chat-1',
+          userId: 'user-1',
+          interaction: {
+            id: 'fake-callback-1',
+            token: approveToken,
+            kind: 'button',
+          },
+        }),
+      })
+      assert.equal(approval.status, 202)
+      await waitUntil(() => runtime.permissions.some((permission) => permission.allowed))
+      assert.equal(fakeProvider.answered.at(-1)?.interactionId, 'fake-callback-1')
     } finally {
       await gateway.stop()
     }
@@ -331,3 +366,11 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     await cloud.close()
   }
 })
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now()
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) throw new Error('Timed out waiting for gateway smoke predicate.')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}

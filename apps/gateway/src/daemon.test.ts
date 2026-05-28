@@ -71,6 +71,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
     async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
     async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
     async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
     subscribeSessionEvents() { return { close() {} } },
     subscribeDeliveries() { return { close() {} } },

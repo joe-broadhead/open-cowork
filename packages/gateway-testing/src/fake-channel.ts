@@ -23,6 +23,7 @@ export class FakeChannelProvider implements ChannelProvider {
   };
 
   readonly sent: Array<{ target: ChannelTarget; text?: string; file?: OutgoingFile; buttons?: ChannelButton[][] }> = [];
+  readonly answered: Array<{ interactionId: string; text?: string; alert?: boolean }> = [];
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
 
   async start(handler: (message: IncomingChannelMessage) => Promise<void>): Promise<void> {
@@ -61,6 +62,10 @@ export class FakeChannelProvider implements ChannelProvider {
   ): Promise<SentMessage> {
     this.sent.push({ target, text, buttons });
     return sent(target, this.sent.length);
+  }
+
+  async answerInteraction(interactionId: string, text?: string, alert?: boolean): Promise<void> {
+    this.answered.push({ interactionId, text, alert });
   }
 }
 

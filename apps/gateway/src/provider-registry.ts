@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from 'node:http'
 
 import type {
+  ChannelInteraction,
   ChannelProvider,
   ChannelTarget,
   IncomingChannelMessage,
@@ -28,6 +29,11 @@ export type GatewayProviderRegistry = {
     chatId?: string
     threadId?: string | null
     userId?: string
+    interaction?: {
+      id: string
+      token: string
+      kind?: 'button' | 'command'
+    }
   }): Promise<void>
 }
 
@@ -132,6 +138,7 @@ function fakeMessage(provider: ChannelProvider['id'], payload: unknown): Incomin
   const chatId = typeof record.chatId === 'string' && record.chatId ? record.chatId : 'fake-chat'
   const threadId = typeof record.threadId === 'string' ? record.threadId : null
   const userId = typeof record.userId === 'string' && record.userId ? record.userId : 'fake-user'
+  const interaction = readFakeInteraction(record)
   const target: ChannelTarget = {
     provider,
     chatId,
@@ -153,9 +160,21 @@ function fakeMessage(provider: ChannelProvider['id'], payload: unknown): Incomin
     command: text.startsWith('/') ? text.slice(1).split(/\s+/)[0] : undefined,
     commandArgs: text.startsWith('/') ? text.slice(1).split(/\s+/).slice(1).join(' ') : undefined,
     attachments: [],
+    interaction,
     receivedAt: new Date(),
     raw: payload,
   }
+}
+
+function readFakeInteraction(record: Record<string, unknown>): ChannelInteraction | undefined {
+  const interaction = record.interaction
+  if (!interaction || typeof interaction !== 'object' || Array.isArray(interaction)) return undefined
+  const input = interaction as Record<string, unknown>
+  const id = typeof input.id === 'string' && input.id.trim() ? input.id.trim() : null
+  const token = typeof input.token === 'string' && input.token.trim() ? input.token.trim() : null
+  const kind = input.kind === 'command' ? 'command' : 'button'
+  if (!id || !token) return undefined
+  return { id, token, kind }
 }
 
 function requiredCredential(config: GatewayProviderConfig, key: string) {

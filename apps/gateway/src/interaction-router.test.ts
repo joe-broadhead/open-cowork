@@ -1,0 +1,112 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+
+import { FakeChannelProvider } from '@open-cowork/gateway-testing'
+
+import type { CloudGateway } from '../dist/index.js'
+import { createGatewayMetrics, resolveGatewayConfig, routeGatewayInteraction } from '../dist/index.js'
+
+test('interaction router resolves channel button tokens through cloud and acknowledges provider callback', async () => {
+  const provider = new FakeChannelProvider()
+  const calls: unknown[] = []
+  const cloud = {
+    async resolveChannelInteraction(input: unknown) {
+      calls.push(input)
+      return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }).providers[0]
+  const metrics = createGatewayMetrics()
+
+  const handled = await routeGatewayInteraction({
+    cloud,
+    provider,
+    providerConfig: config,
+    metrics,
+    message: {
+      id: 'message-1',
+      provider: 'cli',
+      target: {
+        provider: 'cli',
+        chatId: 'chat-1',
+        threadId: 'thread-1',
+      },
+      sender: {
+        providerUserId: 'user-1',
+      },
+      text: 'token-1',
+      rawText: 'token-1',
+      isCommand: false,
+      attachments: [],
+      interaction: {
+        id: 'callback-1',
+        token: 'token-1',
+        kind: 'button',
+      },
+      receivedAt: new Date(0),
+      raw: {},
+    },
+  })
+
+  assert.equal(handled, true)
+  assert.deepEqual(calls, [{
+    provider: 'cli',
+    externalWorkspaceId: null,
+    externalUserId: 'user-1',
+    token: 'token-1',
+    externalInteractionId: 'callback-1',
+    response: { allowed: true },
+  }])
+  assert.deepEqual(provider.answered, [{
+    interactionId: 'callback-1',
+    text: 'Approved',
+    alert: undefined,
+  }])
+  assert.equal(metrics.interactionsResolved, 1)
+})
+
+test('interaction router ignores ordinary channel messages', async () => {
+  const provider = new FakeChannelProvider()
+  const cloud = {} as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }).providers[0]
+  const handled = await routeGatewayInteraction({
+    cloud,
+    provider,
+    providerConfig: config,
+    metrics: createGatewayMetrics(),
+    message: {
+      id: 'message-1',
+      provider: 'cli',
+      target: { provider: 'cli', chatId: 'chat-1' },
+      sender: { providerUserId: 'user-1' },
+      text: 'hello',
+      rawText: 'hello',
+      isCommand: false,
+      attachments: [],
+      receivedAt: new Date(0),
+      raw: {},
+    },
+  })
+
+  assert.equal(handled, false)
+})
