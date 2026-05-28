@@ -21,6 +21,11 @@ import type {
   TodoItem,
 } from './session.js'
 import type {
+  SessionImportInventory,
+  SessionImportResult,
+  SessionImportSelection,
+} from './session-import.js'
+import type {
   PerfSnapshot,
   RuntimeContextOptions,
   RuntimeInputDiagnostics,
@@ -122,6 +127,7 @@ export * from './explorer.js'
 export * from './providers.js'
 export * from './runtime.js'
 export * from './session.js'
+export * from './session-import.js'
 export * from './shortcuts.js'
 export * from './skill-validation.js'
 export * from './threads.js'
@@ -154,6 +160,8 @@ export interface CoworkAPI {
     setComposerPreferences: (sessionId: string, preferences: SessionComposerPreferences) => Promise<SessionInfo | null>
     list: (options?: WorkspaceOptions) => Promise<SessionInfo[]>
     get: (id: string, options?: WorkspaceOptions) => Promise<SessionInfo | null>
+    importInventory: (sessionId: string) => Promise<SessionImportInventory>
+    copyToCloud: (sessionId: string, input: { targetWorkspaceId: string; selection?: SessionImportSelection }) => Promise<SessionImportResult>
     abort: (sessionId: string, options?: WorkspaceOptions) => Promise<void>
     // Aborts a single sub-agent task under a root session without
     // cancelling the root or its siblings. Used by the task drill-in

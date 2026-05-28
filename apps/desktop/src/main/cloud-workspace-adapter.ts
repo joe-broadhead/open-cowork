@@ -5,6 +5,7 @@ import type {
   CapabilityTool,
   SessionArtifact,
   SessionArtifactAttachment,
+  SessionImportRequest,
   SessionArtifactUploadRequest,
   SessionInfo,
   SessionView,
@@ -49,6 +50,7 @@ export type CloudWorkspaceSessionAdapter = {
   policy(): Promise<WorkspacePolicy>
   listSessions(): Promise<SessionInfo[]>
   createSession(): Promise<SessionInfo>
+  importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }>
   getSessionInfo(sessionId: string): Promise<SessionInfo | null>
   getSessionView(sessionId: string): Promise<SessionView>
   promptSession(sessionId: string, input: CloudPromptInput): Promise<void>
@@ -185,6 +187,23 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     const session = toSessionInfo((await this.transport.createSession()).session)
     this.cache?.upsertSessionInfo(cacheKey, session)
     return session
+  }
+
+  async importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }> {
+    const cacheKey = cloudWorkspaceCacheKey(this.connection)
+    const imported = await this.transport.importSession(input)
+    const session = toSessionInfo(imported.session)
+    const view = cloudSessionViewToSessionView(imported)
+    this.cache?.upsertSessionInfo(cacheKey, session)
+    this.cache?.upsertSessionView(cacheKey, session.id, view)
+    const sessions = this.cache?.listSessions(cacheKey)
+    if (sessions) {
+      this.cache?.upsertSessionList(cacheKey, [
+        session,
+        ...sessions.filter((entry) => entry.id !== session.id),
+      ])
+    }
+    return { session, view }
   }
 
   async getSessionInfo(sessionId: string): Promise<SessionInfo | null> {

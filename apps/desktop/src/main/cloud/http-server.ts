@@ -1,7 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
+import {
+  emptySessionImportItemCounts,
+  type SessionImportRequest,
+  type WorkflowDraft,
+  type WorkflowStatus,
+  type WorkflowTriggerType,
+} from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
@@ -109,6 +115,7 @@ const CLOUD_WEBHOOK_AUTH_FAILURE_LIMIT = 5
 const CLOUD_WEBHOOK_AUTH_BACKOFF_MS = 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
+const SESSION_IMPORT_MAX_ARTIFACTS = 25
 
 function defaultAuthResolver(): CloudPrincipal {
   return DEFAULT_PRINCIPAL
@@ -1210,6 +1217,57 @@ async function handleApiRequest(
       },
     })
     if (!handled) writeError(res, 404, 'Not found.', options.corsOrigin)
+    return
+  }
+
+  if (resource === 'import') {
+    if (sessionId === 'sessions' && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
+      const importRequest = body as SessionImportRequest
+      const artifactUploads = Array.isArray(importRequest.artifacts)
+        ? importRequest.artifacts.slice(0, SESSION_IMPORT_MAX_ARTIFACTS)
+        : []
+      if (artifactUploads.length > 0 && !options.artifacts) {
+        writeError(res, 503, 'Cloud artifact storage is not configured for session import.', options.corsOrigin)
+        return
+      }
+      let createdSessionId: string | null = null
+      try {
+        const created = await options.service.createImportedSession(context.principal, {
+          ...importRequest,
+          artifacts: [],
+        })
+        createdSessionId = created.session.sessionId
+        for (const artifact of artifactUploads) {
+          await options.artifacts!.uploadSessionArtifact(context.principal, createdSessionId, {
+            filename: artifact.filename,
+            contentType: artifact.contentType || null,
+            dataBase64: artifact.dataBase64,
+          })
+        }
+        const itemCounts = emptySessionImportItemCounts({
+          ...(importRequest.itemCounts || {}),
+          artifacts: artifactUploads.length,
+        })
+        await options.service.completeSessionImport(context.principal, createdSessionId, {
+          sourceFingerprint: importRequest.source?.fingerprint || '',
+          itemCounts,
+        })
+        writeJson(res, 201, await options.service.getSessionView(context.principal, createdSessionId), options.corsOrigin)
+      } catch (error) {
+        if (createdSessionId) {
+          await options.service.recordImportFailed(context.principal, {
+            sessionId: createdSessionId,
+            sourceFingerprint: importRequest.source?.fingerprint || '',
+            itemCounts: importRequest.itemCounts,
+            error,
+          }).catch(() => undefined)
+        }
+        throw error
+      }
+      return
+    }
+    writeError(res, 404, 'Not found.', options.corsOrigin)
     return
   }
 

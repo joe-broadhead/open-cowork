@@ -37,6 +37,20 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
       }
       return jsonResponse({ sessions: [{ sessionId: 'session-1' }] })
     }
+    if (url.endsWith('/api/import/sessions')) {
+      return jsonResponse({
+        session: { sessionId: 'session-imported' },
+        projection: {
+          messages: [{ id: 'm1', role: 'user', content: 'imported', createdAt: '2026-05-27T10:00:00.000Z' }],
+          origin: {
+            kind: 'local-session-import',
+            sourceFingerprint: 'sha256:import',
+            importedAt: '2026-05-27T10:00:00.000Z',
+            itemCounts: { messages: 1, artifacts: 0, attachments: 0, projectSource: 0, excluded: 1 },
+          },
+        },
+      }, 201)
+    }
     if (url.endsWith('/api/sessions/session-1/prompt')) {
       return jsonResponse({ command: { commandId: 'cmd-1' }, processed: 0, view: { session: {}, projection: null } }, 202)
     }
@@ -241,6 +255,13 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
   assert.equal((await transport.getRuntimeStatus()).commandProcessing, 'delegated')
   assert.deepEqual((await transport.listSessions()).map((session) => session.sessionId), ['session-1'])
   assert.equal((await transport.createSession()).session.sessionId, 'session-1')
+  assert.equal((await transport.importSession({
+    source: { kind: 'local-session', fingerprint: 'sha256:import', title: 'Imported' },
+    title: 'Imported',
+    selection: { includeMessages: true },
+    itemCounts: { messages: 1, artifacts: 0, attachments: 0, projectSource: 0, excluded: 1 },
+    messages: [{ id: 'm1', role: 'user', content: 'imported', order: 1 }],
+  })).session.sessionId, 'session-imported')
   assert.equal((await transport.promptSession('session-1', { text: 'hello' })).processed, 0)
   assert.equal((await transport.replyToQuestion('session-1', { requestId: 'q1', answers: ['A'] })).processed, 0)
   assert.equal((await transport.rejectQuestion('session-1', { requestId: 'q2' })).processed, 0)
@@ -291,6 +312,7 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
     mutating.map((request) => new URL(request.url).pathname),
     [
       '/api/sessions',
+      '/api/import/sessions',
       '/api/sessions/session-1/prompt',
       '/api/sessions/session-1/question-reply',
       '/api/sessions/session-1/question-reject',

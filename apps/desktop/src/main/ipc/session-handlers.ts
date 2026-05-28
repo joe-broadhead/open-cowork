@@ -1,7 +1,8 @@
 import type { IpcHandlerContext } from './context.ts'
-import type { SessionChangeSummary } from '@open-cowork/shared'
+import type { SessionChangeSummary, SessionImportSelection } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
 import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
 import { getProviderDescriptor } from '../config-loader.ts'
 import { getClient, getClientForDirectory, getRuntimeHomeDir } from '../runtime.ts'
@@ -25,6 +26,11 @@ import { sessionEngine } from '../session-engine.ts'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
 import { log } from '../logger.ts'
+import {
+  buildSessionImportInventory,
+  buildSessionImportRequest,
+  type SessionImportArtifactLoader,
+} from '../session-import.ts'
 import { ensureRuntimeContextDirectory } from '../runtime-context.ts'
 import { getThreadIndexService } from '../thread-index/thread-index-service.ts'
 import { registerSessionActionHandlers } from './session-action-handlers.ts'
@@ -48,6 +54,8 @@ type PromptAttachment = ReturnType<typeof normalizePromptAttachments>[number]
 type PromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
   | { type: 'text'; text: string }
+
+const MAX_LOCAL_IMPORT_ARTIFACT_BYTES = 25 * 1024 * 1024
 
 function payloadString(payload: Record<string, unknown>, key: string) {
   const value = payload[key]
@@ -322,6 +330,21 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+function normalizeSessionImportSelection(value: unknown): SessionImportSelection {
+  const record = asRecord(value) || {}
+  const stringArray = (entry: unknown) => Array.isArray(entry)
+    ? entry.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : undefined
+  return {
+    ...(typeof record.includeMessages === 'boolean' ? { includeMessages: record.includeMessages } : {}),
+    ...(typeof record.includeArtifacts === 'boolean' ? { includeArtifacts: record.includeArtifacts } : {}),
+    ...(typeof record.includeAttachments === 'boolean' ? { includeAttachments: record.includeAttachments } : {}),
+    ...(typeof record.includeProjectSource === 'boolean' ? { includeProjectSource: record.includeProjectSource } : {}),
+    ...(stringArray(record.artifactIds) ? { artifactIds: stringArray(record.artifactIds) } : {}),
+    ...(stringArray(record.attachmentIds) ? { attachmentIds: stringArray(record.attachmentIds) } : {}),
+  }
+}
+
 function resolvePromptVariant(
   requestedVariant: string | undefined,
   promptModel: ReturnType<typeof resolvePromptModel>,
@@ -391,6 +414,30 @@ function buildRendererSessionFallback(input: {
     ...(input.parentSessionId !== undefined ? { parentSessionId: input.parentSessionId } : {}),
     ...(input.changeSummary !== undefined ? { changeSummary: input.changeSummary } : {}),
     ...(input.revertedMessageId !== undefined ? { revertedMessageId: input.revertedMessageId } : {}),
+  }
+}
+
+function localImportArtifactLoader(
+  context: IpcHandlerContext,
+  sessionId: string,
+): SessionImportArtifactLoader {
+  return async (artifact) => {
+    const { source } = context.resolvePrivateArtifactPath({
+      sessionId,
+      filePath: artifact.filePath,
+    })
+    let fd: number | null = null
+    try {
+      fd = openSync(source, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW)
+      const stat = fstatSync(fd)
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_LOCAL_IMPORT_ARTIFACT_BYTES) return null
+      return {
+        dataBase64: readFileSync(fd).toString('base64'),
+        contentType: artifact.mime || null,
+      }
+    } finally {
+      if (fd !== null) closeSync(fd)
+    }
   }
 }
 
@@ -719,6 +766,50 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     } catch (err) {
       context.logHandlerError(`session:get ${shortSessionId(id)}`, err)
       return null
+    }
+  })
+
+  context.ipcMain.handle('session:import-inventory', async (event, sessionIdInput: unknown) => {
+    context.workspaceGateway.assertLocalWorkspace(event)
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const record = context.ensureSessionRecord(sessionId)
+    if (!record) throw new Error(`Unknown local session ${sessionId}.`)
+    const view = await syncSessionView(sessionId, { force: true, activate: false })
+    return buildSessionImportInventory(record, view)
+  })
+
+  registerIpcInvoke(context, 'session:copy-to-cloud', stringAndObjectArgs('session id', 'session import request', { maxBytes: 128 * 1024 }), async (event, sessionIdInput, rawInput) => {
+    context.workspaceGateway.assertLocalWorkspace(event)
+    const sessionId = normalizeSessionId(sessionIdInput)
+    const input = asRecord(rawInput) || {}
+    const targetWorkspaceId = typeof input.targetWorkspaceId === 'string' ? input.targetWorkspaceId.trim() : ''
+    if (!targetWorkspaceId) throw new Error('Copy to cloud requires a target cloud workspace.')
+    const selection = normalizeSessionImportSelection(input.selection)
+    const record = context.ensureSessionRecord(sessionId)
+    if (!record) throw new Error(`Unknown local session ${sessionId}.`)
+    const view = await syncSessionView(sessionId, { force: true, activate: false })
+    const importRequest = await buildSessionImportRequest(record, view, selection, localImportArtifactLoader(context, sessionId))
+    const result = await context.workspaceGateway.importLocalSessionToCloud(event, importRequest, targetWorkspaceId)
+    const win = context.getMainWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('workspace:sessions-updated', {
+        workspaceId: result.workspaceId,
+        sessions: await context.workspaceGateway.listCloudSessions(event, result.workspaceId),
+        lastEventSequence: null,
+        syncedAt: new Date().toISOString(),
+      })
+      win.webContents.send('session:view', {
+        sessionId: result.sessionId,
+        workspaceId: result.workspaceId,
+        view: result.view,
+      })
+    }
+    return {
+      workspaceId: result.workspaceId,
+      sessionId: result.sessionId,
+      title: result.title,
+      importedAt: result.importedAt,
+      itemCounts: result.itemCounts,
     }
   })
 

@@ -11,9 +11,12 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import {
+  assertSafeSessionImportPayload,
   type CloudSessionMessage,
   type CloudSessionProjectionView,
   type CloudSessionViewRecord,
+  type SessionImportItemCounts,
+  type SessionImportRequest,
 } from '@open-cowork/shared'
 import {
   getCapabilitySkillBundle,
@@ -234,6 +237,8 @@ type ChannelInteractionResolutionInput = ChannelActorInput & {
 }
 
 const WORKFLOW_MAX_TEXT = 50_000
+const SESSION_IMPORT_MAX_MESSAGES = 2_000
+const SESSION_IMPORT_MAX_TEXT = 1_000_000
 const WORKFLOW_TITLE_MAX_LENGTH = 512
 const WORKFLOW_FIELD_MAX_LENGTH = 4096
 const WORKFLOW_MAX_LIST_VALUES = 100
@@ -433,6 +438,31 @@ function normalizePermissionPayload(payload: Record<string, unknown>): Permissio
   return {
     permissionId: readString(payload.permissionId),
     response: payload.response ?? null,
+  }
+}
+
+function normalizeImportCounts(value: Partial<SessionImportItemCounts> | undefined): SessionImportItemCounts {
+  const numberValue = (entry: unknown) => typeof entry === 'number' && Number.isFinite(entry) && entry > 0 ? Math.floor(entry) : 0
+  return {
+    messages: numberValue(value?.messages),
+    artifacts: numberValue(value?.artifacts),
+    attachments: numberValue(value?.attachments),
+    projectSource: numberValue(value?.projectSource),
+    excluded: numberValue(value?.excluded),
+  }
+}
+
+function boundedImportText(value: unknown, label: string, maxLength = SESSION_IMPORT_MAX_TEXT) {
+  if (typeof value !== 'string') return ''
+  if (value.length > maxLength) throw new CloudServiceError(400, `${label} exceeds ${maxLength} characters.`)
+  return value
+}
+
+function importAuditActor(principal: CloudPrincipal): { actorType: 'user' | 'api_token', actorId: string, accountId: string | null } {
+  return {
+    actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+    actorId: principal.tokenId || principal.userId,
+    accountId: principal.accountId || principal.userId,
   }
 }
 
@@ -652,6 +682,184 @@ export class CloudSessionService {
       profileName,
     })
     return this.getSessionView(principal, session.sessionId)
+  }
+
+  async createImportedSession(principal: CloudPrincipal, input: SessionImportRequest): Promise<CloudSessionView> {
+    await this.ensurePrincipal(principal)
+    if (!this.policy.features.chat) throw new Error('Chat is disabled for this cloud profile.')
+    try {
+      assertSafeSessionImportPayload(input)
+    } catch (error) {
+      throw new CloudServiceError(400, error instanceof Error ? error.message : 'Session import payload is unsafe.')
+    }
+    const source = input.source
+    if (!source || source.kind !== 'local-session' || !source.fingerprint) {
+      throw new CloudServiceError(400, 'Session import requires a redacted local source fingerprint.')
+    }
+    const profileName = input.profileName || this.policy.profileName
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'session.create',
+      profileName,
+    })
+    const itemCounts = normalizeImportCounts(input.itemCounts)
+    const actor = importAuditActor(principal)
+    await this.store.recordAuditEvent({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      eventType: 'session_import.requested',
+      targetType: 'session',
+      targetId: null,
+      metadata: {
+        sourceKind: source.kind,
+        sourceFingerprint: source.fingerprint,
+        title: boundedImportText(input.title, 'Import title', 512),
+        itemCounts,
+      },
+    })
+
+    try {
+      const title = boundedImportText(input.title, 'Import title', 512) || source.title || 'Imported session'
+      const session = await this.createCloudSessionRecord({
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+        orgId: this.principalOrgId(principal),
+        accountId: principal.accountId || principal.userId,
+        profileName,
+        sessionId: this.ids.randomUUID(),
+        title,
+      })
+      const importedAt = new Date()
+      await this.appendProjectedEvent({
+        tenantId: principal.tenantId,
+        sessionId: session.sessionId,
+        type: 'session.imported',
+        payload: {
+          sourceFingerprint: source.fingerprint,
+          importedAt: importedAt.toISOString(),
+          itemCounts,
+        },
+        createdAt: importedAt,
+      })
+
+      const messages = Array.isArray(input.messages) ? input.messages.slice(0, SESSION_IMPORT_MAX_MESSAGES) : []
+      for (const message of messages) {
+        if (message.role !== 'user' && message.role !== 'assistant') continue
+        const content = boundedImportText(message.content, 'Imported message')
+        const createdAt = message.timestamp ? new Date(message.timestamp) : importedAt
+        await this.appendProjectedEvent({
+          tenantId: principal.tenantId,
+          sessionId: session.sessionId,
+          type: message.role === 'user' ? 'prompt.submitted' : 'assistant.message',
+          payload: message.role === 'user'
+            ? {
+                messageId: message.id,
+                text: content,
+                imported: true,
+                attachments: Array.isArray(message.attachments) ? message.attachments : [],
+              }
+            : {
+                messageId: message.id,
+                content,
+                imported: true,
+                attachments: Array.isArray(message.attachments) ? message.attachments : [],
+              },
+          createdAt: Number.isFinite(createdAt.getTime()) ? createdAt : importedAt,
+        })
+      }
+
+      const todos = Array.isArray(input.todos) ? input.todos.slice(0, 500) : []
+      if (todos.length) {
+        await this.appendProjectedEvent({
+          tenantId: principal.tenantId,
+          sessionId: session.sessionId,
+          type: 'todos.updated',
+          payload: { todos },
+          createdAt: importedAt,
+        })
+      }
+
+      if (input.sessionCost || input.sessionTokens) {
+        await this.appendProjectedEvent({
+          tenantId: principal.tenantId,
+          sessionId: session.sessionId,
+          type: 'cost.updated',
+          payload: {
+            cost: typeof input.sessionCost === 'number' && Number.isFinite(input.sessionCost) ? input.sessionCost : 0,
+            tokens: input.sessionTokens || {},
+            imported: true,
+          },
+          createdAt: importedAt,
+        })
+      }
+
+      await this.appendProjectedEvent({
+        tenantId: principal.tenantId,
+        sessionId: session.sessionId,
+        type: 'session.idle',
+        payload: { imported: true },
+        createdAt: importedAt,
+      })
+
+      return this.getSessionView(principal, session.sessionId)
+    } catch (error) {
+      await this.recordImportFailed(principal, {
+        sourceFingerprint: source.fingerprint,
+        itemCounts,
+        error,
+      })
+      throw error
+    }
+  }
+
+  async completeSessionImport(
+    principal: CloudPrincipal,
+    sessionId: string,
+    input: { sourceFingerprint: string, itemCounts: SessionImportItemCounts },
+  ) {
+    await this.getSessionView(principal, sessionId)
+    const actor = importAuditActor(principal)
+    await this.store.recordAuditEvent({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      eventType: 'session_import.completed',
+      targetType: 'session',
+      targetId: sessionId,
+      metadata: {
+        sourceKind: 'local-session',
+        sourceFingerprint: input.sourceFingerprint,
+        destinationSessionId: sessionId,
+        itemCounts: normalizeImportCounts(input.itemCounts),
+      },
+    })
+  }
+
+  async recordImportFailed(
+    principal: CloudPrincipal,
+    input: { sourceFingerprint: string, itemCounts?: Partial<SessionImportItemCounts>, sessionId?: string | null, error: unknown },
+  ) {
+    const actor = importAuditActor(principal)
+    const message = input.error instanceof Error ? input.error.message : String(input.error)
+    await this.store.recordAuditEvent({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      eventType: 'session_import.failed',
+      targetType: input.sessionId ? 'session' : null,
+      targetId: input.sessionId || null,
+      metadata: {
+        sourceKind: 'local-session',
+        sourceFingerprint: input.sourceFingerprint,
+        destinationSessionId: input.sessionId || null,
+        itemCounts: normalizeImportCounts(input.itemCounts),
+        error: boundedImportText(message, 'Import error', 512),
+      },
+    })
   }
 
   async listSessions(principal: CloudPrincipal): Promise<SessionRecord[]> {
