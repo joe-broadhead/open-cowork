@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `fd1f28d75b3f6e38903874236f1bb1bdb656d7594269a3b17e9689b29e2d4cdf`
-- Production package entries: 491
-- Bundled license directories: 460 (31 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `8bde6a85c7c5f543279797d24e360af2d0b16e1807d9c9b68b992d5b7158fb16`
+- Production package entries: 496
+- Bundled license directories: 460 (36 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -52,7 +52,12 @@ Each package remains licensed under its own license terms. The table below is pr
 | @mermaid-js/parser | 1.1.1 | MIT | THIRD_PARTY_LICENSES/@mermaid-js__parser@1.1.1/ | https://github.com/mermaid-js/mermaid.git |
 | @modelcontextprotocol/sdk | 1.29.0 | MIT | THIRD_PARTY_LICENSES/@modelcontextprotocol__sdk@1.29.0/ | git+https://github.com/modelcontextprotocol/typescript-sdk.git |
 | @nodable/entities | 2.1.0 | MIT |  | git+https://github.com/nodable/val-parsers.git |
+| @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-telegram | link:../../packages/gateway-provider-telegram | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-webhook | link:../../packages/gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-testing | link:../../packages/gateway-testing | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @opencode-ai/sdk | 1.15.5 | MIT |  | https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.15.5.tgz |
