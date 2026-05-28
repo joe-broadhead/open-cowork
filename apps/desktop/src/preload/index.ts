@@ -47,6 +47,9 @@ const PRELOAD_INVOKE_CHANNELS = [
   'session:diff',
   'session:file-snippet',
   'session:todo',
+  'project-source:validate',
+  'project-source:snapshot-inventory',
+  'project-source:upload-snapshot',
   'dialog:select-directory',
   'dialog:select-image',
   'dialog:open-json',
@@ -247,6 +250,11 @@ const api: CoworkAPI = {
     diff: (sessionId, messageId) => invoke('session:diff', sessionId, messageId),
     fileSnippet: (request) => invoke('session:file-snippet', request),
     todo: (sessionId) => invoke('session:todo', sessionId),
+  },
+  projectSource: {
+    validate: (input) => invoke('project-source:validate', input),
+    snapshotInventory: (input) => invoke('project-source:snapshot-inventory', input),
+    uploadSnapshot: (input) => invoke('project-source:upload-snapshot', input),
   },
   dialog: {
     selectDirectory: () => invoke('dialog:select-directory'),

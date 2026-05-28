@@ -341,6 +341,33 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       fileSnippet: vi.fn(async () => []),
       todo: vi.fn(async () => []),
     },
+    projectSource: {
+      validate: vi.fn(async () => ({ allowed: true, reason: null })),
+      snapshotInventory: vi.fn(async (input: { directory: string }) => ({
+        rootDirectory: input.directory,
+        files: [{ path: 'README.md', byteCount: 12 }],
+        excluded: [],
+        warnings: [],
+        fileCount: 1,
+        byteCount: 12,
+        maxFiles: 2000,
+        maxBytes: 25 * 1024 * 1024,
+      })),
+      uploadSnapshot: vi.fn(async () => ({
+        snapshotId: 'snapshot-1',
+        objectKey: 'project-snapshots/tenant/snapshot/snapshot.json',
+        fileCount: 1,
+        byteCount: 12,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        projectSource: {
+          kind: 'snapshot',
+          snapshotId: 'snapshot-1',
+          objectKey: 'project-snapshots/tenant/snapshot/snapshot.json',
+          fileCount: 1,
+          byteCount: 12,
+        },
+      })),
+    },
     threads: {
       search: vi.fn(async () => ({ threads: [], nextCursor: null, totalEstimate: 0 })),
       facets: vi.fn(async () => ({

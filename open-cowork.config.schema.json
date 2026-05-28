@@ -270,6 +270,7 @@
         "auth": { "$ref": "#/$defs/cloudAuth" },
         "storage": { "$ref": "#/$defs/cloudStorage" },
         "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
+        "projectSources": { "$ref": "#/$defs/cloudProjectSources" },
         "features": { "$ref": "#/$defs/cloudFeatures" },
         "abuse": { "$ref": "#/$defs/cloudAbuse" },
         "billing": { "$ref": "#/$defs/cloudBilling" }
@@ -447,6 +448,67 @@
         "allowedHostProjectDirectories": { "$ref": "#/$defs/cloudStringList" }
       }
     },
+    "cloudProjectSources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "allowedHosts": { "$ref": "#/$defs/cloudStringList" },
+            "allowedRepositories": { "$ref": "#/$defs/cloudStringList" },
+            "allowFileUrls": { "type": "boolean" }
+          }
+        },
+        "uploadedSnapshots": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "maxFiles": { "type": "integer", "minimum": 1 },
+            "maxBytes": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "managedWorkspaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "cloudProjectSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "git" },
+            "repositoryUrl": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "ref": { "type": ["string", "null"], "maxLength": 512 },
+            "subdirectory": { "type": ["string", "null"], "maxLength": 1024 },
+            "credentialRef": { "type": ["string", "null"], "maxLength": 512 }
+          },
+          "required": ["kind", "repositoryUrl"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "snapshot" },
+            "snapshotId": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "objectKey": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "fileCount": { "type": "integer", "minimum": 0 },
+            "byteCount": { "type": "integer", "minimum": 0 },
+            "title": { "type": ["string", "null"], "maxLength": 256 }
+          },
+          "required": ["kind", "snapshotId", "objectKey", "fileCount", "byteCount"]
+        }
+      ]
+    },
     "cloudProfile": {
       "type": "object",
       "additionalProperties": false,
@@ -457,7 +519,13 @@
         "tools": { "$ref": "#/$defs/cloudStringList" },
         "mcps": { "$ref": "#/$defs/cloudStringList" },
         "features": { "$ref": "#/$defs/cloudFeatures" },
-        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" }
+        "runtime": { "$ref": "#/$defs/cloudRuntimePolicy" },
+        "defaultProjectSource": {
+          "anyOf": [
+            { "$ref": "#/$defs/cloudProjectSource" },
+            { "type": "null" }
+          ]
+        }
       }
     },
     "cloudAuth": {

@@ -89,6 +89,26 @@ function transport(): CloudTransportAdapter {
       allowedTools: ['read'],
       allowedMcps: [],
     }),
+    getWorkspace: async () => ({
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant',
+      orgId: 'org-1',
+      orgName: 'Org',
+      userId: 'user-1',
+      accountId: 'account-1',
+      email: 'user@example.test',
+      role: 'owner',
+      profileName: 'default',
+      policy: {
+        features: {},
+        allowedAgents: null,
+        allowedTools: null,
+        allowedMcps: null,
+        localFiles: 'disabled',
+        localStdioMcps: 'disabled',
+        machineRuntimeConfig: 'disabled',
+      },
+    }),
     getRuntimeStatus: async () => ({
       role: 'web',
       profileName: 'default',
@@ -121,6 +141,21 @@ function transport(): CloudTransportAdapter {
         updatedAt: '2026-05-27T11:00:00.000Z',
       },
       projection: null,
+    }),
+    validateProjectSource: async () => ({ allowed: true, reason: null }),
+    uploadProjectSnapshot: async () => ({
+      snapshotId: 'snapshot-1',
+      objectKey: 'project-snapshots/tenant/snapshot/snapshot.json',
+      fileCount: 1,
+      byteCount: 12,
+      createdAt: '2026-05-27T11:00:00.000Z',
+      projectSource: {
+        kind: 'snapshot',
+        snapshotId: 'snapshot-1',
+        objectKey: 'project-snapshots/tenant/snapshot/snapshot.json',
+        fileCount: 1,
+        byteCount: 12,
+      },
     }),
     getSession: async (sessionId) => ({
       session: {
@@ -412,9 +447,12 @@ function failingTransport(): CloudTransportAdapter {
   }
   return {
     getConfig: fail,
+    getWorkspace: fail,
     getRuntimeStatus: fail,
     listSessions: fail,
     createSession: fail,
+    validateProjectSource: fail,
+    uploadProjectSnapshot: fail,
     getSession: fail,
     promptSession: fail,
     abortSession: fail,

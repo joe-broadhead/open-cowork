@@ -4,6 +4,10 @@ import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  CloudProjectSnapshotUploadInput,
+  CloudProjectSnapshotUploadResult,
+  CloudProjectSourceInput,
+  CloudProjectSourcePolicyVerdict,
   CustomAgentConfig,
   CustomMcpConfig,
   CustomSkillConfig,
@@ -519,8 +523,36 @@ export class WorkspaceGateway {
     return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).listSessions()
   }
 
-  async createCloudSession(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<SessionInfo> {
-    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).createSession()
+  async createCloudSession(
+    event: WorkspaceEventLike,
+    workspaceIdInput?: string | null,
+    input: { projectSource?: CloudProjectSourceInput | null } = {},
+  ): Promise<SessionInfo> {
+    return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).createSession(input)
+  }
+
+  async validateCloudProjectSource(
+    event: WorkspaceEventLike,
+    workspaceIdInput: string | null | undefined,
+    projectSource: CloudProjectSourceInput,
+  ): Promise<CloudProjectSourcePolicyVerdict> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.validateProjectSource) {
+      return { allowed: false, reason: 'Cloud workspace does not support project source validation.' }
+    }
+    return adapter.validateProjectSource(projectSource)
+  }
+
+  async uploadCloudProjectSnapshot(
+    event: WorkspaceEventLike,
+    workspaceIdInput: string | null | undefined,
+    input: CloudProjectSnapshotUploadInput,
+  ): Promise<CloudProjectSnapshotUploadResult> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.uploadProjectSnapshot) {
+      throw new Error('Cloud workspace does not support project snapshot uploads.')
+    }
+    return adapter.uploadProjectSnapshot(input)
   }
 
   async importLocalSessionToCloud(

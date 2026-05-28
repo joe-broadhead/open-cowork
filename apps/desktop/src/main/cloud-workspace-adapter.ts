@@ -3,6 +3,10 @@ import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  CloudProjectSnapshotUploadInput,
+  CloudProjectSnapshotUploadResult,
+  CloudProjectSourceInput,
+  CloudProjectSourcePolicyVerdict,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionImportRequest,
@@ -49,7 +53,9 @@ export type CloudPromptInput = {
 export type CloudWorkspaceSessionAdapter = {
   policy(): Promise<WorkspacePolicy>
   listSessions(): Promise<SessionInfo[]>
-  createSession(): Promise<SessionInfo>
+  createSession(input?: { projectSource?: CloudProjectSourceInput | null }): Promise<SessionInfo>
+  validateProjectSource?(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
+  uploadProjectSnapshot?(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }>
   getSessionInfo(sessionId: string): Promise<SessionInfo | null>
   getSessionView(sessionId: string): Promise<SessionView>
@@ -182,11 +188,19 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     }
   }
 
-  async createSession(): Promise<SessionInfo> {
+  async createSession(input: { projectSource?: CloudProjectSourceInput | null } = {}): Promise<SessionInfo> {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
-    const session = toSessionInfo((await this.transport.createSession()).session)
+    const session = toSessionInfo((await this.transport.createSession(input)).session)
     this.cache?.upsertSessionInfo(cacheKey, session)
     return session
+  }
+
+  validateProjectSource(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict> {
+    return this.transport.validateProjectSource(input)
+  }
+
+  uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult> {
+    return this.transport.uploadProjectSnapshot(input)
   }
 
   async importSession(input: SessionImportRequest): Promise<{ session: SessionInfo, view: SessionView }> {

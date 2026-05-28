@@ -100,6 +100,13 @@ import type {
   WorkspaceSyncResult,
 } from './workspace.js'
 import type {
+  CloudProjectSnapshotInventory,
+  CloudProjectSnapshotUploadResult,
+  CloudProjectSourceInput,
+  CloudProjectSourcePolicyVerdict,
+  CloudSessionCreateOptions,
+} from './project-source.js'
+import type {
   ThreadFacetSummary,
   ThreadSearchQuery,
   ThreadSearchResult,
@@ -125,6 +132,7 @@ export * from './destructive-actions.js'
 export * from './events.js'
 export * from './explorer.js'
 export * from './providers.js'
+export * from './project-source.js'
 export * from './runtime.js'
 export * from './session.js'
 export * from './session-import.js'
@@ -154,7 +162,7 @@ export interface CoworkAPI {
     logout: () => Promise<AuthState>
   }
   session: {
-    create: (directory?: string, options?: WorkspaceOptions) => Promise<SessionInfo>
+    create: (directory?: string, options?: CloudSessionCreateOptions) => Promise<SessionInfo>
     activate: (sessionId: string, options?: WorkspaceScoped<{ force?: boolean }>) => Promise<SessionView>
     prompt: (sessionId: string, text: string, attachments?: Array<{ mime: string; url: string; filename?: string }>, agent?: string, options?: SessionPromptOptions) => Promise<void>
     setComposerPreferences: (sessionId: string, preferences: SessionComposerPreferences) => Promise<SessionInfo | null>
@@ -180,6 +188,11 @@ export interface CoworkAPI {
     diff: (sessionId: string, messageId?: string) => Promise<SessionFileDiff[]>
     fileSnippet: (request: { sessionId: string; filePath: string; startLine: number; endLine: number }) => Promise<string[]>
     todo: (sessionId: string) => Promise<TodoItem[]>
+  }
+  projectSource: {
+    validate: (input: { workspaceId?: string; projectSource: CloudProjectSourceInput }) => Promise<CloudProjectSourcePolicyVerdict>
+    snapshotInventory: (input: { directory: string }) => Promise<CloudProjectSnapshotInventory>
+    uploadSnapshot: (input: { workspaceId?: string; directory: string; title?: string | null }) => Promise<CloudProjectSnapshotUploadResult>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>

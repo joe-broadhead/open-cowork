@@ -122,9 +122,10 @@ describe('NewThreadButton', () => {
     expect(screen.queryByRole('button', { name: /Blank thread/ })).not.toBeInTheDocument()
   })
 
-  it('disables local project creation in cloud workspaces using the support matrix reason', async () => {
+  it('opens the cloud project-source flow instead of the local directory picker', async () => {
     const user = userEvent.setup()
     const selectDirectory = vi.fn(async () => '/tmp/project')
+    const validate = vi.fn(async () => ({ allowed: true, reason: null }))
     const create = vi.fn(async () => ({
       id: 'cloud-session-1',
       title: 'Cloud session',
@@ -153,6 +154,9 @@ describe('NewThreadButton', () => {
       dialog: {
         selectDirectory,
       },
+      projectSource: {
+        validate,
+      },
       session: {
         create,
         activate: vi.fn(async () => undefined),
@@ -165,15 +169,36 @@ describe('NewThreadButton', () => {
     await user.click(screen.getByRole('button', { name: 'New Thread' }))
 
     expect(await screen.findByText('Cloud-safe action - start a synced cloud thread')).toBeTruthy()
-    expect(screen.getByText('Local-only action - Cloud workspaces do not implicitly upload local files.')).toBeTruthy()
+    expect(screen.getByText('Cloud-safe action - choose Git or upload an explicit snapshot')).toBeTruthy()
     const projectButton = screen.getByRole('button', { name: /Open Project/ })
-    expect(projectButton).toBeDisabled()
     await user.click(projectButton)
     expect(selectDirectory).not.toHaveBeenCalled()
+    expect(await screen.findByText('Cloud project source')).toBeTruthy()
 
-    await user.click(screen.getByRole('button', { name: /Blank thread/ }))
+    await user.type(screen.getByPlaceholderText('https://github.com/org/repo.git'), 'https://github.com/acme/repo.git')
+    await user.click(screen.getByRole('button', { name: 'Create thread' }))
+
     await waitFor(() => {
-      expect(create).toHaveBeenCalledWith(undefined, { workspaceId: 'cloud:acme' })
+      expect(validate).toHaveBeenCalledWith({
+        workspaceId: 'cloud:acme',
+        projectSource: {
+          kind: 'git',
+          repositoryUrl: 'https://github.com/acme/repo.git',
+          ref: null,
+          subdirectory: null,
+          credentialRef: null,
+        },
+      })
+      expect(create).toHaveBeenCalledWith(undefined, {
+        workspaceId: 'cloud:acme',
+        projectSource: {
+          kind: 'git',
+          repositoryUrl: 'https://github.com/acme/repo.git',
+          ref: null,
+          subdirectory: null,
+          credentialRef: null,
+        },
+      })
     })
   })
 })

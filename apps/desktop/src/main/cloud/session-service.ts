@@ -15,8 +15,14 @@ import {
   type CloudSessionMessage,
   type CloudSessionProjectionView,
   type CloudSessionViewRecord,
+  type CloudProjectSnapshotUploadInput,
+  type CloudProjectSnapshotUploadResult,
+  type CloudProjectSource,
+  type CloudProjectSourceInput,
+  type CloudProjectSourcePolicyVerdict,
   type SessionImportItemCounts,
   type SessionImportRequest,
+  normalizeCloudProjectSource,
 } from '@open-cowork/shared'
 import {
   getCapabilitySkillBundle,
@@ -70,7 +76,15 @@ import type {
   CloudRuntimeExecutionContext,
   CloudRuntimePromptPart,
 } from './runtime-adapter.ts'
-import { evaluateCloudProjectDirectoryPolicy, type CloudRuntimePolicy } from './cloud-config.ts'
+import {
+  evaluateCloudProjectDirectoryPolicy,
+  evaluateCloudProjectSourcePolicy,
+  type CloudRuntimePolicy,
+} from './cloud-config.ts'
+import {
+  isCloudProjectSnapshotObjectKeyForTenant,
+  type CloudProjectSourceService,
+} from './project-source-service.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 import {
   CloudSessionProjectionService,
@@ -192,6 +206,7 @@ type CreateCloudSessionRecordInput = {
   profileName: string
   sessionId?: string | null
   title?: string | null
+  deferRuntime?: boolean
 }
 
 export type CloudWorkflowStartResult = {
@@ -480,6 +495,7 @@ export class CloudSessionService {
   private readonly billingConfig: CloudBillingConfig | null
   private readonly billingAdapter: BillingAdapter | null
   private readonly identityPolicy: CloudIdentityPolicy
+  private readonly projectSources: CloudProjectSourceService | null
 
   constructor(
     store: ControlPlaneStore,
@@ -494,6 +510,7 @@ export class CloudSessionService {
     billingConfig: CloudBillingConfig | null = null,
     billingAdapter: BillingAdapter | null = null,
     identityPolicy: CloudIdentityPolicy = { allowSelfServiceSignup: true },
+    projectSources: CloudProjectSourceService | null = null,
   ) {
     this.store = store
     this.runtime = runtime
@@ -508,6 +525,7 @@ export class CloudSessionService {
     this.billingConfig = billingConfig
     this.billingAdapter = billingAdapter
     this.identityPolicy = identityPolicy
+    this.projectSources = projectSources
   }
 
   get eventBus() {
@@ -516,6 +534,57 @@ export class CloudSessionService {
 
   get workspaceEventBus() {
     return this.workspaceEvents
+  }
+
+  validateProjectSource(source: CloudProjectSourceInput | null | undefined): CloudProjectSourcePolicyVerdict {
+    return this.projectSources?.validateProjectSource(source) || evaluateCloudProjectSourcePolicy(source, this.policy)
+  }
+
+  async uploadProjectSnapshot(
+    principal: CloudPrincipal,
+    input: CloudProjectSnapshotUploadInput,
+  ): Promise<CloudProjectSnapshotUploadResult> {
+    await this.ensurePrincipal(principal)
+    if (!this.projectSources) throw new CloudServiceError(503, 'Cloud project snapshot storage is not configured.')
+    return this.projectSources.uploadSnapshot(principal, input)
+  }
+
+  async getSessionProjectSource(tenantId: string, sessionId: string): Promise<CloudProjectSource | null> {
+    const projection = await this.store.getSessionProjection(tenantId, sessionId)
+    return normalizeCloudProjectSource(projection?.view?.projectSource)
+  }
+
+  private normalizeAndValidateProjectSource(
+    source: CloudProjectSourceInput | null | undefined,
+    tenantId: string,
+  ) {
+    if (source === undefined || source === null) return null
+    const normalized = normalizeCloudProjectSource(source)
+    const verdict = this.validateProjectSource(normalized)
+    if (!normalized || !verdict.allowed) {
+      throw new CloudServiceError(400, verdict.reason || 'Cloud project source is not allowed.', {
+        policyCode: verdict.policyCode || 'project_source.denied',
+      })
+    }
+    if (normalized.kind === 'snapshot' && !isCloudProjectSnapshotObjectKeyForTenant(tenantId, normalized.objectKey)) {
+      throw new CloudServiceError(400, 'Project snapshot does not belong to this tenant.', {
+        policyCode: 'project_source.snapshot.tenant',
+      })
+    }
+    return normalized
+  }
+
+  private async bindSessionProjectSource(
+    tenantId: string,
+    sessionId: string,
+    projectSource: CloudProjectSource,
+  ) {
+    await this.appendProjectedEvent({
+      tenantId,
+      sessionId,
+      type: 'session.project_source.bound',
+      payload: { projectSource },
+    })
   }
 
   private quotaLimit(value: number | null | undefined) {
@@ -665,10 +734,14 @@ export class CloudSessionService {
     }
   }
 
-  async createSession(principal: CloudPrincipal, input: { profileName?: string | null } = {}): Promise<CloudSessionView> {
+  async createSession(principal: CloudPrincipal, input: {
+    profileName?: string | null
+    projectSource?: CloudProjectSourceInput | null
+  } = {}): Promise<CloudSessionView> {
     await this.ensurePrincipal(principal)
     if (!this.policy.features.chat) throw new Error('Chat is disabled for this cloud profile.')
     const profileName = input.profileName || this.policy.profileName
+    const projectSource = this.normalizeAndValidateProjectSource(input.projectSource, principal.tenantId)
     await this.assertBillingAllowed({
       orgId: this.principalOrgId(principal),
       action: 'session.create',
@@ -680,7 +753,9 @@ export class CloudSessionService {
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
       profileName,
+      deferRuntime: Boolean(projectSource),
     })
+    if (projectSource) await this.bindSessionProjectSource(principal.tenantId, session.sessionId, projectSource)
     return this.getSessionView(principal, session.sessionId)
   }
 
@@ -1149,9 +1224,18 @@ export class CloudSessionService {
       const owned = await this.store.getSession(principal.tenantId, principal.userId, input.sessionId)
       if (!owned) throw new CloudServiceError(403, 'Channel session binding requires a session owned by the gateway principal.')
     }
+    const defaultProjectSource = input.sessionId
+      ? null
+      : this.normalizeAndValidateProjectSource(
+          normalizeCloudProjectSource(channelBinding.settings.defaultProjectSource)
+            || normalizeCloudProjectSource(this.policy.profile.defaultProjectSource),
+          principal.tenantId,
+        )
     const sessionId = input.sessionId || (await this.createCloudSessionRecord({
       tenantId: principal.tenantId,
       userId: principal.userId,
+      orgId,
+      accountId: principal.accountId || principal.userId,
       profileName: agent.profileName,
       sessionId: stableCloudId(
         'channel_session',
@@ -1162,7 +1246,11 @@ export class CloudSessionService {
         input.externalThreadId,
       ),
       title: input.title || `Channel ${input.provider}`,
+      deferRuntime: Boolean(defaultProjectSource),
     })).sessionId
+    if (defaultProjectSource) {
+      await this.bindSessionProjectSource(principal.tenantId, sessionId, defaultProjectSource)
+    }
     const binding = await this.store.bindChannelSession({
       bindingId: this.ids.randomUUID(),
       orgId,
@@ -2534,7 +2622,7 @@ export class CloudSessionService {
       return this.requireSessionRecord(input.tenantId, input.sessionId)
     }
 
-    if (this.shouldCreateRuntimeSessionsEagerly() && !this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
+    if (!input.deferRuntime && this.shouldCreateRuntimeSessionsEagerly() && !this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
       const runtimeSession = await this.runtime.createSession({
         profileName: input.profileName,
         context: this.runtimeContext({

@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
 import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import { normalizeCloudProjectSource } from '@open-cowork/shared'
 import {
   buildConfiguredModelFallbacks,
   buildProviderDescriptors,
@@ -217,6 +218,39 @@ function normalizeCloudFeatures(raw: Partial<CloudFeatureConfig> | undefined): C
   }
 }
 
+function normalizeCloudProjectSources(raw: CloudConfig['projectSources'] | undefined): CloudConfig['projectSources'] {
+  const defaults = DEFAULT_CONFIG.cloud.projectSources
+  const source = raw || defaults
+  return {
+    git: {
+      ...defaults.git,
+      ...(source.git || {}),
+      enabled: typeof source.git?.enabled === 'boolean' ? source.git.enabled : defaults.git.enabled,
+      allowedHosts: stringArray(source.git?.allowedHosts, defaults.git.allowedHosts),
+      allowedRepositories: stringArray(source.git?.allowedRepositories, defaults.git.allowedRepositories),
+      allowFileUrls: typeof source.git?.allowFileUrls === 'boolean' ? source.git.allowFileUrls : defaults.git.allowFileUrls,
+    },
+    uploadedSnapshots: {
+      ...defaults.uploadedSnapshots,
+      ...(source.uploadedSnapshots || {}),
+      enabled: typeof source.uploadedSnapshots?.enabled === 'boolean'
+        ? source.uploadedSnapshots.enabled
+        : defaults.uploadedSnapshots.enabled,
+      maxFiles: nullablePositiveNumber(source.uploadedSnapshots?.maxFiles, defaults.uploadedSnapshots.maxFiles)
+        || defaults.uploadedSnapshots.maxFiles,
+      maxBytes: nullablePositiveNumber(source.uploadedSnapshots?.maxBytes, defaults.uploadedSnapshots.maxBytes)
+        || defaults.uploadedSnapshots.maxBytes,
+    },
+    managedWorkspaces: {
+      ...defaults.managedWorkspaces,
+      ...(source.managedWorkspaces || {}),
+      enabled: typeof source.managedWorkspaces?.enabled === 'boolean'
+        ? source.managedWorkspaces.enabled
+        : defaults.managedWorkspaces.enabled,
+    },
+  }
+}
+
 function nullablePositiveNumber(value: unknown, fallback: number | null): number | null {
   if (value === null) return null
   const parsed = Number(value ?? fallback)
@@ -310,12 +344,16 @@ function normalizeCloudBillingConfig(raw: CloudConfig['billing'] | undefined): C
 }
 
 function normalizeCloudProfile(raw: CloudProfileConfig | undefined): CloudProfileConfig {
+  const defaultProjectSource = Object.prototype.hasOwnProperty.call(raw || {}, 'defaultProjectSource')
+    ? normalizeCloudProjectSource(raw?.defaultProjectSource)
+    : undefined
   return {
     ...(raw || {}),
     agents: stringArray(raw?.agents),
     tools: stringArray(raw?.tools),
     mcps: stringArray(raw?.mcps),
     features: raw?.features ? normalizeCloudFeatures(raw.features) : undefined,
+    ...(defaultProjectSource !== undefined ? { defaultProjectSource } : {}),
     runtime: raw?.runtime
       ? {
           ...raw.runtime,
@@ -401,6 +439,7 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
       allowedLocalMcpNames: stringArray(source.runtime?.allowedLocalMcpNames),
       allowedHostProjectDirectories: stringArray(source.runtime?.allowedHostProjectDirectories),
     },
+    projectSources: normalizeCloudProjectSources(source.projectSources),
     features: normalizeCloudFeatures(source.features),
     abuse: normalizeCloudAbuseConfig(source.abuse),
     billing: normalizeCloudBillingConfig(source.billing),

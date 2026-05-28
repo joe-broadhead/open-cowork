@@ -49,6 +49,7 @@ export type NodeOpencodeCloudRuntimeOptions = {
   hostname?: string
   port?: number
   timeout?: number
+  cwd?: string
   logLevel?: ManagedOpencodeServerLogLevel
   opencodeBinPath?: string | null
   enableNativeWebSearch?: boolean
@@ -460,7 +461,7 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
       timeout: options.timeout ?? 5000,
       config: serverConfig,
       env,
-      cwd: options.paths.getRuntimeHomeDir(),
+      cwd: options.cwd || options.paths.getRuntimeHomeDir(),
       logLevel: options.logLevel,
       opencodeBinPath: options.opencodeBinPath,
       onUnexpectedExit: options.onUnexpectedExit,

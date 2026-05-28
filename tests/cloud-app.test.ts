@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { IncomingMessage } from 'node:http'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
@@ -123,11 +123,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 function asArray(value: unknown): unknown[] {
   assert.equal(Array.isArray(value), true)
   return value as unknown[]
-}
-
-async function writeFixture(path: string, value: string) {
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, value)
 }
 
 test('cloud bootstrap parses env options and role helpers', () => {
@@ -419,9 +414,11 @@ test('cloud app lets deployers inject a durable control-plane store factory', as
 
 test('cloud all-in-one app starts web and worker and routes runtime events into projections', async () => {
   const runtime = new FakeRuntime()
+  const paths = createCloudPathProvider(await mkdtemp(join(tmpdir(), 'open-cowork-cloud-blank-')))
   const app = await startCloudApp({
     config: DEFAULT_CONFIG,
     runtime,
+    paths,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
         OPEN_COWORK_CLOUD_PROFILE: 'full',
@@ -462,6 +459,7 @@ test('cloud all-in-one app starts web and worker and routes runtime events into 
     }))
     assert.equal(prompted.processed, 1)
     assert.equal(runtime.prompts.length, 1)
+    assert.equal((await stat(paths.resolveWorkspacePath('tenant-a', coworkSessionId))).isDirectory(), true)
 
     await runtime.emitAssistant('session-1', 'external event')
     const view = await readJson(await fetch(`${app.url}/api/sessions/${coworkSessionId}`, {
@@ -513,6 +511,39 @@ test('cloud web role starts transport without processing worker commands inline'
     }))
     assert.equal(prompted.processed, 0)
     assert.equal(runtime.prompts.length, 0)
+  } finally {
+    await app.close()
+  }
+})
+
+test('cloud all-in-one app rejects malformed project source payloads', async () => {
+  const app = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    runtime: new FakeRuntime(),
+    env: {
+        OPEN_COWORK_CLOUD_ROLE: 'all-in-one',
+        OPEN_COWORK_CLOUD_PROFILE: 'full',
+        OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  try {
+    assert.ok(app.url)
+    const response = await fetch(`${app.url}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-tenant-id': 'tenant-a',
+        'x-open-cowork-user-id': 'user-a',
+        'x-open-cowork-user-email': 'a@example.test',
+      },
+      body: JSON.stringify({ projectSource: { kind: 'git' } }),
+    })
+    assert.equal(response.status, 400)
+    const body = await readJson(response)
+    assert.match(String(body.error), /project source/i)
   } finally {
     await app.close()
   }
@@ -790,16 +821,32 @@ test('cloud worker can checkpoint workspace state to object storage after comman
       'x-open-cowork-user-id': 'user-a',
       'x-open-cowork-user-email': 'a@example.test',
     }
+    const snapshot = await readJson(await fetch(`${web.url}/api/project-sources/snapshots`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...principalHeaders,
+      },
+      body: JSON.stringify({
+        title: 'fixture',
+        files: [{
+          path: 'README.md',
+          dataBase64: Buffer.from('checkpoint me').toString('base64'),
+          byteCount: 'checkpoint me'.length,
+        }],
+        fileCount: 1,
+        byteCount: 'checkpoint me'.length,
+      }),
+    }))
     const created = await readJson(await fetch(`${web.url}/api/sessions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...principalHeaders,
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ projectSource: snapshot.projectSource }),
     }))
     const coworkSessionId = String(asRecord(created.session).sessionId)
-    await writeFixture(workerPaths.resolveWorkspacePath('tenant-a', coworkSessionId, 'README.md'), 'checkpoint me')
 
     const prompted = await readJson(await fetch(`${web.url}/api/sessions/${coworkSessionId}/prompt`, {
       method: 'POST',
@@ -811,6 +858,10 @@ test('cloud worker can checkpoint workspace state to object storage after comman
     }))
     assert.equal(prompted.processed, 0)
     assert.equal(await worker.worker?.processAllSessionCommands(), 1)
+    assert.equal(
+      await readFile(workerPaths.resolveWorkspacePath('tenant-a', coworkSessionId, 'README.md'), 'utf8'),
+      'checkpoint me',
+    )
 
     const manifest = await worker.checkpointStore.readSessionCheckpoint({
       tenantId: 'tenant-a',
