@@ -227,6 +227,18 @@ The regular `pnpm test` suite covers the in-memory control-plane adapter and
 skips provider infrastructure. Before shipping a scalable cloud release, run
 the real Postgres concurrency gate against an isolated database:
 
+Run the cloud continuation harness whenever touching desktop sync, cloud
+session projection, or gateway channel APIs:
+
+```bash
+pnpm test:cloud-continuation
+```
+
+That harness starts an in-process cloud, authenticates desktop, web, and
+gateway clients with bearer tokens, verifies SSE replay, proves approval and
+question resolution across all surfaces, and checks restart/offline desktop
+hydration from durable cloud projections.
+
 ```bash
 OPEN_COWORK_TEST_POSTGRES_URL='postgres://...' pnpm test tests/cloud-postgres-concurrency.test.ts
 ```

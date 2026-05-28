@@ -2,11 +2,15 @@ import { mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-const coverage = process.argv.includes('--coverage')
-const testFiles = readdirSync('tests')
-  .filter((entry) => entry.endsWith('.test.ts'))
-  .sort()
-  .map((entry) => join('tests', entry))
+const inputArgs = process.argv.slice(2)
+const coverage = inputArgs.includes('--coverage')
+const explicitTestFiles = inputArgs.filter((entry) => entry !== '--coverage')
+const testFiles = explicitTestFiles.length > 0
+  ? explicitTestFiles
+  : readdirSync('tests')
+    .filter((entry) => entry.endsWith('.test.ts'))
+    .sort()
+    .map((entry) => join('tests', entry))
 
 if (testFiles.length === 0) {
   console.error('No Node test files found under tests/*.test.ts')
