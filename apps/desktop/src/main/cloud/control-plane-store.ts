@@ -26,6 +26,92 @@ export type ChannelInteractionKind = 'permission' | 'question'
 export type ChannelInteractionStatus = 'pending' | 'used' | 'expired' | 'revoked'
 export type ChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
 export type ByokSecretStatus = 'active' | 'disabled' | 'expired' | 'invalid'
+export type UsageEventType =
+  | 'session.created'
+  | 'prompt.enqueued'
+  | 'worker.minute'
+  | 'artifact.uploaded'
+  | 'gateway.delivery.claimed'
+export type UsageUnit = 'count' | 'byte' | 'minute'
+
+export type QuotaPolicyCode =
+  | 'quota.concurrent_sessions_exceeded'
+  | 'quota.active_workers_exceeded'
+  | 'quota.prompts_per_hour_exceeded'
+  | 'quota.gateway_deliveries_per_hour_exceeded'
+  | 'quota.artifact_bytes_per_day_exceeded'
+  | 'rate_limit.http_exceeded'
+  | 'auth.backoff'
+
+export type UsageEventRecord = {
+  eventId: string
+  orgId: string
+  accountId: string | null
+  eventType: UsageEventType | string
+  quantity: number
+  unit: UsageUnit | string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export type QuotaConsumptionRecord = {
+  allowed: boolean
+  orgId: string
+  quotaKey: string
+  limit: number
+  used: number
+  remaining: number
+  resetAt: string
+  retryAfterMs: number
+  policyCode?: QuotaPolicyCode | string
+}
+
+export type RateLimitClaimRecord = {
+  allowed: boolean
+  scope: string
+  source: string
+  limit: number
+  count: number
+  resetAt: string
+  retryAfterMs: number
+  policyCode?: QuotaPolicyCode | string
+}
+
+export type CloudAuthBackoffRecord = {
+  allowed: boolean
+  scope: string
+  source: string
+  failureCount: number
+  blockedUntilMs: number
+  retryAfterMs: number
+}
+
+export class ControlPlaneQuotaExceededError extends Error {
+  readonly status = 429
+  readonly publicMessage: string
+  readonly policyCode: QuotaPolicyCode | string
+  readonly retryAfterMs: number
+  readonly limit: number
+  readonly used: number
+  readonly resetAt: string
+
+  constructor(input: {
+    message: string
+    policyCode: QuotaPolicyCode | string
+    retryAfterMs: number
+    limit: number
+    used: number
+    resetAt: string
+  }) {
+    super(input.message)
+    this.publicMessage = input.message
+    this.policyCode = input.policyCode
+    this.retryAfterMs = input.retryAfterMs
+    this.limit = input.limit
+    this.used = input.used
+    this.resetAt = input.resetAt
+  }
+}
 
 export type TenantRecord = {
   tenantId: string
@@ -387,6 +473,56 @@ export type CreateSessionInput = {
   profileName: string
   title?: string | null
   createdAt?: Date
+  quota?: {
+    orgId?: string | null
+    maxConcurrentSessionsPerOrg?: number | null
+    policyCode?: QuotaPolicyCode | string
+  } | null
+}
+
+export type ConsumeUsageQuotaInput = {
+  orgId: string
+  quotaKey: string
+  limit: number
+  quantity?: number
+  windowMs: number
+  now?: Date
+  policyCode?: QuotaPolicyCode | string
+}
+
+export type RecordUsageEventInput = {
+  eventId?: string
+  orgId: string
+  accountId?: string | null
+  eventType: UsageEventType | string
+  quantity?: number
+  unit?: UsageUnit | string
+  metadata?: Record<string, unknown>
+  createdAt?: Date
+}
+
+export type ClaimRateLimitInput = {
+  scope: string
+  source: string
+  limit: number
+  windowMs: number
+  now?: Date
+  policyCode?: QuotaPolicyCode | string
+}
+
+export type CheckCloudAuthBackoffInput = {
+  scope: string
+  source?: string
+  now?: Date
+}
+
+export type RecordCloudAuthFailureInput = {
+  scope: string
+  source: string
+  windowMs: number
+  limit: number
+  backoffMs: number
+  now?: Date
 }
 
 export type CreateAccountInput = {
@@ -612,6 +748,7 @@ export type ClaimChannelDeliveryInput = {
   claimedBy: string
   now?: Date
   ttlMs?: number
+  quota?: Omit<ConsumeUsageQuotaInput, 'orgId'> | null
 }
 
 export type AckChannelDeliveryInput = {
@@ -790,6 +927,12 @@ export type ControlPlaneStore = {
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
+  consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
+  recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
+  listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
+  claimRateLimit(input: ClaimRateLimitInput): MaybePromise<RateLimitClaimRecord>
+  checkCloudAuthBackoff(input: CheckCloudAuthBackoffInput): MaybePromise<CloudAuthBackoffRecord>
+  recordCloudAuthFailure(input: RecordCloudAuthFailureInput): MaybePromise<CloudAuthBackoffRecord>
   createByokSecret(input: CreateByokSecretInput): MaybePromise<ByokSecretRecord>
   getByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
   getActiveByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
@@ -865,6 +1008,11 @@ export type ControlPlaneStore = {
     workerId: string,
     now?: Date,
     ttlMs?: number,
+    quota?: {
+      orgId?: string | null
+      maxActiveWorkersPerOrg?: number | null
+      policyCode?: QuotaPolicyCode | string
+    } | null,
   ): MaybePromise<WorkerLeaseRecord | null>
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
@@ -1076,6 +1224,31 @@ function normalizeNonNegativeInteger(value: unknown, label: string) {
   return parsed
 }
 
+function normalizePositiveInteger(value: unknown, label: string) {
+  const parsed = Number(value ?? 0)
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer.`)
+  return parsed
+}
+
+function windowStart(nowMs: number, windowMs: number) {
+  return Math.floor(nowMs / windowMs) * windowMs
+}
+
+function quotaRetryAfterMs(nowMs: number, startedAtMs: number, windowMs: number) {
+  return Math.max(1, startedAtMs + windowMs - nowMs)
+}
+
+function quotaExceeded(input: {
+  message: string
+  policyCode: QuotaPolicyCode | string
+  retryAfterMs: number
+  limit: number
+  used: number
+  resetAt: string
+}): never {
+  throw new ControlPlaneQuotaExceededError(input)
+}
+
 function normalizeProvider(value: unknown): ChannelProviderId {
   const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
   if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
@@ -1117,6 +1290,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly memberships = new Map<string, MembershipRecord>()
   private readonly apiTokens = new Map<string, ApiTokenRecord>()
   private readonly auditEvents = new Map<string, AuditEventRecord>()
+  private readonly usageEvents = new Map<string, UsageEventRecord>()
+  private readonly usageCounters = new Map<string, { windowStartedAtMs: number, quantity: number }>()
+  private readonly rateLimits = new Map<string, { windowStartedAtMs: number, count: number }>()
+  private readonly authFailures = new Map<string, CloudAuthBackoffRecord>()
+  private readonly authFailureWindows = new Map<string, number>()
   private readonly byokSecrets = new Map<string, ByokSecretRecord>()
   private readonly headlessAgents = new Map<string, HeadlessAgentRecord>()
   private readonly channelBindings = new Map<string, ChannelBindingRecord>()
@@ -1385,6 +1563,138 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  consumeUsageQuota(input: ConsumeUsageQuotaInput): QuotaConsumptionRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const limit = normalizePositiveInteger(input.limit, 'Quota limit')
+    const quantity = normalizePositiveInteger(input.quantity || 1, 'Quota quantity')
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Quota window')
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const startedAtMs = windowStart(nowMs, windowMs)
+    const counterKey = key(input.orgId, input.quotaKey)
+    const existing = this.usageCounters.get(counterKey)
+    const current = existing && existing.windowStartedAtMs === startedAtMs ? existing.quantity : 0
+    const next = current + quantity
+    const retryAfterMs = quotaRetryAfterMs(nowMs, startedAtMs, windowMs)
+    const resetAt = new Date(nowMs + retryAfterMs).toISOString()
+    if (next > limit) {
+      return {
+        allowed: false,
+        orgId: input.orgId,
+        quotaKey: input.quotaKey,
+        limit,
+        used: current,
+        remaining: Math.max(0, limit - current),
+        resetAt,
+        retryAfterMs,
+        policyCode: input.policyCode,
+      }
+    }
+    this.usageCounters.set(counterKey, { windowStartedAtMs: startedAtMs, quantity: next })
+    return {
+      allowed: true,
+      orgId: input.orgId,
+      quotaKey: input.quotaKey,
+      limit,
+      used: next,
+      remaining: Math.max(0, limit - next),
+      resetAt,
+      retryAfterMs,
+      policyCode: input.policyCode,
+    }
+  }
+
+  recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const eventId = input.eventId || stableId('usage', input.orgId, input.eventType, String(this.usageEvents.size + 1), nowIso(input.createdAt))
+    const existing = this.usageEvents.get(eventId)
+    if (existing) return clone(existing)
+    const record: UsageEventRecord = {
+      eventId,
+      orgId: input.orgId,
+      accountId: input.accountId || null,
+      eventType: input.eventType,
+      quantity: normalizePositiveInteger(input.quantity || 1, 'Usage quantity'),
+      unit: input.unit || 'count',
+      metadata: redactAuditMetadata(input.metadata),
+      createdAt: nowIso(input.createdAt),
+    }
+    this.usageEvents.set(eventId, record)
+    return clone(record)
+  }
+
+  listUsageEvents(orgId: string, limit = 100): UsageEventRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    return Array.from(this.usageEvents.values())
+      .filter((event) => event.orgId === orgId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, limit)
+      .map((event) => clone(event))
+  }
+
+  claimRateLimit(input: ClaimRateLimitInput): RateLimitClaimRecord {
+    const limit = normalizePositiveInteger(input.limit, 'Rate limit')
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Rate-limit window')
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const startedAtMs = windowStart(nowMs, windowMs)
+    const rateKey = key(input.scope, input.source)
+    const existing = this.rateLimits.get(rateKey)
+    const count = existing && existing.windowStartedAtMs === startedAtMs ? existing.count + 1 : 1
+    this.rateLimits.set(rateKey, { windowStartedAtMs: startedAtMs, count })
+    const retryAfterMs = quotaRetryAfterMs(nowMs, startedAtMs, windowMs)
+    return {
+      allowed: count <= limit,
+      scope: input.scope,
+      source: input.source,
+      limit,
+      count,
+      resetAt: new Date(nowMs + retryAfterMs).toISOString(),
+      retryAfterMs,
+      policyCode: input.policyCode,
+    }
+  }
+
+  checkCloudAuthBackoff(input: CheckCloudAuthBackoffInput): CloudAuthBackoffRecord {
+    const nowMs = (input.now || new Date()).getTime()
+    const existing = this.authFailures.get(input.scope)
+    return {
+      allowed: !existing || existing.blockedUntilMs <= nowMs,
+      scope: input.scope,
+      source: input.source || existing?.source || input.scope,
+      failureCount: existing?.failureCount || 0,
+      blockedUntilMs: existing?.blockedUntilMs || 0,
+      retryAfterMs: existing ? Math.max(0, existing.blockedUntilMs - nowMs) : 0,
+    }
+  }
+
+  recordCloudAuthFailure(input: RecordCloudAuthFailureInput): CloudAuthBackoffRecord {
+    const windowMs = normalizePositiveInteger(input.windowMs, 'Auth backoff window')
+    const limit = normalizePositiveInteger(input.limit, 'Auth failure limit')
+    const backoffMs = normalizePositiveInteger(input.backoffMs, 'Auth backoff duration')
+    const nowMs = (input.now || new Date()).getTime()
+    const existing = this.authFailures.get(input.scope)
+    const currentWindowStartedAtMs = windowStart(nowMs, windowMs)
+    const existingWindowStartedAtMs = this.authFailureWindows.get(input.scope)
+    const failureCount = existing && existingWindowStartedAtMs === currentWindowStartedAtMs
+      ? existing.failureCount + 1
+      : 1
+    const blockedUntilMs = failureCount >= limit
+      ? Math.max(existing?.blockedUntilMs || 0, nowMs + backoffMs)
+      : existing?.blockedUntilMs || 0
+    const record: CloudAuthBackoffRecord = {
+      allowed: blockedUntilMs <= nowMs,
+      scope: input.scope,
+      source: input.source,
+      failureCount,
+      blockedUntilMs,
+      retryAfterMs: Math.max(0, blockedUntilMs - nowMs),
+    }
+    this.authFailures.set(input.scope, record)
+    this.authFailureWindows.set(input.scope, currentWindowStartedAtMs)
+    return clone(record)
   }
 
   createByokSecret(input: CreateByokSecretInput): ByokSecretRecord {
@@ -1915,6 +2225,23 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       ))
       .sort((left, right) => left.nextAttemptAt.localeCompare(right.nextAttemptAt) || left.createdAt.localeCompare(right.createdAt))[0]
     if (!candidate) return null
+    if (input.quota) {
+      const quota = this.consumeUsageQuota({
+        ...input.quota,
+        orgId: input.orgId,
+        now,
+      })
+      if (!quota.allowed) {
+        quotaExceeded({
+          message: 'Gateway delivery quota exceeded.',
+          policyCode: quota.policyCode || 'quota.gateway_deliveries_per_hour_exceeded',
+          retryAfterMs: quota.retryAfterMs,
+          limit: quota.limit,
+          used: quota.used,
+          resetAt: quota.resetAt,
+        })
+      }
+    }
     candidate.status = 'claimed'
     candidate.claimedBy = normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Delivery claimant')
     candidate.claimExpiresAt = new Date(nowMs + (input.ttlMs || 30_000)).toISOString()
@@ -1942,6 +2269,22 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const sessionKey = key(input.tenantId, input.sessionId)
     const existing = this.sessions.get(sessionKey)
     if (existing) return clone(existing.record)
+    const maxConcurrentSessions = input.quota?.maxConcurrentSessionsPerOrg
+    if (maxConcurrentSessions && maxConcurrentSessions > 0) {
+      const activeSessions = Array.from(this.sessions.values())
+        .filter((session) => session.record.tenantId === input.tenantId && session.record.status !== 'closed')
+        .length
+      if (activeSessions >= maxConcurrentSessions) {
+        quotaExceeded({
+          message: 'Concurrent cloud session quota exceeded.',
+          policyCode: input.quota?.policyCode || 'quota.concurrent_sessions_exceeded',
+          retryAfterMs: 60_000,
+          limit: maxConcurrentSessions,
+          used: activeSessions,
+          resetAt: new Date(Date.now() + 60_000).toISOString(),
+        })
+      }
+    }
     const createdAt = nowIso(input.createdAt)
     const record: SessionRecord = {
       tenantId: input.tenantId,
@@ -2164,10 +2507,25 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     workerId: string,
     now = new Date(),
     ttlMs = 30_000,
+    quota: {
+      orgId?: string | null
+      maxActiveWorkersPerOrg?: number | null
+      policyCode?: QuotaPolicyCode | string
+    } | null = null,
   ): WorkerLeaseRecord | null {
     const session = this.requireSession(tenantId, sessionId)
     const nowMs = now.getTime()
     if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
+    const maxActiveWorkers = quota?.maxActiveWorkersPerOrg
+    if (maxActiveWorkers && maxActiveWorkers > 0) {
+      const activeLeases = Array.from(this.sessions.values())
+        .filter((state) => state.record.tenantId === tenantId)
+        .filter((state) => state.lease && state.lease.leaseExpiresAt > nowMs)
+        .length
+      if (activeLeases >= maxActiveWorkers) {
+        return null
+      }
+    }
     const attempt = session.nextLeaseAttempt += 1
     const lease: WorkerLeaseRecord = {
       tenantId,

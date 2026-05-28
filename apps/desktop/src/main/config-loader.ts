@@ -217,6 +217,45 @@ function normalizeCloudFeatures(raw: Partial<CloudFeatureConfig> | undefined): C
   }
 }
 
+function nullablePositiveNumber(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null
+  const parsed = Number(value ?? fallback)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function normalizeCloudAbuseConfig(raw: CloudConfig['abuse'] | undefined): CloudConfig['abuse'] {
+  const defaults = DEFAULT_CONFIG.cloud.abuse
+  return {
+    ...defaults,
+    ...(raw || {}),
+    enabled: typeof raw?.enabled === 'boolean' ? raw.enabled : defaults.enabled,
+    maxConcurrentSessionsPerOrg: nullablePositiveNumber(raw?.maxConcurrentSessionsPerOrg, defaults.maxConcurrentSessionsPerOrg),
+    maxActiveWorkersPerOrg: nullablePositiveNumber(raw?.maxActiveWorkersPerOrg, defaults.maxActiveWorkersPerOrg),
+    maxPromptsPerHour: nullablePositiveNumber(raw?.maxPromptsPerHour, defaults.maxPromptsPerHour),
+    maxGatewayDeliveriesPerHour: nullablePositiveNumber(raw?.maxGatewayDeliveriesPerHour, defaults.maxGatewayDeliveriesPerHour),
+    maxArtifactBytesPerDay: nullablePositiveNumber(raw?.maxArtifactBytesPerDay, defaults.maxArtifactBytesPerDay),
+    httpRateLimit: {
+      ...defaults.httpRateLimit,
+      ...(raw?.httpRateLimit || {}),
+      enabled: typeof raw?.httpRateLimit?.enabled === 'boolean'
+        ? raw.httpRateLimit.enabled
+        : defaults.httpRateLimit.enabled,
+      windowMs: nullablePositiveNumber(raw?.httpRateLimit?.windowMs, defaults.httpRateLimit.windowMs) || defaults.httpRateLimit.windowMs,
+      maxRequests: nullablePositiveNumber(raw?.httpRateLimit?.maxRequests, defaults.httpRateLimit.maxRequests) || defaults.httpRateLimit.maxRequests,
+    },
+    authBackoff: {
+      ...defaults.authBackoff,
+      ...(raw?.authBackoff || {}),
+      enabled: typeof raw?.authBackoff?.enabled === 'boolean'
+        ? raw.authBackoff.enabled
+        : defaults.authBackoff.enabled,
+      windowMs: nullablePositiveNumber(raw?.authBackoff?.windowMs, defaults.authBackoff.windowMs) || defaults.authBackoff.windowMs,
+      maxFailures: nullablePositiveNumber(raw?.authBackoff?.maxFailures, defaults.authBackoff.maxFailures) || defaults.authBackoff.maxFailures,
+      backoffMs: nullablePositiveNumber(raw?.authBackoff?.backoffMs, defaults.authBackoff.backoffMs) || defaults.authBackoff.backoffMs,
+    },
+  }
+}
+
 function normalizeCloudProfile(raw: CloudProfileConfig | undefined): CloudProfileConfig {
   return {
     ...(raw || {}),
@@ -302,6 +341,7 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
       allowedHostProjectDirectories: stringArray(source.runtime?.allowedHostProjectDirectories),
     },
     features: normalizeCloudFeatures(source.features),
+    abuse: normalizeCloudAbuseConfig(source.abuse),
   }
 }
 

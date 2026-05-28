@@ -238,6 +238,17 @@ export type CloudRuntimeStatus = {
   heartbeats: unknown[]
 }
 
+export type CloudUsageEventRecord = {
+  eventId: string
+  orgId: string
+  accountId: string | null
+  eventType: string
+  quantity: number
+  unit: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export type CloudTransportConfig = {
   role: string
   profileName: string
@@ -373,6 +384,7 @@ export type CloudTransportAdapter = {
   setByokSecret?(providerId: string, input: CloudSetByokSecretInput): Promise<CloudByokSecretMetadata>
   validateByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
+  listUsageEvents?(limit?: number): Promise<CloudUsageEventRecord[]>
   listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent?(input: {
     name: string
@@ -1110,6 +1122,9 @@ export function createHttpSseCloudTransportAdapter(
       return (await request<{ secret: CloudByokSecretMetadata | null }>(`/api/byok/${encodePath(providerId)}`, {
         method: 'DELETE',
       })).secret
+    },
+    async listUsageEvents(limit) {
+      return (await request<{ events: CloudUsageEventRecord[] }>(`/api/usage/events${queryString({ limit })}`)).events
     },
     async listHeadlessAgents() {
       return (await request<{ agents: HeadlessAgentRecord[] }>('/api/channels/agents')).agents

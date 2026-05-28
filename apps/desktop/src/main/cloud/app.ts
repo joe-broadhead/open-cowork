@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import type { IncomingMessage } from 'node:http'
-import { DEFAULT_CONFIG, type CloudAuthConfig, type OpenCoworkConfig } from '../config-types.ts'
+import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import {
   resolveCloudRuntimePolicy,
@@ -156,6 +156,16 @@ function parsePositiveInt(value: string | null | undefined, fallback: number) {
   return parsed
 }
 
+function parseOptionalPositiveInt(value: string | null | undefined, fallback: number | null) {
+  if (!value) return fallback
+  const parsed = Number(value)
+  if (parsed === 0) return null
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid non-negative integer "${value}".`)
+  }
+  return parsed
+}
+
 function parseBoolean(value: string | null | undefined, fallback: boolean) {
   if (!value) return fallback
   if (/^(1|true|yes|on)$/i.test(value)) return true
@@ -199,6 +209,47 @@ export function resolveCloudCookieSecret(config: Pick<OpenCoworkConfig, 'cloud'>
   return envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
     || resolveEnvRef(config.cloud.auth.cookieSecretRef, env)
     || envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
+}
+
+export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudAbuseConfig {
+  const defaults = config.cloud.abuse
+  return {
+    ...defaults,
+    enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ABUSE_ENABLED'), defaults.enabled),
+    maxConcurrentSessionsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG'),
+      defaults.maxConcurrentSessionsPerOrg,
+    ),
+    maxActiveWorkersPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG'),
+      defaults.maxActiveWorkersPerOrg,
+    ),
+    maxPromptsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR'),
+      defaults.maxPromptsPerHour,
+    ),
+    maxGatewayDeliveriesPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR'),
+      defaults.maxGatewayDeliveriesPerHour,
+    ),
+    maxArtifactBytesPerDay: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY'),
+      defaults.maxArtifactBytesPerDay,
+    ),
+    httpRateLimit: {
+      ...defaults.httpRateLimit,
+      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_ENABLED'), defaults.httpRateLimit.enabled),
+      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_WINDOW_MS'), defaults.httpRateLimit.windowMs),
+      maxRequests: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_MAX_REQUESTS'), defaults.httpRateLimit.maxRequests),
+    },
+    authBackoff: {
+      ...defaults.authBackoff,
+      enabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_ENABLED'), defaults.authBackoff.enabled),
+      windowMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_WINDOW_MS'), defaults.authBackoff.windowMs),
+      maxFailures: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MAX_FAILURES'), defaults.authBackoff.maxFailures),
+      backoffMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_AUTH_BACKOFF_MS'), defaults.authBackoff.backoffMs),
+    },
+  }
 }
 
 export function resolveCloudOidcClientSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
@@ -492,6 +543,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const config = options.config || DEFAULT_CONFIG
   const policy = resolveCloudRuntimePolicy(config, env)
   const authConfig = resolveCloudAuthConfig(config, env)
+  const abuseConfig = resolveCloudAbuseConfig(config, env)
   const listenHostname = options.hostname || envOptions.hostname
   assertCloudAuthDeploymentSafe({
     role: policy.role,
@@ -562,6 +614,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     undefined,
     byokSecrets,
     byokPolicy,
+    abuseConfig,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
@@ -618,8 +671,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
                   roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
                 })
               },
-            }
+          }
           : {},
+        abuseConfig,
       )
     : null
   const scheduler = shouldRunCloudScheduler(policy.role)

@@ -106,7 +106,9 @@ OPEN_COWORK_TEST_POSTGRES_URL='postgres://...' pnpm test tests/cloud-postgres-co
 
 That gate proves Postgres row-lock behavior for worker leases, ordered event
 sequence writes, session command idempotency/reclaim, scheduler claims, and
-webhook replay claims.
+webhook replay claims. It also covers quota counter concurrency for prompt
+windows, concurrent session caps, and active worker caps when
+`OPEN_COWORK_TEST_POSTGRES_URL` is set.
 
 CI runs the same cloud gates in the `cloud-gates` job: OpenCode portability
 proof, real Postgres concurrency tests, Compose config validation, cloud OCI
@@ -146,6 +148,32 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` | Optional OpenTelemetry OTLP HTTP base endpoint; exports traces to `/v1/traces` and metrics to `/v1/metrics`. |
 | `OPEN_COWORK_CLOUD_OTLP_HEADERS` | Optional JSON object of OTLP HTTP headers, stored as a secret when it contains collector credentials. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
+
+Hosted/public deployments should keep abuse controls enabled. The defaults are
+conservative and can be tuned per deployment; set an individual numeric quota
+to `0` to disable that quota for self-hosted/private installs.
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_ABUSE_ENABLED` | Enables quota, rate-limit, usage, and auth-backoff enforcement. |
+| `OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG` | Maximum non-closed cloud sessions per org. |
+| `OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG` | Maximum active worker leases per org. |
+| `OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR` | Per-org prompt enqueue quota. |
+| `OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR` | Per-org gateway delivery claim quota. |
+| `OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY` | Per-org artifact upload byte quota. |
+| `OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_ENABLED` | Enables HTTP request rate limiting. |
+| `OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_WINDOW_MS` | HTTP rate-limit window. |
+| `OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_MAX_REQUESTS` | Maximum HTTP requests per IP, org, and API token per window. |
+| `OPEN_COWORK_CLOUD_AUTH_BACKOFF_ENABLED` | Enables backoff after repeated rejected authentication attempts. |
+| `OPEN_COWORK_CLOUD_AUTH_BACKOFF_WINDOW_MS` | Auth failure counting window. |
+| `OPEN_COWORK_CLOUD_AUTH_BACKOFF_MAX_FAILURES` | Failures before auth backoff starts. |
+| `OPEN_COWORK_CLOUD_AUTH_BACKOFF_MS` | Backoff duration returned through `Retry-After`. |
+
+Quota and rate-limit failures return `429` with `Retry-After`, `retryAfterMs`,
+and a machine-readable policy code such as
+`quota.prompts_per_hour_exceeded` or `rate_limit.http_exceeded`. Billing or
+plan enforcement can layer separate `402` policy responses on top of this
+control-plane surface.
 
 Role-specific knobs:
 

@@ -262,6 +262,30 @@ export type CloudStorageConfig = {
   }
 }
 
+export type CloudRateLimitConfig = {
+  enabled: boolean
+  windowMs: number
+  maxRequests: number
+}
+
+export type CloudAuthBackoffConfig = {
+  enabled: boolean
+  windowMs: number
+  maxFailures: number
+  backoffMs: number
+}
+
+export type CloudAbuseConfig = {
+  enabled: boolean
+  maxConcurrentSessionsPerOrg: number | null
+  maxActiveWorkersPerOrg: number | null
+  maxPromptsPerHour: number | null
+  maxGatewayDeliveriesPerHour: number | null
+  maxArtifactBytesPerDay: number | null
+  httpRateLimit: CloudRateLimitConfig
+  authBackoff: CloudAuthBackoffConfig
+}
+
 export type CloudDesktopConnectionConfig = {
   baseUrl: string
   label?: string
@@ -284,6 +308,7 @@ export type CloudConfig = {
   storage: CloudStorageConfig
   runtime: CloudRuntimePolicyConfig
   features: CloudFeatureConfig
+  abuse: CloudAbuseConfig
 }
 
 export type OpenCoworkConfig = {
@@ -402,6 +427,26 @@ const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {
   allowedHostProjectDirectories: [],
 }
 
+const DEFAULT_CLOUD_ABUSE: CloudAbuseConfig = {
+  enabled: true,
+  maxConcurrentSessionsPerOrg: 100,
+  maxActiveWorkersPerOrg: 20,
+  maxPromptsPerHour: 600,
+  maxGatewayDeliveriesPerHour: 1000,
+  maxArtifactBytesPerDay: 10 * 1024 * 1024 * 1024,
+  httpRateLimit: {
+    enabled: true,
+    windowMs: 60 * 1000,
+    maxRequests: 600,
+  },
+  authBackoff: {
+    enabled: true,
+    windowMs: 60 * 1000,
+    maxFailures: 10,
+    backoffMs: 60 * 1000,
+  },
+}
+
 const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
   enabled: true,
   allowUserAddedConnections: true,
@@ -472,6 +517,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     },
     runtime: DEFAULT_CLOUD_RUNTIME,
     features: DEFAULT_CLOUD_FEATURES,
+    abuse: DEFAULT_CLOUD_ABUSE,
     profiles: {
       full: {
         label: 'Full app',

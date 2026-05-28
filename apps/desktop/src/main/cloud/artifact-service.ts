@@ -99,6 +99,7 @@ export class CloudArtifactService {
     const filename = boundedFilename(input.filename)
     const contentType = boundedContentType(input.contentType)
     const body = decodeBase64(input.dataBase64)
+    await this.sessionService.assertArtifactUploadAllowed(principal, body.byteLength)
     const key = artifactObjectKey({
       tenantId: principal.tenantId,
       sessionId,
@@ -128,6 +129,7 @@ export class CloudArtifactService {
       type: 'artifact.created',
       payload: record,
     })
+    await this.sessionService.recordArtifactUploaded(principal, sessionId, artifactId, stored.size)
     return record
   }
 

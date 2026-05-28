@@ -25,6 +25,7 @@ import {
   listCapabilitySkills,
   listCapabilityTools,
 } from '../capability-catalog.ts'
+import { ControlPlaneQuotaExceededError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
   ChannelBindingRecord,
@@ -40,12 +41,14 @@ import type {
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  QuotaPolicyCode,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
   ThreadSmartFilterRecord,
   ThreadTagRecord,
+  UsageEventRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts'
@@ -64,6 +67,7 @@ import {
   type WorkflowWebhookAuth,
   type WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
+import type { CloudAbuseConfig } from '../config-types.ts'
 
 export type CloudPrincipal = {
   tenantId: string
@@ -111,11 +115,18 @@ export type ByokManagementPolicy = {
 export class CloudServiceError extends Error {
   readonly status: number
   readonly publicMessage: string
+  readonly policyCode: string | null
+  readonly retryAfterMs: number | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, details: {
+    policyCode?: string | null
+    retryAfterMs?: number | null
+  } = {}) {
     super(message)
     this.status = status
     this.publicMessage = message
+    this.policyCode = details.policyCode || null
+    this.retryAfterMs = details.retryAfterMs || null
   }
 }
 
@@ -155,6 +166,8 @@ export type CloudSessionView = {
 type CreateCloudSessionRecordInput = {
   tenantId: string
   userId: string
+  orgId?: string | null
+  accountId?: string | null
   profileName: string
   sessionId?: string | null
   title?: string | null
@@ -218,6 +231,27 @@ const WORKFLOW_MAX_LIST_VALUES = 100
 const WORKFLOW_VALID_TRIGGER_TYPES = new Set<WorkflowTriggerType>(['manual', 'schedule', 'webhook'])
 const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
+  enabled: false,
+  maxConcurrentSessionsPerOrg: null,
+  maxActiveWorkersPerOrg: null,
+  maxPromptsPerHour: null,
+  maxGatewayDeliveriesPerHour: null,
+  maxArtifactBytesPerDay: null,
+  httpRateLimit: {
+    enabled: false,
+    windowMs: 60 * 1000,
+    maxRequests: 600,
+  },
+  authBackoff: {
+    enabled: false,
+    windowMs: 60 * 1000,
+    maxFailures: 10,
+    backoffMs: 60 * 1000,
+  },
+}
 const EMPTY_SESSION_TOKENS: SessionTokens = {
   input: 0,
   output: 0,
@@ -1000,6 +1034,7 @@ export class CloudSessionService {
   private readonly ids: { randomUUID: () => string }
   private readonly byokSecrets: ByokSecretStore | null
   private readonly byokPolicy: ByokManagementPolicy
+  private readonly abuse: CloudAbuseConfig
 
   constructor(
     store: ControlPlaneStore,
@@ -1010,6 +1045,7 @@ export class CloudSessionService {
     workspaceEvents = new CloudWorkspaceEventBus(),
     byokSecrets: ByokSecretStore | null = null,
     byokPolicy: ByokManagementPolicy = {},
+    abuse: CloudAbuseConfig = DISABLED_ABUSE_POLICY,
   ) {
     this.store = store
     this.runtime = runtime
@@ -1019,6 +1055,7 @@ export class CloudSessionService {
     this.ids = ids
     this.byokSecrets = byokSecrets
     this.byokPolicy = byokPolicy
+    this.abuse = abuse
   }
 
   get eventBus() {
@@ -1027,6 +1064,63 @@ export class CloudSessionService {
 
   get workspaceEventBus() {
     return this.workspaceEvents
+  }
+
+  private quotaLimit(value: number | null | undefined) {
+    if (!this.abuse.enabled) return null
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  private quotaError(message: string, policyCode: QuotaPolicyCode | string, retryAfterMs: number | null) {
+    return new CloudServiceError(429, message, { policyCode, retryAfterMs })
+  }
+
+  private translateQuotaError(error: unknown, fallbackMessage: string, fallbackPolicyCode: QuotaPolicyCode | string): never {
+    if (error instanceof ControlPlaneQuotaExceededError) {
+      throw this.quotaError(
+        error.publicMessage || fallbackMessage,
+        error.policyCode || fallbackPolicyCode,
+        error.retryAfterMs,
+      )
+    }
+    throw error
+  }
+
+  private async consumeQuota(input: {
+    orgId: string
+    quotaKey: string
+    limit: number | null | undefined
+    quantity?: number
+    windowMs: number
+    policyCode: QuotaPolicyCode
+    message: string
+  }) {
+    const limit = this.quotaLimit(input.limit)
+    if (!limit) return null
+    const result = await this.store.consumeUsageQuota({
+      orgId: input.orgId,
+      quotaKey: input.quotaKey,
+      limit,
+      quantity: input.quantity,
+      windowMs: input.windowMs,
+      policyCode: input.policyCode,
+    })
+    if (!result.allowed) {
+      throw this.quotaError(input.message, input.policyCode, result.retryAfterMs)
+    }
+    return result
+  }
+
+  private async recordUsage(input: {
+    orgId: string
+    accountId?: string | null
+    eventType: UsageEventRecord['eventType']
+    quantity?: number
+    unit?: UsageEventRecord['unit']
+    metadata?: Record<string, unknown>
+  }) {
+    if (!this.abuse.enabled) return null
+    return this.store.recordUsageEvent(input)
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
@@ -1075,6 +1169,8 @@ export class CloudSessionService {
     const session = await this.createCloudSessionRecord({
       tenantId: principal.tenantId,
       userId: principal.userId,
+      orgId: this.principalOrgId(principal),
+      accountId: principal.accountId || principal.userId,
       profileName,
     })
     return this.getSessionView(principal, session.sessionId)
@@ -1484,6 +1580,14 @@ export class CloudSessionService {
       targetId: binding.sessionId,
       metadata: { identityId: actor.identityId, provider: actor.provider },
     })
+    await this.consumeQuota({
+      orgId: this.principalOrgId(principal),
+      quotaKey: 'prompts:hour',
+      limit: this.abuse.maxPromptsPerHour,
+      windowMs: HOUR_MS,
+      policyCode: 'quota.prompts_per_hour_exceeded',
+      message: 'Cloud prompt quota exceeded.',
+    })
     const command = await this.store.enqueueSessionCommand({
       commandId: this.ids.randomUUID(),
       tenantId: principal.tenantId,
@@ -1493,6 +1597,18 @@ export class CloudSessionService {
       payload: {
         text: input.text,
         agent: input.agent || 'build',
+      },
+    })
+    await this.recordUsage({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      eventType: 'prompt.enqueued',
+      unit: 'count',
+      metadata: {
+        tenantId: principal.tenantId,
+        sessionId: binding.sessionId,
+        source: 'gateway',
+        provider: actor.provider,
       },
     })
     return { binding, command }
@@ -1625,12 +1741,38 @@ export class CloudSessionService {
   ): Promise<ChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
-    return this.store.claimNextChannelDelivery({
-      orgId: this.principalOrgId(principal),
-      claimedBy: input.claimedBy,
-      ttlMs: input.ttlMs,
-      now: input.now,
-    })
+    try {
+      const delivery = await this.store.claimNextChannelDelivery({
+        orgId: this.principalOrgId(principal),
+        claimedBy: input.claimedBy,
+        ttlMs: input.ttlMs,
+        now: input.now,
+        quota: this.quotaLimit(this.abuse.maxGatewayDeliveriesPerHour)
+          ? {
+              quotaKey: 'gateway_deliveries:hour',
+              limit: this.abuse.maxGatewayDeliveriesPerHour!,
+              windowMs: HOUR_MS,
+              policyCode: 'quota.gateway_deliveries_per_hour_exceeded',
+            }
+          : null,
+      })
+      if (delivery) {
+        await this.recordUsage({
+          orgId: this.principalOrgId(principal),
+          accountId: principal.accountId || null,
+          eventType: 'gateway.delivery.claimed',
+          unit: 'count',
+          metadata: {
+            deliveryId: delivery.deliveryId,
+            provider: delivery.provider,
+            claimedBy: input.claimedBy,
+          },
+        })
+      }
+      return delivery
+    } catch (error) {
+      this.translateQuotaError(error, 'Gateway delivery quota exceeded.', 'quota.gateway_deliveries_per_hour_exceeded')
+    }
   }
 
   async ackChannelDelivery(
@@ -2007,14 +2149,112 @@ export class CloudSessionService {
     })
   }
 
+  async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
+    await this.consumeQuota({
+      orgId: this.principalOrgId(principal),
+      quotaKey: 'artifact_bytes:day',
+      limit: this.abuse.maxArtifactBytesPerDay,
+      quantity: bytes,
+      windowMs: DAY_MS,
+      policyCode: 'quota.artifact_bytes_per_day_exceeded',
+      message: 'Cloud artifact upload quota exceeded.',
+    })
+  }
+
+  async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
+    await this.recordUsage({
+      orgId: this.principalOrgId(principal),
+      accountId: principal.accountId || principal.userId,
+      eventType: 'artifact.uploaded',
+      quantity: bytes,
+      unit: 'byte',
+      metadata: { tenantId: principal.tenantId, sessionId, artifactId },
+    })
+  }
+
+  async recordWorkerMinutes(input: {
+    tenantId: string
+    sessionId: string
+    workerId: string
+    elapsedMs: number
+  }) {
+    if (!this.abuse.enabled) return null
+    const org = await this.store.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId })
+    const minutes = Math.max(1, Math.ceil(input.elapsedMs / 60_000))
+    return this.store.recordUsageEvent({
+      orgId: org.orgId,
+      eventType: 'worker.minute',
+      quantity: minutes,
+      unit: 'minute',
+      metadata: {
+        tenantId: input.tenantId,
+        sessionId: input.sessionId,
+        workerId: input.workerId,
+        elapsedMs: Math.max(0, Math.round(input.elapsedMs)),
+      },
+    })
+  }
+
+  async listUsageEvents(principal: CloudPrincipal, limit?: number) {
+    await this.ensurePrincipal(principal)
+    return this.store.listUsageEvents(this.principalOrgId(principal), limit)
+  }
+
+  async claimHttpRateLimit(input: {
+    scope: string
+    source: string
+    now?: Date
+  }) {
+    if (!this.abuse.enabled || !this.abuse.httpRateLimit.enabled) return null
+    const result = await this.store.claimRateLimit({
+      scope: input.scope,
+      source: input.source,
+      limit: this.abuse.httpRateLimit.maxRequests,
+      windowMs: this.abuse.httpRateLimit.windowMs,
+      now: input.now,
+      policyCode: 'rate_limit.http_exceeded',
+    })
+    if (!result.allowed) {
+      throw this.quotaError('Too many cloud requests. Try again later.', 'rate_limit.http_exceeded', result.retryAfterMs)
+    }
+    return result
+  }
+
+  async checkCloudAuthBackoff(input: { scope: string, source?: string, now?: Date }) {
+    if (!this.abuse.enabled || !this.abuse.authBackoff.enabled) return null
+    const result = await this.store.checkCloudAuthBackoff(input)
+    if (!result.allowed) {
+      throw this.quotaError('Too many rejected cloud authentication attempts. Try again later.', 'auth.backoff', result.retryAfterMs)
+    }
+    return result
+  }
+
+  async recordCloudAuthFailure(input: { scope: string, source: string, now?: Date }) {
+    if (!this.abuse.enabled || !this.abuse.authBackoff.enabled) return null
+    return this.store.recordCloudAuthFailure({
+      ...input,
+      windowMs: this.abuse.authBackoff.windowMs,
+      limit: this.abuse.authBackoff.maxFailures,
+      backoffMs: this.abuse.authBackoff.backoffMs,
+    })
+  }
+
   async enqueuePrompt(
     principal: CloudPrincipal,
     sessionId: string,
     input: { text: string, agent?: string | null },
   ): Promise<SessionCommandRecord> {
     await this.getSessionView(principal, sessionId)
+    await this.consumeQuota({
+      orgId: this.principalOrgId(principal),
+      quotaKey: 'prompts:hour',
+      limit: this.abuse.maxPromptsPerHour,
+      windowMs: HOUR_MS,
+      policyCode: 'quota.prompts_per_hour_exceeded',
+      message: 'Cloud prompt quota exceeded.',
+    })
     const commandId = this.ids.randomUUID()
-    return this.store.enqueueSessionCommand({
+    const command = await this.store.enqueueSessionCommand({
       commandId,
       tenantId: principal.tenantId,
       userId: principal.userId,
@@ -2025,6 +2265,14 @@ export class CloudSessionService {
         agent: input.agent || 'build',
       },
     })
+    await this.recordUsage({
+      orgId: this.principalOrgId(principal),
+      accountId: principal.accountId || principal.userId,
+      eventType: 'prompt.enqueued',
+      unit: 'count',
+      metadata: { tenantId: principal.tenantId, sessionId, source: 'api' },
+    })
+    return command
   }
 
   async enqueueAbort(principal: CloudPrincipal, sessionId: string): Promise<SessionCommandRecord> {
@@ -2372,15 +2620,58 @@ export class CloudSessionService {
     }
   }
 
+  private async createStoredSession(input: {
+    tenantId: string
+    userId: string
+    orgId?: string | null
+    accountId?: string | null
+    sessionId: string
+    opencodeSessionId: string
+    profileName: string
+    title?: string | null
+    createdAt?: Date
+  }) {
+    try {
+      const session = await this.store.createSession({
+        tenantId: input.tenantId,
+        userId: input.userId,
+        sessionId: input.sessionId,
+        opencodeSessionId: input.opencodeSessionId,
+        profileName: input.profileName,
+        title: input.title,
+        createdAt: input.createdAt,
+        quota: this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)
+          ? {
+              orgId: input.orgId || input.tenantId,
+              maxConcurrentSessionsPerOrg: this.abuse.maxConcurrentSessionsPerOrg,
+              policyCode: 'quota.concurrent_sessions_exceeded',
+            }
+          : null,
+      })
+      await this.recordUsage({
+        orgId: input.orgId || input.tenantId,
+        accountId: input.accountId || input.userId,
+        eventType: 'session.created',
+        unit: 'count',
+        metadata: { tenantId: input.tenantId, userId: input.userId, sessionId: input.sessionId },
+      })
+      return session
+    } catch (error) {
+      this.translateQuotaError(error, 'Concurrent cloud session quota exceeded.', 'quota.concurrent_sessions_exceeded')
+    }
+  }
+
   private async createCloudSessionRecord(input: CreateCloudSessionRecordInput): Promise<SessionRecord> {
     if (input.sessionId) {
       const existing = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
       if (existing) return existing
       const now = new Date()
       const title = input.title || 'New session'
-      await this.store.createSession({
+      await this.createStoredSession({
         tenantId: input.tenantId,
         userId: input.userId,
+        orgId: input.orgId,
+        accountId: input.accountId,
         sessionId: input.sessionId,
         opencodeSessionId: '',
         profileName: input.profileName,
@@ -2400,7 +2691,7 @@ export class CloudSessionService {
       return this.requireSessionRecord(input.tenantId, input.sessionId)
     }
 
-    if (this.shouldCreateRuntimeSessionsEagerly()) {
+    if (this.shouldCreateRuntimeSessionsEagerly() && !this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
       const runtimeSession = await this.runtime.createSession({
         profileName: input.profileName,
         context: this.runtimeContext({
@@ -2410,9 +2701,11 @@ export class CloudSessionService {
         }),
       })
       const title = input.title || runtimeSession.title
-      await this.store.createSession({
+      await this.createStoredSession({
         tenantId: input.tenantId,
         userId: input.userId,
+        orgId: input.orgId,
+        accountId: input.accountId,
         sessionId: runtimeSession.id,
         opencodeSessionId: runtimeSession.id,
         profileName: input.profileName,
@@ -2432,9 +2725,11 @@ export class CloudSessionService {
     const now = new Date()
     const sessionId = this.ids.randomUUID()
     const title = input.title || 'New session'
-    await this.store.createSession({
+    await this.createStoredSession({
       tenantId: input.tenantId,
       userId: input.userId,
+      orgId: input.orgId,
+      accountId: input.accountId,
       sessionId,
       opencodeSessionId: '',
       profileName: input.profileName,
