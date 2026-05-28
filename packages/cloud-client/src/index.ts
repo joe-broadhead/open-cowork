@@ -56,6 +56,27 @@ export type CloudChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' 
 export type CloudChannelIdentityRole = 'owner' | 'admin' | 'member' | 'approver' | 'viewer'
 export type CloudChannelIdentityStatus = 'active' | 'disabled' | 'pending'
 export type CloudChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
+export type CloudByokSecretStatus = 'active' | 'disabled' | 'expired' | 'invalid'
+
+export type CloudByokSecretMetadata = {
+  secretId: string
+  providerId: string
+  status: CloudByokSecretStatus
+  last4: string
+  keyFingerprint: string
+  lastValidatedAt: string | null
+  validationError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type CloudSetByokSecretInput = {
+  plaintext?: string | null
+  apiKey?: string | null
+  key?: string | null
+  secret?: string | null
+  kmsRef?: string | null
+}
 
 export type HeadlessAgentRecord = {
   agentId: string
@@ -347,6 +368,10 @@ export type CloudTransportAdapter = {
   listSettings?(): Promise<CloudTransportSettingMetadata[]>
   getSetting?(key: string): Promise<CloudTransportSettingMetadata | null>
   setSetting?(key: string, value: Record<string, unknown>): Promise<CloudTransportSettingMetadata>
+  listByokSecrets?(): Promise<CloudByokSecretMetadata[]>
+  getByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
+  setByokSecret?(providerId: string, input: CloudSetByokSecretInput): Promise<CloudByokSecretMetadata>
+  deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent?(input: {
     name: string
@@ -1061,6 +1086,23 @@ export function createHttpSseCloudTransportAdapter(
       })).setting)
       if (!setting) throw new Error('Cloud setting response was invalid.')
       return setting
+    },
+    async listByokSecrets() {
+      return (await request<{ secrets: CloudByokSecretMetadata[] }>('/api/byok')).secrets
+    },
+    async getByokSecret(providerId) {
+      return (await request<{ secret: CloudByokSecretMetadata | null }>(`/api/byok/${encodePath(providerId)}`)).secret
+    },
+    async setByokSecret(providerId, input) {
+      return (await request<{ secret: CloudByokSecretMetadata }>(`/api/byok/${encodePath(providerId)}`, {
+        method: 'POST',
+        body: input,
+      })).secret
+    },
+    async deleteByokSecret(providerId) {
+      return (await request<{ secret: CloudByokSecretMetadata | null }>(`/api/byok/${encodePath(providerId)}`, {
+        method: 'DELETE',
+      })).secret
     },
     async listHeadlessAgents() {
       return (await request<{ agents: HeadlessAgentRecord[] }>('/api/channels/agents')).agents

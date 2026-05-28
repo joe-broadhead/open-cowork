@@ -446,6 +446,36 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     ON cloud_channel_deliveries (org_id, status, next_attempt_at, created_at)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID = '004_byok_secrets'
+
+export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_byok_secrets (
+    secret_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    provider_id text NOT NULL,
+    status text NOT NULL,
+    ciphertext text,
+    kms_ref text,
+    last4 text NOT NULL,
+    key_fingerprint text NOT NULL,
+    created_by_account_id text REFERENCES cloud_accounts(account_id) ON DELETE SET NULL,
+    rotated_from_secret_id text REFERENCES cloud_byok_secrets(secret_id) ON DELETE SET NULL,
+    last_validated_at timestamptz,
+    validation_error text,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    CHECK (
+      (ciphertext IS NOT NULL AND kms_ref IS NULL)
+      OR (ciphertext IS NULL AND kms_ref IS NOT NULL)
+    )
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_byok_secrets_org_provider_idx
+    ON cloud_byok_secrets (org_id, provider_id, updated_at DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_byok_secrets_one_active_idx
+    ON cloud_byok_secrets (org_id, provider_id)
+    WHERE status = 'active'`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -458,5 +488,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_BYOK_SECRETS_STATEMENTS,
   },
 ] as const

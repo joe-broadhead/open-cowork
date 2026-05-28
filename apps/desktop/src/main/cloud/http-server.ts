@@ -734,6 +734,41 @@ async function handleApiRequest(
     return
   }
 
+  if (resource === 'byok') {
+    const providerId = sessionId
+    if (!providerId && !action && req.method === 'GET') {
+      writeJson(res, 200, { secrets: await options.service.listByokSecrets(context.principal) }, options.corsOrigin)
+      return
+    }
+    if (providerId && !action && req.method === 'GET') {
+      writeJson(res, 200, { secret: await options.service.getByokSecret(context.principal, providerId) }, options.corsOrigin)
+      return
+    }
+    if (providerId && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const plaintext = readString(body.plaintext) || readString(body.apiKey) || readString(body.key) || readString(body.secret)
+      const kmsRef = readString(body.kmsRef)
+      if ((plaintext && kmsRef) || (!plaintext && !kmsRef)) {
+        writeError(res, 400, 'BYOK credential requires exactly one of plaintext/apiKey/key/secret or kmsRef.', options.corsOrigin)
+        return
+      }
+      const secret = await options.service.setByokSecret(context.principal, {
+        providerId,
+        plaintext: plaintext || null,
+        kmsRef: kmsRef || null,
+      })
+      writeJson(res, 201, { secret }, options.corsOrigin)
+      return
+    }
+    if (providerId && !action && req.method === 'DELETE') {
+      const secret = await options.service.disableByokSecret(context.principal, providerId)
+      writeJson(res, 200, { secret, disabled: Boolean(secret) }, options.corsOrigin)
+      return
+    }
+    writeError(res, 404, 'Not found.', options.corsOrigin)
+    return
+  }
+
   if (resource === 'capabilities') {
     if (!options.policy.features.agents && !options.policy.features.customSkills && !options.policy.features.customMcps) {
       writePolicyError(res, 403, 'Capabilities are disabled for this cloud profile.', 'capabilities.disabled', options.corsOrigin)
