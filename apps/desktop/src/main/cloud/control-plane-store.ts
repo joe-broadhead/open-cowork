@@ -595,6 +595,7 @@ export type IssueApiTokenInput = {
 
 export type RevokeApiTokenInput = {
   tokenId: string
+  orgId?: string | null
   revokedAt?: Date
   actor?: AuditActorInput
 }
@@ -956,6 +957,7 @@ export type ControlPlaneStore = {
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
+  listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
   findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
@@ -1568,6 +1570,13 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return { token: clone(record), plaintext: generated.plaintext }
   }
 
+  listApiTokens(orgId: string): ApiTokenRecord[] {
+    return [...this.apiTokens.values()]
+      .filter((token) => token.orgId === orgId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .map((token) => clone(token))
+  }
+
   findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
     const tokenHash = hashCloudApiToken(plaintext)
     for (const token of this.apiTokens.values()) {
@@ -1584,6 +1593,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   revokeApiToken(input: RevokeApiTokenInput): ApiTokenRecord | null {
     const existing = this.apiTokens.get(input.tokenId)
     if (!existing) return null
+    if (input.orgId && existing.orgId !== input.orgId) return null
     const revokedAt = nowIso(input.revokedAt)
     existing.revokedAt = existing.revokedAt || revokedAt
     existing.updatedAt = revokedAt

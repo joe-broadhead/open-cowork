@@ -420,10 +420,12 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
   assert.match(issued.plaintext, /^occ_/)
   assert.notEqual(issued.token.tokenHash, issued.plaintext)
   assert.deepEqual(issued.token.scopes, ['desktop', 'gateway'])
+  assert.equal(store.listApiTokens(org.orgId)[0]?.tokenId, issued.token.tokenId)
   assert.equal(store.findApiTokenByPlaintext(issued.plaintext)?.tokenId, issued.token.tokenId)
 
   const revoked = store.revokeApiToken({
     tokenId: issued.token.tokenId,
+    orgId: org.orgId,
     actor: { actorType: 'user', actorId: account.accountId },
   })
   assert.equal(revoked?.revokedAt !== null, true)

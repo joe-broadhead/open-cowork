@@ -1017,6 +1017,17 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return result.rows[0] ? apiTokenFromRow(result.rows[0]) : null
   }
 
+  async listApiTokens(orgId: string) {
+    const result = await this.pool.query(
+      `SELECT *
+       FROM cloud_api_tokens
+       WHERE org_id = $1
+       ORDER BY created_at DESC`,
+      [orgId],
+    )
+    return result.rows.map(apiTokenFromRow)
+  }
+
   async revokeApiToken(input: RevokeApiTokenInput) {
     return this.withTransaction(async (client) => {
       const now = nowIso(input.revokedAt)
@@ -1024,8 +1035,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         `UPDATE cloud_api_tokens
          SET revoked_at = COALESCE(revoked_at, $2), updated_at = $2
          WHERE token_id = $1
+           AND ($3::text IS NULL OR org_id = $3)
          RETURNING *`,
-        [input.tokenId, now],
+        [input.tokenId, now, input.orgId || null],
       )
       if (!result.rows[0]) return null
       const token = apiTokenFromRow(result.rows[0])

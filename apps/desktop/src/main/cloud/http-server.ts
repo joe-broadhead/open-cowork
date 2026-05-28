@@ -9,7 +9,7 @@ import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
-import type { ChannelProviderId } from './control-plane-store.ts'
+import type { ApiTokenScope, ChannelProviderId } from './control-plane-store.ts'
 import { recordCloudHttpRequest } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
 import {
@@ -257,6 +257,15 @@ function readStringArray(value: unknown) {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
     ? value
     : null
+}
+
+function readApiTokenScopes(value: unknown): ApiTokenScope[] | null {
+  const scopes = readStringArray(value)
+  if (!scopes) return null
+  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'worker-internal'])
+  if (scopes.some((scope) => !allowed.has(scope as ApiTokenScope))) return null
+  const normalized = [...new Set(scopes as ApiTokenScope[])]
+  return normalized.length > 0 ? normalized : null
 }
 
 function readRecord(value: unknown) {
@@ -815,22 +824,7 @@ async function handleApiRequest(
   }
 
   if (resource === 'workspace' && !sessionId && req.method === 'GET') {
-    writeJson(res, 200, {
-      tenantId: context.principal.tenantId,
-      tenantName: context.principal.tenantName || null,
-      userId: context.principal.userId,
-      email: context.principal.email,
-      profileName: options.policy.profileName,
-      policy: {
-        features: options.policy.features,
-        allowedAgents: options.policy.allowedAgents,
-        allowedTools: options.policy.allowedTools,
-        allowedMcps: options.policy.allowedMcps,
-        localFiles: 'disabled',
-        localStdioMcps: 'disabled',
-        machineRuntimeConfig: 'disabled',
-      },
-    }, options.corsOrigin)
+    writeJson(res, 200, await options.service.getWorkspaceOverview(context.principal), options.corsOrigin)
     return
   }
 
@@ -866,6 +860,40 @@ async function handleApiRequest(
     writeJson(res, 200, {
       events: await options.service.listUsageEvents(context.principal, parseLimit(context.url)),
     }, options.corsOrigin)
+    return
+  }
+
+  if (resource === 'api-tokens') {
+    if (!sessionId && req.method === 'GET') {
+      writeJson(res, 200, { tokens: await options.service.listApiTokens(context.principal) }, options.corsOrigin)
+      return
+    }
+    if (!sessionId && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const name = readString(body.name)
+      const scopes = readApiTokenScopes(body.scopes)
+      if (!name || !scopes) {
+        writeError(res, 400, 'API token requires a name and at least one valid scope.', options.corsOrigin)
+        return
+      }
+      const issued = await options.service.issueApiToken(context.principal, {
+        name,
+        scopes,
+        expiresAt: readOptionalDate(body.expiresAt),
+      })
+      writeJson(res, 201, issued, options.corsOrigin)
+      return
+    }
+    if (sessionId && !action && req.method === 'DELETE') {
+      const token = await options.service.revokeApiToken(context.principal, sessionId)
+      if (!token) {
+        writeError(res, 404, 'API token was not found.', options.corsOrigin)
+        return
+      }
+      writeJson(res, 200, { token, revoked: true }, options.corsOrigin)
+      return
+    }
+    writeError(res, 404, 'Not found.', options.corsOrigin)
     return
   }
 

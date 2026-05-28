@@ -48,6 +48,15 @@
         "opencode-ai"
       ]
     },
+    "apps/website": {
+      "entry": [
+        "src/render.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/shared": {
       "entry": [
         "src/index.ts"
