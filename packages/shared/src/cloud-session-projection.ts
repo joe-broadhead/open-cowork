@@ -1,6 +1,7 @@
 import { cloudArtifactFilePath, type SessionArtifact } from './artifacts.js'
 import type {
   Message,
+  MessageAttachment,
   PendingApproval,
   PendingQuestion,
   SessionError,
@@ -16,12 +17,21 @@ export type CloudSessionMessage = {
   role: 'user' | 'assistant' | 'system'
   content: string
   createdAt: string
+  attachments?: MessageAttachment[]
 }
 
 export type CloudSessionProjectionStatus = 'idle' | 'running' | 'closed' | 'errored'
 
+export type CloudSessionProjectionOrigin = {
+  kind: 'local-session-import'
+  sourceFingerprint: string
+  importedAt: string
+  itemCounts: Record<string, number>
+}
+
 export const CLOUD_SESSION_EVENT_TYPES = [
   'session.created',
+  'session.imported',
   'prompt.submitted',
   'assistant.message',
   'tool.call',
@@ -61,6 +71,7 @@ export type CloudSessionProjectionView = {
   sessionTokens: SessionTokens
   lastInputTokens: number
   lastError: string | null
+  origin: CloudSessionProjectionOrigin | null
   updatedAt: string
 }
 
@@ -137,6 +148,7 @@ function toCloudSessionMessage(value: unknown): CloudSessionMessage | null {
     role,
     content: readString(record.content),
     createdAt: readString(record.createdAt, new Date().toISOString()),
+    ...(Array.isArray(record.attachments) ? { attachments: record.attachments as MessageAttachment[] } : {}),
   }
 }
 
@@ -332,6 +344,25 @@ function normalizeSessionArtifact(value: unknown, fallbackOrder = 0): SessionArt
   }
 }
 
+function normalizeOrigin(value: unknown): CloudSessionProjectionOrigin | null {
+  const record = asRecord(value)
+  if (record.kind !== 'local-session-import') return null
+  const sourceFingerprint = readString(record.sourceFingerprint)
+  const importedAt = readString(record.importedAt)
+  if (!sourceFingerprint || !importedAt) return null
+  const rawCounts = asRecord(record.itemCounts)
+  const itemCounts: Record<string, number> = {}
+  for (const [key, count] of Object.entries(rawCounts)) {
+    if (typeof count === 'number' && Number.isFinite(count)) itemCounts[key] = count
+  }
+  return {
+    kind: 'local-session-import',
+    sourceFingerprint,
+    importedAt,
+    itemCounts,
+  }
+}
+
 function upsertById<T extends { id: string }>(entries: T[], incoming: T): T[] {
   const index = entries.findIndex((entry) => entry.id === incoming.id)
   if (index === -1) return [...entries, incoming]
@@ -508,6 +539,7 @@ export function createCloudSessionProjectionView(session: CloudProjectionSession
     sessionTokens: { ...EMPTY_TOKENS },
     lastInputTokens: 0,
     lastError: null,
+    origin: null,
     updatedAt: session.updatedAt,
   }
 }
@@ -551,6 +583,7 @@ export function normalizeCloudSessionProjectionView(
     sessionTokens: normalizeSessionTokens(record.sessionTokens),
     lastInputTokens: readNumber(record.lastInputTokens),
     lastError: typeof record.lastError === 'string' ? record.lastError : null,
+    origin: normalizeOrigin(record.origin),
     updatedAt: readString(record.updatedAt, session.updatedAt),
   }
 }
@@ -572,6 +605,20 @@ export function reduceCloudSessionProjectionEvent(
         lastError: null,
         updatedAt: eventTime,
       }
+    case 'session.imported':
+      return {
+        ...current,
+        origin: normalizeOrigin({
+          kind: 'local-session-import',
+          sourceFingerprint: readString(payload.sourceFingerprint),
+          importedAt: readString(payload.importedAt, eventTime),
+          itemCounts: asRecord(payload.itemCounts),
+        }),
+        status: 'idle',
+        isGenerating: false,
+        lastError: null,
+        updatedAt: eventTime,
+      }
     case 'prompt.submitted':
       return addMessage({
         ...current,
@@ -584,6 +631,7 @@ export function reduceCloudSessionProjectionEvent(
         role: 'user',
         content: readString(payload.text),
         createdAt: eventTime,
+        ...(Array.isArray(payload.attachments) ? { attachments: payload.attachments as MessageAttachment[] } : {}),
       })
     case 'assistant.message':
       return addMessage({
@@ -597,6 +645,7 @@ export function reduceCloudSessionProjectionEvent(
         role: 'assistant',
         content: readString(payload.content),
         createdAt: eventTime,
+        ...(Array.isArray(payload.attachments) ? { attachments: payload.attachments as MessageAttachment[] } : {}),
       })
     case 'tool.call': {
       const toolCall = toolCallFromPayload(session, payload, event)
@@ -832,6 +881,7 @@ export function readCloudSessionProjection<Session extends CloudProjectionSessio
     sessionTokens: readSessionTokens(record.sessionTokens),
     lastInputTokens: typeof record.lastInputTokens === 'number' ? record.lastInputTokens : 0,
     lastError: typeof record.lastError === 'string' && record.lastError ? record.lastError : null,
+    origin: normalizeOrigin(record.origin),
     updatedAt: typeof record.updatedAt === 'string' && record.updatedAt ? record.updatedAt : view.session.updatedAt,
   }
 }
@@ -843,6 +893,7 @@ function toMessage(message: CloudSessionMessage, order: number): Message | null 
     role: message.role,
     content: message.content,
     timestamp: message.createdAt,
+    ...(message.attachments?.length ? { attachments: message.attachments } : {}),
     order,
   }
 }

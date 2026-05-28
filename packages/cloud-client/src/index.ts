@@ -8,6 +8,7 @@ import type {
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
+  SessionImportRequest,
   ThreadFacetSummary,
   ThreadListItem,
   ThreadSearchQuery,
@@ -29,6 +30,7 @@ export type {
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
+  SessionImportRequest,
   ThreadFacetSummary,
   ThreadListItem,
   ThreadSearchQuery,
@@ -403,6 +405,7 @@ export type CloudTransportAdapter = {
   getRuntimeStatus(): Promise<CloudRuntimeStatus>
   listSessions(): Promise<SessionRecord[]>
   createSession(input?: { profileName?: string | null }): Promise<CloudSessionView>
+  importSession(input: SessionImportRequest): Promise<CloudSessionView>
   getSession(sessionId: string): Promise<CloudSessionView>
   promptSession(sessionId: string, input: { text: string, agent?: string | null }): Promise<{
     command: SessionCommandRecord
@@ -946,6 +949,12 @@ export function createHttpSseCloudTransportAdapter(
     },
     createSession(input = {}) {
       return request<CloudSessionView>('/api/sessions', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    importSession(input) {
+      return request<CloudSessionView>('/api/import/sessions', {
         method: 'POST',
         body: input,
       })

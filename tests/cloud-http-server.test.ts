@@ -327,6 +327,140 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
   }
 })
 
+test('cloud HTTP server imports a redacted local session snapshot and audits the copy', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const importResponse = await fetch(`${baseUrl}/api/import/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          kind: 'local-session',
+          fingerprint: 'sha256:source-session-redacted',
+          title: 'Local import',
+        },
+        title: 'Local import',
+        selection: {
+          includeMessages: true,
+          includeArtifacts: true,
+          includeAttachments: false,
+          includeProjectSource: false,
+        },
+        itemCounts: {
+          messages: 2,
+          artifacts: 1,
+          attachments: 0,
+          projectSource: 0,
+          excluded: 3,
+        },
+        messages: [{
+          id: 'local-user-1',
+          role: 'user',
+          content: 'Summarize the redacted project.',
+          timestamp: '2026-05-28T10:00:00.000Z',
+          order: 1,
+        }, {
+          id: 'local-assistant-1',
+          role: 'assistant',
+          content: 'Summary complete.',
+          timestamp: '2026-05-28T10:00:01.000Z',
+          order: 2,
+        }],
+        artifacts: [{
+          id: 'local-artifact-1',
+          filename: 'summary.txt',
+          contentType: 'text/plain',
+          dataBase64: Buffer.from('artifact body').toString('base64'),
+          order: 3,
+        }],
+        warnings: [{
+          code: 'redacted-local-data',
+          message: 'Some local paths or secret-like text will be redacted before cloud import.',
+          severity: 'warning',
+        }],
+        excluded: [{
+          kind: 'secrets',
+          count: 1,
+          reason: 'Secrets stay local.',
+        }],
+      }),
+    })
+    assert.equal(importResponse.status, 201)
+    const imported = await readJson(importResponse)
+    const session = asRecord(imported.session)
+    const sessionId = String(session.sessionId)
+    assert.equal(fixture.runtime.createdSessions.length, 0, 'import should not create an OpenCode runtime session')
+    const projection = asRecord(asRecord(imported.projection).view)
+    assert.equal(asRecord(projection.origin).sourceFingerprint, 'sha256:source-session-redacted')
+    assert.equal(asArray(projection.messages).length, 2)
+    assert.equal(asRecord(asArray(projection.messages)[0]).content, 'Summarize the redacted project.')
+    assert.equal(asArray(projection.artifacts).length, 1)
+
+    const artifacts = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
+    assert.equal(asArray(artifacts.artifacts).length, 1)
+
+    const promptResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'continue in cloud' }),
+    })
+    assert.equal(promptResponse.status, 202)
+    assert.equal(fixture.runtime.createdSessions.length, 1)
+    const prompted = await readJson(promptResponse)
+    assert.equal(asArray(asRecord(asRecord(asRecord(prompted.view).projection).view).messages).length, 4)
+
+    const audit = await fixture.store.listAuditEvents('tenant-1')
+    const completed = audit.find((event) => event.eventType === 'session_import.completed')
+    assert.ok(completed)
+    assert.equal(completed.targetId, sessionId)
+    assert.equal(asRecord(completed.metadata).sourceFingerprint, 'sha256:source-session-redacted')
+    assert.equal(JSON.stringify(audit).includes('/Users/'), false)
+    assert.equal(JSON.stringify(audit).includes('sk-'), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP session import rejects local paths before projection or audit persistence', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/import/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: {
+          kind: 'local-session',
+          fingerprint: 'sha256:unsafe',
+          title: 'Unsafe import',
+        },
+        title: 'Unsafe import',
+        selection: { includeMessages: true },
+        itemCounts: {
+          messages: 1,
+          artifacts: 0,
+          attachments: 0,
+          projectSource: 0,
+          excluded: 0,
+        },
+        messages: [{
+          id: 'msg-1',
+          role: 'user',
+          content: 'Read /Users/alice/private-project/.env',
+          order: 1,
+        }],
+      }),
+    })
+    assert.equal(response.status, 400)
+    const body = await readJson(response)
+    assert.match(String(body.error), /local paths|secret-like/)
+    assert.equal((await fixture.store.listAuditEvents('tenant-1')).some((event) => event.eventType.startsWith('session_import.')), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server enforces prompt quotas before processing commands and exposes usage events', async () => {
   const fixture = createFixture({
     abuse: testAbuseConfig({

@@ -8,6 +8,8 @@ import { confirmSessionDelete } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
+import { ModalBackdrop } from '../layout/ModalBackdrop'
+import type { SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -25,6 +27,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const renameSession = useSessionStore((s) => s.renameSession)
   const removeSession = useSessionStore((s) => s.removeSession)
+  const setActiveWorkspace = useSessionStore((s) => s.setActiveWorkspace)
+  const setSessions = useSessionStore((s) => s.setSessions)
+  const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
+  const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const busySessions = useSessionStore((s) => s.busySessions)
   const awaitingQuestionSessions = useSessionStore((s) => s.awaitingQuestionSessions)
   const activeWorkspaceIsLocal = normalizeWorkspaceId(activeWorkspaceId) === LOCAL_WORKSPACE_ID
@@ -34,6 +40,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [diffSessionId, setDiffSessionId] = useState<string | null>(null)
+  const [copyDialog, setCopyDialog] = useState<{
+    sessionId: string
+    inventory: SessionImportInventory
+    cloudWorkspaces: WorkspaceInfo[]
+    targetWorkspaceId: string
+    selection: SessionImportSelection
+    busy: boolean
+  } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -133,6 +147,66 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     const ok = await window.coworkApi.session.delete(id, confirmation.token)
     if (ok) removeSession(id)
     setMenuId(null)
+  }
+
+  const openCopyToCloud = async (id: string) => {
+    if (!activeWorkspaceIsLocal) return
+    setMenuId(null)
+    try {
+      const [inventory, workspaces] = await Promise.all([
+        window.coworkApi.session.importInventory(id),
+        window.coworkApi.workspace.list(),
+      ])
+      const cloudWorkspaces = workspaces.filter((workspace) => workspace.kind === 'cloud' && workspace.status === 'online')
+      if (cloudWorkspaces.length === 0) {
+        addGlobalError(t('thread.copyToCloudNoWorkspace', 'Sign in to a cloud workspace before copying a local thread.'))
+        return
+      }
+      setCopyDialog({
+        sessionId: id,
+        inventory,
+        cloudWorkspaces,
+        targetWorkspaceId: cloudWorkspaces[0]?.id || '',
+        selection: { ...inventory.defaults },
+        busy: false,
+      })
+    } catch (error) {
+      addGlobalError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const updateCopySelection = (patch: Partial<SessionImportSelection>) => {
+    setCopyDialog((current) => current
+      ? {
+          ...current,
+          selection: {
+            ...current.selection,
+            ...patch,
+          },
+        }
+      : current)
+  }
+
+  const confirmCopyToCloud = async () => {
+    if (!copyDialog || !copyDialog.targetWorkspaceId || copyDialog.busy) return
+    setCopyDialog({ ...copyDialog, busy: true })
+    try {
+      const result = await window.coworkApi.session.copyToCloud(copyDialog.sessionId, {
+        targetWorkspaceId: copyDialog.targetWorkspaceId,
+        selection: copyDialog.selection,
+      })
+      const activated = await window.coworkApi.workspace.activate(result.workspaceId)
+      setActiveWorkspace(activated.id)
+      const cloudSessions = await window.coworkApi.session.list({ workspaceId: activated.id })
+      setSessions(cloudSessions)
+      setCurrentSession(result.sessionId)
+      setCopyDialog(null)
+      onSelect?.()
+      await loadSessionMessages(result.sessionId)
+    } catch (error) {
+      setCopyDialog((current) => current ? { ...current, busy: false } : current)
+      addGlobalError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const openMenuAt = (xInput: number, yInput: number, sessionId: string) => {
@@ -398,6 +472,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
             className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
             {t('thread.shareLink', 'Share Link')}
           </button>
+          <button type="button" onClick={() => {
+            void openCopyToCloud(menuId)
+          }}
+            role="menuitem"
+            className="w-full text-start px-3 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text cursor-pointer transition-colors">
+            {t('thread.copyToCloud', 'Copy to Cloud...')}
+          </button>
           {interactiveSessions.find(s => s.id === menuId)?.directory && (
             <button type="button" onClick={() => { setDiffSessionId(menuId); setMenuId(null) }}
               role="menuitem"
@@ -426,6 +507,128 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
         >
           <DiffViewer sessionId={diffSessionId} onClose={() => setDiffSessionId(null)} />
         </ViewErrorBoundary>
+      )}
+      {copyDialog && (
+        <>
+          <ModalBackdrop onDismiss={() => { if (!copyDialog.busy) setCopyDialog(null) }} className="fixed inset-0 z-40 bg-black/45" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('thread.copyToCloudDialog', 'Copy thread to cloud')}
+            className="fixed top-[12%] left-1/2 z-50 w-[520px] max-w-[calc(100vw-32px)] -translate-x-1/2 overflow-hidden rounded-lg theme-popover shadow-2xl"
+          >
+            <div className="border-b border-border-subtle px-4 py-3">
+              <div className="text-[14px] font-semibold text-text">{t('thread.copyToCloud', 'Copy to Cloud...')}</div>
+              <div className="mt-1 text-[12px] text-text-muted">
+                {t('thread.copyToCloudSubtitle', 'Creates a new cloud thread. The local thread stays unchanged.')}
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
+              <label className="block text-[11px] font-medium text-text-muted">
+                {t('thread.copyToCloudTarget', 'Cloud workspace')}
+                <select
+                  value={copyDialog.targetWorkspaceId}
+                  disabled={copyDialog.busy}
+                  onChange={(event) => setCopyDialog({ ...copyDialog, targetWorkspaceId: event.target.value })}
+                  className="mt-1 w-full rounded-md border border-border-subtle bg-elevated px-2 py-2 text-[12px] text-text outline-none focus:border-border"
+                >
+                  {copyDialog.cloudWorkspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>{workspace.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+                <div className="rounded-md border border-border-subtle px-3 py-2">
+                  <div className="text-text-muted">{t('thread.copyMessages', 'Messages')}</div>
+                  <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.messages}</div>
+                </div>
+                <div className="rounded-md border border-border-subtle px-3 py-2">
+                  <div className="text-text-muted">{t('thread.copyArtifacts', 'Artifacts')}</div>
+                  <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.artifacts}</div>
+                </div>
+                <div className="rounded-md border border-border-subtle px-3 py-2">
+                  <div className="text-text-muted">{t('thread.copyAttachments', 'Attachments')}</div>
+                  <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.attachments}</div>
+                </div>
+                <div className="rounded-md border border-border-subtle px-3 py-2">
+                  <div className="text-text-muted">{t('thread.copyExcluded', 'Excluded')}</div>
+                  <div className="mt-0.5 font-medium text-text">{copyDialog.inventory.counts.excluded}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={copyDialog.selection.includeMessages !== false}
+                    disabled={copyDialog.busy}
+                    onChange={(event) => updateCopySelection({ includeMessages: event.target.checked })}
+                    className="mt-0.5"
+                  />
+                  <span>{t('thread.copyMessagesCheckbox', 'Copy redacted user and assistant message history')}</span>
+                </label>
+                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={copyDialog.selection.includeAttachments === true}
+                    disabled={copyDialog.busy || copyDialog.inventory.counts.attachments === 0}
+                    onChange={(event) => updateCopySelection({ includeAttachments: event.target.checked })}
+                    className="mt-0.5"
+                  />
+                  <span>{t('thread.copyAttachmentsCheckbox', 'Copy data attachments already present in the thread')}</span>
+                </label>
+                <label className="flex items-start gap-2 text-[12px] text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={copyDialog.selection.includeArtifacts === true}
+                    disabled={copyDialog.busy || copyDialog.inventory.counts.artifacts === 0}
+                    onChange={(event) => updateCopySelection({ includeArtifacts: event.target.checked })}
+                    className="mt-0.5"
+                  />
+                  <span>{t('thread.copyArtifactsCheckbox', 'Upload selected Cowork artifacts to cloud object storage')}</span>
+                </label>
+                <label className="flex items-start gap-2 text-[12px] text-text-muted">
+                  <input type="checkbox" checked={false} disabled className="mt-0.5" />
+                  <span>{t('thread.copyProjectSourceDisabled', 'Local project source and host paths are excluded in v1')}</span>
+                </label>
+              </div>
+
+              {(copyDialog.inventory.warnings.length > 0 || copyDialog.inventory.excluded.length > 0) && (
+                <div className="mt-4 rounded-md border border-border-subtle px-3 py-2">
+                  {copyDialog.inventory.warnings.map((warning) => (
+                    <div key={warning.code} className="text-[11px] text-text-secondary">{warning.message}</div>
+                  ))}
+                  {copyDialog.inventory.excluded.map((item) => (
+                    <div key={item.kind} className="mt-1 text-[11px] text-text-muted">{item.reason}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border-subtle px-4 py-3">
+              <button
+                type="button"
+                disabled={copyDialog.busy}
+                onClick={() => setCopyDialog(null)}
+                className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover disabled:opacity-60"
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={copyDialog.busy || !copyDialog.targetWorkspaceId}
+                onClick={() => void confirmCopyToCloud()}
+                className="rounded-md px-3 py-2 text-[12px] font-medium disabled:cursor-wait disabled:opacity-60"
+                style={{
+                  background: 'var(--color-accent)',
+                  color: 'var(--color-accent-foreground)',
+                }}
+              >
+                {copyDialog.busy ? t('thread.copyingToCloud', 'Copying...') : t('thread.copyToCloudConfirm', 'Copy to Cloud')}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

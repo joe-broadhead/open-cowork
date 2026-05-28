@@ -9,6 +9,8 @@ import type {
   CustomSkillConfig,
   SessionArtifact,
   SessionArtifactAttachment,
+  SessionImportRequest,
+  SessionImportResult,
   SessionArtifactUploadRequest,
   SessionInfo,
   SessionView,
@@ -519,6 +521,27 @@ export class WorkspaceGateway {
 
   async createCloudSession(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<SessionInfo> {
     return (await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))).createSession()
+  }
+
+  async importLocalSessionToCloud(
+    event: WorkspaceEventLike,
+    input: SessionImportRequest,
+    workspaceIdInput: string,
+  ): Promise<SessionImportResult & { view: SessionView }> {
+    const workspace = this.resolveWorkspace(event, workspaceIdInput)
+    const adapter = await this.requireCloudAdapter(workspace)
+    const imported = await adapter.importSession(input)
+    const syncedAt = new Date().toISOString()
+    this.syncedAtByWorkspace.set(workspace.id, syncedAt)
+    this.cloudRegistry?.touchSync(workspace.id, syncedAt)
+    return {
+      workspaceId: workspace.id,
+      sessionId: imported.session.id,
+      title: imported.session.title || input.title,
+      importedAt: imported.session.createdAt,
+      itemCounts: input.itemCounts,
+      view: imported.view,
+    }
   }
 
   async getCloudSessionInfo(event: WorkspaceEventLike, sessionId: string, workspaceIdInput?: string | null): Promise<SessionInfo | null> {
