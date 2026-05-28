@@ -28,6 +28,11 @@ export interface ChannelCapabilities {
   typingIndicator: boolean;
   maxTextLength: number;
   preferredParseMode: "plain" | "markdown" | "html";
+  parseModes?: Array<"plain" | "markdown" | "html">;
+  maxButtonsPerMessage?: number;
+  maxButtonRowsPerMessage?: number;
+  maxButtonTokenBytes?: number;
+  supportsEphemeralResponses?: boolean;
 }
 
 export interface ChannelTarget {

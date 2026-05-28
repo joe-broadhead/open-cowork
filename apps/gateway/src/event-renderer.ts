@@ -14,6 +14,10 @@ import type {
 } from '@open-cowork/cloud-client'
 
 import type { CloudGateway } from './cloud-gateway.js'
+import {
+  executeRenderOperation,
+  normalizeChannelCapabilities,
+} from './render/operations.js'
 
 export type RenderGatewaySessionEventInput = {
   cloud: CloudGateway
@@ -73,13 +77,25 @@ async function sendPermissionRequest(input: RenderGatewaySessionEventInput): Pro
     || stringField(input.event.payload, 'summary')
     || stringField(input.event.payload, 'tool')
   const text = description ? `${title}\n${description}` : title
+  const target = targetForBinding(input.binding, input.provider.id)
+  const capabilities = normalizeChannelCapabilities(input.provider.capabilities)
+  if (!capabilities.inlineButtons) {
+    const sent = await sendTextChunks(input.provider, target, `${text}\n/approve ${issued.plaintextToken}`)
+    return { handled: true, lastChatMessageId: sent?.messageId ?? null }
+  }
+
   const buttons: ChannelButton[][] = [[{
     label: 'Approve',
     token: issued.plaintextToken,
     style: 'success',
   }]]
-  const sent = await input.provider.sendButtons(targetForBinding(input.binding, input.provider.id), text, buttons)
-  return { handled: true, lastChatMessageId: sent.messageId }
+  const result = await executeRenderOperation(input.provider, {
+    type: 'send_buttons',
+    target,
+    text,
+    buttons,
+  })
+  return { handled: true, lastChatMessageId: result.sentMessage?.messageId ?? null }
 }
 
 async function sendQuestion(
@@ -99,7 +115,12 @@ async function sendTextChunks(
 ): Promise<SentMessage | null> {
   let sent: SentMessage | null = null
   for (const chunk of chunkText(text, provider.capabilities.maxTextLength)) {
-    sent = await provider.sendText(target, chunk)
+    const result = await executeRenderOperation(provider, {
+      type: 'send_text',
+      target,
+      text: chunk,
+    })
+    sent = result.sentMessage ?? null
   }
   return sent
 }

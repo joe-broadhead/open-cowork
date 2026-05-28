@@ -32,6 +32,15 @@ export {
   renderGatewaySessionEvent,
 } from './event-renderer.js'
 export {
+  executeRenderOperation,
+  getGatewayRenderProfile,
+  normalizeChannelCapabilities,
+  type GatewayRenderOperation,
+  type GatewayRenderOperationResult,
+  type GatewayRenderProfile,
+  type NormalizedChannelCapabilities,
+} from './render/operations.js'
+export {
   routeGatewayInteraction,
 } from './interaction-router.js'
 export {

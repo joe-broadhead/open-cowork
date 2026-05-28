@@ -1,6 +1,12 @@
 import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
-import { FakeChannelProvider } from "@open-cowork/gateway-testing";
+import {
+  createButtonCapableFakeProvider,
+  createButtonlessFakeProvider,
+  createConstrainedMessageFakeProvider,
+  createFileCapableFakeProvider,
+  FakeChannelProvider
+} from "@open-cowork/gateway-testing";
 
 describe("FakeChannelProvider", () => {
   it("records sent text, files, and buttons for gateway e2e tests", async () => {
@@ -30,6 +36,31 @@ describe("FakeChannelProvider", () => {
       file: { filename: "result.txt" }
     });
     expect(provider.answered).toEqual([{ interactionId: "callback-1", text: "Approved", alert: undefined }]);
+  });
+
+  it("provides realistic fake provider capability presets", async () => {
+    const buttonCapable = createButtonCapableFakeProvider();
+    expect(buttonCapable.capabilities.inlineButtons).toBe(true);
+    expect(buttonCapable.capabilities.messageEditing).toBe(true);
+    await buttonCapable.setTyping({ provider: "cli", chatId: "chat-1" });
+    expect(buttonCapable.typing).toHaveLength(1);
+
+    const buttonless = createButtonlessFakeProvider();
+    expect(buttonless.capabilities.inlineButtons).toBe(false);
+    await expect(
+      buttonless.sendButtons({ provider: "cli", chatId: "chat-1" }, "approve?", [[{ label: "Approve", token: "token" }]]),
+    ).rejects.toThrow("does not support inline buttons");
+
+    const fileCapable = createFileCapableFakeProvider();
+    await expect(
+      fileCapable.sendFile({ provider: "cli", chatId: "chat-1" }, { filename: "artifact.txt", data: new Uint8Array() }),
+    ).resolves.toMatchObject({ messageId: "1" });
+
+    const constrained = createConstrainedMessageFakeProvider();
+    expect(constrained.capabilities.maxTextLength).toBe(128);
+    await expect(constrained.sendText({ provider: "cli", chatId: "chat-1" }, "x".repeat(129))).rejects.toThrow(
+      "maxTextLength 128",
+    );
   });
 
   it("dispatches emitted messages only while started", async () => {
