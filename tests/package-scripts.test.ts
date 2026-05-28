@@ -30,6 +30,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/website test',
     'node scripts/run-node-tests.mjs',
   ])
 
@@ -55,11 +56,13 @@ test('root lint script runs all release gate checks', () => {
 test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:packages'), 'pnpm --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
+  assert.equal(requireScript('build:website'), 'pnpm --filter @open-cowork/website build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm build:packages',
     'pnpm build:mcps',
     'pnpm build:gateway',
+    'pnpm build:website',
     'pnpm --filter @open-cowork/desktop build',
   ])
 
@@ -74,12 +77,14 @@ test('root typecheck script covers shared, MCP, and desktop packages', () => {
     'pnpm build:packages',
     'pnpm typecheck:mcps',
     'pnpm typecheck:gateway',
+    'pnpm typecheck:website',
     'pnpm --filter @open-cowork/desktop build:electron',
     'pnpm --filter @open-cowork/desktop typecheck',
   ])
 
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
   assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
+  assert.equal(requireScript('typecheck:website'), 'pnpm --filter @open-cowork/website typecheck')
 })
 
 test('packaged e2e script fails before smoke discovery without a packaged executable', () => {

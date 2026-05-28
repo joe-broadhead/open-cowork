@@ -27,6 +27,7 @@ import {
 } from '../capability-catalog.ts'
 import { ControlPlaneQuotaExceededError } from './control-plane-store.ts'
 import type {
+  ApiTokenRecord,
   ApiTokenScope,
   BillingSubscriptionRecord,
   ChannelBindingRecord,
@@ -92,6 +93,34 @@ export type CloudPrincipal = {
   authSource?: 'user' | 'api_token' | 'local' | 'header'
   tokenId?: string
   tokenScopes?: ApiTokenScope[]
+}
+
+export type CloudWorkspaceOverview = {
+  tenantId: string
+  tenantName: string | null
+  orgId: string
+  orgName: string
+  userId: string
+  accountId: string
+  email: string
+  role: 'owner' | 'admin' | 'member'
+  profileName: string
+  policy: {
+    features: Record<string, boolean>
+    allowedAgents: string[] | null
+    allowedTools: string[] | null
+    allowedMcps: string[] | null
+    localFiles: 'disabled'
+    localStdioMcps: 'disabled'
+    machineRuntimeConfig: 'disabled'
+  }
+}
+
+export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'>
+
+export type IssuedPublicApiTokenRecord = {
+  token: PublicApiTokenRecord
+  plaintext: string
 }
 
 export type ByokEntitlementVerdict = {
@@ -322,6 +351,27 @@ function principalCanManageBilling(principal: CloudPrincipal) {
   if (principal.authSource === 'local' || principal.authSource === 'header') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanManageApiTokens(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function publicApiToken(token: ApiTokenRecord): PublicApiTokenRecord {
+  const { tokenHash: _tokenHash, ...publicToken } = token
+  return publicToken
+}
+
+function normalizeApiTokenScopes(scopes: ApiTokenScope[] | undefined | null): ApiTokenScope[] {
+  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'worker-internal'])
+  if ((scopes || []).some((scope) => !allowed.has(scope))) {
+    throw new CloudServiceError(400, 'API token includes an unsupported scope.')
+  }
+  const normalized = [...new Set(scopes || [])]
+  if (normalized.length === 0) throw new CloudServiceError(400, 'API token requires at least one valid scope.')
+  return normalized
 }
 
 function normalizeByokProviderIdForPolicy(value: string) {
@@ -1201,6 +1251,36 @@ export class CloudSessionService {
       })
     } else if (membership.membership.status !== 'active') {
       throw new Error('Cloud membership is not active.')
+    }
+  }
+
+  async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {
+    await this.ensurePrincipal(principal)
+    const membership = await this.store.resolvePrincipalMembership({
+      tenantId: principal.tenantId,
+      accountId: principal.accountId || principal.userId,
+      email: principal.email,
+    })
+    if (!membership) throw new CloudServiceError(403, 'Cloud membership is not active.')
+    return {
+      tenantId: principal.tenantId,
+      tenantName: principal.tenantName || null,
+      orgId: membership.org.orgId,
+      orgName: membership.org.name,
+      userId: principal.userId,
+      accountId: membership.account.accountId,
+      email: membership.account.email,
+      role: membership.membership.role,
+      profileName: this.policy.profileName,
+      policy: {
+        features: this.policy.features,
+        allowedAgents: this.policy.allowedAgents,
+        allowedTools: this.policy.allowedTools,
+        allowedMcps: this.policy.allowedMcps,
+        localFiles: 'disabled',
+        localStdioMcps: 'disabled',
+        machineRuntimeConfig: 'disabled',
+      },
     }
   }
 
@@ -2259,6 +2339,56 @@ export class CloudSessionService {
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
   }
 
+  async listApiTokens(principal: CloudPrincipal): Promise<PublicApiTokenRecord[]> {
+    await this.ensurePrincipal(principal)
+    this.assertApiTokenAdmin(principal)
+    const tokens = await this.store.listApiTokens(this.principalOrgId(principal))
+    return tokens.map(publicApiToken)
+  }
+
+  async issueApiToken(
+    principal: CloudPrincipal,
+    input: {
+      name: string
+      scopes: ApiTokenScope[]
+      expiresAt?: Date | null
+    },
+  ): Promise<IssuedPublicApiTokenRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertApiTokenAdmin(principal)
+    const issued = await this.store.issueApiToken({
+      orgId: this.principalOrgId(principal),
+      accountId: principal.accountId || principal.userId,
+      name: input.name,
+      scopes: normalizeApiTokenScopes(input.scopes),
+      expiresAt: input.expiresAt || null,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
+    return {
+      token: publicApiToken(issued.token),
+      plaintext: issued.plaintext,
+    }
+  }
+
+  async revokeApiToken(principal: CloudPrincipal, tokenId: string): Promise<PublicApiTokenRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertApiTokenAdmin(principal)
+    const revoked = await this.store.revokeApiToken({
+      tokenId,
+      orgId: this.principalOrgId(principal),
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
+    return revoked ? publicApiToken(revoked) : null
+  }
+
   async getBillingSubscription(principal: CloudPrincipal) {
     await this.ensurePrincipal(principal)
     const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
@@ -3199,6 +3329,12 @@ export class CloudSessionService {
   private assertBillingAdmin(principal: CloudPrincipal) {
     if (!principalCanManageBilling(principal)) {
       throw new CloudServiceError(403, 'Billing administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private assertApiTokenAdmin(principal: CloudPrincipal) {
+    if (!principalCanManageApiTokens(principal)) {
+      throw new CloudServiceError(403, 'API token administration requires an org admin or admin-scoped API token.')
     }
   }
 

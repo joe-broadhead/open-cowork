@@ -55,6 +55,32 @@ The typed `createHttpSseCloudTransportAdapter` wraps that HTTP/SSE contract for
 browser clients that need a `window.coworkApi`-style transport without Electron
 IPC.
 
+## Browser Dashboard
+
+The cloud web role serves a browser dashboard at `/`. The dashboard is an API
+client for the same cloud control plane used by desktop sync and gateway
+clients; it does not access Postgres or secret storage directly.
+
+Authenticated users land on an org-scoped dashboard backed by
+`GET /api/workspace`. That request also performs the configured first-login org
+bootstrap path. The dashboard exposes:
+
+- BYOK provider status and key submission through metadata-only BYOK APIs,
+- one-time API token issuance and revocation for desktop and gateway clients,
+- headless gateway agent/channel setup through channel binding APIs,
+- billing subscription, checkout, and portal actions when billing is enabled,
+- recent usage events for quota and metering visibility.
+
+Role and policy decisions are enforced by the cloud APIs. The dashboard mirrors
+those decisions by disabling admin-only actions for member users, but disabled
+controls are only an ergonomic layer, not the authorization boundary. Token
+plaintext is shown only in the create response, and raw provider keys are never
+returned by read APIs.
+
+Self-hosted deployments can run with the stub/no billing adapter. In that mode
+the dashboard keeps the billing panel non-blocking while BYOK, desktop token,
+gateway token, and usage surfaces remain available.
+
 For Kubernetes, use the provider-neutral Helm chart as the scalable starting
 point:
 

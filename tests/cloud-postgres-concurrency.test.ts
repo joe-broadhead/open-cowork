@@ -126,7 +126,9 @@ test('real Postgres cloud store persists org identity, API tokens, and audit eve
       secret: 'pg-secret',
     })
     assert.equal((await store.findApiTokenByPlaintext(issued.plaintext))?.tokenId, issued.token.tokenId)
-    await store.revokeApiToken({ tokenId: issued.token.tokenId })
+    assert.equal((await store.listApiTokens(org.orgId))[0]?.tokenId, issued.token.tokenId)
+    assert.equal(await store.revokeApiToken({ tokenId: issued.token.tokenId, orgId: 'other-org' }), null)
+    await store.revokeApiToken({ tokenId: issued.token.tokenId, orgId: org.orgId })
     assert.equal(await store.findApiTokenByPlaintext(issued.plaintext), null)
     assert.equal((await store.listAuditEvents(org.orgId)).some((event) => event.eventType === 'api_token.created'), true)
   })

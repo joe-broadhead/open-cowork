@@ -256,8 +256,9 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.match(htmlResponse.headers.get('content-type') || '', /text\/html/)
     const html = await htmlResponse.text()
     assert.match(html, /Open Cowork Cloud/)
-    assert.match(html, /\/api\/sessions/)
-    assert.match(html, /\/api\/runtime\/status/)
+    assert.match(html, /\/api\/workspace/)
+    assert.match(html, /\/api\/byok/)
+    assert.match(html, /\/api\/api-tokens/)
 
     const config = await readJson(await fetch(`${baseUrl}/api/config`))
     assert.equal(config.profileName, 'full')
@@ -271,6 +272,7 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const workspace = await readJson(await fetch(`${baseUrl}/api/workspace`))
     assert.equal(workspace.tenantId, 'tenant-1')
     assert.equal(workspace.userId, 'user-1')
+    assert.equal(workspace.orgId, 'tenant-1')
     assert.equal(asRecord(workspace.policy).localFiles, 'disabled')
 
     const createdResponse = await fetch(`${baseUrl}/api/sessions`, {
@@ -900,6 +902,110 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
     assert.equal(rejected.status, 401)
   } finally {
     await server.close()
+  }
+})
+
+test('cloud HTTP server auto-provisions workspace and exposes one-time API token issuance', async () => {
+  const ownerPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  let fixture: ReturnType<typeof createFixture>
+  fixture = createFixture({
+    auth: (req) => {
+      const authorization = Array.isArray(req.headers.authorization)
+        ? req.headers.authorization[0] || ''
+        : req.headers.authorization || ''
+      return authorization.startsWith('Bearer ')
+        ? createApiTokenCloudAuthResolver(fixture.store)(req)
+        : ownerPrincipal
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const workspace = await readJson(await fetch(`${baseUrl}/api/workspace`))
+    assert.equal(workspace.orgId, 'tenant-1')
+    assert.equal(workspace.accountId, 'owner-1')
+    assert.equal(workspace.role, 'owner')
+    assert.equal(fixture.store.resolvePrincipalMembership({
+      tenantId: 'tenant-1',
+      accountId: 'owner-1',
+    })?.membership.status, 'active')
+
+    const invalidScope = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Bad token', scopes: ['desktop', 'unknown'] }),
+    })
+    assert.equal(invalidScope.status, 400)
+
+    const issuedResponse = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Desktop token', scopes: ['desktop'] }),
+    })
+    assert.equal(issuedResponse.status, 201)
+    const issued = await readJson(issuedResponse)
+    assert.match(String(issued.plaintext), /^occ_/)
+    assert.equal('tokenHash' in asRecord(issued.token), false)
+
+    const listed = await readJson(await fetch(`${baseUrl}/api/api-tokens`))
+    const token = asRecord(asArray(listed.tokens)[0])
+    assert.equal(token.name, 'Desktop token')
+    assert.equal('plaintext' in token, false)
+    assert.equal('tokenHash' in token, false)
+
+    const bearerWorkspace = await readJson(await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${String(issued.plaintext)}` },
+    }))
+    assert.equal(bearerWorkspace.orgId, 'tenant-1')
+
+    const revoke = await fetch(`${baseUrl}/api/api-tokens/${encodeURIComponent(String(token.tokenId))}`, {
+      method: 'DELETE',
+    })
+    assert.equal(revoke.status, 200)
+    const revoked = await readJson(revoke)
+    assert.equal(asRecord(revoked.token).revokedAt !== null, true)
+
+    const rejected = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${String(issued.plaintext)}` },
+    })
+    assert.equal(rejected.status, 401)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server prevents member-only users from API token administration', async () => {
+  const fixture = createFixture({
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'member-1',
+      accountId: 'member-1',
+      email: 'member@example.test',
+      role: 'member',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await readJson(await fetch(`${baseUrl}/api/workspace`))
+    const response = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Blocked token', scopes: ['desktop'] }),
+    })
+    assert.equal(response.status, 403)
+  } finally {
+    await fixture.server.close()
   }
 })
 

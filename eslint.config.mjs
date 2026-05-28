@@ -25,6 +25,7 @@ const nodeTsFiles = [
   'apps/desktop/src/main/**/*.ts',
   'apps/desktop/src/preload/**/*.ts',
   'apps/desktop/src/lib/**/*.ts',
+  'apps/website/src/**/*.ts',
   'packages/**/*.ts',
   'mcps/**/*.ts',
   'scripts/**/*.ts',

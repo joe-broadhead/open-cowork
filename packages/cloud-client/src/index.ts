@@ -249,6 +249,83 @@ export type CloudUsageEventRecord = {
   createdAt: string
 }
 
+export type CloudWorkspaceOverview = {
+  tenantId: string
+  tenantName: string | null
+  orgId: string
+  orgName: string
+  userId: string
+  accountId: string
+  email: string
+  role: 'owner' | 'admin' | 'member'
+  profileName: string
+  policy: {
+    features: Record<string, boolean>
+    allowedAgents: string[] | null
+    allowedTools: string[] | null
+    allowedMcps: string[] | null
+    localFiles: 'disabled'
+    localStdioMcps: 'disabled'
+    machineRuntimeConfig: 'disabled'
+  }
+}
+
+export type CloudApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'worker-internal'
+
+export type CloudApiTokenRecord = {
+  tokenId: string
+  orgId: string
+  accountId: string | null
+  name: string
+  scopes: CloudApiTokenScope[]
+  last4: string
+  expiresAt: string | null
+  revokedAt: string | null
+  lastUsedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type CloudIssuedApiTokenRecord = {
+  token: CloudApiTokenRecord
+  plaintext: string
+}
+
+export type CloudBillingSubscriptionRecord = {
+  orgId: string
+  providerId: string
+  providerCustomerId: string | null
+  providerSubscriptionId: string | null
+  planKey: string
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete'
+  seats: number
+  entitlements: Record<string, unknown>
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export type CloudBillingSubscriptionPayload = {
+  enabled: boolean
+  providerId: string
+  subscription: CloudBillingSubscriptionRecord | null
+  entitlements: Record<string, unknown>
+  active: boolean
+}
+
+export type CloudBillingCheckoutResult = {
+  providerId: string
+  providerSessionId: string | null
+  url: string
+}
+
+export type CloudBillingPortalResult = {
+  providerId: string
+  url: string
+}
+
 export type CloudTransportConfig = {
   role: string
   profileName: string
@@ -328,6 +405,7 @@ export type CloudTransportSettingMetadata = {
 
 export type CloudTransportAdapter = {
   getConfig(): Promise<CloudTransportConfig>
+  getWorkspace(): Promise<CloudWorkspaceOverview>
   getRuntimeStatus(): Promise<CloudRuntimeStatus>
   listSessions(): Promise<SessionRecord[]>
   createSession(input?: { profileName?: string | null }): Promise<CloudSessionView>
@@ -385,6 +463,20 @@ export type CloudTransportAdapter = {
   validateByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   listUsageEvents?(limit?: number): Promise<CloudUsageEventRecord[]>
+  listApiTokens?(): Promise<CloudApiTokenRecord[]>
+  issueApiToken?(input: {
+    name: string
+    scopes: CloudApiTokenScope[]
+    expiresAt?: string | null
+  }): Promise<CloudIssuedApiTokenRecord>
+  revokeApiToken?(tokenId: string): Promise<CloudApiTokenRecord | null>
+  getBillingSubscription?(): Promise<CloudBillingSubscriptionPayload>
+  createBillingCheckout?(input?: {
+    planKey?: string | null
+    successUrl?: string | null
+    cancelUrl?: string | null
+  }): Promise<CloudBillingCheckoutResult>
+  createBillingPortal?(input?: { returnUrl?: string | null }): Promise<CloudBillingPortalResult>
   listHeadlessAgents?(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent?(input: {
     name: string
@@ -870,6 +962,9 @@ export function createHttpSseCloudTransportAdapter(
     getConfig() {
       return request<CloudTransportConfig>('/api/config')
     },
+    getWorkspace() {
+      return request<CloudWorkspaceOverview>('/api/workspace')
+    },
     getRuntimeStatus() {
       return request<CloudRuntimeStatus>('/api/runtime/status')
     },
@@ -1125,6 +1220,35 @@ export function createHttpSseCloudTransportAdapter(
     },
     async listUsageEvents(limit) {
       return (await request<{ events: CloudUsageEventRecord[] }>(`/api/usage/events${queryString({ limit })}`)).events
+    },
+    async listApiTokens() {
+      return (await request<{ tokens: CloudApiTokenRecord[] }>('/api/api-tokens')).tokens
+    },
+    issueApiToken(input) {
+      return request<CloudIssuedApiTokenRecord>('/api/api-tokens', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    async revokeApiToken(tokenId) {
+      return (await request<{ token: CloudApiTokenRecord | null }>(`/api/api-tokens/${encodePath(tokenId)}`, {
+        method: 'DELETE',
+      })).token
+    },
+    getBillingSubscription() {
+      return request<CloudBillingSubscriptionPayload>('/api/billing/subscription')
+    },
+    createBillingCheckout(input = {}) {
+      return request<CloudBillingCheckoutResult>('/api/billing/checkout', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    createBillingPortal(input = {}) {
+      return request<CloudBillingPortalResult>('/api/billing/portal', {
+        method: 'POST',
+        body: input,
+      })
     },
     async listHeadlessAgents() {
       return (await request<{ agents: HeadlessAgentRecord[] }>('/api/channels/agents')).agents
