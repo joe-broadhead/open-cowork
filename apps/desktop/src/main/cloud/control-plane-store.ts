@@ -25,6 +25,7 @@ export type ChannelSessionBindingStatus = 'active' | 'archived'
 export type ChannelInteractionKind = 'permission' | 'question'
 export type ChannelInteractionStatus = 'pending' | 'used' | 'expired' | 'revoked'
 export type ChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
+export type ByokSecretStatus = 'active' | 'disabled' | 'expired' | 'invalid'
 
 export type TenantRecord = {
   tenantId: string
@@ -105,6 +106,23 @@ export type AuditEventRecord = {
   targetId: string | null
   metadata: Record<string, unknown>
   createdAt: string
+}
+
+export type ByokSecretRecord = {
+  secretId: string
+  orgId: string
+  providerId: string
+  status: ByokSecretStatus
+  ciphertext: string | null
+  kmsRef: string | null
+  last4: string
+  keyFingerprint: string
+  createdByAccountId: string | null
+  rotatedFromSecretId: string | null
+  lastValidatedAt: string | null
+  validationError: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type HeadlessAgentRecord = {
@@ -425,6 +443,39 @@ export type RecordAuditEventInput = {
   createdAt?: Date
 }
 
+export type CreateByokSecretInput = {
+  secretId: string
+  orgId: string
+  providerId: string
+  status?: ByokSecretStatus
+  ciphertext?: string | null
+  kmsRef?: string | null
+  last4: string
+  keyFingerprint: string
+  createdByAccountId?: string | null
+  rotatedFromSecretId?: string | null
+  createdAt?: Date
+  actor?: AuditActorInput
+}
+
+export type DisableByokSecretInput = {
+  orgId: string
+  providerId: string
+  secretId?: string | null
+  disabledAt?: Date
+  actor?: AuditActorInput
+}
+
+export type RecordByokSecretValidationInput = {
+  orgId: string
+  providerId: string
+  secretId?: string | null
+  status?: ByokSecretStatus
+  validationError?: string | null
+  validatedAt?: Date
+  actor?: AuditActorInput
+}
+
 export type CreateHeadlessAgentInput = {
   agentId: string
   orgId: string
@@ -739,6 +790,12 @@ export type ControlPlaneStore = {
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
+  createByokSecret(input: CreateByokSecretInput): MaybePromise<ByokSecretRecord>
+  getByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
+  getActiveByokSecret(orgId: string, providerId: string): MaybePromise<ByokSecretRecord | null>
+  listByokSecrets(orgId: string): MaybePromise<ByokSecretRecord[]>
+  disableByokSecret(input: DisableByokSecretInput): MaybePromise<ByokSecretRecord | null>
+  recordByokSecretValidation(input: RecordByokSecretValidationInput): MaybePromise<ByokSecretRecord | null>
   createHeadlessAgent(input: CreateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord>
   updateHeadlessAgent(input: UpdateHeadlessAgentInput): MaybePromise<HeadlessAgentRecord | null>
   getHeadlessAgent(orgId: string, agentId: string): MaybePromise<HeadlessAgentRecord | null>
@@ -876,6 +933,8 @@ const WORKFLOW_RUN_LIST_LIMIT = 100
 const CHANNEL_TEXT_MAX_LENGTH = 256
 const CHANNEL_METADATA_MAX_BYTES = 16_384
 const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
+const BYOK_PROVIDER_ID_MAX_LENGTH = 64
+const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
 
 function nowIso(now: Date | undefined) {
   return (now || new Date()).toISOString()
@@ -1025,6 +1084,12 @@ function normalizeProvider(value: unknown): ChannelProviderId {
   return provider
 }
 
+function normalizeByokProviderId(value: unknown) {
+  const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
+  return providerId
+}
+
 function normalizeChannelIdentityRole(value: unknown): ChannelIdentityRole {
   const role = normalizeText(value || 'viewer', 32, 'Channel identity role') as ChannelIdentityRole
   if (!['owner', 'admin', 'member', 'approver', 'viewer'].includes(role)) {
@@ -1052,6 +1117,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly memberships = new Map<string, MembershipRecord>()
   private readonly apiTokens = new Map<string, ApiTokenRecord>()
   private readonly auditEvents = new Map<string, AuditEventRecord>()
+  private readonly byokSecrets = new Map<string, ByokSecretRecord>()
   private readonly headlessAgents = new Map<string, HeadlessAgentRecord>()
   private readonly channelBindings = new Map<string, ChannelBindingRecord>()
   private readonly channelIdentities = new Map<string, ChannelIdentityRecord>()
@@ -1319,6 +1385,153 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, limit)
       .map((event) => clone(event))
+  }
+
+  createByokSecret(input: CreateByokSecretInput): ByokSecretRecord {
+    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    if (input.createdByAccountId && !this.accounts.has(input.createdByAccountId)) {
+      throw new Error(`Unknown account ${input.createdByAccountId}.`)
+    }
+    const providerId = normalizeByokProviderId(input.providerId)
+    const ciphertext = normalizeNullableText(input.ciphertext, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK ciphertext')
+    const kmsRef = normalizeNullableText(input.kmsRef, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK KMS ref')
+    if ((ciphertext && kmsRef) || (!ciphertext && !kmsRef)) {
+      throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
+    }
+    const now = nowIso(input.createdAt)
+    const status = input.status || 'active'
+    const priorActive = status === 'active'
+      ? this.getActiveByokSecret(input.orgId, providerId)
+      : null
+    if (priorActive) {
+      const previous = this.byokSecrets.get(priorActive.secretId)
+      if (previous) {
+        previous.status = 'disabled'
+        previous.updatedAt = now
+      }
+    }
+    const record: ByokSecretRecord = {
+      secretId: normalizeText(input.secretId, CHANNEL_TEXT_MAX_LENGTH, 'BYOK secret id'),
+      orgId: input.orgId,
+      providerId,
+      status,
+      ciphertext,
+      kmsRef,
+      last4: normalizeText(input.last4, 32, 'BYOK secret last4'),
+      keyFingerprint: normalizeText(input.keyFingerprint, 128, 'BYOK key fingerprint'),
+      createdByAccountId: input.createdByAccountId || null,
+      rotatedFromSecretId: input.rotatedFromSecretId || priorActive?.secretId || null,
+      lastValidatedAt: null,
+      validationError: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    if (this.byokSecrets.has(record.secretId)) throw new Error(`BYOK secret ${record.secretId} already exists.`)
+    this.byokSecrets.set(record.secretId, record)
+    this.recordAuditEvent({
+      orgId: record.orgId,
+      accountId: record.createdByAccountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: priorActive ? 'byok_secret.rotated' : 'byok_secret.created',
+      targetType: 'byok_secret',
+      targetId: record.secretId,
+      metadata: {
+        providerId: record.providerId,
+        status: record.status,
+        last4: record.last4,
+        keyFingerprint: record.keyFingerprint,
+        rotatedFromSecretId: record.rotatedFromSecretId,
+      },
+      createdAt: input.createdAt,
+    })
+    return clone(record)
+  }
+
+  getByokSecret(orgId: string, providerId: string): ByokSecretRecord | null {
+    const normalizedProviderId = normalizeByokProviderId(providerId)
+    return Array.from(this.byokSecrets.values())
+      .filter((secret) => secret.orgId === orgId && secret.providerId === normalizedProviderId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
+      .map((secret) => clone(secret))[0] || null
+  }
+
+  getActiveByokSecret(orgId: string, providerId: string): ByokSecretRecord | null {
+    const normalizedProviderId = normalizeByokProviderId(providerId)
+    const secret = Array.from(this.byokSecrets.values()).find((candidate) => (
+      candidate.orgId === orgId
+      && candidate.providerId === normalizedProviderId
+      && candidate.status === 'active'
+    ))
+    return secret ? clone(secret) : null
+  }
+
+  listByokSecrets(orgId: string): ByokSecretRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    return Array.from(this.byokSecrets.values())
+      .filter((secret) => secret.orgId === orgId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.providerId.localeCompare(right.providerId))
+      .map((secret) => clone(secret))
+  }
+
+  disableByokSecret(input: DisableByokSecretInput): ByokSecretRecord | null {
+    const providerId = normalizeByokProviderId(input.providerId)
+    const existing = input.secretId
+      ? this.byokSecrets.get(input.secretId)
+      : Array.from(this.byokSecrets.values()).find((secret) => (
+        secret.orgId === input.orgId
+        && secret.providerId === providerId
+        && secret.status === 'active'
+      ))
+    if (!existing || existing.orgId !== input.orgId || existing.providerId !== providerId) return null
+    existing.status = 'disabled'
+    existing.updatedAt = nowIso(input.disabledAt)
+    this.recordAuditEvent({
+      orgId: existing.orgId,
+      accountId: input.actor?.accountId || existing.createdByAccountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'byok_secret.disabled',
+      targetType: 'byok_secret',
+      targetId: existing.secretId,
+      metadata: { providerId: existing.providerId, status: existing.status, last4: existing.last4, keyFingerprint: existing.keyFingerprint },
+      createdAt: input.disabledAt,
+    })
+    return clone(existing)
+  }
+
+  recordByokSecretValidation(input: RecordByokSecretValidationInput): ByokSecretRecord | null {
+    const providerId = normalizeByokProviderId(input.providerId)
+    const existing = input.secretId
+      ? this.byokSecrets.get(input.secretId)
+      : Array.from(this.byokSecrets.values()).find((secret) => (
+        secret.orgId === input.orgId
+        && secret.providerId === providerId
+        && secret.status === 'active'
+      ))
+    if (!existing || existing.orgId !== input.orgId || existing.providerId !== providerId) return null
+    existing.lastValidatedAt = nowIso(input.validatedAt)
+    existing.validationError = input.validationError || null
+    if (input.status) existing.status = input.status
+    existing.updatedAt = existing.lastValidatedAt
+    this.recordAuditEvent({
+      orgId: existing.orgId,
+      accountId: input.actor?.accountId || existing.createdByAccountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'byok_secret.validated',
+      targetType: 'byok_secret',
+      targetId: existing.secretId,
+      metadata: {
+        providerId: existing.providerId,
+        status: existing.status,
+        last4: existing.last4,
+        keyFingerprint: existing.keyFingerprint,
+        validationError: existing.validationError,
+      },
+      createdAt: input.validatedAt,
+    })
+    return clone(existing)
   }
 
   createHeadlessAgent(input: CreateHeadlessAgentInput): HeadlessAgentRecord {

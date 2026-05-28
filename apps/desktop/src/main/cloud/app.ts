@@ -20,6 +20,7 @@ import {
   type CloudObservabilityAdapter,
 } from './observability.ts'
 import { createObjectStoreForCloud, type ObjectStoreAdapter } from './object-store.ts'
+import { createByokSecretStore, type ByokSecretStore } from './byok-secret-store.ts'
 import {
   createOidcBrowserAuthProvider,
   createOidcCloudAuthResolver,
@@ -29,7 +30,7 @@ import { createCloudPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
-import { createCloudSecretAdapterFromEnv } from './secret-adapter.ts'
+import { createCloudSecretAdapterFromEnv, type SecretAdapter } from './secret-adapter.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
@@ -81,6 +82,7 @@ export type CloudAppOptions = {
   storeFactory?: CloudControlPlaneStoreFactory
   objectStore?: ObjectStoreAdapter
   objectStoreFactory?: CloudObjectStoreFactory
+  secretAdapter?: SecretAdapter
   runtime?: CloudRuntimeAdapter
   runtimeFactory?: CloudRuntimeFactory
   paths?: PathProvider
@@ -102,6 +104,7 @@ export type CloudApp = {
   policy: CloudRuntimePolicy
   store: ControlPlaneStore
   objectStore: ObjectStoreAdapter
+  byokSecrets: ByokSecretStore
   checkpointStore: WorkspaceCheckpointStore | null
   paths: PathProvider
   runtime: CloudRuntimeAdapter
@@ -487,6 +490,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const paths = options.paths || createCloudPathProvider(envOptions.root)
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
+  const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env)
+  const byokSecrets = createByokSecretStore(store, secretAdapter)
   const checkpointsEnabled = options.checkpointsEnabled ?? envOptions.checkpointsEnabled
   const hasCheckpointStoreOverride = Object.prototype.hasOwnProperty.call(options, 'checkpointStore')
   const checkpointStore = shouldRunCloudWorker(policy.role)
@@ -495,7 +500,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       : checkpointsEnabled
         ? createObjectWorkspaceCheckpointStore({
             objectStore,
-            secretAdapter: await createCloudSecretAdapterFromEnv(env),
+            secretAdapter,
           })
         : null
     : null
@@ -504,7 +509,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       ? await (options.runtimeFactory || defaultCloudRuntimeFactory)({ paths, policy, env })
       : createUnavailableRuntimeAdapter()
   )
-  const service = new CloudSessionService(store, runtime, policy)
+  const service = new CloudSessionService(store, runtime, policy, undefined, undefined, undefined, byokSecrets)
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
   const cookieSecret = resolveCloudCookieSecret(resolvedAuthConfig, env)
@@ -612,6 +617,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     policy,
     store,
     objectStore,
+    byokSecrets,
     checkpointStore,
     paths,
     runtime,

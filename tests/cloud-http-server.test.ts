@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
+import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import {
@@ -16,6 +17,7 @@ import { createHttpSseCloudTransportAdapter } from '../apps/desktop/src/main/clo
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
+import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
@@ -88,9 +90,12 @@ function createFixture(options: {
   const objectStore = createInMemoryObjectStore()
   const policy = options.policy || resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   let nextId = 0
+  const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('cloud-http-test-byok-key'), {
+    ids: { randomUUID: () => `byok-${nextId += 1}` },
+  })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  })
+  }, undefined, byokSecrets)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -257,6 +262,81 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const abort = await readJson(abortResponse)
     assert.equal(abort.processed, 1)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, and audit records', async () => {
+  const rawFirst = 'credential-http-first-1234567890'
+  const rawSecond = 'credential-http-second-abcdefghi'
+  const fixture = createFixture({
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const createResponse = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: rawFirst }),
+    })
+    assert.equal(createResponse.status, 201)
+    const created = await readJson(createResponse)
+    const createdSecret = asRecord(created.secret)
+    assert.equal(createdSecret.providerId, 'anthropic')
+    assert.equal(createdSecret.status, 'active')
+    assert.equal(createdSecret.last4, '7890')
+    assert.equal(JSON.stringify(created).includes(rawFirst), false)
+    assert.equal(JSON.stringify(created).includes('ciphertext'), false)
+    assert.equal(JSON.stringify(created).includes('kmsRef'), false)
+
+    const list = await readJson(await fetch(`${baseUrl}/api/byok`))
+    assert.equal(asArray(list.secrets).length, 1)
+    assert.equal(JSON.stringify(list).includes(rawFirst), false)
+
+    const rotateResponse = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: rawSecond }),
+    })
+    assert.equal(rotateResponse.status, 201)
+    const rotated = await readJson(rotateResponse)
+    assert.equal(asRecord(rotated.secret).last4, 'fghi')
+    assert.equal(JSON.stringify(rotated).includes(rawSecond), false)
+
+    const records = await fixture.store.listByokSecrets('tenant-1')
+    assert.equal(records.length, 2)
+    assert.equal(records.filter((record) => record.status === 'active').length, 1)
+    assert.equal(records.some((record) => record.status === 'disabled'), true)
+    assert.equal(JSON.stringify(records).includes(rawFirst), false)
+    assert.equal(JSON.stringify(records).includes(rawSecond), false)
+
+    const deleteResponse = await fetch(`${baseUrl}/api/byok/anthropic`, { method: 'DELETE' })
+    assert.equal(deleteResponse.status, 200)
+    const deleted = await readJson(deleteResponse)
+    assert.equal(deleted.disabled, true)
+    assert.equal(asRecord(deleted.secret).status, 'disabled')
+    assert.equal(await fixture.store.getActiveByokSecret('tenant-1', 'anthropic'), null)
+
+    const provider = await readJson(await fetch(`${baseUrl}/api/byok/anthropic`))
+    assert.equal(asRecord(provider.secret).status, 'disabled')
+    assert.equal(JSON.stringify(provider).includes(rawSecond), false)
+
+    const audit = await fixture.store.listAuditEvents('tenant-1')
+    assert.equal(audit.some((event) => event.eventType === 'byok_secret.created'), true)
+    assert.equal(audit.some((event) => event.eventType === 'byok_secret.rotated'), true)
+    assert.equal(audit.some((event) => event.eventType === 'byok_secret.disabled'), true)
+    assert.equal(JSON.stringify(audit).includes(rawFirst), false)
+    assert.equal(JSON.stringify(audit).includes(rawSecond), false)
   } finally {
     await fixture.server.close()
   }

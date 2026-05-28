@@ -90,6 +90,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '001_cloud_control_plane',
         '002_org_identity_tokens_audit',
         '003_headless_channels',
+        '004_byok_secrets',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
@@ -125,6 +126,38 @@ test('real Postgres cloud store persists org identity, API tokens, and audit eve
     await store.revokeApiToken({ tokenId: issued.token.tokenId })
     assert.equal(await store.findApiTokenByPlaintext(issued.plaintext), null)
     assert.equal((await store.listAuditEvents(org.orgId)).some((event) => event.eventType === 'api_token.created'), true)
+  })
+})
+
+test('real Postgres cloud store persists and rotates BYOK secrets atomically', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const org = await store.ensureOrgForTenant({ tenantId: ids.tenantId, name: 'Tenant' })
+    const first = await store.createByokSecret({
+      secretId: `${ids.tenantId}-byok-1`,
+      orgId: org.orgId,
+      providerId: 'anthropic',
+      ciphertext: 'enc:v1:first',
+      last4: '1111',
+      keyFingerprint: 'fingerprint-1',
+    })
+    assert.equal(first.status, 'active')
+    const second = await store.createByokSecret({
+      secretId: `${ids.tenantId}-byok-2`,
+      orgId: org.orgId,
+      providerId: 'anthropic',
+      ciphertext: 'enc:v1:second',
+      last4: '2222',
+      keyFingerprint: 'fingerprint-2',
+    })
+    assert.equal(second.status, 'active')
+    assert.equal(second.rotatedFromSecretId, first.secretId)
+    const records = await store.listByokSecrets(org.orgId)
+    assert.equal(records.filter((record) => record.providerId === 'anthropic' && record.status === 'active').length, 1)
+    assert.equal(records.find((record) => record.secretId === first.secretId)?.status, 'disabled')
+    assert.equal((await store.disableByokSecret({ orgId: org.orgId, providerId: 'anthropic' }))?.status, 'disabled')
+    assert.equal(await store.getActiveByokSecret(org.orgId, 'anthropic'), null)
   })
 })
 

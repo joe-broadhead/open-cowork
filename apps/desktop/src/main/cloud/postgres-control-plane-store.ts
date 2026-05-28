@@ -19,6 +19,7 @@ import type {
   AuditEventRecord,
   AckChannelDeliveryInput,
   BindChannelSessionInput,
+  ByokSecretRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
@@ -39,11 +40,13 @@ import type {
   CreateChannelDeliveryInput,
   CreateChannelInteractionInput,
   CreateAccountInput,
+  CreateByokSecretInput,
   CreateHeadlessAgentInput,
   CreateWorkflowInput,
   CreateWorkflowRunInput,
   CreateThreadSmartFilterInput,
   CreateThreadTagInput,
+  DisableByokSecretInput,
   FailWorkflowRunInput,
   FindChannelInteractionInput,
   HeadlessAgentRecord,
@@ -54,6 +57,7 @@ import type {
   OrgRecord,
   PrincipalMembershipRecord,
   RecordAuditEventInput,
+  RecordByokSecretValidationInput,
   RevokeApiTokenInput,
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
@@ -121,6 +125,8 @@ const WORKFLOW_RUN_LIST_LIMIT = 100
 const CHANNEL_TEXT_MAX_LENGTH = 256
 const CHANNEL_METADATA_MAX_BYTES = 16_384
 const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
+const BYOK_PROVIDER_ID_MAX_LENGTH = 64
+const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
 
 function loadPgPool(connectionString: string): PgPool {
   const pg = require('pg') as {
@@ -253,6 +259,12 @@ function normalizeProvider(value: unknown): ChannelProviderId {
   return provider
 }
 
+function normalizeByokProviderId(value: unknown) {
+  const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
+  if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
+  return providerId
+}
+
 function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
   const redacted: Record<string, unknown> = {}
   for (const [field, entry] of Object.entries(value || {})) {
@@ -350,6 +362,25 @@ function auditEventFromRow(row: QueryRow): AuditEventRecord {
     targetId: stringOrNull(row.target_id),
     metadata: jsonRecord(row.metadata),
     createdAt: iso(row.created_at),
+  }
+}
+
+function byokSecretFromRow(row: QueryRow): ByokSecretRecord {
+  return {
+    secretId: String(row.secret_id),
+    orgId: String(row.org_id),
+    providerId: String(row.provider_id),
+    status: String(row.status) as ByokSecretRecord['status'],
+    ciphertext: stringOrNull(row.ciphertext),
+    kmsRef: stringOrNull(row.kms_ref),
+    last4: String(row.last4),
+    keyFingerprint: String(row.key_fingerprint),
+    createdByAccountId: stringOrNull(row.created_by_account_id),
+    rotatedFromSecretId: stringOrNull(row.rotated_from_secret_id),
+    lastValidatedAt: isoOrNull(row.last_validated_at),
+    validationError: stringOrNull(row.validation_error),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   }
 }
 
@@ -960,6 +991,173 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(auditEventFromRow)
+  }
+
+  async createByokSecret(input: CreateByokSecretInput) {
+    return this.withTransaction(async (client) => {
+      const providerId = normalizeByokProviderId(input.providerId)
+      const ciphertext = normalizeNullableText(input.ciphertext, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK ciphertext')
+      const kmsRef = normalizeNullableText(input.kmsRef, BYOK_SECRET_TEXT_MAX_LENGTH, 'BYOK KMS ref')
+      if ((ciphertext && kmsRef) || (!ciphertext && !kmsRef)) {
+        throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
+      }
+      const status = input.status || 'active'
+      const now = nowIso(input.createdAt)
+      let priorActive: ByokSecretRecord | null = null
+      if (status === 'active') {
+        const prior = await client.query(
+          `UPDATE cloud_byok_secrets
+           SET status = 'disabled', updated_at = $3
+           WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
+           RETURNING *`,
+          [input.orgId, providerId, now],
+        )
+        priorActive = prior.rows[0] ? byokSecretFromRow(prior.rows[0]) : null
+      }
+      const result = await client.query(
+        `INSERT INTO cloud_byok_secrets (
+          secret_id, org_id, provider_id, status, ciphertext, kms_ref, last4,
+          key_fingerprint, created_by_account_id, rotated_from_secret_id,
+          last_validated_at, validation_error, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, NULL, $11, $11)
+        RETURNING *`,
+        [
+          normalizeText(input.secretId, CHANNEL_TEXT_MAX_LENGTH, 'BYOK secret id'),
+          input.orgId,
+          providerId,
+          status,
+          ciphertext,
+          kmsRef,
+          normalizeText(input.last4, 32, 'BYOK secret last4'),
+          normalizeText(input.keyFingerprint, 128, 'BYOK key fingerprint'),
+          input.createdByAccountId || null,
+          input.rotatedFromSecretId || priorActive?.secretId || null,
+          now,
+        ],
+      )
+      const secret = byokSecretFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: secret.orgId,
+        accountId: secret.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: priorActive ? 'byok_secret.rotated' : 'byok_secret.created',
+        targetType: 'byok_secret',
+        targetId: secret.secretId,
+        metadata: {
+          providerId: secret.providerId,
+          status: secret.status,
+          last4: secret.last4,
+          keyFingerprint: secret.keyFingerprint,
+          rotatedFromSecretId: secret.rotatedFromSecretId,
+        },
+        createdAt: input.createdAt,
+      })
+      return secret
+    })
+  }
+
+  async getByokSecret(orgId: string, providerId: string) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_byok_secrets
+       WHERE org_id = $1 AND provider_id = $2
+       ORDER BY updated_at DESC, created_at DESC, secret_id DESC
+       LIMIT 1`,
+      [orgId, normalizeByokProviderId(providerId)],
+    )
+    return row ? byokSecretFromRow(row) : null
+  }
+
+  async getActiveByokSecret(orgId: string, providerId: string) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_byok_secrets
+       WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
+       LIMIT 1`,
+      [orgId, normalizeByokProviderId(providerId)],
+    )
+    return row ? byokSecretFromRow(row) : null
+  }
+
+  async listByokSecrets(orgId: string) {
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_byok_secrets
+       WHERE org_id = $1
+       ORDER BY updated_at DESC, provider_id, secret_id`,
+      [orgId],
+    )
+    return result.rows.map(byokSecretFromRow)
+  }
+
+  async disableByokSecret(input: DisableByokSecretInput) {
+    return this.withTransaction(async (client) => {
+      const providerId = normalizeByokProviderId(input.providerId)
+      const now = nowIso(input.disabledAt)
+      const result = await client.query(
+        `UPDATE cloud_byok_secrets
+         SET status = 'disabled', updated_at = $4
+         WHERE org_id = $1
+           AND provider_id = $2
+           AND ($3::text IS NULL OR secret_id = $3)
+           AND status = 'active'
+         RETURNING *`,
+        [input.orgId, providerId, input.secretId || null, now],
+      )
+      if (!result.rows[0]) return null
+      const secret = byokSecretFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: secret.orgId,
+        accountId: input.actor?.accountId || secret.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'byok_secret.disabled',
+        targetType: 'byok_secret',
+        targetId: secret.secretId,
+        metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
+        createdAt: input.disabledAt,
+      })
+      return secret
+    })
+  }
+
+  async recordByokSecretValidation(input: RecordByokSecretValidationInput) {
+    return this.withTransaction(async (client) => {
+      const providerId = normalizeByokProviderId(input.providerId)
+      const now = nowIso(input.validatedAt)
+      const result = await client.query(
+        `UPDATE cloud_byok_secrets
+         SET status = COALESCE($4, status),
+             last_validated_at = $5,
+             validation_error = $6,
+             updated_at = $5
+         WHERE org_id = $1
+           AND provider_id = $2
+           AND ($3::text IS NULL OR secret_id = $3)
+           AND ($3::text IS NOT NULL OR status = 'active')
+         RETURNING *`,
+        [input.orgId, providerId, input.secretId || null, input.status || null, now, input.validationError || null],
+      )
+      if (!result.rows[0]) return null
+      const secret = byokSecretFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: secret.orgId,
+        accountId: input.actor?.accountId || secret.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'byok_secret.validated',
+        targetType: 'byok_secret',
+        targetId: secret.secretId,
+        metadata: {
+          providerId: secret.providerId,
+          status: secret.status,
+          last4: secret.last4,
+          keyFingerprint: secret.keyFingerprint,
+          validationError: secret.validationError,
+        },
+        createdAt: input.validatedAt,
+      })
+      return secret
+    })
   }
 
   async createHeadlessAgent(input: CreateHeadlessAgentInput) {

@@ -48,6 +48,7 @@ import type {
   ThreadTagRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
+import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from './runtime-adapter.ts'
 import { evaluateCloudProjectDirectoryPolicy, type CloudRuntimePolicy } from './cloud-config.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
@@ -225,6 +226,12 @@ function stableCloudId(prefix: string, ...parts: string[]) {
 }
 
 function principalCanManageChannels(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanManageByok(principal: CloudPrincipal) {
   if (principal.authSource === 'local' || principal.authSource === 'header') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
@@ -948,6 +955,7 @@ export class CloudSessionService {
   private readonly events: CloudSessionEventBus
   private readonly workspaceEvents: CloudWorkspaceEventBus
   private readonly ids: { randomUUID: () => string }
+  private readonly byokSecrets: ByokSecretStore | null
 
   constructor(
     store: ControlPlaneStore,
@@ -956,6 +964,7 @@ export class CloudSessionService {
     events = new CloudSessionEventBus(),
     ids: { randomUUID: () => string } = { randomUUID },
     workspaceEvents = new CloudWorkspaceEventBus(),
+    byokSecrets: ByokSecretStore | null = null,
   ) {
     this.store = store
     this.runtime = runtime
@@ -963,6 +972,7 @@ export class CloudSessionService {
     this.events = events
     this.workspaceEvents = workspaceEvents
     this.ids = ids
+    this.byokSecrets = byokSecrets
   }
 
   get eventBus() {
@@ -1051,6 +1061,52 @@ export class CloudSessionService {
 
   async listWorkerHeartbeats() {
     return this.store.listWorkerHeartbeats()
+  }
+
+  async listByokSecrets(principal: CloudPrincipal): Promise<ByokSecretMetadata[]> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    return this.requireByokSecrets().listMetadata(this.principalOrgId(principal))
+  }
+
+  async getByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    return this.requireByokSecrets().getMetadata(this.principalOrgId(principal), providerId)
+  }
+
+  async setByokSecret(
+    principal: CloudPrincipal,
+    input: { providerId: string, plaintext?: string | null, kmsRef?: string | null },
+  ): Promise<ByokSecretMetadata> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    return this.requireByokSecrets().setSecret({
+      orgId: this.principalOrgId(principal),
+      providerId: input.providerId,
+      plaintext: input.plaintext,
+      kmsRef: input.kmsRef,
+      createdByAccountId: principal.accountId || principal.userId,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
+  }
+
+  async disableByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    return this.requireByokSecrets().disableSecret({
+      orgId: this.principalOrgId(principal),
+      providerId,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
   }
 
   async listHeadlessAgents(principal: CloudPrincipal): Promise<HeadlessAgentRecord[]> {
@@ -2570,6 +2626,17 @@ export class CloudSessionService {
     if (!principalCanManageChannels(principal)) {
       throw new CloudServiceError(403, 'Channel administration requires an org admin or admin-scoped API token.')
     }
+  }
+
+  private assertByokAllowed(principal: CloudPrincipal) {
+    if (!principalCanManageByok(principal)) {
+      throw new CloudServiceError(403, 'BYOK credential administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private requireByokSecrets() {
+    if (!this.byokSecrets) throw new CloudServiceError(503, 'BYOK secret storage is not configured.')
+    return this.byokSecrets
   }
 
   private assertGatewayAccess(principal: CloudPrincipal) {
