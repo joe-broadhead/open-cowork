@@ -297,7 +297,7 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /docker build -f docker\/open-cowork-cloud\/Dockerfile/)
   assert.match(workflow, /docker build -f docker\/open-cowork-gateway\/Dockerfile/)
   assert.match(workflow, /bash scripts\/ci-cloud-compose-smoke\.sh docker-compose\.cloud\.split\.yml/)
-  assert.match(workflow, /OPEN_COWORK_GATEWAY_SMOKE_URL=http:\/\/127\.0\.0\.1:8790\/ready bash scripts\/ci-cloud-compose-smoke\.sh docker-compose\.cloud-gateway\.yml/)
+  assert.match(workflow, /OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http:\/\/127\.0\.0\.1:8790\/ready bash scripts\/ci-cloud-compose-smoke\.sh docker-compose\.cloud-gateway\.yml/)
   assert.match(workflow, /helm dependency build helm\/open-cowork-cloud/)
   assert.match(workflow, /helm lint helm\/open-cowork-cloud/)
   assert.match(workflow, /helm template open-cowork-cloud helm\/open-cowork-cloud/)

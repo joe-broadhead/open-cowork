@@ -159,7 +159,7 @@ jobs:
         run: bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud.split.yml
 
       - name: Run cloud plus gateway Compose smoke test
-        run: OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
+        run: OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
 
       - name: Install Helm
         run: |
