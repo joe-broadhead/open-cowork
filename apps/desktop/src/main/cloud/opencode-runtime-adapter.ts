@@ -3,7 +3,8 @@ import {
   type OpencodeClientConfig,
 } from '@opencode-ai/sdk/v2'
 import type { ServerOptions as OpencodeServerOptions } from '@opencode-ai/sdk/v2/server'
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import {
   normalizeMessagePart,
   normalizeRuntimeEventEnvelope,
@@ -43,6 +44,7 @@ export type NodeOpencodeCloudRuntimeAdapter = CloudRuntimeAdapter & {
 export type NodeOpencodeCloudRuntimeOptions = {
   paths: PathProvider
   config?: OpencodeServerOptions['config']
+  configDelivery?: 'env' | 'ephemeral-file'
   env?: NodeJS.ProcessEnv
   hostname?: string
   port?: number
@@ -411,12 +413,33 @@ function ensureNodeRuntimeDirs(paths: PathProvider) {
   }
 }
 
+function writeEphemeralOpencodeConfig(paths: PathProvider, config: OpencodeServerOptions['config']) {
+  const configPath = join(paths.getRuntimeXdgRoots().configHome, 'opencode', 'opencode.json')
+  mkdirSync(dirname(configPath), { recursive: true })
+  writeFileSync(configPath, JSON.stringify(config ?? {}), { mode: 0o600 })
+  chmodSync(configPath, 0o600)
+  return () => {
+    try {
+      unlinkSync(configPath)
+    } catch {
+      // The runtime may already have removed or moved the file.
+    }
+  }
+}
+
 export async function createNodeOpencodeCloudRuntimeAdapter(
   options: NodeOpencodeCloudRuntimeOptions,
 ): Promise<NodeOpencodeCloudRuntimeAdapter> {
   ensureNodeRuntimeDirs(options.paths)
   const auth = createManagedOpencodeServerAuth()
   const runtimePaths = options.paths.getRuntimeXdgRoots()
+  let cleanupEphemeralConfig: (() => void) | null = null
+  const serverConfig = options.configDelivery === 'ephemeral-file'
+    ? undefined
+    : options.config
+  if (options.configDelivery === 'ephemeral-file' && options.config !== undefined) {
+    cleanupEphemeralConfig = writeEphemeralOpencodeConfig(options.paths, options.config)
+  }
   const env = buildManagedRuntimeEnvironment({
     currentEnv: options.env || process.env,
     runtimePaths: {
@@ -429,17 +452,22 @@ export async function createNodeOpencodeCloudRuntimeAdapter(
     enableNativeWebSearch: options.enableNativeWebSearch,
     serverAuth: auth,
   })
-  const server = await createNodeManagedOpencodeServer({
-    hostname: options.hostname || '127.0.0.1',
-    port: options.port ?? 0,
-    timeout: options.timeout ?? 5000,
-    config: options.config,
-    env,
-    cwd: options.paths.getRuntimeHomeDir(),
-    logLevel: options.logLevel,
-    opencodeBinPath: options.opencodeBinPath,
-    onUnexpectedExit: options.onUnexpectedExit,
-  })
+  let server: Awaited<ReturnType<typeof createNodeManagedOpencodeServer>>
+  try {
+    server = await createNodeManagedOpencodeServer({
+      hostname: options.hostname || '127.0.0.1',
+      port: options.port ?? 0,
+      timeout: options.timeout ?? 5000,
+      config: serverConfig,
+      env,
+      cwd: options.paths.getRuntimeHomeDir(),
+      logLevel: options.logLevel,
+      opencodeBinPath: options.opencodeBinPath,
+      onUnexpectedExit: options.onUnexpectedExit,
+    })
+  } finally {
+    cleanupEphemeralConfig?.()
+  }
   const client = createOpencodeClient(buildNodeOpencodeCloudRuntimeClientConfig(server.url, auth))
   const adapter = createSdkCloudRuntimeAdapter(client)
   return {

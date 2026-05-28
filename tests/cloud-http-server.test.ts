@@ -47,7 +47,7 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   }
 
   async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
-    this.prompts.push(input)
+    this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
     const text = input.parts.find((part) => part.type === 'text')?.text || ''
     return {
       events: [{
@@ -70,7 +70,7 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   }
 
   async respondToPermission(input: { permissionId: string, allowed: boolean }) {
-    this.permissions.push(input)
+    this.permissions.push({ permissionId: input.permissionId, allowed: input.allowed })
   }
 }
 

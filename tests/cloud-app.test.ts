@@ -53,7 +53,7 @@ class FakeRuntime implements CloudRuntimeAdapter {
   }
 
   async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
-    this.prompts.push(input)
+    this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
     return {
       events: [{
         type: 'assistant.message',
@@ -74,15 +74,15 @@ class FakeRuntime implements CloudRuntimeAdapter {
   async abortSession() {}
 
   async replyToQuestion(input: { requestId: string, answers: unknown[] }) {
-    this.questionReplies.push(input)
+    this.questionReplies.push({ requestId: input.requestId, answers: input.answers })
   }
 
   async rejectQuestion(input: { requestId: string }) {
-    this.questionRejects.push(input)
+    this.questionRejects.push({ requestId: input.requestId })
   }
 
   async respondToPermission(input: { permissionId: string, allowed: boolean }) {
-    this.permissionResponses.push(input)
+    this.permissionResponses.push({ permissionId: input.permissionId, allowed: input.allowed })
   }
 
   subscribeEvents(listener: CloudRuntimeEventListener) {
