@@ -23,6 +23,7 @@ export type NormalizedChannelCapabilities = {
   maxButtonsPerMessage: number
   maxButtonRowsPerMessage: number
   maxButtonTokenBytes: number
+  maxFileBytes: number
   supportsEphemeralResponses: boolean
 }
 
@@ -108,6 +109,7 @@ export function normalizeChannelCapabilities(capabilities: ChannelCapabilities):
     maxButtonsPerMessage: positiveInteger(capabilities.maxButtonsPerMessage ?? 8, 'maxButtonsPerMessage'),
     maxButtonRowsPerMessage: positiveInteger(capabilities.maxButtonRowsPerMessage ?? 4, 'maxButtonRowsPerMessage'),
     maxButtonTokenBytes: positiveInteger(capabilities.maxButtonTokenBytes ?? 128, 'maxButtonTokenBytes'),
+    maxFileBytes: positiveInteger(capabilities.maxFileBytes ?? 25 * 1024 * 1024, 'maxFileBytes'),
     supportsEphemeralResponses: capabilities.supportsEphemeralResponses ?? false,
   }
 }
@@ -144,6 +146,10 @@ export async function executeRenderOperation(
     case 'send_file': {
       if (!capabilities.fileDownloads) {
         throw new Error('Channel provider does not support outgoing files.')
+      }
+      const size = operation.file.data?.byteLength
+      if (typeof size === 'number' && size > capabilities.maxFileBytes) {
+        throw new Error(`Rendered file exceeds provider maxFileBytes ${capabilities.maxFileBytes}.`)
       }
       const sentMessage = await provider.sendFile(operation.target, operation.file)
       return { operationType: operation.type, handled: true, sentMessage }

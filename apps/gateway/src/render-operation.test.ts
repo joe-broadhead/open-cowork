@@ -34,6 +34,7 @@ test('normalizes provider capabilities with render-operation defaults and overri
   assert.equal(normalized.maxButtonsPerMessage, 3)
   assert.equal(normalized.maxButtonRowsPerMessage, 4)
   assert.equal(normalized.maxButtonTokenBytes, 32)
+  assert.equal(normalized.maxFileBytes, 25 * 1024 * 1024)
   assert.equal(normalized.supportsEphemeralResponses, true)
 })
 
@@ -140,6 +141,14 @@ test('capability matrix executes supported operations and rejects unsupported bu
       file: { filename: 'artifact.txt', data: new Uint8Array() },
     }),
     /outgoing files/,
+  )
+  await assert.rejects(
+    executeRenderOperation(createFileCapableFakeProvider({ capabilities: { maxFileBytes: 2 } }), {
+      type: 'send_file',
+      target,
+      file: { filename: 'artifact.txt', data: new Uint8Array([1, 2, 3]) },
+    }),
+    /maxFileBytes 2/,
   )
   await assert.rejects(
     executeRenderOperation(constrained, {

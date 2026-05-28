@@ -63,6 +63,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
       }
     },
     async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
     async prompt(input) {
       prompted.push(input.text)
       return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
@@ -71,6 +72,8 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
     async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
     async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async readArtifactAttachment() { return { filename: 'artifact.txt', mime: 'text/plain', url: 'data:text/plain;base64,b2s=' } },
+    artifactUrl() { return 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1' },
     async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
     async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
     subscribeSessionEvents() { return { close() {} } },
@@ -188,6 +191,97 @@ test('gateway provider registry wires fake, Telegram, and webhook providers', ()
     provider: 'webhook',
   }])
 })
+
+test('gateway runtime retries transient deliveries and marks permanent failures dead', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery(deliveryId: string, input: Record<string, unknown>) {
+      acks.push({ deliveryId, input })
+      return { deliveryId, ...input } as never
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+  const provider = runtime.providers.get('fake')?.provider
+  assert.ok(provider)
+  const originalSendText = provider.sendText.bind(provider)
+  const failures = [
+    new Error('provider temporarily down token=super-secret-token'),
+    new Error('invalid target token=super-secret-token'),
+  ]
+  provider.sendText = async (...args) => {
+    const failure = failures.shift()
+    if (failure) throw failure
+    return originalSendText(...args)
+  }
+
+  await runtime.start()
+  try {
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-1', attemptCount: 1 }))
+    await waitFor(() => acks.length === 1)
+    assert.equal(acks[0]?.input.status, 'failed')
+    assert.equal(typeof acks[0]?.input.nextAttemptAt, 'string')
+    assert.doesNotMatch(String(acks[0]?.input.lastError), /super-secret-token/)
+
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-2', attemptCount: 1 }))
+    await waitFor(() => acks.length === 2)
+    assert.equal(acks[1]?.input.status, 'dead')
+    assert.equal(acks[1]?.input.nextAttemptAt, null)
+    assert.doesNotMatch(String(acks[1]?.input.lastError), /super-secret-token/)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+function deliveryRecord(overrides: Partial<{
+  deliveryId: string
+  attemptCount: number
+}> = {}) {
+  return {
+    deliveryId: overrides.deliveryId || 'delivery-1',
+    orgId: 'tenant-1',
+    agentId: 'agent-1',
+    channelBindingId: 'fake-binding',
+    sessionBindingId: null,
+    provider: 'cli',
+    target: {
+      externalChatId: 'chat-1',
+      externalThreadId: 'thread-1',
+    },
+    eventType: 'workflow.completed',
+    payload: { text: 'delivery text' },
+    status: 'claimed',
+    attemptCount: overrides.attemptCount ?? 1,
+    claimedBy: 'gateway:test',
+    claimExpiresAt: new Date(Date.now() + 30_000).toISOString(),
+    nextAttemptAt: new Date(0).toISOString(),
+    lastError: null,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  }
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now()
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) throw new Error('Timed out waiting for predicate.')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
 
 async function readJson(response: Response) {
   assert.equal(response.headers.get('content-type')?.includes('application/json'), true)

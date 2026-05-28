@@ -11,14 +11,22 @@ export type ToolProgressRenderState = {
   status: string
 }
 
+export type ArtifactRenderState = {
+  artifactId: string
+  providerMessageId: string | null
+  renderedSequence: number
+}
+
 export type GatewaySessionRenderState = {
   assistantStreams: Map<string, AssistantStreamRenderState>
   toolProgress: Map<string, ToolProgressRenderState>
+  artifacts: Map<string, ArtifactRenderState>
 }
 
 export function createGatewaySessionRenderState(): GatewaySessionRenderState {
   return {
     assistantStreams: new Map(),
     toolProgress: new Map(),
+    artifacts: new Map(),
   }
 }

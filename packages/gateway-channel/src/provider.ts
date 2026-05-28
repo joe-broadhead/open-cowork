@@ -32,6 +32,7 @@ export interface ChannelCapabilities {
   maxButtonsPerMessage?: number;
   maxButtonRowsPerMessage?: number;
   maxButtonTokenBytes?: number;
+  maxFileBytes?: number;
   supportsEphemeralResponses?: boolean;
 }
 

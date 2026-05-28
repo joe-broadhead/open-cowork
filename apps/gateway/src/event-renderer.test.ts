@@ -5,6 +5,7 @@ import {
   createButtonCapableFakeProvider,
   createButtonlessFakeProvider,
   createConstrainedMessageFakeProvider,
+  createFileCapableFakeProvider,
 } from '@open-cowork/gateway-testing'
 
 import type { CloudGateway } from '../dist/index.js'
@@ -277,6 +278,96 @@ test('event renderer falls back to question text when option tokens exceed provi
   assert.equal(provider.sent[0]?.kind, 'text')
   assert.equal(provider.sent[0]?.buttons, undefined)
   assert.match(provider.sent[0]?.text || '', /\/answer question-token-that-is-too-long-for-buttons <response>/)
+})
+
+test('event renderer sends cloud artifacts as files when provider limits allow it', async () => {
+  const provider = createFileCapableFakeProvider()
+  const state = createGatewaySessionRenderState()
+  const cloud = cloudStub({
+    async readArtifactAttachment(sessionId: string, artifactId: string) {
+      assert.equal(sessionId, 'session-1')
+      assert.equal(artifactId, 'artifact-1')
+      return {
+        filename: 'report.txt',
+        mime: 'text/plain',
+        url: `data:text/plain;base64,${Buffer.from('artifact body').toString('base64')}`,
+      }
+    },
+    artifactUrl() {
+      throw new Error('artifact link fallback should not be used')
+    },
+  })
+
+  await renderGatewaySessionEvent({
+    cloud,
+    provider,
+    binding: bindingRecord(),
+    state,
+    event: {
+      eventId: 'event-1',
+      sequence: 1,
+      type: 'artifact.created',
+      payload: {
+        artifactId: 'artifact-1',
+        filename: 'report.txt',
+        contentType: 'text/plain',
+        size: 13,
+        key: 'tenants/tenant-1/private-object-key',
+      },
+    },
+  })
+  const duplicate = await renderGatewaySessionEvent({
+    cloud,
+    provider,
+    binding: bindingRecord(),
+    state,
+    event: {
+      eventId: 'event-1-again',
+      sequence: 1,
+      type: 'artifact.created',
+      payload: { artifactId: 'artifact-1', filename: 'report.txt', size: 13 },
+    },
+  })
+
+  assert.equal(duplicate.handled, false)
+  assert.equal(provider.sent.length, 1)
+  assert.equal(provider.sent[0]?.kind, 'file')
+  assert.equal(provider.sent[0]?.file?.filename, 'report.txt')
+  assert.equal(Buffer.from(provider.sent[0]?.file?.data || []).toString('utf8'), 'artifact body')
+})
+
+test('event renderer sends authenticated artifact links for link-only or oversized channels', async () => {
+  const provider = createButtonlessFakeProvider({ capabilities: { fileDownloads: false } })
+  await renderGatewaySessionEvent({
+    cloud: cloudStub({
+      async readArtifactAttachment() {
+        throw new Error('link-only provider should not fetch artifact bytes')
+      },
+      artifactUrl(sessionId: string, artifactId: string) {
+        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      },
+    }),
+    provider,
+    binding: bindingRecord(),
+    state: createGatewaySessionRenderState(),
+    event: {
+      eventId: 'event-1',
+      sequence: 1,
+      type: 'artifact.created',
+      payload: {
+        artifactId: 'artifact-1',
+        filename: 'report-token=secret.txt',
+        contentType: 'text/plain',
+        size: 13,
+        key: 'tenants/tenant-1/private-object-key',
+      },
+    },
+  })
+
+  assert.equal(provider.sent[0]?.kind, 'text')
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
+  assert.doesNotMatch(provider.sent[0]?.text || '', /private-object-key/)
+  assert.doesNotMatch(provider.sent[0]?.text || '', /secret/)
 })
 
 function bindingRecord() {

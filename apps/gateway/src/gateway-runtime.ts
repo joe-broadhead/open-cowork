@@ -4,14 +4,18 @@ import type {
   IncomingChannelMessage,
   SentMessage,
 } from '@open-cowork/gateway-channel'
+import { chunkText } from '@open-cowork/gateway-channel'
 import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork/cloud-client'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'
 import { routeGatewayInteraction } from './interaction-router.js'
 import { createGatewayMetrics, type GatewayMetrics } from './metrics.js'
+import { classifyProviderFailure } from './provider-errors.js'
 import { createGatewayProviderRegistry, type GatewayProviderRegistry, type ProviderRegistration } from './provider-registry.js'
 import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } from './session-stream-manager.js'
+
+const MAX_DELIVERY_ATTEMPTS = 5
 
 export type GatewayRuntime = {
   readonly metrics: GatewayMetrics
@@ -141,7 +145,7 @@ async function handleDelivery(
   if (!registration) {
     metrics.errors += 1
     await cloud.ackDelivery(delivery.deliveryId, {
-      status: 'failed',
+      status: 'dead',
       claimedBy: delivery.claimedBy,
       lastError: `No provider registered for ${delivery.provider}.`,
     })
@@ -157,10 +161,13 @@ async function handleDelivery(
     })
   } catch (error) {
     metrics.errors += 1
+    const failure = classifyProviderFailure(error)
+    const shouldRetry = failure.transient && delivery.attemptCount < MAX_DELIVERY_ATTEMPTS
     await cloud.ackDelivery(delivery.deliveryId, {
-      status: 'failed',
+      status: shouldRetry ? 'failed' : 'dead',
       claimedBy: delivery.claimedBy,
-      lastError: error instanceof Error ? error.message : String(error),
+      lastError: failure.message,
+      nextAttemptAt: shouldRetry ? new Date(Date.now() + deliveryRetryDelayMs(delivery.attemptCount)).toISOString() : null,
     })
   }
 }
@@ -172,7 +179,17 @@ async function sendDelivery(provider: ChannelProvider, delivery: ChannelDelivery
     : typeof delivery.payload.message === 'string'
       ? delivery.payload.message
       : JSON.stringify(delivery.payload)
-  return provider.sendText(target, text)
+  let sent: SentMessage | null = null
+  for (const chunk of chunkText(text, provider.capabilities.maxTextLength)) {
+    sent = await provider.sendText(target, chunk)
+  }
+  if (!sent) throw new Error('Channel delivery payload was empty.')
+  return sent
+}
+
+function deliveryRetryDelayMs(attemptCount: number) {
+  const retryIndex = Math.max(0, attemptCount - 1)
+  return Math.min(60_000, 1000 * 2 ** retryIndex)
 }
 
 function findDeliveryProvider(providers: GatewayProviderRegistry, delivery: ChannelDeliveryRecord): ProviderRegistration | null {
