@@ -1,0 +1,365 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+
+import { FakeChannelProvider } from '@open-cowork/gateway-testing'
+
+import type { CloudGateway } from '../dist/index.js'
+import { createGatewayMetrics, createGatewaySessionStreamManager } from '../dist/index.js'
+
+test('session stream manager renders session events once and persists cursor after provider send', async () => {
+  const provider = new FakeChannelProvider()
+  const subscriptions: Array<{
+    sessionId: string
+    afterSequence: number | undefined
+    onEvent: (event: unknown) => void
+    onError?: (error: unknown) => void
+    closed: boolean
+  }> = []
+  const cursorUpdates: unknown[] = []
+  const cloud = {
+    subscribeSessionEvents(input: { sessionId: string, afterSequence?: number, onEvent: (event: unknown) => void, onError?: (error: unknown) => void }) {
+      subscriptions.push({ ...input, closed: false })
+      return {
+        close() {
+          subscriptions[subscriptions.length - 1].closed = true
+        },
+      }
+    },
+    async updateCursor(input: unknown) {
+      cursorUpdates.push(input)
+      return {
+        bindingId: 'binding-1',
+        orgId: 'tenant-1',
+        agentId: 'agent-1',
+        channelBindingId: 'channel-binding-1',
+        provider: 'cli',
+        externalWorkspaceId: null,
+        externalThreadId: 'thread-1',
+        externalChatId: 'chat-1',
+        sessionId: 'session-1',
+        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
+        lastWorkspaceSequence: (input as { lastWorkspaceSequence: number }).lastWorkspaceSequence,
+        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
+        status: 'active',
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async createChannelInteraction() {
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'token-1',
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, createGatewayMetrics())
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 4,
+      lastWorkspaceSequence: 8,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 4,
+      lastWorkspaceSequence: 8,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+
+  assert.equal(manager.activeCount(), 1)
+  assert.equal(subscriptions.length, 1)
+  assert.equal(subscriptions[0].afterSequence, 4)
+
+  subscriptions[0].onEvent({
+    eventId: 'event-4',
+    sequence: 4,
+    type: 'assistant.message',
+    payload: { content: 'stale response' },
+  })
+  subscriptions[0].onEvent({
+    eventId: 'event-5',
+    sequence: 5,
+    type: 'assistant.message',
+    payload: { content: 'fresh response' },
+  })
+  await waitFor(() => cursorUpdates.length === 1)
+
+  assert.deepEqual(provider.sent.map((entry) => entry.text), ['fresh response'])
+  assert.deepEqual(cursorUpdates, [{
+    bindingId: 'binding-1',
+    lastEventSequence: 5,
+    lastWorkspaceSequence: 8,
+    lastChatMessageId: '1',
+  }])
+
+  subscriptions[0].onEvent({
+    eventId: 'event-5-again',
+    sequence: 5,
+    type: 'assistant.message',
+    payload: { content: 'duplicate response' },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.deepEqual(provider.sent.map((entry) => entry.text), ['fresh response'])
+  manager.closeAll()
+})
+
+test('session stream manager renders permission requests as channel buttons', async () => {
+  const provider = new FakeChannelProvider()
+  const interactions: unknown[] = []
+  let onEvent: ((event: unknown) => void) | null = null
+  const cloud = {
+    subscribeSessionEvents(input: { onEvent: (event: unknown) => void }) {
+      onEvent = input.onEvent
+      return { close() {} }
+    },
+    async createChannelInteraction(input: unknown) {
+      interactions.push(input)
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'approve-token',
+      }
+    },
+    async updateCursor(input: unknown) {
+      return {
+        bindingId: 'binding-1',
+        orgId: 'tenant-1',
+        agentId: 'agent-1',
+        channelBindingId: 'channel-binding-1',
+        provider: 'cli',
+        externalWorkspaceId: null,
+        externalThreadId: 'thread-1',
+        externalChatId: 'chat-1',
+        sessionId: 'session-1',
+        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
+        lastWorkspaceSequence: 0,
+        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
+        status: 'active',
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, createGatewayMetrics())
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 0,
+      lastWorkspaceSequence: 0,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+  onEvent?.({
+    eventId: 'event-1',
+    sequence: 1,
+    type: 'permission.requested',
+    payload: {
+      permissionId: 'permission-1',
+      title: 'Run command',
+      description: 'Allow shell command?',
+    },
+  })
+  await waitFor(() => provider.sent.some((entry) => entry.buttons))
+
+  const created = interactions[0] as { interactionId?: string }
+  assert.equal(created.interactionId?.startsWith('gw_'), true)
+  assert.deepEqual({ ...created, interactionId: undefined }, {
+    interactionId: undefined,
+    agentId: 'agent-1',
+    sessionId: 'session-1',
+    provider: 'cli',
+    kind: 'permission',
+    targetId: 'permission-1',
+  })
+  assert.equal(provider.sent[0].text, 'Run command\nAllow shell command?')
+  assert.deepEqual(provider.sent[0].buttons, [[{
+    label: 'Approve',
+    token: 'approve-token',
+    style: 'success',
+  }]])
+  manager.closeAll()
+})
+
+test('session stream manager reconnects from the last persisted cursor', async () => {
+  const provider = new FakeChannelProvider()
+  const metrics = createGatewayMetrics()
+  const subscriptions: Array<{
+    afterSequence?: number
+    onError?: (error: unknown) => void
+  }> = []
+  const cloud = {
+    subscribeSessionEvents(input: { afterSequence?: number, onError?: (error: unknown) => void }) {
+      subscriptions.push(input)
+      return { close() {} }
+    },
+    async updateCursor() { return null },
+    async createChannelInteraction() {
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'token-1',
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, metrics, { retryDelayMs: 1 })
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 9,
+      lastWorkspaceSequence: 0,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+  subscriptions[0].onError?.(new Error('stream broke'))
+  await waitFor(() => subscriptions.length === 2)
+
+  assert.equal(metrics.errors, 1)
+  assert.equal(subscriptions[1].afterSequence, 9)
+  manager.closeAll()
+})
+
+test('session stream manager leaves failed provider sends retryable', async () => {
+  const provider = new FakeChannelProvider()
+  const originalSendText = provider.sendText.bind(provider)
+  let failNextSend = true
+  provider.sendText = async (...args) => {
+    if (failNextSend) {
+      failNextSend = false
+      throw new Error('provider down')
+    }
+    return originalSendText(...args)
+  }
+  const metrics = createGatewayMetrics()
+  let onEvent: ((event: unknown) => void) | null = null
+  const cursorUpdates: unknown[] = []
+  const cloud = {
+    subscribeSessionEvents(input: { onEvent: (event: unknown) => void }) {
+      onEvent = input.onEvent
+      return { close() {} }
+    },
+    async updateCursor(input: unknown) {
+      cursorUpdates.push(input)
+      return {
+        bindingId: 'binding-1',
+        orgId: 'tenant-1',
+        agentId: 'agent-1',
+        channelBindingId: 'channel-binding-1',
+        provider: 'cli',
+        externalWorkspaceId: null,
+        externalThreadId: 'thread-1',
+        externalChatId: 'chat-1',
+        sessionId: 'session-1',
+        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
+        lastWorkspaceSequence: 0,
+        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
+        status: 'active',
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async createChannelInteraction() {
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'token-1',
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, metrics)
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 0,
+      lastWorkspaceSequence: 0,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+
+  const event = {
+    eventId: 'event-1',
+    sequence: 1,
+    type: 'assistant.message',
+    payload: { content: 'retry me' },
+  }
+  onEvent?.(event)
+  await waitFor(() => metrics.errors === 1)
+  assert.equal(cursorUpdates.length, 0)
+
+  onEvent?.(event)
+  await waitFor(() => cursorUpdates.length === 1)
+  assert.deepEqual(provider.sent.map((entry) => entry.text), ['retry me'])
+  manager.closeAll()
+})
+
+async function waitFor(predicate: () => boolean, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now()
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) throw new Error('Timed out waiting for predicate.')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
