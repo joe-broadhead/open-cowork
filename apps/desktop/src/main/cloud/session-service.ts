@@ -49,7 +49,12 @@ import type {
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import type { ByokSecretMetadata, ByokSecretStore } from './byok-secret-store.ts'
-import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from './runtime-adapter.ts'
+import type {
+  CloudRuntimeAdapter,
+  CloudRuntimeEvent,
+  CloudRuntimeExecutionContext,
+  CloudRuntimePromptPart,
+} from './runtime-adapter.ts'
 import { evaluateCloudProjectDirectoryPolicy, type CloudRuntimePolicy } from './cloud-config.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
@@ -2123,6 +2128,7 @@ export class CloudSessionService {
 
   private async executePromptCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
     const payload = normalizePromptPayload(command.payload)
+    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     const runtimeSessionId = await this.ensureRuntimeSessionBound(lease)
     await this.store.updateSessionStatus({
       tenantId: command.tenantId,
@@ -2145,6 +2151,7 @@ export class CloudSessionService {
       sessionId: runtimeSessionId,
       parts: promptParts(payload.text),
       agent: payload.agent,
+      context: this.runtimeContext(session),
     })
     for (const event of result?.events || []) {
       await this.applyRuntimeEvent(lease, command.sessionId, event)
@@ -2159,7 +2166,10 @@ export class CloudSessionService {
   private async executeAbortCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
     const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     if (session.opencodeSessionId) {
-      await this.runtime.abortSession({ sessionId: session.opencodeSessionId })
+      await this.runtime.abortSession({
+        sessionId: session.opencodeSessionId,
+        context: this.runtimeContext(session),
+      })
     }
     await this.store.updateSessionStatus({
       tenantId: command.tenantId,
@@ -2181,9 +2191,11 @@ export class CloudSessionService {
     const payload = normalizeQuestionReplyPayload(command.payload)
     if (!payload.requestId) throw new Error('Question reply requires a request id.')
     if (!this.runtime.replyToQuestion) throw new Error('OpenCode question replies are not available.')
+    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     await this.runtime.replyToQuestion({
       requestId: payload.requestId,
       answers: payload.answers,
+      context: this.runtimeContext(session),
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
@@ -2201,8 +2213,10 @@ export class CloudSessionService {
     const payload = normalizeQuestionRejectPayload(command.payload)
     if (!payload.requestId) throw new Error('Question rejection requires a request id.')
     if (!this.runtime.rejectQuestion) throw new Error('OpenCode question rejection is not available.')
+    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     await this.runtime.rejectQuestion({
       requestId: payload.requestId,
+      context: this.runtimeContext(session),
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
@@ -2221,6 +2235,7 @@ export class CloudSessionService {
     const payload = normalizePermissionPayload(command.payload)
     if (!payload.permissionId) throw new Error('Permission response requires a permission id.')
     if (!this.runtime.respondToPermission) throw new Error('OpenCode permission responses are not available.')
+    const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     const allowed = asRecord(payload.response).allowed === true
       || payload.response === true
       || payload.response === 'allow'
@@ -2228,6 +2243,7 @@ export class CloudSessionService {
     await this.runtime.respondToPermission({
       permissionId: payload.permissionId,
       allowed,
+      context: this.runtimeContext(session),
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
@@ -2296,7 +2312,16 @@ export class CloudSessionService {
   }
 
   private shouldCreateRuntimeSessionsEagerly() {
+    if (this.runtime.requiresWorkerContext) return false
     return this.policy.role === 'all-in-one' || this.policy.role === 'worker'
+  }
+
+  private runtimeContext(input: { tenantId: string, sessionId: string, profileName?: string | null }): CloudRuntimeExecutionContext {
+    return {
+      tenantId: input.tenantId,
+      sessionId: input.sessionId,
+      profileName: input.profileName || this.policy.profileName,
+    }
   }
 
   private async createCloudSessionRecord(input: CreateCloudSessionRecordInput): Promise<SessionRecord> {
@@ -2328,7 +2353,14 @@ export class CloudSessionService {
     }
 
     if (this.shouldCreateRuntimeSessionsEagerly()) {
-      const runtimeSession = await this.runtime.createSession({ profileName: input.profileName })
+      const runtimeSession = await this.runtime.createSession({
+        profileName: input.profileName,
+        context: this.runtimeContext({
+          tenantId: input.tenantId,
+          sessionId: input.sessionId || '',
+          profileName: input.profileName,
+        }),
+      })
       const title = input.title || runtimeSession.title
       await this.store.createSession({
         tenantId: input.tenantId,
@@ -2378,7 +2410,10 @@ export class CloudSessionService {
     const session = await this.requireSessionRecord(lease.tenantId, lease.sessionId)
     if (session.opencodeSessionId) return session.opencodeSessionId
 
-    const runtimeSession = await this.runtime.createSession({ profileName: session.profileName })
+    const runtimeSession = await this.runtime.createSession({
+      profileName: session.profileName,
+      context: this.runtimeContext(session),
+    })
     await this.store.bindSessionRuntime({
       tenantId: session.tenantId,
       sessionId: session.sessionId,

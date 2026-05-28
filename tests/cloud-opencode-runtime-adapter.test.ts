@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -297,6 +297,56 @@ while true; do sleep 1; done
         Authorization: adapter.auth.authorizationHeader,
       },
     })
+  } finally {
+    await adapter.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('cloud Node OpenCode runtime adapter can deliver BYOK config without process env plaintext', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-cloud-node-runtime-byok-'))
+  const envFile = join(root, 'env')
+  const configCopyFile = join(root, 'config-copy')
+  const secret = ['sk', 'runtime', 'byok', 'plaintext', '1234567890abcdef1234567890abcdef'].join('-')
+  const provider = createCloudPathProvider(join(root, 'cloud-root'))
+  const configPath = join(provider.getRuntimeXdgRoots().configHome, 'opencode', 'opencode.json')
+  const executable = writeExecutable(root, 'fake-opencode', `
+env > ${JSON.stringify(envFile)}
+cat ${JSON.stringify(configPath)} > ${JSON.stringify(configCopyFile)} 2>/dev/null || true
+printf '%s\\n' 'opencode server listening on http://127.0.0.1:43231'
+while true; do sleep 1; done
+`)
+
+  const adapter = await createNodeOpencodeCloudRuntimeAdapter({
+    paths: provider,
+    env: {
+      PATH: process.env.PATH || '',
+      OPENCODE_CONFIG_CONTENT: `stale ${secret}`,
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+    opencodeBinPath: executable,
+    timeout: 5000,
+    configDelivery: 'ephemeral-file',
+    config: {
+      model: 'openrouter/test-model',
+      provider: {
+        openrouter: {
+          name: 'OpenRouter',
+          options: {
+            apiKey: secret,
+          },
+        },
+      },
+    },
+  })
+
+  try {
+    assert.equal(adapter.url, 'http://127.0.0.1:43231')
+    assert.equal(readFileSync(envFile, 'utf8').includes(secret), false)
+    assert.equal(readFileSync(envFile, 'utf8').includes('OPENCODE_CONFIG_CONTENT'), false)
+    assert.match(readFileSync(configCopyFile, 'utf8'), new RegExp(secret))
+    assert.equal(existsSync(configPath), false)
   } finally {
     await adapter.close?.()
     rmSync(root, { recursive: true, force: true })

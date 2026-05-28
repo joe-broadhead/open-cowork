@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { join, resolve, relative, isAbsolute } from 'path'
 
 export type RuntimeXdgRoots = {
@@ -92,5 +93,31 @@ export function createCloudPathProvider(root: string): PathProvider {
     xdgCacheHome: join(base, 'runtime', 'xdg', 'cache'),
     workspaceRoot: join(base, 'workspaces'),
     artifactRoot: join(base, 'artifacts'),
+  })
+}
+
+function safeScopeSegment(value: string, fallback: string) {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '')
+  const hash = createHash('sha256').update(value).digest('hex').slice(0, 12)
+  return `${normalized.slice(0, 72) || fallback}-${hash}`
+}
+
+export function createCloudSessionPathProvider(
+  base: PathProvider,
+  tenantId: string,
+  sessionId: string,
+): PathProvider {
+  const roots = base.getRuntimeXdgRoots()
+  const tenantSegment = safeScopeSegment(tenantId, 'tenant')
+  const sessionSegment = safeScopeSegment(sessionId, 'session')
+  return createStaticPathProvider({
+    appDataDir: base.getAppDataDir(),
+    runtimeHomeDir: join(base.getRuntimeHomeDir(), 'sessions', tenantSegment, sessionSegment, 'home'),
+    xdgConfigHome: join(roots.configHome, 'sessions', tenantSegment, sessionSegment),
+    xdgDataHome: join(roots.dataHome, 'sessions', tenantSegment, sessionSegment),
+    xdgStateHome: join(roots.stateHome, 'sessions', tenantSegment, sessionSegment),
+    xdgCacheHome: join(roots.cacheHome, 'sessions', tenantSegment, sessionSegment),
+    workspaceRoot: base.getWorkspaceRoot(),
+    artifactRoot: base.getArtifactRoot(),
   })
 }

@@ -22,17 +22,25 @@ export type CloudPromptResult = {
   events?: CloudRuntimeEvent[]
 }
 
+export type CloudRuntimeExecutionContext = {
+  tenantId: string
+  sessionId: string
+  profileName?: string | null
+}
+
 export type CloudRuntimeAdapter = {
-  createSession(input?: { profileName?: string }): Promise<CloudRuntimeSession>
+  requiresWorkerContext?: boolean
+  createSession(input?: { profileName?: string | null, context?: CloudRuntimeExecutionContext | null }): Promise<CloudRuntimeSession>
   promptSession(input: {
     sessionId: string
     parts: CloudRuntimePromptPart[]
     agent: string
+    context?: CloudRuntimeExecutionContext | null
   }): Promise<CloudPromptResult | void>
-  abortSession(input: { sessionId: string }): Promise<void>
-  replyToQuestion?(input: { requestId: string, answers: unknown[] }): Promise<void>
-  rejectQuestion?(input: { requestId: string }): Promise<void>
-  respondToPermission?(input: { permissionId: string, allowed: boolean }): Promise<void>
+  abortSession(input: { sessionId: string, context?: CloudRuntimeExecutionContext | null }): Promise<void>
+  replyToQuestion?(input: { requestId: string, answers: unknown[], context?: CloudRuntimeExecutionContext | null }): Promise<void>
+  rejectQuestion?(input: { requestId: string, context?: CloudRuntimeExecutionContext | null }): Promise<void>
+  respondToPermission?(input: { permissionId: string, allowed: boolean, context?: CloudRuntimeExecutionContext | null }): Promise<void>
   subscribeEvents?: (
     listener: CloudRuntimeEventListener,
     options?: { signal?: AbortSignal, onError?: (error: unknown) => void },

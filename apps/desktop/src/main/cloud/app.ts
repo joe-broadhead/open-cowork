@@ -26,7 +26,7 @@ import {
   createOidcCloudAuthResolver,
   type OidcCloudAuthResolverOptions,
 } from './oidc-auth.ts'
-import { createCloudPathProvider, type PathProvider } from './path-provider.ts'
+import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
@@ -35,6 +35,7 @@ import { createCloudSessionCookieManager, type CloudSessionCookieManager } from 
 import { CloudSessionService, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
 import { CloudWorker } from './worker.ts'
+import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
 import {
   createObjectWorkspaceCheckpointStore,
   defaultCloudSessionCheckpointRoots,
@@ -50,6 +51,13 @@ export type CloudRoleRuntimeFactoryInput = {
   paths: PathProvider
   policy: CloudRuntimePolicy
   env: Env
+  config: OpenCoworkConfig
+  execution: {
+    tenantId: string
+    sessionId: string
+    profileName?: string | null
+  }
+  runtimeConfig: import('@opencode-ai/sdk/v2/server').ServerOptions['config']
 }
 
 export type CloudRuntimeFactory = (
@@ -256,6 +264,8 @@ function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
   return createNodeOpencodeCloudRuntimeAdapter({
     paths: input.paths,
     env: input.env as NodeJS.ProcessEnv,
+    config: input.runtimeConfig,
+    configDelivery: 'ephemeral-file',
   })
 }
 
@@ -506,7 +516,14 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     : null
   const runtime = options.runtime || (
     shouldRunCloudWorker(policy.role)
-      ? await (options.runtimeFactory || defaultCloudRuntimeFactory)({ paths, policy, env })
+      ? createWorkerScopedRuntimeAdapter({
+          paths,
+          policy,
+          env,
+          config,
+          byokSecrets,
+          runtimeFactory: options.runtimeFactory || defaultCloudRuntimeFactory,
+        })
       : createUnavailableRuntimeAdapter()
   )
   const service = new CloudSessionService(store, runtime, policy, undefined, undefined, undefined, byokSecrets)
@@ -545,22 +562,24 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         checkpointStore
           ? {
               async restoreBeforeCommands(lease) {
+                const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
                 try {
                   await checkpointStore.restoreSessionCheckpoint({
                     tenantId: lease.tenantId,
                     sessionId: lease.sessionId,
-                    roots: defaultCloudSessionCheckpointRoots(paths, lease.tenantId, lease.sessionId),
+                    roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
                   })
                 } catch (error) {
                   if (!isMissingCheckpointError(error)) throw error
                 }
               },
               async saveAfterCommand(lease) {
+                const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
                 await checkpointStore.saveSessionCheckpoint({
                   tenantId: lease.tenantId,
                   sessionId: lease.sessionId,
                   checkpointVersion: lease.checkpointVersion,
-                  roots: defaultCloudSessionCheckpointRoots(paths, lease.tenantId, lease.sessionId),
+                  roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
                 })
               },
             }

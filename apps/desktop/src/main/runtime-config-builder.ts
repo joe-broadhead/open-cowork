@@ -10,6 +10,7 @@ import {
   getConfiguredToolsFromConfig,
   expandMcpToolPermissionPatterns,
 } from './config-loader.ts'
+import type { ConfiguredProviderDescriptor } from './config-types.ts'
 import { getEffectiveSettings, getProviderCredentialValue, type CoworkSettings } from './settings.ts'
 import { log } from './logger.ts'
 import { buildOpenCoworkAgentConfig } from './agent-config.ts'
@@ -148,6 +149,44 @@ function buildDescriptorModelRuntimeConfig(
   )
 }
 
+export function buildConfiguredDescriptorProviderRuntimeConfig(
+  descriptor: ConfiguredProviderDescriptor,
+  credentialValues: Record<string, string | null | undefined>,
+): ProviderConfig | null {
+  const credentialEntries = Object.fromEntries(
+    descriptor.credentials.flatMap((credential) => {
+      const value = credentialValues[credential.key]
+      const runtimeKey = credential.runtimeKey || credential.key
+      return value ? [[runtimeKey, value]] : []
+    }),
+  )
+  const options = {
+    // Built-in provider options (default base URLs, regions) can still
+    // resolve from `process.env` when unset — these are non-credential
+    // settings and power-user overrides via shell exports are a
+    // reasonable escape hatch. Secret credentials are overlaid by key
+    // from the explicit credential value map below.
+    ...resolveEnvPlaceholders(descriptor.options || {}),
+    ...credentialEntries,
+  }
+  const models = buildDescriptorModelRuntimeConfig(descriptor.models)
+  const hasOptions = Object.keys(options).length > 0
+
+  // For OpenCode-native providers such as OpenAI, Anthropic, and
+  // downstream providers like GitHub Copilot, omit the provider override
+  // entirely unless Cowork actually has options, API-key credentials, or
+  // model overrides to contribute. Passing a name-only provider object
+  // shadows OpenCode's built-in provider metadata and can make the
+  // runtime choose the API-key auth path even after browser login.
+  if (!hasOptions && !models) return null
+
+  return {
+    name: descriptor.name,
+    ...(hasOptions ? { options } : {}),
+    ...(models ? { models } : {}),
+  }
+}
+
 function buildProviderRuntimeConfigResult(
   providerId: string,
   provider: NonNullable<ReturnType<typeof getAppConfig>['providers']['custom']>[string],
@@ -214,39 +253,13 @@ function buildBuiltinProviderRuntimeConfig(
 ) {
   const descriptor = getAppConfig().providers.descriptors?.[providerId]
   if (!descriptor) return null
-
-  const credentialEntries = Object.fromEntries(
+  const credentialValues = Object.fromEntries(
     descriptor.credentials.flatMap((credential) => {
       const value = getProviderCredentialValue(settings, providerId, credential.key)
-      const runtimeKey = credential.runtimeKey || credential.key
-      return value ? [[runtimeKey, value]] : []
+      return value ? [[credential.key, value]] : []
     }),
   )
-  const options = {
-    // Built-in provider options (default base URLs, regions) can still
-    // resolve from `process.env` when unset — these are non-credential
-    // settings and power-user overrides via shell exports are a
-    // reasonable escape hatch. The actual secret keys are overlaid from
-    // Settings below via the `credentials` map.
-    ...resolveEnvPlaceholders(descriptor.options || {}),
-    ...credentialEntries,
-  }
-  const models = buildDescriptorModelRuntimeConfig(descriptor.models)
-  const hasOptions = Object.keys(options).length > 0
-
-  // For OpenCode-native providers such as OpenAI, Anthropic, and
-  // downstream providers like GitHub Copilot, omit the provider override
-  // entirely unless Cowork actually has options, API-key credentials, or
-  // model overrides to contribute. Passing a name-only provider object
-  // shadows OpenCode's built-in provider metadata and can make the
-  // runtime choose the API-key auth path even after browser login.
-  if (!hasOptions && !models) return null
-
-  return {
-    name: descriptor.name,
-    ...(hasOptions ? { options } : {}),
-    ...(models ? { models } : {}),
-  }
+  return buildConfiguredDescriptorProviderRuntimeConfig(descriptor, credentialValues)
 }
 
 function buildEffectiveProviderRuntimeConfigResult(
