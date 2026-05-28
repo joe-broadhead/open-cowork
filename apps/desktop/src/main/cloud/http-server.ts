@@ -3,6 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import {
   emptySessionImportItemCounts,
+  normalizeCloudProjectSource,
+  type CloudProjectSnapshotUploadInput,
+  type CloudProjectSourceInput,
   type SessionImportRequest,
   type WorkflowDraft,
   type WorkflowStatus,
@@ -266,6 +269,15 @@ async function readJsonBody(req: IncomingMessage, maxBodyBytes: number) {
 
 function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function readOptionalCloudProjectSource(body: Record<string, unknown>): CloudProjectSourceInput | null | undefined {
+  if (!Object.prototype.hasOwnProperty.call(body, 'projectSource')) return undefined
+  const raw = body.projectSource
+  if (raw === undefined || raw === null) return null
+  const normalized = normalizeCloudProjectSource(raw)
+  if (!normalized) throw new CloudHttpError(400, 'Cloud project source is invalid.')
+  return normalized
 }
 
 function readStringArray(value: unknown) {
@@ -880,6 +892,29 @@ async function handleApiRequest(
     return
   }
 
+  if (resource === 'project-sources') {
+    if (sessionId === 'validate' && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      writeJson(res, 200, options.service.validateProjectSource(normalizeCloudProjectSource(body.projectSource)), options.corsOrigin)
+      return
+    }
+    if (sessionId === 'snapshots' && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
+      const uploaded = await options.service.uploadProjectSnapshot(context.principal, {
+        title: readString(body.title),
+        files: Array.isArray(body.files) ? body.files as CloudProjectSnapshotUploadInput['files'] : [],
+        excluded: Array.isArray(body.excluded) ? body.excluded as CloudProjectSnapshotUploadInput['excluded'] : [],
+        warnings: Array.isArray(body.warnings) ? body.warnings.filter((entry): entry is string => typeof entry === 'string') : [],
+        fileCount: typeof body.fileCount === 'number' ? body.fileCount : undefined,
+        byteCount: typeof body.byteCount === 'number' ? body.byteCount : undefined,
+      })
+      writeJson(res, 201, uploaded, options.corsOrigin)
+      return
+    }
+    writeError(res, 404, 'Not found.', options.corsOrigin)
+    return
+  }
+
   if (resource === 'api-tokens') {
     if (!sessionId && req.method === 'GET') {
       writeJson(res, 200, { tokens: await options.service.listApiTokens(context.principal) }, options.corsOrigin)
@@ -1395,6 +1430,7 @@ async function handleApiRequest(
     const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
     const created = await options.service.createSession(context.principal, {
       profileName: readString(body.profileName),
+      projectSource: readOptionalCloudProjectSource(body),
     })
     writeJson(res, 201, created, options.corsOrigin)
     return

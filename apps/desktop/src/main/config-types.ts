@@ -2,6 +2,7 @@ import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/sha
 import type {
   AgentStarterTemplate,
   BrandingConfig,
+  CloudProjectSourceInput,
   CredentialField,
   ModelInfoSnapshot,
   ProviderModelDescriptor,
@@ -227,6 +228,23 @@ export type CloudRuntimePolicyConfig = {
   allowedHostProjectDirectories: string[]
 }
 
+export type CloudProjectSourcePolicyConfig = {
+  git: {
+    enabled: boolean
+    allowedHosts: string[]
+    allowedRepositories: string[]
+    allowFileUrls: boolean
+  }
+  uploadedSnapshots: {
+    enabled: boolean
+    maxFiles: number
+    maxBytes: number
+  }
+  managedWorkspaces: {
+    enabled: boolean
+  }
+}
+
 export type CloudProfileConfig = {
   label?: string
   description?: string
@@ -235,6 +253,7 @@ export type CloudProfileConfig = {
   mcps?: string[]
   features?: Partial<CloudFeatureConfig>
   runtime?: Partial<CloudRuntimePolicyConfig>
+  defaultProjectSource?: CloudProjectSourceInput | null
 }
 
 export type CloudAuthConfig = {
@@ -348,6 +367,7 @@ export type CloudConfig = {
   auth: CloudAuthConfig
   storage: CloudStorageConfig
   runtime: CloudRuntimePolicyConfig
+  projectSources: CloudProjectSourcePolicyConfig
   features: CloudFeatureConfig
   abuse: CloudAbuseConfig
   billing: CloudBillingConfig
@@ -469,6 +489,23 @@ const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {
   allowedHostProjectDirectories: [],
 }
 
+const DEFAULT_CLOUD_PROJECT_SOURCES: CloudProjectSourcePolicyConfig = {
+  git: {
+    enabled: true,
+    allowedHosts: ['github.com', 'gitlab.com'],
+    allowedRepositories: [],
+    allowFileUrls: false,
+  },
+  uploadedSnapshots: {
+    enabled: true,
+    maxFiles: 2000,
+    maxBytes: 25 * 1024 * 1024,
+  },
+  managedWorkspaces: {
+    enabled: false,
+  },
+}
+
 const DEFAULT_CLOUD_ABUSE: CloudAbuseConfig = {
   enabled: true,
   maxConcurrentSessionsPerOrg: 100,
@@ -575,6 +612,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
       },
     },
     runtime: DEFAULT_CLOUD_RUNTIME,
+    projectSources: DEFAULT_CLOUD_PROJECT_SOURCES,
     features: DEFAULT_CLOUD_FEATURES,
     abuse: DEFAULT_CLOUD_ABUSE,
     billing: DEFAULT_CLOUD_BILLING,

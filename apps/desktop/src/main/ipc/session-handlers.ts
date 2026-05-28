@@ -1,5 +1,10 @@
 import type { IpcHandlerContext } from './context.ts'
-import type { SessionChangeSummary, SessionImportSelection } from '@open-cowork/shared'
+import {
+  normalizeCloudProjectSource,
+  type CloudProjectSourceInput,
+  type SessionChangeSummary,
+  type SessionImportSelection,
+} from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
@@ -40,6 +45,10 @@ import { registerSessionInteractionHandlers } from './session-interaction-handle
 import { registerIpcInvoke, sessionPromptArgs, stringAndObjectArgs } from './schema.ts'
 import { sdkErrorMessage } from '../sdk-error.ts'
 import { readWorkspaceIdOption } from '../workspace-gateway.ts'
+import {
+  buildCloudProjectSnapshotInventory,
+  buildCloudProjectSnapshotUpload,
+} from '../project-source-snapshot.ts'
 import type { CloudTransportSessionEvent } from '../cloud/transport-adapter.ts'
 import {
   normalizeComposerPreferences,
@@ -76,6 +85,16 @@ function payloadQuestionTool(payload: Record<string, unknown>) {
     messageId: typeof tool.messageId === 'string' ? tool.messageId : typeof tool.messageID === 'string' ? tool.messageID : '',
     callId: typeof tool.callId === 'string' ? tool.callId : typeof tool.callID === 'string' ? tool.callID : '',
   }
+}
+
+function readCloudProjectSourceOption(input: unknown): CloudProjectSourceInput | null | undefined {
+  if (input === undefined || input === null || typeof input !== 'object' || Array.isArray(input)) return undefined
+  if (!Object.prototype.hasOwnProperty.call(input, 'projectSource')) return undefined
+  const raw = (input as { projectSource?: unknown }).projectSource
+  if (raw === undefined || raw === null) return null
+  const normalized = normalizeCloudProjectSource(raw)
+  if (!normalized) throw new Error('Cloud project source is invalid.')
+  return normalized
 }
 
 function dispatchCloudWorkspaceSessionEvent(
@@ -508,13 +527,40 @@ async function assertSelectedProviderReadyForPrompt(
 }
 
 export function registerSessionHandlers(context: IpcHandlerContext) {
+  context.ipcMain.handle('project-source:validate', async (event, input?: unknown) => {
+    const workspaceId = readWorkspaceIdOption(input)
+    const projectSource = readCloudProjectSourceOption(input)
+    if (!projectSource) throw new Error('Cloud project source is required.')
+    return context.workspaceGateway.validateCloudProjectSource(event, workspaceId, projectSource)
+  })
+
+  context.ipcMain.handle('project-source:snapshot-inventory', async (_event, input?: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Snapshot inventory input is required.')
+    const directory = context.normalizeDirectory((input as { directory?: unknown }).directory as string | undefined)
+    return buildCloudProjectSnapshotInventory(directory)
+  })
+
+  context.ipcMain.handle('project-source:upload-snapshot', async (event, input?: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Snapshot upload input is required.')
+    const workspaceId = readWorkspaceIdOption(input)
+    const record = input as { directory?: unknown; title?: unknown }
+    const directory = context.normalizeDirectory(record.directory as string | undefined)
+    const upload = await buildCloudProjectSnapshotUpload(directory)
+    return context.workspaceGateway.uploadCloudProjectSnapshot(event, workspaceId, {
+      ...upload,
+      title: typeof record.title === 'string' && record.title.trim() ? record.title.trim() : upload.title,
+    })
+  })
+
   context.ipcMain.handle('session:create', async (event, directory?: string, options?: unknown) => {
     const workspaceId = readWorkspaceIdOption(options)
     if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
       if (typeof directory === 'string' && directory.trim()) {
         throw new Error('Local project directories are not available in Cloud workspaces.')
       }
-      return context.workspaceGateway.createCloudSession(event, workspaceId)
+      return context.workspaceGateway.createCloudSession(event, workspaceId, {
+        projectSource: readCloudProjectSourceOption(options),
+      })
     }
     const opencodeDirectory = context.normalizeDirectory(directory)
     await ensureRuntimeContextDirectory(opencodeDirectory)

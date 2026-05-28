@@ -11,6 +11,10 @@ import type {
   TodoItem,
   ToolCall,
 } from './session.js'
+import {
+  normalizeCloudProjectSource,
+  type CloudProjectSource,
+} from './project-source.js'
 
 export type CloudSessionMessage = {
   id: string
@@ -32,6 +36,7 @@ export type CloudSessionProjectionOrigin = {
 export const CLOUD_SESSION_EVENT_TYPES = [
   'session.created',
   'session.imported',
+  'session.project_source.bound',
   'prompt.submitted',
   'assistant.message',
   'tool.call',
@@ -72,6 +77,7 @@ export type CloudSessionProjectionView = {
   lastInputTokens: number
   lastError: string | null
   origin: CloudSessionProjectionOrigin | null
+  projectSource: CloudProjectSource | null
   updatedAt: string
 }
 
@@ -540,6 +546,7 @@ export function createCloudSessionProjectionView(session: CloudProjectionSession
     lastInputTokens: 0,
     lastError: null,
     origin: null,
+    projectSource: null,
     updatedAt: session.updatedAt,
   }
 }
@@ -584,6 +591,7 @@ export function normalizeCloudSessionProjectionView(
     lastInputTokens: readNumber(record.lastInputTokens),
     lastError: typeof record.lastError === 'string' ? record.lastError : null,
     origin: normalizeOrigin(record.origin),
+    projectSource: normalizeCloudProjectSource(record.projectSource),
     updatedAt: readString(record.updatedAt, session.updatedAt),
   }
 }
@@ -617,6 +625,12 @@ export function reduceCloudSessionProjectionEvent(
         status: 'idle',
         isGenerating: false,
         lastError: null,
+        updatedAt: eventTime,
+      }
+    case 'session.project_source.bound':
+      return {
+        ...current,
+        projectSource: normalizeCloudProjectSource(payload.projectSource),
         updatedAt: eventTime,
       }
     case 'prompt.submitted':
@@ -882,6 +896,7 @@ export function readCloudSessionProjection<Session extends CloudProjectionSessio
     lastInputTokens: typeof record.lastInputTokens === 'number' ? record.lastInputTokens : 0,
     lastError: typeof record.lastError === 'string' && record.lastError ? record.lastError : null,
     origin: normalizeOrigin(record.origin),
+    projectSource: normalizeCloudProjectSource(record.projectSource),
     updatedAt: typeof record.updatedAt === 'string' && record.updatedAt ? record.updatedAt : view.session.updatedAt,
   }
 }

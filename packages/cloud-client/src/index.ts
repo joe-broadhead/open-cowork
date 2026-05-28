@@ -3,6 +3,10 @@ import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  CloudProjectSnapshotUploadInput,
+  CloudProjectSnapshotUploadResult,
+  CloudProjectSourceInput,
+  CloudProjectSourcePolicyVerdict,
   CloudSessionProjectionRecord,
   CloudSessionViewRecord,
   SessionArtifact,
@@ -27,6 +31,10 @@ export type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  CloudProjectSnapshotUploadInput,
+  CloudProjectSnapshotUploadResult,
+  CloudProjectSourceInput,
+  CloudProjectSourcePolicyVerdict,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
@@ -404,7 +412,9 @@ export type CloudTransportAdapter = {
   getWorkspace(): Promise<CloudWorkspaceOverview>
   getRuntimeStatus(): Promise<CloudRuntimeStatus>
   listSessions(): Promise<SessionRecord[]>
-  createSession(input?: { profileName?: string | null }): Promise<CloudSessionView>
+  createSession(input?: { profileName?: string | null; projectSource?: CloudProjectSourceInput | null }): Promise<CloudSessionView>
+  validateProjectSource(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
+  uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<CloudSessionView>
   getSession(sessionId: string): Promise<CloudSessionView>
   promptSession(sessionId: string, input: { text: string, agent?: string | null }): Promise<{
@@ -949,6 +959,18 @@ export function createHttpSseCloudTransportAdapter(
     },
     createSession(input = {}) {
       return request<CloudSessionView>('/api/sessions', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    validateProjectSource(input) {
+      return request<CloudProjectSourcePolicyVerdict>('/api/project-sources/validate', {
+        method: 'POST',
+        body: { projectSource: input },
+      })
+    },
+    uploadProjectSnapshot(input) {
+      return request<CloudProjectSnapshotUploadResult>('/api/project-sources/snapshots', {
         method: 'POST',
         body: input,
       })

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
@@ -34,6 +35,7 @@ import {
 } from './oidc-auth.ts'
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
+import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import { createCloudSecretAdapterFromEnv, resolveCloudSecretRef, type SecretAdapter } from './secret-adapter.ts'
@@ -375,6 +377,7 @@ function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
     env: input.env as NodeJS.ProcessEnv,
     config: input.runtimeConfig,
     configDelivery: 'ephemeral-file',
+    cwd: input.paths.resolveWorkspacePath(input.execution.tenantId, input.execution.sessionId),
   })
 }
 
@@ -702,6 +705,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         })
       : createUnavailableRuntimeAdapter()
   )
+  const projectSources = createCloudProjectSourceService({
+    policy,
+    objectStore,
+    credentialResolver: (credentialRef) => resolveCloudSecretRef(credentialRef, { env }),
+  })
   const service = new CloudSessionService(
     store,
     runtime,
@@ -715,6 +723,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     billingConfig,
     billingAdapter,
     { allowSelfServiceSignup: authConfig.allowSelfServiceSignup ?? authConfig.mode !== 'oidc' },
+    projectSources,
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
@@ -748,31 +757,46 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         service,
         envValue(env, 'OPEN_COWORK_CLOUD_WORKER_ID') || `${policy.role}-worker`,
         30_000,
-        checkpointStore
-          ? {
-              async restoreBeforeCommands(lease) {
-                const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
-                try {
-                  await checkpointStore.restoreSessionCheckpoint({
-                    tenantId: lease.tenantId,
-                    sessionId: lease.sessionId,
-                    roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
-                  })
-                } catch (error) {
-                  if (!isMissingCheckpointError(error)) throw error
-                }
-              },
-              async saveAfterCommand(lease) {
-                const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
-                await checkpointStore.saveSessionCheckpoint({
+        {
+          async restoreBeforeCommands(lease) {
+            const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
+            await mkdir(leasePaths.resolveWorkspacePath(lease.tenantId, lease.sessionId), { recursive: true })
+            let restoredCheckpointEntries = 0
+            if (checkpointStore) {
+              try {
+                const restored = await checkpointStore.restoreSessionCheckpoint({
                   tenantId: lease.tenantId,
                   sessionId: lease.sessionId,
-                  checkpointVersion: lease.checkpointVersion,
                   roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
                 })
-              },
-          }
-          : {},
+                restoredCheckpointEntries = restored.restoredEntries
+              } catch (error) {
+                if (!isMissingCheckpointError(error)) throw error
+              }
+            }
+            if (restoredCheckpointEntries === 0) {
+              const source = await service.getSessionProjectSource(lease.tenantId, lease.sessionId)
+              if (source) {
+                await projectSources.restoreProjectSource({
+                  tenantId: lease.tenantId,
+                  sessionId: lease.sessionId,
+                  source,
+                  paths: leasePaths,
+                })
+              }
+            }
+          },
+          async saveAfterCommand(lease) {
+            if (!checkpointStore) return
+            const leasePaths = createCloudSessionPathProvider(paths, lease.tenantId, lease.sessionId)
+            await checkpointStore.saveSessionCheckpoint({
+              tenantId: lease.tenantId,
+              sessionId: lease.sessionId,
+              checkpointVersion: lease.checkpointVersion,
+              roots: defaultCloudSessionCheckpointRoots(leasePaths, lease.tenantId, lease.sessionId),
+            })
+          },
+        },
         abuseConfig,
       )
     : null

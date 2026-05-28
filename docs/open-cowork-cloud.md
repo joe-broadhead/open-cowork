@@ -49,6 +49,88 @@ desktop, and gateway clients should use those verdicts before enabling sends,
 project pickers, host-path diffs, custom content, artifacts, workflows, or
 gateway interactions.
 
+## Cloud Project Context
+
+Cloud sessions do not read arbitrary desktop or server host paths. A cloud
+thread starts with an explicit project source that the worker restores into an
+isolated app-managed workspace before creating or prompting the OpenCode
+session.
+
+Supported v1 sources:
+
+- Git source: HTTPS repository URL, optional branch/tag/commit ref, optional
+  subdirectory, and optional credential ref. Credentials must be stored as
+  secret references (`env:`, `gcp-sm://`, `aws-sm://`, `azure-kv://`, or
+  Azure Key Vault `https://` URLs); they must not be embedded in repository
+  URLs. A credential secret may be a raw access token, or JSON with
+  `username` plus `password` or `token` for hosts that require a specific Git
+  username.
+- Uploaded snapshot: the desktop inventories a selected directory, excludes
+  secret-bearing files and dependency/build output, shows file count and bytes,
+  uploads the bounded snapshot to object storage, and sends only the snapshot
+  reference in the session create request.
+
+Default policy:
+
+```json
+{
+  "cloud": {
+    "projectSources": {
+      "git": {
+        "enabled": true,
+        "allowedHosts": ["github.com", "gitlab.com"],
+        "allowedRepositories": [],
+        "allowFileUrls": false
+      },
+      "uploadedSnapshots": {
+        "enabled": true,
+        "maxFiles": 2000,
+        "maxBytes": 26214400
+      },
+      "managedWorkspaces": {
+        "enabled": false
+      }
+    }
+  }
+}
+```
+
+For GitHub Enterprise or GitLab self-managed, add the host to
+`cloud.projectSources.git.allowedHosts`. To restrict tenants to approved repos,
+set `allowedRepositories` to exact lowercase `host/org/repo` keys, for example
+`git.internal.example/platform/api`.
+
+Deployments that cannot allow local uploads should set:
+
+```json
+{
+  "cloud": {
+    "projectSources": {
+      "uploadedSnapshots": { "enabled": false }
+    }
+  }
+}
+```
+
+Managed workspace checkpointing is the v2 path for long-running or scheduled
+cloud work. Enable it only with object storage and checkpoint encryption
+configured:
+
+```json
+{
+  "cloud": {
+    "projectSources": {
+      "managedWorkspaces": { "enabled": true }
+    }
+  }
+}
+```
+
+Headless gateway agents can define a default project source on a channel
+binding via `settings.defaultProjectSource`, or through a profile-level
+`defaultProjectSource`. The gateway passes the binding to cloud; cloud workers
+still own restore and execution.
+
 ## Local References
 
 Use the all-in-one reference for quick local checks:
