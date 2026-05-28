@@ -79,7 +79,12 @@ export class WebhookProvider implements ChannelProvider {
     fileDownloads: false,
     typingIndicator: true,
     maxTextLength: 4096,
-    preferredParseMode: "plain"
+    preferredParseMode: "plain",
+    parseModes: ["plain"],
+    maxButtonsPerMessage: 8,
+    maxButtonRowsPerMessage: 4,
+    maxButtonTokenBytes: 64,
+    supportsEphemeralResponses: false
   };
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;

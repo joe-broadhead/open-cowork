@@ -85,10 +85,9 @@ async function handleMessage(
   const externalUserId = message.sender.providerUserId
 
   try {
-    if (message.interaction?.token) {
-      const registration = providers.get(providerConfig.id)
-      if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
-      await routeGatewayInteraction({ cloud, provider: registration.provider, providerConfig, message, metrics })
+    const registration = providers.get(providerConfig.id)
+    if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
+    if (await routeGatewayInteraction({ cloud, provider: registration.provider, providerConfig, message, metrics })) {
       return
     }
 
@@ -114,8 +113,6 @@ async function handleMessage(
       externalThreadId: message.target.threadId || message.target.chatId,
       title: text.slice(0, 80),
     })
-    const registration = providers.get(providerConfig.id)
-    if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
     streams.ensure({ binding: bound.binding, provider: registration.provider })
     await cloud.prompt({
       bindingId: bound.binding.bindingId,

@@ -50,7 +50,12 @@ export class TelegramProvider implements ChannelProvider {
     fileDownloads: true,
     typingIndicator: true,
     maxTextLength: 4096,
-    preferredParseMode: "plain"
+    preferredParseMode: "plain",
+    parseModes: ["plain"],
+    maxButtonsPerMessage: 8,
+    maxButtonRowsPerMessage: 4,
+    maxButtonTokenBytes: 64,
+    supportsEphemeralResponses: true
   };
 
   private readonly bot: Bot;

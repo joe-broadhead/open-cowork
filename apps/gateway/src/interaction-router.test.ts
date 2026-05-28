@@ -50,7 +50,7 @@ test('interaction router resolves channel button tokens through cloud and acknow
       attachments: [],
       interaction: {
         id: 'callback-1',
-        token: 'token-1',
+        token: 'apv:token-1',
         kind: 'button',
       },
       receivedAt: new Date(0),
@@ -73,6 +73,66 @@ test('interaction router resolves channel button tokens through cloud and acknow
     alert: undefined,
   }])
   assert.equal(metrics.interactionsResolved, 1)
+})
+
+test('interaction router resolves deny, answer, and reject fallback commands through cloud', async () => {
+  const provider = new FakeChannelProvider()
+  const calls: unknown[] = []
+  const cloud = {
+    async resolveChannelInteraction(input: unknown) {
+      calls.push(input)
+      return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }).providers[0]
+  const metrics = createGatewayMetrics()
+
+  for (const [text, expected] of [
+    ['/deny deny-token', { response: { allowed: false } }],
+    ['/answer answer-token Ship it', { answers: ['Ship it'] }],
+    ['/reject reject-token', { reject: true }],
+  ] as const) {
+    const handled = await routeGatewayInteraction({
+      cloud,
+      provider,
+      providerConfig: config,
+      metrics,
+      message: {
+        id: `message-${calls.length + 1}`,
+        provider: 'cli',
+        target: { provider: 'cli', chatId: 'chat-1' },
+        sender: { providerUserId: 'user-1' },
+        text,
+        rawText: text,
+        isCommand: true,
+        command: text.split(/\s+/)[0]?.slice(1),
+        commandArgs: text.split(/\s+/).slice(1).join(' '),
+        attachments: [],
+        receivedAt: new Date(0),
+        raw: {},
+      },
+    })
+    assert.equal(handled, true)
+    assert.deepEqual(calls.at(-1), {
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalUserId: 'user-1',
+      token: text.split(/\s+/)[1],
+      externalInteractionId: `message-${calls.length}`,
+      ...expected,
+    })
+  }
+  assert.equal(metrics.interactionsResolved, 3)
 })
 
 test('interaction router ignores ordinary channel messages', async () => {
