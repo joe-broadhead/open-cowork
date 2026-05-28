@@ -19,7 +19,7 @@ import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import type {
   CloudRuntimeAdapter,
@@ -84,6 +84,7 @@ function createFixture(options: {
     desktopAuth?: CloudDesktopAuthConfig | null
     observability?: CloudObservabilityAdapter | null
     internalToken?: string | null
+    byokPolicy?: ByokManagementPolicy
   } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -95,7 +96,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets)
+  }, undefined, byokSecrets, options.byokPolicy)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -303,6 +304,18 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     assert.equal(asArray(list.secrets).length, 1)
     assert.equal(JSON.stringify(list).includes(rawFirst), false)
 
+    const validateResponse = await fetch(`${baseUrl}/api/byok/anthropic/validate`, { method: 'POST' })
+    assert.equal(validateResponse.status, 200)
+    const validated = await readJson(validateResponse)
+    assert.equal(asRecord(validated.secret).status, 'active')
+    assert.equal(typeof asRecord(validated.secret).lastValidatedAt, 'string')
+    assert.equal(JSON.stringify(validated).includes(rawFirst), false)
+
+    const client = createHttpSseCloudTransportAdapter({ baseUrl })
+    const clientSecret = await client.validateByokSecret?.('anthropic')
+    assert.equal(clientSecret?.status, 'active')
+    assert.equal(JSON.stringify(clientSecret).includes(rawFirst), false)
+
     const rotateResponse = await fetch(`${baseUrl}/api/byok/anthropic`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -337,6 +350,135 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     assert.equal(audit.some((event) => event.eventType === 'byok_secret.disabled'), true)
     assert.equal(JSON.stringify(audit).includes(rawFirst), false)
     assert.equal(JSON.stringify(audit).includes(rawSecond), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP BYOK APIs enforce provider availability and org entitlement policy', async () => {
+  const unavailableProviderKey = ['credential', 'policy', 'openai', '1234567890'].join('-')
+  const blockedProviderKey = ['credential', 'policy', 'anthropic', '1234567890'].join('-')
+  const fixture = createFixture({
+    byokPolicy: {
+      allowedProviderIds: ['anthropic'],
+      checkEntitlement(input) {
+        return input.providerId === 'anthropic'
+          ? { allowed: false, status: 402, reason: 'BYOK provider is not included in this plan.' }
+          : { allowed: true }
+      },
+    },
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const unavailable = await fetch(`${baseUrl}/api/byok/openai`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: unavailableProviderKey }),
+    })
+    assert.equal(unavailable.status, 403)
+    assert.match(JSON.stringify(await readJson(unavailable)), /not enabled/)
+
+    const blocked = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: blockedProviderKey }),
+    })
+    assert.equal(blocked.status, 402)
+    assert.match(JSON.stringify(await readJson(blocked)), /not included/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP BYOK KMS refs require explicit deployer policy and validate without worker reveal', async () => {
+  const defaultFixture = createFixture({
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const defaultBaseUrl = await defaultFixture.server.listen()
+  try {
+    const blocked = await fetch(`${defaultBaseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kmsRef: 'gcp-sm://projects/acme/secrets/anthropic/versions/latest' }),
+    })
+    assert.equal(blocked.status, 403)
+    assert.match(JSON.stringify(await readJson(blocked)), /disabled/)
+  } finally {
+    await defaultFixture.server.close()
+  }
+
+  const fixture = createFixture({
+    byokPolicy: {
+      kmsRefs: {
+        enabled: true,
+        allowedPrefixes: ['gcp-sm://projects/acme/secrets/'],
+      },
+    },
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const envRef = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kmsRef: 'env:OPEN_COWORK_BYOK_ANTHROPIC' }),
+    })
+    assert.equal(envRef.status, 403)
+    assert.match(JSON.stringify(await readJson(envRef)), /Environment-backed/)
+
+    const outsidePrefix = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kmsRef: 'gcp-sm://projects/other/secrets/anthropic/versions/latest' }),
+    })
+    assert.equal(outsidePrefix.status, 403)
+    assert.match(JSON.stringify(await readJson(outsidePrefix)), /not allowed/)
+
+    const createResponse = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kmsRef: 'gcp-sm://projects/acme/secrets/anthropic/versions/latest' }),
+    })
+    assert.equal(createResponse.status, 201)
+    const created = await readJson(createResponse)
+    assert.equal(asRecord(created.secret).status, 'active')
+    assert.equal(JSON.stringify(created).includes('kmsRef'), false)
+
+    const validateResponse = await fetch(`${baseUrl}/api/byok/anthropic/validate`, { method: 'POST' })
+    assert.equal(validateResponse.status, 200)
+    const validated = await readJson(validateResponse)
+    assert.equal(validated.validated, false)
+    assert.equal(asRecord(validated.secret).status, 'active')
+    assert.equal(asRecord(validated.secret).lastValidatedAt, null)
+    assert.equal(JSON.stringify(validated).includes('kmsRef'), false)
   } finally {
     await fixture.server.close()
   }

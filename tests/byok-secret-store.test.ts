@@ -7,6 +7,7 @@ import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secr
 
 const FIRST_KEY = 'credential-sample-first-1234567890'
 const SECOND_KEY = 'credential-sample-second-abcdefghi'
+const VALIDATION_KEY = ['sk', 'validation', 'secret', '1234567890abcdef'].join('-')
 
 function seededStore() {
   const store = new InMemoryControlPlaneStore()
@@ -57,6 +58,13 @@ test('BYOK secret store encrypts keys, returns metadata only, rotates active rec
   assert.equal(records.filter((record) => record.providerId === 'anthropic' && record.status === 'active').length, 1)
   assert.equal(records.find((record) => record.secretId === first.secretId)?.status, 'disabled')
   assert.equal(records.find((record) => record.secretId === second.secretId)?.rotatedFromSecretId, first.secretId)
+
+  const audit = await store.listAuditEvents('tenant-1')
+  const rotationAudit = audit.find((event) => event.eventType === 'byok_secret.rotated')
+  assert.equal(rotationAudit?.actorType, 'system')
+  assert.equal(rotationAudit?.targetType, 'byok_secret')
+  assert.equal(rotationAudit?.targetId, second.secretId)
+  assert.equal(rotationAudit?.metadata.rotatedFromSecretId, '[redacted]')
 })
 
 test('BYOK disable prevents active reveal', async () => {
@@ -119,4 +127,97 @@ test('BYOK validation audit metadata is redacted', async () => {
   assert.equal(audit.some((event) => event.eventType === 'byok_secret.validated'), true)
   assert.equal(JSON.stringify(audit).includes(FIRST_KEY), false)
   assert.match(JSON.stringify(audit), /\[redacted\]/)
+})
+
+test('BYOK provider validation hooks mark active and invalid without leaking raw provider errors', async () => {
+  const store = seededStore()
+  let shouldPass = true
+  let observedPlaintext = ''
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => 'secret-validation' },
+    validators: {
+      anthropic(input) {
+        observedPlaintext = input.plaintext
+        return shouldPass
+          ? { valid: true }
+          : { valid: false, error: `provider rejected ${input.plaintext}` }
+      },
+    },
+  })
+
+  await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    plaintext: VALIDATION_KEY,
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+
+  const active = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(observedPlaintext, VALIDATION_KEY)
+  assert.equal(active?.status, 'active')
+  assert.equal(active?.validationError, null)
+
+  shouldPass = false
+  const invalid = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(invalid?.status, 'invalid')
+  assert.equal(invalid?.validationError?.includes(VALIDATION_KEY), false)
+  assert.match(invalid?.validationError || '', /\[redacted\]/)
+
+  const auditPayload = JSON.stringify(await store.listAuditEvents('tenant-1'))
+  assert.equal(auditPayload.includes(VALIDATION_KEY), false)
+  assert.match(auditPayload, /\[redacted\]/)
+})
+
+test('BYOK KMS references reveal only through explicit worker-authorized paths', async () => {
+  const store = seededStore()
+  const kmsPlaintext = 'credential-kms-backed-1234567890'
+  let resolvedRef = ''
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => 'secret-kms' },
+    kmsRefResolver(input) {
+      resolvedRef = input.kmsRef
+      assert.equal(input.orgId, 'tenant-1')
+      assert.equal(input.providerId, 'anthropic')
+      assert.equal(input.secretId, 'byok_secret-kms')
+      return kmsPlaintext
+    },
+    validators: {
+      anthropic(input) {
+        return input.plaintext === kmsPlaintext
+      },
+    },
+  })
+
+  const created = await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    kmsRef: 'gcp-sm://projects/acme/secrets/anthropic/versions/latest',
+  })
+  assert.equal(created.status, 'active')
+  assert.equal(JSON.stringify(created).includes(kmsPlaintext), false)
+
+  await assert.rejects(
+    () => byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }),
+    /worker-authorized reveal path/,
+  )
+  assert.equal(
+    await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic', allowKmsRef: true }),
+    kmsPlaintext,
+  )
+
+  const validated = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'anthropic',
+    allowKmsRef: true,
+  })
+  assert.equal(validated?.status, 'active')
+  assert.equal(resolvedRef, 'gcp-sm://projects/acme/secrets/anthropic/versions/latest')
 })

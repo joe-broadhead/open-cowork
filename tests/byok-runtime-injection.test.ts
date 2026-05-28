@@ -176,6 +176,120 @@ test('worker-scoped BYOK runtime injects provider options for the correct tenant
   }
 })
 
+test('worker-scoped BYOK runtime resolves KMS references only during worker config injection', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-byok-runtime-kms-'))
+  const store = seededStore()
+  let nextId = 0
+  const kmsKey = 'credential-kms-runtime-abcdef1234567890'
+  let resolverCalls = 0
+  const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'), {
+    ids: { randomUUID: () => `secret-${nextId += 1}` },
+    kmsRefResolver(input) {
+      resolverCalls += 1
+      assert.equal(input.orgId, 'tenant-a')
+      assert.equal(input.providerId, 'openrouter')
+      assert.equal(input.kmsRef, 'aws-sm://open-cowork/test/openrouter')
+      return kmsKey
+    },
+  })
+  await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', kmsRef: 'aws-sm://open-cowork/test/openrouter' })
+  await assert.rejects(
+    () => byokSecrets.revealActiveSecret({ orgId: 'tenant-a', providerId: 'openrouter' }),
+    /worker-authorized reveal path/,
+  )
+
+  const runtimes: ConfigBackedRuntime[] = []
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    env: { PATH: process.env.PATH },
+    config: BYOK_TEST_CONFIG,
+    byokSecrets,
+    runtimeFactory(input) {
+      assert.equal(JSON.stringify(input.env).includes(kmsKey), false)
+      const next = new ConfigBackedRuntime(input)
+      runtimes.push(next)
+      return next
+    },
+  })
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    undefined,
+    { randomUUID: () => `cowork-session-${nextId += 1}` },
+    undefined,
+    byokSecrets,
+  )
+  const worker = new CloudWorker(store, service, 'worker-kms')
+
+  try {
+    const session = await service.createSession(principal('tenant-a', 'user-a'))
+    await service.enqueuePrompt(principal('tenant-a', 'user-a'), session.session.sessionId, { text: 'hello kms', agent: 'build' })
+    assert.equal(resolverCalls, 0, 'web/control-plane operations must not resolve KMS refs')
+
+    assert.equal(await worker.processSessionCommands('tenant-a', session.session.sessionId), 1)
+    assert.equal(resolverCalls, 1)
+    assert.equal(runtimes[0]?.apiKey, kmsKey)
+    const view = await service.getSessionView(principal('tenant-a', 'user-a'), session.session.sessionId)
+    assert.equal(view.projection.view.messages.at(-1)?.content, 'used-byok:7890')
+  } finally {
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('worker-scoped BYOK runtime enforces provider policy before revealing active secrets', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-byok-runtime-policy-'))
+  const store = seededStore()
+  let nextId = 0
+  const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'), {
+    ids: { randomUUID: () => `secret-${nextId += 1}` },
+  })
+  await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
+  let factoryCalls = 0
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    env: { PATH: process.env.PATH },
+    config: BYOK_TEST_CONFIG,
+    byokSecrets,
+    byokPolicy: {
+      allowedProviderIds: ['anthropic'],
+      checkEntitlement() {
+        throw new Error('entitlement checker should not run for an unavailable provider')
+      },
+    },
+    runtimeFactory() {
+      factoryCalls += 1
+      throw new Error('runtime factory should not be called')
+    },
+  })
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    undefined,
+    { randomUUID: () => `cowork-session-${nextId += 1}` },
+    undefined,
+    byokSecrets,
+  )
+  const worker = new CloudWorker(store, service, 'worker-policy')
+
+  try {
+    const session = await service.createSession(principal('tenant-a', 'user-a'))
+    await service.enqueuePrompt(principal('tenant-a', 'user-a'), session.session.sessionId, { text: 'hello policy', agent: 'build' })
+    await assert.rejects(
+      () => worker.processSessionCommands('tenant-a', session.session.sessionId),
+      /not available for cloud BYOK execution/,
+    )
+    assert.equal(factoryCalls, 0)
+  } finally {
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('missing or disabled required BYOK key fails before runtime spawn', async () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-byok-runtime-missing-'))
   const store = seededStore()

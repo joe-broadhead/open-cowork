@@ -78,6 +78,36 @@ export type CloudPrincipal = {
   tokenScopes?: ApiTokenScope[]
 }
 
+export type ByokEntitlementVerdict = {
+  allowed: boolean
+  status?: number
+  reason?: string | null
+}
+
+export type ByokEntitlementChecker = (input: {
+  principal: CloudPrincipal
+  orgId: string
+  providerId: string
+}) => Promise<ByokEntitlementVerdict> | ByokEntitlementVerdict
+
+export type ByokRuntimeEntitlementChecker = (input: {
+  orgId: string
+  providerId: string
+}) => Promise<ByokEntitlementVerdict> | ByokEntitlementVerdict
+
+export type ByokKmsRefPolicy = {
+  enabled?: boolean
+  allowedPrefixes?: readonly string[] | null
+  allowEnvRefs?: boolean
+}
+
+export type ByokManagementPolicy = {
+  allowedProviderIds?: readonly string[] | null
+  checkEntitlement?: ByokEntitlementChecker | null
+  checkRuntimeEntitlement?: ByokRuntimeEntitlementChecker | null
+  kmsRefs?: ByokKmsRefPolicy | null
+}
+
 export class CloudServiceError extends Error {
   readonly status: number
   readonly publicMessage: string
@@ -240,6 +270,14 @@ function principalCanManageByok(principal: CloudPrincipal) {
   if (principal.authSource === 'local' || principal.authSource === 'header') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function normalizeByokProviderIdForPolicy(value: string) {
+  const providerId = value.trim().toLowerCase()
+  if (!providerId || providerId.length > 64 || !/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) {
+    throw new CloudServiceError(400, `Unsupported BYOK provider id ${providerId || '<empty>'}.`)
+  }
+  return providerId
 }
 
 function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
@@ -961,6 +999,7 @@ export class CloudSessionService {
   private readonly workspaceEvents: CloudWorkspaceEventBus
   private readonly ids: { randomUUID: () => string }
   private readonly byokSecrets: ByokSecretStore | null
+  private readonly byokPolicy: ByokManagementPolicy
 
   constructor(
     store: ControlPlaneStore,
@@ -970,6 +1009,7 @@ export class CloudSessionService {
     ids: { randomUUID: () => string } = { randomUUID },
     workspaceEvents = new CloudWorkspaceEventBus(),
     byokSecrets: ByokSecretStore | null = null,
+    byokPolicy: ByokManagementPolicy = {},
   ) {
     this.store = store
     this.runtime = runtime
@@ -978,6 +1018,7 @@ export class CloudSessionService {
     this.workspaceEvents = workspaceEvents
     this.ids = ids
     this.byokSecrets = byokSecrets
+    this.byokPolicy = byokPolicy
   }
 
   get eventBus() {
@@ -1077,7 +1118,8 @@ export class CloudSessionService {
   async getByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
     await this.ensurePrincipal(principal)
     this.assertByokAllowed(principal)
-    return this.requireByokSecrets().getMetadata(this.principalOrgId(principal), providerId)
+    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
+    return this.requireByokSecrets().getMetadata(this.principalOrgId(principal), normalizedProviderId)
   }
 
   async setByokSecret(
@@ -1086,31 +1128,37 @@ export class CloudSessionService {
   ): Promise<ByokSecretMetadata> {
     await this.ensurePrincipal(principal)
     this.assertByokAllowed(principal)
+    const providerId = await this.assertByokProviderAllowed(principal, input.providerId)
+    this.assertByokKmsRefAllowed(providerId, input.kmsRef)
     return this.requireByokSecrets().setSecret({
       orgId: this.principalOrgId(principal),
-      providerId: input.providerId,
+      providerId,
       plaintext: input.plaintext,
       kmsRef: input.kmsRef,
       createdByAccountId: principal.accountId || principal.userId,
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
+      actor: this.byokAuditActor(principal),
     })
   }
 
   async disableByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
     await this.ensurePrincipal(principal)
     this.assertByokAllowed(principal)
+    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
     return this.requireByokSecrets().disableSecret({
       orgId: this.principalOrgId(principal),
-      providerId,
-      actor: {
-        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
-        actorId: principal.tokenId || principal.userId,
-        accountId: principal.accountId || principal.userId,
-      },
+      providerId: normalizedProviderId,
+      actor: this.byokAuditActor(principal),
+    })
+  }
+
+  async validateByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
+    return this.requireByokSecrets().validateActiveSecret({
+      orgId: this.principalOrgId(principal),
+      providerId: normalizedProviderId,
+      actor: this.byokAuditActor(principal),
     })
   }
 
@@ -2666,6 +2714,57 @@ export class CloudSessionService {
   private assertByokAllowed(principal: CloudPrincipal) {
     if (!principalCanManageByok(principal)) {
       throw new CloudServiceError(403, 'BYOK credential administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private byokAuditActor(principal: CloudPrincipal) {
+    return {
+      actorType: principal.authSource === 'api_token' ? 'api_token' as const : 'user' as const,
+      actorId: principal.tokenId || principal.userId,
+      accountId: principal.accountId || principal.userId,
+    }
+  }
+
+  private async assertByokProviderAllowed(principal: CloudPrincipal, providerIdInput: string) {
+    const providerId = normalizeByokProviderIdForPolicy(providerIdInput)
+    const allowedProviderIds = this.byokPolicy.allowedProviderIds
+      ? new Set(this.byokPolicy.allowedProviderIds.map((id) => id.trim().toLowerCase()).filter(Boolean))
+      : null
+    if (allowedProviderIds?.size && !allowedProviderIds.has(providerId)) {
+      throw new CloudServiceError(403, `Provider "${providerId}" is not enabled for BYOK in this cloud profile.`)
+    }
+    const entitlement = await this.byokPolicy.checkEntitlement?.({
+      principal,
+      orgId: this.principalOrgId(principal),
+      providerId,
+    })
+    if (entitlement && !entitlement.allowed) {
+      throw new CloudServiceError(
+        entitlement.status || 402,
+        entitlement.reason || `Provider "${providerId}" is not available for this org entitlement.`,
+      )
+    }
+    return providerId
+  }
+
+  private assertByokKmsRefAllowed(providerId: string, kmsRefInput: string | null | undefined) {
+    const kmsRef = typeof kmsRefInput === 'string' ? kmsRefInput.trim() : ''
+    if (!kmsRef) return
+    const policy = this.byokPolicy.kmsRefs
+    if (!policy?.enabled) {
+      throw new CloudServiceError(403, 'KMS-backed BYOK references are disabled for this cloud deployment.')
+    }
+    if (kmsRef.startsWith('env:') && !policy.allowEnvRefs) {
+      throw new CloudServiceError(403, 'Environment-backed BYOK references are not enabled for user-managed KMS refs.')
+    }
+    const allowedPrefixes = (policy.allowedPrefixes || [])
+      .map((prefix) => prefix.trim())
+      .filter(Boolean)
+    if (allowedPrefixes.length === 0) {
+      throw new CloudServiceError(403, 'KMS-backed BYOK references require deployer-configured allowed prefixes.')
+    }
+    if (!allowedPrefixes.some((prefix) => kmsRef.startsWith(prefix))) {
+      throw new CloudServiceError(403, `KMS-backed BYOK reference is not allowed for provider "${providerId}".`)
     }
   }
 

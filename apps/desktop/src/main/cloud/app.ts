@@ -20,7 +20,11 @@ import {
   type CloudObservabilityAdapter,
 } from './observability.ts'
 import { createObjectStoreForCloud, type ObjectStoreAdapter } from './object-store.ts'
-import { createByokSecretStore, type ByokSecretStore } from './byok-secret-store.ts'
+import {
+  createByokSecretStore,
+  type ByokSecretStore,
+  type ByokSecretStoreOptions,
+} from './byok-secret-store.ts'
 import {
   createOidcBrowserAuthProvider,
   createOidcCloudAuthResolver,
@@ -30,9 +34,9 @@ import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvi
 import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
-import { createCloudSecretAdapterFromEnv, type SecretAdapter } from './secret-adapter.ts'
+import { createCloudSecretAdapterFromEnv, resolveCloudSecretRef, type SecretAdapter } from './secret-adapter.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
-import { CloudSessionService, type CloudPrincipal } from './session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
@@ -91,6 +95,8 @@ export type CloudAppOptions = {
   objectStore?: ObjectStoreAdapter
   objectStoreFactory?: CloudObjectStoreFactory
   secretAdapter?: SecretAdapter
+  byokSecretStoreOptions?: Pick<ByokSecretStoreOptions, 'kmsRefResolver' | 'validators'>
+  byokPolicy?: ByokManagementPolicy
   runtime?: CloudRuntimeAdapter
   runtimeFactory?: CloudRuntimeFactory
   paths?: PathProvider
@@ -267,6 +273,13 @@ function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
     config: input.runtimeConfig,
     configDelivery: 'ephemeral-file',
   })
+}
+
+function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
+  const providerIds = (config.providers.available || [])
+    .map((providerId) => providerId.trim().toLowerCase())
+    .filter(Boolean)
+  return providerIds.length > 0 ? Array.from(new Set(providerIds)) : null
 }
 
 function readHeader(req: IncomingMessage, name: string) {
@@ -501,7 +514,17 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env)
-  const byokSecrets = createByokSecretStore(store, secretAdapter)
+  const byokPolicy: ByokManagementPolicy = {
+    allowedProviderIds: options.byokPolicy?.allowedProviderIds ?? listConfiguredByokProviderIds(config),
+    checkEntitlement: options.byokPolicy?.checkEntitlement ?? null,
+    checkRuntimeEntitlement: options.byokPolicy?.checkRuntimeEntitlement ?? null,
+    kmsRefs: options.byokPolicy?.kmsRefs ?? null,
+  }
+  const byokSecrets = createByokSecretStore(store, secretAdapter, {
+    ...options.byokSecretStoreOptions,
+    kmsRefResolver: options.byokSecretStoreOptions?.kmsRefResolver
+      || (({ kmsRef }) => resolveCloudSecretRef(kmsRef, { env })),
+  })
   const checkpointsEnabled = options.checkpointsEnabled ?? envOptions.checkpointsEnabled
   const hasCheckpointStoreOverride = Object.prototype.hasOwnProperty.call(options, 'checkpointStore')
   const checkpointStore = shouldRunCloudWorker(policy.role)
@@ -522,11 +545,24 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           env,
           config,
           byokSecrets,
+          byokPolicy: {
+            allowedProviderIds: byokPolicy.allowedProviderIds,
+            checkEntitlement: byokPolicy.checkRuntimeEntitlement,
+          },
           runtimeFactory: options.runtimeFactory || defaultCloudRuntimeFactory,
         })
       : createUnavailableRuntimeAdapter()
   )
-  const service = new CloudSessionService(store, runtime, policy, undefined, undefined, undefined, byokSecrets)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    policy,
+    undefined,
+    undefined,
+    undefined,
+    byokSecrets,
+    byokPolicy,
+  )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
   const cookieSecret = resolveCloudCookieSecret(resolvedAuthConfig, env)

@@ -744,6 +744,11 @@ async function handleApiRequest(
       writeJson(res, 200, { secret: await options.service.getByokSecret(context.principal, providerId) }, options.corsOrigin)
       return
     }
+    if (providerId && action === 'validate' && req.method === 'POST') {
+      const secret = await options.service.validateByokSecret(context.principal, providerId)
+      writeJson(res, 200, { secret, validated: Boolean(secret?.lastValidatedAt) }, options.corsOrigin)
+      return
+    }
     if (providerId && !action && req.method === 'POST') {
       const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const plaintext = readString(body.plaintext) || readString(body.apiKey) || readString(body.key) || readString(body.secret)

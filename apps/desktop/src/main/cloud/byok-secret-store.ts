@@ -40,7 +40,47 @@ export type RecordByokValidationInput = {
 export type RevealByokSecretInput = {
   orgId: string
   providerId: string
+  allowKmsRef?: boolean
 }
+
+export type ValidateByokSecretInput = {
+  orgId: string
+  providerId: string
+  actor?: AuditActorInput
+  allowKmsRef?: boolean
+}
+
+export type ByokSecretRefResolverInput = {
+  orgId: string
+  providerId: string
+  secretId: string
+  kmsRef: string
+}
+
+export type ByokSecretRefResolver = (input: ByokSecretRefResolverInput) => Promise<string> | string
+
+export type ByokProviderValidationInput = {
+  orgId: string
+  providerId: string
+  secretId: string
+  plaintext: string
+  metadata: ByokSecretMetadata
+}
+
+export type ByokProviderValidationResult =
+  | boolean
+  | {
+      ok?: boolean
+      valid?: boolean
+      status?: Extract<ByokSecretStatus, 'active' | 'invalid'>
+      error?: string | null
+      reason?: string | null
+    }
+  | void
+
+export type ByokProviderValidator = (
+  input: ByokProviderValidationInput,
+) => Promise<ByokProviderValidationResult> | ByokProviderValidationResult
 
 export type ByokSecretStore = {
   listMetadata(orgId: string): Promise<ByokSecretMetadata[]>
@@ -48,11 +88,14 @@ export type ByokSecretStore = {
   setSecret(input: SetByokSecretInput): Promise<ByokSecretMetadata>
   disableSecret(input: { orgId: string, providerId: string, actor?: AuditActorInput }): Promise<ByokSecretMetadata | null>
   recordValidation(input: RecordByokValidationInput): Promise<ByokSecretMetadata | null>
+  validateActiveSecret(input: ValidateByokSecretInput): Promise<ByokSecretMetadata | null>
   revealActiveSecret(input: RevealByokSecretInput): Promise<string>
 }
 
 export type ByokSecretStoreOptions = {
   ids?: { randomUUID: () => string }
+  kmsRefResolver?: ByokSecretRefResolver | null
+  validators?: Record<string, ByokProviderValidator | undefined> | null
 }
 
 const PROVIDER_ID_MAX_LENGTH = 64
@@ -98,6 +141,25 @@ function sanitizeValidationError(value: string | null | undefined) {
     : sanitized
 }
 
+function normalizeValidationOutcome(result: ByokProviderValidationResult): {
+  status: Extract<ByokSecretStatus, 'active' | 'invalid'>
+  validationError: string | null
+} {
+  if (typeof result === 'boolean') {
+    return result
+      ? { status: 'active', validationError: null }
+      : { status: 'invalid', validationError: 'Provider credential validation failed.' }
+  }
+  if (!result) {
+    return { status: 'active', validationError: null }
+  }
+  const valid = result.status ? result.status === 'active' : (result.valid ?? result.ok ?? true)
+  return {
+    status: valid ? 'active' : 'invalid',
+    validationError: valid ? null : (result.error ?? result.reason ?? 'Provider credential validation failed.'),
+  }
+}
+
 export function byokSecretMetadata(record: ByokSecretRecord): ByokSecretMetadata {
   return {
     secretId: record.secretId,
@@ -135,6 +197,32 @@ export function createByokSecretStore(
   options: ByokSecretStoreOptions = {},
 ): ByokSecretStore {
   const ids = options.ids || { randomUUID }
+  const validators = options.validators || {}
+
+  async function revealSecretRecord(secret: ByokSecretRecord, input: RevealByokSecretInput) {
+    if (secret.ciphertext) {
+      return secretAdapter.reveal(secret.ciphertext, byokAad(secret.orgId, secret.providerId, secret.secretId))
+    }
+    if (!secret.kmsRef) {
+      throw new Error(`BYOK secret ${secret.secretId} has no encrypted material.`)
+    }
+    if (!input.allowKmsRef) {
+      throw new Error('KMS-backed BYOK secrets require a worker-authorized reveal path.')
+    }
+    if (!options.kmsRefResolver) {
+      throw new Error('KMS-backed BYOK secret resolver is not configured.')
+    }
+    const resolved = await options.kmsRefResolver({
+      orgId: secret.orgId,
+      providerId: secret.providerId,
+      secretId: secret.secretId,
+      kmsRef: secret.kmsRef,
+    })
+    if (!resolved) {
+      throw new Error('KMS-backed BYOK secret resolver returned an empty credential.')
+    }
+    return resolved
+  }
 
   return {
     async listMetadata(orgId) {
@@ -206,13 +294,65 @@ export function createByokSecretStore(
       return record ? byokSecretMetadata(record) : null
     },
 
+    async validateActiveSecret(input) {
+      const providerId = normalizeProviderId(input.providerId)
+      const secret = await store.getActiveByokSecret(input.orgId, providerId)
+      if (!secret) return null
+      if (secret.kmsRef && !input.allowKmsRef) {
+        return byokSecretMetadata(secret)
+      }
+
+      const validator = validators[providerId]
+      if (!validator) {
+        const record = await store.recordByokSecretValidation({
+          orgId: input.orgId,
+          providerId,
+          secretId: secret.secretId,
+          status: 'active',
+          validationError: null,
+          actor: input.actor,
+        })
+        return record ? byokSecretMetadata(record) : null
+      }
+
+      try {
+        const plaintext = await revealSecretRecord(secret, { ...input, providerId })
+        const outcome = normalizeValidationOutcome(
+          await validator({
+            orgId: input.orgId,
+            providerId,
+            secretId: secret.secretId,
+            plaintext,
+            metadata: byokSecretMetadata(secret),
+          }),
+        )
+        const record = await store.recordByokSecretValidation({
+          orgId: input.orgId,
+          providerId,
+          secretId: secret.secretId,
+          status: outcome.status,
+          validationError: sanitizeValidationError(outcome.validationError),
+          actor: input.actor,
+        })
+        return record ? byokSecretMetadata(record) : null
+      } catch (error) {
+        const record = await store.recordByokSecretValidation({
+          orgId: input.orgId,
+          providerId,
+          secretId: secret.secretId,
+          status: 'invalid',
+          validationError: sanitizeValidationError(error instanceof Error ? error.message : String(error)),
+          actor: input.actor,
+        })
+        return record ? byokSecretMetadata(record) : null
+      }
+    },
+
     async revealActiveSecret(input) {
       const providerId = normalizeProviderId(input.providerId)
       const secret = await store.getActiveByokSecret(input.orgId, providerId)
       if (!secret) throw new Error(`No active BYOK secret configured for provider ${providerId}.`)
-      if (secret.kmsRef) throw new Error('KMS-backed BYOK secrets are not revealable by this store yet.')
-      if (!secret.ciphertext) throw new Error(`BYOK secret ${secret.secretId} has no encrypted material.`)
-      return secretAdapter.reveal(secret.ciphertext, byokAad(input.orgId, providerId, secret.secretId))
+      return revealSecretRecord(secret, { ...input, providerId })
     },
   }
 }
