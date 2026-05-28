@@ -14,6 +14,7 @@ import {
   resolveCloudAuthConfig,
   resolveCloudControlPlaneUrl,
   resolveCloudBootstrapOptionsFromEnv,
+  resolveCloudBillingConfig,
   resolveCloudInternalToken,
   resolveCloudOidcClientSecret,
   shouldRunCloudScheduler,
@@ -219,6 +220,27 @@ test('cloud internal token resolves from explicit env before env refs', () => {
     OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF: 'INTERNAL_TOKEN_REF',
     INTERNAL_TOKEN_REF: 'from-ref',
   }), 'from-env')
+})
+
+test('cloud billing config resolves provider, plan, and Stripe refs from env', () => {
+  const resolved = resolveCloudBillingConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_BILLING_ENABLED: 'true',
+    OPEN_COWORK_CLOUD_BILLING_PROVIDER: 'stripe',
+    OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN: 'pro',
+    OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF: 'env:STRIPE_API_KEY',
+    OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF: 'env:STRIPE_WEBHOOK_SECRET',
+    OPEN_COWORK_CLOUD_STRIPE_PRICE_ID: 'price_pro',
+    OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL: 'https://app.example.test/success',
+    OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL: 'https://app.example.test/cancel',
+    OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL: 'https://app.example.test/billing',
+  })
+
+  assert.equal(resolved.enabled, true)
+  assert.equal(resolved.provider, 'stripe')
+  assert.equal(resolved.defaultPlanKey, 'pro')
+  assert.equal(resolved.stripe?.apiKeyRef, 'env:STRIPE_API_KEY')
+  assert.equal(resolved.stripe?.webhookSecretRef, 'env:STRIPE_WEBHOOK_SECRET')
+  assert.equal(resolved.stripe?.defaultPriceId, 'price_pro')
 })
 
 test('cloud auth config resolves OIDC deployment settings from env', () => {

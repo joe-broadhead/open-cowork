@@ -20,6 +20,7 @@ import type {
   AuditEventRecord,
   AckChannelDeliveryInput,
   BindChannelSessionInput,
+  BillingSubscriptionRecord,
   ByokSecretRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
@@ -85,6 +86,7 @@ import type {
   UpdateWorkflowStatusInput,
   UpdateThreadSmartFilterInput,
   UpdateThreadTagInput,
+  UpsertBillingSubscriptionInput,
   UpsertChannelIdentityInput,
   UpsertMembershipInput,
   UserRecord,
@@ -500,6 +502,24 @@ function channelInteractionFromRow(row: QueryRow): ChannelInteractionRecord {
     createdByIdentityId: stringOrNull(row.created_by_identity_id),
     expiresAt: iso(row.expires_at),
     usedAt: isoOrNull(row.used_at),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+function billingSubscriptionFromRow(row: QueryRow): BillingSubscriptionRecord {
+  return {
+    orgId: String(row.org_id),
+    planKey: String(row.plan_key),
+    providerId: String(row.provider_id),
+    providerCustomerId: stringOrNull(row.provider_customer_id),
+    providerSubscriptionId: stringOrNull(row.provider_subscription_id),
+    status: String(row.status) as BillingSubscriptionRecord['status'],
+    seats: numberValue(row.seats),
+    entitlements: jsonRecord(row.entitlements) as BillingSubscriptionRecord['entitlements'],
+    currentPeriodEnd: isoOrNull(row.current_period_end),
+    cancelAtPeriodEnd: row.cancel_at_period_end === true,
+    metadata: jsonRecord(row.metadata),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   }
@@ -1056,6 +1076,97 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [orgId, Math.max(1, Math.min(limit, 500))],
     )
     return result.rows.map(usageEventFromRow)
+  }
+
+  async upsertBillingSubscription(input: UpsertBillingSubscriptionInput) {
+    await this.requireOrg(input.orgId)
+    const now = nowIso(input.updatedAt)
+    const result = await this.pool.query(
+      `INSERT INTO cloud_subscriptions (
+        org_id, plan_key, provider_id, provider_customer_id, provider_subscription_id,
+        status, seats, entitlements, current_period_end, cancel_at_period_end,
+        metadata, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $12)
+       ON CONFLICT (org_id) DO UPDATE
+       SET plan_key = EXCLUDED.plan_key,
+           provider_id = EXCLUDED.provider_id,
+           provider_customer_id = EXCLUDED.provider_customer_id,
+           provider_subscription_id = EXCLUDED.provider_subscription_id,
+           status = EXCLUDED.status,
+           seats = EXCLUDED.seats,
+           entitlements = EXCLUDED.entitlements,
+           current_period_end = EXCLUDED.current_period_end,
+           cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+           metadata = EXCLUDED.metadata,
+           updated_at = EXCLUDED.updated_at
+       RETURNING *`,
+      [
+        input.orgId,
+        normalizeText(input.planKey, CHANNEL_TEXT_MAX_LENGTH, 'Billing plan key'),
+        normalizeText(input.providerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider id'),
+        input.providerCustomerId ? normalizeText(input.providerCustomerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider customer id') : null,
+        input.providerSubscriptionId ? normalizeText(input.providerSubscriptionId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider subscription id') : null,
+        input.status,
+        normalizePositiveInteger(input.seats || 1, 'Billing seats'),
+        JSON.stringify(jsonRecord(input.entitlements)),
+        input.currentPeriodEnd ? (input.currentPeriodEnd instanceof Date ? input.currentPeriodEnd.toISOString() : new Date(input.currentPeriodEnd).toISOString()) : null,
+        input.cancelAtPeriodEnd === true,
+        JSON.stringify(redactAuditMetadata(input.metadata)),
+        now,
+      ],
+    )
+    const subscription = billingSubscriptionFromRow(result.rows[0])
+    await this.recordAuditEvent({
+      orgId: subscription.orgId,
+      actorType: 'system',
+      actorId: 'billing.subscription.upsert',
+      eventType: 'billing.subscription.updated',
+      targetType: 'billing_subscription',
+      targetId: subscription.providerSubscriptionId || subscription.orgId,
+      metadata: {
+        providerId: subscription.providerId,
+        planKey: subscription.planKey,
+        status: subscription.status,
+        seats: subscription.seats,
+        providerCustomerId: subscription.providerCustomerId,
+        providerSubscriptionId: subscription.providerSubscriptionId,
+      },
+      createdAt: input.updatedAt,
+    })
+    return subscription
+  }
+
+  async getBillingSubscription(orgId: string) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_subscriptions WHERE org_id = $1`,
+      [orgId],
+    )
+    return row ? billingSubscriptionFromRow(row) : null
+  }
+
+  async findBillingSubscriptionByProvider(input: {
+    providerId: string
+    providerCustomerId?: string | null
+    providerSubscriptionId?: string | null
+  }) {
+    const providerId = normalizeText(input.providerId, CHANNEL_TEXT_MAX_LENGTH, 'Billing provider id')
+    const row = input.providerSubscriptionId
+      ? await this.maybeOne(
+        `SELECT * FROM cloud_subscriptions
+         WHERE provider_id = $1 AND provider_subscription_id = $2`,
+        [providerId, input.providerSubscriptionId],
+      )
+      : input.providerCustomerId
+        ? await this.maybeOne(
+          `SELECT * FROM cloud_subscriptions
+           WHERE provider_id = $1 AND provider_customer_id = $2
+           ORDER BY updated_at DESC
+           LIMIT 1`,
+          [providerId, input.providerCustomerId],
+        )
+        : null
+    return row ? billingSubscriptionFromRow(row) : null
   }
 
   async claimRateLimit(input: ClaimRateLimitInput) {
@@ -3292,6 +3403,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async clear() {
+    await this.pool.query('DELETE FROM cloud_subscriptions')
     await this.pool.query('DELETE FROM cloud_auth_failures')
     await this.pool.query('DELETE FROM cloud_rate_limits')
     await this.pool.query('DELETE FROM cloud_quota_locks')
@@ -3451,6 +3563,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     )
     if (!row) throw new Error(`Unknown tenant ${tenantId}.`)
     return tenantFromRow(row)
+  }
+
+  private async requireOrg(orgId: string, executor: PgExecutor = this.pool) {
+    const row = await this.maybeOne(
+      `SELECT * FROM cloud_orgs WHERE org_id = $1`,
+      [orgId],
+      executor,
+    )
+    if (!row) throw new Error(`Unknown org ${orgId}.`)
+    return orgFromRow(row)
   }
 
   private async requireTenantUser(

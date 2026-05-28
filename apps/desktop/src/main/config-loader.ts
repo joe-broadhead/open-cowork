@@ -256,6 +256,59 @@ function normalizeCloudAbuseConfig(raw: CloudConfig['abuse'] | undefined): Cloud
   }
 }
 
+function normalizeBillingEntitlements(raw: CloudConfig['billing']['plans'][string]['entitlements'] | undefined): CloudConfig['billing']['plans'][string]['entitlements'] {
+  if (!raw) return undefined
+  return {
+    ...raw,
+    allowedProfiles: raw.allowedProfiles === null ? null : stringArray(raw.allowedProfiles),
+    allowedProviders: raw.allowedProviders === null ? null : stringArray(raw.allowedProviders),
+    maxConcurrentSessionsPerOrg: nullablePositiveNumber(raw.maxConcurrentSessionsPerOrg, null),
+    maxActiveWorkersPerOrg: nullablePositiveNumber(raw.maxActiveWorkersPerOrg, null),
+    maxPromptsPerHour: nullablePositiveNumber(raw.maxPromptsPerHour, null),
+    maxGatewayDeliveriesPerHour: nullablePositiveNumber(raw.maxGatewayDeliveriesPerHour, null),
+    maxArtifactBytesPerDay: nullablePositiveNumber(raw.maxArtifactBytesPerDay, null),
+  }
+}
+
+function normalizeCloudBillingConfig(raw: CloudConfig['billing'] | undefined): CloudConfig['billing'] {
+  const defaults = DEFAULT_CONFIG.cloud.billing
+  const source = raw || defaults
+  const providers = new Set(['none', 'stub', 'stripe'])
+  const plans: CloudConfig['billing']['plans'] = {}
+  for (const [planKey, plan] of Object.entries(defaults.plans)) {
+    plans[planKey] = {
+      ...plan,
+      entitlements: normalizeBillingEntitlements(plan.entitlements),
+    }
+  }
+  for (const [planKey, plan] of Object.entries(source.plans || {})) {
+    if (!planKey.trim()) continue
+    plans[planKey] = {
+      ...(plans[planKey] || {}),
+      ...plan,
+      entitlements: normalizeBillingEntitlements({
+        ...(plans[planKey]?.entitlements || {}),
+        ...(plan.entitlements || {}),
+      }),
+    }
+  }
+  const defaultPlanKey = source.defaultPlanKey && plans[source.defaultPlanKey]
+    ? source.defaultPlanKey
+    : defaults.defaultPlanKey
+  return {
+    ...defaults,
+    ...source,
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : defaults.enabled,
+    provider: providers.has(source.provider) ? source.provider : defaults.provider,
+    defaultPlanKey,
+    plans,
+    stripe: {
+      ...(defaults.stripe || {}),
+      ...(source.stripe || {}),
+    },
+  }
+}
+
 function normalizeCloudProfile(raw: CloudProfileConfig | undefined): CloudProfileConfig {
   return {
     ...(raw || {}),
@@ -342,6 +395,7 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
     },
     features: normalizeCloudFeatures(source.features),
     abuse: normalizeCloudAbuseConfig(source.abuse),
+    billing: normalizeCloudBillingConfig(source.billing),
   }
 }
 

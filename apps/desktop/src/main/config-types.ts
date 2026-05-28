@@ -286,6 +286,45 @@ export type CloudAbuseConfig = {
   authBackoff: CloudAuthBackoffConfig
 }
 
+export type CloudBillingProvider = 'none' | 'stub' | 'stripe'
+
+export type CloudSubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete'
+
+export type CloudBillingEntitlements = {
+  features?: Partial<CloudFeatureConfig>
+  allowedProfiles?: string[] | null
+  allowedProviders?: string[] | null
+  maxConcurrentSessionsPerOrg?: number | null
+  maxActiveWorkersPerOrg?: number | null
+  maxPromptsPerHour?: number | null
+  maxGatewayDeliveriesPerHour?: number | null
+  maxArtifactBytesPerDay?: number | null
+  allowNewSessions?: boolean
+  allowPrompts?: boolean
+  allowWorkers?: boolean
+}
+
+export type CloudBillingPlanConfig = {
+  label?: string
+  stripePriceId?: string
+  entitlements?: CloudBillingEntitlements
+}
+
+export type CloudBillingConfig = {
+  enabled: boolean
+  provider: CloudBillingProvider
+  defaultPlanKey: string
+  plans: Record<string, CloudBillingPlanConfig>
+  stripe?: {
+    apiKeyRef?: string
+    webhookSecretRef?: string
+    defaultPriceId?: string
+    successUrl?: string
+    cancelUrl?: string
+    portalReturnUrl?: string
+  }
+}
+
 export type CloudDesktopConnectionConfig = {
   baseUrl: string
   label?: string
@@ -309,6 +348,7 @@ export type CloudConfig = {
   runtime: CloudRuntimePolicyConfig
   features: CloudFeatureConfig
   abuse: CloudAbuseConfig
+  billing: CloudBillingConfig
 }
 
 export type OpenCoworkConfig = {
@@ -447,6 +487,22 @@ const DEFAULT_CLOUD_ABUSE: CloudAbuseConfig = {
   },
 }
 
+const DEFAULT_CLOUD_BILLING: CloudBillingConfig = {
+  enabled: false,
+  provider: 'none',
+  defaultPlanKey: 'self-host',
+  plans: {
+    'self-host': {
+      label: 'Self-host',
+      entitlements: {
+        allowNewSessions: true,
+        allowPrompts: true,
+        allowWorkers: true,
+      },
+    },
+  },
+}
+
 const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
   enabled: true,
   allowUserAddedConnections: true,
@@ -518,6 +574,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     runtime: DEFAULT_CLOUD_RUNTIME,
     features: DEFAULT_CLOUD_FEATURES,
     abuse: DEFAULT_CLOUD_ABUSE,
+    billing: DEFAULT_CLOUD_BILLING,
     profiles: {
       full: {
         label: 'Full app',

@@ -101,6 +101,8 @@ const CLOUD_WEBHOOK_REQUEST_LIMIT = 120
 const CLOUD_WEBHOOK_AUTH_FAILURE_WINDOW_MS = 60 * 1000
 const CLOUD_WEBHOOK_AUTH_FAILURE_LIMIT = 5
 const CLOUD_WEBHOOK_AUTH_BACKOFF_MS = 60 * 1000
+const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
+const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
 
 function defaultAuthResolver(): CloudPrincipal {
   return DEFAULT_PRINCIPAL
@@ -334,6 +336,14 @@ function requestSource(req: IncomingMessage) {
   return forwardedFor || req.socket.remoteAddress || 'unknown'
 }
 
+function requestHeaderRecord(req: IncomingMessage): Record<string, string | undefined> {
+  const headers: Record<string, string | undefined> = {}
+  for (const [name, value] of Object.entries(req.headers)) {
+    headers[name.toLowerCase()] = Array.isArray(value) ? value[0] : value
+  }
+  return headers
+}
+
 function authFailureScopes(req: IncomingMessage) {
   const source = requestSource(req)
   const authorization = firstHeader(req.headers.authorization).trim()
@@ -498,6 +508,84 @@ async function handleCloudWorkflowWebhook(
         backoffMs: CLOUD_WEBHOOK_AUTH_BACKOFF_MS,
       })
     }
+    writeError(res, status, message, options.corsOrigin)
+  }
+}
+
+async function handleBillingWebhook(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: CloudHttpServerOptions,
+) {
+  if (req.method !== 'POST') {
+    writeError(res, 405, 'Method not allowed.', options.corsOrigin)
+    return
+  }
+
+  const source = `billing:${requestSource(req)}`
+  const startedAt = Date.now()
+  const securityStore = options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore()
+  let replayClaim: Awaited<ReturnType<WorkflowWebhookSecurityStore['claimSignature']>> | null = null
+  try {
+    const requestAccepted = await securityStore.claimRequest({
+      source,
+      nowMs: startedAt,
+      windowMs: CLOUD_WEBHOOK_REQUEST_WINDOW_MS,
+      limit: CLOUD_WEBHOOK_REQUEST_LIMIT,
+    })
+    if (!requestAccepted) throw new CloudHttpError(429, 'Too many billing webhook requests. Try again later.')
+    const authAccepted = await securityStore.checkAuthBackoff({
+      scope: source,
+      nowMs: startedAt,
+    })
+    if (!authAccepted) throw new CloudHttpError(429, 'Too many rejected billing webhook requests. Try again later.')
+    const { body, rawBody } = await readJsonBodyWithRaw(req, options.maxBodyBytes || 256 * 1024)
+    const eventId = readString(body.id) || createHash('sha256').update(rawBody).digest('hex')
+    replayClaim = await securityStore.claimSignature({
+      key: `billing:${eventId}`,
+      nowMs: startedAt,
+      windowMs: WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS,
+      cacheLimit: WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT,
+    })
+    if (!replayClaim) {
+      writeJson(res, 200, { ok: true, replayed: true }, options.corsOrigin)
+      return
+    }
+    const result = await options.service.handleBillingWebhook({
+      headers: requestHeaderRecord(req),
+      rawBody,
+      body,
+    })
+    await replayClaim.accept()
+    writeJson(res, 200, {
+      ok: true,
+      providerId: result.providerId,
+      eventId: result.eventId,
+      eventType: result.eventType,
+      subscription: result.subscriptionRecord || null,
+    }, options.corsOrigin)
+  } catch (error) {
+    await replayClaim?.release()
+    const status = error instanceof CloudHttpError
+      ? error.status
+      : error instanceof CloudServiceError
+        ? error.status
+        : 400
+    if (status === 401) {
+      await securityStore.recordAuthFailure({
+        scope: source,
+        source,
+        nowMs: Date.now(),
+        windowMs: CLOUD_WEBHOOK_AUTH_FAILURE_WINDOW_MS,
+        limit: CLOUD_WEBHOOK_AUTH_FAILURE_LIMIT,
+        backoffMs: CLOUD_WEBHOOK_AUTH_BACKOFF_MS,
+      })
+    }
+    const message = error instanceof CloudHttpError
+      ? error.publicMessage
+      : error instanceof CloudServiceError
+        ? error.publicMessage
+        : 'Billing webhook request failed.'
     writeError(res, status, message, options.corsOrigin)
   }
 }
@@ -778,6 +866,33 @@ async function handleApiRequest(
     writeJson(res, 200, {
       events: await options.service.listUsageEvents(context.principal, parseLimit(context.url)),
     }, options.corsOrigin)
+    return
+  }
+
+  if (resource === 'billing') {
+    if (sessionId === 'subscription' && !action && req.method === 'GET') {
+      writeJson(res, 200, await options.service.getBillingSubscription(context.principal), options.corsOrigin)
+      return
+    }
+    if (sessionId === 'checkout' && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const checkout = await options.service.createBillingCheckout(context.principal, {
+        planKey: readString(body.planKey),
+        successUrl: readString(body.successUrl),
+        cancelUrl: readString(body.cancelUrl),
+      })
+      writeJson(res, 200, checkout, options.corsOrigin)
+      return
+    }
+    if (sessionId === 'portal' && !action && req.method === 'POST') {
+      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const portal = await options.service.createBillingPortal(context.principal, {
+        returnUrl: readString(body.returnUrl),
+      })
+      writeJson(res, 200, portal, options.corsOrigin)
+      return
+    }
+    writeError(res, 404, 'Not found.', options.corsOrigin)
     return
   }
 
@@ -1829,6 +1944,11 @@ export class CloudHttpServer {
 
       if (url.pathname.startsWith('/webhooks/workflows/')) {
         await handleCloudWorkflowWebhook(req, res, this.options, url)
+        return
+      }
+
+      if (url.pathname === '/webhooks/billing') {
+        await handleBillingWebhook(req, res, this.options)
         return
       }
 

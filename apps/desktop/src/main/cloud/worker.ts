@@ -97,6 +97,14 @@ export class CloudWorker {
 
   private async getOrClaimLease(tenantId: string, sessionId: string): Promise<WorkerLeaseRecord | null> {
     const leaseKey = this.leaseKey(tenantId, sessionId)
+    try {
+      await this.service.assertWorkerExecutionAllowed(tenantId)
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error && (error as { status?: unknown }).status === 402) {
+        return null
+      }
+      throw error
+    }
     const existing = this.leases.get(leaseKey)
     if (existing) {
       try {
@@ -107,16 +115,17 @@ export class CloudWorker {
         this.leases.delete(leaseKey)
       }
     }
+    const maxActiveWorkersPerOrg = await this.service.activeWorkerQuotaForTenant(tenantId)
     const claimed = await this.store.claimSessionLease(
       tenantId,
       sessionId,
       this.workerId,
       new Date(),
       this.leaseTtlMs,
-      this.abuse?.enabled && this.abuse.maxActiveWorkersPerOrg
+      this.abuse?.enabled && maxActiveWorkersPerOrg
         ? {
             orgId: tenantId,
-            maxActiveWorkersPerOrg: this.abuse.maxActiveWorkersPerOrg,
+            maxActiveWorkersPerOrg,
             policyCode: 'quota.active_workers_exceeded',
           }
         : null,

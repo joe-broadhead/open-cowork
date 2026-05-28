@@ -520,6 +520,32 @@ export const CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS = [
   )`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_MIGRATION_ID = '006_billing_subscriptions'
+
+export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_subscriptions (
+    org_id text PRIMARY KEY REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    plan_key text NOT NULL,
+    provider_id text NOT NULL,
+    provider_customer_id text,
+    provider_subscription_id text,
+    status text NOT NULL,
+    seats integer NOT NULL DEFAULT 1,
+    entitlements jsonb NOT NULL,
+    current_period_end timestamptz,
+    cancel_at_period_end boolean NOT NULL DEFAULT false,
+    metadata jsonb NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_subscriptions_provider_customer_idx
+    ON cloud_subscriptions (provider_id, provider_customer_id)
+    WHERE provider_customer_id IS NOT NULL`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_subscriptions_provider_subscription_idx
+    ON cloud_subscriptions (provider_id, provider_subscription_id)
+    WHERE provider_subscription_id IS NOT NULL`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -540,5 +566,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_USAGE_QUOTAS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS,
   },
 ] as const

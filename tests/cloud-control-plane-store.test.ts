@@ -296,6 +296,51 @@ test('cloud control plane records usage and enforces windowed quotas', () => {
   assert.equal(usage[0]?.metadata.safe, 'yes')
 })
 
+test('cloud control plane stores billing subscriptions by org and provider ids', () => {
+  const store = seededStore()
+  const orgId = 'tenant-1'
+
+  const active = store.upsertBillingSubscription({
+    orgId,
+    planKey: 'pro',
+    providerId: 'stripe',
+    providerCustomerId: 'cus_123',
+    providerSubscriptionId: 'sub_123',
+    status: 'active',
+    seats: 2,
+    entitlements: { allowPrompts: true, maxPromptsPerHour: 10 },
+    currentPeriodEnd: new Date('2026-02-01T00:00:00.000Z'),
+    metadata: { source: 'test', apiKey: 'secret-value' },
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  assert.equal(active.status, 'active')
+  assert.equal(active.seats, 2)
+  assert.equal(active.metadata.apiKey, '[redacted]')
+  assert.equal(store.getBillingSubscription(orgId)?.providerSubscriptionId, 'sub_123')
+  assert.equal(store.findBillingSubscriptionByProvider({
+    providerId: 'stripe',
+    providerSubscriptionId: 'sub_123',
+  })?.orgId, orgId)
+  assert.equal(store.findBillingSubscriptionByProvider({
+    providerId: 'stripe',
+    providerCustomerId: 'cus_123',
+  })?.orgId, orgId)
+
+  const canceled = store.upsertBillingSubscription({
+    orgId,
+    planKey: 'pro',
+    providerId: 'stripe',
+    providerCustomerId: 'cus_123',
+    providerSubscriptionId: 'sub_123',
+    status: 'canceled',
+    entitlements: { allowPrompts: false },
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+  })
+  assert.equal(canceled.status, 'canceled')
+  assert.equal(store.getBillingSubscription(orgId)?.status, 'canceled')
+  assert.equal(store.listAuditEvents(orgId).some((event) => event.eventType === 'billing.subscription.updated'), true)
+})
+
 test('cloud control plane caps concurrent sessions and active workers', () => {
   const store = seededStore()
   assert.throws(() => store.createSession({
