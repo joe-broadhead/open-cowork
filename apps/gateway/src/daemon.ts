@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { timingSafeEqual } from 'node:crypto'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
 import { type GatewayConfig, redactGatewayConfig } from './config.js'
@@ -109,6 +110,10 @@ async function handleRequest(
       writeJson(res, 404, { ok: false, error: 'Metrics are disabled.' })
       return
     }
+    if (!isAdminRequest(config, req)) {
+      writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
+      return
+    }
     const body = renderPrometheusMetrics(runtime.metrics, runtime.providers.registrations.length)
     res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' })
     res.end(body)
@@ -118,6 +123,10 @@ async function handleRequest(
   if (req.method === 'GET' && url.pathname === '/diagnostics') {
     if (!config.diagnostics.enabled) {
       writeJson(res, 404, { ok: false, error: 'Diagnostics are disabled.' })
+      return
+    }
+    if (!isAdminRequest(config, req)) {
+      writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
       return
     }
     writeJson(res, 200, {
@@ -147,7 +156,41 @@ function providerStatus(runtime: GatewayRuntime) {
     kind: registration.config.kind,
     provider: registration.provider.id,
     started: registration.started,
+    healthy: registration.healthy,
+    error: registration.lastError,
   }))
+}
+
+function isAdminRequest(config: GatewayConfig, req: IncomingMessage) {
+  if (!config.server.adminToken) return isLoopbackHost(config.server.host)
+  const bearer = readBearer(req.headers.authorization)
+  const header = firstHeader(req.headers['x-open-cowork-gateway-admin-token'])
+  return constantTimeStringEqual(bearer || header, config.server.adminToken)
+}
+
+function firstHeader(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] || '' : value || ''
+}
+
+function readBearer(value: string | string[] | undefined) {
+  const raw = firstHeader(value).trim()
+  return raw.toLowerCase().startsWith('bearer ') ? raw.slice('bearer '.length).trim() : ''
+}
+
+function isLoopbackHost(hostname: string) {
+  const host = hostname.trim().toLowerCase()
+  return host === 'localhost'
+    || host === '127.0.0.1'
+    || host === '::1'
+    || host === '[::1]'
+    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+
+function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) return false
+  const leftBytes = Buffer.from(left)
+  const rightBytes = Buffer.from(right)
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
 async function readJsonBody(req: IncomingMessage, maxBytes = 1024 * 1024) {

@@ -522,7 +522,7 @@ refreshDashboard().catch((error) => {
 `
 }
 
-export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy) {
+export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') {
   const bootstrap = {
     role: policy.role,
     profileName: policy.profileName,
@@ -535,7 +535,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Open Cowork Cloud</title>
-  <style>
+  <style${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>
     :root {
       color-scheme: light;
       --bg: #f5f6f3;
@@ -1074,8 +1074,8 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy) {
       </div>
     </main>
   </div>
-  <script id="open-cowork-cloud-bootstrap" type="application/json">${jsonScript(bootstrap)}</script>
-  <script>${cloudWebsiteClientScript()}</script>
+  <script${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''} id="open-cowork-cloud-bootstrap" type="application/json">${jsonScript(bootstrap)}</script>
+  <script${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>${cloudWebsiteClientScript()}</script>
 </body>
 </html>`
 }

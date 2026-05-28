@@ -429,14 +429,9 @@ function normalizeCallbackPath(value: string | undefined) {
 }
 
 function requestOrigin(req: IncomingMessage) {
-  const proto = Array.isArray(req.headers['x-forwarded-proto'])
-    ? req.headers['x-forwarded-proto'][0]
-    : req.headers['x-forwarded-proto']
-  const host = Array.isArray(req.headers['x-forwarded-host'])
-    ? req.headers['x-forwarded-host'][0]
-    : req.headers['x-forwarded-host'] || req.headers.host
+  const host = Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host
   if (!host) return 'http://localhost'
-  return `${(proto || 'http').split(',')[0].trim()}://${String(host).split(',')[0].trim()}`
+  return `http://${String(host).split(',')[0].trim()}`
 }
 
 function redirectUri(req: IncomingMessage, publicUrl: string | null | undefined, callbackPath: string) {

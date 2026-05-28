@@ -367,7 +367,15 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
       mode: CLOUD_AUTH_MODES.has(source.auth?.mode || '')
         ? source.auth.mode
         : DEFAULT_CONFIG.cloud.auth.mode,
+      headerSecret: typeof source.auth?.headerSecret === 'string' && source.auth.headerSecret.trim()
+        ? source.auth.headerSecret.trim()
+        : undefined,
       allowedEmailDomains: stringArray(source.auth?.allowedEmailDomains),
+      allowSelfServiceSignup: typeof source.auth?.allowSelfServiceSignup === 'boolean'
+        ? source.auth.allowSelfServiceSignup
+        : source.auth?.mode === 'oidc'
+          ? false
+          : DEFAULT_CONFIG.cloud.auth.allowSelfServiceSignup,
     },
     storage: {
       controlPlane: {

@@ -62,6 +62,7 @@ export class TelegramProvider implements ChannelProvider {
   private readonly bot: Bot;
   private polling?: Promise<void>;
   private started = false;
+  private pollingError: string | null = null;
   private handlersRegistered = false;
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private identity?: TelegramBotIdentity;
@@ -107,8 +108,9 @@ export class TelegramProvider implements ChannelProvider {
     this.started = true;
 
     if (this.config.mode === "polling") {
+      this.pollingError = null;
       this.polling = this.bot.start().catch((error: unknown) => {
-        console.error("telegram polling failed", error);
+        this.pollingError = error instanceof Error ? error.message : String(error);
       });
     }
   }
@@ -121,6 +123,14 @@ export class TelegramProvider implements ChannelProvider {
       this.polling = undefined;
     }
     this.started = false;
+    this.pollingError = null;
+  }
+
+  health(): { ok: boolean; error?: string | null } {
+    return {
+      ok: this.started && !this.pollingError,
+      error: this.pollingError
+    };
   }
 
   async configureWebhook(): Promise<void> {

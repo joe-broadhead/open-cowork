@@ -4,8 +4,20 @@
 {{- if and (not .Values.gateway.serviceToken) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.serviceToken or gateway.existingSecret is required." }}
 {{- end }}
+{{- if and (not .Values.gateway.providersJson) (not .Values.gateway.telegram.botToken) (not .Values.gateway.webhook.deliveryUrl) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.providersJson, gateway.telegram.botToken, gateway.webhook.deliveryUrl, or gateway.existingSecret is required to configure at least one gateway provider." }}
+{{- end }}
 {{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.metrics.enabled (eq .Values.gateway.host "0.0.0.0") (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.adminToken or gateway.existingSecret is required when gateway metrics are enabled on a public bind." }}
+{{- end }}
+{{- if and .Values.gateway.diagnostics.enabled (eq .Values.gateway.host "0.0.0.0") (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.adminToken or gateway.existingSecret is required when gateway diagnostics are enabled on a public bind." }}
+{{- end }}
+{{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.webhook.sharedSecret or gateway.existingSecret is required when the generic webhook provider is enabled." }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

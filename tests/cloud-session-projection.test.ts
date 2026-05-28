@@ -9,6 +9,7 @@ import type {
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { cloudSessionViewToSessionView } from '../apps/desktop/src/main/cloud/session-view-contract.ts'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   async createSession() {
@@ -128,6 +129,12 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asRecord(pending.sessionTokens).cacheRead, 2)
   assert.equal(pending.lastInputTokens, 11)
   assert.equal(pending.isGenerating, false)
+  const sessionView = cloudSessionViewToSessionView(await service.getSessionView(principal, sessionId))
+  assert.equal(sessionView.toolCalls.length, 1)
+  assert.equal(sessionView.pendingApprovals.length, 1)
+  assert.equal(sessionView.pendingQuestions.length, 1)
+  assert.equal(sessionView.artifacts[0]?.cloudArtifactId, 'artifact-1')
+  assert.equal(sessionView.sessionTokens.cacheRead, 2)
 
   await service.appendProductEvent(principal, sessionId, {
     type: 'permission.resolved',

@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
@@ -195,12 +196,18 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
   return {
     ...config.cloud.auth,
     mode,
+    headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
+      || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
+      || config.cloud.auth.headerSecret,
     issuerUrl: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_ISSUER_URL') || config.cloud.auth.issuerUrl,
     clientId: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_ID') || config.cloud.auth.clientId,
     clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
     callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
     cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
     allowedEmailDomains: parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains,
+    allowSelfServiceSignup: envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
+      ? parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP'), false)
+      : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc',
   }
 }
 
@@ -344,6 +351,7 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
     cookieSecure: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECURE'), true),
     publicUrl: envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_URL'),
+    trustProxyHeaders: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS'), false),
   }
 }
 
@@ -383,8 +391,21 @@ function readHeader(req: IncomingMessage, name: string) {
   return value || null
 }
 
-export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}): CloudAuthResolver {
+function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) return false
+  const leftBytes = Buffer.from(left)
+  const rightBytes = Buffer.from(right)
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
+}
+
+export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}, options: {
+  headerSecret?: string | null
+} = {}): CloudAuthResolver {
   return (req) => {
+    const expectedSecret = options.headerSecret?.trim()
+    if (expectedSecret && !constantTimeStringEqual(readHeader(req, 'x-open-cowork-header-auth-secret'), expectedSecret)) {
+      throw new CloudHttpError(401, 'Trusted header authentication secret is invalid.')
+    }
     const tenantId = readHeader(req, 'x-open-cowork-tenant-id') || defaults.tenantId || 'default'
     const userId = readHeader(req, 'x-open-cowork-user-id') || defaults.userId || 'local-user'
     const email = readHeader(req, 'x-open-cowork-user-email') || defaults.email || 'local@example.test'
@@ -470,7 +491,7 @@ export function createCloudAuthResolverForConfig(
     return createOidcCloudAuthResolver(config.cloud.auth, options)
   }
   if (config.cloud.auth.mode === 'header') {
-    return createHeaderCloudAuthResolver()
+    return createHeaderCloudAuthResolver({}, { headerSecret: config.cloud.auth.headerSecret })
   }
   return createLocalCloudAuthResolver()
 }
@@ -501,15 +522,25 @@ export function assertCloudAuthDeploymentSafe(input: {
   role: CloudRuntimePolicy['role']
   hostname: string
   auth: CloudAuthConfig
+  publicUrl?: string | null
   env?: Env
 }) {
   if (!shouldRunCloudWeb(input.role)) return
-  if (input.auth.mode !== 'none') return
-  if (isLoopbackCloudHost(input.hostname)) return
   if (parseBoolean(envValue(input.env || process.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) return
-  throw new Error(
-    `Cloud auth mode "none" may only bind to loopback addresses. Set cloud.auth.mode to "oidc" for public browser/JWT auth, "header" for a trusted reverse proxy, or set ${ALLOW_INSECURE_CLOUD_AUTH_ENV}=true for an explicit local/demo override.`,
-  )
+  if (input.auth.mode === 'none') {
+    if (isLoopbackCloudHost(input.hostname)) return
+    throw new Error(
+      `Cloud auth mode "none" may only bind to loopback addresses. Set cloud.auth.mode to "oidc" for public browser/JWT auth, "header" for a trusted reverse proxy, or set ${ALLOW_INSECURE_CLOUD_AUTH_ENV}=true for an explicit local/demo override.`,
+    )
+  }
+  if (input.auth.mode === 'header' && !input.auth.headerSecret?.trim() && !isLoopbackCloudHost(input.hostname)) {
+    throw new Error(
+      'Cloud auth mode "header" on a public bind requires OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET or OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF so caller-supplied identity headers cannot be spoofed.',
+    )
+  }
+  if (input.auth.mode === 'oidc' && !input.publicUrl?.trim() && !isLoopbackCloudHost(input.hostname)) {
+    throw new Error('Cloud OIDC public deployments require OPEN_COWORK_CLOUD_PUBLIC_URL so redirect URIs do not trust forwarded headers.')
+  }
 }
 
 async function routeRuntimeEvent(
@@ -594,6 +625,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     role: policy.role,
     hostname: listenHostname,
     auth: authConfig,
+    publicUrl: envOptions.publicUrl,
     env,
   })
   const resolvedAuthConfig = {
@@ -682,6 +714,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     abuseConfig,
     billingConfig,
     billingAdapter,
+    { allowSelfServiceSignup: authConfig.allowSelfServiceSignup ?? authConfig.mode !== 'oidc' },
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
@@ -783,6 +816,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         webhookSecurity,
         autoProcessCommands: options.autoProcessCommands ?? (policy.role === 'all-in-one' && envOptions.autoProcessCommands),
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
+        trustProxyHeaders: envOptions.trustProxyHeaders,
       })
     : null
   const url = server

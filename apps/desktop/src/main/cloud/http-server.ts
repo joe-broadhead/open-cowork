@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { WorkflowDraft, WorkflowStatus, WorkflowTriggerType } from '@open-cowork/shared'
@@ -61,6 +61,7 @@ export type CloudHttpServerOptions = {
   corsOrigin?: string | null
   maxBodyBytes?: number
   ssePollMs?: number
+  trustProxyHeaders?: boolean
 }
 
 export class CloudHttpError extends Error {
@@ -92,8 +93,12 @@ type RouteContext = {
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
   tenantId: 'default',
   tenantName: 'Default',
+  orgId: 'default',
   userId: 'local-user',
+  accountId: 'local-user',
   email: 'local@example.test',
+  role: 'owner',
+  authSource: 'local',
 }
 
 const CLOUD_WEBHOOK_REQUEST_WINDOW_MS = 60 * 1000
@@ -143,7 +148,9 @@ function writeJson(res: ServerResponse, status: number, body: unknown, origin?: 
   res.end(JSON.stringify(body))
 }
 
-function writeHtml(res: ServerResponse, status: number, body: string, origin?: string | null) {
+function writeHtml(res: ServerResponse, status: number, body: string, origin?: string | null, nonce?: string | null) {
+  const scriptSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
+  const styleSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
   writeCorsHeaders(res, origin)
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
@@ -152,8 +159,8 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
       "default-src 'self'",
       "connect-src 'self'",
       "img-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      "script-src 'unsafe-inline'",
+      `style-src ${styleSrc}`,
+      `script-src ${scriptSrc}`,
       "base-uri 'none'",
       "frame-ancestors 'none'",
       "form-action 'self'",
@@ -340,8 +347,10 @@ function webhookSource(req: IncomingMessage) {
   return req.socket.remoteAddress || 'unknown'
 }
 
-function requestSource(req: IncomingMessage) {
-  const forwardedFor = firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
+function requestSource(req: IncomingMessage, trustProxyHeaders = false) {
+  const forwardedFor = trustProxyHeaders
+    ? firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
+    : ''
   return forwardedFor || req.socket.remoteAddress || 'unknown'
 }
 
@@ -353,8 +362,8 @@ function requestHeaderRecord(req: IncomingMessage): Record<string, string | unde
   return headers
 }
 
-function authFailureScopes(req: IncomingMessage) {
-  const source = requestSource(req)
+function authFailureScopes(req: IncomingMessage, trustProxyHeaders = false) {
+  const source = requestSource(req, trustProxyHeaders)
   const authorization = firstHeader(req.headers.authorization).trim()
   const scopes = [`ip:${source}`]
   if (!authorization) return scopes
@@ -531,7 +540,7 @@ async function handleBillingWebhook(
     return
   }
 
-  const source = `billing:${requestSource(req)}`
+  const source = `billing:${requestSource(req, options.trustProxyHeaders)}`
   const startedAt = Date.now()
   const securityStore = options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore()
   let replayClaim: Awaited<ReturnType<WorkflowWebhookSecurityStore['claimSignature']>> | null = null
@@ -835,7 +844,7 @@ async function handleApiRequest(
 
   if (resource === 'workers' && sessionId === 'heartbeats' && !action && req.method === 'GET') {
     writeJson(res, 200, {
-      heartbeats: await options.service.listWorkerHeartbeats(),
+      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
     }, options.corsOrigin)
     return
   }
@@ -851,7 +860,7 @@ async function handleApiRequest(
           : 'durable'
         : 'delegated',
       checkpoints: Boolean(options.worker),
-      heartbeats: await options.service.listWorkerHeartbeats(),
+      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
     }, options.corsOrigin)
     return
   }
@@ -1891,7 +1900,7 @@ export class CloudHttpServer {
   private async enforceIpRateLimit(req: IncomingMessage) {
     await this.options.service.claimHttpRateLimit({
       scope: 'ip',
-      source: requestSource(req),
+      source: requestSource(req, this.options.trustProxyHeaders),
     })
   }
 
@@ -1909,8 +1918,8 @@ export class CloudHttpServer {
   }
 
   private async resolvePrincipal(req: IncomingMessage, auth: CloudAuthResolver) {
-    const source = requestSource(req)
-    const scopes = authFailureScopes(req)
+    const source = requestSource(req, this.options.trustProxyHeaders)
+    const scopes = authFailureScopes(req, this.options.trustProxyHeaders)
     await Promise.all(scopes.map((scope) => (
       this.options.service.checkCloudAuthBackoff({ scope, source })
     )))
@@ -1957,7 +1966,8 @@ export class CloudHttpServer {
       }
 
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
-        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy), this.options.corsOrigin)
+        const nonce = randomBytes(16).toString('base64url')
+        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, nonce), this.options.corsOrigin, nonce)
         return
       }
 

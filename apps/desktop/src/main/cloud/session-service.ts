@@ -153,6 +153,10 @@ export type ByokManagementPolicy = {
   kmsRefs?: ByokKmsRefPolicy | null
 }
 
+export type CloudIdentityPolicy = {
+  allowSelfServiceSignup: boolean
+}
+
 export class CloudServiceError extends Error {
   readonly status: number
   readonly publicMessage: string
@@ -274,6 +278,8 @@ const WEBHOOK_SIGNATURE_REPLAY_WINDOW_MS = 5 * 60 * 1000
 const WEBHOOK_SIGNATURE_REPLAY_CACHE_LIMIT = 512
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
+const DEFAULT_API_TOKEN_TTL_MS = 90 * DAY_MS
+const MAX_API_TOKEN_TTL_MS = 365 * DAY_MS
 const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   enabled: false,
   maxConcurrentSessionsPerOrg: null,
@@ -336,25 +342,25 @@ function stableCloudId(prefix: string, ...parts: string[]) {
 }
 
 function principalCanManageChannels(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function principalCanManageByok(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function principalCanManageBilling(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function principalCanManageApiTokens(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
@@ -374,6 +380,17 @@ function normalizeApiTokenScopes(scopes: ApiTokenScope[] | undefined | null): Ap
   return normalized
 }
 
+function normalizeApiTokenExpiresAt(input: Date | null | undefined, now = new Date()) {
+  const expiresAt = input || new Date(now.getTime() + DEFAULT_API_TOKEN_TTL_MS)
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= now.getTime()) {
+    throw new CloudServiceError(400, 'API token expiration must be in the future.')
+  }
+  if (expiresAt.getTime() - now.getTime() > MAX_API_TOKEN_TTL_MS) {
+    throw new CloudServiceError(400, 'API token expiration cannot be more than 365 days in the future.')
+  }
+  return expiresAt
+}
+
 function normalizeByokProviderIdForPolicy(value: string) {
   const providerId = value.trim().toLowerCase()
   if (!providerId || providerId.length > 64 || !/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) {
@@ -383,8 +400,14 @@ function normalizeByokProviderIdForPolicy(value: string) {
 }
 
 function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'gateway')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanViewOperations(principal: CloudPrincipal) {
+  if (principal.authSource === 'local') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin') || hasTokenScope(principal, 'worker-internal')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
@@ -1105,6 +1128,7 @@ export class CloudSessionService {
   private readonly abuse: CloudAbuseConfig
   private readonly billingConfig: CloudBillingConfig | null
   private readonly billingAdapter: BillingAdapter | null
+  private readonly identityPolicy: CloudIdentityPolicy
 
   constructor(
     store: ControlPlaneStore,
@@ -1118,6 +1142,7 @@ export class CloudSessionService {
     abuse: CloudAbuseConfig = DISABLED_ABUSE_POLICY,
     billingConfig: CloudBillingConfig | null = null,
     billingAdapter: BillingAdapter | null = null,
+    identityPolicy: CloudIdentityPolicy = { allowSelfServiceSignup: true },
   ) {
     this.store = store
     this.runtime = runtime
@@ -1130,6 +1155,7 @@ export class CloudSessionService {
     this.abuse = abuse
     this.billingConfig = billingConfig
     this.billingAdapter = billingAdapter
+    this.identityPolicy = identityPolicy
   }
 
   get eventBus() {
@@ -1242,6 +1268,9 @@ export class CloudSessionService {
       email: account.email,
     })
     if (!membership) {
+      if (principal.authSource === 'user' && !this.identityPolicy.allowSelfServiceSignup) {
+        throw new CloudServiceError(403, 'Cloud membership is not active.')
+      }
       await this.store.upsertMembership({
         orgId: org.orgId,
         accountId: account.accountId,
@@ -1328,7 +1357,11 @@ export class CloudSessionService {
     return this.store.listWorkspaceEvents(principal.tenantId, principal.userId, afterSequence)
   }
 
-  async listWorkerHeartbeats() {
+  async listWorkerHeartbeats(principal: CloudPrincipal) {
+    await this.ensurePrincipal(principal)
+    if (!principalCanViewOperations(principal)) {
+      throw new CloudServiceError(403, 'Cloud worker status requires operator privileges.')
+    }
     return this.store.listWorkerHeartbeats()
   }
 
@@ -2361,7 +2394,7 @@ export class CloudSessionService {
       accountId: principal.accountId || principal.userId,
       name: input.name,
       scopes: normalizeApiTokenScopes(input.scopes),
-      expiresAt: input.expiresAt || null,
+      expiresAt: normalizeApiTokenExpiresAt(input.expiresAt),
       actor: {
         actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
         actorId: principal.tokenId || principal.userId,

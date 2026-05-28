@@ -15,9 +15,12 @@ gateway:
   host: 0.0.0.0
   port: 8790
   publicUrl: ""
+  adminToken: ""
   logLevel: info
   metrics:
-    enabled: true
+    enabled: false
+  diagnostics:
+    enabled: false
   providersJson: ""
   telegram:
     botToken: ""

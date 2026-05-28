@@ -111,6 +111,7 @@ export interface OutgoingFile {
 export interface ChannelProvider {
   readonly id: ChannelProviderId;
   readonly capabilities: ChannelCapabilities;
+  health?(): { ok: boolean; error?: string | null };
 
   start(handler: (message: IncomingChannelMessage) => Promise<void>): Promise<void>;
   stop(): Promise<void>;

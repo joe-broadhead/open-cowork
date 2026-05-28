@@ -217,8 +217,11 @@ export class WebhookProvider implements ChannelProvider {
 
   private assertIngressAuthorized(auth: WebhookIngressAuth): void {
     const expectedSecret = this.config.sharedSecret;
-    if (!expectedSecret || auth.verified === true) {
+    if (auth.verified === true) {
       return;
+    }
+    if (!expectedSecret) {
+      throw new Error("Webhook shared secret is required for ingress");
     }
 
     const providedSecret =

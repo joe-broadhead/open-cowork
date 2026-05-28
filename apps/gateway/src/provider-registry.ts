@@ -16,6 +16,8 @@ export type ProviderRegistration = {
   config: GatewayProviderConfig
   provider: ChannelProvider
   started: boolean
+  healthy: boolean
+  lastError: string | null
 }
 
 export type GatewayProviderRegistry = {
@@ -40,10 +42,12 @@ export type GatewayProviderRegistry = {
 export function createGatewayProviderRegistry(config: GatewayConfig): GatewayProviderRegistry {
   const registrations = config.providers
     .filter((provider) => provider.enabled)
-    .map((provider) => ({
+    .map((provider): ProviderRegistration => ({
       config: provider,
       provider: createProvider(provider),
       started: false,
+      healthy: false,
+      lastError: null,
     }))
 
   return {
@@ -52,9 +56,13 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
       for (const registration of registrations) {
         await registration.provider.start((message) => handler(registration.config, message))
         registration.started = true
+        registration.healthy = providerHealthy(registration.provider)
+        registration.lastError = providerHealthError(registration.provider)
         if (registration.config.kind === 'telegram') {
           const provider = registration.provider as TelegramProvider
           await provider.configureWebhook()
+          registration.healthy = providerHealthy(registration.provider)
+          registration.lastError = providerHealthError(registration.provider)
         }
       }
     },
@@ -63,6 +71,8 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
         if (!registration.started) continue
         await registration.provider.stop()
         registration.started = false
+        registration.healthy = false
+        registration.lastError = null
       }
     },
     get(id) {
@@ -97,6 +107,14 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
       await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider.id, input))
     },
   }
+}
+
+function providerHealthy(provider: ChannelProvider) {
+  return provider.health ? provider.health().ok : true
+}
+
+function providerHealthError(provider: ChannelProvider) {
+  return provider.health ? provider.health().error || null : null
 }
 
 function createProvider(config: GatewayProviderConfig): ChannelProvider {

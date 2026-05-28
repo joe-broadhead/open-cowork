@@ -4,6 +4,7 @@ export type GatewayMetrics = {
   promptedMessages: number
   interactionsResolved: number
   deliveriesReceived: number
+  droppedSessionEvents: number
   errors: number
 }
 
@@ -14,6 +15,7 @@ export function createGatewayMetrics(now = Date.now): GatewayMetrics {
     promptedMessages: 0,
     interactionsResolved: 0,
     deliveriesReceived: 0,
+    droppedSessionEvents: 0,
     errors: 0,
   }
 }
@@ -42,6 +44,9 @@ export function renderPrometheusMetrics(metrics: GatewayMetrics, providerCount: 
     '# HELP open_cowork_gateway_errors_total Gateway errors.',
     '# TYPE open_cowork_gateway_errors_total counter',
     `open_cowork_gateway_errors_total ${metrics.errors}`,
+    '# HELP open_cowork_gateway_dropped_session_events_total Session events skipped after non-retryable channel rendering failures.',
+    '# TYPE open_cowork_gateway_dropped_session_events_total counter',
+    `open_cowork_gateway_dropped_session_events_total ${metrics.droppedSessionEvents}`,
     '',
   ].join('\n')
 }

@@ -80,6 +80,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
   const gateway = createCloudGateway(resolveGatewayConfig({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
   }), adapter)
 
   await gateway.resolveIdentity({ provider: 'telegram', externalUserId: 'user-1' })

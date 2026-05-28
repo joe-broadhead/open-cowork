@@ -68,7 +68,12 @@ export function createGatewayRuntime(
       started = false
     },
     ready() {
-      return started && providers.registrations.every((provider) => provider.started)
+      return started && providers.registrations.every((registration) => {
+        const health = registration.provider.health?.()
+        registration.healthy = health?.ok ?? registration.healthy
+        registration.lastError = health?.error || null
+        return registration.started && registration.healthy
+      })
     },
   }
 
