@@ -116,6 +116,10 @@ async function handleRequest(
   }
 
   if (req.method === 'GET' && url.pathname === '/diagnostics') {
+    if (!config.diagnostics.enabled) {
+      writeJson(res, 404, { ok: false, error: 'Diagnostics are disabled.' })
+      return
+    }
     writeJson(res, 200, {
       ok: true,
       config: redactGatewayConfig(config),

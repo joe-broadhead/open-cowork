@@ -71,6 +71,12 @@ export type CloudHttpRequestObservation = {
 const DEFAULT_SERVICE_NAME = 'open-cowork-cloud'
 const SENSITIVE_FIELD = /(authorization|cookie|token|secret|password|credential|key)$/i
 const MAX_STRING_LENGTH = 512
+const SIGNED_URL_QUERY_PATTERN = /\b(https?:\/\/[^\s"'<>?]+)\?[^"'<> \t\r\n]+/gi
+const LOCAL_PATH_PATTERNS = [
+  /\/Users\/[^\s"'`:]+/g,
+  /\/home\/[^\s"'`:]+/g,
+  /[A-Z]:\\Users\\[^\s"'`:]+/gi,
+]
 
 function serviceAttributes(serviceName: string, serviceVersion: string | null | undefined) {
   return {
@@ -87,10 +93,21 @@ function redactAttribute(key: string, value: CloudObservabilityAttributeValue) {
   if (value === undefined) return undefined
   if (value === null) return null
   if (SENSITIVE_FIELD.test(key)) return '[redacted]'
-  if (typeof value === 'string') return value.slice(0, MAX_STRING_LENGTH)
+  if (typeof value === 'string') return redactCloudAttributeString(value).slice(0, MAX_STRING_LENGTH)
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
   if (typeof value === 'boolean') return value
   return String(value).slice(0, MAX_STRING_LENGTH)
+}
+
+function redactCloudAttributeString(value: string) {
+  let redacted = value.replace(SIGNED_URL_QUERY_PATTERN, '$1?[redacted]')
+  for (const pattern of LOCAL_PATH_PATTERNS) {
+    redacted = redacted.replace(pattern, (match) => {
+      const prefix = match.match(/^(\/Users|\/home|[A-Z]:\\Users)/i)?.[0] || '[home]'
+      return `${prefix}/[redacted]`
+    })
+  }
+  return redacted
 }
 
 export function sanitizeCloudObservabilityAttributes(attributes: CloudObservabilityAttributes = {}) {

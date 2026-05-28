@@ -119,6 +119,7 @@ nav:
       - Telemetry and Privacy: privacy.md
   - Operate:
       - Open Cowork Cloud: open-cowork-cloud.md
+      - Cloud Managed Operations: runbooks/cloud-managed-operations.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md

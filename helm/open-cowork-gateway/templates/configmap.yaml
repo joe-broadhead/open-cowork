@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-cowork-gateway.fullname" . }}-config
+  labels:
+    {{- include "open-cowork-gateway.labels" . | nindent 4 }}
+data:
+  OPEN_COWORK_CLOUD_BASE_URL: {{ .Values.gateway.cloudBaseUrl | quote }}
+  OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: {{ .Values.gateway.allowInsecureHttp | quote }}
+  OPEN_COWORK_GATEWAY_HOST: {{ .Values.gateway.host | quote }}
+  OPEN_COWORK_GATEWAY_PORT: {{ .Values.gateway.port | quote }}
+  OPEN_COWORK_GATEWAY_PUBLIC_URL: {{ .Values.gateway.publicUrl | quote }}
+  OPEN_COWORK_GATEWAY_MODE: {{ .Values.gateway.mode | quote }}
+  OPEN_COWORK_GATEWAY_LOG_LEVEL: {{ .Values.gateway.logLevel | quote }}
+  OPEN_COWORK_GATEWAY_METRICS_ENABLED: {{ .Values.gateway.metrics.enabled | quote }}
+  OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID: {{ .Values.gateway.telegram.channelBindingId | quote }}
+  OPEN_COWORK_GATEWAY_TELEGRAM_MODE: {{ .Values.gateway.telegram.mode | quote }}
+  OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: {{ .Values.gateway.webhook.deliveryUrl | quote }}
+  OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID: {{ .Values.gateway.webhook.channelBindingId | quote }}

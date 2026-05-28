@@ -1,6 +1,12 @@
 apiVersion: v2
 name: open-cowork-cloud
-description: Provider-neutral Helm chart for Open Cowork Cloud web, worker, and scheduler roles.
+description: Provider-neutral Helm chart for Open Cowork Cloud web, worker, scheduler, and optional gateway roles.
 type: application
 version: 0.1.0
 appVersion: "0.0.0"
+dependencies:
+  - name: open-cowork-gateway
+    alias: gateway
+    version: 0.1.0
+    repository: file://../open-cowork-gateway
+    condition: gateway.enabled

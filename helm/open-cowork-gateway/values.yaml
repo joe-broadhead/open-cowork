@@ -1,0 +1,61 @@
+image:
+  repository: ghcr.io/joe-broadhead/open-cowork-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+gateway:
+  mode: self-host
+  cloudBaseUrl: ""
+  allowInsecureHttp: false
+  serviceToken: ""
+  existingSecret: ""
+  host: 0.0.0.0
+  port: 8790
+  publicUrl: ""
+  logLevel: info
+  metrics:
+    enabled: true
+  providersJson: ""
+  telegram:
+    botToken: ""
+    channelBindingId: telegram
+    mode: polling
+    webhookSecret: ""
+  webhook:
+    deliveryUrl: ""
+    sharedSecret: ""
+    channelBindingId: webhook
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: open-cowork-gateway.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

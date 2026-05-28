@@ -92,6 +92,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
       settings: {
         callbackSecret: 'provider-callback-secret-1234567890',
         deliveryUrl: 'https://example.test/deliver?token=provider-token-1234567890',
+        workspacePath: '/home/alice/acme-private',
       },
     }],
   }, {
@@ -124,6 +125,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     assert.equal(diagnosticProvider?.credentials.apiKey, 'prov...[redacted]...7890')
     assert.equal(diagnosticProvider?.settings.callbackSecret, 'prov...[redacted]...7890')
     assert.equal(diagnosticProvider?.settings.deliveryUrl, 'https://example.test/deliver?token=%5Bredacted%5D')
+    assert.equal(diagnosticProvider?.settings.workspacePath, '/home/[redacted]')
 
     const webhook = await fetch(`${url}/webhooks/fake`, {
       method: 'POST',
@@ -132,6 +134,38 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     })
     assert.equal(webhook.status, 202)
     assert.deepEqual(prompted, ['ship it'])
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway diagnostics are disabled by default in managed mode', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    mode: 'managed',
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const response = await fetch(`${url}/diagnostics`)
+    assert.equal(response.status, 404)
   } finally {
     await http.close()
     await runtime.stop()

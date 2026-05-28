@@ -16,6 +16,8 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
     authorization: 'Bearer private-token',
     cookie: 'session=private',
     nested_secret: 'private',
+    object_store_url: 'https://bucket.s3.amazonaws.com/private/file.txt?X-Amz-Signature=private',
+    local_path: '/Users/alice/acme-private',
     count: 2,
     ok: true,
   }), {
@@ -23,6 +25,8 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
     authorization: '[redacted]',
     cookie: '[redacted]',
     nested_secret: '[redacted]',
+    object_store_url: 'https://bucket.s3.amazonaws.com/private/file.txt?[redacted]',
+    local_path: '/Users/[redacted]',
     count: 2,
     ok: true,
   })
