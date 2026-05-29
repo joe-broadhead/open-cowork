@@ -4,7 +4,6 @@ import type { AddressInfo } from 'node:net'
 import {
   emptySessionImportItemCounts,
   normalizeCloudProjectSource,
-  type CloudProjectSnapshotUploadInput,
   type CloudProjectSourceInput,
   type PublicBrandingConfig,
   type SessionImportRequest,
@@ -14,7 +13,12 @@ import {
 } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
+import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
+import { handleBillingApiRoute } from './http-routes/billing.ts'
+import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
+import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
+import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
@@ -842,180 +846,89 @@ async function handleApiRequest(
     return
   }
 
-  if (resource === 'config' && req.method === 'GET') {
-    writeJson(res, 200, {
-      role: options.policy.role,
-      profileName: options.policy.profileName,
-      features: options.policy.features,
-      allowedAgents: options.policy.allowedAgents,
-      allowedTools: options.policy.allowedTools,
-      allowedMcps: options.policy.allowedMcps,
-      publicBranding: options.publicBranding || null,
-    }, options.corsOrigin)
-    return
+  const routeTools = {
+    readJsonBody,
+    readString,
+    readRecord,
+    readOptionalDate,
+    readApiTokenScopes,
+    readOptionalCloudProjectSource,
+    parseLimit,
+    writeJson,
+    writeError,
+    writePolicyError,
+    handleWorkspaceSse,
   }
 
-  if (resource === 'workspace' && !sessionId && req.method === 'GET') {
-    writeJson(res, 200, await options.service.getWorkspaceOverview(context.principal), options.corsOrigin)
-    return
-  }
-
-  if (resource === 'events' && !sessionId && req.method === 'GET') {
-    await handleWorkspaceSse(req, res, options, context)
-    return
-  }
-
-  if (resource === 'workers' && sessionId === 'heartbeats' && !action && req.method === 'GET') {
-    writeJson(res, 200, {
-      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
-    }, options.corsOrigin)
-    return
-  }
-
-  if (resource === 'runtime' && sessionId === 'status' && !action && req.method === 'GET') {
-    writeJson(res, 200, {
-      role: options.policy.role,
-      profileName: options.policy.profileName,
-      canExecute: Boolean(options.worker),
-      commandProcessing: options.worker
-        ? options.autoProcessCommands
-          ? 'inline'
-          : 'durable'
-        : 'delegated',
-      checkpoints: Boolean(options.worker),
-      heartbeats: await options.service.listWorkerHeartbeats(context.principal),
-    }, options.corsOrigin)
-    return
-  }
-
-  if (resource === 'usage' && sessionId === 'events' && !action && req.method === 'GET') {
-    writeJson(res, 200, {
-      events: await options.service.listUsageEvents(context.principal, parseLimit(context.url)),
-    }, options.corsOrigin)
-    return
-  }
+  if (await handleWorkspaceApiRoute({
+    req,
+    res,
+    options,
+    context,
+    resource,
+    itemId: sessionId,
+    action,
+    artifactId,
+    tools: routeTools,
+  })) return
 
   if (resource === 'project-sources') {
-    if (sessionId === 'validate' && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      writeJson(res, 200, options.service.validateProjectSource(normalizeCloudProjectSource(body.projectSource)), options.corsOrigin)
-      return
-    }
-    if (sessionId === 'snapshots' && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
-      const uploaded = await options.service.uploadProjectSnapshot(context.principal, {
-        title: readString(body.title),
-        files: Array.isArray(body.files) ? body.files as CloudProjectSnapshotUploadInput['files'] : [],
-        excluded: Array.isArray(body.excluded) ? body.excluded as CloudProjectSnapshotUploadInput['excluded'] : [],
-        warnings: Array.isArray(body.warnings) ? body.warnings.filter((entry): entry is string => typeof entry === 'string') : [],
-        fileCount: typeof body.fileCount === 'number' ? body.fileCount : undefined,
-        byteCount: typeof body.byteCount === 'number' ? body.byteCount : undefined,
-      })
-      writeJson(res, 201, uploaded, options.corsOrigin)
-      return
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleProjectSourcesApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
   if (resource === 'api-tokens') {
-    if (!sessionId && req.method === 'GET') {
-      writeJson(res, 200, { tokens: await options.service.listApiTokens(context.principal) }, options.corsOrigin)
-      return
-    }
-    if (!sessionId && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const name = readString(body.name)
-      const scopes = readApiTokenScopes(body.scopes)
-      if (!name || !scopes) {
-        writeError(res, 400, 'API token requires a name and at least one valid scope.', options.corsOrigin)
-        return
-      }
-      const issued = await options.service.issueApiToken(context.principal, {
-        name,
-        scopes,
-        expiresAt: readOptionalDate(body.expiresAt),
-      })
-      writeJson(res, 201, issued, options.corsOrigin)
-      return
-    }
-    if (sessionId && !action && req.method === 'DELETE') {
-      const token = await options.service.revokeApiToken(context.principal, sessionId)
-      if (!token) {
-        writeError(res, 404, 'API token was not found.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, { token, revoked: true }, options.corsOrigin)
-      return
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleApiTokensApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
   if (resource === 'billing') {
-    if (sessionId === 'subscription' && !action && req.method === 'GET') {
-      writeJson(res, 200, await options.service.getBillingSubscription(context.principal), options.corsOrigin)
-      return
-    }
-    if (sessionId === 'checkout' && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const checkout = await options.service.createBillingCheckout(context.principal, {
-        planKey: readString(body.planKey),
-        successUrl: readString(body.successUrl),
-        cancelUrl: readString(body.cancelUrl),
-      })
-      writeJson(res, 200, checkout, options.corsOrigin)
-      return
-    }
-    if (sessionId === 'portal' && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const portal = await options.service.createBillingPortal(context.principal, {
-        returnUrl: readString(body.returnUrl),
-      })
-      writeJson(res, 200, portal, options.corsOrigin)
-      return
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleBillingApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
   if (resource === 'byok') {
-    const providerId = sessionId
-    if (!providerId && !action && req.method === 'GET') {
-      writeJson(res, 200, { secrets: await options.service.listByokSecrets(context.principal) }, options.corsOrigin)
-      return
-    }
-    if (providerId && !action && req.method === 'GET') {
-      writeJson(res, 200, { secret: await options.service.getByokSecret(context.principal, providerId) }, options.corsOrigin)
-      return
-    }
-    if (providerId && action === 'validate' && req.method === 'POST') {
-      const secret = await options.service.validateByokSecret(context.principal, providerId)
-      writeJson(res, 200, { secret, validated: Boolean(secret?.lastValidatedAt) }, options.corsOrigin)
-      return
-    }
-    if (providerId && !action && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const plaintext = readString(body.plaintext) || readString(body.apiKey) || readString(body.key) || readString(body.secret)
-      const kmsRef = readString(body.kmsRef)
-      if ((plaintext && kmsRef) || (!plaintext && !kmsRef)) {
-        writeError(res, 400, 'BYOK credential requires exactly one of plaintext/apiKey/key/secret or kmsRef.', options.corsOrigin)
-        return
-      }
-      const secret = await options.service.setByokSecret(context.principal, {
-        providerId,
-        plaintext: plaintext || null,
-        kmsRef: kmsRef || null,
-      })
-      writeJson(res, 201, { secret }, options.corsOrigin)
-      return
-    }
-    if (providerId && !action && req.method === 'DELETE') {
-      const secret = await options.service.disableByokSecret(context.principal, providerId)
-      writeJson(res, 200, { secret, disabled: Boolean(secret) }, options.corsOrigin)
-      return
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleByokApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 

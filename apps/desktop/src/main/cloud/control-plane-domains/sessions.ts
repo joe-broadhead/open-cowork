@@ -1,0 +1,35 @@
+import type { ControlPlaneStore } from '../control-plane-store.ts'
+
+export type SessionControlPlaneStore = Pick<ControlPlaneStore,
+  | 'createSession'
+  | 'getSession'
+  | 'getSessionForTenant'
+  | 'findSession'
+  | 'listSessions'
+  | 'listAllSessions'
+  | 'bindSessionRuntime'
+  | 'updateSessionStatus'
+  | 'appendSessionEvent'
+  | 'listSessionEvents'
+  | 'appendWorkspaceEvent'
+  | 'listWorkspaceEvents'
+  | 'writeSessionProjection'
+  | 'getSessionProjection'
+  | 'claimSessionLease'
+  | 'renewSessionLease'
+  | 'checkpointSession'
+  | 'enqueueSessionCommand'
+  | 'claimNextSessionCommand'
+  | 'ackSessionCommand'
+  | 'failSessionCommand'
+  | 'recordWorkerHeartbeat'
+  | 'listWorkerHeartbeats'
+>
+
+export type ProjectionControlPlaneStore = Pick<SessionControlPlaneStore,
+  | 'appendSessionEvent'
+  | 'getSessionForTenant'
+  | 'appendWorkspaceEvent'
+  | 'getSessionProjection'
+  | 'writeSessionProjection'
+>
