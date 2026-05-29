@@ -47,10 +47,99 @@ async function checkJson(url, options = {}) {
   }
 }
 
+async function checkReachableJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: options.token ? { Authorization: `Bearer ${options.token}` } : undefined,
+  })
+  const text = await response.text()
+  const accepted = options.acceptedStatus || [200]
+  if (!accepted.includes(response.status)) {
+    throw new Error(`${url} returned ${response.status}: ${text.slice(0, 400)}`)
+  }
+  let parsed
+  try {
+    parsed = text ? JSON.parse(text) : null
+  } catch {
+    parsed = null
+  }
+  const contentType = response.headers.get('content-type') || ''
+  if (response.status === 200 && !contentType.includes('application/json')) {
+    throw new Error(`${url} must return JSON for successful bootstrap checks`)
+  }
+  return {
+    status: response.status,
+    contentType,
+    bodyShape: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed).sort() : typeof parsed,
+  }
+}
+
+async function checkHtml(url, options = {}) {
+  const response = await fetch(url, {
+    headers: options.token ? { Authorization: `Bearer ${options.token}` } : undefined,
+  })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}: ${text.slice(0, 400)}`)
+  }
+  const contentType = response.headers.get('content-type') || ''
+  const cacheControl = response.headers.get('cache-control') || ''
+  const csp = response.headers.get('content-security-policy') || ''
+  for (const expected of [
+    'text/html',
+    'open-cowork-cloud-bootstrap',
+    'data-route-panel="threads"',
+    'data-route-panel="chat"',
+    'data-route-panel="byok"',
+  ]) {
+    const target = expected === 'text/html' ? contentType : text
+    if (!target.includes(expected)) {
+      throw new Error(`${url} missing expected Cloud Web Workbench marker: ${expected}`)
+    }
+  }
+  if (!cacheControl.includes('no-store')) {
+    throw new Error(`${url} must use cache-control: no-store`)
+  }
+  if (!csp.includes("default-src 'self'") || !csp.includes("connect-src 'self'") || !csp.includes("frame-ancestors 'none'")) {
+    throw new Error(`${url} must send the Cloud Web Workbench CSP`)
+  }
+  const nonceMatch = csp.match(/'nonce-([^']+)'/)
+  if (!nonceMatch || !text.includes(`nonce="${nonceMatch[1]}"`)) {
+    throw new Error(`${url} must use matching CSP nonces for inline Cloud Web scripts`)
+  }
+  return {
+    status: response.status,
+    contentType,
+    cacheControl,
+    csp: 'present',
+    bootstrap: 'present',
+  }
+}
+
 async function main() {
   const results = []
   if (!skipCloud) {
     results.push({ check: 'cloud health', url: `${cloudUrl}/healthz`, result: await checkJson(`${cloudUrl}/healthz`) })
+    results.push({
+      check: 'cloud web workbench',
+      url: `${cloudUrl}/`,
+      result: await checkHtml(`${cloudUrl}/`),
+    })
+    results.push({
+      check: 'cloud web api config bootstrap',
+      url: `${cloudUrl}/api/config`,
+      result: await checkReachableJson(`${cloudUrl}/api/config`, {
+        token: cloudToken,
+        acceptedStatus: cloudToken ? [200] : [200, 401, 403],
+      }),
+    })
+    results.push({
+      check: 'cloud web api workspace bootstrap',
+      url: `${cloudUrl}/api/workspace`,
+      result: await checkReachableJson(`${cloudUrl}/api/workspace`, {
+        token: cloudToken,
+        acceptedStatus: cloudToken ? [200] : [200, 401, 403],
+      }),
+    })
     if (includeOperatorChecks) {
       results.push({
         check: 'cloud runtime status',

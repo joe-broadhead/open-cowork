@@ -13,11 +13,15 @@ cleanup() {
   rm -f "${health_file}" "${gateway_health_file}"
 }
 
+print_diagnostics() {
+  docker compose -p "${project_name}" -f "${compose_file}" ps || true
+  docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200 || true
+}
+
 trap cleanup EXIT
 
 if ! docker compose -p "${project_name}" -f "${compose_file}" up --build -d; then
-  docker compose -p "${project_name}" -f "${compose_file}" ps || true
-  docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200 || true
+  print_diagnostics
   exit 1
 fi
 
@@ -25,6 +29,12 @@ for _ in $(seq 1 90); do
   if curl -fsS "http://127.0.0.1:8787/healthz" >"${health_file}"; then
     cat "${health_file}"
     if [ -z "${gateway_smoke_url}" ]; then
+      if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
+        OPEN_COWORK_SMOKE_SKIP_GATEWAY=true \
+        pnpm deploy:smoke; then
+        print_diagnostics
+        exit 1
+      fi
       exit 0
     fi
     break
@@ -36,14 +46,19 @@ if [ -n "${gateway_smoke_url}" ]; then
   for _ in $(seq 1 90); do
     if curl -fsS "${gateway_smoke_url}" >"${gateway_health_file}"; then
       cat "${gateway_health_file}"
+      if ! OPEN_COWORK_SMOKE_CLOUD_URL="http://127.0.0.1:8787" \
+        OPEN_COWORK_SMOKE_GATEWAY_URL="${gateway_smoke_url%/ready}" \
+        pnpm deploy:smoke; then
+        print_diagnostics
+        exit 1
+      fi
       exit 0
     fi
     sleep 2
   done
 fi
 
-docker compose -p "${project_name}" -f "${compose_file}" ps
-docker compose -p "${project_name}" -f "${compose_file}" logs --no-color --tail=200
+print_diagnostics
 if [ -n "${gateway_smoke_url}" ]; then
   echo "open-cowork cloud+gateway compose smoke test did not reach ${gateway_smoke_url}" >&2
 else

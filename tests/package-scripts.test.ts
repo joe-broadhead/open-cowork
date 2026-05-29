@@ -8,6 +8,7 @@ type PackageJson = {
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
+const websitePackageJson = JSON.parse(readFileSync(new URL('../apps/website/package.json', import.meta.url), 'utf8')) as PackageJson
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
   const script = source.scripts?.[name]
@@ -42,6 +43,28 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
   ])
+
+  assert.deepEqual(splitScriptSteps(requireScript('test:cloud-web')), [
+    'pnpm build:shared',
+    'pnpm --filter @open-cowork/website test:browser:run',
+    'pnpm --filter @open-cowork/website test:a11y:run',
+    'pnpm --filter @open-cowork/website perf:check:run',
+  ])
+  assert.deepEqual(splitScriptSteps(requireScript('test:browser', websitePackageJson)), [
+    'pnpm --filter @open-cowork/shared build',
+    'pnpm run test:browser:run',
+  ])
+  assert.deepEqual(splitScriptSteps(requireScript('test:a11y', websitePackageJson)), [
+    'pnpm --filter @open-cowork/shared build',
+    'pnpm run test:a11y:run',
+  ])
+  assert.deepEqual(splitScriptSteps(requireScript('perf:check', websitePackageJson)), [
+    'pnpm --filter @open-cowork/shared build',
+    'pnpm run perf:check:run',
+  ])
+  assert.equal(requireScript('test:browser:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts')
+  assert.equal(requireScript('test:a11y:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/accessibility.test.ts')
+  assert.equal(requireScript('perf:check:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/performance.test.ts')
 })
 
 test('root lint script runs all release gate checks', () => {

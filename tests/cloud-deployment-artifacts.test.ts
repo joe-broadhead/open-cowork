@@ -84,6 +84,8 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/api\/runtime\/status/)
   assert.match(docs, /GET \/api\/workers\/heartbeats/)
   assert.match(docs, /web app at `\/`/)
+  assert.match(docs, /Cloud Web Workbench readiness gates/)
+  assert.match(docs, /pnpm test:cloud-web/)
   assert.match(docs, /createHttpSseCloudTransportAdapter/)
   assert.match(docs, /Generic Docker: Cloud \+ Gateway/)
   assert.match(docs, /docker-compose\.cloud-gateway\.yml/)
@@ -251,10 +253,16 @@ test('cloud image builds workspace packages required by package entrypoints', ()
   const dockerfile = readRepoFile('docker/open-cowork-cloud/Dockerfile')
   const gatewayDockerfile = readRepoFile('docker/open-cowork-gateway/Dockerfile')
   const buildScript = readRepoFile('scripts/build-cloud.mjs')
+  const browserApp = readRepoFile('apps/desktop/src/main/cloud/browser-app.ts')
+  const websitePackage = readRepoFile('apps/website/package.json')
 
   assert.match(buildScript, /cloudElectronShimPlugin/)
   assert.match(buildScript, /onResolve\(\{ filter: \/\^electron\$\/ \}/)
   assert.match(buildScript, /plugins: \[cloudElectronShimPlugin\]/)
+  assert.match(browserApp, /website\/src\/render\.ts/)
+  assert.match(websitePackage, /"test:browser"/)
+  assert.match(websitePackage, /"test:a11y"/)
+  assert.match(websitePackage, /"perf:check"/)
 
   assert.match(dockerfile, /pnpm install --frozen-lockfile/)
   assert.match(dockerfile, /pnpm install --frozen-lockfile --prod/)
@@ -329,6 +337,13 @@ test('deployment readiness checklist and managed BYOK runbook cover production g
     'OTLP/logging',
     'backups/restore',
     'no billing provider or the stub billing provider',
+    'Cloud Web Workbench',
+    'browser E2E',
+    'accessibility',
+    'performance and scale',
+    'GET /',
+    'Content-Security-Policy',
+    'api bootstrap',
     'pnpm deploy:validate',
     'pnpm deploy:smoke',
     'Provider Recipe Contract',
@@ -377,6 +392,12 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(smoke, /OPEN_COWORK_SMOKE_CLOUD_URL/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_GATEWAY_URL/)
   assert.match(smoke, /\/healthz/)
+  assert.match(smoke, /cloud web workbench/)
+  assert.match(smoke, /open-cowork-cloud-bootstrap/)
+  assert.match(smoke, /data-route-panel="threads"/)
+  assert.match(smoke, /content-security-policy/)
+  assert.match(smoke, /\/api\/config/)
+  assert.match(smoke, /\/api\/workspace/)
   assert.match(smoke, /\/api\/runtime\/status/)
   assert.match(smoke, /\/api\/workers\/heartbeats/)
   assert.match(smoke, /\/health/)
@@ -428,11 +449,13 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /helm lint helm\/open-cowork-gateway/)
   assert.match(workflow, /helm template open-cowork-gateway helm\/open-cowork-gateway/)
   assert.match(workflow, /pnpm deploy:validate -- --require-tools/)
+  assert.match(workflow, /pnpm test:cloud-web/)
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)
   assert.match(smoke, /http:\/\/127\.0\.0\.1:8787\/healthz/)
   assert.match(smoke, /OPEN_COWORK_GATEWAY_SMOKE_URL/)
+  assert.match(smoke, /pnpm deploy:smoke/)
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" logs --no-color --tail=200/)
 })
 
