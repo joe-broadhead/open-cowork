@@ -21,6 +21,7 @@ export type BenchmarkReport = {
     p95Multiplier: number
     avgAbsoluteFloorMs: number
     p95AbsoluteFloorMs: number
+    jitterAllowanceMs?: number
   }
   benchmarks: BenchmarkResult[]
 }

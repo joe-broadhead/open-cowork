@@ -3,6 +3,7 @@ export const DEFAULT_THRESHOLDS = {
   p95Multiplier: 1.25,
   avgAbsoluteFloorMs: 0.5,
   p95AbsoluteFloorMs: 0.8,
+  jitterAllowanceMs: 0.05,
 }
 
 export const CROSS_ENVIRONMENT_FLOORS = {
