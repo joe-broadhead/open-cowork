@@ -12,6 +12,8 @@ these services:
 | Control plane | Cloud SQL for PostgreSQL |
 | Object store | Cloud Storage |
 | Secrets | Secret Manager for cloud keys, gateway tokens, and channel credentials |
+| Observability | Cloud Logging plus OTLP exporter or managed collector |
+| Backups | Cloud SQL PITR plus Cloud Storage bucket versioning/lifecycle |
 
 For scalable deployments, install the provider-neutral Helm chart on GKE and
 wire it to Cloud SQL, Cloud Storage, and Secret Manager through External
@@ -54,3 +56,20 @@ as `gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-key/versions/latest`.
 Cloud Run all-in-one is useful for demos and focused-agent pilots, but
 production worker execution should run on GKE so OpenCode processes have stable
 CPU and lifetime.
+
+## Production Notes
+
+- Configure `OPEN_COWORK_CLOUD_PUBLIC_URL` and
+  `OPEN_COWORK_GATEWAY_PUBLIC_URL` with HTTPS load balancer or Cloud Run URLs.
+- Store cookie secret, internal token, database URL, BYOK envelope key,
+  gateway service token, and provider webhook signing secrets in Secret
+  Manager.
+- Keep cloud billing disabled/stubbed for OSS self-host. Managed SaaS should
+  configure billing through the billing adapter and signed billing webhooks.
+- Use Workload Identity or External Secrets rather than static object-store
+  credentials where possible.
+- Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
+  URLs.
+
+GCP configuration is adapter wiring only. Do not add GCP branches to cloud
+sessions, gateway rendering, OpenCode runtime startup, or BYOK core code.

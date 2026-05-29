@@ -12,6 +12,8 @@ with these services:
 | Control plane | Azure Database for PostgreSQL |
 | Object store | Azure Blob Storage |
 | Secrets | Key Vault for cloud keys, gateway tokens, and channel credentials |
+| Observability | Azure Monitor/Application Insights plus OTLP exporter or collector |
+| Backups | Azure PostgreSQL PITR plus Blob versioning/lifecycle |
 
 For scalable deployments, install the provider-neutral Helm chart on AKS and
 connect it to Azure Database for PostgreSQL, Blob Storage, and Key Vault
@@ -53,3 +55,20 @@ but keep split roles and checkpointing enabled before adding worker replicas.
 When the envelope key is read directly by the app, set
 `OPEN_COWORK_CLOUD_SECRET_KEY_REF` to a Key Vault URI such as
 `azure-kv://VAULT_NAME/secrets/open-cowork-cloud-key/VERSION`.
+
+## Production Notes
+
+- Configure `OPEN_COWORK_CLOUD_PUBLIC_URL` and
+  `OPEN_COWORK_GATEWAY_PUBLIC_URL` with HTTPS Container Apps ingress,
+  Application Gateway, Front Door, or AKS ingress.
+- Store cookie secret, internal token, database URL, BYOK envelope key,
+  gateway service token, and provider webhook signing secrets in Key Vault.
+- Keep cloud billing disabled/stubbed for OSS self-host. Managed SaaS should
+  configure billing through the billing adapter and signed billing webhooks.
+- Prefer workload identity for Blob and Key Vault access over long-lived static
+  keys.
+- Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
+  URLs.
+
+Azure configuration is adapter wiring only. Do not add Azure branches to cloud
+sessions, gateway rendering, OpenCode runtime startup, or BYOK core code.

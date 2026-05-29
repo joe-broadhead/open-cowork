@@ -12,6 +12,8 @@ these services:
 | Control plane | RDS for PostgreSQL |
 | Object store | S3 |
 | Secrets | Secrets Manager or SSM Parameter Store for cloud keys, gateway tokens, and channel credentials |
+| Observability | CloudWatch Logs plus OTLP exporter or collector |
+| Backups | RDS PITR plus S3 versioning/lifecycle |
 
 For Kubernetes-first deployments, install the provider-neutral Helm chart on
 EKS and connect it to RDS, S3, and Secrets Manager through External Secrets or
@@ -54,3 +56,20 @@ object-store settings, secret key, and checkpoint settings.
 When the envelope key is read directly by the app, set
 `OPEN_COWORK_CLOUD_SECRET_KEY_REF` to an AWS Secrets Manager URI such as
 `aws-sm://open-cowork/cloud-secret-key?region=REGION`.
+
+## Production Notes
+
+- Configure `OPEN_COWORK_CLOUD_PUBLIC_URL` and
+  `OPEN_COWORK_GATEWAY_PUBLIC_URL` with HTTPS ALB, CloudFront, or ingress
+  origins.
+- Store cookie secret, internal token, database URL, BYOK envelope key,
+  gateway service token, and provider webhook signing secrets in Secrets
+  Manager or SSM.
+- Keep cloud billing disabled/stubbed for OSS self-host. Managed SaaS should
+  configure billing through the billing adapter and signed billing webhooks.
+- Prefer IRSA or task roles for S3 access over long-lived static keys.
+- Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
+  URLs.
+
+AWS configuration is adapter wiring only. Do not add AWS branches to cloud
+sessions, gateway rendering, OpenCode runtime startup, or BYOK core code.
