@@ -13,6 +13,7 @@ export type UsageControlPlaneStore = Pick<ControlPlaneStore,
 
 export type QuotaControlPlaneStore = Pick<ControlPlaneStore,
   | 'consumeUsageQuota'
+  | 'listUsageQuotaCounters'
   | 'recordUsageEvent'
   | 'listUsageEvents'
   | 'claimRateLimit'

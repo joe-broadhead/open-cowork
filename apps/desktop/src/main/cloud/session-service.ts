@@ -172,6 +172,91 @@ export type CloudAdminPolicyOverview = {
     channelsEnabled: boolean
     webhooksEnabled: boolean
   }
+  byok: {
+    allowedProviderIds: string[] | null
+    kmsRefsEnabled: boolean
+    kmsRefPrefixesConfigured: boolean
+    envRefsEnabled: boolean
+  }
+}
+
+export type CloudUsageTotalRecord = {
+  eventType: string
+  unit: string
+  quantity: number
+}
+
+export type CloudUsageQuotaWindowRecord = {
+  quotaKey: string
+  label: string
+  unit: 'count' | 'byte' | 'minute'
+  enabled: boolean
+  limit: number | null
+  used: number
+  remaining: number | null
+  windowMs: number
+  windowStartedAt: string
+  resetAt: string
+  policyCode: string
+}
+
+export type CloudUsageSummary = {
+  enabled: boolean
+  generatedAt: string
+  events: UsageEventRecord[]
+  totals: CloudUsageTotalRecord[]
+  quotas: CloudUsageQuotaWindowRecord[]
+}
+
+export type CloudDiagnosticsBundle = {
+  generatedAt: string
+  redaction: 'secrets-redacted'
+  org: {
+    orgId: string
+    tenantId: string
+    role: string
+    profileName: string
+  }
+  runtime: {
+    role: CloudRuntimePolicy['role']
+    profileName: string
+    canExecute: boolean
+    commandProcessing: 'inline' | 'durable' | 'delegated'
+    checkpoints: boolean
+    heartbeatCount: number
+  }
+  billing: {
+    enabled: boolean
+    mode: 'disabled' | 'self-host' | 'managed'
+    providerId: string
+    subscription: BillingSubscriptionRecord | null
+    entitlements: Record<string, unknown>
+    active: boolean
+    plans: Array<{
+      planKey: string
+      label: string
+      default: boolean
+      entitlements: Record<string, unknown>
+    }>
+  }
+  byok: {
+    configuredProviders: number
+    providers: ByokSecretMetadata[]
+  }
+  usage: CloudUsageSummary
+  gateway: {
+    agents: {
+      total: number
+      active: number
+      disabled: number
+    }
+    bindingsByProvider: Record<string, number>
+    deliveriesByStatus: Record<string, number>
+  }
+  links: {
+    deploymentDocs: string
+    managedByokRunbook: string
+  }
 }
 
 export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'>
@@ -307,6 +392,10 @@ const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 const DEFAULT_API_TOKEN_TTL_MS = 90 * DAY_MS
 const MAX_API_TOKEN_TTL_MS = 365 * DAY_MS
+
+function windowStartMs(nowMs: number, windowMs: number) {
+  return Math.floor(nowMs / windowMs) * windowMs
+}
 const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   enabled: false,
   maxConcurrentSessionsPerOrg: null,
@@ -881,6 +970,14 @@ export class CloudSessionService {
       gateway: {
         channelsEnabled: this.policy.features.agents !== false,
         webhooksEnabled: this.policy.features.webhooks !== false,
+      },
+      byok: {
+        allowedProviderIds: this.byokPolicy.allowedProviderIds
+          ? [...this.byokPolicy.allowedProviderIds].map((id) => id.trim().toLowerCase()).filter(Boolean)
+          : null,
+        kmsRefsEnabled: this.byokPolicy.kmsRefs?.enabled === true,
+        kmsRefPrefixesConfigured: Boolean(this.byokPolicy.kmsRefs?.allowedPrefixes?.length),
+        envRefsEnabled: this.byokPolicy.kmsRefs?.allowEnvRefs === true,
       },
     }
   }
@@ -2334,6 +2431,164 @@ export class CloudSessionService {
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
   }
 
+  async getUsageSummary(principal: CloudPrincipal, limit = 100): Promise<CloudUsageSummary> {
+    await this.ensurePrincipal(principal)
+    const orgId = this.principalOrgId(principal)
+    const now = Date.now()
+    const [events, counters] = await Promise.all([
+      this.store.listUsageEvents(orgId, limit),
+      this.store.listUsageQuotaCounters(orgId),
+    ])
+    const totals = new Map<string, CloudUsageTotalRecord>()
+    for (const event of events) {
+      const totalKey = `${event.eventType}\0${event.unit}`
+      const total = totals.get(totalKey) || {
+        eventType: event.eventType,
+        unit: event.unit,
+        quantity: 0,
+      }
+      total.quantity += event.quantity
+      totals.set(totalKey, total)
+    }
+    const counterByKey = new Map(counters.map((counter) => [counter.quotaKey, counter]))
+    const quotaInputs: Array<{
+      quotaKey: string
+      label: string
+      unit: CloudUsageQuotaWindowRecord['unit']
+      limit: number | null | undefined
+      entitlementLimitKey?: 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
+      windowMs: number
+      policyCode: string
+    }> = [
+      {
+        quotaKey: 'prompts:hour',
+        label: 'Prompts per hour',
+        unit: 'count',
+        limit: this.abuse.maxPromptsPerHour,
+        entitlementLimitKey: 'maxPromptsPerHour',
+        windowMs: HOUR_MS,
+        policyCode: 'quota.prompts_per_hour_exceeded',
+      },
+      {
+        quotaKey: 'gateway_deliveries:hour',
+        label: 'Gateway deliveries per hour',
+        unit: 'count',
+        limit: this.abuse.maxGatewayDeliveriesPerHour,
+        entitlementLimitKey: 'maxGatewayDeliveriesPerHour',
+        windowMs: HOUR_MS,
+        policyCode: 'quota.gateway_deliveries_per_hour_exceeded',
+      },
+      {
+        quotaKey: 'artifact_bytes:day',
+        label: 'Artifact bytes per day',
+        unit: 'byte',
+        limit: this.abuse.maxArtifactBytesPerDay,
+        entitlementLimitKey: 'maxArtifactBytesPerDay',
+        windowMs: DAY_MS,
+        policyCode: 'quota.artifact_bytes_per_day_exceeded',
+      },
+    ]
+    const quotas: CloudUsageQuotaWindowRecord[] = []
+    for (const input of quotaInputs) {
+      const rawLimit = await this.effectiveQuotaLimit(orgId, input.limit, input.entitlementLimitKey)
+      const effectiveLimit = this.quotaLimit(rawLimit)
+      const fallbackWindowStart = windowStartMs(now, input.windowMs)
+      const counter = counterByKey.get(input.quotaKey)
+      const counterWindowStart = counter?.windowStartedAtMs === fallbackWindowStart
+        ? counter.windowStartedAtMs
+        : fallbackWindowStart
+      const used = counter && counter.windowStartedAtMs === fallbackWindowStart ? counter.quantity : 0
+      quotas.push({
+        quotaKey: input.quotaKey,
+        label: input.label,
+        unit: input.unit,
+        enabled: Boolean(this.abuse.enabled && effectiveLimit),
+        limit: effectiveLimit,
+        used,
+        remaining: effectiveLimit ? Math.max(0, effectiveLimit - used) : null,
+        windowMs: input.windowMs,
+        windowStartedAt: new Date(counterWindowStart).toISOString(),
+        resetAt: new Date(counterWindowStart + input.windowMs).toISOString(),
+        policyCode: input.policyCode,
+      })
+    }
+    return {
+      enabled: this.abuse.enabled,
+      generatedAt: new Date(now).toISOString(),
+      events,
+      totals: [...totals.values()].sort((left, right) => left.eventType.localeCompare(right.eventType) || left.unit.localeCompare(right.unit)),
+      quotas,
+    }
+  }
+
+  async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
+    await this.ensurePrincipal(principal)
+    if (!principalCanViewOperations(principal)) {
+      throw new CloudServiceError(403, 'Cloud diagnostics require operator privileges.')
+    }
+    const orgId = this.principalOrgId(principal)
+    const [billing, usage, byok, heartbeats, agents, deliveries] = await Promise.all([
+      this.getBillingSubscription(principal),
+      this.getUsageSummary(principal, 200),
+      this.byokSecrets ? this.byokSecrets.listMetadata(orgId) : Promise.resolve([]),
+      this.store.listWorkerHeartbeats(),
+      this.store.listHeadlessAgents(orgId),
+      this.store.listChannelDeliveries({ orgId, limit: 200 }),
+    ])
+    const bindings = (await Promise.all(agents.map((agent) => this.store.listChannelBindings(orgId, agent.agentId)))).flat()
+    const deliveryCounts: Record<string, number> = {
+      pending: 0,
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      dead: 0,
+    }
+    for (const delivery of deliveries) {
+      deliveryCounts[delivery.status] = (deliveryCounts[delivery.status] || 0) + 1
+    }
+    const bindingsByProvider: Record<string, number> = {}
+    for (const binding of bindings) {
+      bindingsByProvider[binding.provider] = (bindingsByProvider[binding.provider] || 0) + 1
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      redaction: 'secrets-redacted',
+      org: {
+        orgId,
+        tenantId: principal.tenantId,
+        role: principal.role || principal.authSource || 'unknown',
+        profileName: this.policy.profileName,
+      },
+      runtime: {
+        role: this.policy.role,
+        profileName: this.policy.profileName,
+        canExecute: this.policy.role === 'all-in-one' || this.policy.role === 'worker',
+        commandProcessing: this.policy.role === 'all-in-one' ? 'inline' : this.policy.role === 'worker' ? 'durable' : 'delegated',
+        checkpoints: this.policy.role === 'all-in-one' || this.policy.role === 'worker',
+        heartbeatCount: heartbeats.length,
+      },
+      billing,
+      byok: {
+        configuredProviders: byok.length,
+        providers: byok,
+      },
+      usage,
+      gateway: {
+        agents: {
+          total: agents.length,
+          active: agents.filter((agent) => agent.status === 'active').length,
+          disabled: agents.filter((agent) => agent.status === 'disabled').length,
+        },
+        bindingsByProvider,
+        deliveriesByStatus: deliveryCounts,
+      },
+      links: {
+        deploymentDocs: '/docs/open-cowork-cloud',
+        managedByokRunbook: '/runbooks/managed-byok-saas',
+      },
+    }
+  }
+
   async listApiTokens(principal: CloudPrincipal): Promise<PublicApiTokenRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertApiTokenAdmin(principal)
@@ -2387,9 +2642,13 @@ export class CloudSessionService {
   async getBillingSubscription(principal: CloudPrincipal) {
     await this.ensurePrincipal(principal)
     const subscription = await this.store.getBillingSubscription(this.principalOrgId(principal))
+    const billingEnabled = Boolean(this.billingConfig && isBillingConfigured(this.billingConfig))
+    const providerId = this.billingAdapter?.providerId || this.billingConfig?.provider || 'none'
+    const mode: 'self-host' | 'managed' = billingEnabled && providerId !== 'stub' ? 'managed' : 'self-host'
     return {
-      enabled: Boolean(this.billingConfig && isBillingConfigured(this.billingConfig)),
-      providerId: this.billingAdapter?.providerId || this.billingConfig?.provider || 'none',
+      enabled: billingEnabled,
+      mode,
+      providerId,
       subscription,
       entitlements: this.billingConfig ? resolvedBillingEntitlements(this.billingConfig, subscription) : {},
       active: this.billingConfig ? evaluateBillingEntitlement({
@@ -2398,6 +2657,12 @@ export class CloudSessionService {
         action: 'session.create',
         profileName: this.policy.profileName,
       }).allowed : true,
+      plans: Object.entries(this.billingConfig?.plans || {}).map(([planKey, plan]) => ({
+        planKey,
+        label: plan.label || planKey,
+        default: planKey === this.billingConfig?.defaultPlanKey,
+        entitlements: plan.entitlements || {},
+      })),
     }
   }
 

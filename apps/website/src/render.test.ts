@@ -91,6 +91,9 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
       runs: [],
       error: null,
     },
+    usageSummary: null,
+    deliveries: [],
+    diagnostics: null,
     admin: {
       policy: null,
       members: [],
@@ -127,12 +130,22 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberInvite')?.method, 'POST')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberUpdate')?.path, '/api/admin/members/:accountId/update')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminAudit')?.path, '/api/admin/audit?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'usageSummary')?.path, '/api/usage/summary?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'diagnostics')?.path, '/api/diagnostics')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveries')?.path, '/api/channels/deliveries?limit=50')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryRetry')?.path, '/api/channels/deliveries/:deliveryId/retry')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryDeadLetter')?.path, '/api/channels/deliveries/:deliveryId/dead-letter')
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {
   assert.match(html, /Slack team ID/)
   assert.match(html, /Inbound address/)
   assert.match(html, /Webhook delivery URL/)
+  assert.match(html, /Delivery backlog/)
+  assert.match(html, /KMS secret ref/)
+  assert.match(html, /Quota windows/)
+  assert.match(html, /id="billing-plan-select"/)
+  assert.match(html, /id="diagnostics-health"/)
   assert.match(html, /Billing/)
   assert.match(html, /Usage/)
 })
@@ -240,6 +253,7 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /rejectQuestion/)
   assert.match(cloudWebsiteClientScript(), /openArtifact/)
   assert.match(cloudWebsiteClientScript(), /safeArtifactMetadata/)
+  assert.match(cloudWebsiteClientScript(), /safeOperationalMetadata/)
   assert.match(cloudWebsiteClientScript(), /renderWorkbenchAgents/)
   assert.match(cloudWebsiteClientScript(), /renderCapabilities/)
   assert.match(cloudWebsiteClientScript(), /renderWorkflows/)
@@ -254,6 +268,11 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /renderAudit/)
   assert.match(cloudWebsiteClientScript(), /inviteMember/)
   assert.match(cloudWebsiteClientScript(), /updateMember/)
+  assert.match(cloudWebsiteClientScript(), /loadGatewayOps/)
+  assert.match(cloudWebsiteClientScript(), /retryDelivery/)
+  assert.match(cloudWebsiteClientScript(), /deadLetterDelivery/)
+  assert.match(cloudWebsiteClientScript(), /loadDiagnostics/)
+  assert.match(cloudWebsiteClientScript(), /exportUsageEvents/)
 })
 
 test('cloud website renders cloud thread controls without local host path affordances', () => {

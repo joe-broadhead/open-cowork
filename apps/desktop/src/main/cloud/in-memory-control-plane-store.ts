@@ -84,6 +84,13 @@ export type QuotaConsumptionRecord = {
   policyCode?: QuotaPolicyCode | string
 }
 
+export type UsageQuotaCounterRecord = {
+  orgId: string
+  quotaKey: string
+  windowStartedAtMs: number
+  quantity: number
+}
+
 export type RateLimitClaimRecord = {
   allowed: boolean
   scope: string
@@ -982,6 +989,7 @@ export type ControlPlaneStore = {
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
+  listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>
@@ -1749,6 +1757,23 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       retryAfterMs,
       policyCode: input.policyCode,
     }
+  }
+
+  listUsageQuotaCounters(orgId: string): UsageQuotaCounterRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    return Array.from(this.usageCounters.entries())
+      .map(([counterKey, counter]) => {
+        const [counterOrgId, quotaKey] = counterKey.split('\0', 2)
+        return {
+          orgId: counterOrgId,
+          quotaKey,
+          windowStartedAtMs: counter.windowStartedAtMs,
+          quantity: counter.quantity,
+        }
+      })
+      .filter((counter) => counter.orgId === orgId)
+      .sort((left, right) => left.quotaKey.localeCompare(right.quotaKey))
+      .map((counter) => clone(counter))
   }
 
   recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {

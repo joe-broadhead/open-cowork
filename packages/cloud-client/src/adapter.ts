@@ -76,6 +76,7 @@ export type CloudByokSecretMetadata = {
   secretId: string
   providerId: string
   status: CloudByokSecretStatus
+  credentialKind?: 'plaintext' | 'kms_ref'
   last4: string
   keyFingerprint: string
   lastValidatedAt: string | null
@@ -254,6 +255,34 @@ export type CloudUsageEventRecord = {
   createdAt: string
 }
 
+export type CloudUsageTotalRecord = {
+  eventType: string
+  unit: string
+  quantity: number
+}
+
+export type CloudUsageQuotaWindowRecord = {
+  quotaKey: string
+  label: string
+  unit: 'count' | 'byte' | 'minute'
+  enabled: boolean
+  limit: number | null
+  used: number
+  remaining: number | null
+  windowMs: number
+  windowStartedAt: string
+  resetAt: string
+  policyCode: string
+}
+
+export type CloudUsageSummary = {
+  enabled: boolean
+  generatedAt: string
+  events: CloudUsageEventRecord[]
+  totals: CloudUsageTotalRecord[]
+  quotas: CloudUsageQuotaWindowRecord[]
+}
+
 export type CloudWorkspaceOverview = {
   tenantId: string
   tenantName: string | null
@@ -341,6 +370,12 @@ export type CloudAdminPolicyOverview = {
     channelsEnabled: boolean
     webhooksEnabled: boolean
   }
+  byok?: {
+    allowedProviderIds: string[] | null
+    kmsRefsEnabled: boolean
+    kmsRefPrefixesConfigured: boolean
+    envRefsEnabled: boolean
+  }
 }
 
 export type CloudAuditEventRecord = {
@@ -374,10 +409,36 @@ export type CloudBillingSubscriptionRecord = {
 
 export type CloudBillingSubscriptionPayload = {
   enabled: boolean
+  mode?: 'disabled' | 'self-host' | 'managed'
   providerId: string
   subscription: CloudBillingSubscriptionRecord | null
   entitlements: Record<string, unknown>
   active: boolean
+  plans?: Array<{
+    planKey: string
+    label: string
+    default: boolean
+    entitlements: Record<string, unknown>
+  }>
+}
+
+export type CloudDiagnosticsBundle = {
+  generatedAt: string
+  redaction: 'secrets-redacted'
+  org: Record<string, unknown>
+  runtime: Record<string, unknown>
+  billing: CloudBillingSubscriptionPayload
+  byok: {
+    configuredProviders: number
+    providers: CloudByokSecretMetadata[]
+  }
+  usage: CloudUsageSummary
+  gateway: {
+    agents: Record<string, number>
+    bindingsByProvider: Record<string, number>
+    deliveriesByStatus: Record<string, number>
+  }
+  links: Record<string, string>
 }
 
 export type CloudBillingCheckoutResult = {
@@ -531,6 +592,8 @@ export type CloudTransportAdapter = {
   validateByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   listUsageEvents?(limit?: number): Promise<CloudUsageEventRecord[]>
+  getUsageSummary?(limit?: number): Promise<CloudUsageSummary>
+  getDiagnosticsBundle?(): Promise<CloudDiagnosticsBundle>
   listApiTokens?(): Promise<CloudApiTokenRecord[]>
   issueApiToken?(input: {
     name: string
@@ -1304,6 +1367,12 @@ export function createHttpSseCloudTransportAdapter(
     },
     async listUsageEvents(limit) {
       return (await request<{ events: CloudUsageEventRecord[] }>(`/api/usage/events${queryString({ limit })}`)).events
+    },
+    getUsageSummary(limit) {
+      return request<CloudUsageSummary>(`/api/usage/summary${queryString({ limit })}`)
+    },
+    getDiagnosticsBundle() {
+      return request<CloudDiagnosticsBundle>('/api/diagnostics')
     },
     async listApiTokens() {
       return (await request<{ tokens: CloudApiTokenRecord[] }>('/api/api-tokens')).tokens

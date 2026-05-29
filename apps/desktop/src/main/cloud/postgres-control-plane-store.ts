@@ -82,6 +82,7 @@ import type {
   ThreadTagLinkInput,
   ThreadTagRecord,
   UsageEventRecord,
+  UsageQuotaCounterRecord,
   UpdateChannelBindingInput,
   UpdateChannelCursorInput,
   UpdateHeadlessAgentInput,
@@ -1141,6 +1142,22 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async consumeUsageQuota(input: ConsumeUsageQuotaInput) {
     return this.withTransaction((client) => this.consumeUsageQuotaWithExecutor(client, input))
+  }
+
+  async listUsageQuotaCounters(orgId: string): Promise<UsageQuotaCounterRecord[]> {
+    const result = await this.pool.query(
+      `SELECT org_id, quota_key, window_started_at_ms, quantity
+       FROM cloud_usage_counters
+       WHERE org_id = $1
+       ORDER BY quota_key ASC`,
+      [orgId],
+    )
+    return result.rows.map((row) => ({
+      orgId: String(row.org_id),
+      quotaKey: String(row.quota_key),
+      windowStartedAtMs: numberValue(row.window_started_at_ms),
+      quantity: numberValue(row.quantity),
+    }))
   }
 
   async recordUsageEvent(input: RecordUsageEventInput) {

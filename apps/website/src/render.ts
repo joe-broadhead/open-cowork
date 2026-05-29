@@ -190,6 +190,9 @@ const state = {
   bindings: [],
   billing: null,
   usage: [],
+  usageSummary: null,
+  deliveries: [],
+  diagnostics: null,
   sessions: [],
   sessionViews: {},
   selectedSessionId: null,
@@ -424,6 +427,9 @@ function renderSignedOut() {
     runs: [],
     error: null,
   };
+  state.usageSummary = null;
+  state.deliveries = [];
+  state.diagnostics = null;
   state.admin = {
     policy: null,
     members: [],
@@ -514,6 +520,17 @@ function byteLabel(value) {
   return bytes + ' B';
 }
 
+function quantityLabel(value, unit) {
+  if (unit === 'byte') return byteLabel(value);
+  const quantity = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return quantity + ' ' + (unit || 'count');
+}
+
+function percentLabel(used, limit) {
+  if (!limit || !Number.isFinite(limit)) return 'unlimited';
+  return Math.min(100, Math.round((Number(used || 0) / limit) * 100)) + '%';
+}
+
 function tokenNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
@@ -585,6 +602,35 @@ function safeArtifactMetadata(artifact) {
     metadata[key] = value;
   }
   return metadata;
+}
+
+function safeOperationalMetadata(value, depth = 0) {
+  if (depth > 4) return '[truncated]';
+  if (Array.isArray(value)) return value.slice(0, 25).map((entry) => safeOperationalMetadata(entry, depth + 1));
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const normalized = key.toLowerCase();
+    const compactKey = normalized.replace(/[^a-z0-9]/g, '');
+    if (
+      normalized.includes('secret')
+      || normalized.includes('token')
+      || normalized.includes('password')
+      || normalized.includes('authorization')
+      || normalized.includes('cookie')
+      || normalized.includes('credential')
+      || compactKey.includes('kmsref')
+      || compactKey.includes('apikey')
+      || compactKey.includes('signedurl')
+      || compactKey.includes('downloadurl')
+      || normalized === 'key'
+    ) {
+      output[key] = '[redacted]';
+      continue;
+    }
+    output[key] = safeOperationalMetadata(entry, depth + 1);
+  }
+  return output;
 }
 
 function capabilityLabel(capability) {
@@ -740,6 +786,13 @@ function filteredAuditEvents() {
     ].filter(Boolean).join(' ').toLowerCase();
     return tokens.every((token) => haystack.includes(token));
   });
+}
+
+function deliveryPillKind(status) {
+  if (status === 'sent') return 'ok';
+  if (status === 'pending' || status === 'claimed' || status === 'failed') return 'warn';
+  if (status === 'dead') return 'warn';
+  return '';
 }
 
 function policyListLabel(values) {
@@ -1040,7 +1093,18 @@ function renderAudit() {
 
 function renderByok() {
   const list = qs('#byok-list');
+  const policyNote = qs('#byok-policy-note');
   if (!list) return;
+  if (policyNote) {
+    const byokPolicy = state.admin.policy?.byok || {};
+    const providers = normalizeList(byokPolicy.allowedProviderIds);
+    const parts = [
+      providers.length ? 'Allowed providers: ' + providers.join(', ') : 'Allowed providers: profile defaults',
+      byokPolicy.kmsRefsEnabled ? 'KMS refs enabled' : 'KMS refs disabled',
+      byokPolicy.envRefsEnabled ? 'env: refs enabled' : 'env: refs disabled',
+    ];
+    policyNote.textContent = parts.join(' - ');
+  }
   removeChildren(list);
   if (!state.byok.length) {
     const empty = document.createElement('p');
@@ -1056,9 +1120,13 @@ function renderByok() {
     const title = document.createElement('strong');
     title.textContent = secret.providerId;
     main.appendChild(title);
-    main.appendChild(document.createTextNode(' key ending ' + secret.last4));
+    main.appendChild(document.createTextNode(' ' + (secret.credentialKind === 'kms_ref' ? 'KMS ref' : 'key') + ' ending ' + secret.last4));
     const meta = document.createElement('small');
-    meta.textContent = 'Updated ' + formatDate(secret.updatedAt);
+    meta.textContent = [
+      'Updated ' + formatDate(secret.updatedAt),
+      secret.lastValidatedAt ? 'validated ' + formatDate(secret.lastValidatedAt) : 'not validated',
+      secret.validationError ? 'validation: ' + secret.validationError : null,
+    ].filter(Boolean).join(' - ');
     main.appendChild(document.createElement('br'));
     main.appendChild(meta);
     const actions = document.createElement('div');
@@ -1123,11 +1191,35 @@ function renderTokens() {
 function renderGateway() {
   const agents = qs('#agent-list');
   const bindings = qs('#binding-list');
+  const deliveries = qs('#delivery-list');
+  const setup = qs('#gateway-setup-guide');
   const select = qs('#binding-agent');
   if (!agents || !bindings || !select) return;
   removeChildren(agents);
   removeChildren(bindings);
   removeChildren(select);
+  if (deliveries) removeChildren(deliveries);
+  if (setup) {
+    removeChildren(setup);
+    const steps = [
+      'Create or rotate a gateway-scoped service token in Connections.',
+      'Deploy the gateway with OPEN_COWORK_CLOUD_BASE_URL and OPEN_COWORK_GATEWAY_SERVICE_TOKEN.',
+      'Telegram: set OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN and bind the bot workspace.',
+      'Slack: set OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN plus signing secret and bind the team/channel.',
+      'Email: configure inbound secret plus SMTP settings, then bind the inbound address/domain.',
+      'Webhook: set OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET and a HTTPS delivery URL.',
+      'Use the delivery backlog below to retry or dead-letter stuck outbound messages.',
+    ];
+    for (const step of steps) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      row.appendChild(pill(String(setup.children.length + 1)));
+      const text = document.createElement('span');
+      text.textContent = step;
+      row.appendChild(text);
+      setup.appendChild(row);
+    }
+  }
   if (!state.agents.length) {
     const empty = document.createElement('p');
     empty.className = 'empty';
@@ -1171,6 +1263,45 @@ function renderGateway() {
     row.appendChild(main);
     row.appendChild(pill(binding.status, binding.status === 'active' ? 'ok' : 'warn'));
     bindings.appendChild(row);
+  }
+  if (deliveries) {
+    const backlog = normalizeList(state.deliveries);
+    if (!backlog.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No gateway deliveries loaded.';
+      deliveries.appendChild(empty);
+    }
+    for (const delivery of backlog.slice(0, 50)) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const main = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = delivery.eventType || delivery.deliveryId || 'delivery';
+      main.appendChild(title);
+      const meta = document.createElement('small');
+      meta.textContent = [
+        delivery.provider,
+        delivery.channelBindingId,
+        'attempts ' + (delivery.attemptCount || 0),
+        delivery.lastError || null,
+        'next ' + formatDate(delivery.nextAttemptAt),
+      ].filter(Boolean).join(' - ');
+      main.appendChild(document.createElement('br'));
+      main.appendChild(meta);
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      actions.appendChild(pill(delivery.status || 'unknown', deliveryPillKind(delivery.status)));
+      actions.appendChild(actionButton('Retry', () => retryDelivery(delivery.deliveryId), 'secondary', adminLocked() || !delivery.deliveryId || delivery.status === 'sent'));
+      actions.appendChild(actionButton('Dead-letter', () => deadLetterDelivery(delivery.deliveryId), 'danger', adminLocked() || !delivery.deliveryId || delivery.status === 'dead'));
+      row.appendChild(main);
+      row.appendChild(actions);
+      appendDetails(row, 'Redacted delivery payload', {
+        target: safeOperationalMetadata(delivery.target),
+        payload: safeOperationalMetadata(delivery.payload),
+      });
+      deliveries.appendChild(row);
+    }
   }
 }
 
@@ -1436,31 +1567,119 @@ function renderWorkflows() {
 function renderBilling() {
   const billing = state.billing;
   const panel = qs('#billing-summary');
+  const entitlements = qs('#billing-entitlements');
+  const planSelect = qs('#billing-plan-select');
   if (!panel) return;
   removeChildren(panel);
+  if (entitlements) removeChildren(entitlements);
   if (!billing || !billing.enabled) {
     panel.appendChild(pill('billing disabled', 'warn'));
     const text = document.createElement('p');
     text.className = 'empty';
-    text.textContent = 'This deployment has billing disabled.';
+    text.textContent = 'Self-host mode is active. BYOK, desktop tokens, gateway setup, and workbench features remain available without commercial billing.';
     panel.appendChild(text);
+    if (entitlements) appendDetails(entitlements, 'Self-host entitlements', billing?.entitlements || {});
     qsa('[data-billing-control="true"]').forEach((element) => { element.disabled = true; });
     return;
   }
   qsa('[data-billing-control="true"]').forEach((element) => { element.disabled = adminLocked(); });
   panel.appendChild(pill(billing.active ? 'active' : 'action required', billing.active ? 'ok' : 'warn'));
+  panel.appendChild(pill(billing.mode || 'managed'));
+  panel.appendChild(pill(billing.providerId || 'provider'));
   const detail = document.createElement('p');
   const subscription = billing.subscription;
   detail.textContent = subscription
-    ? subscription.planKey + ' - ' + subscription.status + ' - ' + subscription.seats + ' seat(s)'
+    ? subscription.planKey + ' - ' + subscription.status + ' - ' + subscription.seats + ' seat(s)' + (subscription.currentPeriodEnd ? ' - renews ' + formatDate(subscription.currentPeriodEnd) : '')
     : 'No subscription is attached to this org.';
   panel.appendChild(detail);
+  if (planSelect) {
+    removeChildren(planSelect);
+    for (const plan of normalizeList(billing.plans)) {
+      const option = document.createElement('option');
+      option.value = plan.planKey;
+      option.textContent = plan.label + (plan.default ? ' (default)' : '');
+      planSelect.appendChild(option);
+    }
+  }
+  if (entitlements) {
+    const plans = normalizeList(billing.plans);
+    for (const plan of plans) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const main = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = plan.label || plan.planKey;
+      main.appendChild(title);
+      const meta = document.createElement('small');
+      meta.textContent = plan.planKey + (plan.default ? ' - default' : '');
+      main.appendChild(document.createElement('br'));
+      main.appendChild(meta);
+      row.appendChild(main);
+      row.appendChild(pill(plan.default ? 'default' : 'available'));
+      appendDetails(row, 'Entitlements', plan.entitlements || {});
+      entitlements.appendChild(row);
+    }
+    if (!plans.length) appendDetails(entitlements, 'Resolved entitlements', billing.entitlements || {});
+  }
 }
 
 function renderUsage() {
   const list = qs('#usage-list');
+  const quotas = qs('#usage-quota-list');
+  const totals = qs('#usage-total-list');
   if (!list) return;
   removeChildren(list);
+  if (quotas) {
+    removeChildren(quotas);
+    const quotaRows = normalizeList(state.usageSummary?.quotas);
+    if (!quotaRows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No quota windows loaded.';
+      quotas.appendChild(empty);
+    }
+    for (const quota of quotaRows) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const main = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = quota.label || quota.quotaKey;
+      main.appendChild(title);
+      const meta = document.createElement('small');
+      meta.textContent = quota.enabled
+        ? quantityLabel(quota.used, quota.unit) + ' of ' + quantityLabel(quota.limit, quota.unit) + ' - resets ' + formatDate(quota.resetAt)
+        : 'unlimited or disabled';
+      main.appendChild(document.createElement('br'));
+      main.appendChild(meta);
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      actions.appendChild(pill(quota.enabled ? percentLabel(quota.used, quota.limit) : 'unlimited', quota.enabled ? 'warn' : 'ok'));
+      row.appendChild(main);
+      row.appendChild(actions);
+      quotas.appendChild(row);
+    }
+  }
+  if (totals) {
+    removeChildren(totals);
+    const totalRows = normalizeList(state.usageSummary?.totals);
+    if (!totalRows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No usage totals loaded.';
+      totals.appendChild(empty);
+    }
+    for (const total of totalRows) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const strong = document.createElement('strong');
+      strong.textContent = total.eventType;
+      const span = document.createElement('span');
+      span.textContent = quantityLabel(total.quantity, total.unit);
+      row.appendChild(strong);
+      row.appendChild(span);
+      totals.appendChild(row);
+    }
+  }
   if (!state.usage.length) {
     const empty = document.createElement('p');
     empty.className = 'empty';
@@ -1482,6 +1701,50 @@ function renderUsage() {
     row.appendChild(main);
     list.appendChild(row);
   }
+}
+
+function renderDiagnostics() {
+  const health = qs('#diagnostics-health');
+  const bundle = qs('#diagnostics-bundle');
+  if (!health || !bundle) return;
+  removeChildren(health);
+  removeChildren(bundle);
+  const diagnostics = state.diagnostics;
+  if (!diagnostics) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = adminLocked() ? 'Diagnostics require admin or operator privileges.' : 'Diagnostics have not been requested.';
+    health.appendChild(empty);
+    return;
+  }
+  const runtime = safeObject(diagnostics.runtime);
+  const gateway = safeObject(diagnostics.gateway);
+  const byok = safeObject(diagnostics.byok);
+  const rows = [
+    ['Generated', formatDate(diagnostics.generatedAt)],
+    ['Redaction', diagnostics.redaction || 'secrets-redacted'],
+    ['Runtime role', runtime.role || 'unknown'],
+    ['Command processing', runtime.commandProcessing || 'unknown'],
+    ['Worker heartbeats', runtime.heartbeatCount ?? 0],
+    ['BYOK providers', byok.configuredProviders ?? 0],
+    ['Gateway agents', safeObject(gateway.agents).total ?? 0],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'row compact';
+    const strong = document.createElement('strong');
+    strong.textContent = label;
+    const span = document.createElement('span');
+    span.textContent = String(value);
+    row.appendChild(strong);
+    row.appendChild(span);
+    health.appendChild(row);
+  }
+  appendDetails(bundle, 'Redacted diagnostics JSON', diagnostics);
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.appendChild(actionButton('Download bundle', () => downloadJson('open-cowork-diagnostics.json', diagnostics), 'primary', false));
+  bundle.appendChild(actions);
 }
 
 function sessionTitle(session) {
@@ -2521,6 +2784,7 @@ function renderAll() {
   renderGateway();
   renderBilling();
   renderUsage();
+  renderDiagnostics();
   renderThreadList();
   renderChat();
   renderWorkbenchAgents();
@@ -2601,6 +2865,7 @@ async function loadAdminSurfaces() {
     renderAdminPolicy();
     renderMembers();
     renderAudit();
+    renderByok();
     return;
   }
   const [policy, members, auditEvents] = await Promise.all([
@@ -2627,6 +2892,30 @@ async function loadAdminSurfaces() {
   renderMembers();
   renderAdminPolicy();
   renderAudit();
+  renderByok();
+}
+
+async function loadGatewayOps() {
+  const [agents, bindings, deliveries] = await Promise.all([
+    optionalLoad(() => api(endpoint('channelAgents', '/api/channels/agents')).then((body) => body.agents || []), []),
+    optionalLoad(() => api(endpoint('channelBindings', '/api/channels/bindings')).then((body) => body.bindings || []), []),
+    optionalLoad(() => api(endpoint('channelDeliveries', '/api/channels/deliveries?limit=50')).then((body) => body.deliveries || []), []),
+  ]);
+  state.agents = normalizeList(agents);
+  state.bindings = normalizeList(bindings);
+  state.deliveries = normalizeList(deliveries);
+  renderGateway();
+}
+
+async function loadDiagnostics() {
+  state.diagnostics = await optionalSurfaceLoad(
+    () => api(endpoint('diagnostics', '/api/diagnostics')),
+    null,
+    (error) => {
+      if (error) setStatus(error, 'error');
+    },
+  );
+  renderDiagnostics();
 }
 
 async function refreshDashboard() {
@@ -2636,26 +2925,25 @@ async function refreshDashboard() {
   state.csrfToken = me.csrfToken || null;
   state.config = await api(endpoint('config', '/api/config'));
   state.workspace = await api(endpoint('workspace', '/api/workspace'));
-  const [byok, tokens, agents, bindings, billing, usage] = await Promise.all([
+  const [byok, tokens, billing, usage, usageSummary] = await Promise.all([
     optionalLoad(() => api(endpoint('byok', '/api/byok')).then((body) => body.secrets || []), []),
     optionalLoad(() => api(endpoint('apiTokens', '/api/api-tokens')).then((body) => body.tokens || []), []),
-    optionalLoad(() => api(endpoint('channelAgents', '/api/channels/agents')).then((body) => body.agents || []), []),
-    optionalLoad(() => api(endpoint('channelBindings', '/api/channels/bindings')).then((body) => body.bindings || []), []),
     optionalLoad(() => api(endpoint('billingSubscription', '/api/billing/subscription')), { enabled: false }),
     optionalLoad(() => api(endpoint('usageEvents', '/api/usage/events?limit=20')).then((body) => body.events || []), []),
+    optionalLoad(() => api(endpoint('usageSummary', '/api/usage/summary?limit=100')), null),
   ]);
   state.byok = byok;
   state.tokens = tokens;
-  state.agents = agents;
-  state.bindings = bindings;
   state.billing = billing;
   state.usage = usage;
+  state.usageSummary = usageSummary;
   document.body.dataset.auth = 'signed-in';
   setStatus('Workbench synced', 'ok');
   setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
   renderAll();
   await Promise.all([
     loadAdminSurfaces(),
+    loadGatewayOps(),
     loadCapabilities(),
     loadWorkflows(),
     loadSessions({ keepSelection: true }),
@@ -2702,10 +2990,12 @@ async function submitScopedForm(form, handler, options = {}) {
 async function setByokSecret(formData) {
   const providerId = String(formData.get('providerId') || '').trim().toLowerCase();
   const plaintext = String(formData.get('apiKey') || '').trim();
-  if (!providerId || !plaintext) throw new Error('Provider and key are required.');
+  const kmsRef = String(formData.get('kmsRef') || '').trim();
+  if (!providerId || (!plaintext && !kmsRef)) throw new Error('Provider and credential are required.');
+  if (plaintext && kmsRef) throw new Error('Use either an API key or a KMS ref, not both.');
   await api('/api/byok/' + encodeURIComponent(providerId), {
     method: 'POST',
-    body: JSON.stringify({ apiKey: plaintext }),
+    body: JSON.stringify(plaintext ? { apiKey: plaintext } : { kmsRef }),
   });
 }
 
@@ -2771,20 +3061,27 @@ async function disableMember(accountId) {
   await updateMember(accountId, { status: 'disabled', confirm: accountId });
 }
 
-function exportAuditEvents() {
-  const events = filteredAuditEvents();
-  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), events }, null, 2)], { type: 'application/json' });
+function downloadJson(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   try {
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'open-cowork-audit-events.json';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
   } finally {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+}
+
+function exportAuditEvents() {
+  downloadJson('open-cowork-audit-events.json', { exportedAt: new Date().toISOString(), events: filteredAuditEvents() });
+}
+
+function exportUsageEvents() {
+  downloadJson('open-cowork-usage-summary.json', { exportedAt: new Date().toISOString(), summary: state.usageSummary, events: state.usage });
 }
 
 async function createAgent(formData) {
@@ -2817,6 +3114,23 @@ async function createBinding(formData) {
       settings: providerSettingsFromForm(provider, formData),
     }),
   });
+}
+
+async function retryDelivery(deliveryId) {
+  await api(endpointPath('channelDeliveryRetry', '/api/channels/deliveries/:deliveryId/retry', { deliveryId }), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  await loadGatewayOps();
+}
+
+async function deadLetterDelivery(deliveryId) {
+  const reason = window.prompt('Optional dead-letter reason:') || 'Manually dead-lettered from Cloud Web.';
+  await api(endpointPath('channelDeliveryDeadLetter', '/api/channels/deliveries/:deliveryId/dead-letter', { deliveryId }), {
+    method: 'POST',
+    body: JSON.stringify({ lastError: reason }),
+  });
+  await loadGatewayOps();
 }
 
 function providerSettingsFromForm(provider, formData) {
@@ -2969,6 +3283,9 @@ function bindForms() {
     renderAudit();
   });
   qs('#export-audit').addEventListener('click', () => exportAuditEvents());
+  qs('#export-usage').addEventListener('click', () => exportUsageEvents());
+  qs('#refresh-gateway').addEventListener('click', () => loadGatewayOps().catch((error) => setStatus(error.message, 'error')));
+  qs('#prepare-diagnostics').addEventListener('click', () => loadDiagnostics().catch((error) => setStatus(error.message, 'error')));
   qs('#desktop-token').addEventListener('click', () => quickToken(connectionLabel('desktopToken', 'Desktop token') + ' connection token', 'desktop').catch((error) => setStatus(error.message, 'error')));
   qs('#gateway-token').addEventListener('click', () => quickToken(connectionLabel('gatewayToken', 'Gateway token') + ' service token', 'gateway').catch((error) => setStatus(error.message, 'error')));
   qs('#agent-form').addEventListener('submit', (event) => {
@@ -3995,8 +4312,10 @@ ${publicBrandingCss(branding)}
               <div class="form-grid">
                 <label><span>Provider</span><input name="providerId" autocomplete="off" placeholder="anthropic" data-admin-control="true"></label>
                 <label><span>API key</span><input name="apiKey" type="password" autocomplete="off" placeholder="provider key" data-admin-control="true"></label>
+                <label class="span"><span>KMS secret ref</span><input name="kmsRef" autocomplete="off" placeholder="gcp-sm://projects/acme/secrets/anthropic/versions/latest" data-admin-control="true"></label>
                 <button class="primary span" type="submit" data-admin-control="true">Save key</button>
               </div>
+              <p class="empty" id="byok-policy-note">BYOK policy loads after sign-in.</p>
             </form>
             <div class="panel">
               <h3>Configured providers</h3>
@@ -4040,8 +4359,15 @@ ${publicBrandingCss(branding)}
               <h2>Headless gateway</h2>
               <div class="meta">${escapeHtml(copy.gatewayDescription || 'Headless agents route chat channels into cloud sessions.')}</div>
             </div>
+            <button id="refresh-gateway" type="button" data-admin-control="true">Refresh gateway</button>
           </div>
           <div class="grid">
+            <div class="panel">
+              <h3>Setup guide</h3>
+              <div class="list" id="gateway-setup-guide">
+                <p class="empty">Gateway setup guidance loads after sign-in.</p>
+              </div>
+            </div>
             <form class="panel" id="agent-form">
               <h3>Create headless agent</h3>
               <div class="form-grid">
@@ -4082,6 +4408,12 @@ ${publicBrandingCss(branding)}
               <h3>Channel bindings</h3>
               <div class="list" id="binding-list"></div>
             </div>
+            <div class="panel">
+              <h3>Delivery backlog</h3>
+              <div class="list" id="delivery-list">
+                <p class="empty">No gateway deliveries loaded.</p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -4097,14 +4429,16 @@ ${publicBrandingCss(branding)}
               <h3>Plan</h3>
               <div id="billing-summary" class="list"></div>
               <div class="form-grid">
-                <label><span>Plan key</span><input name="planKey" autocomplete="off" placeholder="pro" data-admin-control="true" data-billing-control="true"></label>
+                <label><span>Available plan</span><select id="billing-plan-select" name="planKey" data-admin-control="true" data-billing-control="true"></select></label>
                 <button class="primary" type="submit" data-admin-control="true" data-billing-control="true">Start checkout</button>
                 <button type="button" id="billing-portal" data-admin-control="true" data-billing-control="true">Open portal</button>
               </div>
             </form>
             <div class="panel">
               <h3>Entitlements</h3>
-              <p class="empty">Billing entitlements are enforced by the cloud API and worker. The dashboard reflects the current subscription status.</p>
+              <div class="list" id="billing-entitlements">
+                <p class="empty">Billing entitlements are enforced by the cloud API and worker. The dashboard reflects the current subscription status.</p>
+              </div>
             </div>
           </div>
         </section>
@@ -4137,9 +4471,21 @@ ${publicBrandingCss(branding)}
               <h2>Usage</h2>
               <div class="meta">${escapeHtml(copy.usageDescription || 'Recent metering events for this org.')}</div>
             </div>
+            <button id="export-usage" type="button">Export usage</button>
           </div>
-          <div class="panel">
-            <div class="list" id="usage-list"></div>
+          <div class="grid">
+            <div class="panel">
+              <h3>Quota windows</h3>
+              <div class="list" id="usage-quota-list"></div>
+            </div>
+            <div class="panel">
+              <h3>Totals</h3>
+              <div class="list" id="usage-total-list"></div>
+            </div>
+            <div class="panel">
+              <h3>Recent events</h3>
+              <div class="list" id="usage-list"></div>
+            </div>
           </div>
         </section>
 
@@ -4149,15 +4495,20 @@ ${publicBrandingCss(branding)}
               <h2>Diagnostics</h2>
               <div class="meta">Redacted operational state</div>
             </div>
+            <button id="prepare-diagnostics" type="button" data-admin-control="true">Prepare bundle</button>
           </div>
           <div class="grid">
             <div class="panel">
               <h3>Health</h3>
-              <p class="empty">No diagnostics loaded.</p>
+              <div class="list" id="diagnostics-health">
+                <p class="empty">No diagnostics loaded.</p>
+              </div>
             </div>
             <div class="panel">
               <h3>Support bundle</h3>
-              <button type="button" disabled data-admin-control="true">Prepare bundle</button>
+              <div class="list" id="diagnostics-bundle">
+                <p class="empty">Prepare a bundle to inspect redacted support data.</p>
+              </div>
             </div>
           </div>
         </section>
