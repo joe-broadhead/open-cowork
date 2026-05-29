@@ -4,6 +4,11 @@ import { CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } fr
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientStateContract } from './client-contract.ts'
 import { cloudWebsiteClientScript, cloudWebsiteHtml } from './render.ts'
 import { canManageOrg } from './roles.ts'
+import {
+  CLOUD_WEB_THREAD_PAGE_SIZE,
+  cloudWebThreadStatus,
+  filterCloudWebThreads,
+} from './thread-workbench.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -52,13 +57,25 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
     activeRoute: DEFAULT_CLOUD_WEB_ROUTE,
     workspace: null,
     csrfToken: null,
+    selectedSessionId: null,
+    sessions: [],
+    sessionViews: {},
     workspaceEvents: {
       status: 'idle',
-      cursor: null,
+      cursor: 0,
+      error: null,
+    },
+    sessionEvents: {
+      status: 'idle',
+      sessionId: null,
+      cursor: 0,
       error: null,
     },
   }
   assert.equal(stateContract.workspaceEvents.status, 'idle')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessions')?.path, '/api/sessions')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSourceValidate')?.path, '/api/project-sources/validate')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSnapshots')?.path, '/api/project-sources/snapshots')
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {
@@ -160,9 +177,64 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /signin-inline/)
   assert.match(cloudWebsiteClientScript(), /\/api\/config/)
   assert.match(cloudWebsiteClientScript(), /\/api\/workspace/)
+  assert.match(cloudWebsiteClientScript(), /\/api\/sessions/)
+  assert.match(cloudWebsiteClientScript(), /\/view/)
+  assert.match(cloudWebsiteClientScript(), /new EventSource/)
+  assert.match(cloudWebsiteClientScript(), /sessionEventTypes/)
+  assert.match(cloudWebsiteClientScript(), /createCloudSessionFromForm/)
+  assert.match(cloudWebsiteClientScript(), /promptSelectedSession/)
   assert.match(cloudWebsiteClientScript(), /setRoute/)
   assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
   assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
+})
+
+test('cloud website renders cloud thread controls without local host path affordances', () => {
+  assert.match(html, /id="thread-list"/)
+  assert.match(html, /id="session-form"/)
+  assert.match(html, /Git repository URL/)
+  assert.match(html, /Uploaded snapshot/)
+  assert.match(html, /id="prompt-form"/)
+  assert.match(html, /id="chat-timeline"/)
+  assert.doesNotMatch(html, /\/Users\//)
+  assert.doesNotMatch(html, /local stdio MCP/i)
+})
+
+test('cloud website thread helper handles status filters and thousands-sized lists', () => {
+  const sessions = Array.from({ length: CLOUD_WEB_THREAD_PAGE_SIZE + 25 }, (_, index) => ({
+    sessionId: `session-${index}`,
+    title: index === 50 ? 'Design review' : `Thread ${index}`,
+    profileName: index % 2 === 0 ? 'default' : 'data-analyst',
+    status: 'idle',
+    updatedAt: new Date(Date.UTC(2026, 4, 29, 12, 0, index % 60)).toISOString(),
+    tags: index === 50 ? ['customer-a'] : [],
+  }))
+  const views = {
+    'session-50': {
+      projection: {
+        view: {
+          status: 'running',
+          pendingApprovals: [{ id: 'approval-1' }],
+          projectSource: { kind: 'git', repositoryUrl: 'https://github.com/acme/app.git' },
+        },
+      },
+    },
+    'session-51': {
+      projection: {
+        view: {
+          status: 'running',
+          pendingQuestions: [{ id: 'question-1' }],
+          projectSource: { kind: 'snapshot', title: 'Browser upload' },
+        },
+      },
+    },
+  }
+
+  assert.equal(cloudWebThreadStatus(sessions[50], views['session-50'].projection.view), 'approval')
+  assert.equal(cloudWebThreadStatus(sessions[51], views['session-51'].projection.view), 'question')
+  assert.equal(filterCloudWebThreads(sessions, views).length, CLOUD_WEB_THREAD_PAGE_SIZE)
+  assert.deepEqual(filterCloudWebThreads(sessions, views, { status: 'approval' }).map((session) => session.sessionId), ['session-50'])
+  assert.deepEqual(filterCloudWebThreads(sessions, views, { project: 'snapshot' }).map((session) => session.sessionId), ['session-51'])
+  assert.deepEqual(filterCloudWebThreads(sessions, views, { query: 'design customer-a app' }).map((session) => session.sessionId), ['session-50'])
 })
 
 test('cloud website disables dynamic admin actions for member roles', () => {

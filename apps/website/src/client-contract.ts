@@ -11,6 +11,9 @@ export type CloudWebEndpointId =
   | 'channelBindings'
   | 'billingSubscription'
   | 'usageEvents'
+  | 'sessions'
+  | 'projectSourceValidate'
+  | 'projectSnapshots'
 
 export type CloudWebEndpoint = {
   id: CloudWebEndpointId
@@ -27,6 +30,7 @@ export type CloudWebClientBootstrap = {
   routes: CloudWebRoute[]
   defaultRoute: string
   api: CloudWebEndpoint[]
+  sessionEventTypes: string[]
 }
 
 export type CloudWebAuthStatus = 'loading' | 'signed-out' | 'signed-in'
@@ -37,9 +41,18 @@ export type CloudWebClientStateContract = {
   activeRoute: CloudWebRouteId
   workspace: unknown | null
   csrfToken: string | null
+  selectedSessionId: string | null
+  sessions: unknown[]
+  sessionViews: Record<string, unknown>
   workspaceEvents: {
     status: CloudWebConnectionStatus
-    cursor: string | null
+    cursor: number
+    error: string | null
+  }
+  sessionEvents: {
+    status: CloudWebConnectionStatus
+    sessionId: string | null
+    cursor: number
     error: string | null
   }
 }
@@ -98,5 +111,23 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     method: 'GET',
     path: '/api/usage/events?limit=20',
     csrf: false,
+  },
+  {
+    id: 'sessions',
+    method: 'GET',
+    path: '/api/sessions',
+    csrf: false,
+  },
+  {
+    id: 'projectSourceValidate',
+    method: 'POST',
+    path: '/api/project-sources/validate',
+    csrf: true,
+  },
+  {
+    id: 'projectSnapshots',
+    method: 'POST',
+    path: '/api/project-sources/snapshots',
+    csrf: true,
   },
 ]

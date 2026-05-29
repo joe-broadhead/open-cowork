@@ -178,6 +178,37 @@ The information architecture is split into two surfaces:
 - Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
   Audit, Usage, and Diagnostics.
 
+The Threads and Chat panels are the first interactive workbench surfaces:
+
+- `GET /api/sessions` loads the org-scoped durable session list.
+- `GET /api/sessions/:id/view` hydrates the selected thread from its durable
+  projection and shared `SessionView`.
+- `POST /api/sessions` creates a browser-origin cloud thread with a chat-only,
+  allowed Git, or uploaded snapshot project source.
+- `POST /api/sessions/:id/prompt` sends browser prompts through the same durable
+  command path used by desktop sync and gateway clients.
+- `GET /api/sessions/:id/events` and `GET /api/events` keep the selected thread
+  and thread list live through SSE, resuming from durable event sequences after
+  reconnect.
+
+Thread list filtering is client-side over the current durable session snapshot:
+search text, status, profile, project kind, and tag/smart-filter metadata are
+supported. The browser paginates large org thread lists in fixed batches so a
+thousands-sized session list remains responsive without changing the cloud API.
+
+Browser-created project context is explicit and policy checked. A Git source is
+validated by `/api/project-sources/validate`; an uploaded snapshot is first
+stored through `/api/project-sources/snapshots`, then referenced by session
+creation. The browser never receives or sends local desktop host paths,
+machine-native OpenCode config, local stdio MCP process details, or local
+provider secrets unless the user explicitly uploads bounded project files as a
+cloud snapshot.
+
+Continuation is intentionally symmetric: a thread created by desktop sync or a
+gateway channel is just a cloud session and can be opened in the browser; a
+thread created in the browser appears to desktop and gateway clients through the
+same session list, projection, and SSE contracts.
+
 Signed-in member users can open the workbench and read allowed org/policy/usage
 state. Admin-only panels are rendered as read-only for members and all admin
 mutations remain server-authorized. Disabled controls in the browser are an
