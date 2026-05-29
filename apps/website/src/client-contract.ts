@@ -20,6 +20,15 @@ export type CloudWebEndpointId =
   | 'sessionQuestionReject'
   | 'sessionArtifacts'
   | 'sessionArtifact'
+  | 'capabilitiesCatalog'
+  | 'capabilityTools'
+  | 'capabilitySkills'
+  | 'workflows'
+  | 'workflow'
+  | 'workflowRun'
+  | 'workflowPause'
+  | 'workflowResume'
+  | 'workflowArchive'
   | 'projectSourceValidate'
   | 'projectSnapshots'
 
@@ -60,6 +69,17 @@ export type CloudWebClientStateContract = {
     status: 'idle' | 'loading' | 'error'
     error: string | null
   }
+  capabilities: {
+    tools: unknown[]
+    skills: unknown[]
+    error: string | null
+  }
+  workflows: {
+    workflows: unknown[]
+    runs: unknown[]
+    error: string | null
+  }
+  selectedWorkflowId: string | null
   workspaceEvents: {
     status: CloudWebConnectionStatus
     cursor: number
@@ -181,6 +201,60 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     method: 'GET',
     path: '/api/sessions/:sessionId/artifacts/:artifactId',
     csrf: false,
+  },
+  {
+    id: 'capabilitiesCatalog',
+    method: 'GET',
+    path: '/api/capabilities',
+    csrf: false,
+  },
+  {
+    id: 'capabilityTools',
+    method: 'GET',
+    path: '/api/capabilities/tools',
+    csrf: false,
+  },
+  {
+    id: 'capabilitySkills',
+    method: 'GET',
+    path: '/api/capabilities/skills',
+    csrf: false,
+  },
+  {
+    id: 'workflows',
+    method: 'GET',
+    path: '/api/workflows',
+    csrf: false,
+  },
+  {
+    id: 'workflow',
+    method: 'GET',
+    path: '/api/workflows/:workflowId',
+    csrf: false,
+  },
+  {
+    id: 'workflowRun',
+    method: 'POST',
+    path: '/api/workflows/:workflowId/run',
+    csrf: true,
+  },
+  {
+    id: 'workflowPause',
+    method: 'POST',
+    path: '/api/workflows/:workflowId/pause',
+    csrf: true,
+  },
+  {
+    id: 'workflowResume',
+    method: 'POST',
+    path: '/api/workflows/:workflowId/resume',
+    csrf: true,
+  },
+  {
+    id: 'workflowArchive',
+    method: 'POST',
+    path: '/api/workflows/:workflowId/archive',
+    csrf: true,
   },
   {
     id: 'projectSourceValidate',

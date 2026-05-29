@@ -222,6 +222,19 @@ const state = {
     status: 'idle',
     error: null,
   },
+  capabilities: {
+    tools: [],
+    skills: [],
+    error: null,
+  },
+  capabilityFilter: '',
+  workflows: {
+    workflows: [],
+    runs: [],
+    error: null,
+  },
+  selectedWorkflowId: null,
+  workflowFilter: '',
   revealToken: null,
   activeRoute: bootstrap.defaultRoute || 'threads',
 };
@@ -362,12 +375,15 @@ async function api(path, options = {}) {
   }
   if (!response.ok) {
     let message = 'Request failed';
+    let body = null;
     try {
-      const body = await response.json();
+      body = await response.json();
       message = body.error || message;
     } catch {}
     const error = new Error(message);
     error.status = response.status;
+    error.body = body;
+    error.verdict = body?.verdict || null;
     throw error;
   }
   return response.json();
@@ -389,6 +405,17 @@ function renderSignedOut() {
     status: 'idle',
     error: null,
   };
+  state.capabilities = {
+    tools: [],
+    skills: [],
+    error: null,
+  };
+  state.workflows = {
+    workflows: [],
+    runs: [],
+    error: null,
+  };
+  state.selectedWorkflowId = null;
   state.sessionEvents = {
     source: null,
     sessionId: null,
@@ -543,6 +570,144 @@ function safeArtifactMetadata(artifact) {
   return metadata;
 }
 
+function capabilityLabel(capability) {
+  return capability.label || capability.name || capability.id || 'Capability';
+}
+
+function capabilityPolicyNote(capability) {
+  if (capability.kind === 'mcp' && capability.scope === 'machine') return 'Machine-scoped MCP metadata requires a cloud-safe profile capability.';
+  if (capability.source === 'custom') return 'Synced custom metadata. Execution depends on org policy.';
+  return 'Allowed by current cloud profile.';
+}
+
+function filterCapabilities(items) {
+  const tokens = state.capabilityFilter.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return items;
+  return items.filter((item) => {
+    const haystack = [
+      item.id,
+      item.name,
+      item.label,
+      item.source,
+      item.origin,
+      item.scope,
+      item.kind,
+      item.namespace,
+      ...(Array.isArray(item.agentNames) ? item.agentNames : []),
+      ...(Array.isArray(item.toolIds) ? item.toolIds : []),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+function deriveWorkbenchAgents() {
+  const agents = new Map();
+  const ensure = (name) => {
+    const cleaned = String(name || '').trim();
+    if (!cleaned) return null;
+    const current = agents.get(cleaned) || {
+      name: cleaned,
+      toolCount: 0,
+      skillCount: 0,
+      custom: false,
+    };
+    agents.set(cleaned, current);
+    return current;
+  };
+  for (const name of normalizeList(state.workspace?.policy?.allowedAgents)) ensure(name);
+  for (const tool of normalizeList(state.capabilities.tools)) {
+    for (const name of normalizeList(tool.agentNames)) {
+      const agent = ensure(name);
+      if (!agent) continue;
+      agent.toolCount += 1;
+      agent.custom = agent.custom || tool.source === 'custom' || tool.origin === 'custom';
+    }
+  }
+  for (const skill of normalizeList(state.capabilities.skills)) {
+    for (const name of normalizeList(skill.agentNames)) {
+      const agent = ensure(name);
+      if (!agent) continue;
+      agent.skillCount += 1;
+      agent.custom = agent.custom || skill.source === 'custom' || skill.origin === 'custom';
+    }
+  }
+  return [...agents.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function workflowTriggerSummary(workflow) {
+  const triggers = normalizeList(workflow.triggers)
+    .filter((trigger) => trigger.enabled !== false)
+    .map((trigger) => trigger.type || 'trigger');
+  return triggers.length ? triggers.join(', ') : 'manual';
+}
+
+function selectedWorkflow() {
+  return state.workflows.workflows.find((workflow) => workflow.id === state.selectedWorkflowId)
+    || state.workflows.workflows[0]
+    || null;
+}
+
+function selectedWorkflowRuns(workflowId) {
+  return normalizeList(state.workflows.runs)
+    .filter((run) => run.workflowId === workflowId)
+    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
+}
+
+function filteredWorkflows() {
+  const tokens = state.workflowFilter.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const workflows = [...normalizeList(state.workflows.workflows)]
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+  if (!tokens.length) return workflows;
+  return workflows.filter((workflow) => {
+    const haystack = [
+      workflow.id,
+      workflow.title,
+      workflow.instructions,
+      workflow.agentName,
+      workflow.status,
+      workflow.latestRunStatus,
+      workflow.latestRunSummary,
+      workflow.webhookUrl,
+      ...normalizeList(workflow.skillNames),
+      ...normalizeList(workflow.toolIds),
+      ...normalizeList(workflow.triggers).map((trigger) => trigger.type),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+function workflowPillKind(status) {
+  if (status === 'active' || status === 'completed') return 'ok';
+  if (status === 'paused' || status === 'queued' || status === 'running') return 'warn';
+  if (status === 'failed' || status === 'cancelled' || status === 'archived') return 'warn';
+  return '';
+}
+
+function workbenchAgentSurfaces() {
+  const surfaces = [];
+  if (bootstrap.features?.chat !== false) surfaces.push('Web');
+  surfaces.push('Desktop cloud');
+  if (state.agents.length || state.bindings.length) surfaces.push('Gateway');
+  if (bootstrap.features?.workflows !== false) surfaces.push('Workflow');
+  return surfaces;
+}
+
+function allArtifactRecords() {
+  const records = [];
+  for (const [sessionId, view] of Object.entries(state.sessionViews)) {
+    const projection = runtimeViewFromCloudView(view);
+    for (const artifact of normalizeList(projection.artifacts)) {
+      records.push({
+        sessionId,
+        sessionTitle: sessionTitle(view?.session),
+        artifact,
+        updatedAt: artifact.createdAt || projection.updatedAt || view?.session?.updatedAt || '',
+      });
+    }
+  }
+  return records.sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+}
+
 function renderWorkspace() {
   const workspace = state.workspace;
   document.title = brandName();
@@ -560,6 +725,16 @@ function renderWorkspace() {
   });
   qsa('[data-chat-control="true"]').forEach((element) => {
     const locked = !workspace || bootstrap.features?.chat === false;
+    element.disabled = locked;
+    element.dataset.locked = locked ? 'true' : 'false';
+  });
+  qsa('[data-capability-control="true"]').forEach((element) => {
+    const locked = !workspace || (bootstrap.features?.agents === false && bootstrap.features?.customSkills === false && bootstrap.features?.customMcps === false);
+    element.disabled = locked;
+    element.dataset.locked = locked ? 'true' : 'false';
+  });
+  qsa('[data-workflow-control="true"]').forEach((element) => {
+    const locked = !workspace || bootstrap.features?.workflows === false;
     element.disabled = locked;
     element.dataset.locked = locked ? 'true' : 'false';
   });
@@ -700,6 +875,265 @@ function renderGateway() {
     row.appendChild(pill(binding.status, binding.status === 'active' ? 'ok' : 'warn'));
     bindings.appendChild(row);
   }
+}
+
+function renderWorkbenchAgents() {
+  const list = qs('#workbench-agent-list');
+  const policy = qs('#agent-policy-list');
+  if (!list) return;
+  removeChildren(list);
+  const agents = deriveWorkbenchAgents();
+  const surfaces = workbenchAgentSurfaces();
+  if (!agents.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = state.capabilities.error || 'No profile-allowed agents loaded.';
+    list.appendChild(empty);
+  }
+  for (const agent of agents) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = agent.name;
+    main.appendChild(title);
+    main.appendChild(document.createTextNode(agent.custom ? ' - custom metadata' : ' - built-in/profile'));
+    const meta = document.createElement('small');
+    meta.textContent = [
+      agent.toolCount + ' tool(s)',
+      agent.skillCount + ' skill(s)',
+      surfaces.join(', '),
+    ].join(' - ');
+    main.appendChild(document.createElement('br'));
+    main.appendChild(meta);
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    actions.appendChild(pill(agent.custom ? 'custom' : 'profile', agent.custom ? 'warn' : 'ok'));
+    actions.appendChild(actionButton('Start thread', () => startAgentThread(agent.name), 'primary', bootstrap.features?.chat === false || bootstrap.features?.agents === false));
+    row.appendChild(main);
+    row.appendChild(actions);
+    list.appendChild(row);
+  }
+  if (!policy) return;
+  removeChildren(policy);
+  const policyRows = [
+    ['Profile', state.workspace?.profileName || bootstrap.profileName || 'default'],
+    ['Chat', bootstrap.features?.chat === false ? 'disabled' : 'enabled'],
+    ['Workflows', bootstrap.features?.workflows === false ? 'disabled' : 'enabled'],
+    ['Surfaces', surfaces.join(', ') || 'none'],
+  ];
+  for (const [label, value] of policyRows) {
+    const row = document.createElement('div');
+    row.className = 'row compact';
+    const strong = document.createElement('strong');
+    strong.textContent = label;
+    const span = document.createElement('span');
+    span.textContent = value;
+    row.appendChild(strong);
+    row.appendChild(span);
+    policy.appendChild(row);
+  }
+}
+
+function renderCapabilityRows(target, items, emptyText) {
+  removeChildren(target);
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = emptyText;
+    target.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = capabilityLabel(item);
+    main.appendChild(title);
+    const description = document.createElement('p');
+    description.className = 'empty';
+    description.textContent = item.description || capabilityPolicyNote(item);
+    main.appendChild(description);
+    const meta = document.createElement('small');
+    meta.textContent = [
+      item.kind || 'skill',
+      item.source || item.origin || 'profile',
+      item.scope || null,
+      normalizeList(item.agentNames).length ? 'agents: ' + normalizeList(item.agentNames).join(', ') : null,
+      normalizeList(item.toolIds).length ? 'tools: ' + normalizeList(item.toolIds).join(', ') : null,
+    ].filter(Boolean).join(' - ');
+    main.appendChild(meta);
+    main.appendChild(document.createElement('br'));
+    const policy = document.createElement('small');
+    policy.textContent = capabilityPolicyNote(item);
+    main.appendChild(policy);
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    actions.appendChild(pill(item.source === 'custom' ? 'custom' : 'allowed', item.source === 'custom' ? 'warn' : 'ok'));
+    row.appendChild(main);
+    row.appendChild(actions);
+    target.appendChild(row);
+  }
+}
+
+function renderCapabilities() {
+  const toolList = qs('#tool-list');
+  const skillList = qs('#skill-list');
+  const note = qs('#capability-policy-note');
+  if (!toolList || !skillList) return;
+  const tools = filterCapabilities(normalizeList(state.capabilities.tools));
+  const skills = filterCapabilities(normalizeList(state.capabilities.skills));
+  renderCapabilityRows(toolList, tools, state.capabilities.error || 'No allowed tools loaded.');
+  renderCapabilityRows(skillList, skills, state.capabilities.error || 'No allowed skills loaded.');
+  if (!note) return;
+  removeChildren(note);
+  if (state.capabilities.error) {
+    const error = document.createElement('p');
+    error.className = 'notice';
+    error.textContent = state.capabilities.error;
+    note.appendChild(error);
+  }
+  const rows = [
+    bootstrap.features?.agents === false ? 'Agent capability browsing is disabled by this org profile.' : null,
+    bootstrap.features?.customSkills === false ? 'Custom skill metadata may be synced but is disabled by this org profile.' : null,
+    bootstrap.features?.customMcps === false ? 'Custom MCP metadata may be synced but is disabled by this org profile.' : null,
+  ].filter(Boolean);
+  if (!rows.length) rows.push('The browser shows cloud-safe capability metadata and policy verdicts only.');
+  for (const text of rows) {
+    const row = document.createElement('p');
+    row.className = 'empty';
+    row.textContent = text;
+    note.appendChild(row);
+  }
+}
+
+function renderWorkflows() {
+  const list = qs('#workflow-list');
+  const runs = qs('#workflow-run-list');
+  const detail = qs('#workflow-detail');
+  if (!list) return;
+  removeChildren(list);
+  const workflows = filteredWorkflows();
+  if (!state.selectedWorkflowId && workflows[0]) state.selectedWorkflowId = workflows[0].id;
+  if (!workflows.length) {
+    const row = document.createElement('div');
+    row.className = 'table-row empty-row';
+    row.setAttribute('role', 'row');
+    [state.workflows.error || 'No workflows loaded.', '-', '-', '-'].forEach((value) => {
+      const cell = document.createElement('span');
+      cell.setAttribute('role', 'cell');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    list.appendChild(row);
+  }
+  for (const workflow of workflows) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'table-row thread-row';
+    row.dataset.selected = state.selectedWorkflowId === workflow.id ? 'true' : 'false';
+    row.setAttribute('role', 'row');
+    row.addEventListener('click', () => {
+      state.selectedWorkflowId = workflow.id;
+      renderWorkflows();
+    });
+    const title = document.createElement('span');
+    title.setAttribute('role', 'cell');
+    title.textContent = workflow.title || workflow.id;
+    const status = document.createElement('span');
+    status.setAttribute('role', 'cell');
+    status.appendChild(pill(workflow.status || 'unknown', workflowPillKind(workflow.status)));
+    const last = document.createElement('span');
+    last.setAttribute('role', 'cell');
+    last.textContent = workflow.latestRunStatus || workflow.lastRunAt || 'never';
+    const next = document.createElement('span');
+    next.setAttribute('role', 'cell');
+    next.textContent = workflow.nextRunAt ? formatDate(workflow.nextRunAt) : workflowTriggerSummary(workflow);
+    row.appendChild(title);
+    row.appendChild(status);
+    row.appendChild(last);
+    row.appendChild(next);
+    list.appendChild(row);
+  }
+
+  const workflow = selectedWorkflow();
+  if (runs) {
+    removeChildren(runs);
+    if (!workflow) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'Select a workflow to inspect runs.';
+      runs.appendChild(empty);
+    } else {
+      const workflowRuns = selectedWorkflowRuns(workflow.id);
+      if (!workflowRuns.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty';
+        empty.textContent = 'No runs recorded.';
+        runs.appendChild(empty);
+      }
+      for (const run of workflowRuns.slice(0, 12)) {
+        const row = document.createElement('div');
+        row.className = 'row compact';
+        const main = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = run.title || run.id;
+        main.appendChild(title);
+        const meta = document.createElement('small');
+        meta.textContent = [
+          run.triggerType || 'manual',
+          formatDate(run.createdAt),
+          run.summary || run.error || null,
+        ].filter(Boolean).join(' - ');
+        main.appendChild(document.createElement('br'));
+        main.appendChild(meta);
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        actions.appendChild(pill(run.status || 'unknown', workflowPillKind(run.status)));
+        if (run.sessionId) actions.appendChild(actionButton('Open thread', () => selectSession(run.sessionId), 'secondary'));
+        row.appendChild(main);
+        row.appendChild(actions);
+        runs.appendChild(row);
+      }
+    }
+  }
+
+  if (!detail) return;
+  removeChildren(detail);
+  if (!workflow) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = state.workflows.error || 'Select or create a workflow.';
+    detail.appendChild(empty);
+    return;
+  }
+  detail.appendChild(pill(workflow.status || 'unknown', workflowPillKind(workflow.status)));
+  detail.appendChild(pill('trigger: ' + workflowTriggerSummary(workflow)));
+  if (workflow.webhookUrl) detail.appendChild(pill('webhook configured', 'ok'));
+  const text = document.createElement('p');
+  text.className = 'empty';
+  text.textContent = workflow.instructions || 'No instructions.';
+  detail.appendChild(text);
+  appendDetails(detail, 'Workflow metadata', {
+    id: workflow.id,
+    agentName: workflow.agentName,
+    skillNames: workflow.skillNames,
+    toolIds: workflow.toolIds,
+    latestRunId: workflow.latestRunId,
+    latestRunStatus: workflow.latestRunStatus,
+    latestRunSummary: workflow.latestRunSummary,
+    nextRunAt: workflow.nextRunAt,
+    lastRunAt: workflow.lastRunAt,
+  });
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.appendChild(actionButton('Run now', () => runWorkflow(workflow.id), 'primary', bootstrap.features?.workflows === false || workflow.status === 'archived'));
+  if (workflow.status === 'paused') actions.appendChild(actionButton('Resume', () => updateWorkflowStatus(workflow.id, 'resume'), 'secondary', bootstrap.features?.workflows === false));
+  else actions.appendChild(actionButton('Pause', () => updateWorkflowStatus(workflow.id, 'pause'), 'secondary', bootstrap.features?.workflows === false || workflow.status === 'archived'));
+  actions.appendChild(actionButton('Archive', () => updateWorkflowStatus(workflow.id, 'archive'), 'danger', bootstrap.features?.workflows === false || workflow.status === 'archived'));
+  if (workflow.latestRunSessionId) actions.appendChild(actionButton('Open run thread', () => selectSession(workflow.latestRunSessionId), 'secondary'));
+  detail.appendChild(actions);
 }
 
 function renderBilling() {
@@ -1300,6 +1734,7 @@ function renderChat() {
 function renderArtifacts() {
   const panel = qs('#artifact-list');
   const detail = qs('#artifact-detail');
+  const history = qs('#artifact-history');
   if (!panel) return;
   removeChildren(panel);
   const view = state.selectedSessionId ? state.sessionViews[state.selectedSessionId] : null;
@@ -1312,6 +1747,39 @@ function renderArtifacts() {
   } else {
     for (const artifact of projection.artifacts) {
       panel.appendChild(renderArtifactCard(artifact));
+    }
+  }
+  if (history) {
+    removeChildren(history);
+    const records = allArtifactRecords();
+    if (!records.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No artifact history loaded from current thread projections.';
+      history.appendChild(empty);
+    }
+    for (const record of records.slice(0, 25)) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const main = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = record.artifact.filename || record.artifact.name || artifactId(record.artifact) || 'Artifact';
+      main.appendChild(title);
+      const meta = document.createElement('small');
+      meta.textContent = [
+        record.sessionTitle,
+        record.artifact.mime || record.artifact.contentType || 'unknown type',
+        record.artifact.size !== undefined ? byteLabel(record.artifact.size) : null,
+        formatDate(record.updatedAt),
+      ].filter(Boolean).join(' - ');
+      main.appendChild(document.createElement('br'));
+      main.appendChild(meta);
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      actions.appendChild(actionButton('Open thread', () => selectSession(record.sessionId), 'secondary'));
+      row.appendChild(main);
+      row.appendChild(actions);
+      history.appendChild(row);
     }
   }
   if (!detail) return;
@@ -1441,6 +1909,7 @@ async function loadSessions(options = {}) {
   }
   renderThreadList();
   renderChat();
+  renderArtifacts();
 }
 
 async function loadSessionView(sessionId, options = {}) {
@@ -1539,6 +2008,99 @@ async function createCloudSessionFromForm(formData, form) {
   } else {
     await loadSessions({ keepSelection: true });
   }
+}
+
+async function startAgentThread(agentName) {
+  const created = await api(endpoint('sessions', '/api/sessions'), {
+    method: 'POST',
+    body: JSON.stringify({
+      profileName: String(state.workspace?.profileName || bootstrap.profileName || 'default').trim(),
+      projectSource: null,
+    }),
+  });
+  const sessionId = created?.session?.sessionId;
+  if (sessionId) {
+    state.sessionViews[sessionId] = created;
+    await loadSessions({ keepSelection: true });
+    await selectSession(sessionId);
+    const agentInput = qs('#prompt-form input[name="agent"]');
+    if (agentInput) agentInput.value = agentName;
+  } else {
+    await loadSessions({ keepSelection: true });
+  }
+}
+
+function commaList(value) {
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function workflowTriggersFromForm(formData) {
+  const type = String(formData.get('triggerType') || 'manual').trim();
+  const id = type + '-web';
+  if (type === 'schedule') {
+    return [{
+      id,
+      type: 'schedule',
+      enabled: true,
+      schedule: {
+        type: 'daily',
+        timezone: 'UTC',
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+    }];
+  }
+  if (type === 'webhook') {
+    return [{ id, type: 'webhook', enabled: true }];
+  }
+  return [{ id, type: 'manual', enabled: true }];
+}
+
+async function createWorkflowFromForm(formData) {
+  const title = String(formData.get('title') || '').trim();
+  const instructions = String(formData.get('instructions') || '').trim();
+  const agentName = String(formData.get('agentName') || '').trim();
+  if (!title || !instructions || !agentName) throw new Error('Workflow title, instructions, and agent are required.');
+  const result = await api(endpoint('workflows', '/api/workflows'), {
+    method: 'POST',
+    body: JSON.stringify({
+      title,
+      instructions,
+      agentName,
+      toolIds: commaList(formData.get('toolIds')),
+      skillNames: commaList(formData.get('skillNames')),
+      triggers: workflowTriggersFromForm(formData),
+    }),
+  });
+  if (result?.workflow?.id) state.selectedWorkflowId = result.workflow.id;
+  await loadWorkflows();
+}
+
+async function runWorkflow(workflowId) {
+  const result = await api(endpointPath('workflowRun', '/api/workflows/:workflowId/run', { workflowId }), {
+    method: 'POST',
+    body: JSON.stringify({ triggerType: 'manual', triggerPayload: { source: 'cloud-web' } }),
+  });
+  if (result?.workflow?.id) state.selectedWorkflowId = result.workflow.id;
+  await loadWorkflows();
+  if (result?.run?.sessionId) {
+    await loadSessions({ keepSelection: true });
+    await selectSession(result.run.sessionId);
+  }
+}
+
+async function updateWorkflowStatus(workflowId, action) {
+  const endpointId = action === 'resume' ? 'workflowResume' : action === 'archive' ? 'workflowArchive' : 'workflowPause';
+  const fallback = '/api/workflows/:workflowId/' + action;
+  const result = await api(endpointPath(endpointId, fallback, { workflowId }), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (result?.workflow?.id) state.selectedWorkflowId = result.workflow.id;
+  await loadWorkflows();
 }
 
 async function promptSelectedSession(formData) {
@@ -1661,6 +2223,9 @@ function renderAll() {
   renderUsage();
   renderThreadList();
   renderChat();
+  renderWorkbenchAgents();
+  renderCapabilities();
+  renderWorkflows();
   renderArtifacts();
   renderRoutes();
 }
@@ -1672,6 +2237,48 @@ async function optionalLoad(load, fallback) {
     if (error.status === 403 || error.status === 404) return fallback;
     throw error;
   }
+}
+
+async function optionalSurfaceLoad(load, fallback, setError) {
+  try {
+    const value = await load();
+    setError(null);
+    return value;
+  } catch (error) {
+    if (error.status === 403 || error.status === 404) {
+      const reason = error.verdict?.reason || error.message || 'Surface unavailable for this cloud profile.';
+      setError(reason);
+      return fallback;
+    }
+    throw error;
+  }
+}
+
+async function loadCapabilities() {
+  const catalog = await optionalSurfaceLoad(
+    () => api(endpoint('capabilitiesCatalog', '/api/capabilities')),
+    { tools: [], skills: [] },
+    (error) => { state.capabilities.error = error; },
+  );
+  state.capabilities.tools = normalizeList(catalog.tools);
+  state.capabilities.skills = normalizeList(catalog.skills);
+  renderWorkbenchAgents();
+  renderCapabilities();
+}
+
+async function loadWorkflows() {
+  const payload = await optionalSurfaceLoad(
+    () => api(endpoint('workflows', '/api/workflows')),
+    { workflows: [], runs: [] },
+    (error) => { state.workflows.error = error; },
+  );
+  state.workflows.workflows = normalizeList(payload.workflows);
+  state.workflows.runs = normalizeList(payload.runs);
+  if (state.selectedWorkflowId && !state.workflows.workflows.some((workflow) => workflow.id === state.selectedWorkflowId)) {
+    state.selectedWorkflowId = null;
+  }
+  if (!state.selectedWorkflowId && state.workflows.workflows[0]) state.selectedWorkflowId = state.workflows.workflows[0].id;
+  renderWorkflows();
 }
 
 async function refreshDashboard() {
@@ -1699,7 +2306,11 @@ async function refreshDashboard() {
   setStatus('Workbench synced', 'ok');
   setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
   renderAll();
-  await loadSessions({ keepSelection: true });
+  await Promise.all([
+    loadCapabilities(),
+    loadWorkflows(),
+    loadSessions({ keepSelection: true }),
+  ]);
   if (state.selectedSessionId) {
     const view = state.sessionViews[state.selectedSessionId];
     const afterSequence = typeof view?.projection?.sequence === 'number' ? view.projection.sequence : 0;
@@ -1931,6 +2542,21 @@ function bindForms() {
     event.preventDefault();
     submitScopedForm(event.currentTarget, promptSelectedSession, { refresh: false });
   });
+  qs('#capability-filter').addEventListener('input', (event) => {
+    state.capabilityFilter = event.currentTarget.value;
+    renderWorkbenchAgents();
+    renderCapabilities();
+  });
+  qs('#refresh-capabilities').addEventListener('click', () => loadCapabilities().catch((error) => setStatus(error.message, 'error')));
+  qs('#workflow-filter').addEventListener('input', (event) => {
+    state.workflowFilter = event.currentTarget.value;
+    renderWorkflows();
+  });
+  qs('#workflow-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitScopedForm(event.currentTarget, createWorkflowFromForm, { refresh: false });
+  });
+  qs('#refresh-workflows').addEventListener('click', () => loadWorkflows().catch((error) => setStatus(error.message, 'error')));
   qs('#byok-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitForm(event.currentTarget, setByokSecret);
@@ -2706,16 +3332,21 @@ ${publicBrandingCss(branding)}
               <h2>Agents</h2>
               <div class="meta">Profile-allowed execution choices</div>
             </div>
+            <button id="refresh-capabilities" type="button" data-capability-control="true">Refresh</button>
           </div>
           <div class="grid">
             <div class="panel">
               <h3>Available agents</h3>
-              <p class="empty">No agents loaded.</p>
+              <div class="list" id="workbench-agent-list">
+                <p class="empty">No agents loaded.</p>
+              </div>
             </div>
             <div class="panel">
               <h3>Policy</h3>
-              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
-              <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
+              <div class="list" id="agent-policy-list">
+                <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
+                <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
+              </div>
             </div>
           </div>
         </section>
@@ -2726,15 +3357,26 @@ ${publicBrandingCss(branding)}
               <h2>Tools & Skills</h2>
               <div class="meta">Capability policy verdicts</div>
             </div>
+            <label><span>Filter</span><input id="capability-filter" autocomplete="off" placeholder="tool, skill, agent, source" data-capability-control="true"></label>
           </div>
           <div class="grid">
             <div class="panel">
               <h3>Tools</h3>
-              <p class="empty">No tools loaded.</p>
+              <div class="list" id="tool-list">
+                <p class="empty">No tools loaded.</p>
+              </div>
             </div>
             <div class="panel">
               <h3>Skills and MCPs</h3>
-              <p class="empty">No skills loaded.</p>
+              <div class="list" id="skill-list">
+                <p class="empty">No skills loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Policy notes</h3>
+              <div class="list" id="capability-policy-note">
+                <p class="empty">Cloud-safe capability metadata loads after sign-in.</p>
+              </div>
             </div>
           </div>
         </section>
@@ -2745,21 +3387,55 @@ ${publicBrandingCss(branding)}
               <h2>Workflows</h2>
               <div class="meta">Definitions and runs</div>
             </div>
-            <span class="pill" data-kind="${policy.features.workflows ? 'ok' : 'warn'}">${policy.features.workflows ? 'enabled' : 'disabled'}</span>
+            <div class="row-actions">
+              <label><span>Filter</span><input id="workflow-filter" autocomplete="off" placeholder="title, agent, trigger, status" data-workflow-control="true"></label>
+              <button id="refresh-workflows" type="button" data-workflow-control="true">Refresh</button>
+              <span class="pill" data-kind="${policy.features.workflows ? 'ok' : 'warn'}">${policy.features.workflows ? 'enabled' : 'disabled'}</span>
+            </div>
           </div>
-          <div class="panel">
-            <div class="table-shell" role="table" aria-label="Cloud workflows">
-              <div class="table-row table-head" role="row">
-                <span role="columnheader">Workflow</span>
-                <span role="columnheader">Status</span>
-                <span role="columnheader">Last run</span>
-                <span role="columnheader">Next run</span>
+          <div class="workbench-split">
+            <div class="panel">
+              <div class="table-shell" role="table" aria-label="Cloud workflows">
+                <div class="table-row table-head" role="row">
+                  <span role="columnheader">Workflow</span>
+                  <span role="columnheader">Status</span>
+                  <span role="columnheader">Last run</span>
+                  <span role="columnheader">Next run</span>
+                </div>
+                <div id="workflow-list">
+                  <div class="table-row empty-row" role="row">
+                    <span role="cell">No workflows loaded.</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                  </div>
+                </div>
               </div>
-              <div class="table-row empty-row" role="row">
-                <span role="cell">No workflows loaded.</span>
-                <span role="cell">-</span>
-                <span role="cell">-</span>
-                <span role="cell">-</span>
+              <h3>Runs</h3>
+              <div class="list" id="workflow-run-list">
+                <p class="empty">No runs loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <form id="workflow-form">
+                <h3>Create workflow</h3>
+                <div class="form-grid">
+                  <label class="span"><span>Title</span><input name="title" autocomplete="off" placeholder="Daily review" data-workflow-control="true"></label>
+                  <label><span>Agent</span><input name="agentName" autocomplete="off" placeholder="build" data-workflow-control="true"></label>
+                  <label><span>Trigger</span><select name="triggerType" data-workflow-control="true">
+                    <option value="manual">Manual</option>
+                    <option value="schedule">Daily schedule</option>
+                    <option value="webhook">Webhook</option>
+                  </select></label>
+                  <label><span>Tools</span><input name="toolIds" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
+                  <label><span>Skills</span><input name="skillNames" autocomplete="off" placeholder="comma-separated" data-workflow-control="true"></label>
+                  <label class="span"><span>Instructions</span><textarea name="instructions" placeholder="What this workflow should do" data-workflow-control="true"></textarea></label>
+                  <button class="primary span" type="submit" data-workflow-control="true">Create workflow</button>
+                </div>
+              </form>
+              <h3>Selected workflow</h3>
+              <div class="list" id="workflow-detail">
+                <p class="empty">Select or create a workflow.</p>
               </div>
             </div>
           </div>
@@ -2777,6 +3453,12 @@ ${publicBrandingCss(branding)}
               <h3>Selected thread artifacts</h3>
               <div class="list" id="artifact-list">
                 <p class="empty">No artifacts loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Artifact history</h3>
+              <div class="list" id="artifact-history">
+                <p class="empty">No artifact history loaded.</p>
               </div>
             </div>
             <div class="panel">
