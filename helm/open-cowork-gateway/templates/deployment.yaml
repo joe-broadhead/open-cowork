@@ -4,8 +4,8 @@
 {{- if and (not .Values.gateway.serviceToken) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.serviceToken or gateway.existingSecret is required." }}
 {{- end }}
-{{- if and (not .Values.gateway.providersJson) (not .Values.gateway.telegram.botToken) (not .Values.gateway.webhook.deliveryUrl) (not .Values.gateway.existingSecret) }}
-{{- fail "gateway.providersJson, gateway.telegram.botToken, gateway.webhook.deliveryUrl, or gateway.existingSecret is required to configure at least one gateway provider." }}
+{{- if and (not .Values.gateway.providersJson) (not .Values.gateway.telegram.botToken) (not .Values.gateway.slack.botToken) (not .Values.gateway.email.inboundSecret) (not .Values.gateway.webhook.deliveryUrl) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.providersJson, gateway.telegram.botToken, gateway.slack.botToken, gateway.email.inboundSecret, gateway.webhook.deliveryUrl, or gateway.existingSecret is required to configure at least one gateway provider." }}
 {{- end }}
 {{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
@@ -18,6 +18,12 @@
 {{- end }}
 {{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.webhook.sharedSecret or gateway.existingSecret is required when the generic webhook provider is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.slack.botToken (not .Values.gateway.slack.signingSecret) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.slack.signingSecret or gateway.existingSecret is required when the Slack provider is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.email.inboundSecret (or (not .Values.gateway.email.from) (not .Values.gateway.email.smtpHost)) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.email.from and gateway.email.smtpHost are required when the email provider is enabled." }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment

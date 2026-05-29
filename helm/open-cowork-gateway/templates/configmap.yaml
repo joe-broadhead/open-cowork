@@ -17,5 +17,17 @@ data:
   OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: {{ .Values.gateway.diagnostics.enabled | quote }}
   OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID: {{ .Values.gateway.telegram.channelBindingId | quote }}
   OPEN_COWORK_GATEWAY_TELEGRAM_MODE: {{ .Values.gateway.telegram.mode | quote }}
+  OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID: {{ .Values.gateway.slack.channelBindingId | quote }}
+  OPEN_COWORK_GATEWAY_SLACK_TEAM_ID: {{ .Values.gateway.slack.teamId | quote }}
+  OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID: {{ .Values.gateway.slack.defaultChannelId | quote }}
+  OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL: {{ .Values.gateway.slack.apiBaseUrl | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID: {{ .Values.gateway.email.channelBindingId | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_FROM: {{ .Values.gateway.email.from | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_ADDRESS: {{ .Values.gateway.email.address | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_DOMAIN: {{ .Values.gateway.email.domain | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST: {{ .Values.gateway.email.smtpHost | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT: {{ .Values.gateway.email.smtpPort | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE: {{ .Values.gateway.email.smtpSecure | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME: {{ .Values.gateway.email.smtpUsername | quote }}
   OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: {{ .Values.gateway.webhook.deliveryUrl | quote }}
   OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID: {{ .Values.gateway.webhook.channelBindingId | quote }}

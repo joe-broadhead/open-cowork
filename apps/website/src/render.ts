@@ -417,7 +417,7 @@ function renderGateway() {
     main.appendChild(title);
     main.appendChild(document.createTextNode(' - ' + binding.provider));
     const meta = document.createElement('small');
-    meta.textContent = binding.externalWorkspaceId || 'tenant-wide channel';
+    meta.textContent = [binding.externalWorkspaceId || 'tenant-wide channel', bindingSettingsLabel(binding.settings)].filter(Boolean).join(' - ');
     main.appendChild(document.createElement('br'));
     main.appendChild(meta);
     row.appendChild(main);
@@ -596,17 +596,69 @@ async function createAgent(formData) {
 }
 
 async function createBinding(formData) {
+  const provider = String(formData.get('provider') || '').trim();
+  const externalWorkspaceId = String(formData.get('externalWorkspaceId') || '').trim()
+    || String(formData.get('slackTeamId') || '').trim()
+    || String(formData.get('emailDomain') || '').trim()
+    || null;
   await api('/api/channels/bindings', {
     method: 'POST',
     body: JSON.stringify({
       agentId: String(formData.get('agentId') || '').trim(),
-      provider: String(formData.get('provider') || '').trim(),
+      provider,
       displayName: String(formData.get('displayName') || '').trim(),
-      externalWorkspaceId: String(formData.get('externalWorkspaceId') || '').trim() || null,
+      externalWorkspaceId,
       credentialRef: String(formData.get('credentialRef') || '').trim() || null,
       status: 'auth_required',
-      settings: {},
+      settings: providerSettingsFromForm(provider, formData),
     }),
+  });
+}
+
+function providerSettingsFromForm(provider, formData) {
+  if (provider === 'slack') {
+    return pruneEmpty({
+      teamId: String(formData.get('slackTeamId') || '').trim(),
+      defaultChannelId: String(formData.get('slackChannelId') || '').trim(),
+      apiBaseUrl: String(formData.get('slackApiBaseUrl') || '').trim(),
+    });
+  }
+  if (provider === 'email') {
+    return pruneEmpty({
+      inboundAddress: String(formData.get('emailAddress') || '').trim(),
+      domain: String(formData.get('emailDomain') || '').trim(),
+      smtpHost: String(formData.get('emailSmtpHost') || '').trim(),
+    });
+  }
+  if (provider === 'webhook') {
+    return pruneEmpty({
+      deliveryUrl: String(formData.get('webhookDeliveryUrl') || '').trim(),
+    });
+  }
+  return {};
+}
+
+function pruneEmpty(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => Boolean(entry)));
+}
+
+function bindingSettingsLabel(settings) {
+  if (!settings || typeof settings !== 'object') return '';
+  const values = [
+    settings.teamId,
+    settings.defaultChannelId,
+    settings.inboundAddress,
+    settings.smtpHost,
+    settings.deliveryUrl,
+  ].filter(Boolean);
+  return values.slice(0, 2).join(' / ');
+}
+
+function updateBindingProviderFields() {
+  const form = qs('#binding-form');
+  const provider = String(qs('select[name="provider"]', form).value || '');
+  qsa('[data-provider-field]', form).forEach((field) => {
+    field.hidden = field.dataset.providerField !== provider;
   });
 }
 
@@ -649,6 +701,8 @@ function bindForms() {
     event.preventDefault();
     submitForm(event.currentTarget, createBinding);
   });
+  qs('select[name="provider"]', qs('#binding-form')).addEventListener('change', updateBindingProviderFields);
+  updateBindingProviderFields();
   qs('#billing-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitForm(event.currentTarget, openCheckout);
@@ -998,6 +1052,9 @@ ${publicBrandingCss(branding)}
     .secret-reveal input {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    [data-provider-field][hidden] {
+      display: none;
+    }
     body:not([data-auth="signed-in"]) .signed-in-only {
       display: none;
     }
@@ -1175,6 +1232,13 @@ ${publicBrandingCss(branding)}
                 <label><span>Display name</span><input name="displayName" autocomplete="off" placeholder="Team Slack" data-admin-control="true"></label>
                 <label><span>External workspace</span><input name="externalWorkspaceId" autocomplete="off" placeholder="optional" data-admin-control="true"></label>
                 <label class="span"><span>Credential ref</span><input name="credentialRef" autocomplete="off" placeholder="secret://gateway/slack-bot" data-admin-control="true"></label>
+                <label data-provider-field="slack"><span>Slack team ID</span><input name="slackTeamId" autocomplete="off" placeholder="T0123ABC" data-admin-control="true"></label>
+                <label data-provider-field="slack"><span>Slack channel ID</span><input name="slackChannelId" autocomplete="off" placeholder="C0123ABC" data-admin-control="true"></label>
+                <label class="span" data-provider-field="slack"><span>Slack API base URL</span><input name="slackApiBaseUrl" autocomplete="off" placeholder="https://slack.com/api" data-admin-control="true"></label>
+                <label data-provider-field="email"><span>Inbound address</span><input name="emailAddress" autocomplete="off" placeholder="agent@example.com" data-admin-control="true"></label>
+                <label data-provider-field="email"><span>Email domain</span><input name="emailDomain" autocomplete="off" placeholder="example.com" data-admin-control="true"></label>
+                <label class="span" data-provider-field="email"><span>SMTP host</span><input name="emailSmtpHost" autocomplete="off" placeholder="smtp.example.com" data-admin-control="true"></label>
+                <label class="span" data-provider-field="webhook"><span>Webhook delivery URL</span><input name="webhookDeliveryUrl" autocomplete="off" placeholder="https://bridge.example.com/open-cowork" data-admin-control="true"></label>
                 <button class="primary span" type="submit" data-admin-control="true">Create binding</button>
               </div>
             </form>

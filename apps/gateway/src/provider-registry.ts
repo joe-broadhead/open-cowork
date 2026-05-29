@@ -6,6 +6,8 @@ import type {
   ChannelTarget,
   IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
+import { EmailProvider } from '@open-cowork/gateway-provider-email'
+import { SlackProvider } from '@open-cowork/gateway-provider-slack'
 import { TelegramProvider } from '@open-cowork/gateway-provider-telegram'
 import { WebhookProvider } from '@open-cowork/gateway-provider-webhook'
 import { FakeChannelProvider } from '@open-cowork/gateway-testing'
@@ -20,12 +22,16 @@ export type ProviderRegistration = {
   lastError: string | null
 }
 
+export type GatewayWebhookResponse = {
+  challenge?: string
+}
+
 export type GatewayProviderRegistry = {
   readonly registrations: ProviderRegistration[]
   start(handler: (config: GatewayProviderConfig, message: IncomingChannelMessage) => Promise<void>): Promise<void>
   stop(): Promise<void>
   get(id: string): ProviderRegistration | null
-  handleWebhook(id: string, payload: unknown, headers: IncomingHttpHeaders): Promise<void>
+  handleWebhook(id: string, payload: unknown, headers: IncomingHttpHeaders, rawBody?: string): Promise<GatewayWebhookResponse | void>
   emitFake(id: string, input: {
     text: string
     chatId?: string
@@ -78,13 +84,27 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     get(id) {
       return registrations.find((entry) => entry.config.id === id) || null
     },
-    async handleWebhook(id, payload, headers) {
+    async handleWebhook(id, payload, headers, rawBody) {
       const registration = this.get(id)
       if (!registration) throw new Error(`Unknown gateway provider ${id}.`)
       if (registration.config.kind === 'telegram') {
         await (registration.provider as TelegramProvider).handleWebhookUpdate(payload, {
           headers,
           secretToken: registration.config.credentials.webhookSecret || null,
+        })
+        return
+      }
+      if (registration.config.kind === 'slack') {
+        return (registration.provider as SlackProvider).handleWebhookPayload(payload, {
+          headers,
+          rawBody,
+          signingSecret: registration.config.credentials.signingSecret || null,
+        })
+      }
+      if (registration.config.kind === 'email') {
+        await (registration.provider as EmailProvider).handleWebhookPayload(payload, {
+          headers,
+          sharedSecret: registration.config.credentials.inboundSecret || null,
         })
         return
       }
@@ -142,6 +162,28 @@ function createProvider(config: GatewayProviderConfig): ChannelProvider {
         : undefined,
       respondInGroups: readRespondInGroups(config.settings.respondInGroups),
       observeUnmentionedGroupMessages: config.settings.observeUnmentionedGroupMessages === true,
+    })
+  }
+
+  if (config.kind === 'slack') {
+    return new SlackProvider({
+      botToken: requiredCredential(config, 'botToken'),
+      signingSecret: requiredCredential(config, 'signingSecret'),
+      apiBaseUrl: settingString(config, 'apiBaseUrl') || undefined,
+    })
+  }
+
+  if (config.kind === 'email') {
+    return new EmailProvider({
+      from: requiredSetting(config, 'from'),
+      inboundSecret: requiredCredential(config, 'inboundSecret'),
+      smtp: {
+        host: requiredSetting(config, 'smtpHost'),
+        port: optionalNumber(config.settings.smtpPort) || optionalNumberString(config.settings.smtpPort),
+        secure: readBoolean(config.settings.smtpSecure, false),
+        username: settingString(config, 'smtpUsername') || undefined,
+        password: config.credentials.smtpPassword || undefined,
+      },
     })
   }
 
@@ -214,6 +256,20 @@ function settingString(config: GatewayProviderConfig, key: string) {
 
 function optionalNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function optionalNumberString(value: unknown) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  const parsed = text ? Number(text) : NaN
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === 'boolean') return value
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (text === 'true' || text === '1' || text === 'yes') return true
+  if (text === 'false' || text === '0' || text === 'no') return false
+  return fallback
 }
 
 function readRespondInGroups(value: unknown) {

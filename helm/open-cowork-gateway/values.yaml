@@ -40,6 +40,24 @@ gateway:
     channelBindingId: telegram
     mode: polling
     webhookSecret: ""
+  slack:
+    botToken: ""
+    signingSecret: ""
+    channelBindingId: slack
+    teamId: ""
+    defaultChannelId: ""
+    apiBaseUrl: ""
+  email:
+    inboundSecret: ""
+    channelBindingId: email
+    from: ""
+    address: ""
+    domain: ""
+    smtpHost: ""
+    smtpPort: "587"
+    smtpSecure: "false"
+    smtpUsername: ""
+    smtpPassword: ""
   webhook:
     deliveryUrl: ""
     sharedSecret: ""

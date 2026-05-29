@@ -32,6 +32,20 @@ gateway:
     webhookSecret: env:OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET
     channelBindingId: acme-telegram
     mode: webhook
+  slack:
+    botToken: env:OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN
+    signingSecret: env:OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET
+    channelBindingId: acme-slack
+    teamId: T0123ACME
+  email:
+    inboundSecret: env:OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET
+    channelBindingId: acme-email
+    from: agent@acme.example
+    address: agent@acme.example
+    domain: acme.example
+    smtpHost: smtp.acme.example
+    smtpUsername: agent@acme.example
+    smtpPassword: env:OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD
   webhook:
     deliveryUrl: ""
     sharedSecret: ""

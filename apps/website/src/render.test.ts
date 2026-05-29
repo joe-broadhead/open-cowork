@@ -18,6 +18,9 @@ test('cloud website renders onboarding dashboard surfaces', () => {
   assert.match(html, /Desktop token/)
   assert.match(html, /Gateway token/)
   assert.match(html, /Headless gateway/)
+  assert.match(html, /Slack team ID/)
+  assert.match(html, /Inbound address/)
+  assert.match(html, /Webhook delivery URL/)
   assert.match(html, /Billing/)
   assert.match(html, /Usage/)
 })
@@ -92,6 +95,8 @@ test('cloud website client avoids persistent browser secret storage', () => {
 test('cloud website binds actions through the client script', () => {
   assert.equal(html.includes('onclick='), false)
   assert.match(cloudWebsiteClientScript(), /signin-inline/)
+  assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
+  assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
 })
 
 test('cloud website disables dynamic admin actions for member roles', () => {

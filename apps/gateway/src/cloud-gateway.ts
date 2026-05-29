@@ -100,6 +100,13 @@ export type CloudGateway = {
     lastError?: string | null
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord | null>
+  listDeliveries?(input?: {
+    status?: ChannelDeliveryRecord['status'] | null
+    channelBindingId?: string | null
+    limit?: number | null
+  }): Promise<ChannelDeliveryRecord[]>
+  retryDelivery?(deliveryId: string): Promise<ChannelDeliveryRecord | null>
+  deadLetterDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
 }
 
 export function createCloudGateway(config: GatewayConfig, adapter = createCloudAdapter(config)): CloudGateway {
@@ -168,6 +175,18 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
     async ackDelivery(deliveryId, input) {
       assertMethod(adapter.ackChannelDelivery, 'ackChannelDelivery')
       return adapter.ackChannelDelivery(deliveryId, input)
+    },
+    async listDeliveries(input = {}) {
+      assertMethod(adapter.listChannelDeliveries, 'listChannelDeliveries')
+      return adapter.listChannelDeliveries(input)
+    },
+    async retryDelivery(deliveryId) {
+      assertMethod(adapter.retryChannelDelivery, 'retryChannelDelivery')
+      return adapter.retryChannelDelivery(deliveryId)
+    },
+    async deadLetterDelivery(deliveryId, input = {}) {
+      assertMethod(adapter.deadLetterChannelDelivery, 'deadLetterChannelDelivery')
+      return adapter.deadLetterChannelDelivery(deliveryId, input)
     },
   }
 }

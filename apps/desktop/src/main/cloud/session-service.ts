@@ -1519,6 +1519,54 @@ export class CloudSessionService {
     })
   }
 
+  async listChannelDeliveries(
+    principal: CloudPrincipal,
+    input: {
+      status?: ChannelDeliveryRecord['status'] | null
+      channelBindingId?: string | null
+      limit?: number | null
+    } = {},
+  ): Promise<ChannelDeliveryRecord[]> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.listChannelDeliveries({
+      orgId: this.principalOrgId(principal),
+      status: input.status || null,
+      channelBindingId: input.channelBindingId || null,
+      limit: input.limit || null,
+    })
+  }
+
+  async retryChannelDelivery(
+    principal: CloudPrincipal,
+    deliveryId: string,
+  ): Promise<ChannelDeliveryRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.ackChannelDelivery({
+      orgId: this.principalOrgId(principal),
+      deliveryId,
+      status: 'failed',
+      lastError: null,
+      nextAttemptAt: new Date(),
+    })
+  }
+
+  async deadLetterChannelDelivery(
+    principal: CloudPrincipal,
+    input: { deliveryId: string, lastError?: string | null },
+  ): Promise<ChannelDeliveryRecord | null> {
+    await this.ensurePrincipal(principal)
+    this.assertGatewayAccess(principal)
+    return this.store.ackChannelDelivery({
+      orgId: this.principalOrgId(principal),
+      deliveryId: input.deliveryId,
+      status: 'dead',
+      lastError: input.lastError || 'Manually dead-lettered by gateway operator.',
+      nextAttemptAt: null,
+    })
+  }
+
   async claimNextChannelDelivery(
     principal: CloudPrincipal,
     input: { claimedBy: string, ttlMs?: number, now?: Date },

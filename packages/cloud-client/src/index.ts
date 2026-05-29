@@ -579,6 +579,13 @@ export type CloudTransportAdapter = {
     lastError?: string | null
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord | null>
+  listChannelDeliveries?(input?: {
+    status?: CloudChannelDeliveryStatus | null
+    channelBindingId?: string | null
+    limit?: number | null
+  }): Promise<ChannelDeliveryRecord[]>
+  retryChannelDelivery?(deliveryId: string): Promise<ChannelDeliveryRecord | null>
+  deadLetterChannelDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
   channelDeliveriesUrl?(input?: { claimedBy?: string, ttlMs?: number }): string
   subscribeChannelDeliveries?(input: {
     claimedBy?: string
@@ -1330,6 +1337,21 @@ export function createHttpSseCloudTransportAdapter(
     },
     async ackChannelDelivery(deliveryId, input) {
       return (await request<{ delivery: ChannelDeliveryRecord | null }>(`/api/channels/deliveries/${encodePath(deliveryId)}/ack`, {
+        method: 'POST',
+        body: input,
+      })).delivery
+    },
+    async listChannelDeliveries(input = {}) {
+      return (await request<{ deliveries: ChannelDeliveryRecord[] }>(`/api/channels/deliveries${queryString(input)}`)).deliveries
+    },
+    async retryChannelDelivery(deliveryId) {
+      return (await request<{ delivery: ChannelDeliveryRecord | null }>(`/api/channels/deliveries/${encodePath(deliveryId)}/retry`, {
+        method: 'POST',
+        body: {},
+      })).delivery
+    },
+    async deadLetterChannelDelivery(deliveryId, input = {}) {
+      return (await request<{ delivery: ChannelDeliveryRecord | null }>(`/api/channels/deliveries/${encodePath(deliveryId)}/dead-letter`, {
         method: 'POST',
         body: input,
       })).delivery

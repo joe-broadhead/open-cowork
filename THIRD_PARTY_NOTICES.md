@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `c076f626a0adbb315b4353c71b5be1352fa25ff7d61d1c2c76f5a2f962683f4c`
-- Production package entries: 496
-- Bundled license directories: 460 (36 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `7937f19b10c2fa6f99ed63b78441ff6ba8aba0e6ece3ad7c0fe9c09cd416920b`
+- Production package entries: 498
+- Bundled license directories: 460 (38 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -55,6 +55,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-email | link:../../packages/gateway-provider-email | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-slack | link:../../packages/gateway-provider-slack | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-telegram | link:../../packages/gateway-provider-telegram | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-webhook | link:../../packages/gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-testing | link:../../packages/gateway-testing | MIT |  | https://github.com/joe-broadhead/open-cowork.git |

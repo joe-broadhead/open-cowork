@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 
 import type { CloudGateway } from '../dist/index.js'
 import {
@@ -175,7 +176,7 @@ test('gateway diagnostics are disabled by default in managed mode', async () => 
   }
 })
 
-test('gateway provider registry wires fake, Telegram, and webhook providers', () => {
+test('gateway provider registry wires fake, Telegram, Slack, email, and webhook providers', () => {
   const registry = createGatewayProviderRegistry(resolveGatewayConfig({
     cloud: {
       baseUrl: 'https://cloud.example.test',
@@ -196,6 +197,25 @@ test('gateway provider registry wires fake, Telegram, and webhook providers', ()
       settings: {
         mode: 'webhook',
         publicBaseUrl: 'https://gateway.example.test',
+      },
+    }, {
+      id: 'slack',
+      kind: 'slack',
+      channelBindingId: 'slack-binding',
+      credentials: {
+        botToken: 'xoxb-slack-token',
+        signingSecret: 'slack-signing-secret',
+      },
+    }, {
+      id: 'email',
+      kind: 'email',
+      channelBindingId: 'email-binding',
+      credentials: {
+        inboundSecret: 'email-inbound-secret',
+      },
+      settings: {
+        from: 'agent@example.test',
+        smtpHost: 'smtp.example.test',
       },
     }, {
       id: 'webhook',
@@ -223,10 +243,122 @@ test('gateway provider registry wires fake, Telegram, and webhook providers', ()
     kind: 'telegram',
     provider: 'telegram',
   }, {
+    id: 'slack',
+    kind: 'slack',
+    provider: 'slack',
+  }, {
+    id: 'email',
+    kind: 'email',
+    provider: 'email',
+  }, {
     id: 'webhook',
     kind: 'webhook',
     provider: 'webhook',
   }])
+})
+
+test('gateway daemon accepts signed Slack webhook verification payloads', async () => {
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'slack',
+      kind: 'slack',
+      channelBindingId: 'slack-binding',
+      credentials: {
+        botToken: 'xoxb-slack-token',
+        signingSecret: 'slack-signing-secret',
+      },
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const payload = JSON.stringify({ type: 'url_verification', challenge: 'slack-challenge' })
+    const body = `payload=${encodeURIComponent(payload)}`
+    const timestamp = Math.floor(Date.now() / 1000).toString()
+    const signature = `v0=${createHmac('sha256', 'slack-signing-secret').update(`v0:${timestamp}:${body}`).digest('hex')}`
+    const response = await readJson(await fetch(`${url}/webhooks/slack`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': signature,
+      },
+      body,
+    }))
+
+    assert.equal(response.challenge, 'slack-challenge')
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway daemon exposes admin delivery backlog controls', async () => {
+  const calls: string[] = []
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+    async listDeliveries(input) {
+      calls.push(`list:${input.status}`)
+      return [deliveryRecord({ deliveryId: 'delivery-1' })]
+    },
+    async retryDelivery(deliveryId: string) {
+      calls.push(`retry:${deliveryId}`)
+      return deliveryRecord({ deliveryId })
+    },
+    async deadLetterDelivery(deliveryId: string, input) {
+      calls.push(`dead:${deliveryId}:${input?.lastError}`)
+      return deliveryRecord({ deliveryId })
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+  const auth = { authorization: 'Bearer admin-token' }
+
+  try {
+    const listed = await readJson(await fetch(`${url}/deliveries?status=failed`, { headers: auth }))
+    assert.equal(Array.isArray(listed.deliveries), true)
+    const retried = await readJson(await fetch(`${url}/deliveries/delivery-1/retry`, { method: 'POST', headers: auth }))
+    assert.equal((retried.delivery as { deliveryId: string }).deliveryId, 'delivery-1')
+    const dead = await readJson(await fetch(`${url}/deliveries/delivery-1/dead-letter`, {
+      method: 'POST',
+      headers: {
+        ...auth,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ lastError: 'operator stop' }),
+    }))
+    assert.equal((dead.delivery as { deliveryId: string }).deliveryId, 'delivery-1')
+    assert.deepEqual(calls, ['list:failed', 'retry:delivery-1', 'dead:delivery-1:operator stop'])
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
 })
 
 test('gateway runtime retries transient deliveries and marks permanent failures dead', async () => {
