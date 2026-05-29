@@ -158,15 +158,37 @@ The typed `createHttpSseCloudTransportAdapter` wraps that HTTP/SSE contract for
 browser clients that need a `window.coworkApi`-style transport without Electron
 IPC.
 
-## Browser Dashboard
+## Cloud Web Workbench
 
-The cloud web role serves a browser dashboard at `/`. The dashboard is an API
-client for the same cloud control plane used by desktop sync and gateway
+The cloud web role serves the Cloud Web Workbench at `/`. The workbench is an
+API client for the same cloud control plane used by desktop sync and gateway
 clients; it does not access Postgres or secret storage directly.
+
+The browser app currently keeps a no-framework, server-rendered shell with an
+inline nonce-protected client script. That is intentional for the first cloud
+workbench build-out: it keeps the cloud image simple, preserves the existing
+CSP and cookie-auth path, and avoids introducing a separate asset build before
+the browser product surface needs richer interaction. The shell is still split
+around typed route metadata so the app can grow into a bundled browser client
+without changing the Cloud API contract.
+
+The information architecture is split into two surfaces:
+
+- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, and Artifacts.
+- Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
+  Audit, Usage, and Diagnostics.
+
+Signed-in member users can open the workbench and read allowed org/policy/usage
+state. Admin-only panels are rendered as read-only for members and all admin
+mutations remain server-authorized. Disabled controls in the browser are an
+ergonomic layer only.
 
 Authenticated users land on an org-scoped dashboard backed by
 `GET /api/workspace`. That request also performs the configured first-login org
-bootstrap path. The dashboard exposes:
+bootstrap path. The workbench also bootstraps public deployment metadata from
+`GET /api/config`; both bootstrap responses are metadata-only and must not
+contain provider keys, OAuth tokens, API tokens, MCP secrets, or local host
+paths. Existing admin panels expose:
 
 - BYOK provider status and key submission through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,
