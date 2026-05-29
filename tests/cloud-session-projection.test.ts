@@ -138,16 +138,20 @@ test('cloud session projection persists approvals questions tools todos costs an
 
   await service.appendProductEvent(principal, sessionId, {
     type: 'permission.resolved',
-    payload: { permissionId: 'permission-1' },
+    payload: { permissionId: 'permission-1', allowed: true },
   })
   await service.appendProductEvent(principal, sessionId, {
     type: 'question.resolved',
-    payload: { requestId: 'question-1' },
+    payload: { requestId: 'question-1', answers: ['Yes'] },
   })
 
   const resolved = asRecord(asRecord((await service.getSessionView(principal, sessionId)).projection).view)
   assert.equal(asArray(resolved.pendingApprovals).length, 0)
   assert.equal(asArray(resolved.pendingQuestions).length, 0)
+  assert.equal(asRecord(asArray(resolved.resolvedApprovals)[0]).allowed, true)
+  assert.equal(asRecord(asArray(resolved.resolvedApprovals)[0]).description, 'Run git status')
+  assert.equal(asRecord(asArray(resolved.resolvedQuestions)[0]).rejected, false)
+  assert.deepEqual(asArray(asRecord(asArray(resolved.resolvedQuestions)[0]).answers), ['Yes'])
 })
 
 test('cloud assistant chunks keep projection running until explicit idle event', async () => {

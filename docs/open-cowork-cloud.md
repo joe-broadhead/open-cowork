@@ -191,6 +191,24 @@ The Threads and Chat panels are the first interactive workbench surfaces:
   and thread list live through SSE, resuming from durable event sequences after
   reconnect.
 
+The Chat panel renders the full cloud runtime projection contract rather than a
+minimal message list. It includes user and assistant messages, streaming-safe
+assistant snapshots, task runs, compact tool traces, pending and resolved
+permission approvals, pending and resolved questions, artifacts, todos, cost and
+token totals, context/compaction state, and categorized errors. Browser approval
+and question actions call the same durable command routes used by desktop and
+gateway clients:
+
+- `POST /api/sessions/:id/permission-respond`
+- `POST /api/sessions/:id/question-reply`
+- `POST /api/sessions/:id/question-reject`
+
+Artifact metadata is listed from the durable projection and
+`GET /api/sessions/:id/artifacts`. Artifact bodies are fetched only for explicit
+View or Download actions through `GET /api/sessions/:id/artifacts/:artifactId`;
+the browser does not keep artifact bodies, signed object-store URLs, bucket
+names, or object keys in long-lived state.
+
 Thread list filtering is client-side over the current durable session snapshot:
 search text, status, profile, project kind, and tag/smart-filter metadata are
 supported. The browser paginates large org thread lists in fixed batches so a
