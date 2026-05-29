@@ -74,6 +74,9 @@ SDK upgrades can change:
 When bumping the SDK, run `pnpm typecheck` first; anything that fails
 is real drift, not a cosmetic update.
 
+The detailed import allowlist, shared event contract, and SDK v2 upgrade
+checklist live in [OpenCode SDK v2 Boundary](opencode-sdk-v2-boundary.md).
+
 ## What OpenCode owns
 
 - session execution
