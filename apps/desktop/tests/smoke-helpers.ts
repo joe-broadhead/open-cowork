@@ -11,6 +11,10 @@ import {
   type ElectronApplication,
   type Page,
 } from 'playwright-core'
+import {
+  E2E_ARG_ENV_ENABLE_KEY,
+  buildE2EArgEnvironment,
+} from '../src/main/e2e-remote-debugging.ts'
 
 // Shared bootstrap for every Electron smoke test: launches the packaged
 // renderer bundle against an isolated HOME + XDG dirs so tests never
@@ -270,8 +274,10 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
   const env = {
     ...getSmokeEnvironment(paths),
     ...overrides,
+    [E2E_ARG_ENV_ENABLE_KEY]: '1',
   }
   const keys = new Set([
+    E2E_ARG_ENV_ENABLE_KEY,
     'HOME',
     'TMPDIR',
     'XDG_CONFIG_HOME',
@@ -285,6 +291,7 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
     'OPEN_COWORK_E2E',
     'OPEN_COWORK_E2E_PROBE_ACTION',
     'OPEN_COWORK_E2E_READY_FILE',
+    'OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT',
   ])
 
   return Object.fromEntries(
@@ -292,6 +299,10 @@ function getLaunchServicesEnvironment(paths: SmokePaths, overrides?: Record<stri
       .map((key) => [key, env[key]] as const)
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   )
+}
+
+function getMacE2EArgEnvironment(paths: SmokePaths, overrides?: Record<string, string>) {
+  return buildE2EArgEnvironment(getLaunchServicesEnvironment(paths, overrides))
 }
 
 async function delay(ms: number) {
@@ -489,6 +500,8 @@ export async function launchPackagedMacProbe(
 
   try {
     return await withLaunchServicesEnvironment(launchEnvironment, async () => {
+      await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+      await delay(1_000)
       await runCommand('open', [
         '-n',
         '-g',
@@ -660,15 +673,16 @@ export async function launchSmokeSession(
 
   if (macAppBundlePath) {
     const port = await getAvailablePort()
-    const launchEnvironment = getLaunchServicesEnvironment(paths)
-    const envArgs = Object.entries(launchEnvironment).flatMap(([key, value]) => ['--env', `${key}=${value}`])
+    const e2eArgEnvironment = getMacE2EArgEnvironment(paths, {
+      OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+    })
     await runCommand('open', [
       '-n',
       '-g',
       '-j',
-      ...envArgs,
       macAppBundlePath,
       '--args',
+      ...e2eArgEnvironment,
       `--remote-debugging-port=${port}`,
     ])
 
