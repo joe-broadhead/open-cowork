@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Open Cowork Cloud hosted website and onboarding dashboard",
+  "description": "Open Cowork Cloud hosted website and web workbench",
   "main": "dist/render.js",
   "types": "dist/render.d.ts",
   "scripts": {

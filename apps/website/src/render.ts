@@ -1,4 +1,6 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
+import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute } from './app-shell.ts'
+import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientBootstrap } from './client-contract.ts'
 import type { PublicBrandingConfig } from '@open-cowork/shared'
 
 export type WebsiteBootstrapPolicy = {
@@ -144,7 +146,33 @@ function escapeHtml(value: string) {
 }
 
 function jsonScript(value: unknown) {
-  return escapeHtml(JSON.stringify(value))
+  return JSON.stringify(value)
+    .replace(/&/g, '\\u0026')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
+function routeNavMarkup(route: CloudWebRoute) {
+  const authClass = route.requiresAuth ? ' signed-in-only' : ''
+  const adminClass = route.requiresAdmin ? ' admin-route' : ''
+  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" class="${authClass.trim()}${adminClass}">${escapeHtml(route.label)}</a>`
+}
+
+function routeGroupsMarkup() {
+  return CLOUD_WEB_ROUTE_GROUPS.map((group) => `<div class="nav-group" data-nav-group="${escapeHtml(group.id)}">
+          <div class="nav-heading">${escapeHtml(group.label)}</div>
+          <div class="nav-links">${group.routes.map(routeNavMarkup).join('')}</div>
+        </div>`).join('\n        ')
+}
+
+function routePanelAttrs(routeId: string, options: { signedIn?: boolean, admin?: boolean } = {}) {
+  const classes = ['section']
+  if (options.signedIn !== false) classes.push('signed-in-only')
+  if (options.admin) classes.push('admin-only-section')
+  const route = CLOUD_WEB_ROUTES.find((entry) => entry.id === routeId)
+  return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"`
 }
 
 export function cloudWebsiteClientScript() {
@@ -162,6 +190,7 @@ const state = {
   billing: null,
   usage: [],
   revealToken: null,
+  activeRoute: bootstrap.defaultRoute || 'threads',
 };
 
 const qs = (selector, root = document) => root.querySelector(selector);
@@ -193,6 +222,68 @@ function adminLocked() {
   return !canManage(state.workspace?.role);
 }
 
+function routeLinks() {
+  return qsa('[data-route-link]');
+}
+
+function routePanels() {
+  return qsa('[data-route-panel]');
+}
+
+function routeById(routeId) {
+  return (state.config?.routes || bootstrap.routes || []).find((route) => route.id === routeId) || null;
+}
+
+function canViewRoute(route) {
+  if (!route) return false;
+  if (route.requiresAuth && !state.workspace) return false;
+  return true;
+}
+
+function defaultRoute() {
+  const preferred = routeById(bootstrap.defaultRoute || 'threads');
+  if (canViewRoute(preferred)) return preferred.id;
+  const first = (state.config?.routes || bootstrap.routes || []).find(canViewRoute);
+  return first?.id || 'org';
+}
+
+function setRoute(routeId, replace = false) {
+  const route = routeById(routeId) || routeById(defaultRoute());
+  if (!canViewRoute(route)) {
+    state.activeRoute = defaultRoute();
+  } else {
+    state.activeRoute = route.id;
+  }
+  if (window.location.hash !== '#' + state.activeRoute) {
+    if (replace) window.history.replaceState(null, '', '#' + state.activeRoute);
+  }
+  renderRoutes();
+}
+
+function renderRoutes() {
+  const route = routeById(state.activeRoute) || routeById(defaultRoute());
+  routePanels().forEach((panel) => {
+    const isActive = panel.dataset.routePanel === route?.id;
+    panel.hidden = !isActive;
+    panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+  });
+  routeLinks().forEach((link) => {
+    const linkRoute = routeById(link.dataset.routeLink);
+    const visible = canViewRoute(linkRoute);
+    link.hidden = !visible;
+    link.dataset.active = linkRoute?.id === route?.id ? 'true' : 'false';
+    if (linkRoute?.requiresAdmin && adminLocked()) {
+      link.dataset.locked = 'true';
+      link.setAttribute('aria-label', linkRoute.label + ' - admin permissions required');
+    } else {
+      link.dataset.locked = 'false';
+      link.removeAttribute('aria-label');
+    }
+  });
+  document.body.dataset.route = route?.id || '';
+  document.body.dataset.surface = route?.surface || '';
+}
+
 function branding() {
   return state.config?.publicBranding || bootstrap.publicBranding || {};
 }
@@ -204,6 +295,11 @@ function brandName() {
 function connectionLabel(key, fallback) {
   const labels = branding().managedOrgConnectionLabels || {};
   return labels[key] || fallback;
+}
+
+function endpoint(id, fallback) {
+  const entry = (state.config?.api || bootstrap.api || []).find((candidate) => candidate.id === id);
+  return entry?.path || fallback;
 }
 
 function headers(hasBody) {
@@ -237,8 +333,11 @@ async function api(path, options = {}) {
 }
 
 function renderSignedOut() {
+  state.workspace = null;
+  state.principal = null;
   document.body.dataset.auth = 'signed-out';
   setStatus('Sign in required', 'warn');
+  setRoute(window.location.hash.replace(/^#/, '') || defaultRoute(), true);
 }
 
 function formatDate(value) {
@@ -288,6 +387,7 @@ function renderWorkspace() {
     element.disabled = adminLocked();
     element.dataset.locked = adminLocked() ? 'true' : 'false';
   });
+  renderRoutes();
 }
 
 function renderByok() {
@@ -484,6 +584,7 @@ function renderAll() {
   renderGateway();
   renderBilling();
   renderUsage();
+  renderRoutes();
 }
 
 async function optionalLoad(load, fallback) {
@@ -496,19 +597,19 @@ async function optionalLoad(load, fallback) {
 }
 
 async function refreshDashboard() {
-  const me = await optionalLoad(() => api('/auth/me'), null);
+  const me = await optionalLoad(() => api(endpoint('authMe', '/auth/me')), null);
   if (!me) return;
   state.principal = me.principal;
   state.csrfToken = me.csrfToken || null;
-  state.config = await api('/api/config');
-  state.workspace = await api('/api/workspace');
+  state.config = await api(endpoint('config', '/api/config'));
+  state.workspace = await api(endpoint('workspace', '/api/workspace'));
   const [byok, tokens, agents, bindings, billing, usage] = await Promise.all([
-    optionalLoad(() => api('/api/byok').then((body) => body.secrets || []), []),
-    optionalLoad(() => api('/api/api-tokens').then((body) => body.tokens || []), []),
-    optionalLoad(() => api('/api/channels/agents').then((body) => body.agents || []), []),
-    optionalLoad(() => api('/api/channels/bindings').then((body) => body.bindings || []), []),
-    optionalLoad(() => api('/api/billing/subscription'), { enabled: false }),
-    optionalLoad(() => api('/api/usage/events?limit=20').then((body) => body.events || []), []),
+    optionalLoad(() => api(endpoint('byok', '/api/byok')).then((body) => body.secrets || []), []),
+    optionalLoad(() => api(endpoint('apiTokens', '/api/api-tokens')).then((body) => body.tokens || []), []),
+    optionalLoad(() => api(endpoint('channelAgents', '/api/channels/agents')).then((body) => body.agents || []), []),
+    optionalLoad(() => api(endpoint('channelBindings', '/api/channels/bindings')).then((body) => body.bindings || []), []),
+    optionalLoad(() => api(endpoint('billingSubscription', '/api/billing/subscription')), { enabled: false }),
+    optionalLoad(() => api(endpoint('usageEvents', '/api/usage/events?limit=20')).then((body) => body.events || []), []),
   ]);
   state.byok = byok;
   state.tokens = tokens;
@@ -517,7 +618,8 @@ async function refreshDashboard() {
   state.billing = billing;
   state.usage = usage;
   document.body.dataset.auth = 'signed-in';
-  setStatus('Dashboard synced', 'ok');
+  setStatus('Workbench synced', 'ok');
+  setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
   renderAll();
 }
 
@@ -676,6 +778,9 @@ async function openBillingPortal() {
 }
 
 function bindForms() {
+  window.addEventListener('hashchange', () => {
+    setRoute(window.location.hash.replace(/^#/, '') || defaultRoute(), true);
+  });
   qs('#signin').addEventListener('click', () => { window.location.href = '/auth/login'; });
   qs('#signin-inline').addEventListener('click', () => { window.location.href = '/auth/login'; });
   qs('#logout').addEventListener('click', async () => {
@@ -723,11 +828,14 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
   const branding = resolvePublicBranding(publicBranding || policy.publicBranding)
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
   const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
-  const bootstrap = {
+  const bootstrap: CloudWebClientBootstrap = {
     role: policy.role,
     profileName: policy.profileName,
     features: policy.features,
     publicBranding: branding,
+    routes: CLOUD_WEB_ROUTES,
+    defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
+    api: CLOUD_WEB_CLIENT_ENDPOINTS,
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
   return `<!doctype html>
@@ -861,6 +969,22 @@ ${publicBrandingCss(branding)}
       color: var(--muted);
       font-size: 12px;
     }
+    .nav-sections {
+      display: grid;
+      gap: 14px;
+    }
+    .nav-group {
+      display: grid;
+      gap: 6px;
+    }
+    .nav-heading {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0 10px;
+    }
     .nav-links {
       display: grid;
       gap: 4px;
@@ -874,6 +998,14 @@ ${publicBrandingCss(branding)}
     .nav-links a:hover {
       background: var(--surface);
       text-decoration: none;
+    }
+    .nav-links a[data-active="true"] {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(24, 33, 28, 0.04);
+    }
+    .nav-links a[data-locked="true"] {
+      color: var(--muted);
     }
     .brand-links {
       margin-top: auto;
@@ -924,6 +1056,9 @@ ${publicBrandingCss(branding)}
       display: grid;
       gap: 12px;
     }
+    [data-route-panel][hidden], [data-route-link][hidden] {
+      display: none;
+    }
     .section:first-child {
       border-top: 0;
       padding-top: 0;
@@ -938,6 +1073,12 @@ ${publicBrandingCss(branding)}
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
+    }
+    .workbench-split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+      gap: 12px;
+      align-items: start;
     }
     .panel {
       background: var(--surface);
@@ -984,6 +1125,36 @@ ${publicBrandingCss(branding)}
     .list {
       display: grid;
       gap: 8px;
+    }
+    .table-shell {
+      display: grid;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .table-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(120px, 0.7fr);
+      gap: 10px;
+      min-height: 42px;
+      align-items: center;
+      padding: 0 12px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+    }
+    .table-row:first-child {
+      border-top: 0;
+    }
+    .table-head {
+      min-height: 34px;
+      background: var(--muted-surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .empty-row {
+      color: var(--muted);
     }
     .row {
       min-height: 52px;
@@ -1069,8 +1240,14 @@ ${publicBrandingCss(branding)}
         border-right: 0;
         border-bottom: 1px solid var(--line);
       }
-      .grid, .form-grid {
+      .grid, .form-grid, .workbench-split {
         grid-template-columns: 1fr;
+      }
+      .table-shell {
+        overflow-x: auto;
+      }
+      .table-row {
+        min-width: 620px;
       }
       .topbar {
         align-items: flex-start;
@@ -1098,13 +1275,8 @@ ${publicBrandingCss(branding)}
           <div class="meta" id="profile-name">${escapeHtml(policy.profileName)}</div>
         </div>
       </div>
-      <nav class="nav-links" aria-label="Dashboard sections">
-        <a href="#workspace">Workspace</a>
-        <a href="#byok">BYOK</a>
-        <a href="#connections">Connections</a>
-        <a href="#gateway">Gateway</a>
-        <a href="#billing">Billing</a>
-        <a href="#usage">Usage</a>
+      <nav class="nav-sections" aria-label="Cloud Web sections">
+        ${routeGroupsMarkup()}
       </nav>
       <div>
         <div class="meta">Role</div>
@@ -1128,7 +1300,131 @@ ${publicBrandingCss(branding)}
       <div class="content">
         <p class="notice" id="admin-notice" hidden>Admin actions are disabled for this role. Ask an org owner or admin to manage keys, tokens, billing, and channel setup.</p>
 
-        <section class="section" id="workspace">
+        <section ${routePanelAttrs('threads')}>
+          <div class="section-header">
+            <div>
+              <h2>Threads</h2>
+              <div class="meta">Cloud workspace threads</div>
+            </div>
+            <button class="primary" type="button" disabled data-policy-state="deferred">New thread</button>
+          </div>
+          <div class="panel">
+            <div class="table-shell" role="table" aria-label="Cloud threads">
+              <div class="table-row table-head" role="row">
+                <span role="columnheader">Thread</span>
+                <span role="columnheader">Status</span>
+                <span role="columnheader">Surface</span>
+                <span role="columnheader">Updated</span>
+              </div>
+              <div class="table-row empty-row" role="row">
+                <span role="cell">No cloud threads loaded.</span>
+                <span role="cell">-</span>
+                <span role="cell">-</span>
+                <span role="cell">-</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('chat')}>
+          <div class="section-header">
+            <div>
+              <h2>Chat</h2>
+              <div class="meta">Selected cloud session</div>
+            </div>
+            <span class="pill" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'enabled' : 'disabled'}</span>
+          </div>
+          <div class="workbench-split">
+            <div class="panel">
+              <h3>Timeline</h3>
+              <p class="empty">No thread selected.</p>
+            </div>
+            <form class="panel">
+              <h3>Composer</h3>
+              <label><span>Message</span><input disabled placeholder="Select a cloud thread"></label>
+              <button class="primary" type="button" disabled>Send</button>
+            </form>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('agents')}>
+          <div class="section-header">
+            <div>
+              <h2>Agents</h2>
+              <div class="meta">Profile-allowed execution choices</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="panel">
+              <h3>Available agents</h3>
+              <p class="empty">No agents loaded.</p>
+            </div>
+            <div class="panel">
+              <h3>Policy</h3>
+              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
+              <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('capabilities')}>
+          <div class="section-header">
+            <div>
+              <h2>Tools & Skills</h2>
+              <div class="meta">Capability policy verdicts</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="panel">
+              <h3>Tools</h3>
+              <p class="empty">No tools loaded.</p>
+            </div>
+            <div class="panel">
+              <h3>Skills and MCPs</h3>
+              <p class="empty">No skills loaded.</p>
+            </div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('workflows')}>
+          <div class="section-header">
+            <div>
+              <h2>Workflows</h2>
+              <div class="meta">Definitions and runs</div>
+            </div>
+            <span class="pill" data-kind="${policy.features.workflows ? 'ok' : 'warn'}">${policy.features.workflows ? 'enabled' : 'disabled'}</span>
+          </div>
+          <div class="panel">
+            <div class="table-shell" role="table" aria-label="Cloud workflows">
+              <div class="table-row table-head" role="row">
+                <span role="columnheader">Workflow</span>
+                <span role="columnheader">Status</span>
+                <span role="columnheader">Last run</span>
+                <span role="columnheader">Next run</span>
+              </div>
+              <div class="table-row empty-row" role="row">
+                <span role="cell">No workflows loaded.</span>
+                <span role="cell">-</span>
+                <span role="cell">-</span>
+                <span role="cell">-</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('artifacts')}>
+          <div class="section-header">
+            <div>
+              <h2>Artifacts</h2>
+              <div class="meta">Cloud artifact metadata</div>
+            </div>
+          </div>
+          <div class="panel">
+            <p class="empty">No artifacts loaded.</p>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('org', { signedIn: false })}>
           <div class="section-header">
             <div>
               <h2>${escapeHtml(copy.title || 'Workspace')}</h2>
@@ -1150,7 +1446,40 @@ ${publicBrandingCss(branding)}
           </div>
         </section>
 
-        <section class="section signed-in-only" id="byok">
+        <section ${routePanelAttrs('members', { admin: true })}>
+          <div class="section-header">
+            <div>
+              <h2>Members</h2>
+              <div class="meta">Roles and invites</div>
+            </div>
+          </div>
+          <div class="panel">
+            <p class="empty">No member records loaded.</p>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('policy')}>
+          <div class="section-header">
+            <div>
+              <h2>Profiles & Policy</h2>
+              <div class="meta">Runtime profile and feature flags</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="panel">
+              <h3>Runtime profile</h3>
+              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
+              <div class="row compact"><strong>Role</strong><span>${escapeHtml(policy.role)}</span></div>
+            </div>
+            <div class="panel">
+              <h3>Features</h3>
+              <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
+              <div class="row compact"><strong>Workflows</strong><span>${policy.features.workflows ? 'enabled' : 'disabled'}</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('byok', { admin: true })}>
           <div class="section-header">
             <div>
               <h2>BYOK</h2>
@@ -1173,7 +1502,7 @@ ${publicBrandingCss(branding)}
           </div>
         </section>
 
-        <section class="section signed-in-only" id="connections">
+        <section ${routePanelAttrs('connections', { admin: true })}>
           <div class="section-header">
             <div>
               <h2>Connections</h2>
@@ -1202,7 +1531,7 @@ ${publicBrandingCss(branding)}
           </div>
         </section>
 
-        <section class="section signed-in-only" id="gateway">
+        <section ${routePanelAttrs('gateway', { admin: true })}>
           <div class="section-header">
             <div>
               <h2>Headless gateway</h2>
@@ -1253,7 +1582,7 @@ ${publicBrandingCss(branding)}
           </div>
         </section>
 
-        <section class="section signed-in-only" id="billing">
+        <section ${routePanelAttrs('billing', { admin: true })}>
           <div class="section-header">
             <div>
               <h2>Billing</h2>
@@ -1277,7 +1606,19 @@ ${publicBrandingCss(branding)}
           </div>
         </section>
 
-        <section class="section signed-in-only" id="usage">
+        <section ${routePanelAttrs('audit', { admin: true })}>
+          <div class="section-header">
+            <div>
+              <h2>Audit</h2>
+              <div class="meta">Redacted administrative events</div>
+            </div>
+          </div>
+          <div class="panel">
+            <p class="empty">No audit events loaded.</p>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('usage')}>
           <div class="section-header">
             <div>
               <h2>Usage</h2>
@@ -1286,6 +1627,25 @@ ${publicBrandingCss(branding)}
           </div>
           <div class="panel">
             <div class="list" id="usage-list"></div>
+          </div>
+        </section>
+
+        <section ${routePanelAttrs('diagnostics', { admin: true })}>
+          <div class="section-header">
+            <div>
+              <h2>Diagnostics</h2>
+              <div class="meta">Redacted operational state</div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="panel">
+              <h3>Health</h3>
+              <p class="empty">No diagnostics loaded.</p>
+            </div>
+            <div class="panel">
+              <h3>Support bundle</h3>
+              <button type="button" disabled data-admin-control="true">Prepare bundle</button>
+            </div>
           </div>
         </section>
       </div>
