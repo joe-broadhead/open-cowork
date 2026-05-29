@@ -311,6 +311,29 @@ test('cloud auth config resolves OIDC deployment settings from env', () => {
   assert.equal(resolved.callbackPath, '/auth/oidc/callback')
   assert.equal(resolved.cookieSecretRef, 'env:COOKIE_SECRET')
   assert.deepEqual(resolved.allowedEmailDomains, ['example.test', 'example.org'])
+  assert.equal(resolved.allowSelfServiceSignup, false)
+})
+
+test('cloud auth config requires explicit self-service opt-in for managed OIDC signup', () => {
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+  }).allowSelfServiceSignup, false)
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: 'true',
+  }).allowSelfServiceSignup, true)
+
+  const explicitConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      auth: {
+        mode: 'oidc' as const,
+        allowSelfServiceSignup: true,
+      },
+    },
+  }
+  assert.equal(resolveCloudAuthConfig(explicitConfig, {}).allowSelfServiceSignup, true)
 })
 
 test('cloud auth config supports explicit trusted header mode', async () => {

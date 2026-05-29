@@ -229,7 +229,7 @@ test('event renderer keeps tool progress compact and redacts failure details', a
         id: 'tool-1',
         name: 'bash',
         status: 'error',
-        error: 'failed with token=super-secret-token',
+        error: 'failed in /Users/alice/acme-private with token=super-secret-token',
       },
     },
   })
@@ -244,7 +244,7 @@ test('event renderer keeps tool progress compact and redacts failure details', a
     messageId: undefined,
   }, {
     kind: 'edit',
-    text: 'Tool failed: bash\nfailed with token=[redacted]',
+    text: 'Tool failed: bash\nfailed in /Users/[redacted] with token=[redacted]',
     messageId: '1',
   }])
 })

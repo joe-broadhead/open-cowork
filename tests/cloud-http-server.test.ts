@@ -21,7 +21,7 @@ import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import type {
@@ -37,6 +37,8 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   createdSessions: string[] = []
   aborted: string[] = []
   permissions: Array<{ permissionId: string, allowed: boolean }> = []
+  questionReplies: Array<{ requestId: string, answers: unknown[] }> = []
+  questionRejects: Array<{ requestId: string }> = []
   private nextSession = 0
 
   async createSession() {
@@ -77,6 +79,14 @@ class FakeRuntimeAdapter implements CloudRuntimeAdapter {
   async respondToPermission(input: { permissionId: string, allowed: boolean }) {
     this.permissions.push({ permissionId: input.permissionId, allowed: input.allowed })
   }
+
+  async replyToQuestion(input: { requestId: string, answers: unknown[] }) {
+    this.questionReplies.push({ requestId: input.requestId, answers: input.answers })
+  }
+
+  async rejectQuestion(input: { requestId: string }) {
+    this.questionRejects.push({ requestId: input.requestId })
+  }
 }
 
 function createFixture(options: {
@@ -93,6 +103,7 @@ function createFixture(options: {
     abuse?: CloudAbuseConfig
     billing?: CloudBillingConfig | null
     billingAdapter?: BillingAdapter | null
+    identityPolicy?: CloudIdentityPolicy
   } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -104,7 +115,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -133,7 +144,7 @@ function createFixture(options: {
       authSource: 'local',
     })),
   })
-  return { runtime, store, objectStore, policy, service, worker, server }
+  return { runtime, store, objectStore, policy, service, artifacts, worker, server }
 }
 
 async function readJson(response: Response) {
@@ -1075,6 +1086,53 @@ test('cloud HTTP API token issuance applies default and maximum expirations', as
   }
 })
 
+test('cloud HTTP self-service mode requires an active invited membership when disabled', async () => {
+  const principal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'invited-1',
+    accountId: 'invited-1',
+    email: 'invited@example.test',
+    role: 'member' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({
+    auth: () => principal,
+    identityPolicy: { allowSelfServiceSignup: false },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const missingInvite = await fetch(`${baseUrl}/api/workspace`)
+    assert.equal(missingInvite.status, 403)
+
+    fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+    const org = fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'tenant-1', name: 'Tenant 1' })
+    fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'invited-1', email: 'invited@example.test' })
+    fixture.store.createAccount({ accountId: 'invited-1', idpSubject: 'invited-1', email: 'invited@example.test' })
+    fixture.store.upsertMembership({
+      orgId: org.orgId,
+      accountId: 'invited-1',
+      role: 'member',
+      status: 'pending',
+    })
+    const pendingInvite = await fetch(`${baseUrl}/api/workspace`)
+    assert.equal(pendingInvite.status, 403)
+
+    fixture.store.upsertMembership({
+      orgId: org.orgId,
+      accountId: 'invited-1',
+      role: 'member',
+      status: 'active',
+    })
+    const accepted = await readJson(await fetch(`${baseUrl}/api/workspace`))
+    assert.equal(accepted.orgId, 'tenant-1')
+    assert.equal(accepted.accountId, 'invited-1')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP worker status endpoints require operator privileges', async () => {
   const memberPrincipal = {
     tenantId: 'tenant-1',
@@ -1457,6 +1515,43 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(asRecord(approval.command).kind, 'permission.respond')
     assert.equal(approval.processed, 1)
     assert.deepEqual(runtime.permissions, [{ permissionId: 'permission-1', allowed: true }])
+
+    const questionInteractionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        interactionId: 'interaction-2',
+        agentId: 'agent-1',
+        sessionId: cloudSession.sessionId,
+        provider: 'telegram',
+        kind: 'question',
+        targetId: 'question-1',
+        tokenSecret: 'question-secret',
+      }),
+    })
+    assert.equal(questionInteractionResponse.status, 201)
+    const issuedQuestion = await readJson(questionInteractionResponse)
+    assert.equal(typeof issuedQuestion.plaintextToken, 'string')
+
+    const questionResponse = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        token: issuedQuestion.plaintextToken,
+        answers: ['Ship it'],
+      }),
+    })
+    assert.equal(questionResponse.status, 202)
+    const question = await readJson(questionResponse)
+    assert.equal(asRecord(question.command).kind, 'question.reply')
+    assert.deepEqual(runtime.questionReplies, [{ requestId: 'question-1', answers: ['Ship it'] }])
+
+    const auditPayload = JSON.stringify(await store.listAuditEvents('tenant-1'))
+    assert.match(auditPayload, /channel_interaction\.permission\.responded/)
+    assert.match(auditPayload, /channel_interaction\.question\.replied/)
+    assert.equal(auditPayload.includes(String(issuedInteraction.plaintextToken)), false)
+    assert.equal(auditPayload.includes(String(issuedQuestion.plaintextToken)), false)
 
     const deliveryResponse = await fetch(`${baseUrl}/api/channels/deliveries`, {
       method: 'POST',
@@ -2547,6 +2642,17 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
     const read = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts/${uploaded.artifactId}`))
     const artifact = asRecord(read.artifact)
     assert.equal(Buffer.from(String(artifact.dataBase64), 'base64').toString('utf8'), 'cloud artifact')
+
+    await assert.rejects(() => fixture.artifacts.readSessionArtifact({
+      tenantId: 'tenant-2',
+      orgId: 'tenant-2',
+      tenantName: 'Tenant 2',
+      userId: 'user-2',
+      accountId: 'user-2',
+      email: 'user2@example.test',
+      role: 'owner' as const,
+      authSource: 'user' as const,
+    }, 'oc-session-1', String(uploaded.artifactId)), /Cloud session was not found|Unknown session|Unknown tenant/)
   } finally {
     await fixture.server.close()
   }

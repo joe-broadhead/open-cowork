@@ -111,7 +111,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
       if (registration.config.kind === 'webhook') {
         await (registration.provider as WebhookProvider).handleWebhookPayload(payload, {
           headers,
-          sharedSecret: registration.config.credentials.sharedSecret || null,
+          rawBody,
         })
         return
       }

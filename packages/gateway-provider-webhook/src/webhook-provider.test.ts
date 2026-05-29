@@ -1,8 +1,24 @@
 import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
-import { mapWebhookPayload, validateWebhookButtons, WebhookProvider } from "@open-cowork/gateway-provider-webhook";
+import {
+  mapWebhookPayload,
+  signWebhookIngressPayload,
+  validateWebhookButtons,
+  WebhookProvider
+} from "@open-cowork/gateway-provider-webhook";
 
 describe("WebhookProvider", () => {
+  function signedAuth(payload: unknown, sharedSecret = "secret", timestamp = "1772280000") {
+    const rawBody = JSON.stringify(payload);
+    return {
+      rawBody,
+      headers: {
+        "x-open-cowork-gateway-webhook-timestamp": timestamp,
+        "x-open-cowork-gateway-webhook-signature": signWebhookIngressPayload(rawBody, sharedSecret, timestamp)
+      }
+    };
+  }
+
   it("advertises only the attachment capabilities implemented by the generic bridge", () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway"
@@ -442,30 +458,29 @@ describe("WebhookProvider", () => {
     const seen: string[] = [];
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
-      sharedSecret: "secret"
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z")
     });
     await provider.start(async (message) => {
       seen.push(message.text);
     });
-    await provider.handleWebhookPayload({
+    const payload = {
       target: { chatId: "team-chat" },
       sender: { userId: "alice" },
       text: "hello"
-    }, {
-      headers: {
-        "x-open-cowork-gateway-webhook-secret": "secret"
-      }
-    });
+    };
+    await provider.handleWebhookPayload(payload, signedAuth(payload));
     await provider.stop();
 
     expect(seen).toEqual(["hello"]);
   });
 
-  it("requires the configured ingress shared secret before dispatch", async () => {
+  it("requires signed timestamp ingress before dispatch", async () => {
     const seen: string[] = [];
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
-      sharedSecret: "secret"
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z")
     });
     await provider.start(async (message) => {
       seen.push(message.text);
@@ -477,16 +492,45 @@ describe("WebhookProvider", () => {
       text: "hello"
     };
     await expect(provider.handleWebhookPayload(payload, {})).rejects.toThrow(
-      "Webhook shared secret verification failed",
+      "Webhook timestamp signature is required for ingress",
     );
-    await expect(provider.handleWebhookPayload(payload, { sharedSecret: "wrong" })).rejects.toThrow(
-      "Webhook shared secret verification failed",
+    await expect(provider.handleWebhookPayload(payload, {
+      ...signedAuth(payload, "wrong"),
+    })).rejects.toThrow(
+      "Webhook signature verification failed",
     );
-    await provider.handleWebhookPayload(payload, {
-      headers: new Headers({ "x-open-cowork-gateway-webhook-secret": "secret" })
-    });
+    await provider.handleWebhookPayload(payload, signedAuth(payload));
 
     expect(seen).toEqual(["hello"]);
+    await provider.stop();
+  });
+
+  it("rejects stale or replayed signed ingress payloads", async () => {
+    const payload = {
+      target: { chatId: "team-chat" },
+      sender: { userId: "alice" },
+      text: "hello"
+    };
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z")
+    });
+    const seen: string[] = [];
+    await provider.start(async (message) => {
+      seen.push(message.id);
+    });
+
+    await expect(provider.handleWebhookPayload(payload, signedAuth(payload, "secret", "1772279000"))).rejects.toThrow(
+      "Webhook timestamp is outside the allowed window",
+    );
+
+    const auth = signedAuth(payload);
+    await provider.handleWebhookPayload(payload, auth);
+    await expect(provider.handleWebhookPayload(payload, auth)).rejects.toThrow(
+      "Webhook signature replay rejected",
+    );
+    expect(seen).toHaveLength(1);
     await provider.stop();
   });
 
@@ -630,6 +674,7 @@ describe("WebhookProvider", () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
       sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z"),
       maxAttachmentBytes: 4
     });
     const seen: string[] = [];
@@ -637,7 +682,7 @@ describe("WebhookProvider", () => {
       seen.push(message.id);
     });
 
-    await expect(provider.handleWebhookPayload({
+    const payload = {
       target: { chatId: "team-chat" },
       sender: { userId: "alice" },
       text: "see attached",
@@ -648,7 +693,8 @@ describe("WebhookProvider", () => {
           bufferBase64: Buffer.from("12345").toString("base64")
         }
       ]
-    }, { sharedSecret: "secret" })).rejects.toThrow("Webhook attachment exceeds max size of 4 bytes");
+    };
+    await expect(provider.handleWebhookPayload(payload, signedAuth(payload))).rejects.toThrow("Webhook attachment exceeds max size of 4 bytes");
     expect(seen).toEqual([]);
 
     await provider.stop();

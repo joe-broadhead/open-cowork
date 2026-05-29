@@ -459,7 +459,7 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE` | SMTP transport settings for email replies. |
 | `OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD` | Optional SMTP auth credentials. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
-| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress and outbound bridge signing. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress HMAC signatures and outbound bridge authentication. Inbound generic webhook requests include `x-open-cowork-gateway-webhook-timestamp` and `x-open-cowork-gateway-webhook-signature` over the raw body. |
 
 Hosted/public deployments should keep abuse controls enabled. The defaults are
 conservative and can be tuned per deployment; set an individual numeric quota
