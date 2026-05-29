@@ -120,7 +120,9 @@ nav:
       - Telemetry and Privacy: privacy.md
   - Operate:
       - Open Cowork Cloud: open-cowork-cloud.md
+      - Deployment Readiness: deployment-readiness.md
       - Cloud Managed Operations: runbooks/cloud-managed-operations.md
+      - Managed BYOK SaaS: runbooks/managed-byok-saas.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md

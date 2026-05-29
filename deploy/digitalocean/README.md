@@ -12,6 +12,8 @@ DigitalOcean with these services:
 | Control plane | Managed PostgreSQL |
 | Object store | Spaces |
 | Secrets | App Platform or Kubernetes secrets, preferably External Secrets |
+| Observability | App Platform logs, Kubernetes logs, and OTLP exporter or collector |
+| Backups | Managed PostgreSQL backups plus Spaces versioning/lifecycle |
 
 For scalable deployments, install the provider-neutral Helm chart on DOKS and
 connect it to Managed PostgreSQL and Spaces.
@@ -48,3 +50,21 @@ needs inbound callbacks.
 
 App Platform all-in-one is acceptable for demos and focused-agent pilots.
 Production worker execution should use DOKS split roles.
+
+## Production Notes
+
+- Configure `OPEN_COWORK_CLOUD_PUBLIC_URL` and
+  `OPEN_COWORK_GATEWAY_PUBLIC_URL` with HTTPS App Platform or DOKS ingress
+  origins.
+- Store cookie secret, internal token, database URL, BYOK envelope key,
+  gateway service token, and provider webhook signing secrets in App Platform
+  secrets, Kubernetes secrets, or External Secrets.
+- Keep cloud billing disabled/stubbed for OSS self-host. Managed SaaS should
+  configure billing through the billing adapter and signed billing webhooks.
+- Use Spaces access keys with the smallest bucket/prefix scope available.
+- Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
+  URLs.
+
+DigitalOcean configuration is adapter wiring only. Do not add DigitalOcean
+branches to cloud sessions, gateway rendering, OpenCode runtime startup, or
+BYOK core code.

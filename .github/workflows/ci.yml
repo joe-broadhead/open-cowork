@@ -226,6 +226,9 @@ jobs:
           test -s /tmp/open-cowork-gateway-rendered.yaml
           grep -q "OPEN_COWORK_GATEWAY_SERVICE_TOKEN" /tmp/open-cowork-gateway-rendered.yaml
 
+      - name: Run deployment readiness validator
+        run: pnpm deploy:validate -- --require-tools
+
   # Run the desktop smoke suite and package the app on macOS so
   # platform-specific regressions (IPC, renderer boot, native modules,
   # packaging hooks) surface on every PR instead of only when we cut a

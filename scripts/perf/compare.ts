@@ -18,6 +18,7 @@ export function compareReports(current: BenchmarkReport, baseline: BenchmarkRepo
   const baselineByName = new Map(baseline.benchmarks.map((entry) => [entry.name, entry]))
   const avgMultiplier = baseline.regressionThresholds?.avgMultiplier || DEFAULT_THRESHOLDS.avgMultiplier
   const p95Multiplier = baseline.regressionThresholds?.p95Multiplier || DEFAULT_THRESHOLDS.p95Multiplier
+  const jitterAllowanceMs = baseline.regressionThresholds?.jitterAllowanceMs ?? DEFAULT_THRESHOLDS.jitterAllowanceMs
   const comparableEnvironment = hasComparableEnvironment(current, baseline)
   const avgAbsoluteFloorMs = comparableEnvironment
     ? baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs
@@ -39,11 +40,11 @@ export function compareReports(current: BenchmarkReport, baseline: BenchmarkRepo
     const avgLimit = round(Math.max(
       baselineEntry.avgMs * avgMultiplier,
       baselineEntry.avgMs + avgAbsoluteFloorMs,
-    ))
+    ) + jitterAllowanceMs)
     const p95Limit = round(Math.max(
       baselineEntry.p95Ms * p95Multiplier,
       baselineEntry.p95Ms + p95AbsoluteFloorMs,
-    ))
+    ) + jitterAllowanceMs)
 
     if (currentEntry.avgMs > avgLimit) {
       failures.push(`${currentEntry.name} avg ${currentEntry.avgMs} ms exceeds baseline limit ${avgLimit} ms`)

@@ -92,6 +92,10 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED/)
   assert.match(docs, /helm\/open-cowork-gateway/)
   assert.match(docs, /cloud-managed-operations\.md/)
+  assert.match(docs, /deployment-readiness\.md/)
+  assert.match(docs, /runbooks\/managed-byok-saas\.md/)
+  assert.match(docs, /pnpm deploy:validate/)
+  assert.match(docs, /pnpm deploy:smoke/)
 })
 
 test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
@@ -276,12 +280,17 @@ test('cloud provider recipes stay thin compositions of the shared image and adap
   assert.match(index, /open-cowork-gateway/)
   assert.match(index, /Postgres/)
   assert.match(index, /OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true/)
+  assert.match(index, /no billing/)
+  assert.match(index, /stub billing provider/)
+  assert.match(index, /pnpm deploy:validate/)
+  assert.match(index, /pnpm deploy:smoke/)
+  assert.match(index, /Provider recipes/)
 
   const recipes = {
-    gcp: ['Cloud SQL for PostgreSQL', 'Cloud Storage', 'Secret Manager', 'GKE', 'open-cowork-gateway'],
-    aws: ['RDS for PostgreSQL', 'S3', 'Secrets Manager', 'EKS', 'open-cowork-gateway'],
-    azure: ['Azure Database for PostgreSQL', 'Azure Blob Storage', 'Key Vault', 'AKS', 'open-cowork-gateway'],
-    digitalocean: ['Managed PostgreSQL', 'Spaces', 'DOKS', 'App Platform', 'open-cowork-gateway'],
+    gcp: ['Cloud SQL for PostgreSQL', 'Cloud Storage', 'Secret Manager', 'GKE', 'open-cowork-gateway', 'Cloud Logging', 'Cloud SQL PITR'],
+    aws: ['RDS for PostgreSQL', 'S3', 'Secrets Manager', 'EKS', 'open-cowork-gateway', 'CloudWatch Logs', 'RDS PITR'],
+    azure: ['Azure Database for PostgreSQL', 'Azure Blob Storage', 'Key Vault', 'AKS', 'open-cowork-gateway', 'Azure Monitor', 'Azure PostgreSQL PITR'],
+    digitalocean: ['Managed PostgreSQL', 'Spaces', 'DOKS', 'App Platform', 'open-cowork-gateway', 'App Platform logs', 'Managed PostgreSQL backups'],
   }
 
   for (const [provider, expected] of Object.entries(recipes)) {
@@ -291,10 +300,87 @@ test('cloud provider recipes stay thin compositions of the shared image and adap
     assert.match(readme, /helm upgrade --install open-cowork-cloud/)
     assert.match(readme, /helm upgrade --install open-cowork-gateway/)
     assert.match(readme, /gateway.existingSecret=open-cowork-gateway-secrets/)
+    assert.match(readme, /OPEN_COWORK_CLOUD_PUBLIC_URL/)
+    assert.match(readme, /OPEN_COWORK_GATEWAY_PUBLIC_URL/)
+    assert.match(readme, /provider webhook signing secrets/)
+    assert.match(readme, /billing disabled\/stubbed/)
+    assert.match(readme, /pnpm deploy:smoke/)
+    assert.match(readme, /adapter wiring only/)
     for (const phrase of expected) {
       assert.match(readme, new RegExp(phrase))
     }
   }
+})
+
+test('deployment readiness checklist and managed BYOK runbook cover production gates', () => {
+  const readiness = readRepoFile('docs/deployment-readiness.md')
+  for (const phrase of [
+    'Required Topology',
+    'Auth',
+    'cookie secret',
+    'Postgres',
+    'object store',
+    'secret adapter/KMS',
+    'public URL/HTTPS',
+    'worker/scheduler scaling',
+    'gateway service token',
+    'provider webhook signing',
+    'quotas/rate limits',
+    'OTLP/logging',
+    'backups/restore',
+    'no billing provider or the stub billing provider',
+    'pnpm deploy:validate',
+    'pnpm deploy:smoke',
+    'Provider Recipe Contract',
+  ]) {
+    assert.match(readiness, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
+  }
+
+  const byok = readRepoFile('docs/runbooks/managed-byok-saas.md')
+  for (const phrase of [
+    'org signup mode',
+    'token TTL',
+    'invite/domain controls',
+    'billing setup',
+    'BYOK validation',
+    'gateway operations',
+    'incident response',
+    'no billing provider',
+    'Launch Gates',
+  ]) {
+    assert.match(byok, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
+  }
+
+  const mkdocs = readRepoFile('mkdocs.yml')
+  assert.match(mkdocs, /Deployment Readiness: deployment-readiness\.md/)
+  assert.match(mkdocs, /Managed BYOK SaaS: runbooks\/managed-byok-saas\.md/)
+})
+
+test('deployment validation and smoke scripts cover compose, helm, cloud, and gateway checks', () => {
+  const packageJson = readRepoFile('package.json')
+  const scriptsReadme = readRepoFile('scripts/README.md')
+  const validate = readRepoFile('scripts/validate-deployment-configs.mjs')
+  const smoke = readRepoFile('scripts/smoke-deployment.mjs')
+
+  assert.match(packageJson, /"deploy:validate": "node scripts\/validate-deployment-configs\.mjs"/)
+  assert.match(packageJson, /"deploy:smoke": "node scripts\/smoke-deployment\.mjs"/)
+  assert.match(scriptsReadme, /pnpm deploy:validate/)
+  assert.match(scriptsReadme, /pnpm deploy:smoke/)
+  assert.match(validate, /docker-compose\.cloud\.yml/)
+  assert.match(validate, /docker-compose\.cloud\.split\.yml/)
+  assert.match(validate, /docker-compose\.cloud-gateway\.yml/)
+  assert.match(validate, /helm\/open-cowork-cloud/)
+  assert.match(validate, /helm\/open-cowork-gateway/)
+  assert.match(validate, /unsafe-public-cloud/)
+  assert.match(validate, /unsafe-webhook-gateway/)
+  assert.match(validate, /unsafe-metrics-gateway/)
+  assert.match(smoke, /OPEN_COWORK_SMOKE_CLOUD_URL/)
+  assert.match(smoke, /OPEN_COWORK_SMOKE_GATEWAY_URL/)
+  assert.match(smoke, /\/healthz/)
+  assert.match(smoke, /\/api\/runtime\/status/)
+  assert.match(smoke, /\/api\/workers\/heartbeats/)
+  assert.match(smoke, /\/health/)
+  assert.match(smoke, /\/ready/)
 })
 
 test('managed operations runbook covers readiness, rollback, diagnostics, and gateway backlog', () => {
@@ -341,6 +427,7 @@ test('CI enforces cloud portability, concurrency, and deployment gates', () => {
   assert.match(workflow, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN/)
   assert.match(workflow, /helm lint helm\/open-cowork-gateway/)
   assert.match(workflow, /helm template open-cowork-gateway helm\/open-cowork-gateway/)
+  assert.match(workflow, /pnpm deploy:validate -- --require-tools/)
 
   const smoke = readRepoFile('scripts/ci-cloud-compose-smoke.sh')
   assert.match(smoke, /docker compose -p "\$\{project_name\}" -f "\$\{compose_file\}" up --build -d/)

@@ -57,6 +57,8 @@
     "cloud:build": "node scripts/build-cloud.mjs",
     "cloud:start": "node apps/desktop/dist/cloud/open-cowork-cloud.mjs",
     "cloud:smoke:compose": "bash scripts/ci-cloud-compose-smoke.sh",
+    "deploy:validate": "node scripts/validate-deployment-configs.mjs",
+    "deploy:smoke": "node scripts/smoke-deployment.mjs",
     "notices": "node scripts/generate-third-party-notices.mjs",
     "proof:cloud:opencode-portability": "node --no-warnings --experimental-strip-types scripts/opencode-portability-proof.ts",
     "perf:bench": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts",

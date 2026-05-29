@@ -331,6 +331,32 @@ form can point at `env:NAME`, GCP Secret Manager
 Secrets Manager (`aws-sm://{secret-id}?region={region}`), or Azure Key Vault
 (`azure-kv://{vault}/secrets/{secret}/{version}`).
 
+## Production Readiness
+
+Before exposing cloud or gateway publicly, use the deployment checklist in
+`deployment-readiness.md`. It covers auth, cookie secrets, Postgres, object
+storage, secret adapter/KMS references, public HTTPS origins, worker/scheduler
+scaling, gateway service tokens, provider webhook signing, quotas/rate limits,
+OTLP/logging, backups, and restore.
+
+Managed BYOK operators should also follow `runbooks/managed-byok-saas.md`.
+That runbook covers org signup mode, token TTLs, invite/domain controls,
+billing setup, BYOK validation, gateway operations, and incident response.
+
+Run deployment manifest validation before rollout:
+
+```bash
+pnpm deploy:validate
+```
+
+Smoke a running deployment after traffic is routed:
+
+```bash
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+pnpm deploy:smoke
+```
+
 ## Validation
 
 The regular `pnpm test` suite covers the in-memory control-plane adapter and
