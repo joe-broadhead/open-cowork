@@ -56,5 +56,15 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
     return true
   }
 
+  if (resource === 'usage' && itemId === 'summary' && !action && req.method === 'GET') {
+    tools.writeJson(res, 200, await options.service.getUsageSummary(context.principal, tools.parseLimit(context.url)), options.corsOrigin)
+    return true
+  }
+
+  if (resource === 'diagnostics' && !itemId && !action && req.method === 'GET') {
+    tools.writeJson(res, 200, await options.service.getDiagnosticsBundle(context.principal), options.corsOrigin)
+    return true
+  }
+
   return false
 }

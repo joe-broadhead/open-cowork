@@ -263,17 +263,29 @@ paths. Admin panels expose:
   visibility through `/api/admin/policy`,
 - redacted audit events through `/api/admin/audit`, with browser-side search
   and export over the already redacted event payload,
-- BYOK provider status and key submission through metadata-only BYOK APIs,
+- BYOK provider status, plaintext key rotation, and KMS reference submission
+  through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,
-- headless gateway agent/channel setup through channel binding APIs,
-- billing subscription, checkout, and portal actions when billing is enabled,
-- recent usage events for quota and metering visibility.
+- headless gateway agent/channel setup through channel binding APIs, plus
+  delivery backlog retry/dead-letter controls for admins,
+- billing subscription, plan entitlement, checkout, and portal actions when
+  billing is enabled,
+- recent usage event summaries and current quota windows through
+  `/api/usage/summary`,
+- redacted support diagnostics through `/api/diagnostics` for org admins and
+  admin-scoped API tokens.
 
 Role and policy decisions are enforced by the cloud APIs. The dashboard mirrors
 those decisions by disabling admin-only actions for member users, but disabled
 controls are only an ergonomic layer, not the authorization boundary. Token
 plaintext is shown only in the create response, and raw provider keys are never
 returned by read APIs.
+
+The diagnostics bundle is intentionally a support artifact, not a secret export.
+It includes runtime role, billing mode, BYOK provider metadata, quota summaries,
+recent sampled gateway counters, and recent usage totals, but excludes raw
+provider keys, KMS refs, OAuth/API tokens, signed URLs, channel credentials,
+cookies, and local host paths.
 
 Self-hosted deployments can run with the stub/no billing adapter. In that mode
 the dashboard keeps the billing panel non-blocking while BYOK, desktop token,

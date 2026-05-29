@@ -11,6 +11,7 @@ export type ByokSecretMetadata = {
   secretId: string
   providerId: string
   status: ByokSecretStatus
+  credentialKind: 'plaintext' | 'kms_ref'
   last4: string
   keyFingerprint: string
   lastValidatedAt: string | null
@@ -165,6 +166,7 @@ export function byokSecretMetadata(record: ByokSecretRecord): ByokSecretMetadata
     secretId: record.secretId,
     providerId: record.providerId,
     status: record.status,
+    credentialKind: record.kmsRef ? 'kms_ref' : 'plaintext',
     last4: record.last4,
     keyFingerprint: record.keyFingerprint,
     lastValidatedAt: record.lastValidatedAt,

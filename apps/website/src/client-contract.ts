@@ -11,6 +11,8 @@ export type CloudWebEndpointId =
   | 'channelBindings'
   | 'billingSubscription'
   | 'usageEvents'
+  | 'usageSummary'
+  | 'diagnostics'
   | 'sessions'
   | 'sessionView'
   | 'sessionEvents'
@@ -36,6 +38,9 @@ export type CloudWebEndpointId =
   | 'adminMemberInvite'
   | 'adminMemberUpdate'
   | 'adminAudit'
+  | 'channelDeliveries'
+  | 'channelDeliveryRetry'
+  | 'channelDeliveryDeadLetter'
 
 export type CloudWebEndpoint = {
   id: CloudWebEndpointId
@@ -84,6 +89,9 @@ export type CloudWebClientStateContract = {
     runs: unknown[]
     error: string | null
   }
+  usageSummary: unknown | null
+  deliveries: unknown[]
+  diagnostics: unknown | null
   admin: {
     policy: unknown | null
     members: unknown[]
@@ -148,6 +156,24 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     csrf: false,
   },
   {
+    id: 'channelDeliveries',
+    method: 'GET',
+    path: '/api/channels/deliveries?limit=50',
+    csrf: false,
+  },
+  {
+    id: 'channelDeliveryRetry',
+    method: 'POST',
+    path: '/api/channels/deliveries/:deliveryId/retry',
+    csrf: true,
+  },
+  {
+    id: 'channelDeliveryDeadLetter',
+    method: 'POST',
+    path: '/api/channels/deliveries/:deliveryId/dead-letter',
+    csrf: true,
+  },
+  {
     id: 'billingSubscription',
     method: 'GET',
     path: '/api/billing/subscription',
@@ -157,6 +183,18 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'usageEvents',
     method: 'GET',
     path: '/api/usage/events?limit=20',
+    csrf: false,
+  },
+  {
+    id: 'usageSummary',
+    method: 'GET',
+    path: '/api/usage/summary?limit=100',
+    csrf: false,
+  },
+  {
+    id: 'diagnostics',
+    method: 'GET',
+    path: '/api/diagnostics',
     csrf: false,
   },
   {

@@ -84,6 +84,13 @@ export type QuotaConsumptionRecord = {
   policyCode?: QuotaPolicyCode | string
 }
 
+export type UsageQuotaCounterRecord = {
+  orgId: string
+  quotaKey: string
+  windowStartedAtMs: number
+  quantity: number
+}
+
 export type RateLimitClaimRecord = {
   allowed: boolean
   scope: string
@@ -982,6 +989,7 @@ export type ControlPlaneStore = {
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
+  listUsageQuotaCounters(orgId: string): MaybePromise<UsageQuotaCounterRecord[]>
   recordUsageEvent(input: RecordUsageEventInput): MaybePromise<UsageEventRecord>
   listUsageEvents(orgId: string, limit?: number): MaybePromise<UsageEventRecord[]>
   upsertBillingSubscription(input: UpsertBillingSubscriptionInput): MaybePromise<BillingSubscriptionRecord>
@@ -1243,6 +1251,16 @@ function normalizeText(value: unknown, maxLength: number, label: string) {
     throw new Error(`${label} exceeds ${maxLength} characters.`)
   }
   return normalized
+}
+
+function redactOperationalText(value: unknown, maxLength: number, label: string) {
+  return normalizeText(value, maxLength, label)
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
+    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
+    .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
+    .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
 }
 
 function normalizeOptionalText(value: unknown, maxLength: number, label: string) {
@@ -1749,6 +1767,23 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       retryAfterMs,
       policyCode: input.policyCode,
     }
+  }
+
+  listUsageQuotaCounters(orgId: string): UsageQuotaCounterRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    return Array.from(this.usageCounters.entries())
+      .map(([counterKey, counter]) => {
+        const [counterOrgId, quotaKey] = counterKey.split('\0', 2)
+        return {
+          orgId: counterOrgId,
+          quotaKey,
+          windowStartedAtMs: counter.windowStartedAtMs,
+          quantity: counter.quantity,
+        }
+      })
+      .filter((counter) => counter.orgId === orgId)
+      .sort((left, right) => left.quotaKey.localeCompare(right.quotaKey))
+      .map((counter) => clone(counter))
   }
 
   recordUsageEvent(input: RecordUsageEventInput): UsageEventRecord {
@@ -2490,7 +2525,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     delivery.status = input.status
     delivery.claimedBy = null
     delivery.claimExpiresAt = null
-    delivery.lastError = input.lastError ? normalizeText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null
+    delivery.lastError = input.lastError ? redactOperationalText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null
     delivery.nextAttemptAt = (input.nextAttemptAt || input.updatedAt || new Date()).toISOString()
     delivery.updatedAt = updatedAt
     return clone(delivery)

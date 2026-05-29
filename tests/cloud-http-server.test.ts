@@ -512,6 +512,16 @@ test('cloud HTTP server enforces prompt quotas before processing commands and ex
     const events = asArray(usage.events).map(asRecord)
     assert.equal(events.some((event) => event.eventType === 'prompt.enqueued'), true)
     assert.equal(events.some((event) => event.eventType === 'worker.minute'), true)
+    const summary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
+    const quotas = asArray(summary.quotas).map(asRecord)
+    const promptQuota = quotas.find((quota) => quota.quotaKey === 'prompts:hour')
+    assert.equal(promptQuota?.limit, 1)
+    assert.equal(promptQuota?.used, 1)
+    assert.equal(typeof promptQuota?.resetAt, 'string')
+    assert.equal(summary.totalsScope, 'recent_events')
+    assert.equal(summary.eventSampleLimit, 50)
+    const totals = asArray(summary.totals).map(asRecord)
+    assert.equal(totals.some((total) => total.eventType === 'prompt.enqueued' && total.quantity === 1), true)
   } finally {
     await fixture.server.close()
   }
@@ -667,6 +677,7 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     const createdSecret = asRecord(created.secret)
     assert.equal(createdSecret.providerId, 'anthropic')
     assert.equal(createdSecret.status, 'active')
+    assert.equal(createdSecret.credentialKind, 'plaintext')
     assert.equal(createdSecret.last4, '7890')
     assert.equal(JSON.stringify(created).includes(rawFirst), false)
     assert.equal(JSON.stringify(created).includes('ciphertext'), false)
@@ -976,6 +987,7 @@ test('cloud HTTP BYOK KMS refs require explicit deployer policy and validate wit
     assert.equal(createResponse.status, 201)
     const created = await readJson(createResponse)
     assert.equal(asRecord(created.secret).status, 'active')
+    assert.equal(asRecord(created.secret).credentialKind, 'kms_ref')
     assert.equal(JSON.stringify(created).includes('kmsRef'), false)
 
     const validateResponse = await fetch(`${baseUrl}/api/byok/anthropic/validate`, { method: 'POST' })
@@ -1166,6 +1178,24 @@ test('cloud HTTP worker status endpoints require operator privileges', async () 
     assert.equal(response.status, 403)
     const runtimeStatus = await fetch(`${baseUrl}/api/runtime/status`)
     assert.equal(runtimeStatus.status, 403)
+    const diagnostics = await fetch(`${baseUrl}/api/diagnostics`)
+    assert.equal(diagnostics.status, 403)
+    const workerPrincipal = {
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'worker-token',
+      accountId: 'worker-token',
+      email: 'worker@example.test',
+      role: 'member' as const,
+      authSource: 'api_token' as const,
+      tokenScopes: ['worker-internal' as const],
+    }
+    assert.equal((await fixture.service.listWorkerHeartbeats(workerPrincipal)).length, 0)
+    await assert.rejects(
+      () => fixture.service.getDiagnosticsBundle(workerPrincipal),
+      /Cloud diagnostics require org admin/,
+    )
   } finally {
     await fixture.server.close()
   }
@@ -1432,6 +1462,12 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     name: 'Gateway token',
     scopes: ['gateway', 'admin'],
   })
+  const gatewayOnlyIssued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Gateway-only token',
+    scopes: ['gateway'],
+  })
 
   const runtime = new FakeRuntimeAdapter()
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
@@ -1451,6 +1487,10 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   const baseUrl = await server.listen()
   const headers = {
     authorization: `Bearer ${issued.plaintext}`,
+    'content-type': 'application/json',
+  }
+  const gatewayOnlyHeaders = {
+    authorization: `Bearer ${gatewayOnlyIssued.plaintext}`,
     'content-type': 'application/json',
   }
   try {
@@ -1737,6 +1777,47 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(ackResponse.status, 200)
     assert.equal(asRecord((await readJson(ackResponse)).delivery).status, 'sent')
+
+    const listedDeliveries = await readJson(await fetch(`${baseUrl}/api/channels/deliveries?limit=10`, { headers }))
+    assert.equal(asArray(listedDeliveries.deliveries).some((delivery) => asRecord(delivery).deliveryId === 'delivery-1'), true)
+
+    const gatewayOnlyRetry = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/retry`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({}),
+    })
+    assert.equal(gatewayOnlyRetry.status, 403)
+
+    const retryDelivery = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/retry`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+    })
+    assert.equal(retryDelivery.status, 200)
+    assert.equal(asRecord((await readJson(retryDelivery)).delivery).status, 'failed')
+
+    const tokenLikeErrorText = ['sk', 'production', 'secret', '1234567890'].join('-')
+    const deadLetterDelivery = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/dead-letter`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ lastError: `poison event token=${tokenLikeErrorText}` }),
+    })
+    assert.equal(deadLetterDelivery.status, 200)
+    const deadDelivery = asRecord((await readJson(deadLetterDelivery)).delivery)
+    assert.equal(deadDelivery.status, 'dead')
+    assert.equal(String(deadDelivery.lastError).includes(tokenLikeErrorText), false)
+
+    const diagnostics = await readJson(await fetch(`${baseUrl}/api/diagnostics`, { headers }))
+    assert.equal(diagnostics.redaction, 'secrets-redacted')
+    assert.equal(asRecord(asRecord(diagnostics.gateway).agents).total, 1)
+    assert.equal(asRecord(asRecord(diagnostics.gateway).deliveriesByStatus).dead, 1)
+    assert.equal(asRecord(diagnostics.gateway).deliveriesByStatusScope, 'recent_deliveries')
+    assert.equal(asRecord(diagnostics.gateway).deliverySampleLimit, 200)
+    const diagnosticsText = JSON.stringify(diagnostics)
+    assert.equal(diagnosticsText.includes(issued.plaintext), false)
+    assert.equal(diagnosticsText.includes(gatewayOnlyIssued.plaintext), false)
+    assert.equal(diagnosticsText.includes(tokenLikeErrorText), false)
+    assert.equal(diagnosticsText.includes('secret/telegram'), false)
   } finally {
     await server.close()
   }
