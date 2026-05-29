@@ -207,9 +207,11 @@ That file starts:
 - MinIO for artifacts and checkpoints,
 - Open Cowork Gateway on <http://localhost:8790>.
 
-The gateway requires at least one real provider by default. For local-only
-smoke tests without Telegram or webhook credentials, opt into the fake provider
-explicitly:
+The gateway requires at least one real provider by default. Telegram, Slack,
+email, and generic webhook providers can run together in one gateway process, or
+you can deploy one gateway per channel binding for tighter blast-radius control.
+For local-only smoke tests without real channel credentials, opt into the fake
+provider explicitly:
 
 ```bash
 OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true \
@@ -217,8 +219,8 @@ OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true \
 ```
 
 Do not expose the fake provider publicly. Real public deployments should
-configure Telegram or a signed webhook provider instead. For a real self-hosted
-gateway:
+configure Telegram, Slack, email, or a signed webhook provider instead. For a
+real self-hosted gateway:
 
 1. Open the dashboard at <http://localhost:8787>.
 2. Configure BYOK provider credentials if your profile requires them.
@@ -226,7 +228,22 @@ gateway:
 4. Create a headless agent and channel binding.
 5. Restart the gateway with `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` set to that
    one-time token and provider credentials such as
-   `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`.
+   `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`,
+   `OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN`, or
+   `OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET`.
+
+Provider requirements:
+
+- **Telegram** can run polling for a private VPS or webhook mode when
+  `OPEN_COWORK_GATEWAY_PUBLIC_URL` is reachable by Telegram.
+- **Slack** requires `OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN` and
+  `OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET`; incoming requests are rejected
+  unless Slack's timestamp/signature check passes.
+- **Email** requires an inbound webhook shared secret plus SMTP settings. Email
+  preserves `In-Reply-To` / `References` thread IDs and uses command-token
+  approval fallback rather than inline buttons.
+- **Webhook** requires a shared secret for public ingress and outbound bridge
+  signing.
 
 For local demos the cloud compose file uses `auth.mode=none` and explicit
 insecure overrides. Public deployments must use OIDC or a trusted identity
@@ -240,6 +257,10 @@ Gateway health endpoints:
   `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`.
 - `GET /diagnostics` returns redacted gateway config, provider state, and
   counters for support. Public binds require the same admin token.
+- `GET /deliveries` lists recent delivery backlog rows for operators.
+- `POST /deliveries/:id/retry` schedules a failed/dead delivery for retry.
+- `POST /deliveries/:id/dead-letter` marks a poison delivery as dead. These
+  delivery controls require the same gateway admin token.
 
 The gateway image is separate from the cloud image because it owns channel
 secrets, long-polling or webhook connections, and a different scaling profile.
@@ -293,8 +314,8 @@ with the identity headers. Public OIDC deployments must set
 `OPEN_COWORK_CLOUD_PUBLIC_URL` so redirect URIs never depend on forwarded
 headers from untrusted callers.
 The gateway chart also fails closed unless at least one provider is configured
-through `gateway.providersJson`, Telegram, generic webhook settings, or an
-existing secret.
+through `gateway.providersJson`, Telegram, Slack, email, generic webhook
+settings, or an existing secret.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
@@ -404,6 +425,13 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_PROVIDERS` | JSON provider array for multi-provider deployments. Treat as secret when it carries credentials. |
 | `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN` | Telegram bot token for the Telegram provider. |
 | `OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET` | Telegram webhook secret token when running webhook mode. |
+| `OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN` | Slack bot token for Slack channel access. |
+| `OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET` | Required Slack signing secret for webhook verification. |
+| `OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_SLACK_TEAM_ID` | Cloud channel binding id and Slack team/workspace id. |
+| `OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET` | Required shared secret for inbound email webhook delivery. |
+| `OPEN_COWORK_GATEWAY_EMAIL_FROM` / `OPEN_COWORK_GATEWAY_EMAIL_ADDRESS` | Outbound sender and inbound address shown in channel binding setup. |
+| `OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE` | SMTP transport settings for email replies. |
+| `OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD` | Optional SMTP auth credentials. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress and outbound bridge signing. |
 

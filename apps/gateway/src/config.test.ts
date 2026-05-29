@@ -199,8 +199,8 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       serviceToken: 'service-token',
     },
     providers: [{
-      kind: 'email' as never,
-      channelBindingId: 'email-binding',
+      kind: 'discord' as never,
+      channelBindingId: 'discord-binding',
     }],
   }), /roadmap|not implemented|Unsupported/)
 
@@ -278,4 +278,47 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       settings: { deliveryUrl: 'https://bridge.example.test/out' },
     }],
   }), /sharedSecret/)
+})
+
+test('gateway config loads Slack, email, Telegram, and webhook providers from env together', () => {
+  const config = resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN: 'slack-token',
+    OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET: 'slack-signing-secret',
+    OPEN_COWORK_GATEWAY_SLACK_TEAM_ID: 'T123',
+    OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET: 'email-inbound-secret',
+    OPEN_COWORK_GATEWAY_EMAIL_FROM: 'agent@example.test',
+    OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST: 'smtp.example.test',
+    OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT: '587',
+    OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME: 'agent@example.test',
+    OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD: 'smtp-password',
+    OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: 'https://bridge.example.test/out',
+    OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET: 'webhook-secret',
+  })
+
+  assert.deepEqual(config.providers.map((provider) => ({
+    id: provider.id,
+    kind: provider.kind,
+    channelBindingId: provider.channelBindingId,
+  })), [{
+    id: 'telegram',
+    kind: 'telegram',
+    channelBindingId: 'telegram',
+  }, {
+    id: 'slack',
+    kind: 'slack',
+    channelBindingId: 'slack',
+  }, {
+    id: 'email',
+    kind: 'email',
+    channelBindingId: 'email',
+  }, {
+    id: 'webhook',
+    kind: 'webhook',
+    channelBindingId: 'webhook',
+  }])
+  assert.equal(config.providers.find((provider) => provider.kind === 'slack')?.externalWorkspaceId, 'T123')
+  assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.smtpHost, 'smtp.example.test')
 })

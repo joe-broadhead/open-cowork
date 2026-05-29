@@ -795,6 +795,13 @@ export type AckChannelDeliveryInput = {
   updatedAt?: Date
 }
 
+export type ListChannelDeliveriesInput = {
+  orgId: string
+  status?: ChannelDeliveryStatus | null
+  channelBindingId?: string | null
+  limit?: number | null
+}
+
 export type AppendEventInput = {
   tenantId: string
   sessionId: string
@@ -1016,6 +1023,7 @@ export type ControlPlaneStore = {
     command: SessionCommandRecord
   } | null>
   createChannelDelivery(input: CreateChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord>
+  listChannelDeliveries(input: ListChannelDeliveriesInput): MaybePromise<ChannelDeliveryRecord[]>
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
@@ -2363,6 +2371,17 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
     this.channelDeliveries.set(record.deliveryId, record)
     return clone(record)
+  }
+
+  listChannelDeliveries(input: ListChannelDeliveriesInput): ChannelDeliveryRecord[] {
+    const limit = Math.max(1, Math.min(200, input.limit || 50))
+    return Array.from(this.channelDeliveries.values())
+      .filter((delivery) => delivery.orgId === input.orgId)
+      .filter((delivery) => !input.status || delivery.status === input.status)
+      .filter((delivery) => !input.channelBindingId || delivery.channelBindingId === input.channelBindingId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
+      .slice(0, limit)
+      .map(clone)
   }
 
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): ChannelDeliveryRecord | null {

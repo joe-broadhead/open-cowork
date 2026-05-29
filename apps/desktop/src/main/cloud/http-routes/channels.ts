@@ -307,6 +307,16 @@ export async function handleChannelsApiRoute(input: {
       await tools.handleChannelDeliveriesSse(req, res, options, context)
       return true
     }
+    if (!itemId && req.method === 'GET') {
+      const status = tools.readEnum(context.url.searchParams.get('status'), ['pending', 'claimed', 'sent', 'failed', 'dead'] as const)
+      const deliveries = await options.service.listChannelDeliveries(context.principal, {
+        status,
+        channelBindingId: tools.readString(context.url.searchParams.get('channelBindingId')),
+        limit: tools.readNonNegativeInteger(context.url.searchParams.get('limit'), 50),
+      })
+      tools.writeJson(res, 200, { deliveries }, options.corsOrigin)
+      return true
+    }
     if (!itemId && req.method === 'POST') {
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const agentId = tools.readString(body.agentId)
@@ -347,6 +357,28 @@ export async function handleChannelsApiRoute(input: {
         status,
         lastError: tools.readString(body.lastError),
         nextAttemptAt: tools.readOptionalDate(body.nextAttemptAt),
+      })
+      if (!delivery) {
+        tools.writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 200, { delivery }, options.corsOrigin)
+      return true
+    }
+    if (itemId && itemAction === 'retry' && req.method === 'POST') {
+      const delivery = await options.service.retryChannelDelivery(context.principal, itemId)
+      if (!delivery) {
+        tools.writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 200, { delivery }, options.corsOrigin)
+      return true
+    }
+    if (itemId && itemAction === 'dead-letter' && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const delivery = await options.service.deadLetterChannelDelivery(context.principal, {
+        deliveryId: itemId,
+        lastError: tools.readString(body.lastError),
       })
       if (!delivery) {
         tools.writeError(res, 404, 'Channel delivery was not found.', options.corsOrigin)

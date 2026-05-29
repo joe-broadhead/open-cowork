@@ -22,7 +22,7 @@ export type GatewayDaemon = {
 
 export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway = createCloudGateway(config)): GatewayDaemon {
   const runtime = createGatewayRuntime(config, cloud)
-  const http = createGatewayHttpServer(config, runtime)
+  const http = createGatewayHttpServer(config, runtime, cloud)
 
   return {
     config,
@@ -39,9 +39,9 @@ export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway =
   }
 }
 
-export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayRuntime): GatewayHttpServer {
+export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayRuntime, cloud?: CloudGateway): GatewayHttpServer {
   const server = createServer((req, res) => {
-    void handleRequest(config, runtime, req, res).catch((error) => {
+    void handleRequest(config, runtime, req, res, cloud).catch((error) => {
       runtime.metrics.errors += 1
       writeJson(res, 500, {
         ok: false,
@@ -83,6 +83,7 @@ async function handleRequest(
   runtime: GatewayRuntime,
   req: IncomingMessage,
   res: ServerResponse,
+  cloud?: CloudGateway,
 ) {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
@@ -143,11 +144,61 @@ async function handleRequest(
     return
   }
 
+  if (url.pathname === '/deliveries' && req.method === 'GET') {
+    if (!isAdminRequest(config, req)) {
+      writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
+      return
+    }
+    if (!cloud?.listDeliveries) {
+      writeJson(res, 503, { ok: false, error: 'Cloud delivery listing is not available.' })
+      return
+    }
+    const deliveries = await cloud.listDeliveries({
+      status: readDeliveryStatus(url.searchParams.get('status')),
+      channelBindingId: url.searchParams.get('channelBindingId'),
+      limit: readLimit(url.searchParams.get('limit'), 50),
+    })
+    writeJson(res, 200, { ok: true, deliveries })
+    return
+  }
+
+  const deliveryActionMatch = /^\/deliveries\/([^/]+)\/(retry|dead-letter)$/.exec(url.pathname)
+  if (deliveryActionMatch && req.method === 'POST') {
+    if (!isAdminRequest(config, req)) {
+      writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
+      return
+    }
+    const deliveryId = decodeURIComponent(deliveryActionMatch[1] || '')
+    const action = deliveryActionMatch[2]
+    if (action === 'retry') {
+      if (!cloud?.retryDelivery) {
+        writeJson(res, 503, { ok: false, error: 'Cloud delivery retry is not available.' })
+        return
+      }
+      const delivery = await cloud.retryDelivery(deliveryId)
+      writeJson(res, delivery ? 200 : 404, delivery ? { ok: true, delivery } : { ok: false, error: 'Delivery not found.' })
+      return
+    }
+    if (!cloud?.deadLetterDelivery) {
+      writeJson(res, 503, { ok: false, error: 'Cloud delivery dead-letter is not available.' })
+      return
+    }
+    const body = await readRequestBody(req)
+    const payload = parseRequestBody(body.raw, req.headers['content-type'])
+    const lastError = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? stringField((payload as Record<string, unknown>).lastError)
+      : null
+    const delivery = await cloud.deadLetterDelivery(deliveryId, { lastError })
+    writeJson(res, delivery ? 200 : 404, delivery ? { ok: true, delivery } : { ok: false, error: 'Delivery not found.' })
+    return
+  }
+
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
-    const payload = await readJsonBody(req)
-    await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers)
-    writeJson(res, 202, { ok: true })
+    const body = await readRequestBody(req)
+    const payload = parseRequestBody(body.raw, req.headers['content-type'])
+    const result = await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers, body.raw)
+    writeJson(res, result?.challenge ? 200 : 202, result?.challenge ? { challenge: result.challenge } : { ok: true })
     return
   }
 
@@ -197,13 +248,44 @@ function constantTimeStringEqual(left: string | null | undefined, right: string 
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
-async function readJsonBody(req: IncomingMessage, maxBytes = 1024 * 1024) {
+async function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024) {
   let raw = ''
   for await (const chunk of req) {
     raw += chunk
     if (Buffer.byteLength(raw) > maxBytes) throw new Error('Request body is too large.')
   }
-  return raw ? JSON.parse(raw) as unknown : {}
+  return { raw }
+}
+
+function parseRequestBody(raw: string, contentType: string | string[] | undefined) {
+  if (!raw) return {}
+  const type = firstHeader(contentType).toLowerCase()
+  if (type.includes('application/x-www-form-urlencoded')) {
+    const params = new URLSearchParams(raw)
+    const payload = params.get('payload')
+    if (payload) return JSON.parse(payload) as unknown
+    return Object.fromEntries(params.entries())
+  }
+  return JSON.parse(raw) as unknown
+}
+
+function readDeliveryStatus(value: string | null) {
+  return value === 'pending'
+    || value === 'claimed'
+    || value === 'sent'
+    || value === 'failed'
+    || value === 'dead'
+    ? value
+    : null
+}
+
+function readLimit(value: string | null, fallback: number) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(200, parsed) : fallback
+}
+
+function stringField(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function writeJson(res: ServerResponse, status: number, body: unknown) {

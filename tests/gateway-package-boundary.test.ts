@@ -6,6 +6,8 @@ import { join, relative } from 'node:path'
 const gatewayPackages = [
   'apps/gateway',
   'packages/gateway-channel',
+  'packages/gateway-provider-email',
+  'packages/gateway-provider-slack',
   'packages/gateway-provider-telegram',
   'packages/gateway-provider-webhook',
   'packages/gateway-testing',

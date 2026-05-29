@@ -80,6 +80,10 @@ const secretEnvKeys = [
   'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
   'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
   'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
+  'OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN',
+  'OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET',
+  'OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET',
+  'OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD',
   'OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET',
   'OPEN_COWORK_GATEWAY_PROVIDERS',
 ]
@@ -290,9 +294,10 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
     return parsed.providers || []
   }
 
+  const providers: GatewayRawConfig['providers'] = []
   const telegramToken = readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN)
   if (telegramToken) {
-    return [{
+    providers.push({
       id: 'telegram',
       kind: 'telegram',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID) || 'telegram',
@@ -304,12 +309,53 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
         mode: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_MODE) || 'polling',
         respondInGroups: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS) || 'commands_only',
       },
-    }]
+    })
+  }
+
+  const slackToken = readString(env.OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN)
+  if (slackToken) {
+    providers.push({
+      id: 'slack',
+      kind: 'slack',
+      channelBindingId: readString(env.OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID) || 'slack',
+      externalWorkspaceId: readNullableString(env.OPEN_COWORK_GATEWAY_SLACK_TEAM_ID),
+      credentials: {
+        botToken: slackToken,
+        signingSecret: readString(env.OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET),
+      },
+      settings: {
+        teamId: readString(env.OPEN_COWORK_GATEWAY_SLACK_TEAM_ID),
+        defaultChannelId: readString(env.OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID),
+        apiBaseUrl: readString(env.OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL),
+      },
+    })
+  }
+
+  const emailInboundSecret = readString(env.OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET)
+  if (emailInboundSecret) {
+    providers.push({
+      id: 'email',
+      kind: 'email',
+      channelBindingId: readString(env.OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID) || 'email',
+      externalWorkspaceId: readNullableString(env.OPEN_COWORK_GATEWAY_EMAIL_DOMAIN),
+      credentials: {
+        inboundSecret: emailInboundSecret,
+        smtpPassword: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD),
+      },
+      settings: {
+        from: readString(env.OPEN_COWORK_GATEWAY_EMAIL_FROM),
+        inboundAddress: readString(env.OPEN_COWORK_GATEWAY_EMAIL_ADDRESS),
+        smtpHost: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST),
+        smtpPort: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT),
+        smtpSecure: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE),
+        smtpUsername: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME),
+      },
+    })
   }
 
   const webhookDeliveryUrl = readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL)
   if (webhookDeliveryUrl) {
-    return [{
+    providers.push({
       id: 'webhook',
       kind: 'webhook',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID) || 'webhook',
@@ -319,10 +365,10 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       settings: {
         deliveryUrl: webhookDeliveryUrl,
       },
-    }]
+    })
   }
 
-  return []
+  return providers
 }
 
 function defaultFakeProvider(env: GatewayEnv): GatewayProviderConfig {
@@ -341,8 +387,18 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
   const channelBindingId = readString(raw.channelBindingId)
   if (!channelBindingId) throw new Error(`Gateway provider ${id} requires channelBindingId.`)
   const credentials = cleanStringRecord(raw.credentials)
+  const settings = cleanRecord(raw.settings)
   if (kind === 'webhook' && !credentials.sharedSecret) {
     throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated webhook ingress.`)
+  }
+  if (kind === 'slack') {
+    if (!credentials.botToken) throw new Error(`Gateway provider ${id} requires credential botToken.`)
+    if (!credentials.signingSecret) throw new Error(`Gateway provider ${id} requires credential signingSecret.`)
+  }
+  if (kind === 'email') {
+    if (!credentials.inboundSecret) throw new Error(`Gateway provider ${id} requires credential inboundSecret.`)
+    if (!readString(settings.from)) throw new Error(`Gateway provider ${id} requires setting from.`)
+    if (!readString(settings.smtpHost)) throw new Error(`Gateway provider ${id} requires setting smtpHost.`)
   }
   return {
     id,
@@ -352,16 +408,16 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
     externalWorkspaceId: readNullableString(raw.externalWorkspaceId),
     defaultAgent: readNullableString(raw.defaultAgent),
     credentials,
-    settings: cleanRecord(raw.settings),
+    settings,
   }
 }
 
 function readProviderKind(value: unknown): GatewayProviderKind {
   const kind = readString(value)
-  if (kind === 'fake' || kind === 'telegram' || kind === 'webhook') {
+  if (kind === 'fake' || kind === 'telegram' || kind === 'slack' || kind === 'email' || kind === 'webhook') {
     return kind
   }
-  if (kind === 'cli' || kind === 'slack' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
+  if (kind === 'cli' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
     throw new Error(`Gateway provider kind ${kind} is reserved for the roadmap but is not implemented by this gateway build yet.`)
   }
   throw new Error(`Unsupported gateway provider kind: ${kind || String(value)}`)

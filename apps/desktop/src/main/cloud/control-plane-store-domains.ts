@@ -67,6 +67,7 @@ export type ChannelControlPlaneStore = Pick<ControlPlaneStore,
   | 'resolveChannelInteraction'
   | 'resolveChannelInteractionWithCommand'
   | 'createChannelDelivery'
+  | 'listChannelDeliveries'
   | 'claimNextChannelDelivery'
   | 'ackChannelDelivery'
 >

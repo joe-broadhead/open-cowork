@@ -1,6 +1,7 @@
 export type ChannelProviderId =
   | "telegram"
   | "slack"
+  | "email"
   | "discord"
   | "whatsapp"
   | "signal"
@@ -11,6 +12,7 @@ export function isChannelProviderId(value: string): value is ChannelProviderId {
   return [
     "telegram",
     "slack",
+    "email",
     "discord",
     "whatsapp",
     "signal",

@@ -58,6 +58,7 @@ import type {
   IssuedApiTokenRecord,
   IssuedChannelInteractionRecord,
   IssueApiTokenInput,
+  ListChannelDeliveriesInput,
   MembershipRecord,
   OrgRecord,
   PrincipalMembershipRecord,
@@ -1993,6 +1994,29 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [input.orgId, input.deliveryId],
     )
     return channelDeliveryFromRow(row)
+  }
+
+  async listChannelDeliveries(input: ListChannelDeliveriesInput) {
+    const conditions = ['org_id = $1']
+    const values: unknown[] = [input.orgId]
+    if (input.status) {
+      values.push(input.status)
+      conditions.push(`status = $${values.length}`)
+    }
+    if (input.channelBindingId) {
+      values.push(input.channelBindingId)
+      conditions.push(`channel_binding_id = $${values.length}`)
+    }
+    values.push(Math.max(1, Math.min(200, input.limit || 50)))
+    const limitIndex = values.length
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_channel_deliveries
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT $${limitIndex}`,
+      values,
+    )
+    return result.rows.map(channelDeliveryFromRow)
   }
 
   async claimNextChannelDelivery(input: ClaimChannelDeliveryInput) {
