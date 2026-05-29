@@ -27,6 +27,8 @@ Use these invariants across every provider:
   provider or the stub billing provider unless you are operating managed SaaS.
 - Run `pnpm deploy:validate` before release and `pnpm deploy:smoke` against a
   live deployment after rollout.
+- For the GCP reference deployment, run `pnpm deploy:gcp:preflight` before
+  rollout and `pnpm deploy:gcp:smoke` after traffic is routed.
 
 The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
@@ -75,3 +77,13 @@ pnpm deploy:smoke
 
 The same smoke command works for local Compose, Kubernetes/Helm, and the cloud
 provider recipes once traffic is routed to the chosen endpoints.
+
+GCP adds a provider-specific infra smoke:
+
+```bash
+OPEN_COWORK_GCP_PROJECT=PROJECT \
+OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+pnpm deploy:gcp:smoke
+```

@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: open-cowork-cloud
+  namespace: open-cowork
+spec:
+  domains:
+    - cowork.example.com

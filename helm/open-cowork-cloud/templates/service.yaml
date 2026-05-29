@@ -6,6 +6,10 @@ metadata:
   labels:
     {{- include "open-cowork-cloud.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:

@@ -76,6 +76,13 @@ test('root lint script runs all release gate checks', () => {
   ])
 })
 
+test('root deployment scripts expose provider smoke gates', () => {
+  assert.equal(requireScript('deploy:validate'), 'node scripts/validate-deployment-configs.mjs')
+  assert.equal(requireScript('deploy:smoke'), 'node scripts/smoke-deployment.mjs')
+  assert.equal(requireScript('deploy:gcp:preflight'), 'node scripts/gcp-reference-preflight.mjs')
+  assert.equal(requireScript('deploy:gcp:smoke'), 'node scripts/gcp-reference-smoke.mjs')
+})
+
 test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:packages'), 'pnpm --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')

@@ -1,88 +1,256 @@
-# GCP Recipe
+# GCP Reference Deployment
 
-Use the same `open-cowork-cloud` and `open-cowork-gateway` images on GCP with
-these services:
+This recipe is the first provider deployment target for Open Cowork Cloud. It
+keeps GCP wiring in deploy assets and documentation; core cloud, Desktop sync,
+Gateway, BYOK, billing, and projection code must stay provider-neutral.
 
-| Role | Recommended service |
-| --- | --- |
-| `web` | Cloud Run or GKE Deployment |
-| `worker` | GKE Deployment for production; Cloud Run all-in-one only for demos |
-| `scheduler` | GKE Deployment or a small Cloud Run service if polling is acceptable |
-| Gateway | Cloud Run for webhook/polling gateways or a GKE Deployment |
-| Control plane | Cloud SQL for PostgreSQL |
-| Object store | Cloud Storage |
-| Secrets | Secret Manager for cloud keys, gateway tokens, and channel credentials |
-| Observability | Cloud Logging plus OTLP exporter or managed collector |
-| Backups | Cloud SQL PITR plus Cloud Storage bucket versioning/lifecycle |
+Use this directory for reusable reference assets only. Put real project ids,
+domains, image tags, and environment overlays in a private deployment repo or a
+local scratch directory. Store secret values in GCP Secret Manager or KMS, not
+in git.
 
-For scalable deployments, install the provider-neutral Helm chart on GKE and
-wire it to Cloud SQL, Cloud Storage, and Secret Manager through External
-Secrets or workload identity.
+## Recommended Topology
 
-Example Helm overrides:
+| Component | GCP service | Notes |
+| --- | --- | --- |
+| Cloud Web | GKE Deployment behind HTTPS Ingress | Stateless web/API/SSE surface. Cloud Run is acceptable for demo/all-in-one only. |
+| Cloud Worker | GKE Deployment | Long-running OpenCode execution and fenced command processing. |
+| Cloud Scheduler | GKE Deployment | Durable workflow claims; one replica is enough, multiple are safe. |
+| Gateway | GKE Deployment or Cloud Run | Separate deployable with separate channel/provider secrets. |
+| Control plane | Cloud SQL for PostgreSQL | Enable automated backups and Cloud SQL PITR. |
+| Object store | Cloud Storage | Artifacts, uploads, exports, checkpoints, snapshots, diagnostics bundles. |
+| Secrets | Secret Manager plus optional Cloud KMS | Cookie/internal secrets, envelope keys, OIDC secret, database URL, gateway tokens. |
+| Images | Artifact Registry | `open-cowork-cloud` and `open-cowork-gateway` images. |
+| Observability | Cloud Logging/Monitoring plus optional OTLP collector | JSON logs with request/session/run correlation. |
+
+Production deployments should use the GKE split-role profile in
+`gke/values.gke.yaml.example`. `cloud-run/all-in-one.service.yaml.example` is a
+focused pilot profile for demos and smoke testing; it is not the scale-out
+worker topology.
+
+## Required GCP APIs
+
+Enable these APIs before rollout:
+
+- `artifactregistry.googleapis.com`
+- `compute.googleapis.com`
+- `container.googleapis.com`
+- `iam.googleapis.com`
+- `iamcredentials.googleapis.com`
+- `logging.googleapis.com`
+- `monitoring.googleapis.com`
+- `secretmanager.googleapis.com`
+- `sqladmin.googleapis.com`
+- `storage.googleapis.com`
+
+Optional APIs:
+
+- `cloudkms.googleapis.com` only when your private deployment overlay uses
+  Cloud KMS directly.
+- `run.googleapis.com` only when you use the Cloud Run demo profile.
+
+Run a read-only preflight from the repo root:
 
 ```bash
-helm upgrade --install open-cowork-cloud ../../helm/open-cowork-cloud \
+OPEN_COWORK_GCP_REGION=us-central1 pnpm deploy:gcp:preflight
+```
+
+The preflight checks the active `gcloud` account/project, configured region,
+required APIs, and presence of the reference files. Set
+`OPEN_COWORK_GCP_REQUIRE_KMS=true` to also require Cloud KMS. Set
+`OPEN_COWORK_GCP_REQUIRE_CLOUD_RUN=true` or
+`OPEN_COWORK_GCP_CLOUD_RUN_SERVICE=SERVICE` to also require Cloud Run. It does
+not create or modify cloud resources.
+
+## Required IAM
+
+Use separate service accounts where possible:
+
+- `open-cowork-cloud-web`: reads config secrets, connects to Cloud SQL, reads
+  object metadata where needed.
+- `open-cowork-cloud-worker`: reads BYOK/envelope/config secrets, connects to
+  Cloud SQL, reads/writes Cloud Storage, executes OpenCode runtime work.
+- `open-cowork-cloud-scheduler`: connects to Cloud SQL and writes scheduler
+  audit/heartbeat state.
+- `open-cowork-gateway`: reads channel credentials, uses a scoped cloud API
+  token, writes Gateway logs/metrics.
+
+Minimum IAM bindings:
+
+- Cloud SQL Client for cloud roles that connect through Cloud SQL.
+- Secret Manager Secret Accessor for the exact secrets each role needs.
+- Storage Object Admin on the Open Cowork bucket for worker roles; narrower
+  reader/writer roles can be split later.
+- Logs Writer and Monitoring Metric Writer for runtime telemetry.
+- Workload Identity binding from Kubernetes service accounts to GCP service
+  accounts when using GKE.
+- The GKE reference values create a Kubernetes service account named
+  `open-cowork-cloud` annotated with
+  `iam.gke.io/gcp-service-account: open-cowork-cloud@PROJECT.iam.gserviceaccount.com`.
+  Bind that KSA to the matching GCP service account, or replace it in your
+  private overlay with role-specific KSAs/GSAs.
+
+## Secret Inventory
+
+Create these Secret Manager secrets, or map equivalent secret names through
+External Secrets:
+
+| Secret | Consumed as |
+| --- | --- |
+| `open-cowork-cloud-control-plane-url` | `OPEN_COWORK_CLOUD_CONTROL_PLANE_URL` |
+| `open-cowork-cloud-cookie-secret` | `OPEN_COWORK_CLOUD_COOKIE_SECRET` |
+| `open-cowork-cloud-internal-token` | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` |
+| `open-cowork-cloud-secret-key` | Target Secret Manager secret that holds the envelope key. |
+| `open-cowork-cloud-secret-key-ref` | `OPEN_COWORK_CLOUD_SECRET_KEY_REF`, with payload `gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest`. |
+| `open-cowork-cloud-oidc-client-secret` | `OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET` |
+| `open-cowork-gateway-service-token` | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` |
+| channel provider secrets | Gateway provider env vars such as Telegram/Slack/webhook secrets |
+
+For GCP-native secret refs, use:
+
+```text
+gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest
+```
+
+The app resolves that ref at runtime using the pod/service identity access
+token. BYOK provider keys are still stored as tenant-scoped encrypted records;
+they must not be injected as process env vars.
+
+## GKE Split-Role Rollout
+
+1. Create or select a GCP project and region.
+2. Create Artifact Registry repository and publish `open-cowork-cloud` and
+   `open-cowork-gateway` images.
+3. Create Cloud SQL PostgreSQL, enable backups/PITR, and create a database.
+4. Create a private Cloud Storage bucket with versioning/lifecycle policy.
+5. Create Secret Manager secrets listed above.
+6. Create or select a GKE cluster with Workload Identity and bind the
+   `open-cowork-cloud` Kubernetes service account to the configured GCP
+   service account.
+7. Create the namespace, then install External Secrets Operator if using
+   `gke/external-secret.example.yaml`. Apply the ExternalSecret before Helm so
+   the chart's non-optional `open-cowork-cloud-secrets` reference is ready:
+
+   ```bash
+   kubectl create namespace open-cowork --dry-run=client -o yaml | kubectl apply -f -
+   kubectl apply -f deploy/gcp/gke/external-secret.example.yaml
+   ```
+
+   If you are not using External Secrets Operator, create the
+   `open-cowork-cloud-secrets` Kubernetes secret manually from Secret Manager
+   values before installing the chart.
+8. Apply the managed certificate before Helm creates the Ingress that references
+   it:
+
+   ```bash
+   kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml
+   ```
+
+9. Copy `gke/values.gke.yaml.example` into your private deployment repo and
+   replace placeholders.
+10. Render and install:
+
+   ```bash
+   helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
+     --namespace open-cowork \
+     --create-namespace \
+     --values deploy/gcp/gke/values.gke.yaml.example
+   ```
+
+11. Route HTTPS traffic to the web Ingress and run deployment smoke:
+
+    ```bash
+    OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_SMOKE_SKIP_GATEWAY=true \
+    pnpm deploy:smoke
+    ```
+
+    The reference GKE values disable plain HTTP on the public Ingress and set
+    `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` so auth backoff and request
+    auditing use the client IP forwarded by the GCP load balancer. Keep those
+    settings enabled for public GCE Ingress deployments.
+
+12. Run the GCP infra smoke after Cloud Storage and Secret Manager are wired:
+
+    ```bash
+    OPEN_COWORK_GCP_PROJECT=PROJECT \
+    OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+    OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
+    OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+    pnpm deploy:gcp:smoke
+    ```
+
+For quick Helm overrides, keep the same provider-neutral keys used by the
+other recipes:
+
+```bash
+helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
   --set image.repository=REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud \
-  --set cloud.profile=full \
   --set cloud.auth.mode=oidc \
   --set cloud.auth.oidcIssuerUrl=https://accounts.google.com \
-  --set cloud.auth.oidcClientId=CLIENT_ID \
+  --set cloud.auth.oidcClientId=OIDC_CLIENT_ID \
+  --set cloud.publicUrl="$OPEN_COWORK_CLOUD_PUBLIC_URL" \
   --set cloud.checkpoints.enabled=true \
   --set cloud.objectStore.kind=gcs \
   --set cloud.objectStore.bucket=OPEN_COWORK_BUCKET \
   --set cloud.existingSecret=open-cowork-cloud-secrets
-```
 
-Install the gateway as a separate Cloud Run service or GKE Deployment. For
-Helm-based GKE:
-
-```bash
-helm upgrade --install open-cowork-gateway ../../helm/open-cowork-gateway \
-  --set image.repository=REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-gateway \
-  --set gateway.cloudBaseUrl=https://cowork.example.com \
+helm upgrade --install open-cowork-gateway ./helm/open-cowork-gateway \
+  --set gateway.cloudBaseUrl="$OPEN_COWORK_CLOUD_PUBLIC_URL" \
+  --set gateway.publicUrl="$OPEN_COWORK_GATEWAY_PUBLIC_URL" \
   --set gateway.existingSecret=open-cowork-gateway-secrets
 ```
 
-The gateway secret should provide `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` plus
-provider credentials such as `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`.
-Webhook-mode providers need a public HTTPS gateway URL and ingress or Cloud Run
-service URL; polling providers can stay private with egress to the channel API.
+Store gateway service tokens and provider webhook signing secrets in Secret
+Manager/External Secrets. Keep billing disabled/stubbed for OSS self-host and
+only enable the managed billing adapter for hosted SaaS.
 
-When not using External Secrets to inject `OPEN_COWORK_CLOUD_SECRET_KEY`
-directly, set `OPEN_COWORK_CLOUD_SECRET_KEY_REF` to a Secret Manager URI such
-as `gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-key/versions/latest`.
+## Cloud Run Demo Profile
 
-Cloud Run all-in-one is useful for demos and focused-agent pilots, but
-production worker execution should run on GKE so OpenCode processes have stable
-CPU and lifetime.
+`cloud-run/all-in-one.service.yaml.example` is useful for a focused pilot or a
+smoke endpoint before the GKE worker topology is available. It runs web,
+worker, and scheduler in one process, so it is not a horizontally scalable
+production worker model.
 
-## Production Notes
+Deploy the demo only with explicit OIDC/cookie/secret config and a managed
+Postgres/Object Store backend:
 
-- Configure `OPEN_COWORK_CLOUD_PUBLIC_URL` and
-  `OPEN_COWORK_GATEWAY_PUBLIC_URL` with HTTPS load balancer or Cloud Run URLs.
-- Store cookie secret, internal token, database URL, BYOK envelope key,
-  gateway service token, and provider webhook signing secrets in Secret
-  Manager.
-- Keep cloud billing disabled/stubbed for OSS self-host. Managed SaaS should
-  configure billing through the billing adapter and signed billing webhooks.
-- Use Workload Identity or External Secrets rather than static object-store
-  credentials where possible.
-- Run Cloud Web readiness gates before rollout:
+```bash
+gcloud run services replace deploy/gcp/cloud-run/all-in-one.service.yaml.example \
+  --region us-central1
+```
 
-  ```bash
-  pnpm test:cloud-web
-  ```
+Do not use `auth.mode=none` for public Cloud Run URLs.
 
-- Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
-  URLs. The smoke must prove the browser workbench loads at `GET /`, the
-  bootstrap JSON and `Content-Security-Policy` are present, `/api/config` and
-  `/api/workspace` are reachable through the public origin, and gateway
-  `/health` plus `/ready` pass.
-- For branded downstream deployments, smoke the GCP URL with the intended
-  `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` or Helm `cloud.branding` values and
-  confirm the product name, logo URL, theme tokens, and desktop/gateway
-  connection labels appear in the browser bootstrap.
+## Migrations And Rollback
+
+Cloud control-plane migrations run idempotently on app startup under Postgres
+advisory locks. Before a production rollout:
+
+- apply to a staging clone first,
+- run smoke checks against an already-populated database,
+- keep the previous image tag available for web/worker/scheduler rollback,
+- do not roll back database data manually unless a tested recovery plan says so.
+
+Rollback order:
+
+1. Scale worker and scheduler down to zero if command execution is unhealthy.
+2. Roll web, worker, and scheduler deployments back to the previous image tag.
+3. Verify `/healthz`, `GET /api/config`, and session list/projection reads.
+4. Start one worker replica and run a smoke prompt.
+5. Start scheduler and remaining workers.
+
+## Validation Checklist
+
+- `pnpm deploy:validate`
+- `OPEN_COWORK_GCP_REGION=... pnpm deploy:gcp:preflight`
+- `OPEN_COWORK_SMOKE_CLOUD_URL=https://... pnpm deploy:smoke -- --skip-gateway`
+- `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... pnpm deploy:gcp:smoke`
+- Cloud logs contain no raw database URLs, BYOK keys, API tokens, OAuth tokens,
+  channel credentials, or signed object URLs.
+
+## Provider Boundary
 
 GCP configuration is adapter wiring only. Do not add GCP branches to cloud
-sessions, gateway rendering, OpenCode runtime startup, or BYOK core code.
+sessions, gateway rendering, OpenCode runtime startup, projection reducers,
+billing, Desktop sync, Gateway channel rendering, or BYOK core code.

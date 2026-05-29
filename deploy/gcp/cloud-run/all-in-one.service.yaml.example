@@ -1,0 +1,94 @@
+# Cloud Run all-in-one demo profile. This is suitable for a focused pilot or a
+# quick HTTPS smoke target. Production split-role deployments should use GKE and
+# deploy web, worker, and scheduler separately. Replace PROJECT, PROJECT_NUMBER,
+# REGION, INSTANCE, IMAGE_TAG, OIDC_CLIENT_ID, domains, and bucket names in a
+# private deployment overlay.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: open-cowork-cloud
+  annotations:
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/cloudsql-instances: PROJECT:REGION:INSTANCE
+        run.googleapis.com/secrets: >-
+          open-cowork-cloud-control-plane-url:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-control-plane-url,
+          open-cowork-cloud-cookie-secret:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-cookie-secret,
+          open-cowork-cloud-internal-token:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-internal-token,
+          open-cowork-cloud-secret-key-ref:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-secret-key-ref,
+          open-cowork-cloud-oidc-client-secret:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-oidc-client-secret
+    spec:
+      serviceAccountName: open-cowork-cloud-run@PROJECT.iam.gserviceaccount.com
+      containerConcurrency: 20
+      timeoutSeconds: 3600
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud:IMAGE_TAG
+          ports:
+            - name: http1
+              containerPort: 8787
+          env:
+            - name: OPEN_COWORK_CLOUD_ROLE
+              value: all-in-one
+            - name: OPEN_COWORK_CLOUD_HOST
+              value: 0.0.0.0
+            - name: OPEN_COWORK_CLOUD_PORT
+              value: "8787"
+            - name: OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS
+              value: "true"
+            - name: OPEN_COWORK_CLOUD_AUTH_MODE
+              value: oidc
+            - name: OPEN_COWORK_CLOUD_OIDC_ISSUER_URL
+              value: https://accounts.google.com
+            - name: OPEN_COWORK_CLOUD_OIDC_CLIENT_ID
+              value: OIDC_CLIENT_ID
+            - name: OPEN_COWORK_CLOUD_PUBLIC_URL
+              value: https://cowork.example.com
+            - name: OPEN_COWORK_CLOUD_COOKIE_SECURE
+              value: "true"
+            - name: OPEN_COWORK_CLOUD_LOG_FORMAT
+              value: json
+            - name: OPEN_COWORK_CLOUD_SERVICE_NAME
+              value: open-cowork-cloud
+            - name: OPEN_COWORK_CLOUD_OBJECT_STORE_KIND
+              value: gcs
+            - name: OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET
+              value: OPEN_COWORK_GCS_BUCKET
+            - name: OPEN_COWORK_CLOUD_OBJECT_STORE_PREFIX
+              value: cloud-run-demo
+            - name: OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED
+              value: "true"
+            - name: OPEN_COWORK_CLOUD_CONTROL_PLANE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork-cloud-control-plane-url
+                  key: latest
+            - name: OPEN_COWORK_CLOUD_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork-cloud-cookie-secret
+                  key: latest
+            - name: OPEN_COWORK_CLOUD_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork-cloud-internal-token
+                  key: latest
+            - name: OPEN_COWORK_CLOUD_SECRET_KEY_REF
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork-cloud-secret-key-ref
+                  key: latest
+            - name: OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: open-cowork-cloud-oidc-client-secret
+                  key: latest
+          resources:
+            limits:
+              cpu: "4"
+              memory: 8Gi
