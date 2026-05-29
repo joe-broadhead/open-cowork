@@ -206,6 +206,50 @@ test('cloud deployment config validates role, profile, storage, and runtime poli
   assert.doesNotThrow(() => validateResolvedConfig(config, 'cloud config'))
 })
 
+test('cloud public branding validates and rejects unsafe URLs or unknown keys', () => {
+  const config = cloneConfig()
+  config.cloud = {
+    publicBranding: {
+      productName: 'Acme Cowork',
+      shortName: 'AC',
+      logoUrl: 'https://assets.acme.example/cowork/logo.png',
+      supportUrl: 'mailto:support@acme.example',
+      privacyUrl: 'https://legal.acme.example/privacy',
+      securityUrl: 'https://security.acme.example/cowork',
+      legalUrl: 'https://legal.acme.example/terms',
+      theme: {
+        background: '#f7f8f5',
+        surface: '#ffffff',
+        accent: '#0f6b4b',
+      },
+      dashboard: {
+        title: 'Acme workspace',
+        subtitle: 'Manage Acme cloud clients.',
+      },
+      managedOrgConnectionLabels: {
+        desktopToken: 'Acme Desktop token',
+        gatewayToken: 'Acme Gateway token',
+        apiToken: 'Acme API token',
+        cloudUrl: 'Acme Cloud URL',
+      },
+    },
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'cloud public branding config'))
+
+  config.cloud.publicBranding.logoUrl = 'http://assets.acme.example/logo.png'
+  assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding\.logoUrl/)
+
+  config.cloud.publicBranding.logoUrl = 'https://assets.acme.example/cowork/logo.png'
+  config.cloud.publicBranding.html = '<strong>not allowed</strong>'
+  assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding/)
+})
+
+test('Acme downstream example validates against the public schema', () => {
+  const config = JSON.parse(readFileSync('examples/downstream/acme/open-cowork.config.json', 'utf-8'))
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'examples/downstream/acme/open-cowork.config.json'))
+})
+
 test('cloud deployment config rejects machine runtime config and unknown cloud keys', () => {
   const config = cloneConfig()
   config.cloud = {

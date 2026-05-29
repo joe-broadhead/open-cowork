@@ -1,0 +1,45 @@
+image:
+  repository: registry.acme.example/open-cowork-gateway
+  tag: stable
+
+gateway:
+  mode: self-host
+  cloudBaseUrl: https://cowork.acme.example
+  serviceToken: env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN
+  host: 0.0.0.0
+  port: 8790
+  publicUrl: https://cowork-gateway.acme.example
+  adminToken: env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN
+  branding:
+    productName: Acme Cowork
+    shortName: AC
+    logoUrl: https://assets.acme.example/cowork/logo.png
+    supportUrl: https://support.acme.example/cowork
+    privacyUrl: https://legal.acme.example/privacy
+    securityUrl: https://security.acme.example/cowork
+    legalUrl: https://legal.acme.example/terms
+    managedOrgConnectionLabels:
+      desktopToken: Acme Desktop token
+      gatewayToken: Acme Gateway token
+      apiToken: Acme API token
+      cloudUrl: Acme Cloud URL
+  metrics:
+    enabled: false
+  diagnostics:
+    enabled: false
+  telegram:
+    botToken: env:OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN
+    webhookSecret: env:OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET
+    channelBindingId: acme-telegram
+    mode: webhook
+  webhook:
+    deliveryUrl: ""
+    sharedSecret: ""
+
+ingress:
+  enabled: true
+  hosts:
+    - host: cowork-gateway.acme.example
+      paths:
+        - path: /
+          pathType: Prefix

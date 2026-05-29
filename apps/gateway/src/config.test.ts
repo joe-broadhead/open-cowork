@@ -84,6 +84,65 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
   assert.equal(providers[0]?.settings.workspacePath, '/Users/[redacted]')
 })
 
+test('gateway config resolves public branding from config and env JSON', () => {
+  const config = resolveGatewayConfig({
+    branding: {
+      productName: 'Config Cowork',
+      shortName: 'CC',
+      supportUrl: 'https://support.config.example/cowork',
+    },
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON: JSON.stringify({
+      productName: 'Acme Cowork',
+      managedOrgConnectionLabels: {
+        gatewayToken: 'Acme Gateway token',
+      },
+    }),
+    OPEN_COWORK_GATEWAY_BRAND_SHORT_NAME: 'AC',
+  })
+
+  assert.equal(config.branding.productName, 'Acme Cowork')
+  assert.equal(config.branding.shortName, 'AC')
+  assert.equal(config.branding.supportUrl, 'https://support.config.example/cowork')
+  assert.equal(config.branding.managedOrgConnectionLabels?.desktopToken, 'Desktop token')
+  assert.equal(config.branding.managedOrgConnectionLabels?.gatewayToken, 'Acme Gateway token')
+})
+
+test('gateway config ignores unsafe public branding URLs', () => {
+  const config = resolveGatewayConfig({
+    branding: {
+      productName: 'Config Cowork',
+      supportUrl: 'https://support.config.example/cowork',
+    },
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON: JSON.stringify({
+      logoUrl: 'http://assets.example.test/logo.png',
+      supportUrl: 'javascript:alert(1)',
+      privacyUrl: 'mailto:privacy@example.test',
+    }),
+  })
+
+  assert.equal(config.branding.logoUrl, undefined)
+  assert.equal(config.branding.supportUrl, 'https://support.config.example/cowork')
+  assert.equal(config.branding.privacyUrl, '')
+})
+
 test('gateway env redaction catches token and secret names', () => {
   const redacted = redactGatewayEnv({
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'token-1234567890',

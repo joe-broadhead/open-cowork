@@ -17,6 +17,7 @@ import {
   resolveCloudBillingConfig,
   resolveCloudInternalToken,
   resolveCloudOidcClientSecret,
+  resolveCloudPublicBranding,
   shouldRunCloudScheduler,
   shouldRunCloudWeb,
   shouldRunCloudWorker,
@@ -158,6 +159,59 @@ test('cloud bootstrap parses env options and role helpers', () => {
   assert.equal(shouldRunCloudScheduler('scheduler'), true)
   assert.equal(shouldRunCloudScheduler('web'), false)
   assert.equal(shouldRunCloudScheduler('worker'), false)
+})
+
+test('cloud public branding resolves from config and env JSON', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      publicBranding: {
+        ...DEFAULT_CONFIG.cloud.publicBranding,
+        productName: 'Config Cowork',
+        supportUrl: 'https://support.config.example/cowork',
+      },
+    },
+  }
+  const branding = resolveCloudPublicBranding(config, {
+    OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
+      productName: 'Acme Cowork',
+      managedOrgConnectionLabels: {
+        desktopToken: 'Acme Desktop token',
+      },
+    }),
+    OPEN_COWORK_CLOUD_BRAND_SHORT_NAME: 'AC',
+  })
+
+  assert.equal(branding.productName, 'Acme Cowork')
+  assert.equal(branding.shortName, 'AC')
+  assert.equal(branding.supportUrl, 'https://support.config.example/cowork')
+  assert.equal(branding.managedOrgConnectionLabels?.desktopToken, 'Acme Desktop token')
+  assert.equal(branding.managedOrgConnectionLabels?.gatewayToken, 'Gateway token')
+})
+
+test('cloud public branding ignores unsafe env URLs', () => {
+  const config = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      publicBranding: {
+        ...DEFAULT_CONFIG.cloud.publicBranding,
+        supportUrl: 'https://support.config.example/cowork',
+      },
+    },
+  }
+  const branding = resolveCloudPublicBranding(config, {
+    OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
+      logoUrl: 'http://assets.example.test/logo.png',
+      supportUrl: 'javascript:alert(1)',
+      privacyUrl: 'mailto:privacy@example.test',
+    }),
+  })
+
+  assert.equal(branding.logoUrl, undefined)
+  assert.equal(branding.supportUrl, 'https://support.config.example/cowork')
+  assert.equal(branding.privacyUrl, DEFAULT_CONFIG.cloud.publicBranding.privacyUrl)
 })
 
 test('cloud control plane URL resolves from env and config refs', () => {

@@ -7,9 +7,12 @@
   "main": "dist/render.js",
   "types": "dist/render.d.ts",
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
+    "build": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
+    "typecheck": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
     "test": "node --no-warnings --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@open-cowork/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.12.0",

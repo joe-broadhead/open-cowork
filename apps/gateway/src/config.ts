@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs'
 
 import type { ChannelProviderId } from '@open-cowork/gateway-channel'
+import type { PublicBrandingConfig } from '@open-cowork/shared'
 
 export type GatewayMode = 'self-host' | 'managed'
 export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 export type GatewayProviderKind = ChannelProviderId | 'fake'
 
 export type GatewayConfig = {
+  branding: PublicBrandingConfig
   cloud: {
     baseUrl: string
     serviceToken: string
@@ -43,6 +45,7 @@ export type GatewayProviderConfig = {
 }
 
 export type GatewayRawConfig = Partial<{
+  branding: Partial<PublicBrandingConfig>
   cloud: Partial<GatewayConfig['cloud']>
   server: Partial<GatewayConfig['server']>
   mode: GatewayMode
@@ -58,6 +61,20 @@ export type GatewayEnv = Record<string, string | undefined>
 
 const defaultHost = '127.0.0.1'
 const defaultPort = 8787
+const defaultGatewayBranding: PublicBrandingConfig = {
+  productName: 'Open Cowork Cloud',
+  shortName: 'OC',
+  supportUrl: '',
+  privacyUrl: '',
+  securityUrl: '',
+  legalUrl: '',
+  managedOrgConnectionLabels: {
+    desktopToken: 'Desktop token',
+    gatewayToken: 'Gateway token',
+    apiToken: 'API token',
+    cloudUrl: 'Cloud URL',
+  },
+}
 const secretEnvKeys = [
   'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
   'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
@@ -81,6 +98,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL or cloud.baseUrl is required.')
   if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN or cloud.serviceToken is required.')
   const config: GatewayConfig = {
+    branding: resolveGatewayBranding(raw.branding, env),
     cloud: {
       baseUrl: normalizeBaseUrl(cloudBaseUrl, allowInsecureHttp),
       serviceToken,
@@ -156,6 +174,97 @@ function parseConfigJson(value: string, source: string): GatewayRawConfig {
     throw new Error(`Invalid gateway config JSON from ${source}: ${error instanceof Error ? error.message : String(error)}`, {
       cause: error,
     })
+  }
+}
+
+function parseBrandingJson(env: GatewayEnv) {
+  const json = readString(env.OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON)
+  if (!json) return {}
+  try {
+    const parsed = JSON.parse(json)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Partial<PublicBrandingConfig>
+      : {}
+  } catch (error) {
+    throw new Error(`Invalid OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
+  }
+}
+
+function cleanBrandingObject(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => typeof entry === 'string' && entry.trim())
+    .map(([key, entry]) => [key, String(entry).trim()]))
+}
+
+function safeBrandingUrl(value: unknown, allowMailto = false) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return undefined
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'https:') return url.toString()
+    if (allowMailto && url.protocol === 'mailto:') return url.toString()
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function cleanBrandingEntry(entry: Partial<PublicBrandingConfig>) {
+  const cleaned = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined && value !== null && value !== '')) as Partial<PublicBrandingConfig> & Record<string, unknown>
+  const urls: Array<[keyof PublicBrandingConfig, boolean]> = [
+    ['logoUrl', false],
+    ['supportUrl', true],
+    ['privacyUrl', false],
+    ['securityUrl', false],
+    ['legalUrl', false],
+  ]
+  for (const [key, allowMailto] of urls) {
+    if (!(key in cleaned)) continue
+    const safeUrl = safeBrandingUrl(cleaned[key], allowMailto)
+    if (safeUrl) cleaned[key] = safeUrl
+    else delete cleaned[key]
+  }
+  return cleaned
+}
+
+function resolveGatewayBranding(raw: GatewayRawConfig['branding'], env: GatewayEnv): PublicBrandingConfig {
+  const fromJson = parseBrandingJson(env)
+  const fromEnv: Partial<PublicBrandingConfig> = {
+    productName: readString(env.OPEN_COWORK_GATEWAY_BRAND_NAME) || undefined,
+    shortName: readString(env.OPEN_COWORK_GATEWAY_BRAND_SHORT_NAME) || undefined,
+    logoUrl: readString(env.OPEN_COWORK_GATEWAY_BRAND_LOGO_URL) || undefined,
+    supportUrl: readString(env.OPEN_COWORK_GATEWAY_SUPPORT_URL) || undefined,
+    privacyUrl: readString(env.OPEN_COWORK_GATEWAY_PRIVACY_URL) || undefined,
+    securityUrl: readString(env.OPEN_COWORK_GATEWAY_SECURITY_URL) || undefined,
+    legalUrl: readString(env.OPEN_COWORK_GATEWAY_LEGAL_URL) || undefined,
+  }
+  const merged = [defaultGatewayBranding, raw, fromJson, fromEnv].reduce<PublicBrandingConfig>((current, entry) => {
+    if (!entry) return current
+    const cleanEntry = cleanBrandingEntry(entry)
+    return {
+      ...current,
+      ...cleanEntry,
+      theme: {
+        ...(current.theme || {}),
+        ...cleanBrandingObject(cleanEntry.theme),
+      },
+      dashboard: {
+        ...(current.dashboard || {}),
+        ...cleanBrandingObject(cleanEntry.dashboard),
+      },
+      managedOrgConnectionLabels: {
+        ...(current.managedOrgConnectionLabels || {}),
+        ...cleanBrandingObject(cleanEntry.managedOrgConnectionLabels),
+      },
+    }
+  }, { ...defaultGatewayBranding })
+  return {
+    ...merged,
+    productName: merged.productName?.trim() || defaultGatewayBranding.productName,
+    shortName: merged.shortName?.trim() || defaultGatewayBranding.shortName,
   }
 }
 

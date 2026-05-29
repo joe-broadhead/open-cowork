@@ -89,6 +89,93 @@ export interface BrandingConfig {
   home?: BrandingHomeConfig
 }
 
+export interface PublicBrandingThemeTokens {
+  background?: string
+  surface?: string
+  mutedSurface?: string
+  border?: string
+  text?: string
+  mutedText?: string
+  accent?: string
+  accentStrong?: string
+  focus?: string
+  warn?: string
+  danger?: string
+  ok?: string
+}
+
+export interface PublicDashboardCopyConfig {
+  title?: string
+  subtitle?: string
+  signInTitle?: string
+  signInBody?: string
+  byokDescription?: string
+  connectionsDescription?: string
+  gatewayDescription?: string
+  billingDescription?: string
+  usageDescription?: string
+}
+
+export interface ManagedOrgConnectionLabels {
+  desktopToken?: string
+  gatewayToken?: string
+  apiToken?: string
+  cloudUrl?: string
+}
+
+export interface PublicBrandingConfig {
+  productName: string
+  shortName?: string
+  logoUrl?: string
+  supportUrl?: string
+  privacyUrl?: string
+  securityUrl?: string
+  legalUrl?: string
+  theme?: PublicBrandingThemeTokens
+  dashboard?: PublicDashboardCopyConfig
+  managedOrgConnectionLabels?: ManagedOrgConnectionLabels
+}
+
+export const DEFAULT_PUBLIC_BRANDING: PublicBrandingConfig = {
+  productName: 'Open Cowork Cloud',
+  shortName: 'OC',
+  supportUrl: '',
+  privacyUrl: '',
+  securityUrl: '',
+  legalUrl: '',
+  theme: {
+    background: '#f5f6f3',
+    surface: '#ffffff',
+    mutedSurface: '#ecefed',
+    border: '#d8ddd7',
+    text: '#18211c',
+    mutedText: '#66736b',
+    accent: '#2d6b56',
+    accentStrong: '#1f503f',
+    focus: 'rgba(45, 107, 86, 0.28)',
+    warn: '#8a5a14',
+    danger: '#9d3630',
+    ok: '#1f6b46',
+  },
+  dashboard: {
+    title: 'Workspace',
+    subtitle: 'Cloud control plane state for this signed-in org.',
+    signInTitle: 'Sign in',
+    signInBody: 'Use the configured cloud auth provider to open your org dashboard.',
+    byokDescription: 'Provider keys are write-only. The dashboard stores status metadata only.',
+    connectionsDescription: 'Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.',
+    gatewayDescription: 'Headless agents route chat channels into cloud sessions.',
+    billingDescription: 'Manage hosted plan state and entitlements for this org.',
+    usageDescription: 'Recent metering events for this org.',
+  },
+  managedOrgConnectionLabels: {
+    desktopToken: 'Desktop token',
+    gatewayToken: 'Gateway token',
+    apiToken: 'API token',
+    cloudUrl: 'Cloud URL',
+  },
+}
+
 export interface AgentStarterTemplate {
   id: string
   label: string

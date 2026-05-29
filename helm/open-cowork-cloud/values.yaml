@@ -38,6 +38,31 @@ cloud:
   internalTokenRef: ""
   cookieSecure: true
   publicUrl: ""
+  branding:
+    productName: Open Cowork Cloud
+    shortName: OC
+    logoUrl: ""
+    supportUrl: ""
+    privacyUrl: ""
+    securityUrl: ""
+    legalUrl: ""
+    theme:
+      background: "#f5f6f3"
+      surface: "#ffffff"
+      mutedSurface: "#ecefed"
+      border: "#d8ddd7"
+      text: "#18211c"
+      mutedText: "#66736b"
+      accent: "#2d6b56"
+      accentStrong: "#1f503f"
+    dashboard:
+      title: Workspace
+      subtitle: Cloud control plane state for this signed-in org.
+    managedOrgConnectionLabels:
+      desktopToken: Desktop token
+      gatewayToken: Gateway token
+      apiToken: API token
+      cloudUrl: Cloud URL
   oidcClientSecret: ""
   existingSecret: ""
   observability:

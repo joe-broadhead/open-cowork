@@ -29,12 +29,26 @@ Downstream operators should choose the product surface intentionally:
   tokens and channel bindings but does not spawn OpenCode or own a second
   control plane.
 
+Open Cowork also supports two commercial/operational packaging modes without
+changing the OSS boundary:
+
+- **Internal enterprise distribution** ships a branded desktop config, pins
+  `cloudDesktop.preconfiguredConnections` to the company's cloud, runs cloud
+  behind company OIDC, and deploys gateway inside the company's infrastructure.
+- **Managed BYOK SaaS distribution** ships the same open desktop/cloud/gateway
+  code while the operator hosts cloud, billing, BYOK, object storage, and
+  managed channel bindings for paying orgs.
+
 Branding, providers, skills, MCPs, agents, cloud connections, gateway
 credentials, and telemetry are configurable, but the workspace contract is not:
 no build should implicitly upload local threads, local project files, provider
 keys, local stdio MCP commands, or machine runtime config into cloud. Use
 cloud-safe remote MCPs, explicit artifact upload, or admin-managed profiles
 when a capability must be available in cloud.
+
+For a complete Acme-style deployment that covers desktop config, cloud Helm
+values, gateway Helm values, OIDC, branding, and profile/tool/agent allowlists,
+see `examples/downstream/acme/`.
 
 ## Mental model
 

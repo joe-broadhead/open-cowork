@@ -6,6 +6,7 @@ import type {
   CredentialField,
   ModelInfoSnapshot,
   ProviderModelDescriptor,
+  PublicBrandingConfig,
   UpdateReleaseSourceAuthKind,
   UpdateReleaseSourceKind,
 } from '@open-cowork/shared'
@@ -364,6 +365,7 @@ export type CloudConfig = {
   role: CloudRole
   profiles: Record<string, CloudProfileConfig>
   defaultProfile: string
+  publicBranding: PublicBrandingConfig
   auth: CloudAuthConfig
   storage: CloudStorageConfig
   runtime: CloudRuntimePolicyConfig
@@ -542,6 +544,46 @@ const DEFAULT_CLOUD_BILLING: CloudBillingConfig = {
   },
 }
 
+const DEFAULT_CLOUD_PUBLIC_BRANDING: PublicBrandingConfig = {
+  productName: 'Open Cowork Cloud',
+  shortName: 'OC',
+  supportUrl: '',
+  privacyUrl: '',
+  securityUrl: '',
+  legalUrl: '',
+  theme: {
+    background: '#f5f6f3',
+    surface: '#ffffff',
+    mutedSurface: '#ecefed',
+    border: '#d8ddd7',
+    text: '#18211c',
+    mutedText: '#66736b',
+    accent: '#2d6b56',
+    accentStrong: '#1f503f',
+    focus: 'rgba(45, 107, 86, 0.28)',
+    warn: '#8a5a14',
+    danger: '#9d3630',
+    ok: '#1f6b46',
+  },
+  dashboard: {
+    title: 'Workspace',
+    subtitle: 'Cloud control plane state for this signed-in org.',
+    signInTitle: 'Sign in',
+    signInBody: 'Use the configured cloud auth provider to open your org dashboard.',
+    byokDescription: 'Provider keys are write-only. The dashboard stores status metadata only.',
+    connectionsDescription: 'Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.',
+    gatewayDescription: 'Headless agents route chat channels into cloud sessions.',
+    billingDescription: 'Manage hosted plan state and entitlements for this org.',
+    usageDescription: 'Recent metering events for this org.',
+  },
+  managedOrgConnectionLabels: {
+    desktopToken: 'Desktop token',
+    gatewayToken: 'Gateway token',
+    apiToken: 'API token',
+    cloudUrl: 'Cloud URL',
+  },
+}
+
 const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
   enabled: true,
   allowUserAddedConnections: true,
@@ -599,6 +641,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
   cloud: {
     role: 'all-in-one',
     defaultProfile: 'full',
+    publicBranding: DEFAULT_CLOUD_PUBLIC_BRANDING,
     auth: {
       mode: 'none',
       allowSelfServiceSignup: true,

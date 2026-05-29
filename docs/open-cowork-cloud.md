@@ -184,6 +184,13 @@ Self-hosted deployments can run with the stub/no billing adapter. In that mode
 the dashboard keeps the billing panel non-blocking while BYOK, desktop token,
 gateway token, and usage surfaces remain available.
 
+Downstream deployments can brand the public cloud surface through
+`cloud.publicBranding` or the Helm `cloud.branding` block. The same structure
+controls the dashboard product name, logo URL, theme tokens, support/privacy/
+security/legal links, dashboard copy, and managed-org connection labels. The
+cloud API also returns this metadata from `GET /api/config` so desktop and
+gateway clients can show the same deployer identity.
+
 ## Generic Docker: Cloud + Gateway
 
 Use the combined self-host reference when validating the browser dashboard,
@@ -353,6 +360,10 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF` | Optional env secret ref for the cookie signing key when it is managed outside chart values. |
 | `OPEN_COWORK_CLOUD_COOKIE_SECURE` | Defaults to `true`; local HTTP compose references set it to `false`. |
 | `OPEN_COWORK_CLOUD_PUBLIC_URL` | Public base URL used for OIDC callback redirect URIs behind proxies or ingress. |
+| `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` | JSON object matching `cloud.publicBranding`; Helm renders this from `cloud.branding`. |
+| `OPEN_COWORK_CLOUD_BRAND_NAME` / `OPEN_COWORK_CLOUD_BRAND_SHORT_NAME` | Simple env overrides for the dashboard product name and short mark. |
+| `OPEN_COWORK_CLOUD_BRAND_LOGO_URL` | HTTPS logo URL for the browser dashboard. |
+| `OPEN_COWORK_CLOUD_SUPPORT_URL` / `OPEN_COWORK_CLOUD_PRIVACY_URL` / `OPEN_COWORK_CLOUD_SECURITY_URL` / `OPEN_COWORK_CLOUD_LEGAL_URL` | Optional public footer links. |
 | `OPEN_COWORK_CLOUD_AUTH_MODE` | `none` for loopback/local demos, `header` for a trusted identity proxy, or `oidc` for public browser/JWT auth. |
 | `OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH` | Explicit local/demo override that permits `auth.mode=none` on a non-loopback bind. Do not use for public deployments. |
 | `OPEN_COWORK_CLOUD_OIDC_ISSUER_URL` | HTTPS OIDC issuer used for discovery and JWT verification. |
@@ -384,6 +395,9 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public gateway URL for channel webhook registration. |
 | `OPEN_COWORK_GATEWAY_MODE` | `self-host` or `managed`; affects diagnostics and deployment labeling. |
+| `OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON` | JSON object matching the public branding contract; Helm renders this from `gateway.branding`. |
+| `OPEN_COWORK_GATEWAY_BRAND_NAME` / `OPEN_COWORK_GATEWAY_BRAND_SHORT_NAME` | Simple env overrides for gateway health/readiness and setup metadata. |
+| `OPEN_COWORK_GATEWAY_SUPPORT_URL` / `OPEN_COWORK_GATEWAY_PRIVACY_URL` / `OPEN_COWORK_GATEWAY_SECURITY_URL` / `OPEN_COWORK_GATEWAY_LEGAL_URL` | Optional public links returned by gateway health/readiness metadata. |
 | `OPEN_COWORK_GATEWAY_METRICS_ENABLED` | Enables `/metrics`; public binds require `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`. |
 | `OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED` | Enables `/diagnostics`; public binds require `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`. |
 | `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER` | Enables the fake local/demo provider when no real provider is configured. Do not expose it publicly. |

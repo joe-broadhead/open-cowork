@@ -91,6 +91,8 @@ async function handleRequest(
       ok: true,
       status: 'ok',
       mode: config.mode,
+      branding: config.branding,
+      cloudBaseUrl: config.cloud.baseUrl,
     })
     return
   }
@@ -100,6 +102,8 @@ async function handleRequest(
     writeJson(res, ready ? 200 : 503, {
       ok: ready,
       status: ready ? 'ready' : 'not_ready',
+      branding: config.branding,
+      cloudBaseUrl: config.cloud.baseUrl,
       providers: providerStatus(runtime),
     })
     return

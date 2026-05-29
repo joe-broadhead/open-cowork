@@ -1,9 +1,138 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
+import type { PublicBrandingConfig } from '@open-cowork/shared'
 
 export type WebsiteBootstrapPolicy = {
   role: string
   profileName: string
   features: Record<string, boolean>
+  publicBranding?: PublicBrandingConfig | null
+}
+
+const DEFAULT_WEBSITE_PUBLIC_BRANDING: PublicBrandingConfig = {
+  productName: 'Open Cowork Cloud',
+  shortName: 'OC',
+  supportUrl: '',
+  privacyUrl: '',
+  securityUrl: '',
+  legalUrl: '',
+  theme: {
+    background: '#f5f6f3',
+    surface: '#ffffff',
+    mutedSurface: '#ecefed',
+    border: '#d8ddd7',
+    text: '#18211c',
+    mutedText: '#66736b',
+    accent: '#2d6b56',
+    accentStrong: '#1f503f',
+    focus: 'rgba(45, 107, 86, 0.28)',
+    warn: '#8a5a14',
+    danger: '#9d3630',
+    ok: '#1f6b46',
+  },
+  dashboard: {
+    title: 'Workspace',
+    subtitle: 'Cloud control plane state for this signed-in org.',
+    signInTitle: 'Sign in',
+    signInBody: 'Use the configured cloud auth provider to open your org dashboard.',
+    byokDescription: 'Provider keys are write-only. The dashboard stores status metadata only.',
+    connectionsDescription: 'Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.',
+    gatewayDescription: 'Headless agents route chat channels into cloud sessions.',
+    billingDescription: 'Manage hosted plan state and entitlements for this org.',
+    usageDescription: 'Recent metering events for this org.',
+  },
+  managedOrgConnectionLabels: {
+    desktopToken: 'Desktop token',
+    gatewayToken: 'Gateway token',
+    apiToken: 'API token',
+    cloudUrl: 'Cloud URL',
+  },
+}
+
+function cleanObjectStrings(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => typeof entry === 'string' && entry.trim())
+    .map(([key, entry]) => [key, String(entry).trim()]))
+}
+
+function safeBrandingUrl(value: unknown, allowMailto = false) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return undefined
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'https:') return url.toString()
+    if (allowMailto && url.protocol === 'mailto:') return url.toString()
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function resolvePublicBranding(input?: PublicBrandingConfig | null): PublicBrandingConfig {
+  return {
+    ...DEFAULT_WEBSITE_PUBLIC_BRANDING,
+    ...(input || {}),
+    productName: input?.productName?.trim() || DEFAULT_WEBSITE_PUBLIC_BRANDING.productName,
+    shortName: input?.shortName?.trim() || DEFAULT_WEBSITE_PUBLIC_BRANDING.shortName,
+    logoUrl: safeBrandingUrl(input?.logoUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.logoUrl,
+    supportUrl: safeBrandingUrl(input?.supportUrl, true) || DEFAULT_WEBSITE_PUBLIC_BRANDING.supportUrl,
+    privacyUrl: safeBrandingUrl(input?.privacyUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.privacyUrl,
+    securityUrl: safeBrandingUrl(input?.securityUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.securityUrl,
+    legalUrl: safeBrandingUrl(input?.legalUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.legalUrl,
+    theme: {
+      ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.theme || {}),
+      ...cleanObjectStrings(input?.theme),
+    },
+    dashboard: {
+      ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}),
+      ...cleanObjectStrings(input?.dashboard),
+    },
+    managedOrgConnectionLabels: {
+      ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}),
+      ...cleanObjectStrings(input?.managedOrgConnectionLabels),
+    },
+  }
+}
+
+function publicBrandingCss(branding: PublicBrandingConfig) {
+  const theme = branding.theme || {}
+  const cssToken = (value: string | undefined) => value && /^[#A-Za-z0-9(),.%\s-]+$/.test(value) ? value : undefined
+  const tokens: Record<string, string | undefined> = {
+    '--bg': cssToken(theme.background),
+    '--surface': cssToken(theme.surface),
+    '--muted-surface': cssToken(theme.mutedSurface),
+    '--line': cssToken(theme.border),
+    '--text': cssToken(theme.text),
+    '--muted': cssToken(theme.mutedText),
+    '--accent': cssToken(theme.accent),
+    '--accent-strong': cssToken(theme.accentStrong),
+    '--focus': cssToken(theme.focus),
+    '--warn': cssToken(theme.warn),
+    '--danger': cssToken(theme.danger),
+    '--ok': cssToken(theme.ok),
+  }
+  return Object.entries(tokens)
+    .filter(([, value]) => typeof value === 'string' && value.trim())
+    .map(([key, value]) => `      ${key}: ${escapeHtml(value || '')};`)
+    .join('\n')
+}
+
+function brandLogoMarkup(branding: PublicBrandingConfig) {
+  if (branding.logoUrl) {
+    return `<img class="brand-logo" src="${escapeHtml(branding.logoUrl)}" alt="" aria-hidden="true">`
+  }
+  return `<div class="mark" aria-hidden="true">${escapeHtml(branding.shortName || 'OC')}</div>`
+}
+
+function brandLinksMarkup(branding: PublicBrandingConfig) {
+  const links = [
+    ['Support', branding.supportUrl],
+    ['Privacy', branding.privacyUrl],
+    ['Security', branding.securityUrl],
+    ['Legal', branding.legalUrl],
+  ].filter(([, url]) => typeof url === 'string' && url.trim())
+  if (!links.length) return ''
+  return `<div class="brand-links">${links.map(([label, url]) => `<a href="${escapeHtml(url || '')}" rel="noreferrer" target="_blank">${escapeHtml(label || '')}</a>`).join('')}</div>`
 }
 
 function escapeHtml(value: string) {
@@ -62,6 +191,19 @@ function setBusy(form, busy) {
 
 function adminLocked() {
   return !canManage(state.workspace?.role);
+}
+
+function branding() {
+  return state.config?.publicBranding || bootstrap.publicBranding || {};
+}
+
+function brandName() {
+  return branding().productName || 'Open Cowork Cloud';
+}
+
+function connectionLabel(key, fallback) {
+  const labels = branding().managedOrgConnectionLabels || {};
+  return labels[key] || fallback;
 }
 
 function headers(hasBody) {
@@ -133,7 +275,8 @@ function actionButton(label, onClick, variant = '', disabled = false) {
 
 function renderWorkspace() {
   const workspace = state.workspace;
-  setText('#org-name', workspace?.orgName || workspace?.tenantName || 'Open Cowork Cloud');
+  document.title = brandName();
+  setText('#org-name', workspace?.orgName || workspace?.tenantName || brandName());
   setText('#org-meta', workspace ? workspace.email + ' - ' + workspace.role + ' - ' + workspace.profileName : 'Not signed in');
   setText('#profile-name', workspace?.profileName || bootstrap.profileName || 'default');
   setText('#role-name', workspace?.role || 'signed out');
@@ -496,8 +639,8 @@ function bindForms() {
     event.preventDefault();
     submitForm(event.currentTarget, issueToken);
   });
-  qs('#desktop-token').addEventListener('click', () => quickToken('Desktop connection token', 'desktop').catch((error) => setStatus(error.message, 'error')));
-  qs('#gateway-token').addEventListener('click', () => quickToken('Gateway service token', 'gateway').catch((error) => setStatus(error.message, 'error')));
+  qs('#desktop-token').addEventListener('click', () => quickToken(connectionLabel('desktopToken', 'Desktop token') + ' connection token', 'desktop').catch((error) => setStatus(error.message, 'error')));
+  qs('#gateway-token').addEventListener('click', () => quickToken(connectionLabel('gatewayToken', 'Gateway token') + ' service token', 'gateway').catch((error) => setStatus(error.message, 'error')));
   qs('#agent-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitForm(event.currentTarget, createAgent);
@@ -522,11 +665,15 @@ refreshDashboard().catch((error) => {
 `
 }
 
-export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') {
+export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
+  const branding = resolvePublicBranding(publicBranding || policy.publicBranding)
+  const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
+  const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
   const bootstrap = {
     role: policy.role,
     profileName: policy.profileName,
     features: policy.features,
+    publicBranding: branding,
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
   return `<!doctype html>
@@ -534,22 +681,11 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Open Cowork Cloud</title>
+  <title>${escapeHtml(branding.productName)}</title>
   <style${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>
     :root {
       color-scheme: light;
-      --bg: #f5f6f3;
-      --surface: #ffffff;
-      --muted-surface: #ecefed;
-      --line: #d8ddd7;
-      --text: #18211c;
-      --muted: #66736b;
-      --accent: #2d6b56;
-      --accent-strong: #1f503f;
-      --focus: rgba(45, 107, 86, 0.28);
-      --warn: #8a5a14;
-      --danger: #9d3630;
-      --ok: #1f6b46;
+${publicBrandingCss(branding)}
       --shadow: 0 8px 24px rgba(24, 33, 28, 0.08);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -652,6 +788,15 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
       font-weight: 700;
       flex: 0 0 auto;
     }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      object-fit: contain;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      flex: 0 0 auto;
+    }
     .brand-title, h1, h2 {
       margin: 0;
       font-weight: 700;
@@ -675,6 +820,13 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
     .nav-links a:hover {
       background: var(--surface);
       text-decoration: none;
+    }
+    .brand-links {
+      margin-top: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      font-size: 12px;
     }
     .main {
       min-width: 0;
@@ -883,9 +1035,9 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
   <div class="shell">
     <aside class="nav">
       <div class="brand">
-        <div class="mark" aria-hidden="true">OC</div>
+        ${brandLogoMarkup(branding)}
         <div>
-          <div class="brand-title">Open Cowork Cloud</div>
+          <div class="brand-title">${escapeHtml(branding.productName)}</div>
           <div class="meta" id="profile-name">${escapeHtml(policy.profileName)}</div>
         </div>
       </div>
@@ -901,11 +1053,12 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
         <div class="meta">Role</div>
         <strong id="role-name">${adminDefault ? 'admin' : 'member'}</strong>
       </div>
+      ${brandLinksMarkup(branding)}
     </aside>
     <main class="main">
       <header class="topbar">
         <div>
-          <h1 id="org-name">Open Cowork Cloud</h1>
+          <h1 id="org-name">${escapeHtml(branding.productName)}</h1>
           <div class="meta" id="org-meta">Loading workspace</div>
         </div>
         <div class="topbar-actions">
@@ -921,8 +1074,8 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
         <section class="section" id="workspace">
           <div class="section-header">
             <div>
-              <h2>Workspace</h2>
-              <div class="meta">Cloud control plane state for this signed-in org.</div>
+              <h2>${escapeHtml(copy.title || 'Workspace')}</h2>
+              <div class="meta">${escapeHtml(copy.subtitle || 'Cloud control plane state for this signed-in org.')}</div>
             </div>
           </div>
           <div class="grid">
@@ -933,8 +1086,8 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
               <div class="row compact"><strong>Workflows</strong><span>${policy.features.workflows ? 'enabled' : 'disabled'}</span></div>
             </div>
             <div class="panel signed-out-only">
-              <h3>Sign in</h3>
-              <p class="empty">Use the configured cloud auth provider to open your org dashboard.</p>
+              <h3>${escapeHtml(copy.signInTitle || 'Sign in')}</h3>
+              <p class="empty">${escapeHtml(copy.signInBody || 'Use the configured cloud auth provider to open your org dashboard.')}</p>
               <button id="signin-inline" class="primary" type="button">Sign in</button>
             </div>
           </div>
@@ -944,7 +1097,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
           <div class="section-header">
             <div>
               <h2>BYOK</h2>
-              <div class="meta">Provider keys are write-only. The dashboard stores status metadata only.</div>
+              <div class="meta">${escapeHtml(copy.byokDescription || 'Provider keys are write-only. The dashboard stores status metadata only.')}</div>
             </div>
           </div>
           <div class="grid">
@@ -967,12 +1120,12 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
           <div class="section-header">
             <div>
               <h2>Connections</h2>
-              <div class="meta">Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.</div>
+              <div class="meta">${escapeHtml(copy.connectionsDescription || 'Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.')}</div>
             </div>
           </div>
           <div class="grid">
             <form class="panel" id="token-form">
-              <h3>Create API token</h3>
+              <h3>Create ${escapeHtml(labels.apiToken || 'API token')}</h3>
               <div class="form-grid">
                 <label class="span"><span>Name</span><input name="name" autocomplete="off" placeholder="Desktop connection" data-admin-control="true"></label>
                 <div class="check-row span">
@@ -981,8 +1134,8 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
                   <label><input type="checkbox" name="scopes" value="admin" data-admin-control="true"> Admin</label>
                 </div>
                 <button class="primary" type="submit" data-admin-control="true">Create token</button>
-                <button type="button" id="desktop-token" data-admin-control="true">Desktop token</button>
-                <button type="button" id="gateway-token" data-admin-control="true">Gateway token</button>
+                <button type="button" id="desktop-token" data-admin-control="true">${escapeHtml(labels.desktopToken || 'Desktop token')}</button>
+                <button type="button" id="gateway-token" data-admin-control="true">${escapeHtml(labels.gatewayToken || 'Gateway token')}</button>
               </div>
             </form>
             <div class="panel">
@@ -996,7 +1149,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
           <div class="section-header">
             <div>
               <h2>Headless gateway</h2>
-              <div class="meta">Configure a cloud-owned headless agent and channel bindings for self-hosted or managed gateway daemons.</div>
+              <div class="meta">${escapeHtml(copy.gatewayDescription || 'Headless agents route chat channels into cloud sessions.')}</div>
             </div>
           </div>
           <div class="grid">
@@ -1040,7 +1193,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
           <div class="section-header">
             <div>
               <h2>Billing</h2>
-              <div class="meta">Hosted deployments can expose checkout and portal links. Self-hosted deployments can leave this disabled.</div>
+              <div class="meta">${escapeHtml(copy.billingDescription || 'Manage hosted plan state and entitlements for this org.')}</div>
             </div>
           </div>
           <div class="grid">
@@ -1064,7 +1217,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, cspNonce = '') 
           <div class="section-header">
             <div>
               <h2>Usage</h2>
-              <div class="meta">Recent metered events for quota and billing visibility.</div>
+              <div class="meta">${escapeHtml(copy.usageDescription || 'Recent metering events for this org.')}</div>
             </div>
           </div>
           <div class="panel">

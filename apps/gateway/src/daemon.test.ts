@@ -108,9 +108,12 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
   try {
     const health = await readJson(await fetch(`${url}/health`))
     assert.equal(health.ok, true)
+    assert.equal((health.branding as { productName: string }).productName, 'Open Cowork Cloud')
+    assert.equal(health.cloudBaseUrl, 'https://cloud.example.test')
 
     const ready = await readJson(await fetch(`${url}/ready`))
     assert.equal(ready.ok, true)
+    assert.equal((ready.branding as { productName: string }).productName, 'Open Cowork Cloud')
 
     const metrics = await fetch(`${url}/metrics`)
     assert.equal(metrics.status, 200)
