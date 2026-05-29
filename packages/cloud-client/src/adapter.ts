@@ -278,6 +278,8 @@ export type CloudUsageQuotaWindowRecord = {
 export type CloudUsageSummary = {
   enabled: boolean
   generatedAt: string
+  totalsScope?: 'recent_events'
+  eventSampleLimit?: number
   events: CloudUsageEventRecord[]
   totals: CloudUsageTotalRecord[]
   quotas: CloudUsageQuotaWindowRecord[]
@@ -437,6 +439,8 @@ export type CloudDiagnosticsBundle = {
     agents: Record<string, number>
     bindingsByProvider: Record<string, number>
     deliveriesByStatus: Record<string, number>
+    deliveriesByStatusScope?: 'recent_deliveries'
+    deliverySampleLimit?: number
   }
   links: Record<string, string>
 }

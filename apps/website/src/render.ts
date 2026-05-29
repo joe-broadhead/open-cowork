@@ -633,6 +633,16 @@ function safeOperationalMetadata(value, depth = 0) {
   return output;
 }
 
+function safeOperationalText(value) {
+  return String(value || '')
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
+    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
+    .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
+    .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]');
+}
+
 function capabilityLabel(capability) {
   return capability.label || capability.name || capability.id || 'Capability';
 }
@@ -1284,7 +1294,7 @@ function renderGateway() {
         delivery.provider,
         delivery.channelBindingId,
         'attempts ' + (delivery.attemptCount || 0),
-        delivery.lastError || null,
+        delivery.lastError ? safeOperationalText(delivery.lastError) : null,
         'next ' + formatDate(delivery.nextAttemptAt),
       ].filter(Boolean).join(' - ');
       main.appendChild(document.createElement('br'));
@@ -1662,6 +1672,10 @@ function renderUsage() {
   if (totals) {
     removeChildren(totals);
     const totalRows = normalizeList(state.usageSummary?.totals);
+    const scope = document.createElement('p');
+    scope.className = 'empty';
+    scope.textContent = 'Recent totals from the latest ' + (state.usageSummary?.eventSampleLimit || 100) + ' usage events.';
+    totals.appendChild(scope);
     if (!totalRows.length) {
       const empty = document.createElement('p');
       empty.className = 'empty';
@@ -1728,6 +1742,7 @@ function renderDiagnostics() {
     ['Worker heartbeats', runtime.heartbeatCount ?? 0],
     ['BYOK providers', byok.configuredProviders ?? 0],
     ['Gateway agents', safeObject(gateway.agents).total ?? 0],
+    ['Delivery status sample', 'latest ' + (gateway.deliverySampleLimit || 200) + ' deliveries'],
   ];
   for (const [label, value] of rows) {
     const row = document.createElement('div');
@@ -4479,7 +4494,7 @@ ${publicBrandingCss(branding)}
               <div class="list" id="usage-quota-list"></div>
             </div>
             <div class="panel">
-              <h3>Totals</h3>
+              <h3>Recent totals</h3>
               <div class="list" id="usage-total-list"></div>
             </div>
             <div class="panel">

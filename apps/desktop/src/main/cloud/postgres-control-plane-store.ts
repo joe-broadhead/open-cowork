@@ -217,6 +217,16 @@ function normalizeText(value: unknown, maxLength: number, label: string) {
   return normalized
 }
 
+function redactOperationalText(value: unknown, maxLength: number, label: string) {
+  return normalizeText(value, maxLength, label)
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[redacted]')
+    .replace(/\b(api[_-]?key|token|secret|password|authorization)=([^\s&]+)/gi, '$1=[redacted]')
+    .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
+    .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
+    .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
+}
+
 function normalizeOptionalText(value: unknown, maxLength: number, label: string) {
   if (value === undefined) return undefined
   return normalizeText(value, maxLength, label)
@@ -2175,7 +2185,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         input.orgId,
         input.deliveryId,
         input.status,
-        input.lastError ? normalizeText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null,
+        input.lastError ? redactOperationalText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null,
         (input.nextAttemptAt || input.updatedAt || new Date()).toISOString(),
         nowIso(input.updatedAt),
         input.claimedBy || null,

@@ -203,6 +203,8 @@ export type CloudUsageQuotaWindowRecord = {
 export type CloudUsageSummary = {
   enabled: boolean
   generatedAt: string
+  totalsScope: 'recent_events'
+  eventSampleLimit: number
   events: UsageEventRecord[]
   totals: CloudUsageTotalRecord[]
   quotas: CloudUsageQuotaWindowRecord[]
@@ -252,6 +254,8 @@ export type CloudDiagnosticsBundle = {
     }
     bindingsByProvider: Record<string, number>
     deliveriesByStatus: Record<string, number>
+    deliveriesByStatusScope: 'recent_deliveries'
+    deliverySampleLimit: number
   }
   links: {
     deploymentDocs: string
@@ -546,6 +550,12 @@ function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
 function principalCanViewOperations(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin') || hasTokenScope(principal, 'worker-internal')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+function principalCanViewDiagnostics(principal: CloudPrincipal) {
+  if (principal.authSource === 'local') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
@@ -1935,7 +1945,7 @@ export class CloudSessionService {
     deliveryId: string,
   ): Promise<ChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
-    this.assertGatewayAccess(principal)
+    this.assertChannelSetupAllowed(principal)
     return this.store.ackChannelDelivery({
       orgId: this.principalOrgId(principal),
       deliveryId,
@@ -1950,7 +1960,7 @@ export class CloudSessionService {
     input: { deliveryId: string, lastError?: string | null },
   ): Promise<ChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
-    this.assertGatewayAccess(principal)
+    this.assertChannelSetupAllowed(principal)
     return this.store.ackChannelDelivery({
       orgId: this.principalOrgId(principal),
       deliveryId: input.deliveryId,
@@ -2515,6 +2525,8 @@ export class CloudSessionService {
     return {
       enabled: this.abuse.enabled,
       generatedAt: new Date(now).toISOString(),
+      totalsScope: 'recent_events',
+      eventSampleLimit: limit,
       events,
       totals: [...totals.values()].sort((left, right) => left.eventType.localeCompare(right.eventType) || left.unit.localeCompare(right.unit)),
       quotas,
@@ -2523,17 +2535,18 @@ export class CloudSessionService {
 
   async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
     await this.ensurePrincipal(principal)
-    if (!principalCanViewOperations(principal)) {
-      throw new CloudServiceError(403, 'Cloud diagnostics require operator privileges.')
+    if (!principalCanViewDiagnostics(principal)) {
+      throw new CloudServiceError(403, 'Cloud diagnostics require org admin or admin-scoped API token privileges.')
     }
     const orgId = this.principalOrgId(principal)
+    const deliverySampleLimit = 200
     const [billing, usage, byok, heartbeats, agents, deliveries] = await Promise.all([
       this.getBillingSubscription(principal),
       this.getUsageSummary(principal, 200),
       this.byokSecrets ? this.byokSecrets.listMetadata(orgId) : Promise.resolve([]),
       this.store.listWorkerHeartbeats(),
       this.store.listHeadlessAgents(orgId),
-      this.store.listChannelDeliveries({ orgId, limit: 200 }),
+      this.store.listChannelDeliveries({ orgId, limit: deliverySampleLimit }),
     ])
     const bindings = (await Promise.all(agents.map((agent) => this.store.listChannelBindings(orgId, agent.agentId)))).flat()
     const deliveryCounts: Record<string, number> = {
@@ -2581,6 +2594,8 @@ export class CloudSessionService {
         },
         bindingsByProvider,
         deliveriesByStatus: deliveryCounts,
+        deliveriesByStatusScope: 'recent_deliveries',
+        deliverySampleLimit,
       },
       links: {
         deploymentDocs: '/docs/open-cowork-cloud',
