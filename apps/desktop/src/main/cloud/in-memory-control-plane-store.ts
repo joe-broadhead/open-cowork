@@ -173,6 +173,17 @@ export type MembershipRecord = {
   updatedAt: string
 }
 
+export type OrgMemberRecord = {
+  orgId: string
+  accountId: string
+  email: string
+  displayName: string | null
+  role: ControlPlaneRole
+  status: ControlPlaneMembershipStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export type PrincipalMembershipRecord = {
   org: OrgRecord
   account: AccountRecord
@@ -961,6 +972,7 @@ export type ControlPlaneStore = {
   findAccountBySubject(idpSubject: string): MaybePromise<AccountRecord | null>
   findAccountByEmail(email: string): MaybePromise<AccountRecord | null>
   upsertMembership(input: UpsertMembershipInput): MaybePromise<MembershipRecord>
+  listOrgMembers(orgId: string, input?: { query?: string | null, limit?: number | null }): MaybePromise<OrgMemberRecord[]>
   listMembershipsForAccount(accountId: string): MaybePromise<MembershipRecord[]>
   resolvePrincipalMembership(input: { tenantId: string, userId?: string | null, accountId?: string | null, idpSubject?: string | null, email?: string | null }): MaybePromise<PrincipalMembershipRecord | null>
   issueApiToken(input: IssueApiTokenInput): MaybePromise<IssuedApiTokenRecord>
@@ -1469,7 +1481,20 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const bySubject = input.idpSubject ? this.accountsBySubject.get(input.idpSubject) : null
     const byEmail = this.accountsByEmail.get(input.email.toLowerCase())
     const existing = this.accounts.get(bySubject || byEmail || input.accountId)
-    if (existing) return clone(existing)
+    if (existing) {
+      let changed = false
+      if (input.idpSubject && !existing.idpSubject) {
+        existing.idpSubject = input.idpSubject
+        this.accountsBySubject.set(input.idpSubject, existing.accountId)
+        changed = true
+      }
+      if (input.displayName && !existing.displayName) {
+        existing.displayName = input.displayName
+        changed = true
+      }
+      if (changed) existing.updatedAt = nowIso(input.createdAt)
+      return clone(existing)
+    }
     const createdAt = nowIso(input.createdAt)
     const record: AccountRecord = {
       accountId: input.accountId,
@@ -1523,6 +1548,42 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: input.updatedAt,
     })
     return clone(record)
+  }
+
+  listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}): OrgMemberRecord[] {
+    if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
+    const queryText = input.query?.trim().toLowerCase() || ''
+    const limit = Math.max(1, Math.min(input.limit || 100, 500))
+    return Array.from(this.memberships.values())
+      .filter((membership) => membership.orgId === orgId)
+      .map((membership) => {
+        const account = this.accounts.get(membership.accountId)
+        if (!account) return null
+        return {
+          orgId: membership.orgId,
+          accountId: membership.accountId,
+          email: account.email,
+          displayName: account.displayName,
+          role: membership.role,
+          status: membership.status,
+          createdAt: membership.createdAt,
+          updatedAt: membership.updatedAt,
+        } satisfies OrgMemberRecord
+      })
+      .filter((member): member is OrgMemberRecord => Boolean(member))
+      .filter((member) => {
+        if (!queryText) return true
+        return [
+          member.accountId,
+          member.email,
+          member.displayName,
+          member.role,
+          member.status,
+        ].filter(Boolean).join(' ').toLowerCase().includes(queryText)
+      })
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.email.localeCompare(right.email))
+      .slice(0, limit)
+      .map((member) => clone(member))
   }
 
   listMembershipsForAccount(accountId: string): MembershipRecord[] {

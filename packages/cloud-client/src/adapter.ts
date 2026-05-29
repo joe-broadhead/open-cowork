@@ -296,6 +296,66 @@ export type CloudIssuedApiTokenRecord = {
   plaintext: string
 }
 
+export type CloudOrgMemberRecord = {
+  orgId: string
+  accountId: string
+  email: string
+  displayName: string | null
+  role: 'owner' | 'admin' | 'member'
+  status: 'active' | 'invited' | 'disabled'
+  createdAt: string
+  updatedAt: string
+}
+
+export type CloudAdminPolicyOverview = {
+  org: {
+    orgId: string
+    tenantId: string
+    name: string
+    planKey: string | null
+    status: string
+  }
+  signup: {
+    mode: 'closed' | 'invite' | 'domain' | 'open'
+    allowSelfServiceSignup: boolean
+    allowedEmailDomains: string[]
+    invitesEnabled: boolean
+  }
+  profile: {
+    name: string
+    label: string | null
+    description: string | null
+  }
+  features: Record<string, boolean>
+  allowedAgents: string[] | null
+  allowedTools: string[] | null
+  allowedMcps: string[] | null
+  runtime: {
+    configSource: 'app'
+    machineRuntimeConfig: 'disabled' | 'allowlisted'
+    localStdioMcps: 'disabled' | 'allowlisted'
+    hostProjectDirectories: 'disabled' | 'allowlisted'
+  }
+  projectSources: Record<string, unknown>
+  gateway: {
+    channelsEnabled: boolean
+    webhooksEnabled: boolean
+  }
+}
+
+export type CloudAuditEventRecord = {
+  eventId: string
+  orgId: string
+  actorType: string
+  actorId: string
+  accountId: string | null
+  eventType: string
+  targetType: string | null
+  targetId: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export type CloudBillingSubscriptionRecord = {
   orgId: string
   providerId: string
@@ -478,6 +538,15 @@ export type CloudTransportAdapter = {
     expiresAt?: string | null
   }): Promise<CloudIssuedApiTokenRecord>
   revokeApiToken?(tokenId: string): Promise<CloudApiTokenRecord | null>
+  getAdminPolicy?(): Promise<CloudAdminPolicyOverview>
+  listOrgMembers?(input?: { query?: string | null, limit?: number | null }): Promise<CloudOrgMemberRecord[]>
+  inviteOrgMember?(input: { email: string, role?: 'owner' | 'admin' | 'member' | null }): Promise<CloudOrgMemberRecord>
+  updateOrgMember?(accountId: string, input: {
+    role?: 'owner' | 'admin' | 'member' | null
+    status?: 'active' | 'invited' | 'disabled' | null
+    confirm?: string | null
+  }): Promise<CloudOrgMemberRecord>
+  listAdminAuditEvents?(limit?: number): Promise<CloudAuditEventRecord[]>
   getBillingSubscription?(): Promise<CloudBillingSubscriptionPayload>
   createBillingCheckout?(input?: {
     planKey?: string | null
@@ -1249,6 +1318,34 @@ export function createHttpSseCloudTransportAdapter(
       return (await request<{ token: CloudApiTokenRecord | null }>(`/api/api-tokens/${encodePath(tokenId)}`, {
         method: 'DELETE',
       })).token
+    },
+    async getAdminPolicy() {
+      return (await request<{ policy: CloudAdminPolicyOverview }>('/api/admin/policy')).policy
+    },
+    async listOrgMembers(input = {}) {
+      return (await request<{ members: CloudOrgMemberRecord[] }>(
+        `/api/admin/members${queryString({ q: input.query, limit: input.limit })}`,
+      )).members
+    },
+    async inviteOrgMember(input) {
+      return (await request<{ member: CloudOrgMemberRecord }>('/api/admin/members', {
+        method: 'POST',
+        body: input,
+      })).member
+    },
+    async updateOrgMember(accountId, input) {
+      return (await request<{ member: CloudOrgMemberRecord }>(
+        `/api/admin/members/${encodePath(accountId)}/update`,
+        {
+          method: 'POST',
+          body: input,
+        },
+      )).member
+    },
+    async listAdminAuditEvents(limit) {
+      return (await request<{ events: CloudAuditEventRecord[] }>(
+        `/api/admin/audit${queryString({ limit })}`,
+      )).events
     },
     getBillingSubscription() {
       return request<CloudBillingSubscriptionPayload>('/api/billing/subscription')

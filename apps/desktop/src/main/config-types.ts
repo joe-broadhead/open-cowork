@@ -259,6 +259,7 @@ export type CloudProfileConfig = {
 
 export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
+  signupMode?: 'closed' | 'invite' | 'domain' | 'open'
   headerSecret?: string
   issuerUrl?: string
   clientId?: string
@@ -644,6 +645,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     publicBranding: DEFAULT_CLOUD_PUBLIC_BRANDING,
     auth: {
       mode: 'none',
+      signupMode: 'open',
       allowSelfServiceSignup: true,
     },
     storage: {
