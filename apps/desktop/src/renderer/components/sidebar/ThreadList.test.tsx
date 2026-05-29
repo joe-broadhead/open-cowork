@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionInfo, SessionView } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
+import { installRendererTestCoworkApi } from '../../test/setup'
 import { ThreadList } from './ThreadList'
 
 vi.mock('../../helpers/loadSessionMessages', () => ({
@@ -128,5 +129,112 @@ describe('ThreadList', () => {
     expect(screen.queryByRole('menu', { name: 'Thread actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Rename' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('requires an explicit Copy to Cloud preview before uploading local thread state', async () => {
+    const workspaceList = vi.fn(async () => [{
+      id: 'local',
+      kind: 'local' as const,
+      label: 'Local',
+      status: 'online' as const,
+      active: true,
+      lastSyncedAt: null,
+    }, {
+      id: 'cloud:acme',
+      kind: 'cloud' as const,
+      label: 'Acme Cloud',
+      status: 'online' as const,
+      active: false,
+      lastSyncedAt: null,
+    }])
+    const workspaceActivate = vi.fn(async () => ({
+      id: 'cloud:acme',
+      kind: 'cloud' as const,
+      label: 'Acme Cloud',
+      status: 'online' as const,
+      active: true,
+      lastSyncedAt: null,
+    }))
+    const importInventory = vi.fn(async () => ({
+      source: { kind: 'local-session' as const, fingerprint: 'sha256:session-1', title: 'Current thread' },
+      title: 'Current thread',
+      counts: { messages: 3, artifacts: 2, attachments: 1, projectSource: 4, excluded: 2 },
+      defaults: {
+        includeMessages: true,
+        includeArtifacts: false,
+        includeAttachments: false,
+        includeProjectSource: false,
+      },
+      warnings: [{ code: 'redacted-values', severity: 'warning' as const, message: 'Secret-like values were redacted before upload.' }],
+      excluded: [{ kind: 'project-source', count: 4, reason: 'Local project source and host paths are excluded in v1.' }],
+    }))
+    const copyToCloud = vi.fn(async () => ({
+      workspaceId: 'cloud:acme',
+      sessionId: 'cloud-session-1',
+      title: 'Current thread',
+      importedAt: '2026-01-01T00:00:00.000Z',
+      itemCounts: { messages: 3, artifacts: 2, attachments: 1, projectSource: 0, excluded: 2 },
+    }))
+    const listSessions = vi.fn(async () => [{
+      id: 'cloud-session-1',
+      title: 'Current thread',
+      directory: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }])
+
+    installRendererTestCoworkApi({
+      workspace: {
+        list: workspaceList,
+        activate: workspaceActivate,
+      },
+      session: {
+        importInventory,
+        copyToCloud,
+        list: listSessions,
+      },
+    })
+
+    render(<ThreadList />)
+
+    const row = screen.getByRole('button', { name: /Current thread/ })
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy to Cloud...' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Copy thread to cloud' })
+    expect(dialog).toHaveTextContent('Creates a new cloud thread. The local thread stays unchanged.')
+    expect(importInventory).toHaveBeenCalledWith('session-1')
+    expect(workspaceList).toHaveBeenCalled()
+
+    expect(screen.getByLabelText('Cloud workspace')).toHaveTextContent('Acme Cloud')
+    expect(dialog).toHaveTextContent('Messages')
+    expect(dialog).toHaveTextContent('3')
+    expect(dialog).toHaveTextContent('Artifacts')
+    expect(dialog).toHaveTextContent('2')
+    expect(dialog).toHaveTextContent('Attachments')
+    expect(dialog).toHaveTextContent('1')
+    expect(dialog).toHaveTextContent('Excluded')
+    expect(dialog).toHaveTextContent('2')
+    expect(dialog).toHaveTextContent('Secret-like values were redacted before upload.')
+    expect(dialog).toHaveTextContent('Local project source and host paths are excluded in v1.')
+    expect(screen.getByLabelText('Local project source and host paths are excluded in v1')).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText('Copy data attachments already present in the thread'))
+    fireEvent.click(screen.getByLabelText('Upload selected Cowork artifacts to cloud object storage'))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to Cloud' }))
+
+    await waitFor(() => expect(copyToCloud).toHaveBeenCalledWith('session-1', {
+      targetWorkspaceId: 'cloud:acme',
+      selection: {
+        includeMessages: true,
+        includeArtifacts: true,
+        includeAttachments: true,
+        includeProjectSource: false,
+      },
+    }))
+    expect(workspaceActivate).toHaveBeenCalledWith('cloud:acme')
+    expect(listSessions).toHaveBeenCalledWith({ workspaceId: 'cloud:acme' })
+    expect(useSessionStore.getState().activeWorkspaceId).toBe('cloud:acme')
+    expect(useSessionStore.getState().currentSessionId).toBe('cloud-session-1')
   })
 })

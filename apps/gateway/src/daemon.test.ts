@@ -361,6 +361,62 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
   }
 })
 
+test('gateway daemon rejects delivery admin controls without the admin token', async () => {
+  const calls: string[] = []
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+    async listDeliveries() {
+      calls.push('list')
+      return []
+    },
+    async retryDelivery(deliveryId: string) {
+      calls.push(`retry:${deliveryId}`)
+      return deliveryRecord({ deliveryId })
+    },
+    async deadLetterDelivery(deliveryId: string) {
+      calls.push(`dead:${deliveryId}`)
+      return deliveryRecord({ deliveryId })
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    const listed = await readJson(await fetch(`${url}/deliveries`))
+    assert.equal(listed.error, 'Gateway admin authorization is required.')
+
+    const retried = await readJson(await fetch(`${url}/deliveries/delivery-1/retry`, { method: 'POST' }))
+    assert.equal(retried.error, 'Gateway admin authorization is required.')
+
+    const dead = await readJson(await fetch(`${url}/deliveries/delivery-1/dead-letter`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lastError: 'operator stop' }),
+    }))
+    assert.equal(dead.error, 'Gateway admin authorization is required.')
+    assert.deepEqual(calls, [])
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
 test('gateway runtime retries transient deliveries and marks permanent failures dead', async () => {
   let onDelivery: ((delivery: unknown) => void) | null = null
   const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []

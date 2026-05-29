@@ -119,6 +119,28 @@ test('e2e arg environment applies only smoke allowlisted keys', () => {
   })
 })
 
+test('e2e arg environment can be explicitly enabled by an allowlisted launch argument', () => {
+  const args = buildE2EArgEnvironment({
+    [E2E_ARG_ENV_ENABLE_KEY]: '1',
+    OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
+    HOME: '/tmp/open-cowork-home',
+  })
+  const env: NodeJS.ProcessEnv = {}
+
+  applyE2EArgEnvironment([
+    'Open Cowork',
+    ...args,
+  ], env)
+
+  assert.deepEqual(env, {
+    [E2E_ARG_ENV_ENABLE_KEY]: '1',
+    OPEN_COWORK_E2E: '1',
+    OPEN_COWORK_E2E_READY_FILE: '/tmp/open-cowork/probe.json',
+    HOME: '/tmp/open-cowork-home',
+  })
+})
+
 test('e2e settings mutation requires explicit opt-in for packaged probes', () => {
   assert.equal(e2eSettingsMutationAllowed({ OPEN_COWORK_E2E: '1' }, { isPackaged: false }), true)
   assert.equal(e2eSettingsMutationAllowed({ OPEN_COWORK_E2E: '1' }, { isPackaged: true }), false)
