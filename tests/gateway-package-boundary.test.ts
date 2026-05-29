@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const gatewayPackages = [
@@ -30,8 +30,25 @@ const forbiddenImportPatterns = [
 
 test('gateway package names and imports stay inside channel-adapter boundaries', () => {
   for (const packageDir of gatewayPackages) {
-    const packageJson = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as { name?: string }
+    const packageJson = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as {
+      name?: string
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+      peerDependencies?: Record<string, string>
+      optionalDependencies?: Record<string, string>
+    }
     assert.match(packageJson.name || '', /^@open-cowork\/gateway(?:-|$)/)
+    for (const dependencySet of [
+      packageJson.dependencies,
+      packageJson.devDependencies,
+      packageJson.peerDependencies,
+      packageJson.optionalDependencies,
+    ]) {
+      assert.equal(dependencySet?.['@opencode-ai/sdk'], undefined, `${packageDir} must not depend on @opencode-ai/sdk`)
+      assert.equal(dependencySet?.['opencode-ai'], undefined, `${packageDir} must not depend on opencode-ai`)
+      assert.equal(dependencySet?.pg, undefined, `${packageDir} must not depend on pg`)
+      assert.equal(dependencySet?.['drizzle-orm'], undefined, `${packageDir} must not depend on drizzle-orm`)
+    }
 
     for (const filePath of sourceFiles(packageDir)) {
       const contents = readFileSync(filePath, 'utf8')
@@ -56,14 +73,13 @@ function sourceFiles(root: string): string[] {
 }
 
 function allFiles(root: string): string[] {
-  const entries = readdirSync(root)
+  const entries = readdirSync(root, { withFileTypes: true })
   const files: string[] = []
   for (const entry of entries) {
-    if (generatedDirectories.has(entry)) continue
-    const path = join(root, entry)
-    const stat = statSync(path)
-    if (stat.isDirectory()) files.push(...allFiles(path))
-    else files.push(path)
+    if (generatedDirectories.has(entry.name)) continue
+    const path = join(root, entry.name)
+    if (entry.isDirectory()) files.push(...allFiles(path))
+    else if (entry.isFile()) files.push(path)
   }
   return files
 }

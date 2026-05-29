@@ -138,6 +138,68 @@ test('event renderer chunks buttonless assistant output and renders approval com
   })
 })
 
+test('event renderer consumes normalized cloud events and ignores raw OpenCode SDK event envelopes', async () => {
+  const provider = createButtonlessFakeProvider()
+  const state = createGatewaySessionRenderState()
+  const interactions: unknown[] = []
+  const cloud = cloudStub({
+    async createChannelInteraction(input: unknown) {
+      interactions.push(input)
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'approval-token',
+      }
+    },
+  })
+  const input = {
+    cloud,
+    provider,
+    binding: bindingRecord(),
+    state,
+  }
+
+  const rawSdkEvent = await renderGatewaySessionEvent({
+    ...input,
+    event: {
+      eventId: 'sdk-raw-1',
+      sequence: 1,
+      type: 'permission.asked',
+      payload: {
+        sessionID: 'session-1',
+        permission: {
+          id: 'permission-1',
+          tool: 'bash',
+          input: { command: 'pnpm test' },
+        },
+      },
+    } as never,
+  })
+
+  assert.equal(rawSdkEvent.handled, false)
+  assert.equal(provider.sent.length, 0)
+  assert.equal(interactions.length, 0)
+
+  const normalizedCloudEvent = await renderGatewaySessionEvent({
+    ...input,
+    event: {
+      eventId: 'cloud-1',
+      sequence: 2,
+      type: 'permission.requested',
+      payload: {
+        permissionId: 'permission-1',
+        title: 'Run command',
+        description: 'Allow pnpm test?',
+      },
+    },
+  })
+
+  assert.equal(normalizedCloudEvent.handled, true)
+  assert.equal(provider.sent.length, 1)
+  assert.match(provider.sent[0]?.text || '', /Run command\nAllow pnpm test\?/)
+  assert.match(provider.sent[0]?.text || '', /\/approve approval-token/)
+  assert.equal(interactions.length, 1)
+})
+
 test('event renderer keeps tool progress compact and redacts failure details', async () => {
   const provider = createButtonCapableFakeProvider()
   const state = createGatewaySessionRenderState()

@@ -8,6 +8,7 @@ import type {
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
   CloudSessionProjectionRecord,
+  CloudSessionEventType,
   CloudSessionViewRecord,
   SessionArtifact,
   SessionArtifactAttachment,
@@ -392,7 +393,7 @@ export type CloudTransportSessionEvent = {
   entityId?: string
   operation?: string
   projectionVersion?: number
-  type: string
+  type: CloudSessionEventType
   payload: Record<string, unknown>
   createdAt?: string
 }
