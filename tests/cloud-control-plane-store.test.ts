@@ -28,6 +28,123 @@ test('cloud control plane keeps tenant/user/session state isolated', () => {
   assert.throws(() => store.listSessions('tenant-2', 'user-1'), /Unknown tenant/)
 })
 
+test('cloud control plane keeps product domains isolated by tenant and org', () => {
+  const store = seededStore()
+  const org1 = store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'tenant-1', name: 'Acme' })
+  store.createTenant({ tenantId: 'tenant-2', name: 'Other' })
+  store.ensureUser({ tenantId: 'tenant-2', userId: 'user-2', email: 'b@example.com', role: 'owner' })
+  const org2 = store.ensureOrgForTenant({ tenantId: 'tenant-2', orgId: 'tenant-2', name: 'Other' })
+
+  assert.equal(store.getSessionForTenant('tenant-2', 'session-1'), null)
+  assert.equal(store.getSession('tenant-2', 'user-2', 'session-1'), null)
+
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-1',
+    draft: {
+      title: 'Daily revenue',
+      instructions: 'Summarize revenue.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  assert.equal(store.getWorkflow('tenant-2', 'user-2', 'workflow-1'), null)
+  assert.throws(() => store.listWorkflowRuns('tenant-2', 'workflow-1'), /Unknown workflow/)
+
+  const agent = store.createHeadlessAgent({
+    agentId: 'agent-1',
+    orgId: org1.orgId,
+    tenantId: 'tenant-1',
+    profileName: 'full',
+    name: 'Agent',
+  })
+  const channelBinding = store.createChannelBinding({
+    bindingId: 'telegram-binding',
+    orgId: org1.orgId,
+    agentId: agent.agentId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    displayName: 'Telegram',
+  })
+  const identity = store.upsertChannelIdentity({
+    identityId: 'identity-1',
+    orgId: org1.orgId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalUserId: 'alice',
+    role: 'member',
+    status: 'active',
+  })
+  const sessionBinding = store.bindChannelSession({
+    bindingId: 'channel-session-1',
+    orgId: org1.orgId,
+    agentId: agent.agentId,
+    channelBindingId: channelBinding.bindingId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+    sessionId: 'session-1',
+  })
+  assert.equal(store.getChannelBinding(org2.orgId, channelBinding.bindingId), null)
+  assert.equal(store.getChannelIdentity(org2.orgId, identity.identityId), null)
+  assert.equal(store.getChannelSessionBinding(org2.orgId, sessionBinding.bindingId), null)
+  assert.equal(store.findChannelSessionBindingByThread({
+    orgId: org2.orgId,
+    provider: 'telegram',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+  }), null)
+
+  store.createByokSecret({
+    secretId: 'secret-1',
+    orgId: org1.orgId,
+    providerId: 'anthropic',
+    ciphertext: 'ciphertext',
+    last4: '1234',
+    keyFingerprint: 'fingerprint',
+  })
+  assert.equal(store.getActiveByokSecret(org2.orgId, 'anthropic'), null)
+  assert.deepEqual(store.listByokSecrets(org2.orgId), [])
+
+  store.upsertBillingSubscription({
+    orgId: org1.orgId,
+    providerId: 'stub',
+    providerCustomerId: 'cus_1',
+    providerSubscriptionId: 'sub_1',
+    planKey: 'pro',
+    status: 'active',
+  })
+  assert.equal(store.getBillingSubscription(org2.orgId), null)
+
+  store.recordUsageEvent({
+    orgId: org1.orgId,
+    eventType: 'prompt.submitted',
+    metadata: { sessionId: 'session-1' },
+  })
+  assert.deepEqual(store.listUsageEvents(org2.orgId), [])
+  assert.equal(store.consumeUsageQuota({
+    orgId: org1.orgId,
+    quotaKey: 'prompts:hour',
+    limit: 1,
+    windowMs: 60_000,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+  }).allowed, true)
+  assert.equal(store.consumeUsageQuota({
+    orgId: org2.orgId,
+    quotaKey: 'prompts:hour',
+    limit: 1,
+    windowMs: 60_000,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+  }).allowed, true)
+})
+
 test('cloud control plane appends ordered idempotent session events', () => {
   const store = seededStore()
   const first = store.appendSessionEvent({

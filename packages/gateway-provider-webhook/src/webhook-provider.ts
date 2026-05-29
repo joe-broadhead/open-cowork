@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
   ChannelAttachment,
   ChannelButton,
@@ -16,6 +16,7 @@ export interface WebhookProviderConfig {
   providerId?: ChannelProviderId;
   deliveryUrl: string;
   sharedSecret?: string;
+  maxSignatureAgeMs?: number;
   maxAttachmentBytes?: number;
   fetch?: typeof globalThis.fetch;
   now?: () => Date;
@@ -59,11 +60,12 @@ export interface WebhookIncomingAttachment {
 
 export interface WebhookIngressAuth {
   headers?: Headers | Record<string, string | string[] | undefined>;
-  sharedSecret?: string | null;
+  rawBody?: string;
   verified?: boolean;
 }
 
 const maxWebhookAttachments = 20;
+const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 
 export interface MapWebhookPayloadOptions {
   maxAttachmentBytes?: number;
@@ -89,6 +91,7 @@ export class WebhookProvider implements ChannelProvider {
   };
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
+  private readonly seenIngressSignatures = new Map<string, number>();
 
   constructor(private readonly config: WebhookProviderConfig) {
     validateWebhookDeliveryUrl(config.deliveryUrl);
@@ -224,12 +227,45 @@ export class WebhookProvider implements ChannelProvider {
       throw new Error("Webhook shared secret is required for ingress");
     }
 
-    const providedSecret =
-      auth.sharedSecret ?? headerValue(auth.headers, "x-open-cowork-gateway-webhook-secret");
-    if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
-      throw new Error("Webhook shared secret verification failed");
+    const timestamp = headerValue(auth.headers, "x-open-cowork-gateway-webhook-timestamp");
+    const signature = headerValue(auth.headers, "x-open-cowork-gateway-webhook-signature");
+    const rawBody = auth.rawBody || "";
+    if (!timestamp || !signature || !rawBody) {
+      throw new Error("Webhook timestamp signature is required for ingress");
+    }
+    const timestampSeconds = Number(timestamp);
+    if (!Number.isFinite(timestampSeconds)) {
+      throw new Error("Webhook timestamp is invalid");
+    }
+    const nowMs = this.config.now?.().getTime() ?? Date.now();
+    const maxAgeMs = this.config.maxSignatureAgeMs ?? defaultMaxSignatureAgeMs;
+    const timestampMs = timestampSeconds * 1000;
+    if (Math.abs(nowMs - timestampMs) > maxAgeMs) {
+      throw new Error("Webhook timestamp is outside the allowed window");
+    }
+
+    const expectedSignature = signWebhookIngressPayload(rawBody, expectedSecret, timestamp);
+    if (!constantTimeStringEqual(signature, expectedSignature)) {
+      throw new Error("Webhook signature verification failed");
+    }
+    this.purgeSeenIngressSignatures(nowMs);
+    const replayKey = `${timestamp}:${signature}`;
+    const existingExpiresAt = this.seenIngressSignatures.get(replayKey);
+    if (existingExpiresAt && existingExpiresAt > nowMs) {
+      throw new Error("Webhook signature replay rejected");
+    }
+    this.seenIngressSignatures.set(replayKey, nowMs + maxAgeMs);
+  }
+
+  private purgeSeenIngressSignatures(nowMs: number): void {
+    for (const [key, expiresAt] of this.seenIngressSignatures) {
+      if (expiresAt <= nowMs) this.seenIngressSignatures.delete(key);
     }
   }
+}
+
+export function signWebhookIngressPayload(rawBody: string, sharedSecret: string, timestamp: string): string {
+  return `v1=${createHmac("sha256", sharedSecret).update(`v1:${timestamp}:${rawBody}`).digest("hex")}`;
 }
 
 export interface WebhookRetryOptions {

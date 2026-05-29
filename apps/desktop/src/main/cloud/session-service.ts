@@ -663,15 +663,20 @@ export class CloudSessionService {
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
+    const existingMembership = await this.store.resolvePrincipalMembership({
+      tenantId: principal.tenantId,
+      accountId: principal.accountId || principal.userId,
+      idpSubject: principal.userId,
+      email: principal.email,
+    })
+    if (principal.authSource === 'user' && !this.identityPolicy.allowSelfServiceSignup) {
+      if (!existingMembership || existingMembership.membership.status !== 'active') {
+        throw new CloudServiceError(403, 'Cloud membership is not active.')
+      }
+    }
     await this.store.createTenant({
       tenantId: principal.tenantId,
       name: principal.tenantName || principal.tenantId,
-    })
-    const user = await this.store.ensureUser({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      email: principal.email,
-      role: principal.role || 'member',
     })
     const org = await this.store.ensureOrgForTenant({
       tenantId: principal.tenantId,
@@ -682,6 +687,13 @@ export class CloudSessionService {
       accountId: principal.accountId || principal.userId,
       idpSubject: principal.userId,
       email: principal.email,
+    })
+    const role = existingMembership?.membership.role || principal.role || 'member'
+    const user = await this.store.ensureUser({
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+      email: principal.email,
+      role,
     })
     const membership = await this.store.resolvePrincipalMembership({
       tenantId: principal.tenantId,
@@ -700,7 +712,7 @@ export class CloudSessionService {
         actor: { actorType: 'system', actorId: 'principal.bootstrap' },
       })
     } else if (membership.membership.status !== 'active') {
-      throw new Error('Cloud membership is not active.')
+      throw new CloudServiceError(403, 'Cloud membership is not active.')
     }
   }
 
@@ -1484,6 +1496,26 @@ export class CloudSessionService {
       command,
     })
     if (!resolved) throw new CloudServiceError(409, 'Channel interaction was already resolved.')
+    await this.store.recordAuditEvent({
+      orgId: this.principalOrgId(principal),
+      accountId: actor.accountId,
+      actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+      actorId: principal.tokenId || principal.userId,
+      eventType: resolved.command.kind === 'permission.respond'
+        ? 'channel_interaction.permission.responded'
+        : resolved.command.kind === 'question.reject'
+          ? 'channel_interaction.question.rejected'
+          : 'channel_interaction.question.replied',
+      targetType: 'channel_interaction',
+      targetId: resolved.interaction.interactionId,
+      metadata: {
+        identityId: actor.identityId,
+        provider: actor.provider,
+        sessionId: resolved.interaction.sessionId,
+        targetId: resolved.interaction.targetId,
+        commandId: resolved.command.commandId,
+      },
+    })
     return resolved
   }
 

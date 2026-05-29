@@ -109,9 +109,13 @@ roles and shared Postgres/object storage.
 
 ### Provider Webhook Signing
 
-- Public webhook providers require provider signing secrets or shared secrets.
+- Public webhook providers require provider signing secrets or timestamped
+  HMAC signatures.
 - Slack uses its signing secret, email uses an inbound shared secret, and the
-  generic webhook provider uses `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET`.
+  generic webhook provider signs the raw body with
+  `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` using
+  `x-open-cowork-gateway-webhook-timestamp` and
+  `x-open-cowork-gateway-webhook-signature`.
 - The fake provider is local/demo-only and must not be exposed publicly.
 - Gateway metrics and diagnostics on `0.0.0.0` require an admin token or
   private networking.

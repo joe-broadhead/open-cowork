@@ -196,6 +196,8 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
   const mode = requestedMode === 'oidc' || requestedMode === 'header' || requestedMode === 'none'
     ? requestedMode
     : config.cloud.auth.mode
+  const requestedSelfService = envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
+  const envSwitchedToOidc = mode === 'oidc' && requestedMode === 'oidc' && config.cloud.auth.mode !== 'oidc'
   return {
     ...config.cloud.auth,
     mode,
@@ -208,9 +210,11 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
     cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
     allowedEmailDomains: parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains,
-    allowSelfServiceSignup: envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
-      ? parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP'), false)
-      : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc',
+    allowSelfServiceSignup: requestedSelfService
+      ? parseBoolean(requestedSelfService, false)
+      : envSwitchedToOidc
+        ? false
+        : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc',
   }
 }
 
