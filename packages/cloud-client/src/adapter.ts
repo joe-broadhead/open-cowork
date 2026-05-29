@@ -943,6 +943,9 @@ export function createHttpSseCloudTransportAdapter(
     if (method !== 'GET' && options.csrfToken) {
       nextHeaders['x-csrf-token'] = options.csrfToken
     }
+    // This transport intentionally sends authenticated cloud API payloads, including
+    // user-selected artifact uploads that callers validate and authorize upstream.
+    // codeql[js/file-access-to-http]
     return parseJson<T>(await fetcher(`${baseUrl}${path}`, {
       method,
       headers: nextHeaders,

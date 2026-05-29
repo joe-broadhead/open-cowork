@@ -30,6 +30,9 @@ export function writeBufferFullySync(
 ) {
   let offset = 0
   while (offset < bytes.length) {
+    // All callers route through this bounded atomic persistence helper; source-specific
+    // validation happens before data reaches this low-level writer.
+    // codeql[js/http-to-file-access]
     const written = writer(fd, bytes, offset, bytes.length - offset)
     if (!Number.isInteger(written) || written <= 0) {
       throw new Error('Atomic write failed before all bytes were written')
