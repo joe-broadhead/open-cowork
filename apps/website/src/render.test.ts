@@ -16,6 +16,12 @@ import {
   cloudWebRuntimeOrder,
   cloudWebSafeArtifactMetadata,
 } from './runtime-workbench.ts'
+import {
+  cloudWebCapabilityPolicyNote,
+  cloudWebWorkflowTriggerSummary,
+  deriveCloudWebWorkbenchAgents,
+  filterCloudWebCapabilities,
+} from './surface-workbench.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -75,6 +81,17 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
       status: 'idle',
       error: null,
     },
+    capabilities: {
+      tools: [],
+      skills: [],
+      error: null,
+    },
+    workflows: {
+      workflows: [],
+      runs: [],
+      error: null,
+    },
+    selectedWorkflowId: null,
     workspaceEvents: {
       status: 'idle',
       cursor: 0,
@@ -94,6 +111,9 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionQuestionReply')?.path, '/api/sessions/:sessionId/question-reply')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionQuestionReject')?.path, '/api/sessions/:sessionId/question-reject')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionArtifact')?.path, '/api/sessions/:sessionId/artifacts/:artifactId')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'capabilitiesCatalog')?.path, '/api/capabilities')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflows')?.path, '/api/workflows')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflowRun')?.path, '/api/workflows/:workflowId/run')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSourceValidate')?.path, '/api/project-sources/validate')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSnapshots')?.path, '/api/project-sources/snapshots')
 })
@@ -209,6 +229,12 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /rejectQuestion/)
   assert.match(cloudWebsiteClientScript(), /openArtifact/)
   assert.match(cloudWebsiteClientScript(), /safeArtifactMetadata/)
+  assert.match(cloudWebsiteClientScript(), /renderWorkbenchAgents/)
+  assert.match(cloudWebsiteClientScript(), /renderCapabilities/)
+  assert.match(cloudWebsiteClientScript(), /renderWorkflows/)
+  assert.match(cloudWebsiteClientScript(), /startAgentThread/)
+  assert.match(cloudWebsiteClientScript(), /createWorkflowFromForm/)
+  assert.match(cloudWebsiteClientScript(), /runWorkflow/)
   assert.match(cloudWebsiteClientScript(), /setRoute/)
   assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
   assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
@@ -221,10 +247,45 @@ test('cloud website renders cloud thread controls without local host path afford
   assert.match(html, /Uploaded snapshot/)
   assert.match(html, /id="prompt-form"/)
   assert.match(html, /id="chat-timeline"/)
+  assert.match(html, /id="workbench-agent-list"/)
+  assert.match(html, /id="capability-filter"/)
+  assert.match(html, /id="tool-list"/)
+  assert.match(html, /id="skill-list"/)
+  assert.match(html, /id="workflow-form"/)
+  assert.match(html, /id="workflow-list"/)
+  assert.match(html, /id="workflow-detail"/)
   assert.match(html, /id="artifact-list"/)
+  assert.match(html, /id="artifact-history"/)
   assert.match(html, /id="artifact-detail"/)
   assert.doesNotMatch(html, /\/Users\//)
   assert.doesNotMatch(html, /local stdio MCP/i)
+})
+
+test('cloud website surface helper derives agents, filters capabilities, and summarizes workflow triggers', () => {
+  const agents = deriveCloudWebWorkbenchAgents({
+    policyAllowedAgents: ['build'],
+    tools: [
+      { id: 'charts', agentNames: ['data-analyst'], source: 'builtin' },
+      { id: 'custom-tool', agentNames: ['custom-agent'], source: 'custom' },
+    ],
+    skills: [
+      { name: 'analysis', agentNames: ['data-analyst'], toolIds: ['charts'], source: 'builtin' },
+      { name: 'custom-skill', agentNames: ['custom-agent'], source: 'custom' },
+    ],
+  })
+  assert.deepEqual(agents.map((agent) => agent.name), ['build', 'custom-agent', 'data-analyst'])
+  assert.equal(agents.find((agent) => agent.name === 'custom-agent')?.custom, true)
+  assert.equal(agents.find((agent) => agent.name === 'data-analyst')?.toolCount, 1)
+  assert.equal(agents.find((agent) => agent.name === 'data-analyst')?.skillCount, 1)
+
+  const capabilities = filterCloudWebCapabilities([
+    { id: 'charts', label: 'Charts', agentNames: ['data-analyst'], source: 'builtin' },
+    { id: 'repo', label: 'Repository', agentNames: ['build'], source: 'builtin' },
+  ], 'data charts')
+  assert.deepEqual(capabilities.map((capability) => capability.id), ['charts'])
+  assert.match(cloudWebCapabilityPolicyNote({ kind: 'mcp', scope: 'machine' }), /Machine-scoped/)
+  assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'manual', enabled: true }, { type: 'schedule', enabled: false }] }), 'manual')
+  assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'schedule', enabled: true }, { type: 'webhook', enabled: true }] }), 'schedule, webhook')
 })
 
 test('cloud website runtime helper covers all runtime entity classes', () => {

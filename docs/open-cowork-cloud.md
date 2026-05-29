@@ -209,6 +209,24 @@ View or Download actions through `GET /api/sessions/:id/artifacts/:artifactId`;
 the browser does not keep artifact bodies, signed object-store URLs, bucket
 names, or object keys in long-lived state.
 
+The rest of the Workbench uses the same cloud API contract:
+
+- Agents are derived from the current profile's allowed agent list plus the
+  cloud-safe tool and skill catalog. Starting an agent creates a cloud thread
+  and pins that agent into the composer; execution still flows through the
+  cloud worker and OpenCode runtime.
+- Tools & Skills browse `/api/capabilities`, including source, scope, agent
+  relationships, and policy notes. The browser renders cloud-safe metadata
+  only; custom content that is synced but disabled by profile policy is shown as
+  unavailable rather than exposed with local process details or secrets.
+- Workflows use `/api/workflows` for durable definitions and run history,
+  `POST /api/workflows/:id/run` for manual runs, and the pause/resume/archive
+  routes for lifecycle changes. Manual runs can open the generated run thread so
+  users can inspect the same projection shown in Chat.
+- Artifacts includes a selected-thread browser plus a cross-thread history from
+  already hydrated durable projections. Artifact bodies are still fetched only
+  on explicit user action.
+
 Thread list filtering is client-side over the current durable session snapshot:
 search text, status, profile, project kind, and tag/smart-filter metadata are
 supported. The browser paginates large org thread lists in fixed batches so a
