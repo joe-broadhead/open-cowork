@@ -87,6 +87,33 @@ roles and shared Postgres/object storage.
 - Do not send desktop bearer tokens, gateway service tokens, cookies, or BYOK
   setup requests over non-loopback HTTP.
 
+### Cloud Web Workbench
+
+- Treat the browser workbench as a release-critical client, not only as an
+  admin convenience UI.
+- Run the browser E2E gate before provider rollout:
+  `pnpm --filter @open-cowork/website test:browser`.
+- Run the accessibility gate before provider rollout:
+  `pnpm --filter @open-cowork/website test:a11y`.
+- Run the performance and scale gate before provider rollout:
+  `pnpm --filter @open-cowork/website perf:check`.
+- `pnpm test:cloud-web` runs all three gates together for CI and release
+  qualification.
+- The workbench route at `GET /` must return HTML with the bootstrap JSON,
+  route panels, `cache-control: no-store`, and a nonce-backed
+  `Content-Security-Policy`.
+- API bootstrap endpoints such as `GET /api/config` and `GET /api/workspace`
+  must be reachable through the deployed origin and return either authenticated
+  metadata or an expected auth error, never a proxy/static-asset failure.
+- Validate signed-out, member, admin, policy-blocked, quota-blocked, and
+  billing-blocked states. A disabled browser control is only an ergonomic
+  mirror; the API remains the authorization boundary.
+- Test laptop and tablet widths. Thread lists, admin tables, approval/question
+  panels, and artifact controls must not overlap or depend on desktop-only
+  viewport assumptions.
+- Downstream branding smoke checks should load the workbench with the deployed
+  product name, logo URL, theme tokens, and managed connection labels.
+
 ### Worker/Scheduler Scaling
 
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
@@ -200,9 +227,10 @@ OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
 pnpm deploy:smoke
 ```
 
-The smoke script validates cloud `/healthz`, gateway `/health`, and gateway
-`/ready`. Operator mode also checks cloud runtime/heartbeat endpoints and
-gateway metrics when tokens are provided.
+The smoke script validates cloud `/healthz`, the Cloud Web Workbench at `GET /`,
+workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
+gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
+runtime/heartbeat endpoints and gateway metrics when tokens are provided.
 
 ## Provider Recipe Contract
 

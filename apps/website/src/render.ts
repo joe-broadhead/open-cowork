@@ -330,6 +330,11 @@ function renderRoutes() {
     const visible = canViewRoute(linkRoute);
     link.hidden = !visible;
     link.dataset.active = linkRoute?.id === route?.id ? 'true' : 'false';
+    if (linkRoute?.id === route?.id) {
+      link.setAttribute('aria-current', 'page');
+    } else {
+      link.removeAttribute('aria-current');
+    }
     if (linkRoute?.requiresAdmin && adminLocked()) {
       link.dataset.locked = 'true';
       link.setAttribute('aria-label', linkRoute.label + ' - admin permissions required');
@@ -1467,18 +1472,23 @@ function renderWorkflows() {
     list.appendChild(row);
   }
   for (const workflow of workflows) {
-    const row = document.createElement('button');
-    row.type = 'button';
+    const row = document.createElement('div');
     row.className = 'table-row thread-row';
     row.dataset.selected = state.selectedWorkflowId === workflow.id ? 'true' : 'false';
     row.setAttribute('role', 'row');
-    row.addEventListener('click', () => {
+    const selectWorkflow = () => {
       state.selectedWorkflowId = workflow.id;
       renderWorkflows();
-    });
+    };
     const title = document.createElement('span');
     title.setAttribute('role', 'cell');
-    title.textContent = workflow.title || workflow.id;
+    const titleButton = document.createElement('button');
+    titleButton.type = 'button';
+    titleButton.className = 'row-link';
+    titleButton.textContent = workflow.title || workflow.id;
+    titleButton.setAttribute('aria-pressed', state.selectedWorkflowId === workflow.id ? 'true' : 'false');
+    titleButton.addEventListener('click', selectWorkflow);
+    title.appendChild(titleButton);
     const status = document.createElement('span');
     status.setAttribute('role', 'cell');
     status.appendChild(pill(workflow.status || 'unknown', workflowPillKind(workflow.status)));
@@ -2185,15 +2195,19 @@ function renderThreadList() {
     const view = state.sessionViews[session.sessionId];
     const projection = projectionFromView(view);
     const status = sessionStatus(session, projection);
-    const row = document.createElement('button');
-    row.type = 'button';
+    const row = document.createElement('div');
     row.className = 'table-row thread-row';
     row.dataset.selected = state.selectedSessionId === session.sessionId ? 'true' : 'false';
     row.setAttribute('role', 'row');
-    row.addEventListener('click', () => selectSession(session.sessionId).catch((error) => setStatus(error.message, 'error')));
     const title = document.createElement('span');
     title.setAttribute('role', 'cell');
-    title.textContent = sessionTitle(session);
+    const titleButton = document.createElement('button');
+    titleButton.type = 'button';
+    titleButton.className = 'row-link';
+    titleButton.textContent = sessionTitle(session);
+    titleButton.setAttribute('aria-pressed', state.selectedSessionId === session.sessionId ? 'true' : 'false');
+    titleButton.addEventListener('click', () => selectSession(session.sessionId).catch((error) => setStatus(error.message, 'error')));
+    title.appendChild(titleButton);
     const statusCell = document.createElement('span');
     statusCell.setAttribute('role', 'cell');
     statusCell.appendChild(pill(status, statusPillKind(status)));
@@ -3417,7 +3431,7 @@ ${publicBrandingCss(branding)}
       resize: vertical;
       line-height: 1.45;
     }
-    input:focus, select:focus, textarea:focus, button:focus-visible {
+    input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
@@ -3688,6 +3702,23 @@ ${publicBrandingCss(branding)}
       background: #eef8f2;
       box-shadow: inset 3px 0 0 var(--accent);
     }
+    .row-link {
+      min-height: 0;
+      width: 100%;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      padding: 4px 0;
+      text-align: left;
+      font-weight: 600;
+    }
+    .row-link:hover {
+      color: var(--accent);
+      border-color: transparent;
+      background: transparent;
+      text-decoration: underline;
+    }
     .empty-row {
       color: var(--muted);
     }
@@ -3899,6 +3930,14 @@ ${publicBrandingCss(branding)}
     }
     body[data-auth="signed-in"] .signed-out-only {
       display: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
     }
     @media (max-width: 920px) {
       .shell {

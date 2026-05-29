@@ -9,13 +9,20 @@
   "scripts": {
     "build": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
     "typecheck": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
-    "test": "node --no-warnings --experimental-strip-types --test src/*.test.ts"
+    "test": "node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "test:browser": "pnpm --filter @open-cowork/shared build && pnpm run test:browser:run",
+    "test:browser:run": "node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts",
+    "test:a11y": "pnpm --filter @open-cowork/shared build && pnpm run test:a11y:run",
+    "test:a11y:run": "node --no-warnings --experimental-strip-types --test src/accessibility.test.ts",
+    "perf:check": "pnpm --filter @open-cowork/shared build && pnpm run perf:check:run",
+    "perf:check:run": "node --no-warnings --experimental-strip-types --test src/performance.test.ts"
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.12.0",
+    "jsdom": "26.1.0",
     "typescript": "^6.0.0"
   }
 }

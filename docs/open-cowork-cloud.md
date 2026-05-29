@@ -245,6 +245,29 @@ gateway channel is just a cloud session and can be opened in the browser; a
 thread created in the browser appears to desktop and gateway clients through the
 same session list, projection, and SSE contracts.
 
+### Cloud Web Workbench readiness gates
+
+The browser workbench has its own release gates because `/healthz` only proves
+the server is alive. Run these before provider rollout and keep them in CI:
+
+```bash
+pnpm --filter @open-cowork/website test:browser
+pnpm --filter @open-cowork/website test:a11y
+pnpm --filter @open-cowork/website perf:check
+pnpm test:cloud-web
+```
+
+The browser E2E gate hydrates the actual workbench client in a DOM harness and
+checks signed-out, member, admin, thread create/prompt/continue, SSE refresh,
+approval/question, artifact, workflow, BYOK, gateway, billing, diagnostics,
+policy-blocked, quota-blocked, and billing-blocked flows.
+
+The accessibility gate checks labelled controls, keyboard-reachable navigation,
+focus management, active route state, reduced-motion CSS, responsive layout
+rules, and contrast budgets. The performance and scale gate checks 10k-thread
+fixtures, hundreds of capabilities, bounded DOM row rendering, load-more
+behavior, client-side filtering budgets, and SSE reconnect handling.
+
 Signed-in member users can open the workbench and read allowed org/policy/usage
 state. Admin-only panels are hidden for members and all admin mutations remain
 server-authorized. Disabled controls in the browser are an ergonomic layer only.
@@ -494,8 +517,8 @@ windows, concurrent session caps, and active worker caps when
 
 CI runs the same cloud gates in the `cloud-gates` job: OpenCode portability
 proof, real Postgres concurrency tests, Compose config validation, cloud OCI
-image build, split-role Compose `/healthz` smoke, and Helm lint/render
-validation.
+image build, Cloud Web Workbench readiness gates, split-role Compose
+workbench/API smoke, and Helm lint/render validation.
 
 ## Configuration
 

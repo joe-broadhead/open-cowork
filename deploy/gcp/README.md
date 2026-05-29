@@ -68,8 +68,21 @@ CPU and lifetime.
   configure billing through the billing adapter and signed billing webhooks.
 - Use Workload Identity or External Secrets rather than static object-store
   credentials where possible.
+- Run Cloud Web readiness gates before rollout:
+
+  ```bash
+  pnpm test:cloud-web
+  ```
+
 - Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
-  URLs.
+  URLs. The smoke must prove the browser workbench loads at `GET /`, the
+  bootstrap JSON and `Content-Security-Policy` are present, `/api/config` and
+  `/api/workspace` are reachable through the public origin, and gateway
+  `/health` plus `/ready` pass.
+- For branded downstream deployments, smoke the GCP URL with the intended
+  `OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON` or Helm `cloud.branding` values and
+  confirm the product name, logo URL, theme tokens, and desktop/gateway
+  connection labels appear in the browser bootstrap.
 
 GCP configuration is adapter wiring only. Do not add GCP branches to cloud
 sessions, gateway rendering, OpenCode runtime startup, or BYOK core code.
