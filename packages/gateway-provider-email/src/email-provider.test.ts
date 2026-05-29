@@ -70,6 +70,28 @@ describe("EmailProvider", () => {
     })).rejects.toThrow("shared secret");
   });
 
+  it("parses formatted sender addresses with bounded deterministic parsing", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new EmailProvider({
+      from: "agent@example.test",
+      inboundSecret: "inbound-secret",
+      transport: fakeTransport(),
+    });
+    await provider.start(async (message) => {
+      messages.push(message);
+    });
+
+    await provider.handleWebhookPayload({
+      from: `"Alice Example" <ALICE+ops@example.test> ${"%".repeat(2048)}`,
+      text: "hello",
+    }, {
+      sharedSecret: "inbound-secret",
+    });
+
+    expect(messages[0]?.target.chatId).toBe("alice+ops@example.test");
+    expect(messages[0]?.sender.displayName).toBe("Alice Example");
+  });
+
   it("sends threaded outbound email and keeps approvals on token fallback", async () => {
     const sent: EmailMessage[] = [];
     const provider = new EmailProvider({

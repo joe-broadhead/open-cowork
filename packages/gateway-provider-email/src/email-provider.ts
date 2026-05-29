@@ -279,8 +279,8 @@ function sanitizeHeader(value: string): string {
 
 function emailAddress(value: unknown): string | null {
   if (typeof value === "string") {
-    const match = /<?([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})>?/i.exec(value);
-    return match ? match[1]!.toLowerCase() : null;
+    const address = firstEmailCandidate(value);
+    return address ? address.toLowerCase() : null;
   }
   const record = objectRecord(value);
   return emailAddress(record.email);
@@ -288,11 +288,120 @@ function emailAddress(value: unknown): string | null {
 
 function emailDisplayName(value: unknown): string | null {
   if (typeof value === "string") {
-    const match = /^\s*"?([^"<]+?)"?\s*</.exec(value);
-    return match?.[1]?.trim() || null;
+    const marker = value.indexOf("<");
+    if (marker <= 0) return null;
+    const displayName = stripOuterQuotes(value.slice(0, marker).trim());
+    return displayName || null;
   }
   const record = objectRecord(value);
   return stringField(record, "name");
+}
+
+function firstEmailCandidate(value: string): string | null {
+  const input = value.slice(0, 1024).trim();
+  const marker = input.lastIndexOf("<");
+  if (marker >= 0) {
+    const close = input.indexOf(">", marker + 1);
+    const bracketed = close >= 0 ? input.slice(marker + 1, close) : input.slice(marker + 1);
+    const normalized = cleanEmailCandidate(bracketed);
+    if (isValidEmailAddress(normalized)) return normalized;
+  }
+  for (const token of tokenizeAddressInput(input)) {
+    const normalized = cleanEmailCandidate(token);
+    if (isValidEmailAddress(normalized)) return normalized;
+  }
+  return null;
+}
+
+function tokenizeAddressInput(value: string): string[] {
+  const tokens: string[] = [];
+  let start: number | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    const separator = code === 44 || code === 59 || code <= 32;
+    if (separator) {
+      if (start !== null) tokens.push(value.slice(start, index));
+      start = null;
+    } else if (start === null) {
+      start = index;
+    }
+  }
+  if (start !== null) tokens.push(value.slice(start));
+  return tokens;
+}
+
+function cleanEmailCandidate(value: string): string {
+  let candidate = value.trim();
+  if (candidate.toLowerCase().startsWith("mailto:")) {
+    candidate = candidate.slice("mailto:".length).trim();
+  }
+  candidate = stripOuterQuotes(candidate);
+  while (candidate.startsWith("<")) candidate = candidate.slice(1).trimStart();
+  while (candidate.endsWith(">") || candidate.endsWith(",") || candidate.endsWith(";")) {
+    candidate = candidate.slice(0, -1).trimEnd();
+  }
+  return candidate;
+}
+
+function stripOuterQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function isValidEmailAddress(value: string): boolean {
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@") || at === value.length - 1) return false;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (local.startsWith(".") || local.endsWith(".") || domain.startsWith(".") || domain.endsWith(".")) return false;
+  if (!hasOnlyEmailLocalChars(local) || !hasOnlyEmailDomainChars(domain)) return false;
+  const labels = domain.split(".");
+  if (labels.length < 2 || labels.some((label) => !label || label.startsWith("-") || label.endsWith("-"))) return false;
+  return labels.at(-1)!.length >= 2;
+}
+
+function hasOnlyEmailLocalChars(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    const valid = isAsciiAlphaNumeric(code)
+      || code === 33
+      || code === 35
+      || code === 36
+      || code === 37
+      || code === 38
+      || code === 39
+      || code === 42
+      || code === 43
+      || code === 45
+      || code === 46
+      || code === 47
+      || code === 61
+      || code === 63
+      || code === 94
+      || code === 95
+      || code === 96
+      || code === 123
+      || code === 124
+      || code === 125
+      || code === 126;
+    if (!valid) return false;
+  }
+  return value.length > 0;
+}
+
+function hasOnlyEmailDomainChars(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (!isAsciiAlphaNumeric(code) && code !== 45 && code !== 46) return false;
+  }
+  return value.length > 0;
+}
+
+function isAsciiAlphaNumeric(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function lastReference(value: unknown): string | null {
