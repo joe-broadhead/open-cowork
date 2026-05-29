@@ -49,6 +49,17 @@ developers can understand test fixtures, not so users can set them manually.
 | `OPEN_COWORK_LOG_FORMAT=json` | Writes structured JSON log lines. | Default is readable text. |
 | `OPEN_COWORK_CHART_TIMEOUT_MS` | Overrides main-process chart render timeout. | Clamped to `[250, 10000]` ms. |
 
+## Documentation tooling
+
+`pnpm docs:build` is self-contained for contributors. It creates or reuses
+`.venv-docs/`, installs the pinned packages from `docs/requirements.txt`, and
+runs `mkdocs build --strict`. `pnpm docs:serve` uses the same virtual
+environment for local preview. Do not commit `.venv-docs/` or the generated
+`site/` directory.
+
+If Python is not on `PATH`, set `DOCS_PYTHON` to an explicit Python 3
+executable before running either command.
+
 ## Release variables
 
 Release-only variables are documented in
