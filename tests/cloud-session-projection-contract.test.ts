@@ -140,8 +140,10 @@ test('cloud projection reducer covers durable runtime event state transitions', 
   assert.equal(view.pendingApprovals.length, 1)
   assert.equal(view.isGenerating, false)
 
-  view = reduceCloudSessionProjectionEvent(session, view, event(6, 'permission.resolved', { requestID: 'permission-1' }))
+  view = reduceCloudSessionProjectionEvent(session, view, event(6, 'permission.resolved', { requestID: 'permission-1', allowed: false }))
   assert.equal(view.pendingApprovals.length, 0)
+  assert.equal(view.resolvedApprovals[0]?.id, 'permission-1')
+  assert.equal(view.resolvedApprovals[0]?.allowed, false)
 
   view = reduceCloudSessionProjectionEvent(session, view, event(7, 'question.asked', {
     requestID: 'question-1',
@@ -158,8 +160,10 @@ test('cloud projection reducer covers durable runtime event state transitions', 
   assert.equal(view.pendingQuestions[0]?.tool?.callId, 'call-1')
   assert.equal(view.pendingQuestions[0]?.questions[0]?.multiple, true)
 
-  view = reduceCloudSessionProjectionEvent(session, view, event(8, 'question.resolved', { requestID: 'question-1' }))
+  view = reduceCloudSessionProjectionEvent(session, view, event(8, 'question.resolved', { requestID: 'question-1', answers: ['Tests'] }))
   assert.equal(view.pendingQuestions.length, 0)
+  assert.equal(view.resolvedQuestions[0]?.id, 'question-1')
+  assert.deepEqual(view.resolvedQuestions[0]?.answers, ['Tests'])
 
   view = reduceCloudSessionProjectionEvent(session, view, event(9, 'todos.updated', {
     todos: [

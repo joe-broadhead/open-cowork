@@ -193,6 +193,7 @@ const state = {
   sessions: [],
   sessionViews: {},
   selectedSessionId: null,
+  runtimeActions: {},
   threadLimit: ${CLOUD_WEB_THREAD_PAGE_SIZE},
   threadFilters: {
     query: '',
@@ -211,6 +212,13 @@ const state = {
   workspaceEvents: {
     source: null,
     cursor: 0,
+    status: 'idle',
+    error: null,
+  },
+  artifactPanel: {
+    sessionId: null,
+    artifactId: null,
+    metadata: null,
     status: 'idle',
     error: null,
   },
@@ -327,6 +335,14 @@ function endpoint(id, fallback) {
   return entry?.path || fallback;
 }
 
+function endpointPath(id, fallback, params = {}) {
+  let path = endpoint(id, fallback);
+  for (const [key, value] of Object.entries(params)) {
+    path = path.replace(':' + key, encodeURIComponent(String(value)));
+  }
+  return path;
+}
+
 function headers(hasBody) {
   const next = hasBody ? { 'content-type': 'application/json' } : {};
   if (state.csrfToken) next['x-csrf-token'] = state.csrfToken;
@@ -365,6 +381,14 @@ function renderSignedOut() {
   state.sessions = [];
   state.sessionViews = {};
   state.selectedSessionId = null;
+  state.runtimeActions = {};
+  state.artifactPanel = {
+    sessionId: null,
+    artifactId: null,
+    metadata: null,
+    status: 'idle',
+    error: null,
+  };
   state.sessionEvents = {
     source: null,
     sessionId: null,
@@ -412,8 +436,111 @@ function actionButton(label, onClick, variant = '', disabled = false) {
   button.textContent = label;
   button.disabled = disabled;
   if (variant) button.className = variant;
-  button.addEventListener('click', onClick);
+  button.addEventListener('click', () => {
+    try {
+      const result = onClick();
+      if (result && typeof result.catch === 'function') result.catch((error) => setStatus(error.message || 'Action failed', 'error'));
+    } catch (error) {
+      setStatus(error.message || 'Action failed', 'error');
+    }
+  });
   return button;
+}
+
+function normalizeList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function compactJson(value) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return String(value ?? '');
+  }
+}
+
+function byteLabel(value) {
+  const bytes = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+function tokenNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function actionPending(key) {
+  return Boolean(state.runtimeActions[key]);
+}
+
+async function withRuntimeAction(key, action) {
+  if (state.runtimeActions[key]) return;
+  state.runtimeActions[key] = true;
+  renderChat();
+  renderArtifacts();
+  try {
+    await action();
+    await refreshSelectedSession();
+    await loadSessions({ keepSelection: true });
+  } finally {
+    delete state.runtimeActions[key];
+    renderChat();
+    renderArtifacts();
+  }
+}
+
+function runtimeViewFromCloudView(view) {
+  const sessionView = safeObject(view?.view);
+  const projection = projectionFromView(view);
+  return {
+    ...projection,
+    messages: normalizeList(sessionView.messages).length ? normalizeList(sessionView.messages) : projection.messages,
+    toolCalls: normalizeList(sessionView.toolCalls).length ? normalizeList(sessionView.toolCalls) : projection.toolCalls,
+    taskRuns: normalizeList(sessionView.taskRuns).length ? normalizeList(sessionView.taskRuns) : projection.taskRuns,
+    pendingApprovals: normalizeList(sessionView.pendingApprovals).length ? normalizeList(sessionView.pendingApprovals) : projection.pendingApprovals,
+    pendingQuestions: normalizeList(sessionView.pendingQuestions).length ? normalizeList(sessionView.pendingQuestions) : projection.pendingQuestions,
+    artifacts: normalizeList(sessionView.artifacts).length ? normalizeList(sessionView.artifacts) : projection.artifacts,
+    todos: normalizeList(sessionView.todos).length ? normalizeList(sessionView.todos) : projection.todos,
+    errors: normalizeList(sessionView.errors).length ? normalizeList(sessionView.errors) : projection.errors,
+    sessionCost: typeof sessionView.sessionCost === 'number' ? sessionView.sessionCost : projection.sessionCost,
+    sessionTokens: safeObject(sessionView.sessionTokens || projection.sessionTokens),
+    lastInputTokens: typeof sessionView.lastInputTokens === 'number' ? sessionView.lastInputTokens : projection.lastInputTokens,
+    contextState: sessionView.contextState || projection.contextState || 'idle',
+    compactionCount: tokenNumber(sessionView.compactionCount || projection.compactionCount),
+    lastCompactedAt: sessionView.lastCompactedAt || projection.lastCompactedAt || null,
+    isGenerating: Boolean(sessionView.isGenerating || projection.isGenerating),
+    isAwaitingPermission: Boolean(sessionView.isAwaitingPermission || projection.pendingApprovals.length),
+    isAwaitingQuestion: Boolean(sessionView.isAwaitingQuestion || projection.pendingQuestions.length),
+  };
+}
+
+function messageText(message) {
+  if (typeof message.content === 'string' && message.content) return message.content;
+  if (Array.isArray(message.segments)) return message.segments.map((segment) => segment.content || '').join('');
+  return '';
+}
+
+function runtimeOrder(item, fallback) {
+  return typeof item?.order === 'number' && Number.isFinite(item.order) ? item.order : fallback;
+}
+
+function artifactId(artifact) {
+  return artifact?.cloudArtifactId || artifact?.artifactId || artifact?.id || '';
+}
+
+function safeArtifactMetadata(artifact) {
+  const metadata = {};
+  for (const [key, value] of Object.entries(safeObject(artifact))) {
+    const normalized = key.toLowerCase();
+    if (['database64', 'url', 'downloadurl', 'signedurl', 'presignedurl', 'key', 'objectkey', 'storagekey', 'bucket', 'container', 'authorization', 'token'].includes(normalized)) continue;
+    metadata[key] = value;
+  }
+  return metadata;
 }
 
 function renderWorkspace() {
@@ -647,11 +774,18 @@ function projectionFromView(view) {
       taskRuns: [],
       pendingApprovals: [],
       pendingQuestions: [],
+      resolvedApprovals: [],
+      resolvedQuestions: [],
       artifacts: [],
       todos: [],
       errors: [],
       sessionCost: 0,
       sessionTokens: {},
+      lastInputTokens: 0,
+      isGenerating: false,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
       origin: null,
       projectSource: null,
       tags: [],
@@ -668,11 +802,18 @@ function projectionFromView(view) {
     taskRuns: Array.isArray(projection.taskRuns) ? projection.taskRuns : [],
     pendingApprovals: Array.isArray(projection.pendingApprovals) ? projection.pendingApprovals : [],
     pendingQuestions: Array.isArray(projection.pendingQuestions) ? projection.pendingQuestions : [],
+    resolvedApprovals: Array.isArray(projection.resolvedApprovals) ? projection.resolvedApprovals : [],
+    resolvedQuestions: Array.isArray(projection.resolvedQuestions) ? projection.resolvedQuestions : [],
     artifacts: Array.isArray(projection.artifacts) ? projection.artifacts : [],
     todos: Array.isArray(projection.todos) ? projection.todos : [],
     errors: Array.isArray(projection.errors) ? projection.errors : [],
     sessionCost: typeof projection.sessionCost === 'number' ? projection.sessionCost : 0,
     sessionTokens: projection.sessionTokens && typeof projection.sessionTokens === 'object' ? projection.sessionTokens : {},
+    lastInputTokens: typeof projection.lastInputTokens === 'number' ? projection.lastInputTokens : 0,
+    isGenerating: Boolean(projection.isGenerating),
+    contextState: projection.contextState || 'idle',
+    compactionCount: typeof projection.compactionCount === 'number' ? projection.compactionCount : 0,
+    lastCompactedAt: projection.lastCompactedAt || null,
     origin: projection.origin && typeof projection.origin === 'object' ? projection.origin : null,
     projectSource: projection.projectSource && typeof projection.projectSource === 'object' ? projection.projectSource : null,
     tags: Array.isArray(projection.tags) ? projection.tags : [],
@@ -739,6 +880,264 @@ function statusPillKind(status) {
   if (status === 'approval' || status === 'question') return 'warn';
   if (status === 'errored' || status === 'error') return 'warn';
   return '';
+}
+
+function errorCategory(message) {
+  const text = String(message || '').toLowerCase();
+  if (text.includes('policy') || text.includes('disabled') || text.includes('not allowed')) return 'policy';
+  if (text.includes('auth') || text.includes('token') || text.includes('forbidden') || text.includes('unauthorized')) return 'auth';
+  if (text.includes('quota') || text.includes('rate limit') || text.includes('too many')) return 'quota';
+  if (text.includes('billing') || text.includes('subscription') || text.includes('payment')) return 'billing';
+  if (text.includes('provider') || text.includes('model') || text.includes('api key')) return 'provider';
+  return 'runtime';
+}
+
+function appendDetails(parent, summaryText, value) {
+  const details = document.createElement('details');
+  details.className = 'runtime-detail';
+  const summary = document.createElement('summary');
+  summary.textContent = summaryText;
+  const pre = document.createElement('pre');
+  pre.textContent = compactJson(value);
+  details.appendChild(summary);
+  details.appendChild(pre);
+  parent.appendChild(details);
+}
+
+function renderRuntimeSummary(projection) {
+  const summary = document.createElement('section');
+  summary.className = 'runtime-summary';
+  summary.appendChild(pill(projection.status || 'idle', statusPillKind(projection.status)));
+  if (projection.isGenerating) summary.appendChild(pill('generating', 'ok'));
+  if (projection.isAwaitingPermission) summary.appendChild(pill('awaiting approval', 'warn'));
+  if (projection.isAwaitingQuestion) summary.appendChild(pill('awaiting answer', 'warn'));
+  summary.appendChild(pill('cost $' + Number(projection.sessionCost || 0).toFixed(4)));
+  const tokens = safeObject(projection.sessionTokens);
+  const tokenText = [
+    'in ' + tokenNumber(tokens.input),
+    'out ' + tokenNumber(tokens.output),
+    'reason ' + tokenNumber(tokens.reasoning),
+    'cache ' + (tokenNumber(tokens.cacheRead) + tokenNumber(tokens.cacheWrite)),
+  ].join(' / ');
+  summary.appendChild(pill(tokenText));
+  if (projection.contextState && projection.contextState !== 'idle') summary.appendChild(pill('context ' + projection.contextState));
+  if (projection.compactionCount) summary.appendChild(pill('compactions ' + projection.compactionCount));
+  return summary;
+}
+
+function renderApprovalCard(approval) {
+  const key = 'approval:' + approval.id;
+  const card = document.createElement('article');
+  card.className = 'runtime-card';
+  card.dataset.kind = 'approval';
+  const header = document.createElement('div');
+  header.className = 'runtime-card-header';
+  header.appendChild(pill('Approval', 'warn'));
+  const title = document.createElement('strong');
+  title.textContent = approval.description || approval.tool || 'Permission requested';
+  header.appendChild(title);
+  card.appendChild(header);
+  const meta = document.createElement('small');
+  meta.textContent = [approval.tool, approval.taskRunId ? 'task ' + approval.taskRunId : null].filter(Boolean).join(' - ');
+  card.appendChild(meta);
+  appendDetails(card, 'Permission input', approval.input || {});
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.appendChild(actionButton('Allow', () => respondToPermission(approval.id, true), 'primary', actionPending(key)));
+  actions.appendChild(actionButton('Deny', () => respondToPermission(approval.id, false), 'danger', actionPending(key)));
+  card.appendChild(actions);
+  return card;
+}
+
+function renderQuestionCard(question) {
+  const key = 'question:' + question.id;
+  const card = document.createElement('article');
+  card.className = 'runtime-card';
+  card.dataset.kind = 'question';
+  const header = document.createElement('div');
+  header.className = 'runtime-card-header';
+  header.appendChild(pill('Question', 'warn'));
+  const title = document.createElement('strong');
+  title.textContent = question.questions?.[0]?.question || 'Question requested';
+  header.appendChild(title);
+  card.appendChild(header);
+  for (const prompt of normalizeList(question.questions)) {
+    const block = document.createElement('div');
+    block.className = 'question-block';
+    if (prompt.header) {
+      const heading = document.createElement('strong');
+      heading.textContent = prompt.header;
+      block.appendChild(heading);
+    }
+    const text = document.createElement('p');
+    text.textContent = prompt.question || '';
+    block.appendChild(text);
+    if (Array.isArray(prompt.options) && prompt.options.length) {
+      const choices = document.createElement('div');
+      choices.className = 'choice-row';
+      for (const option of prompt.options) {
+        choices.appendChild(actionButton(option.label || option.description || 'Select', () => answerQuestion(question.id, [option.label || option.description || '']), 'secondary', actionPending(key)));
+      }
+      block.appendChild(choices);
+    }
+    card.appendChild(block);
+  }
+  const input = document.createElement('textarea');
+  input.placeholder = 'Answer';
+  input.rows = 3;
+  input.dataset.questionAnswer = question.id;
+  input.disabled = actionPending(key);
+  card.appendChild(input);
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.appendChild(actionButton('Send answer', () => answerQuestion(question.id, [input.value.trim()].filter(Boolean)), 'primary', actionPending(key)));
+  actions.appendChild(actionButton('Reject', () => rejectQuestion(question.id), 'danger', actionPending(key)));
+  card.appendChild(actions);
+  return card;
+}
+
+function renderResolvedCard(kind, item) {
+  const row = document.createElement('div');
+  row.className = 'activity-row';
+  if (kind === 'approval') {
+    row.appendChild(pill(item.allowed ? 'approved' : 'denied', item.allowed ? 'ok' : 'warn'));
+    const text = document.createElement('span');
+    text.textContent = item.description || item.tool || item.id;
+    row.appendChild(text);
+  } else {
+    row.appendChild(pill(item.rejected ? 'question rejected' : 'answered', item.rejected ? 'warn' : 'ok'));
+    const text = document.createElement('span');
+    const prompt = item.questions?.[0]?.question || item.id;
+    const answers = item.answers?.length ? ': ' + item.answers.join(', ') : '';
+    text.textContent = prompt + answers;
+    row.appendChild(text);
+  }
+  return row;
+}
+
+function renderMessageBubble(message) {
+  const bubble = document.createElement('article');
+  bubble.className = 'message-bubble';
+  bubble.dataset.role = message.role;
+  const heading = document.createElement('div');
+  heading.className = 'message-heading';
+  heading.textContent = message.role === 'user' ? 'You' : 'Assistant';
+  const body = document.createElement('p');
+  body.textContent = messageText(message);
+  bubble.appendChild(heading);
+  bubble.appendChild(body);
+  if (Array.isArray(message.attachments) && message.attachments.length) {
+    appendDetails(bubble, 'Attachments', message.attachments);
+  }
+  return bubble;
+}
+
+function renderToolTrace(tool) {
+  const details = document.createElement('details');
+  details.className = 'runtime-detail tool-trace';
+  const summary = document.createElement('summary');
+  summary.appendChild(pill(tool.status || 'tool', statusPillKind(tool.status)));
+  const title = document.createElement('span');
+  title.textContent = tool.name || tool.id || 'Tool call';
+  summary.appendChild(title);
+  details.appendChild(summary);
+  appendDetails(details, 'Input', tool.input || {});
+  if (tool.output !== undefined) appendDetails(details, 'Output', tool.output);
+  if (Array.isArray(tool.attachments) && tool.attachments.length) appendDetails(details, 'Attachments', tool.attachments);
+  return details;
+}
+
+function renderTaskRun(task) {
+  const details = document.createElement('details');
+  details.className = 'runtime-detail task-run';
+  const summary = document.createElement('summary');
+  summary.appendChild(pill(task.status || 'task', statusPillKind(task.status)));
+  const title = document.createElement('span');
+  title.textContent = task.title || task.agent || task.id || 'Task run';
+  summary.appendChild(title);
+  details.appendChild(summary);
+  if (task.content) {
+    const body = document.createElement('p');
+    body.textContent = task.content;
+    details.appendChild(body);
+  }
+  if (task.agent) details.appendChild(pill('agent ' + task.agent));
+  if (task.error) {
+    const error = document.createElement('p');
+    error.className = 'notice';
+    error.textContent = task.error;
+    details.appendChild(error);
+  }
+  for (const tool of normalizeList(task.toolCalls)) {
+    details.appendChild(renderToolTrace(tool));
+  }
+  if (normalizeList(task.todos).length) appendDetails(details, 'Task todos', task.todos);
+  return details;
+}
+
+function renderArtifactCard(artifact) {
+  const id = artifactId(artifact);
+  const card = document.createElement('article');
+  card.className = 'runtime-card artifact-card';
+  card.dataset.kind = 'artifact';
+  const header = document.createElement('div');
+  header.className = 'runtime-card-header';
+  header.appendChild(pill('Artifact', 'ok'));
+  const title = document.createElement('strong');
+  title.textContent = artifact.filename || artifact.name || id || 'Artifact';
+  header.appendChild(title);
+  card.appendChild(header);
+  const meta = document.createElement('small');
+  meta.textContent = [
+    artifact.mime || artifact.contentType || 'unknown type',
+    artifact.size !== undefined ? byteLabel(artifact.size) : null,
+    artifact.taskRunId ? 'task ' + artifact.taskRunId : null,
+    artifact.toolName || artifact.toolId || null,
+  ].filter(Boolean).join(' - ');
+  card.appendChild(meta);
+  appendDetails(card, 'Metadata', safeArtifactMetadata({
+    id,
+    filePath: artifact.filePath || null,
+    toolId: artifact.toolId || null,
+    toolName: artifact.toolName || null,
+    taskRunId: artifact.taskRunId || null,
+    createdAt: artifact.createdAt || null,
+  }));
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  actions.appendChild(actionButton('View', () => openArtifact(id, 'view'), 'secondary', !id || actionPending('artifact:' + id)));
+  actions.appendChild(actionButton('Download', () => openArtifact(id, 'download'), 'primary', !id || actionPending('artifact:' + id)));
+  actions.appendChild(actionButton('Inspect', () => inspectArtifact(id), 'secondary', !id));
+  card.appendChild(actions);
+  return card;
+}
+
+function renderTodoList(todos) {
+  const list = document.createElement('section');
+  list.className = 'activity-block';
+  const heading = document.createElement('h4');
+  heading.textContent = 'Todos';
+  list.appendChild(heading);
+  for (const todo of todos) {
+    const row = document.createElement('div');
+    row.className = 'activity-row';
+    row.appendChild(pill(todo.status || 'todo'));
+    const text = document.createElement('span');
+    text.textContent = [todo.content, todo.priority ? '(' + todo.priority + ')' : null].filter(Boolean).join(' ');
+    row.appendChild(text);
+    list.appendChild(row);
+  }
+  return list;
+}
+
+function renderRuntimeError(error) {
+  const item = document.createElement('div');
+  item.className = 'notice runtime-error';
+  item.appendChild(pill(errorCategory(error.message), 'warn'));
+  const text = document.createElement('span');
+  text.textContent = error.message || 'Runtime error';
+  item.appendChild(text);
+  return item;
 }
 
 function renderThreadList() {
@@ -810,7 +1209,7 @@ function renderChat() {
   const composer = qs('#prompt-form');
   const eventStatus = qs('#chat-event-status');
   const view = state.selectedSessionId ? state.sessionViews[state.selectedSessionId] : null;
-  const projection = projectionFromView(view);
+  const projection = runtimeViewFromCloudView(view);
   if (title) title.textContent = view ? sessionTitle(view.session) : 'No thread selected';
   if (meta) {
     const details = view
@@ -820,6 +1219,7 @@ function renderChat() {
           projection.messages.length + ' message(s)',
           projection.toolCalls.length + ' tool call(s)',
           projection.taskRuns.length + ' task run(s)',
+          projection.artifacts.length + ' artifact(s)',
         ]
       : ['Select a cloud thread'];
     meta.textContent = details.filter(Boolean).join(' - ');
@@ -844,88 +1244,97 @@ function renderChat() {
     timeline.appendChild(empty);
     return;
   }
-  const waits = [
-    ...projection.pendingApprovals.map((approval) => ({ kind: 'Approval', text: approval.description || approval.tool })),
-    ...projection.pendingQuestions.map((question) => ({ kind: 'Question', text: question.questions?.[0]?.question || 'Question requested' })),
-  ];
-  for (const wait of waits) {
-    const item = document.createElement('div');
-    item.className = 'wait-banner';
-    item.appendChild(pill(wait.kind, 'warn'));
-    const text = document.createElement('span');
-    text.textContent = wait.text;
-    item.appendChild(text);
-    timeline.appendChild(item);
+
+  timeline.appendChild(renderRuntimeSummary(projection));
+
+  for (const approval of projection.pendingApprovals) {
+    timeline.appendChild(renderApprovalCard(approval));
   }
-  for (const message of projection.messages) {
-    const bubble = document.createElement('article');
-    bubble.className = 'message-bubble';
-    bubble.dataset.role = message.role;
-    const heading = document.createElement('div');
-    heading.className = 'message-heading';
-    heading.textContent = message.role === 'user' ? 'You' : 'Assistant';
-    const body = document.createElement('p');
-    body.textContent = message.content || '';
-    bubble.appendChild(heading);
-    bubble.appendChild(body);
-    timeline.appendChild(bubble);
+  for (const question of projection.pendingQuestions) {
+    timeline.appendChild(renderQuestionCard(question));
   }
-  if (projection.taskRuns.length || projection.toolCalls.length || projection.artifacts.length || projection.todos.length) {
+
+  const resolved = [
+    ...projection.resolvedApprovals.map((item) => ({ kind: 'approval', item, order: runtimeOrder(item, 0) })),
+    ...projection.resolvedQuestions.map((item) => ({ kind: 'question', item, order: runtimeOrder(item, 0) })),
+  ].sort((a, b) => a.order - b.order);
+  if (resolved.length) {
     const activity = document.createElement('section');
     activity.className = 'activity-block';
     const heading = document.createElement('h4');
-    heading.textContent = 'Activity';
+    heading.textContent = 'Resolved waits';
     activity.appendChild(heading);
-    for (const task of projection.taskRuns.slice(-8)) {
-      const row = document.createElement('div');
-      row.className = 'activity-row';
-      row.appendChild(pill(task.status || 'task'));
-      const text = document.createElement('span');
-      text.textContent = task.title || task.agent || task.id || 'Task run';
-      row.appendChild(text);
-      activity.appendChild(row);
-    }
-    for (const tool of projection.toolCalls.slice(-8)) {
-      const row = document.createElement('div');
-      row.className = 'activity-row';
-      row.appendChild(pill(tool.status || 'tool'));
-      const text = document.createElement('span');
-      text.textContent = tool.name || tool.id || 'Tool call';
-      row.appendChild(text);
-      activity.appendChild(row);
-    }
-    for (const artifact of projection.artifacts.slice(-8)) {
-      const row = document.createElement('div');
-      row.className = 'activity-row';
-      row.appendChild(pill('artifact', 'ok'));
-      const text = document.createElement('span');
-      text.textContent = artifact.filename || artifact.name || artifact.artifactId || 'Artifact';
-      row.appendChild(text);
-      activity.appendChild(row);
-    }
-    if (projection.todos.length) {
-      const row = document.createElement('div');
-      row.className = 'activity-row';
-      row.appendChild(pill('todos'));
-      const text = document.createElement('span');
-      text.textContent = projection.todos.length + ' todo(s)';
-      row.appendChild(text);
-      activity.appendChild(row);
+    for (const entry of resolved.slice(-12)) {
+      activity.appendChild(renderResolvedCard(entry.kind, entry.item));
     }
     timeline.appendChild(activity);
   }
-  for (const error of projection.errors) {
-    const item = document.createElement('div');
-    item.className = 'notice';
-    item.textContent = error.message || 'Runtime error';
-    timeline.appendChild(item);
+
+  const timelineItems = [
+    ...projection.messages.map((item, index) => ({ kind: 'message', item, order: runtimeOrder(item, index + 1) })),
+    ...projection.taskRuns.map((item, index) => ({ kind: 'task', item, order: runtimeOrder(item, 5000 + index) })),
+    ...projection.toolCalls.map((item, index) => ({ kind: 'tool', item, order: runtimeOrder(item, 6000 + index) })),
+    ...projection.artifacts.map((item, index) => ({ kind: 'artifact', item, order: runtimeOrder(item, 7000 + index) })),
+    ...projection.errors.map((item, index) => ({ kind: 'error', item, order: runtimeOrder(item, 8000 + index) })),
+  ].sort((a, b) => a.order - b.order);
+
+  for (const entry of timelineItems) {
+    if (entry.kind === 'message') timeline.appendChild(renderMessageBubble(entry.item));
+    if (entry.kind === 'task') timeline.appendChild(renderTaskRun(entry.item));
+    if (entry.kind === 'tool') timeline.appendChild(renderToolTrace(entry.item));
+    if (entry.kind === 'artifact') timeline.appendChild(renderArtifactCard(entry.item));
+    if (entry.kind === 'error') timeline.appendChild(renderRuntimeError(entry.item));
   }
-  if (!projection.messages.length && !waits.length && !projection.errors.length) {
+
+  if (projection.todos.length) {
+    timeline.appendChild(renderTodoList(projection.todos));
+  }
+  if (!timelineItems.length && !projection.pendingApprovals.length && !projection.pendingQuestions.length && !resolved.length && !projection.todos.length) {
     const empty = document.createElement('p');
     empty.className = 'empty';
     empty.textContent = 'No messages yet.';
     timeline.appendChild(empty);
   }
+}
+
+function renderArtifacts() {
+  const panel = qs('#artifact-list');
+  const detail = qs('#artifact-detail');
+  if (!panel) return;
+  removeChildren(panel);
+  const view = state.selectedSessionId ? state.sessionViews[state.selectedSessionId] : null;
+  const projection = runtimeViewFromCloudView(view);
+  if (!view || !projection.artifacts.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = view ? 'No artifacts for the selected thread.' : 'Select a cloud thread to inspect artifacts.';
+    panel.appendChild(empty);
+  } else {
+    for (const artifact of projection.artifacts) {
+      panel.appendChild(renderArtifactCard(artifact));
+    }
+  }
+  if (!detail) return;
+  removeChildren(detail);
+  if (state.artifactPanel.status === 'loading') {
+    detail.appendChild(pill('loading', 'warn'));
+    return;
+  }
+  if (state.artifactPanel.error) {
+    const error = document.createElement('p');
+    error.className = 'notice';
+    error.textContent = state.artifactPanel.error;
+    detail.appendChild(error);
+    return;
+  }
+  if (!state.artifactPanel.metadata) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = 'Choose Inspect on an artifact to load metadata. Artifact bodies are fetched only for explicit view or download actions.';
+    detail.appendChild(empty);
+    return;
+  }
+  appendDetails(detail, 'Artifact metadata', state.artifactPanel.metadata);
 }
 
 function closeEventSource(entry) {
@@ -970,7 +1379,7 @@ function openSessionEvents(sessionId, afterSequence = 0) {
     renderChat();
     return;
   }
-  const source = new EventSource(sseUrl('/api/sessions/' + encodeURIComponent(sessionId) + '/events', afterSequence), { withCredentials: true });
+  const source = new EventSource(sseUrl(endpointPath('sessionEvents', '/api/sessions/:sessionId/events', { sessionId }), afterSequence), { withCredentials: true });
   state.sessionEvents.source = source;
   source.onopen = () => {
     state.sessionEvents.status = 'open';
@@ -1035,11 +1444,12 @@ async function loadSessions(options = {}) {
 }
 
 async function loadSessionView(sessionId, options = {}) {
-  const view = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/view');
+  const view = await api(endpointPath('sessionView', '/api/sessions/:sessionId/view', { sessionId }));
   state.sessionViews[sessionId] = view;
   if (options.render !== false) {
     renderThreadList();
     renderChat();
+    renderArtifacts();
   }
   return view;
 }
@@ -1052,6 +1462,7 @@ async function selectSession(sessionId) {
   setRoute('chat', true);
   renderThreadList();
   renderChat();
+  renderArtifacts();
 }
 
 async function readFileAsBase64(file) {
@@ -1135,13 +1546,110 @@ async function promptSelectedSession(formData) {
   const text = String(formData.get('text') || '').trim();
   if (!text) throw new Error('Prompt text is required.');
   const agent = String(formData.get('agent') || '').trim() || null;
-  const result = await api('/api/sessions/' + encodeURIComponent(state.selectedSessionId) + '/prompt', {
+  const result = await api(endpointPath('sessionPrompt', '/api/sessions/:sessionId/prompt', { sessionId: state.selectedSessionId }), {
     method: 'POST',
     body: JSON.stringify({ text, agent }),
   });
   if (result?.view) state.sessionViews[state.selectedSessionId] = result.view;
   await loadSessions({ keepSelection: true });
   await refreshSelectedSession();
+}
+
+async function respondToPermission(permissionId, allowed) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  await withRuntimeAction('approval:' + permissionId, async () => {
+    await api(endpointPath('sessionPermissionRespond', '/api/sessions/:sessionId/permission-respond', { sessionId: state.selectedSessionId }), {
+      method: 'POST',
+      body: JSON.stringify({ permissionId, response: { allowed } }),
+    });
+  });
+}
+
+async function answerQuestion(requestId, answers) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  const normalized = normalizeList(answers).map((answer) => String(answer || '').trim()).filter(Boolean);
+  if (!normalized.length) throw new Error('Question answer is required.');
+  await withRuntimeAction('question:' + requestId, async () => {
+    await api(endpointPath('sessionQuestionReply', '/api/sessions/:sessionId/question-reply', { sessionId: state.selectedSessionId }), {
+      method: 'POST',
+      body: JSON.stringify({ requestId, answers: normalized }),
+    });
+  });
+}
+
+async function rejectQuestion(requestId) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  await withRuntimeAction('question:' + requestId, async () => {
+    await api(endpointPath('sessionQuestionReject', '/api/sessions/:sessionId/question-reject', { sessionId: state.selectedSessionId }), {
+      method: 'POST',
+      body: JSON.stringify({ requestId }),
+    });
+  });
+}
+
+function decodeBase64(dataBase64, contentType) {
+  const binary = atob(String(dataBase64 || ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: contentType || 'application/octet-stream' });
+}
+
+async function readArtifact(artifactIdValue) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  if (!artifactIdValue) throw new Error('Artifact id is required.');
+  const body = await api(endpointPath('sessionArtifact', '/api/sessions/:sessionId/artifacts/:artifactId', {
+    sessionId: state.selectedSessionId,
+    artifactId: artifactIdValue,
+  }));
+  return body.artifact || {};
+}
+
+async function openArtifact(artifactIdValue, mode) {
+  await withRuntimeAction('artifact:' + artifactIdValue, async () => {
+    const artifact = await readArtifact(artifactIdValue);
+    const blob = decodeBase64(artifact.dataBase64, artifact.contentType || artifact.mime);
+    const url = URL.createObjectURL(blob);
+    try {
+      if (mode === 'download') {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = artifact.filename || 'artifact';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  });
+}
+
+async function inspectArtifact(artifactIdValue) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  state.artifactPanel = {
+    sessionId: state.selectedSessionId,
+    artifactId: artifactIdValue,
+    metadata: null,
+    status: 'loading',
+    error: null,
+  };
+  renderArtifacts();
+  try {
+    const artifacts = await api(endpointPath('sessionArtifacts', '/api/sessions/:sessionId/artifacts', { sessionId: state.selectedSessionId }))
+      .then((body) => normalizeList(body.artifacts));
+    const metadata = artifacts.find((artifact) => artifactId(artifact) === artifactIdValue) || { artifactId: artifactIdValue };
+    state.artifactPanel.metadata = safeArtifactMetadata(metadata);
+    state.artifactPanel.status = 'idle';
+    state.artifactPanel.error = null;
+    setRoute('artifacts', true);
+  } catch (error) {
+    state.artifactPanel.status = 'error';
+    state.artifactPanel.error = error.message || 'Artifact metadata failed to load';
+  } finally {
+    renderArtifacts();
+  }
 }
 
 function renderAll() {
@@ -1153,6 +1661,7 @@ function renderAll() {
   renderUsage();
   renderThreadList();
   renderChat();
+  renderArtifacts();
   renderRoutes();
 }
 
@@ -1871,6 +2380,85 @@ ${publicBrandingCss(branding)}
       padding: 10px 12px;
       font-size: 13px;
     }
+    .runtime-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+    }
+    .runtime-card {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px 12px;
+      max-width: 880px;
+      min-width: 0;
+    }
+    .runtime-card[data-kind="approval"], .runtime-card[data-kind="question"] {
+      border-color: #dfc48f;
+      background: #fffdf6;
+    }
+    .runtime-card-header {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+    .runtime-card-header strong {
+      overflow-wrap: anywhere;
+    }
+    .question-block {
+      display: grid;
+      gap: 6px;
+    }
+    .question-block p {
+      margin: 0;
+      line-height: 1.45;
+    }
+    .choice-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    .runtime-detail {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+      max-width: 880px;
+      min-width: 0;
+    }
+    .runtime-detail summary {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+    }
+    .runtime-detail pre {
+      overflow: auto;
+      margin: 8px 0 0;
+      padding: 8px;
+      border-radius: 6px;
+      background: var(--muted-surface);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .runtime-error {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 880px;
+    }
     .empty {
       margin: 0;
       color: var(--muted);
@@ -2184,8 +2772,19 @@ ${publicBrandingCss(branding)}
               <div class="meta">Cloud artifact metadata</div>
             </div>
           </div>
-          <div class="panel">
-            <p class="empty">No artifacts loaded.</p>
+          <div class="grid">
+            <div class="panel">
+              <h3>Selected thread artifacts</h3>
+              <div class="list" id="artifact-list">
+                <p class="empty">No artifacts loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Inspector</h3>
+              <div class="list" id="artifact-detail">
+                <p class="empty">Choose Inspect on an artifact to load metadata.</p>
+              </div>
+            </div>
           </div>
         </section>
 

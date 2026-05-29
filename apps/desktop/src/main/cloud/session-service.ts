@@ -2540,6 +2540,7 @@ export class CloudSessionService {
       payload: {
         commandId: command.commandId,
         requestId: payload.requestId,
+        answers: payload.answers,
       },
       leaseToken: lease.leaseToken,
     })

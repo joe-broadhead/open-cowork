@@ -9,6 +9,13 @@ import {
   cloudWebThreadStatus,
   filterCloudWebThreads,
 } from './thread-workbench.ts'
+import {
+  CLOUD_WEB_RUNTIME_ENTITY_CLASSES,
+  cloudWebErrorCategory,
+  cloudWebRuntimeCounts,
+  cloudWebRuntimeOrder,
+  cloudWebSafeArtifactMetadata,
+} from './runtime-workbench.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -60,6 +67,14 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
     selectedSessionId: null,
     sessions: [],
     sessionViews: {},
+    runtimeActions: {},
+    artifactPanel: {
+      sessionId: null,
+      artifactId: null,
+      metadata: null,
+      status: 'idle',
+      error: null,
+    },
     workspaceEvents: {
       status: 'idle',
       cursor: 0,
@@ -74,6 +89,11 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   }
   assert.equal(stateContract.workspaceEvents.status, 'idle')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessions')?.path, '/api/sessions')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionView')?.path, '/api/sessions/:sessionId/view')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionPermissionRespond')?.path, '/api/sessions/:sessionId/permission-respond')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionQuestionReply')?.path, '/api/sessions/:sessionId/question-reply')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionQuestionReject')?.path, '/api/sessions/:sessionId/question-reject')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionArtifact')?.path, '/api/sessions/:sessionId/artifacts/:artifactId')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSourceValidate')?.path, '/api/project-sources/validate')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSnapshots')?.path, '/api/project-sources/snapshots')
 })
@@ -174,6 +194,7 @@ test('cloud website client avoids persistent browser secret storage', () => {
 
 test('cloud website binds actions through the client script', () => {
   assert.equal(html.includes('onclick='), false)
+  assert.doesNotThrow(() => new Function(cloudWebsiteClientScript()))
   assert.match(cloudWebsiteClientScript(), /signin-inline/)
   assert.match(cloudWebsiteClientScript(), /\/api\/config/)
   assert.match(cloudWebsiteClientScript(), /\/api\/workspace/)
@@ -183,6 +204,11 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /sessionEventTypes/)
   assert.match(cloudWebsiteClientScript(), /createCloudSessionFromForm/)
   assert.match(cloudWebsiteClientScript(), /promptSelectedSession/)
+  assert.match(cloudWebsiteClientScript(), /respondToPermission/)
+  assert.match(cloudWebsiteClientScript(), /answerQuestion/)
+  assert.match(cloudWebsiteClientScript(), /rejectQuestion/)
+  assert.match(cloudWebsiteClientScript(), /openArtifact/)
+  assert.match(cloudWebsiteClientScript(), /safeArtifactMetadata/)
   assert.match(cloudWebsiteClientScript(), /setRoute/)
   assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
   assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
@@ -195,8 +221,84 @@ test('cloud website renders cloud thread controls without local host path afford
   assert.match(html, /Uploaded snapshot/)
   assert.match(html, /id="prompt-form"/)
   assert.match(html, /id="chat-timeline"/)
+  assert.match(html, /id="artifact-list"/)
+  assert.match(html, /id="artifact-detail"/)
   assert.doesNotMatch(html, /\/Users\//)
   assert.doesNotMatch(html, /local stdio MCP/i)
+})
+
+test('cloud website runtime helper covers all runtime entity classes', () => {
+  assert.deepEqual(CLOUD_WEB_RUNTIME_ENTITY_CLASSES, [
+    'message',
+    'taskRun',
+    'toolCall',
+    'pendingApproval',
+    'resolvedApproval',
+    'pendingQuestion',
+    'resolvedQuestion',
+    'artifact',
+    'todo',
+    'error',
+    'usage',
+    'context',
+  ])
+  const counts = cloudWebRuntimeCounts({
+    messages: [{ id: 'message-1' }],
+    taskRuns: [{ id: 'task-1' }],
+    toolCalls: [{ id: 'tool-1' }],
+    pendingApprovals: [{ id: 'approval-1' }],
+    resolvedApprovals: [{ id: 'approval-1' }],
+    pendingQuestions: [{ id: 'question-1' }],
+    resolvedQuestions: [{ id: 'question-1' }],
+    artifacts: [{ artifactId: 'artifact-1' }],
+    todos: [{ id: 'todo-1' }],
+    errors: [{ id: 'error-1' }],
+    sessionCost: 0.13,
+    sessionTokens: { input: 10, output: 5, reasoning: 2, cacheRead: 1, cacheWrite: 1 },
+    contextState: 'measured',
+  })
+  assert.equal(counts.message, 1)
+  assert.equal(counts.taskRun, 1)
+  assert.equal(counts.toolCall, 1)
+  assert.equal(counts.pendingApproval, 1)
+  assert.equal(counts.resolvedApproval, 1)
+  assert.equal(counts.pendingQuestion, 1)
+  assert.equal(counts.resolvedQuestion, 1)
+  assert.equal(counts.artifact, 1)
+  assert.equal(counts.todo, 1)
+  assert.equal(counts.error, 1)
+  assert.equal(counts.usage, 1)
+  assert.equal(counts.context, 1)
+  assert.equal(cloudWebRuntimeCounts({ contextState: 'idle' }).context, 0)
+})
+
+test('cloud website runtime helper preserves order and classifies errors', () => {
+  assert.equal(cloudWebRuntimeOrder({ order: 42 }, 7), 42)
+  assert.equal(cloudWebRuntimeOrder({}, 7), 7)
+  assert.equal(cloudWebErrorCategory('Policy blocked by profile'), 'policy')
+  assert.equal(cloudWebErrorCategory('Unauthorized token'), 'auth')
+  assert.equal(cloudWebErrorCategory('Quota exceeded'), 'quota')
+  assert.equal(cloudWebErrorCategory('Billing subscription inactive'), 'billing')
+  assert.equal(cloudWebErrorCategory('Provider API key invalid'), 'provider')
+  assert.equal(cloudWebErrorCategory('Runtime crashed'), 'runtime')
+})
+
+test('cloud website artifact metadata redacts transient artifact bodies and URLs', () => {
+  assert.deepEqual(cloudWebSafeArtifactMetadata({
+    artifactId: 'artifact-1',
+    filename: 'result.txt',
+    dataBase64: 'YQ==',
+    signedUrl: 'https://object.example.test/signed?token=secret',
+    downloadUrl: 'https://object.example.test/download?token=secret',
+    key: 'tenant/session/artifact-1/result.txt',
+    bucket: 'open-cowork-prod-artifacts',
+    token: 'secret',
+  }), {
+    artifactId: 'artifact-1',
+    filename: 'result.txt',
+  })
+  assert.match(cloudWebsiteClientScript(), /URL\.createObjectURL/)
+  assert.match(cloudWebsiteClientScript(), /URL\.revokeObjectURL/)
 })
 
 test('cloud website thread helper handles status filters and thousands-sized lists', () => {

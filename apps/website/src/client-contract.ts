@@ -12,6 +12,14 @@ export type CloudWebEndpointId =
   | 'billingSubscription'
   | 'usageEvents'
   | 'sessions'
+  | 'sessionView'
+  | 'sessionEvents'
+  | 'sessionPrompt'
+  | 'sessionPermissionRespond'
+  | 'sessionQuestionReply'
+  | 'sessionQuestionReject'
+  | 'sessionArtifacts'
+  | 'sessionArtifact'
   | 'projectSourceValidate'
   | 'projectSnapshots'
 
@@ -44,6 +52,14 @@ export type CloudWebClientStateContract = {
   selectedSessionId: string | null
   sessions: unknown[]
   sessionViews: Record<string, unknown>
+  runtimeActions: Record<string, boolean>
+  artifactPanel: {
+    sessionId: string | null
+    artifactId: string | null
+    metadata: Record<string, unknown> | null
+    status: 'idle' | 'loading' | 'error'
+    error: string | null
+  }
   workspaceEvents: {
     status: CloudWebConnectionStatus
     cursor: number
@@ -116,6 +132,54 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'sessions',
     method: 'GET',
     path: '/api/sessions',
+    csrf: false,
+  },
+  {
+    id: 'sessionView',
+    method: 'GET',
+    path: '/api/sessions/:sessionId/view',
+    csrf: false,
+  },
+  {
+    id: 'sessionEvents',
+    method: 'GET',
+    path: '/api/sessions/:sessionId/events',
+    csrf: false,
+  },
+  {
+    id: 'sessionPrompt',
+    method: 'POST',
+    path: '/api/sessions/:sessionId/prompt',
+    csrf: true,
+  },
+  {
+    id: 'sessionPermissionRespond',
+    method: 'POST',
+    path: '/api/sessions/:sessionId/permission-respond',
+    csrf: true,
+  },
+  {
+    id: 'sessionQuestionReply',
+    method: 'POST',
+    path: '/api/sessions/:sessionId/question-reply',
+    csrf: true,
+  },
+  {
+    id: 'sessionQuestionReject',
+    method: 'POST',
+    path: '/api/sessions/:sessionId/question-reject',
+    csrf: true,
+  },
+  {
+    id: 'sessionArtifacts',
+    method: 'GET',
+    path: '/api/sessions/:sessionId/artifacts',
+    csrf: false,
+  },
+  {
+    id: 'sessionArtifact',
+    method: 'GET',
+    path: '/api/sessions/:sessionId/artifacts/:artifactId',
     csrf: false,
   },
   {

@@ -33,6 +33,28 @@ export type CloudSessionProjectionOrigin = {
   itemCounts: Record<string, number>
 }
 
+export type CloudResolvedApproval = {
+  id: string
+  sessionId: string
+  taskRunId?: string | null
+  tool: string
+  description: string
+  allowed: boolean
+  order: number
+  resolvedAt: string
+}
+
+export type CloudResolvedQuestion = {
+  id: string
+  sessionId: string
+  sourceSessionId?: string | null
+  questions: PendingQuestion['questions']
+  answers: unknown[]
+  rejected: boolean
+  order: number
+  resolvedAt: string
+}
+
 export const CLOUD_SESSION_EVENT_TYPES = [
   'session.created',
   'session.imported',
@@ -69,6 +91,8 @@ export type CloudSessionProjectionView = {
   taskRuns: TaskRun[]
   pendingApprovals: PendingApproval[]
   pendingQuestions: PendingQuestion[]
+  resolvedApprovals: CloudResolvedApproval[]
+  resolvedQuestions: CloudResolvedQuestion[]
   artifacts: SessionArtifact[]
   todos: TodoItem[]
   errors: SessionError[]
@@ -314,6 +338,42 @@ function normalizePendingApproval(value: unknown): PendingApproval | null {
   }
 }
 
+function normalizeResolvedApproval(value: unknown): CloudResolvedApproval | null {
+  const record = asRecord(value)
+  const id = readString(record.id)
+  const sessionId = readString(record.sessionId)
+  if (!id || !sessionId) return null
+  return {
+    id,
+    sessionId,
+    taskRunId: readNullableString(record.taskRunId),
+    tool: readString(record.tool, 'permission'),
+    description: readString(record.description, 'Permission resolved'),
+    allowed: record.allowed === true,
+    order: readNumber(record.order),
+    resolvedAt: readString(record.resolvedAt),
+  }
+}
+
+function normalizeResolvedQuestion(value: unknown): CloudResolvedQuestion | null {
+  const record = asRecord(value)
+  const id = readString(record.id)
+  const sessionId = readString(record.sessionId)
+  if (!id || !sessionId) return null
+  return {
+    id,
+    sessionId,
+    sourceSessionId: readNullableString(record.sourceSessionId),
+    questions: Array.isArray(record.questions)
+      ? record.questions.map(normalizeQuestionPrompt).filter((entry): entry is PendingQuestion['questions'][number] => Boolean(entry))
+      : [],
+    answers: Array.isArray(record.answers) ? record.answers : [],
+    rejected: record.rejected === true,
+    order: readNumber(record.order),
+    resolvedAt: readString(record.resolvedAt),
+  }
+}
+
 function normalizeSessionError(value: unknown): SessionError | null {
   const record = asRecord(value)
   const id = readString(record.id)
@@ -538,6 +598,8 @@ export function createCloudSessionProjectionView(session: CloudProjectionSession
     taskRuns: [],
     pendingApprovals: [],
     pendingQuestions: [],
+    resolvedApprovals: [],
+    resolvedQuestions: [],
     artifacts: [],
     todos: [],
     errors: [],
@@ -578,6 +640,12 @@ export function normalizeCloudSessionProjectionView(
       : [],
     pendingQuestions: Array.isArray(record.pendingQuestions)
       ? record.pendingQuestions.map(normalizePendingQuestion).filter((entry): entry is PendingQuestion => Boolean(entry))
+      : [],
+    resolvedApprovals: Array.isArray(record.resolvedApprovals)
+      ? record.resolvedApprovals.map(normalizeResolvedApproval).filter((entry): entry is CloudResolvedApproval => Boolean(entry))
+      : [],
+    resolvedQuestions: Array.isArray(record.resolvedQuestions)
+      ? record.resolvedQuestions.map(normalizeResolvedQuestion).filter((entry): entry is CloudResolvedQuestion => Boolean(entry))
       : [],
     artifacts: Array.isArray(record.artifacts)
       ? record.artifacts.map((entry, index) => normalizeSessionArtifact(entry, index)).filter((entry): entry is SessionArtifact => Boolean(entry))
@@ -695,9 +763,21 @@ export function reduceCloudSessionProjectionEvent(
       }
     case 'permission.resolved': {
       const permissionId = eventPayloadId(payload, ['permissionId', 'id', 'requestId', 'requestID'], '')
+      const pendingApproval = current.pendingApprovals.find((entry) => entry.id === permissionId)
+      const resolvedApproval = permissionId ? normalizeResolvedApproval({
+        id: permissionId,
+        sessionId: session.sessionId,
+        taskRunId: pendingApproval?.taskRunId ?? readNullableString(payload.taskRunId),
+        tool: pendingApproval?.tool || readString(payload.tool, 'permission'),
+        description: pendingApproval?.description || readString(payload.description, 'Permission resolved'),
+        allowed: payload.allowed === true || payload.response === true || payload.response === 'allow' || payload.response === 'once',
+        order: event.sequence,
+        resolvedAt: eventTime,
+      }) : null
       return {
         ...current,
         pendingApprovals: permissionId ? removeById(current.pendingApprovals, permissionId) : current.pendingApprovals,
+        resolvedApprovals: resolvedApproval ? upsertById(current.resolvedApprovals, resolvedApproval) : current.resolvedApprovals,
         isGenerating: false,
         updatedAt: eventTime,
       }
@@ -712,9 +792,21 @@ export function reduceCloudSessionProjectionEvent(
       }
     case 'question.resolved': {
       const questionId = eventPayloadId(payload, ['requestId', 'requestID', 'id'], '')
+      const pendingQuestion = current.pendingQuestions.find((entry) => entry.id === questionId)
+      const resolvedQuestion = questionId ? normalizeResolvedQuestion({
+        id: questionId,
+        sessionId: session.sessionId,
+        sourceSessionId: pendingQuestion?.sourceSessionId ?? readNullableString(payload.sourceSessionId),
+        questions: pendingQuestion?.questions || [],
+        answers: Array.isArray(payload.answers) ? payload.answers : [],
+        rejected: payload.rejected === true,
+        order: event.sequence,
+        resolvedAt: eventTime,
+      }) : null
       return {
         ...current,
         pendingQuestions: questionId ? removeById(current.pendingQuestions, questionId) : current.pendingQuestions,
+        resolvedQuestions: resolvedQuestion ? upsertById(current.resolvedQuestions, resolvedQuestion) : current.resolvedQuestions,
         isGenerating: false,
         updatedAt: eventTime,
       }
@@ -837,6 +929,24 @@ function isPendingQuestion(value: unknown): value is PendingQuestion {
     && Array.isArray(record.questions)
 }
 
+function isResolvedApproval(value: unknown): value is CloudResolvedApproval {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<CloudResolvedApproval>
+  return typeof record.id === 'string'
+    && typeof record.sessionId === 'string'
+    && typeof record.tool === 'string'
+    && typeof record.allowed === 'boolean'
+}
+
+function isResolvedQuestion(value: unknown): value is CloudResolvedQuestion {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<CloudResolvedQuestion>
+  return typeof record.id === 'string'
+    && typeof record.sessionId === 'string'
+    && Array.isArray(record.questions)
+    && typeof record.rejected === 'boolean'
+}
+
 function isTodoItem(value: unknown): value is TodoItem {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Partial<TodoItem>
@@ -888,6 +998,8 @@ export function readCloudSessionProjection<Session extends CloudProjectionSessio
     taskRuns: Array.isArray(record.taskRuns) ? record.taskRuns.filter(isTaskRun) : [],
     pendingApprovals: Array.isArray(record.pendingApprovals) ? record.pendingApprovals.filter(isPendingApproval) : [],
     pendingQuestions: Array.isArray(record.pendingQuestions) ? record.pendingQuestions.filter(isPendingQuestion) : [],
+    resolvedApprovals: Array.isArray(record.resolvedApprovals) ? record.resolvedApprovals.filter(isResolvedApproval) : [],
+    resolvedQuestions: Array.isArray(record.resolvedQuestions) ? record.resolvedQuestions.filter(isResolvedQuestion) : [],
     artifacts: Array.isArray(record.artifacts) ? record.artifacts.filter(isSessionArtifact) : [],
     todos: Array.isArray(record.todos) ? record.todos.filter(isTodoItem) : [],
     errors: Array.isArray(record.errors) ? record.errors.filter(isSessionError) : [],
