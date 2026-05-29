@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
+import type { PublicBrandingConfig } from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
@@ -355,6 +356,106 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     publicUrl: envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_URL'),
     trustProxyHeaders: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS'), false),
   }
+}
+
+function parsePublicBrandingJson(env: Env) {
+  const raw = envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON')
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Partial<PublicBrandingConfig>
+      : {}
+  } catch (error) {
+    throw new Error(`Invalid OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
+  }
+}
+
+function cleanBrandingObject(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => typeof entry === 'string' && entry.trim())
+      .map(([key, entry]) => [key, String(entry).trim()]),
+  )
+}
+
+function safePublicBrandingUrl(value: unknown, allowMailto = false) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return undefined
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'https:') return url.toString()
+    if (allowMailto && url.protocol === 'mailto:') return url.toString()
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function cleanPublicBrandingEntry(entry: Partial<PublicBrandingConfig>) {
+  const cleaned = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined && value !== null && value !== '')) as Partial<PublicBrandingConfig> & Record<string, unknown>
+  const urls: Array<[keyof PublicBrandingConfig, boolean]> = [
+    ['logoUrl', false],
+    ['supportUrl', true],
+    ['privacyUrl', false],
+    ['securityUrl', false],
+    ['legalUrl', false],
+  ]
+  for (const [key, allowMailto] of urls) {
+    if (!(key in cleaned)) continue
+    const safeUrl = safePublicBrandingUrl(cleaned[key], allowMailto)
+    if (safeUrl) cleaned[key] = safeUrl
+    else delete cleaned[key]
+  }
+  return cleaned
+}
+
+function mergePublicBranding(...entries: Array<Partial<PublicBrandingConfig> | undefined>): PublicBrandingConfig {
+  const merged = entries.reduce<PublicBrandingConfig>((current, entry) => {
+    if (!entry) return current
+    const cleanEntry = cleanPublicBrandingEntry(entry)
+    return {
+      ...current,
+      ...cleanEntry,
+      theme: {
+        ...(current.theme || {}),
+        ...cleanBrandingObject(cleanEntry.theme),
+      },
+      dashboard: {
+        ...(current.dashboard || {}),
+        ...cleanBrandingObject(cleanEntry.dashboard),
+      },
+      managedOrgConnectionLabels: {
+        ...(current.managedOrgConnectionLabels || {}),
+        ...cleanBrandingObject(cleanEntry.managedOrgConnectionLabels),
+      },
+    }
+  }, { ...DEFAULT_CONFIG.cloud.publicBranding })
+  return {
+    ...merged,
+    productName: merged.productName?.trim() || DEFAULT_CONFIG.cloud.publicBranding.productName,
+    shortName: merged.shortName?.trim() || DEFAULT_CONFIG.cloud.publicBranding.shortName,
+  }
+}
+
+export function resolveCloudPublicBranding(config: OpenCoworkConfig, env: Env = process.env): PublicBrandingConfig {
+  return mergePublicBranding(
+    DEFAULT_CONFIG.cloud.publicBranding,
+    config.cloud.publicBranding,
+    parsePublicBrandingJson(env),
+    {
+      productName: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_NAME') || undefined,
+      shortName: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_SHORT_NAME') || undefined,
+      logoUrl: envValue(env, 'OPEN_COWORK_CLOUD_BRAND_LOGO_URL') || undefined,
+      supportUrl: envValue(env, 'OPEN_COWORK_CLOUD_SUPPORT_URL') || undefined,
+      privacyUrl: envValue(env, 'OPEN_COWORK_CLOUD_PRIVACY_URL') || undefined,
+      securityUrl: envValue(env, 'OPEN_COWORK_CLOUD_SECURITY_URL') || undefined,
+      legalUrl: envValue(env, 'OPEN_COWORK_CLOUD_LEGAL_URL') || undefined,
+    },
+  )
 }
 
 function createUnavailableRuntimeAdapter(): CloudRuntimeAdapter {
@@ -827,6 +928,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         service,
         artifacts,
         policy,
+        publicBranding: resolveCloudPublicBranding(config, env),
         worker,
         sessionCookies,
         observability,

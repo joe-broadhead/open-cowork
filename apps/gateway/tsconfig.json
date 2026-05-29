@@ -19,7 +19,9 @@
       "@open-cowork/gateway-provider-webhook": ["../../packages/gateway-provider-webhook/dist/index.d.ts"],
       "@open-cowork/gateway-provider-webhook/*": ["../../packages/gateway-provider-webhook/dist/*"],
       "@open-cowork/gateway-testing": ["../../packages/gateway-testing/dist/index.d.ts"],
-      "@open-cowork/gateway-testing/*": ["../../packages/gateway-testing/dist/*"]
+      "@open-cowork/gateway-testing/*": ["../../packages/gateway-testing/dist/*"],
+      "@open-cowork/shared": ["../../packages/shared/dist/index.d.ts"],
+      "@open-cowork/shared/*": ["../../packages/shared/dist/*"]
     }
   },
   "include": ["src/**/*.ts"],

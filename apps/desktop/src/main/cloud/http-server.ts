@@ -6,6 +6,7 @@ import {
   normalizeCloudProjectSource,
   type CloudProjectSnapshotUploadInput,
   type CloudProjectSourceInput,
+  type PublicBrandingConfig,
   type SessionImportRequest,
   type WorkflowDraft,
   type WorkflowStatus,
@@ -59,6 +60,7 @@ export type CloudHttpServerOptions = {
   service: CloudSessionService
   artifacts?: CloudArtifactService | null
   policy: CloudRuntimePolicy
+  publicBranding?: PublicBrandingConfig | null
   auth?: CloudAuthResolver
   browserAuth?: CloudBrowserAuthProvider | null
   desktopAuth?: CloudDesktopAuthConfig | null
@@ -169,7 +171,7 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
     'content-security-policy': [
       "default-src 'self'",
       "connect-src 'self'",
-      "img-src 'self' data:",
+      "img-src 'self' data: https:",
       `style-src ${styleSrc}`,
       `script-src ${scriptSrc}`,
       "base-uri 'none'",
@@ -848,6 +850,7 @@ async function handleApiRequest(
       allowedAgents: options.policy.allowedAgents,
       allowedTools: options.policy.allowedTools,
       allowedMcps: options.policy.allowedMcps,
+      publicBranding: options.publicBranding || null,
     }, options.corsOrigin)
     return
   }
@@ -1773,7 +1776,7 @@ export class CloudHttpServer {
 
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
         const nonce = randomBytes(16).toString('base64url')
-        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, nonce), this.options.corsOrigin, nonce)
+        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), this.options.corsOrigin, nonce)
         return
       }
 

@@ -2,7 +2,7 @@ import electron from 'electron'
 import { cpSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join, resolve } from 'path'
-import type { ProviderModelDescriptor, PublicAppConfig } from '@open-cowork/shared'
+import type { ProviderModelDescriptor, PublicAppConfig, PublicBrandingConfig } from '@open-cowork/shared'
 import { normalizeCloudProjectSource } from '@open-cowork/shared'
 import {
   buildConfiguredModelFallbacks,
@@ -63,6 +63,7 @@ const CLOUD_ROLES = new Set<CloudRole>(['all-in-one', 'web', 'worker', 'schedule
 const CLOUD_AUTH_MODES = new Set(['none', 'header', 'oidc'])
 const CLOUD_CONTROL_PLANE_KINDS = new Set(['local', 'postgres'])
 const CLOUD_OBJECT_STORE_KINDS = new Set(['filesystem', 's3', 'gcs', 'azure-blob', 'digitalocean-spaces', 'minio'])
+const PUBLIC_BRANDING_URL_KEYS = new Set(['logoUrl', 'supportUrl', 'privacyUrl', 'securityUrl', 'legalUrl'])
 
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
@@ -216,6 +217,67 @@ function normalizeCloudFeatures(raw: Partial<CloudFeatureConfig> | undefined): C
     ...DEFAULT_CONFIG.cloud.features,
     ...(raw || {}),
   }
+}
+
+function safePublicBrandingUrl(value: unknown, allowMailto = false) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return ''
+  try {
+    const url = new URL(text)
+    if (url.protocol === 'https:') return url.toString()
+    if (allowMailto && url.protocol === 'mailto:') return url.toString()
+  } catch {
+    return ''
+  }
+  return ''
+}
+
+function cleanPublicBrandingStrings(value: unknown) {
+  const output: Record<string, string> = {}
+  if (!value || typeof value !== 'object') return output
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry !== 'string') continue
+    const text = entry.trim()
+    if (!text) continue
+    output[key] = text
+  }
+  return output
+}
+
+function normalizePublicBranding(raw: Partial<PublicBrandingConfig> | undefined): PublicBrandingConfig {
+  const defaults = DEFAULT_CONFIG.cloud.publicBranding
+  const source = raw || {}
+  const base: PublicBrandingConfig = {
+    ...defaults,
+    ...source,
+    productName: typeof source.productName === 'string' && source.productName.trim()
+      ? source.productName.trim()
+      : defaults.productName,
+    shortName: typeof source.shortName === 'string' && source.shortName.trim()
+      ? source.shortName.trim()
+      : defaults.shortName,
+    logoUrl: safePublicBrandingUrl(source.logoUrl),
+    supportUrl: safePublicBrandingUrl(source.supportUrl, true),
+    privacyUrl: safePublicBrandingUrl(source.privacyUrl),
+    securityUrl: safePublicBrandingUrl(source.securityUrl),
+    legalUrl: safePublicBrandingUrl(source.legalUrl),
+    theme: {
+      ...(defaults.theme || {}),
+      ...cleanPublicBrandingStrings(source.theme),
+    },
+    dashboard: {
+      ...(defaults.dashboard || {}),
+      ...cleanPublicBrandingStrings(source.dashboard),
+    },
+    managedOrgConnectionLabels: {
+      ...(defaults.managedOrgConnectionLabels || {}),
+      ...cleanPublicBrandingStrings(source.managedOrgConnectionLabels),
+    },
+  }
+  for (const key of PUBLIC_BRANDING_URL_KEYS) {
+    if (!base[key as keyof PublicBrandingConfig]) delete base[key as keyof PublicBrandingConfig]
+  }
+  return base
 }
 
 function normalizeCloudProjectSources(raw: CloudConfig['projectSources'] | undefined): CloudConfig['projectSources'] {
@@ -399,6 +461,7 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
     role,
     defaultProfile,
     profiles,
+    publicBranding: normalizePublicBranding(source.publicBranding),
     auth: {
       ...DEFAULT_CONFIG.cloud.auth,
       ...(source.auth || {}),

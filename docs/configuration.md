@@ -113,6 +113,45 @@ icon/logo placement for icon-only or logo-only branding.
 `branding.sidebar.lower.linkUrl` accepts only `https://` and `mailto:` links.
 The renderer re-checks that allowlist before rendering a link.
 
+### Cloud public branding
+
+`cloud.publicBranding` controls deployer-facing web and gateway surfaces for
+cloud workspaces. It is separate from desktop `branding` because many operators
+ship one desktop app that can connect to different cloud orgs.
+
+```jsonc
+{
+  "cloud": {
+    "publicBranding": {
+      "productName": "Acme Cowork",
+      "shortName": "AC",
+      "logoUrl": "https://assets.acme.example/cowork/logo.png",
+      "supportUrl": "https://support.acme.example/cowork",
+      "privacyUrl": "https://legal.acme.example/privacy",
+      "securityUrl": "https://security.acme.example/cowork",
+      "legalUrl": "https://legal.acme.example/terms",
+      "theme": {
+        "background": "#f7f8f5",
+        "surface": "#ffffff",
+        "accent": "#0f6b4b",
+        "accentStrong": "#0a4c35"
+      },
+      "managedOrgConnectionLabels": {
+        "desktopToken": "Acme Desktop token",
+        "gatewayToken": "Acme Gateway token",
+        "apiToken": "Acme API token",
+        "cloudUrl": "Acme Cloud URL"
+      }
+    }
+  }
+}
+```
+
+The cloud service exposes the same metadata from `GET /api/config`; the browser
+dashboard renders it directly, and the gateway returns it from health/readiness
+metadata for provider setup tooling. Helm deployments can set the equivalent
+`cloud.branding` and `gateway.branding` values.
+
 ## Environment placeholders
 
 Config strings may reference environment variables using `{env:NAME}`.

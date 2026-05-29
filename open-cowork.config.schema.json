@@ -263,6 +263,7 @@
       "properties": {
         "role": { "$ref": "#/$defs/cloudRole" },
         "defaultProfile": { "$ref": "#/$defs/cloudName" },
+        "publicBranding": { "$ref": "#/$defs/cloudPublicBranding" },
         "profiles": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/cloudProfile" }
@@ -279,6 +280,86 @@
     "cloudRole": {
       "type": "string",
       "enum": ["all-in-one", "web", "worker", "scheduler"]
+    },
+    "cloudPublicBrandingUrl": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https://.+"
+    },
+    "cloudPublicBrandingSupportUrl": {
+      "anyOf": [
+        { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^mailto:[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+        }
+      ]
+    },
+    "cloudPublicBrandingTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "background": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "surface": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "mutedSurface": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "border": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "text": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "mutedText": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "accent": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "accentStrong": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "focus": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "warn": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "danger": { "$ref": "#/$defs/cloudPublicBrandingCssToken" },
+        "ok": { "$ref": "#/$defs/cloudPublicBrandingCssToken" }
+      }
+    },
+    "cloudPublicBrandingCssToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[#A-Za-z0-9(),.%\\s-]+$"
+    },
+    "cloudPublicDashboardCopy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "subtitle": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "signInTitle": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "signInBody": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "byokDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "connectionsDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "gatewayDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "billingDescription": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "usageDescription": { "type": "string", "minLength": 1, "maxLength": 240 }
+      }
+    },
+    "cloudManagedOrgConnectionLabels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "desktopToken": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "gatewayToken": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "apiToken": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "cloudUrl": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "cloudPublicBranding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "shortName": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "logoUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
+        "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "legalUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "theme": { "$ref": "#/$defs/cloudPublicBrandingTheme" },
+        "dashboard": { "$ref": "#/$defs/cloudPublicDashboardCopy" },
+        "managedOrgConnectionLabels": { "$ref": "#/$defs/cloudManagedOrgConnectionLabels" }
+      }
     },
     "cloudDesktopConfig": {
       "type": "object",

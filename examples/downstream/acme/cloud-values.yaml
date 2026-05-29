@@ -1,0 +1,71 @@
+image:
+  repository: registry.acme.example/open-cowork-cloud
+  tag: stable
+
+cloud:
+  profile: data-analyst
+  publicUrl: https://cowork.acme.example
+  auth:
+    mode: oidc
+    oidcIssuerUrl: https://idp.acme.example
+    oidcClientId: acme-cowork-cloud
+    oidcClientSecretRef: env:OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET
+    allowedEmailDomains:
+      - acme.example
+  controlPlaneUrl: env:OPEN_COWORK_CLOUD_DATABASE_URL
+  cookieSecretRef: env:OPEN_COWORK_CLOUD_COOKIE_SECRET
+  secretKeyRef: env:OPEN_COWORK_CLOUD_SECRET_KEY
+  internalTokenRef: env:OPEN_COWORK_CLOUD_INTERNAL_TOKEN
+  branding:
+    productName: Acme Cowork
+    shortName: AC
+    logoUrl: https://assets.acme.example/cowork/logo.png
+    supportUrl: https://support.acme.example/cowork
+    privacyUrl: https://legal.acme.example/privacy
+    securityUrl: https://security.acme.example/cowork
+    legalUrl: https://legal.acme.example/terms
+    theme:
+      background: "#f7f8f5"
+      surface: "#ffffff"
+      mutedSurface: "#e8eee9"
+      border: "#cfd9d2"
+      text: "#142018"
+      mutedText: "#5f6f66"
+      accent: "#0f6b4b"
+      accentStrong: "#0a4c35"
+    dashboard:
+      title: Acme workspace
+      subtitle: Manage Acme Cowork keys, clients, and channel agents.
+      connectionsDescription: Issue scoped Acme Cowork tokens for approved desktop and gateway clients.
+      gatewayDescription: Connect approved chat channels to Acme Cowork cloud sessions.
+    managedOrgConnectionLabels:
+      desktopToken: Acme Desktop token
+      gatewayToken: Acme Gateway token
+      apiToken: Acme API token
+      cloudUrl: Acme Cloud URL
+  objectStore:
+    kind: s3
+    bucket: acme-cowork-artifacts
+    region: us-east-1
+    prefix: production/
+    credentialsRef: env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS
+
+roles:
+  web:
+    enabled: true
+    replicas: 2
+  worker:
+    enabled: true
+    replicas: 2
+    checkpointsEnabled: true
+  scheduler:
+    enabled: true
+    replicas: 1
+
+ingress:
+  enabled: true
+  hosts:
+    - host: cowork.acme.example
+      paths:
+        - path: /
+          pathType: Prefix

@@ -22,6 +22,66 @@ test('cloud website renders onboarding dashboard surfaces', () => {
   assert.match(html, /Usage/)
 })
 
+test('cloud website renders deployer public branding', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'data-analyst',
+    features: {
+      chat: true,
+      workflows: false,
+    },
+  }, {
+    productName: 'Acme Cowork',
+    shortName: 'AC',
+    logoUrl: 'https://assets.acme.example/cowork/logo.png',
+    supportUrl: 'https://support.acme.example/cowork',
+    privacyUrl: 'https://legal.acme.example/privacy',
+    theme: {
+      accent: '#0f6b4b',
+    },
+    dashboard: {
+      title: 'Acme workspace',
+      subtitle: 'Manage Acme clients.',
+      connectionsDescription: 'Issue scoped Acme tokens.',
+    },
+    managedOrgConnectionLabels: {
+      desktopToken: 'Acme Desktop token',
+      gatewayToken: 'Acme Gateway token',
+      apiToken: 'Acme API token',
+      cloudUrl: 'Acme Cloud URL',
+    },
+  })
+
+  assert.match(branded, /<title>Acme Cowork<\/title>/)
+  assert.match(branded, /https:\/\/assets\.acme\.example\/cowork\/logo\.png/)
+  assert.match(branded, /Acme workspace/)
+  assert.match(branded, /Issue scoped Acme tokens/)
+  assert.match(branded, /Acme Desktop token/)
+  assert.match(branded, /--accent: #0f6b4b;/)
+  assert.match(branded, /https:\/\/support\.acme\.example\/cowork/)
+  assert.match(branded, /https:\/\/legal\.acme\.example\/privacy/)
+})
+
+test('cloud website drops unsafe public branding URLs', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Acme Cowork',
+    logoUrl: 'http://assets.example.test/logo.png',
+    supportUrl: 'javascript:alert(1)',
+    privacyUrl: 'mailto:privacy@example.test',
+  })
+
+  assert.doesNotMatch(branded, /http:\/\/assets\.example\.test/)
+  assert.doesNotMatch(branded, /javascript:alert/)
+  assert.doesNotMatch(branded, /mailto:privacy/)
+})
+
 test('cloud website client avoids persistent browser secret storage', () => {
   const script = cloudWebsiteClientScript()
   assert.equal(script.includes('localStorage'), false)

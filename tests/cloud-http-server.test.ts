@@ -114,6 +114,7 @@ function createFixture(options: {
     artifacts,
     worker,
     policy,
+    publicBranding: DEFAULT_CONFIG.cloud.publicBranding,
     autoProcessCommands: options.autoProcessCommands ?? true,
     ssePollMs: options.ssePollMs,
     sessionCookies: options.sessionCookies,
@@ -267,6 +268,7 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const config = await readJson(await fetch(`${baseUrl}/api/config`))
     assert.equal(config.profileName, 'full')
     assert.equal(config.features.chat, true)
+    assert.equal(asRecord(config.publicBranding).productName, 'Open Cowork Cloud')
 
     const runtimeStatus = await readJson(await fetch(`${baseUrl}/api/runtime/status`))
     assert.equal(runtimeStatus.role, 'all-in-one')

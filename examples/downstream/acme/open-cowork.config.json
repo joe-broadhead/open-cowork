@@ -1,0 +1,145 @@
+{
+  "$schema": "../../../open-cowork.config.schema.json",
+  "allowedEnvPlaceholders": [],
+  "branding": {
+    "name": "Acme Cowork",
+    "appId": "com.acme.cowork",
+    "dataDirName": "acme-cowork",
+    "helpUrl": "https://support.acme.example/cowork",
+    "projectNamespace": "acme-cowork",
+    "sidebar": {
+      "top": {
+        "variant": "text",
+        "title": "Acme Cowork",
+        "subtitle": "Internal agent workspace"
+      },
+      "lower": {
+        "text": "Acme internal",
+        "linkLabel": "Support",
+        "linkUrl": "https://support.acme.example/cowork"
+      }
+    }
+  },
+  "auth": {
+    "mode": "none"
+  },
+  "providers": {
+    "available": [],
+    "defaultProvider": null,
+    "defaultModel": null
+  },
+  "tools": [],
+  "skills": [],
+  "mcps": [],
+  "agents": [],
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "ask",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  },
+  "cloud": {
+    "role": "all-in-one",
+    "defaultProfile": "data-analyst",
+    "publicBranding": {
+      "productName": "Acme Cowork",
+      "shortName": "AC",
+      "logoUrl": "https://assets.acme.example/cowork/logo.png",
+      "supportUrl": "https://support.acme.example/cowork",
+      "privacyUrl": "https://legal.acme.example/privacy",
+      "securityUrl": "https://security.acme.example/cowork",
+      "legalUrl": "https://legal.acme.example/terms",
+      "theme": {
+        "background": "#f7f8f5",
+        "surface": "#ffffff",
+        "mutedSurface": "#e8eee9",
+        "border": "#cfd9d2",
+        "text": "#142018",
+        "mutedText": "#5f6f66",
+        "accent": "#0f6b4b",
+        "accentStrong": "#0a4c35"
+      },
+      "dashboard": {
+        "title": "Acme workspace",
+        "subtitle": "Manage Acme Cowork keys, clients, and channel agents.",
+        "connectionsDescription": "Issue scoped Acme Cowork tokens for approved desktop and gateway clients.",
+        "gatewayDescription": "Connect approved chat channels to Acme Cowork cloud sessions."
+      },
+      "managedOrgConnectionLabels": {
+        "desktopToken": "Acme Desktop token",
+        "gatewayToken": "Acme Gateway token",
+        "apiToken": "Acme API token",
+        "cloudUrl": "Acme Cloud URL"
+      }
+    },
+    "auth": {
+      "mode": "oidc",
+      "issuerUrl": "https://idp.acme.example",
+      "clientId": "acme-cowork-cloud",
+      "callbackPath": "/auth/callback",
+      "cookieSecretRef": "env:OPEN_COWORK_CLOUD_COOKIE_SECRET",
+      "allowedEmailDomains": ["acme.example"],
+      "allowSelfServiceSignup": false
+    },
+    "storage": {
+      "controlPlane": {
+        "kind": "postgres",
+        "urlRef": "env:OPEN_COWORK_CLOUD_DATABASE_URL"
+      },
+      "objectStore": {
+        "kind": "s3",
+        "bucket": "acme-cowork-artifacts",
+        "region": "us-east-1",
+        "prefix": "production/",
+        "credentialsRef": "env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS"
+      }
+    },
+    "features": {
+      "chat": true,
+      "agents": true,
+      "artifacts": true,
+      "threadIndex": true,
+      "workflows": false,
+      "webhooks": false,
+      "settings": true,
+      "customSkills": false,
+      "customAgents": false,
+      "customMcps": false
+    },
+    "profiles": {
+      "data-analyst": {
+        "label": "Data analyst",
+        "description": "Focused Acme deployment exposing only the data analyst surface.",
+        "agents": ["data-analyst"],
+        "tools": ["explorer.read", "charts.save"],
+        "mcps": [],
+        "features": {
+          "chat": true,
+          "agents": true,
+          "artifacts": true,
+          "threadIndex": true,
+          "workflows": false,
+          "webhooks": false,
+          "settings": true,
+          "customSkills": false,
+          "customAgents": false,
+          "customMcps": false
+        }
+      }
+    }
+  },
+  "cloudDesktop": {
+    "enabled": true,
+    "allowUserAddedConnections": false,
+    "preconfiguredConnections": [
+      {
+        "baseUrl": "https://cowork.acme.example",
+        "label": "Acme Cowork"
+      }
+    ],
+    "requireManagedOrg": true,
+    "cacheMode": "metadata-only",
+    "cacheEncryptionFallback": "fail-startup"
+  }
+}

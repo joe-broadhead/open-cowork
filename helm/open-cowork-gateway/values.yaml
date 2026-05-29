@@ -17,6 +17,19 @@ gateway:
   publicUrl: ""
   adminToken: ""
   logLevel: info
+  branding:
+    productName: Open Cowork Cloud
+    shortName: OC
+    logoUrl: ""
+    supportUrl: ""
+    privacyUrl: ""
+    securityUrl: ""
+    legalUrl: ""
+    managedOrgConnectionLabels:
+      desktopToken: Desktop token
+      gatewayToken: Gateway token
+      apiToken: API token
+      cloudUrl: Cloud URL
   metrics:
     enabled: false
   diagnostics:

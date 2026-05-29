@@ -12,6 +12,7 @@ data:
   OPEN_COWORK_GATEWAY_PUBLIC_URL: {{ .Values.gateway.publicUrl | quote }}
   OPEN_COWORK_GATEWAY_MODE: {{ .Values.gateway.mode | quote }}
   OPEN_COWORK_GATEWAY_LOG_LEVEL: {{ .Values.gateway.logLevel | quote }}
+  OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON: {{ .Values.gateway.branding | toJson | quote }}
   OPEN_COWORK_GATEWAY_METRICS_ENABLED: {{ .Values.gateway.metrics.enabled | quote }}
   OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: {{ .Values.gateway.diagnostics.enabled | quote }}
   OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID: {{ .Values.gateway.telegram.channelBindingId | quote }}
