@@ -13,6 +13,7 @@ import {
 } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
+import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
@@ -874,6 +875,21 @@ async function handleApiRequest(
 
   if (resource === 'project-sources') {
     await handleProjectSourcesApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'admin') {
+    await handleAdminApiRoute({
       req,
       res,
       options,

@@ -156,6 +156,7 @@ test('cloud deployment config validates role, profile, storage, and runtime poli
       clientId: 'open-cowork-cloud',
       clientSecretRef: 'secret/oidc-client',
       cookieSecretRef: 'secret/cookie',
+      signupMode: 'domain',
       allowedEmailDomains: ['example.test'],
     },
     storage: {

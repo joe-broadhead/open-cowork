@@ -233,6 +233,14 @@ const state = {
     runs: [],
     error: null,
   },
+  admin: {
+    policy: null,
+    members: [],
+    auditEvents: [],
+    error: null,
+  },
+  memberFilter: '',
+  auditFilter: '',
   selectedWorkflowId: null,
   workflowFilter: '',
   revealToken: null,
@@ -283,6 +291,7 @@ function routeById(routeId) {
 function canViewRoute(route) {
   if (!route) return false;
   if (route.requiresAuth && !state.workspace) return false;
+  if (route.requiresAdmin && adminLocked()) return false;
   return true;
 }
 
@@ -415,6 +424,14 @@ function renderSignedOut() {
     runs: [],
     error: null,
   };
+  state.admin = {
+    policy: null,
+    members: [],
+    auditEvents: [],
+    error: null,
+  };
+  state.memberFilter = '';
+  state.auditFilter = '';
   state.selectedWorkflowId = null;
   state.sessionEvents = {
     source: null,
@@ -683,6 +700,52 @@ function workflowPillKind(status) {
   return '';
 }
 
+function membershipPillKind(status) {
+  if (status === 'active') return 'ok';
+  if (status === 'invited') return 'warn';
+  return 'warn';
+}
+
+function filteredMembers() {
+  const tokens = state.memberFilter.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const members = [...normalizeList(state.admin.members)]
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')) || String(left.email || '').localeCompare(String(right.email || '')));
+  if (!tokens.length) return members;
+  return members.filter((member) => {
+    const haystack = [
+      member.accountId,
+      member.email,
+      member.displayName,
+      member.role,
+      member.status,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+function filteredAuditEvents() {
+  const tokens = state.auditFilter.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const events = [...normalizeList(state.admin.auditEvents)]
+    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
+  if (!tokens.length) return events;
+  return events.filter((event) => {
+    const haystack = [
+      event.eventId,
+      event.actorType,
+      event.actorId,
+      event.eventType,
+      event.targetType,
+      event.targetId,
+      compactJson(event.metadata),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return tokens.every((token) => haystack.includes(token));
+  });
+}
+
+function policyListLabel(values) {
+  return Array.isArray(values) && values.length ? values.join(', ') : 'all profile defaults';
+}
+
 function workbenchAgentSurfaces() {
   const surfaces = [];
   if (bootstrap.features?.chat !== false) surfaces.push('Web');
@@ -739,6 +802,240 @@ function renderWorkspace() {
     element.dataset.locked = locked ? 'true' : 'false';
   });
   renderRoutes();
+}
+
+function renderMembers() {
+  const list = qs('#member-list');
+  const count = qs('#member-count');
+  const inviteForm = qs('#member-invite-form');
+  const inviteNotice = qs('#member-invite-notice');
+  if (!list) return;
+  const policy = state.admin.policy;
+  const signup = policy?.signup || {};
+  if (inviteForm) {
+    qsa('button, input, select', inviteForm).forEach((element) => {
+      const locked = adminLocked() || signup.mode !== 'invite';
+      element.disabled = locked;
+      element.dataset.locked = locked ? 'true' : 'false';
+    });
+  }
+  if (inviteNotice) {
+    inviteNotice.textContent = signup.mode === 'invite'
+      ? 'Invite mode is enabled. Invited users activate on first verified sign-in.'
+      : 'Invite creation is disabled because this deployment signup mode is ' + (signup.mode || 'unknown') + '.';
+  }
+  const members = filteredMembers();
+  if (count) count.textContent = String(members.length);
+  removeChildren(list);
+  if (state.admin.error) {
+    const row = document.createElement('div');
+    row.className = 'table-row empty-row';
+    row.setAttribute('role', 'row');
+    [state.admin.error, '-', '-', '-'].forEach((value) => {
+      const cell = document.createElement('span');
+      cell.setAttribute('role', 'cell');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    list.appendChild(row);
+    return;
+  }
+  if (!members.length) {
+    const row = document.createElement('div');
+    row.className = 'table-row empty-row';
+    row.setAttribute('role', 'row');
+    ['No members loaded.', '-', '-', '-'].forEach((value) => {
+      const cell = document.createElement('span');
+      cell.setAttribute('role', 'cell');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    list.appendChild(row);
+    return;
+  }
+  for (const member of members) {
+    const row = document.createElement('div');
+    row.className = 'table-row member-row';
+    row.setAttribute('role', 'row');
+    const identity = document.createElement('span');
+    identity.setAttribute('role', 'cell');
+    identity.textContent = [member.email, member.displayName].filter(Boolean).join(' - ');
+    const role = document.createElement('span');
+    role.setAttribute('role', 'cell');
+    role.appendChild(pill(member.role || 'member', member.role === 'owner' ? 'ok' : ''));
+    const status = document.createElement('span');
+    status.setAttribute('role', 'cell');
+    status.appendChild(pill(member.status || 'unknown', membershipPillKind(member.status)));
+    const actions = document.createElement('span');
+    actions.setAttribute('role', 'cell');
+    actions.className = 'row-actions';
+    actions.appendChild(actionButton('Make admin', () => updateMember(member.accountId, { role: 'admin' }), 'secondary', adminLocked() || member.role === 'admin' || member.status === 'disabled'));
+    actions.appendChild(actionButton('Make member', () => updateMember(member.accountId, { role: 'member' }), 'secondary', adminLocked() || member.role === 'member' || member.status === 'disabled'));
+    if (member.status === 'invited') {
+      actions.appendChild(actionButton('Activate', () => updateMember(member.accountId, { status: 'active' }), 'primary', adminLocked()));
+      actions.appendChild(actionButton('Revoke', () => disableMember(member.accountId), 'danger', adminLocked()));
+    } else if (member.status !== 'disabled') {
+      actions.appendChild(actionButton('Suspend', () => disableMember(member.accountId), 'danger', adminLocked()));
+    }
+    row.appendChild(identity);
+    row.appendChild(role);
+    row.appendChild(status);
+    row.appendChild(actions);
+    list.appendChild(row);
+  }
+}
+
+function renderAdminPolicy() {
+  const overview = qs('#admin-policy-overview');
+  const features = qs('#admin-policy-features');
+  const project = qs('#admin-project-policy');
+  const runtime = qs('#admin-runtime-policy');
+  const policy = state.admin.policy;
+  if (overview) {
+    removeChildren(overview);
+    if (!policy) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = state.admin.error || 'No policy loaded.';
+      overview.appendChild(empty);
+    } else {
+      const rows = [
+        ['Org', policy.org?.name || policy.org?.orgId || 'unknown'],
+        ['Signup mode', policy.signup?.mode || 'unknown'],
+        ['Profile', [policy.profile?.name, policy.profile?.label].filter(Boolean).join(' - ')],
+        ['Allowed agents', policyListLabel(policy.allowedAgents)],
+        ['Allowed tools', policyListLabel(policy.allowedTools)],
+        ['Allowed MCPs', policyListLabel(policy.allowedMcps)],
+      ];
+      for (const [label, value] of rows) {
+        const row = document.createElement('div');
+        row.className = 'row compact';
+        const strong = document.createElement('strong');
+        strong.textContent = label;
+        const span = document.createElement('span');
+        span.textContent = value || 'not configured';
+        row.appendChild(strong);
+        row.appendChild(span);
+        overview.appendChild(row);
+      }
+      if (normalizeList(policy.signup?.allowedEmailDomains).length) {
+        const row = document.createElement('div');
+        row.className = 'row compact';
+        const strong = document.createElement('strong');
+        strong.textContent = 'Allowed domains';
+        const span = document.createElement('span');
+        span.textContent = policy.signup.allowedEmailDomains.join(', ');
+        row.appendChild(strong);
+        row.appendChild(span);
+        overview.appendChild(row);
+      }
+    }
+  }
+  if (features) {
+    removeChildren(features);
+    const entries = Object.entries(safeObject(policy?.features || bootstrap.features)).sort(([left], [right]) => left.localeCompare(right));
+    for (const [name, enabled] of entries) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const strong = document.createElement('strong');
+      strong.textContent = name;
+      const status = pill(enabled ? 'enabled' : 'disabled', enabled ? 'ok' : 'warn');
+      row.appendChild(strong);
+      row.appendChild(status);
+      features.appendChild(row);
+    }
+  }
+  if (project) {
+    removeChildren(project);
+    const sources = safeObject(policy?.projectSources);
+    const rows = [
+      ['Git hosts', policyListLabel(normalizeList(sources.git?.allowedHosts))],
+      ['Git repositories', policyListLabel(normalizeList(sources.git?.allowedRepositories))],
+      ['Git file URLs', sources.git?.allowFileUrls ? 'allowed' : 'disabled'],
+      ['Uploaded snapshots', sources.uploadedSnapshots?.enabled ? 'enabled' : 'disabled'],
+      ['Snapshot max files', sources.uploadedSnapshots?.maxFiles ?? 'not configured'],
+      ['Snapshot max bytes', sources.uploadedSnapshots?.maxBytes ?? 'not configured'],
+      ['Managed workspaces', sources.managedWorkspaces?.enabled ? 'enabled' : 'disabled'],
+    ];
+    for (const [label, value] of rows) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const strong = document.createElement('strong');
+      strong.textContent = label;
+      const span = document.createElement('span');
+      span.textContent = String(value);
+      row.appendChild(strong);
+      row.appendChild(span);
+      project.appendChild(row);
+    }
+  }
+  if (runtime) {
+    removeChildren(runtime);
+    const rows = [
+      ['Machine runtime config', policy?.runtime?.machineRuntimeConfig || 'disabled'],
+      ['Stdio MCP processes', policy?.runtime?.localStdioMcps || 'disabled'],
+      ['Host project directories', policy?.runtime?.hostProjectDirectories || 'disabled'],
+      ['Gateway channels', policy?.gateway?.channelsEnabled ? 'enabled' : 'disabled'],
+      ['Gateway webhooks', policy?.gateway?.webhooksEnabled ? 'enabled' : 'disabled'],
+    ];
+    for (const [label, value] of rows) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const strong = document.createElement('strong');
+      strong.textContent = label;
+      const span = document.createElement('span');
+      span.textContent = String(value);
+      row.appendChild(strong);
+      row.appendChild(span);
+      runtime.appendChild(row);
+    }
+  }
+}
+
+function renderAudit() {
+  const list = qs('#audit-list');
+  const count = qs('#audit-count');
+  if (!list) return;
+  const events = filteredAuditEvents();
+  if (count) count.textContent = String(events.length);
+  removeChildren(list);
+  if (state.admin.error) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = state.admin.error;
+    list.appendChild(empty);
+    return;
+  }
+  if (!events.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = 'No audit events loaded.';
+    list.appendChild(empty);
+    return;
+  }
+  for (const event of events.slice(0, 100)) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const main = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = event.eventType || event.eventId || 'audit event';
+    main.appendChild(title);
+    const meta = document.createElement('small');
+    meta.textContent = [
+      event.actorType ? event.actorType + ':' + (event.actorId || 'unknown') : null,
+      event.targetType ? event.targetType + ':' + (event.targetId || 'unknown') : null,
+      formatDate(event.createdAt),
+    ].filter(Boolean).join(' - ');
+    main.appendChild(document.createElement('br'));
+    main.appendChild(meta);
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    actions.appendChild(pill(event.actorType || 'system'));
+    row.appendChild(main);
+    row.appendChild(actions);
+    appendDetails(row, 'Redacted metadata', event.metadata || {});
+    list.appendChild(row);
+  }
 }
 
 function renderByok() {
@@ -2216,6 +2513,9 @@ async function inspectArtifact(artifactIdValue) {
 
 function renderAll() {
   renderWorkspace();
+  renderMembers();
+  renderAdminPolicy();
+  renderAudit();
   renderByok();
   renderTokens();
   renderGateway();
@@ -2281,6 +2581,54 @@ async function loadWorkflows() {
   renderWorkflows();
 }
 
+async function loadAdminSurfaces() {
+  let adminError = null;
+  const setAdminError = (error) => {
+    if (error && !adminError) adminError = error;
+  };
+  if (!canManage(state.workspace?.role)) {
+    const policy = await optionalSurfaceLoad(
+      () => api(endpoint('adminPolicy', '/api/admin/policy')).then((body) => body.policy || null),
+      null,
+      setAdminError,
+    );
+    state.admin = {
+      policy,
+      members: [],
+      auditEvents: [],
+      error: adminError,
+    };
+    renderAdminPolicy();
+    renderMembers();
+    renderAudit();
+    return;
+  }
+  const [policy, members, auditEvents] = await Promise.all([
+    optionalSurfaceLoad(
+      () => api(endpoint('adminPolicy', '/api/admin/policy')).then((body) => body.policy || null),
+      null,
+      setAdminError,
+    ),
+    optionalSurfaceLoad(
+      () => api(endpoint('adminMembers', '/api/admin/members')).then((body) => body.members || []),
+      [],
+      setAdminError,
+    ),
+    optionalSurfaceLoad(
+      () => api(endpoint('adminAudit', '/api/admin/audit?limit=100')).then((body) => body.events || []),
+      [],
+      setAdminError,
+    ),
+  ]);
+  state.admin.policy = policy;
+  state.admin.members = normalizeList(members);
+  state.admin.auditEvents = normalizeList(auditEvents);
+  state.admin.error = adminError;
+  renderMembers();
+  renderAdminPolicy();
+  renderAudit();
+}
+
 async function refreshDashboard() {
   const me = await optionalLoad(() => api(endpoint('authMe', '/auth/me')), null);
   if (!me) return;
@@ -2307,6 +2655,7 @@ async function refreshDashboard() {
   setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
   renderAll();
   await Promise.all([
+    loadAdminSurfaces(),
     loadCapabilities(),
     loadWorkflows(),
     loadSessions({ keepSelection: true }),
@@ -2395,6 +2744,47 @@ async function revokeToken(tokenId) {
   await api('/api/api-tokens/' + encodeURIComponent(tokenId), { method: 'DELETE' });
   if (state.revealToken) state.revealToken = null;
   await refreshDashboard();
+}
+
+async function inviteMember(formData) {
+  await api(endpoint('adminMemberInvite', '/api/admin/members'), {
+    method: 'POST',
+    body: JSON.stringify({
+      email: String(formData.get('email') || '').trim(),
+      role: String(formData.get('role') || 'member').trim(),
+    }),
+  });
+  await loadAdminSurfaces();
+}
+
+async function updateMember(accountId, input) {
+  await api(endpointPath('adminMemberUpdate', '/api/admin/members/:accountId/update', { accountId }), {
+    method: 'POST',
+    body: JSON.stringify(input || {}),
+  });
+  await loadAdminSurfaces();
+}
+
+async function disableMember(accountId) {
+  const confirmed = window.prompt('Type the account id to confirm member suspension or invite revocation: ' + accountId);
+  if (confirmed !== accountId) throw new Error('Confirmation did not match the account id.');
+  await updateMember(accountId, { status: 'disabled', confirm: accountId });
+}
+
+function exportAuditEvents() {
+  const events = filteredAuditEvents();
+  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), events }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'open-cowork-audit-events.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 async function createAgent(formData) {
@@ -2565,6 +2955,20 @@ function bindForms() {
     event.preventDefault();
     submitForm(event.currentTarget, issueToken);
   });
+  qs('#member-filter').addEventListener('input', (event) => {
+    state.memberFilter = event.currentTarget.value;
+    renderMembers();
+  });
+  qs('#member-invite-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitScopedForm(event.currentTarget, inviteMember, { refresh: false });
+  });
+  qs('#refresh-admin').addEventListener('click', () => loadAdminSurfaces().catch((error) => setStatus(error.message, 'error')));
+  qs('#audit-filter').addEventListener('input', (event) => {
+    state.auditFilter = event.currentTarget.value;
+    renderAudit();
+  });
+  qs('#export-audit').addEventListener('click', () => exportAuditEvents());
   qs('#desktop-token').addEventListener('click', () => quickToken(connectionLabel('desktopToken', 'Desktop token') + ' connection token', 'desktop').catch((error) => setStatus(error.message, 'error')));
   qs('#gateway-token').addEventListener('click', () => quickToken(connectionLabel('gatewayToken', 'Gateway token') + ' service token', 'gateway').catch((error) => setStatus(error.message, 'error')));
   qs('#agent-form').addEventListener('submit', (event) => {
@@ -3498,9 +3902,46 @@ ${publicBrandingCss(branding)}
               <h2>Members</h2>
               <div class="meta">Roles and invites</div>
             </div>
+            <div class="row-actions">
+              <label><span>Filter</span><input id="member-filter" autocomplete="off" placeholder="email, role, status" data-admin-control="true"></label>
+              <button id="refresh-admin" type="button" data-admin-control="true">Refresh admin</button>
+            </div>
           </div>
-          <div class="panel">
-            <p class="empty">No member records loaded.</p>
+          <div class="workbench-split">
+            <div class="panel">
+              <div class="section-header">
+                <h3>Org members</h3>
+                <div class="meta"><span id="member-count">0</span> member(s)</div>
+              </div>
+              <div class="table-shell" role="table" aria-label="Org members">
+                <div class="table-row table-head" role="row">
+                  <span role="columnheader">Member</span>
+                  <span role="columnheader">Role</span>
+                  <span role="columnheader">Status</span>
+                  <span role="columnheader">Actions</span>
+                </div>
+                <div id="member-list">
+                  <div class="table-row empty-row" role="row">
+                    <span role="cell">No member records loaded.</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                    <span role="cell">-</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <form class="panel" id="member-invite-form">
+              <h3>Invite member</h3>
+              <p class="empty" id="member-invite-notice">Invite availability loads after sign-in.</p>
+              <div class="form-grid">
+                <label class="span"><span>Email</span><input name="email" type="email" autocomplete="off" placeholder="teammate@example.com" data-admin-control="true"></label>
+                <label><span>Role</span><select name="role" data-admin-control="true">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select></label>
+                <button class="primary" type="submit" data-admin-control="true">Create invite</button>
+              </div>
+            </form>
           </div>
         </section>
 
@@ -3514,13 +3955,29 @@ ${publicBrandingCss(branding)}
           <div class="grid">
             <div class="panel">
               <h3>Runtime profile</h3>
-              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
-              <div class="row compact"><strong>Role</strong><span>${escapeHtml(policy.role)}</span></div>
+              <div class="list" id="admin-policy-overview">
+                <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
+                <div class="row compact"><strong>Role</strong><span>${escapeHtml(policy.role)}</span></div>
+              </div>
             </div>
             <div class="panel">
               <h3>Features</h3>
-              <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
-              <div class="row compact"><strong>Workflows</strong><span>${policy.features.workflows ? 'enabled' : 'disabled'}</span></div>
+              <div class="list" id="admin-policy-features">
+                <div class="row compact"><strong>Chat</strong><span>${policy.features.chat ? 'enabled' : 'disabled'}</span></div>
+                <div class="row compact"><strong>Workflows</strong><span>${policy.features.workflows ? 'enabled' : 'disabled'}</span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Project sources</h3>
+              <div class="list" id="admin-project-policy">
+                <p class="empty">Project-source policy loads after sign-in.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Runtime and gateway</h3>
+              <div class="list" id="admin-runtime-policy">
+                <p class="empty">Runtime policy loads after sign-in.</p>
+              </div>
             </div>
           </div>
         </section>
@@ -3658,9 +4115,19 @@ ${publicBrandingCss(branding)}
               <h2>Audit</h2>
               <div class="meta">Redacted administrative events</div>
             </div>
+            <div class="row-actions">
+              <label><span>Search</span><input id="audit-filter" autocomplete="off" placeholder="actor, action, entity" data-admin-control="true"></label>
+              <button id="export-audit" type="button" data-admin-control="true">Export</button>
+            </div>
           </div>
           <div class="panel">
-            <p class="empty">No audit events loaded.</p>
+            <div class="section-header">
+              <h3>Events</h3>
+              <div class="meta"><span id="audit-count">0</span> event(s)</div>
+            </div>
+            <div class="list" id="audit-list">
+              <p class="empty">No audit events loaded.</p>
+            </div>
           </div>
         </section>
 

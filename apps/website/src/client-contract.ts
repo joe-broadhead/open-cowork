@@ -31,6 +31,11 @@ export type CloudWebEndpointId =
   | 'workflowArchive'
   | 'projectSourceValidate'
   | 'projectSnapshots'
+  | 'adminPolicy'
+  | 'adminMembers'
+  | 'adminMemberInvite'
+  | 'adminMemberUpdate'
+  | 'adminAudit'
 
 export type CloudWebEndpoint = {
   id: CloudWebEndpointId
@@ -77,6 +82,12 @@ export type CloudWebClientStateContract = {
   workflows: {
     workflows: unknown[]
     runs: unknown[]
+    error: string | null
+  }
+  admin: {
+    policy: unknown | null
+    members: unknown[]
+    auditEvents: unknown[]
     error: string | null
   }
   selectedWorkflowId: string | null
@@ -267,5 +278,35 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     method: 'POST',
     path: '/api/project-sources/snapshots',
     csrf: true,
+  },
+  {
+    id: 'adminPolicy',
+    method: 'GET',
+    path: '/api/admin/policy',
+    csrf: false,
+  },
+  {
+    id: 'adminMembers',
+    method: 'GET',
+    path: '/api/admin/members',
+    csrf: false,
+  },
+  {
+    id: 'adminMemberInvite',
+    method: 'POST',
+    path: '/api/admin/members',
+    csrf: true,
+  },
+  {
+    id: 'adminMemberUpdate',
+    method: 'POST',
+    path: '/api/admin/members/:accountId/update',
+    csrf: true,
+  },
+  {
+    id: 'adminAudit',
+    method: 'GET',
+    path: '/api/admin/audit?limit=100',
+    csrf: false,
   },
 ]

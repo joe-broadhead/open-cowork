@@ -621,7 +621,8 @@
         "callbackPath": { "type": "string", "pattern": "^/[A-Za-z0-9/_-]*$" },
         "cookieSecretRef": { "type": "string", "maxLength": 512 },
         "allowedEmailDomains": { "$ref": "#/$defs/cloudStringList" },
-        "allowSelfServiceSignup": { "type": "boolean" }
+        "allowSelfServiceSignup": { "type": "boolean" },
+        "signupMode": { "type": "string", "enum": ["closed", "invite", "domain", "open"] }
       }
     },
     "cloudStorage": {

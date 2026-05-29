@@ -312,6 +312,7 @@ test('cloud auth config resolves OIDC deployment settings from env', () => {
   assert.equal(resolved.cookieSecretRef, 'env:COOKIE_SECRET')
   assert.deepEqual(resolved.allowedEmailDomains, ['example.test', 'example.org'])
   assert.equal(resolved.allowSelfServiceSignup, false)
+  assert.equal(resolved.signupMode, 'invite')
 })
 
 test('cloud auth config requires explicit self-service opt-in for managed OIDC signup', () => {
@@ -320,8 +321,24 @@ test('cloud auth config requires explicit self-service opt-in for managed OIDC s
   }).allowSelfServiceSignup, false)
   assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+  }).signupMode, 'invite')
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: 'true',
   }).allowSelfServiceSignup, true)
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: 'example.test',
+    OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: 'true',
+  }).signupMode, 'domain')
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
+  }).allowSelfServiceSignup, false)
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
+  }).signupMode, 'closed')
 
   const explicitConfig = {
     ...DEFAULT_CONFIG,

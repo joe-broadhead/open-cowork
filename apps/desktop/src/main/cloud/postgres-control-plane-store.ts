@@ -60,6 +60,7 @@ import type {
   IssueApiTokenInput,
   ListChannelDeliveriesInput,
   MembershipRecord,
+  OrgMemberRecord,
   OrgRecord,
   PrincipalMembershipRecord,
   RecordAuditEventInput,
@@ -850,6 +851,33 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async createAccount(input: CreateAccountInput) {
     const now = nowIso(input.createdAt)
+    const existing = await this.maybeOne(
+      `SELECT * FROM cloud_accounts
+       WHERE ($1::text IS NOT NULL AND idp_subject = $1)
+          OR lower(email) = lower($2)
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [input.idpSubject || null, input.email],
+    )
+    if (existing) {
+      const result = await this.pool.query(
+        `UPDATE cloud_accounts
+         SET idp_subject = COALESCE(cloud_accounts.idp_subject, $2),
+             email = lower($3),
+             display_name = COALESCE($4, cloud_accounts.display_name),
+             updated_at = $5
+         WHERE account_id = $1
+         RETURNING *`,
+        [
+          existing.account_id,
+          input.idpSubject || null,
+          input.email,
+          input.displayName || null,
+          now,
+        ],
+      )
+      return accountFromRow(result.rows[0])
+    }
     const result = await this.pool.query(
       `INSERT INTO cloud_accounts (account_id, idp_subject, email, display_name, created_at, updated_at)
        VALUES ($1, $2, lower($3), $4, $5, $5)
@@ -905,6 +933,45 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       })
       return membershipFromRow(result.rows[0])
     })
+  }
+
+  async listOrgMembers(orgId: string, input: { query?: string | null, limit?: number | null } = {}) {
+    const queryText = input.query?.trim() || null
+    const result = await this.pool.query(
+      `SELECT
+         m.org_id,
+         m.account_id,
+         a.email,
+         a.display_name,
+         m.role,
+         m.status,
+         m.created_at,
+         m.updated_at
+       FROM cloud_memberships m
+       JOIN cloud_accounts a ON a.account_id = m.account_id
+       WHERE m.org_id = $1
+         AND (
+           $2::text IS NULL
+           OR m.account_id ILIKE '%' || $2 || '%'
+           OR a.email ILIKE '%' || $2 || '%'
+           OR COALESCE(a.display_name, '') ILIKE '%' || $2 || '%'
+           OR m.role ILIKE '%' || $2 || '%'
+           OR m.status ILIKE '%' || $2 || '%'
+         )
+       ORDER BY m.updated_at DESC, a.email ASC
+       LIMIT $3`,
+      [orgId, queryText, Math.max(1, Math.min(input.limit || 100, 500))],
+    )
+    return result.rows.map((row): OrgMemberRecord => ({
+      orgId: String(row.org_id),
+      accountId: String(row.account_id),
+      email: String(row.email),
+      displayName: row.display_name ? String(row.display_name) : null,
+      role: row.role as OrgMemberRecord['role'],
+      status: row.status as OrgMemberRecord['status'],
+      createdAt: iso(row.created_at),
+      updatedAt: iso(row.updated_at),
+    }))
   }
 
   async listMembershipsForAccount(accountId: string) {

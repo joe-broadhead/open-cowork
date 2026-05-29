@@ -246,17 +246,23 @@ thread created in the browser appears to desktop and gateway clients through the
 same session list, projection, and SSE contracts.
 
 Signed-in member users can open the workbench and read allowed org/policy/usage
-state. Admin-only panels are rendered as read-only for members and all admin
-mutations remain server-authorized. Disabled controls in the browser are an
-ergonomic layer only.
+state. Admin-only panels are hidden for members and all admin mutations remain
+server-authorized. Disabled controls in the browser are an ergonomic layer only.
 
 Authenticated users land on an org-scoped dashboard backed by
 `GET /api/workspace`. That request also performs the configured first-login org
 bootstrap path. The workbench also bootstraps public deployment metadata from
 `GET /api/config`; both bootstrap responses are metadata-only and must not
 contain provider keys, OAuth tokens, API tokens, MCP secrets, or local host
-paths. Existing admin panels expose:
+paths. Admin panels expose:
 
+- member and invite operations through `/api/admin/members`, with owner/admin
+  RBAC enforced by the API and destructive member disable/revoke actions
+  requiring explicit confirmation,
+- runtime profile, feature, project-source, signup-mode, and gateway policy
+  visibility through `/api/admin/policy`,
+- redacted audit events through `/api/admin/audit`, with browser-side search
+  and export over the already redacted event payload,
 - BYOK provider status and key submission through metadata-only BYOK APIs,
 - one-time API token issuance and revocation for desktop and gateway clients,
 - headless gateway agent/channel setup through channel binding APIs,
@@ -509,6 +515,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal-only token for operational endpoints such as scheduler tick probes. Keep it in a platform secret store. |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
+| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `closed`, `invite`, `domain`, or `open`. `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `closed` allows only existing active memberships. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
 | `OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP` | Explicitly allows first-login OIDC org membership creation. Keep disabled for invite-only managed deployments. |

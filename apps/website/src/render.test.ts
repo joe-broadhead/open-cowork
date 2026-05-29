@@ -91,6 +91,12 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
       runs: [],
       error: null,
     },
+    admin: {
+      policy: null,
+      members: [],
+      auditEvents: [],
+      error: null,
+    },
     selectedWorkflowId: null,
     workspaceEvents: {
       status: 'idle',
@@ -116,6 +122,11 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflowRun')?.path, '/api/workflows/:workflowId/run')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSourceValidate')?.path, '/api/project-sources/validate')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSnapshots')?.path, '/api/project-sources/snapshots')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminPolicy')?.path, '/api/admin/policy')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMembers')?.path, '/api/admin/members')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberInvite')?.method, 'POST')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberUpdate')?.path, '/api/admin/members/:accountId/update')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminAudit')?.path, '/api/admin/audit?limit=100')
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {
@@ -238,6 +249,11 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /setRoute/)
   assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
   assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
+  assert.match(cloudWebsiteClientScript(), /renderMembers/)
+  assert.match(cloudWebsiteClientScript(), /renderAdminPolicy/)
+  assert.match(cloudWebsiteClientScript(), /renderAudit/)
+  assert.match(cloudWebsiteClientScript(), /inviteMember/)
+  assert.match(cloudWebsiteClientScript(), /updateMember/)
 })
 
 test('cloud website renders cloud thread controls without local host path affordances', () => {
@@ -257,6 +273,11 @@ test('cloud website renders cloud thread controls without local host path afford
   assert.match(html, /id="artifact-list"/)
   assert.match(html, /id="artifact-history"/)
   assert.match(html, /id="artifact-detail"/)
+  assert.match(html, /id="member-list"/)
+  assert.match(html, /id="member-invite-form"/)
+  assert.match(html, /id="admin-policy-overview"/)
+  assert.match(html, /id="admin-project-policy"/)
+  assert.match(html, /id="audit-list"/)
   assert.doesNotMatch(html, /\/Users\//)
   assert.doesNotMatch(html, /local stdio MCP/i)
 })

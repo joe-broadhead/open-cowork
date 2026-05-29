@@ -191,16 +191,48 @@ function parseCsv(value: string | null) {
   return value?.split(',').map((entry) => entry.trim()).filter(Boolean) || null
 }
 
+function parseSignupMode(value: string | null | undefined) {
+  if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
+  return null
+}
+
+function inferSignupMode(input: {
+  requestedSignupMode?: 'closed' | 'invite' | 'domain' | 'open' | null
+  allowSelfServiceSignup: boolean
+  allowedEmailDomains?: string[] | null
+}) {
+  if (input.requestedSignupMode) return input.requestedSignupMode
+  if (!input.allowSelfServiceSignup) return 'invite'
+  return input.allowedEmailDomains?.length ? 'domain' : 'open'
+}
+
 export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = process.env): CloudAuthConfig {
   const requestedMode = envValue(env, 'OPEN_COWORK_CLOUD_AUTH_MODE')
   const mode = requestedMode === 'oidc' || requestedMode === 'header' || requestedMode === 'none'
     ? requestedMode
     : config.cloud.auth.mode
   const requestedSelfService = envValue(env, 'OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP')
+  const allowedEmailDomains = parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains
   const envSwitchedToOidc = mode === 'oidc' && requestedMode === 'oidc' && config.cloud.auth.mode !== 'oidc'
+  const requestedSignupMode = parseSignupMode(envValue(env, 'OPEN_COWORK_CLOUD_SIGNUP_MODE'))
+    || (envSwitchedToOidc ? null : parseSignupMode(config.cloud.auth.signupMode))
+  const allowSelfServiceSignup = requestedSelfService
+    ? parseBoolean(requestedSelfService, false)
+    : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
+      ? true
+      : requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
+        ? false
+        : envSwitchedToOidc
+          ? false
+          : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc'
   return {
     ...config.cloud.auth,
     mode,
+    signupMode: inferSignupMode({
+      requestedSignupMode,
+      allowSelfServiceSignup,
+      allowedEmailDomains,
+    }),
     headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
       || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
       || config.cloud.auth.headerSecret,
@@ -209,12 +241,8 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
     callbackPath: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH') || config.cloud.auth.callbackPath,
     cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
-    allowedEmailDomains: parseCsv(envValue(env, 'OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS')) || config.cloud.auth.allowedEmailDomains,
-    allowSelfServiceSignup: requestedSelfService
-      ? parseBoolean(requestedSelfService, false)
-      : envSwitchedToOidc
-        ? false
-        : config.cloud.auth.allowSelfServiceSignup ?? mode !== 'oidc',
+    allowedEmailDomains,
+    allowSelfServiceSignup,
   }
 }
 
@@ -827,7 +855,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     abuseConfig,
     billingConfig,
     billingAdapter,
-    { allowSelfServiceSignup: authConfig.allowSelfServiceSignup ?? authConfig.mode !== 'oidc' },
+    {
+      allowSelfServiceSignup: authConfig.allowSelfServiceSignup ?? authConfig.mode !== 'oidc',
+      signupMode: authConfig.signupMode,
+      allowedEmailDomains: authConfig.allowedEmailDomains || [],
+    },
     projectSources,
   )
   const artifacts = new CloudArtifactService(service, objectStore)

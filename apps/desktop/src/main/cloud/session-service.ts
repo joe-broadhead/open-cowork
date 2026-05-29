@@ -45,9 +45,12 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  ControlPlaneMembershipStatus,
+  ControlPlaneRole,
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  OrgMemberRecord,
   QuotaPolicyCode,
   SessionCommandRecord,
   SessionEventRecord,
@@ -133,6 +136,44 @@ export type CloudWorkspaceOverview = {
   }
 }
 
+export type PublicOrgMemberRecord = OrgMemberRecord
+
+export type CloudAdminPolicyOverview = {
+  org: {
+    orgId: string
+    tenantId: string
+    name: string
+    planKey: string | null
+    status: string
+  }
+  signup: {
+    mode: 'closed' | 'invite' | 'domain' | 'open'
+    allowSelfServiceSignup: boolean
+    allowedEmailDomains: string[]
+    invitesEnabled: boolean
+  }
+  profile: {
+    name: string
+    label: string | null
+    description: string | null
+  }
+  features: Record<string, boolean>
+  allowedAgents: string[] | null
+  allowedTools: string[] | null
+  allowedMcps: string[] | null
+  runtime: {
+    configSource: 'app'
+    machineRuntimeConfig: 'disabled' | 'allowlisted'
+    localStdioMcps: 'disabled' | 'allowlisted'
+    hostProjectDirectories: 'disabled' | 'allowlisted'
+  }
+  projectSources: CloudRuntimePolicy['projectSources']
+  gateway: {
+    channelsEnabled: boolean
+    webhooksEnabled: boolean
+  }
+}
+
 export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'>
 
 export type IssuedPublicApiTokenRecord = {
@@ -172,6 +213,8 @@ export type ByokManagementPolicy = {
 
 export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
+  signupMode?: 'closed' | 'invite' | 'domain' | 'open'
+  allowedEmailDomains?: readonly string[]
 }
 
 export class CloudServiceError extends Error {
@@ -298,6 +341,27 @@ function readNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
+function normalizeEmailAddress(value: unknown) {
+  const email = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (!email || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new CloudServiceError(400, 'A valid member email address is required.')
+  }
+  return email
+}
+
+function normalizeControlPlaneRole(value: unknown, fallback: ControlPlaneRole = 'member'): ControlPlaneRole {
+  if (value === 'owner' || value === 'admin' || value === 'member') return value
+  return fallback
+}
+
+function normalizeMembershipStatus(
+  value: unknown,
+  fallback: ControlPlaneMembershipStatus = 'active',
+): ControlPlaneMembershipStatus {
+  if (value === 'active' || value === 'invited' || value === 'disabled') return value
+  return fallback
+}
+
 function channelRoleCanPrompt(role: ChannelIdentityRole) {
   return role === 'owner' || role === 'admin' || role === 'member'
 }
@@ -338,9 +402,21 @@ function principalCanManageApiTokens(principal: CloudPrincipal) {
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
+function principalCanManageOrg(principal: CloudPrincipal) {
+  if (principal.authSource === 'local') return true
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
 function publicApiToken(token: ApiTokenRecord): PublicApiTokenRecord {
   const { tokenHash: _tokenHash, ...publicToken } = token
   return publicToken
+}
+
+function resolvedSignupMode(policy: CloudIdentityPolicy): 'closed' | 'invite' | 'domain' | 'open' {
+  if (policy.signupMode) return policy.signupMode
+  if (!policy.allowSelfServiceSignup) return 'invite'
+  return policy.allowedEmailDomains?.length ? 'domain' : 'open'
 }
 
 function normalizeApiTokenScopes(scopes: ApiTokenScope[] | undefined | null): ApiTokenScope[] {
@@ -663,14 +739,23 @@ export class CloudSessionService {
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
+    const signupMode = resolvedSignupMode(this.identityPolicy)
     const existingMembership = await this.store.resolvePrincipalMembership({
       tenantId: principal.tenantId,
       accountId: principal.accountId || principal.userId,
       idpSubject: principal.userId,
       email: principal.email,
     })
-    if (principal.authSource === 'user' && !this.identityPolicy.allowSelfServiceSignup) {
-      if (!existingMembership || existingMembership.membership.status !== 'active') {
+    const requiresExistingMembership = principal.authSource === 'user'
+      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'closed' || signupMode === 'invite')
+    if (requiresExistingMembership) {
+      const acceptableStatuses: ControlPlaneMembershipStatus[] = signupMode === 'invite'
+        ? ['active', 'invited']
+        : ['active']
+      if (
+        !existingMembership
+        || !acceptableStatuses.includes(existingMembership.membership.status)
+      ) {
         throw new CloudServiceError(403, 'Cloud membership is not active.')
       }
     }
@@ -684,7 +769,7 @@ export class CloudSessionService {
       orgId: principal.orgId,
     })
     const account = await this.store.createAccount({
-      accountId: principal.accountId || principal.userId,
+      accountId: existingMembership?.account.accountId || principal.accountId || principal.userId,
       idpSubject: principal.userId,
       email: principal.email,
     })
@@ -701,7 +786,7 @@ export class CloudSessionService {
       email: account.email,
     })
     if (!membership) {
-      if (principal.authSource === 'user' && !this.identityPolicy.allowSelfServiceSignup) {
+      if (requiresExistingMembership) {
         throw new CloudServiceError(403, 'Cloud membership is not active.')
       }
       await this.store.upsertMembership({
@@ -710,6 +795,14 @@ export class CloudSessionService {
         role: principal.role || user.role,
         status: 'active',
         actor: { actorType: 'system', actorId: 'principal.bootstrap' },
+      })
+    } else if (membership.membership.status === 'invited' && principal.authSource === 'user' && signupMode === 'invite') {
+      await this.store.upsertMembership({
+        orgId: org.orgId,
+        accountId: account.accountId,
+        role: membership.membership.role,
+        status: 'active',
+        actor: { actorType: 'system', actorId: 'membership.invite.accepted' },
       })
     } else if (membership.membership.status !== 'active') {
       throw new CloudServiceError(403, 'Cloud membership is not active.')
@@ -744,6 +837,177 @@ export class CloudSessionService {
         machineRuntimeConfig: 'disabled',
       },
     }
+  }
+
+  async getAdminPolicyOverview(principal: CloudPrincipal): Promise<CloudAdminPolicyOverview> {
+    await this.ensurePrincipal(principal)
+    const membership = await this.store.resolvePrincipalMembership({
+      tenantId: principal.tenantId,
+      accountId: principal.accountId || principal.userId,
+      email: principal.email,
+    })
+    if (!membership) throw new CloudServiceError(403, 'Cloud membership is not active.')
+    const signupMode = resolvedSignupMode(this.identityPolicy)
+    return {
+      org: {
+        orgId: membership.org.orgId,
+        tenantId: membership.org.tenantId,
+        name: membership.org.name,
+        planKey: membership.org.planKey,
+        status: membership.org.status,
+      },
+      signup: {
+        mode: signupMode,
+        allowSelfServiceSignup: this.identityPolicy.allowSelfServiceSignup,
+        allowedEmailDomains: [...(this.identityPolicy.allowedEmailDomains || [])],
+        invitesEnabled: signupMode === 'invite',
+      },
+      profile: {
+        name: this.policy.profileName,
+        label: this.policy.profile.label || null,
+        description: this.policy.profile.description || null,
+      },
+      features: this.policy.features,
+      allowedAgents: this.policy.allowedAgents,
+      allowedTools: this.policy.allowedTools,
+      allowedMcps: this.policy.allowedMcps,
+      runtime: {
+        configSource: 'app',
+        machineRuntimeConfig: this.policy.allowMachineRuntimeConfig ? 'allowlisted' : 'disabled',
+        localStdioMcps: this.policy.allowLocalStdioMcps || this.policy.allowedLocalMcpNames.length ? 'allowlisted' : 'disabled',
+        hostProjectDirectories: this.policy.allowHostProjectDirectories || this.policy.allowedHostProjectDirectories.length ? 'allowlisted' : 'disabled',
+      },
+      projectSources: this.policy.projectSources,
+      gateway: {
+        channelsEnabled: this.policy.features.agents !== false,
+        webhooksEnabled: this.policy.features.webhooks !== false,
+      },
+    }
+  }
+
+  async listOrgMembers(
+    principal: CloudPrincipal,
+    input: { query?: string | null, limit?: number | null } = {},
+  ): Promise<PublicOrgMemberRecord[]> {
+    await this.ensurePrincipal(principal)
+    this.assertOrgAdmin(principal)
+    return this.store.listOrgMembers(this.principalOrgId(principal), {
+      query: input.query || null,
+      limit: input.limit || 100,
+    })
+  }
+
+  async inviteOrgMember(
+    principal: CloudPrincipal,
+    input: { email: string, role?: ControlPlaneRole | null },
+  ): Promise<PublicOrgMemberRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertOrgAdmin(principal)
+    const signupMode = resolvedSignupMode(this.identityPolicy)
+    if (signupMode !== 'invite') {
+      throw new CloudServiceError(403, 'Member invites are available only when cloud signup mode is invite.')
+    }
+    const email = normalizeEmailAddress(input.email)
+    const role = normalizeControlPlaneRole(input.role || 'member')
+    if (role === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
+      throw new CloudServiceError(403, 'Only org owners can invite another owner.')
+    }
+    const orgId = this.principalOrgId(principal)
+    const account = await this.store.createAccount({
+      accountId: stableCloudId('account', orgId, email),
+      email,
+      idpSubject: null,
+    })
+    const membership = await this.store.upsertMembership({
+      orgId,
+      accountId: account.accountId,
+      role,
+      status: 'invited',
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
+    return {
+      orgId,
+      accountId: account.accountId,
+      email: account.email,
+      displayName: account.displayName,
+      role: membership.role,
+      status: membership.status,
+      createdAt: membership.createdAt,
+      updatedAt: membership.updatedAt,
+    }
+  }
+
+  async updateOrgMember(
+    principal: CloudPrincipal,
+    accountId: string,
+    input: {
+      role?: ControlPlaneRole | null
+      status?: ControlPlaneMembershipStatus | null
+      confirm?: string | null
+    },
+  ): Promise<PublicOrgMemberRecord> {
+    await this.ensurePrincipal(principal)
+    this.assertOrgAdmin(principal)
+    const orgId = this.principalOrgId(principal)
+    const members = await this.store.listOrgMembers(orgId, { limit: 500 })
+    const existing = members.find((member) => member.accountId === accountId)
+    if (!existing) throw new CloudServiceError(404, 'Org member was not found.')
+    const nextRole = input.role ? normalizeControlPlaneRole(input.role, existing.role) : existing.role
+    const nextStatus = input.status ? normalizeMembershipStatus(input.status, existing.status) : existing.status
+    if (nextRole === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
+      throw new CloudServiceError(403, 'Only org owners can promote another owner.')
+    }
+    if (existing.role === 'owner' && principal.role !== 'owner' && principal.authSource !== 'local') {
+      throw new CloudServiceError(403, 'Only org owners can change another owner.')
+    }
+    const currentActorAccountId = principal.accountId || principal.userId
+    if (accountId === currentActorAccountId && nextRole !== existing.role) {
+      throw new CloudServiceError(400, 'You cannot change your own org role.')
+    }
+    if (accountId === currentActorAccountId && nextStatus !== 'active') {
+      throw new CloudServiceError(400, 'You cannot disable your own active membership.')
+    }
+    if (nextStatus === 'disabled' && input.confirm !== accountId) {
+      throw new CloudServiceError(400, 'Disabling a member requires confirmation.')
+    }
+    const activeOwnerCount = members.filter((member) => member.role === 'owner' && member.status === 'active').length
+    if (existing.role === 'owner' && existing.status === 'active' && (nextRole !== 'owner' || nextStatus !== 'active') && activeOwnerCount <= 1) {
+      throw new CloudServiceError(400, 'Cannot remove or demote the last active owner.')
+    }
+    const updated = await this.store.upsertMembership({
+      orgId,
+      accountId,
+      role: nextRole,
+      status: nextStatus,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: currentActorAccountId,
+      },
+    })
+    return {
+      orgId,
+      accountId: existing.accountId,
+      email: existing.email,
+      displayName: existing.displayName,
+      role: updated.role,
+      status: updated.status,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    }
+  }
+
+  async listAuditEvents(
+    principal: CloudPrincipal,
+    input: { limit?: number | null } = {},
+  ) {
+    await this.ensurePrincipal(principal)
+    this.assertOrgAdmin(principal)
+    return this.store.listAuditEvents(this.principalOrgId(principal), input.limit || 100)
   }
 
   async createSession(principal: CloudPrincipal, input: {
@@ -3033,6 +3297,12 @@ export class CloudSessionService {
   private assertApiTokenAdmin(principal: CloudPrincipal) {
     if (!principalCanManageApiTokens(principal)) {
       throw new CloudServiceError(403, 'API token administration requires an org admin or admin-scoped API token.')
+    }
+  }
+
+  private assertOrgAdmin(principal: CloudPrincipal) {
+    if (!principalCanManageOrg(principal)) {
+      throw new CloudServiceError(403, 'Org administration requires an org admin or admin-scoped API token.')
     }
   }
 

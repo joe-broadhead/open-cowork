@@ -1123,6 +1123,20 @@ test('cloud HTTP self-service mode requires an active invited membership when di
       orgId: org.orgId,
       accountId: 'invited-1',
       role: 'member',
+      status: 'invited',
+    })
+    const invitedAccepted = await readJson(await fetch(`${baseUrl}/api/workspace`))
+    assert.equal(invitedAccepted.orgId, 'tenant-1')
+    assert.equal(invitedAccepted.accountId, 'invited-1')
+    assert.equal(fixture.store.resolvePrincipalMembership({
+      tenantId: 'tenant-1',
+      accountId: 'invited-1',
+    })?.membership.status, 'active')
+
+    fixture.store.upsertMembership({
+      orgId: org.orgId,
+      accountId: 'invited-1',
+      role: 'member',
       status: 'active',
     })
     const accepted = await readJson(await fetch(`${baseUrl}/api/workspace`))
@@ -1256,6 +1270,141 @@ test('cloud HTTP server prevents member-only users from API token administration
       body: JSON.stringify({ name: 'Blocked token', scopes: ['desktop'] }),
     })
     assert.equal(response.status, 403)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP admin APIs manage invited members and expose redacted audit', async () => {
+  const fixture = createFixture({
+    identityPolicy: {
+      allowSelfServiceSignup: false,
+      signupMode: 'invite',
+      allowedEmailDomains: ['example.test'],
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const policy = asRecord((await readJson(await fetch(`${baseUrl}/api/admin/policy`))).policy)
+    assert.equal(asRecord(policy.signup).mode, 'invite')
+    assert.deepEqual(asRecord(policy.signup).allowedEmailDomains, ['example.test'])
+    assert.equal(asRecord(policy.runtime).machineRuntimeConfig, 'disabled')
+
+    const initialMembers = asArray((await readJson(await fetch(`${baseUrl}/api/admin/members`))).members)
+    assert.equal(initialMembers.some((entry) => asRecord(entry).email === 'user@example.test'), true)
+
+    const invitedResponse = await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'invitee@example.test', role: 'admin' }),
+    })
+    assert.equal(invitedResponse.status, 201)
+    const invited = asRecord((await readJson(invitedResponse)).member)
+    assert.equal(invited.email, 'invitee@example.test')
+    assert.equal(invited.role, 'admin')
+    assert.equal(invited.status, 'invited')
+
+    const listed = asArray((await readJson(await fetch(`${baseUrl}/api/admin/members?q=invitee`))).members)
+    assert.equal(listed.length, 1)
+
+    const accountId = String(invited.accountId)
+    const missingConfirm = await fetch(`${baseUrl}/api/admin/members/${encodeURIComponent(accountId)}/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'disabled' }),
+    })
+    assert.equal(missingConfirm.status, 400)
+
+    const disabled = await readJson(await fetch(`${baseUrl}/api/admin/members/${encodeURIComponent(accountId)}/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'disabled', confirm: accountId }),
+    }))
+    assert.equal(asRecord(disabled.member).status, 'disabled')
+
+    const audit = asArray((await readJson(await fetch(`${baseUrl}/api/admin/audit?limit=50`))).events)
+    const auditText = JSON.stringify(audit)
+    assert.match(auditText, /membership\.created/)
+    assert.match(auditText, /membership\.updated/)
+    assert.equal(auditText.includes('occ_'), false)
+    assert.equal(auditText.includes('sk-'), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP admin APIs reject member-only users while preserving read-only policy', async () => {
+  const memberPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'member-1',
+    accountId: 'member-1',
+    email: 'member@example.test',
+    role: 'member' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({ auth: () => memberPrincipal })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await readJson(await fetch(`${baseUrl}/api/workspace`))
+    const policy = await fetch(`${baseUrl}/api/admin/policy`)
+    assert.equal(policy.status, 200)
+    const members = await fetch(`${baseUrl}/api/admin/members`)
+    assert.equal(members.status, 403)
+    const audit = await fetch(`${baseUrl}/api/admin/audit`)
+    assert.equal(audit.status, 403)
+    const invite = await fetch(`${baseUrl}/api/admin/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'blocked@example.test', role: 'member' }),
+    })
+    assert.equal(invite.status, 403)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP admin APIs protect owner membership changes', async () => {
+  const adminPrincipal = {
+    tenantId: 'tenant-1',
+    orgId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    userId: 'admin-1',
+    accountId: 'admin-1',
+    email: 'admin@example.test',
+    role: 'admin' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({ auth: () => adminPrincipal })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await readJson(await fetch(`${baseUrl}/api/workspace`))
+    fixture.store.createAccount({
+      accountId: 'owner-1',
+      idpSubject: 'owner-subject',
+      email: 'owner@example.test',
+    })
+    fixture.store.upsertMembership({
+      orgId: 'tenant-1',
+      accountId: 'owner-1',
+      role: 'owner',
+      status: 'active',
+    })
+
+    const demoteOwner = await fetch(`${baseUrl}/api/admin/members/owner-1/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role: 'member' }),
+    })
+    assert.equal(demoteOwner.status, 403)
+
+    const selfDemote = await fetch(`${baseUrl}/api/admin/members/admin-1/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ role: 'member' }),
+    })
+    assert.equal(selfDemote.status, 400)
   } finally {
     await fixture.server.close()
   }
