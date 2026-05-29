@@ -1,7 +1,8 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
 import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientBootstrap } from './client-contract.ts'
-import type { PublicBrandingConfig } from '@open-cowork/shared'
+import { CLOUD_WEB_THREAD_PAGE_SIZE } from './thread-workbench.ts'
+import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
 export type WebsiteBootstrapPolicy = {
   role: string
@@ -189,6 +190,30 @@ const state = {
   bindings: [],
   billing: null,
   usage: [],
+  sessions: [],
+  sessionViews: {},
+  selectedSessionId: null,
+  threadLimit: ${CLOUD_WEB_THREAD_PAGE_SIZE},
+  threadFilters: {
+    query: '',
+    status: 'all',
+    profile: '',
+    project: 'all',
+    tag: '',
+  },
+  sessionEvents: {
+    source: null,
+    sessionId: null,
+    cursor: 0,
+    status: 'idle',
+    error: null,
+  },
+  workspaceEvents: {
+    source: null,
+    cursor: 0,
+    status: 'idle',
+    error: null,
+  },
   revealToken: null,
   activeRoute: bootstrap.defaultRoute || 'threads',
 };
@@ -333,11 +358,30 @@ async function api(path, options = {}) {
 }
 
 function renderSignedOut() {
+  closeEventSource(state.sessionEvents);
+  closeEventSource(state.workspaceEvents);
   state.workspace = null;
   state.principal = null;
+  state.sessions = [];
+  state.sessionViews = {};
+  state.selectedSessionId = null;
+  state.sessionEvents = {
+    source: null,
+    sessionId: null,
+    cursor: 0,
+    status: 'idle',
+    error: null,
+  };
+  state.workspaceEvents = {
+    source: null,
+    cursor: 0,
+    status: 'idle',
+    error: null,
+  };
   document.body.dataset.auth = 'signed-out';
   setStatus('Sign in required', 'warn');
   setRoute(window.location.hash.replace(/^#/, '') || defaultRoute(), true);
+  renderAll();
 }
 
 function formatDate(value) {
@@ -386,6 +430,11 @@ function renderWorkspace() {
   qsa('[data-admin-control="true"]').forEach((element) => {
     element.disabled = adminLocked();
     element.dataset.locked = adminLocked() ? 'true' : 'false';
+  });
+  qsa('[data-chat-control="true"]').forEach((element) => {
+    const locked = !workspace || bootstrap.features?.chat === false;
+    element.disabled = locked;
+    element.dataset.locked = locked ? 'true' : 'false';
   });
   renderRoutes();
 }
@@ -577,6 +626,524 @@ function renderUsage() {
   }
 }
 
+function sessionTitle(session) {
+  return session?.title || session?.sessionId || 'New session';
+}
+
+function sessionStatus(session, projection) {
+  if (projection?.pendingApprovals?.length) return 'approval';
+  if (projection?.pendingQuestions?.length) return 'question';
+  return projection?.status || session?.status || 'idle';
+}
+
+function projectionFromView(view) {
+  const projection = view?.projection?.view;
+  if (!projection || typeof projection !== 'object' || Array.isArray(projection)) {
+    return {
+      title: view?.session?.title || null,
+      profileName: view?.session?.profileName || null,
+      messages: [],
+      toolCalls: [],
+      taskRuns: [],
+      pendingApprovals: [],
+      pendingQuestions: [],
+      artifacts: [],
+      todos: [],
+      errors: [],
+      sessionCost: 0,
+      sessionTokens: {},
+      origin: null,
+      projectSource: null,
+      tags: [],
+      smartFilters: [],
+      updatedAt: view?.session?.updatedAt || null,
+      status: view?.session?.status || 'idle',
+    };
+  }
+  return {
+    title: projection.title || view?.session?.title || null,
+    profileName: projection.profileName || view?.session?.profileName || null,
+    messages: Array.isArray(projection.messages) ? projection.messages : [],
+    toolCalls: Array.isArray(projection.toolCalls) ? projection.toolCalls : [],
+    taskRuns: Array.isArray(projection.taskRuns) ? projection.taskRuns : [],
+    pendingApprovals: Array.isArray(projection.pendingApprovals) ? projection.pendingApprovals : [],
+    pendingQuestions: Array.isArray(projection.pendingQuestions) ? projection.pendingQuestions : [],
+    artifacts: Array.isArray(projection.artifacts) ? projection.artifacts : [],
+    todos: Array.isArray(projection.todos) ? projection.todos : [],
+    errors: Array.isArray(projection.errors) ? projection.errors : [],
+    sessionCost: typeof projection.sessionCost === 'number' ? projection.sessionCost : 0,
+    sessionTokens: projection.sessionTokens && typeof projection.sessionTokens === 'object' ? projection.sessionTokens : {},
+    origin: projection.origin && typeof projection.origin === 'object' ? projection.origin : null,
+    projectSource: projection.projectSource && typeof projection.projectSource === 'object' ? projection.projectSource : null,
+    tags: Array.isArray(projection.tags) ? projection.tags : [],
+    smartFilters: Array.isArray(projection.smartFilters) ? projection.smartFilters : [],
+    updatedAt: projection.updatedAt || view?.session?.updatedAt || null,
+    status: projection.status || view?.session?.status || 'idle',
+  };
+}
+
+function threadTags(session, projection) {
+  return [
+    ...(Array.isArray(session?.tags) ? session.tags : []),
+    ...(Array.isArray(session?.smartFilters) ? session.smartFilters : []),
+    ...(Array.isArray(projection.tags) ? projection.tags : []),
+    ...(Array.isArray(projection.smartFilters) ? projection.smartFilters : []),
+  ].filter((entry) => typeof entry === 'string' && entry.trim());
+}
+
+function projectLabel(projectSource) {
+  if (!projectSource) return 'chat-only';
+  if (projectSource.kind === 'git') {
+    const repo = String(projectSource.repositoryUrl || 'git repository');
+    return repo.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || repo;
+  }
+  if (projectSource.kind === 'snapshot') return projectSource.title || 'uploaded snapshot';
+  return 'project';
+}
+
+function filteredSessions() {
+  const query = state.threadFilters.query.trim().toLowerCase();
+  const queryTokens = query.split(/\s+/).filter(Boolean);
+  const status = state.threadFilters.status;
+  const profile = state.threadFilters.profile.trim().toLowerCase();
+  const project = state.threadFilters.project;
+  const tag = state.threadFilters.tag.trim().toLowerCase();
+  return [...state.sessions]
+    .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+    .filter((session) => {
+      const view = state.sessionViews[session.sessionId];
+      const projection = projectionFromView(view);
+      const computedStatus = sessionStatus(session, projection);
+      if (status !== 'all' && computedStatus !== status && session.status !== status) return false;
+      if (profile && String(session.profileName || projection.profileName || '').toLowerCase() !== profile) return false;
+      if (project !== 'all') {
+        const kind = projection.projectSource?.kind || 'chat';
+        if (project !== kind) return false;
+      }
+      if (tag && !threadTags(session, projection).some((entry) => entry.toLowerCase().includes(tag))) return false;
+      if (!queryTokens.length) return true;
+      const haystack = [
+        session.sessionId,
+        session.title,
+        session.profileName,
+        computedStatus,
+        projectLabel(projection.projectSource),
+        ...threadTags(session, projection),
+      ].filter(Boolean).join(' ').toLowerCase();
+      return queryTokens.every((token) => haystack.includes(token));
+    });
+}
+
+function statusPillKind(status) {
+  if (status === 'running') return 'ok';
+  if (status === 'approval' || status === 'question') return 'warn';
+  if (status === 'errored' || status === 'error') return 'warn';
+  return '';
+}
+
+function renderThreadList() {
+  const list = qs('#thread-list');
+  const count = qs('#thread-count');
+  const limitStatus = qs('#thread-limit-status');
+  const loadMore = qs('#thread-load-more');
+  if (!list) return;
+  const sessions = filteredSessions();
+  const visible = sessions.slice(0, state.threadLimit);
+  removeChildren(list);
+  if (count) count.textContent = String(sessions.length);
+  if (limitStatus) {
+    limitStatus.textContent = sessions.length
+      ? 'Showing ' + visible.length + ' of ' + sessions.length
+      : 'No threads match the current filters';
+  }
+  if (loadMore) {
+    loadMore.hidden = visible.length >= sessions.length;
+    loadMore.disabled = visible.length >= sessions.length;
+  }
+  if (!sessions.length) {
+    const row = document.createElement('div');
+    row.className = 'table-row empty-row';
+    row.setAttribute('role', 'row');
+    ['No cloud threads loaded.', '-', '-', '-'].forEach((value) => {
+      const cell = document.createElement('span');
+      cell.setAttribute('role', 'cell');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    list.appendChild(row);
+    return;
+  }
+  for (const session of visible) {
+    const view = state.sessionViews[session.sessionId];
+    const projection = projectionFromView(view);
+    const status = sessionStatus(session, projection);
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'table-row thread-row';
+    row.dataset.selected = state.selectedSessionId === session.sessionId ? 'true' : 'false';
+    row.setAttribute('role', 'row');
+    row.addEventListener('click', () => selectSession(session.sessionId).catch((error) => setStatus(error.message, 'error')));
+    const title = document.createElement('span');
+    title.setAttribute('role', 'cell');
+    title.textContent = sessionTitle(session);
+    const statusCell = document.createElement('span');
+    statusCell.setAttribute('role', 'cell');
+    statusCell.appendChild(pill(status, statusPillKind(status)));
+    const surface = document.createElement('span');
+    surface.setAttribute('role', 'cell');
+    surface.textContent = projection.origin?.kind === 'local-session-import' ? 'imported' : projectLabel(projection.projectSource);
+    const updated = document.createElement('span');
+    updated.setAttribute('role', 'cell');
+    updated.textContent = formatDate(projection.updatedAt || session.updatedAt);
+    row.appendChild(title);
+    row.appendChild(statusCell);
+    row.appendChild(surface);
+    row.appendChild(updated);
+    list.appendChild(row);
+  }
+}
+
+function renderChat() {
+  const title = qs('#chat-session-title');
+  const meta = qs('#chat-session-meta');
+  const timeline = qs('#chat-timeline');
+  const composer = qs('#prompt-form');
+  const eventStatus = qs('#chat-event-status');
+  const view = state.selectedSessionId ? state.sessionViews[state.selectedSessionId] : null;
+  const projection = projectionFromView(view);
+  if (title) title.textContent = view ? sessionTitle(view.session) : 'No thread selected';
+  if (meta) {
+    const details = view
+      ? [
+          view.session.profileName,
+          projectLabel(projection.projectSource),
+          projection.messages.length + ' message(s)',
+          projection.toolCalls.length + ' tool call(s)',
+          projection.taskRuns.length + ' task run(s)',
+        ]
+      : ['Select a cloud thread'];
+    meta.textContent = details.filter(Boolean).join(' - ');
+  }
+  if (eventStatus) {
+    eventStatus.textContent = state.sessionEvents.status;
+    eventStatus.dataset.kind = state.sessionEvents.status === 'open' ? 'ok' : state.sessionEvents.status === 'error' ? 'warn' : '';
+  }
+  if (composer) {
+    qsa('button, input, textarea', composer).forEach((element) => {
+      const locked = !view || projection.status === 'closed' || bootstrap.features?.chat === false;
+      element.disabled = locked;
+      element.dataset.locked = locked ? 'true' : 'false';
+    });
+  }
+  if (!timeline) return;
+  removeChildren(timeline);
+  if (!view) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = 'No thread selected.';
+    timeline.appendChild(empty);
+    return;
+  }
+  const waits = [
+    ...projection.pendingApprovals.map((approval) => ({ kind: 'Approval', text: approval.description || approval.tool })),
+    ...projection.pendingQuestions.map((question) => ({ kind: 'Question', text: question.questions?.[0]?.question || 'Question requested' })),
+  ];
+  for (const wait of waits) {
+    const item = document.createElement('div');
+    item.className = 'wait-banner';
+    item.appendChild(pill(wait.kind, 'warn'));
+    const text = document.createElement('span');
+    text.textContent = wait.text;
+    item.appendChild(text);
+    timeline.appendChild(item);
+  }
+  for (const message of projection.messages) {
+    const bubble = document.createElement('article');
+    bubble.className = 'message-bubble';
+    bubble.dataset.role = message.role;
+    const heading = document.createElement('div');
+    heading.className = 'message-heading';
+    heading.textContent = message.role === 'user' ? 'You' : 'Assistant';
+    const body = document.createElement('p');
+    body.textContent = message.content || '';
+    bubble.appendChild(heading);
+    bubble.appendChild(body);
+    timeline.appendChild(bubble);
+  }
+  if (projection.taskRuns.length || projection.toolCalls.length || projection.artifacts.length || projection.todos.length) {
+    const activity = document.createElement('section');
+    activity.className = 'activity-block';
+    const heading = document.createElement('h4');
+    heading.textContent = 'Activity';
+    activity.appendChild(heading);
+    for (const task of projection.taskRuns.slice(-8)) {
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      row.appendChild(pill(task.status || 'task'));
+      const text = document.createElement('span');
+      text.textContent = task.title || task.agent || task.id || 'Task run';
+      row.appendChild(text);
+      activity.appendChild(row);
+    }
+    for (const tool of projection.toolCalls.slice(-8)) {
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      row.appendChild(pill(tool.status || 'tool'));
+      const text = document.createElement('span');
+      text.textContent = tool.name || tool.id || 'Tool call';
+      row.appendChild(text);
+      activity.appendChild(row);
+    }
+    for (const artifact of projection.artifacts.slice(-8)) {
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      row.appendChild(pill('artifact', 'ok'));
+      const text = document.createElement('span');
+      text.textContent = artifact.filename || artifact.name || artifact.artifactId || 'Artifact';
+      row.appendChild(text);
+      activity.appendChild(row);
+    }
+    if (projection.todos.length) {
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      row.appendChild(pill('todos'));
+      const text = document.createElement('span');
+      text.textContent = projection.todos.length + ' todo(s)';
+      row.appendChild(text);
+      activity.appendChild(row);
+    }
+    timeline.appendChild(activity);
+  }
+  for (const error of projection.errors) {
+    const item = document.createElement('div');
+    item.className = 'notice';
+    item.textContent = error.message || 'Runtime error';
+    timeline.appendChild(item);
+  }
+  if (!projection.messages.length && !waits.length && !projection.errors.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty';
+    empty.textContent = 'No messages yet.';
+    timeline.appendChild(empty);
+  }
+}
+
+function closeEventSource(entry) {
+  if (entry.source) entry.source.close();
+  entry.source = null;
+}
+
+function sseUrl(path, afterSequence) {
+  return afterSequence > 0 ? path + '?after=' + encodeURIComponent(String(afterSequence)) : path;
+}
+
+function bindCloudEventListeners(source, handler) {
+  source.onmessage = handler;
+  const types = [...new Set([...(bootstrap.sessionEventTypes || []), 'snapshot.required'])];
+  types.forEach((type) => source.addEventListener(type, handler));
+}
+
+function readSseEvent(event) {
+  try {
+    return JSON.parse(event.data || '{}');
+  } catch {
+    return null;
+  }
+}
+
+async function refreshSelectedSession() {
+  if (!state.selectedSessionId) return;
+  await loadSessionView(state.selectedSessionId, { render: true });
+}
+
+function openSessionEvents(sessionId, afterSequence = 0) {
+  closeEventSource(state.sessionEvents);
+  state.sessionEvents = {
+    source: null,
+    sessionId,
+    cursor: afterSequence,
+    status: 'connecting',
+    error: null,
+  };
+  if (!window.EventSource) {
+    state.sessionEvents.status = 'closed';
+    renderChat();
+    return;
+  }
+  const source = new EventSource(sseUrl('/api/sessions/' + encodeURIComponent(sessionId) + '/events', afterSequence), { withCredentials: true });
+  state.sessionEvents.source = source;
+  source.onopen = () => {
+    state.sessionEvents.status = 'open';
+    renderChat();
+  };
+  source.onerror = () => {
+    state.sessionEvents.status = 'retrying';
+    renderChat();
+  };
+  bindCloudEventListeners(source, (event) => {
+    const payload = readSseEvent(event);
+    if (payload?.sequence) state.sessionEvents.cursor = Math.max(state.sessionEvents.cursor, payload.sequence);
+    if (payload?.type === 'snapshot.required') {
+      state.sessionEvents.cursor = 0;
+    }
+    refreshSelectedSession().catch((error) => {
+      state.sessionEvents.status = 'error';
+      state.sessionEvents.error = error.message || 'Session refresh failed';
+      setStatus(state.sessionEvents.error, 'error');
+      renderChat();
+    });
+  });
+  renderChat();
+}
+
+function openWorkspaceEvents(afterSequence = 0) {
+  closeEventSource(state.workspaceEvents);
+  state.workspaceEvents = {
+    source: null,
+    cursor: afterSequence,
+    status: 'connecting',
+    error: null,
+  };
+  if (!window.EventSource) return;
+  const source = new EventSource(sseUrl('/api/events', afterSequence), { withCredentials: true });
+  state.workspaceEvents.source = source;
+  source.onopen = () => { state.workspaceEvents.status = 'open'; };
+  source.onerror = () => { state.workspaceEvents.status = 'retrying'; };
+  bindCloudEventListeners(source, (event) => {
+    const payload = readSseEvent(event);
+    if (payload?.sequence) state.workspaceEvents.cursor = Math.max(state.workspaceEvents.cursor, payload.sequence);
+    if (payload?.type === 'snapshot.required') state.workspaceEvents.cursor = 0;
+    loadSessions({ keepSelection: true }).catch((error) => setStatus(error.message, 'error'));
+  });
+}
+
+async function loadSessions(options = {}) {
+  const sessions = await api(endpoint('sessions', '/api/sessions')).then((body) => body.sessions || []);
+  state.sessions = Array.isArray(sessions) ? sessions : [];
+  if (state.selectedSessionId && !state.sessions.some((session) => session.sessionId === state.selectedSessionId)) {
+    state.selectedSessionId = null;
+    closeEventSource(state.sessionEvents);
+  }
+  if ((!options.keepSelection || !state.selectedSessionId) && state.sessions[0]) {
+    state.selectedSessionId = state.sessions[0].sessionId;
+  }
+  if (state.selectedSessionId && !state.sessionViews[state.selectedSessionId]) {
+    await loadSessionView(state.selectedSessionId, { render: false });
+  }
+  renderThreadList();
+  renderChat();
+}
+
+async function loadSessionView(sessionId, options = {}) {
+  const view = await api('/api/sessions/' + encodeURIComponent(sessionId) + '/view');
+  state.sessionViews[sessionId] = view;
+  if (options.render !== false) {
+    renderThreadList();
+    renderChat();
+  }
+  return view;
+}
+
+async function selectSession(sessionId) {
+  state.selectedSessionId = sessionId;
+  const view = await loadSessionView(sessionId, { render: false });
+  const afterSequence = typeof view?.projection?.sequence === 'number' ? view.projection.sequence : 0;
+  openSessionEvents(sessionId, afterSequence);
+  setRoute('chat', true);
+  renderThreadList();
+  renderChat();
+}
+
+async function readFileAsBase64(file) {
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function projectSourceFromSessionForm(form, formData) {
+  const repositoryUrl = String(formData.get('repositoryUrl') || '').trim();
+  if (repositoryUrl) {
+    return {
+      kind: 'git',
+      repositoryUrl,
+      ref: String(formData.get('ref') || '').trim() || null,
+      subdirectory: String(formData.get('subdirectory') || '').trim() || null,
+      credentialRef: String(formData.get('credentialRef') || '').trim() || null,
+    };
+  }
+  const fileInput = qs('input[name="snapshotFiles"]', form);
+  const files = fileInput?.files ? Array.from(fileInput.files) : [];
+  if (!files.length) return null;
+  const uploadedFiles = [];
+  let byteCount = 0;
+  for (const file of files.slice(0, 250)) {
+    byteCount += file.size || 0;
+    uploadedFiles.push({
+      path: file.webkitRelativePath || file.name,
+      dataBase64: await readFileAsBase64(file),
+      byteCount: file.size || 0,
+      mode: null,
+    });
+  }
+  const uploaded = await api(endpoint('projectSnapshots', '/api/project-sources/snapshots'), {
+    method: 'POST',
+    body: JSON.stringify({
+      title: String(formData.get('snapshotTitle') || '').trim() || 'Browser upload',
+      files: uploadedFiles,
+      fileCount: uploadedFiles.length,
+      byteCount,
+    }),
+  });
+  return uploaded.projectSource;
+}
+
+async function createCloudSessionFromForm(formData, form) {
+  const projectSource = await projectSourceFromSessionForm(form, formData);
+  if (projectSource) {
+    const verdict = await api(endpoint('projectSourceValidate', '/api/project-sources/validate'), {
+      method: 'POST',
+      body: JSON.stringify({ projectSource }),
+    });
+    if (verdict && verdict.allowed === false) {
+      throw new Error(verdict.reason || 'Project source is blocked by policy.');
+    }
+  }
+  const created = await api(endpoint('sessions', '/api/sessions'), {
+    method: 'POST',
+    body: JSON.stringify({
+      profileName: String(formData.get('profileName') || state.workspace?.profileName || bootstrap.profileName || 'default').trim(),
+      projectSource,
+    }),
+  });
+  const sessionId = created?.session?.sessionId;
+  if (sessionId) {
+    state.sessionViews[sessionId] = created;
+    await loadSessions({ keepSelection: true });
+    await selectSession(sessionId);
+  } else {
+    await loadSessions({ keepSelection: true });
+  }
+}
+
+async function promptSelectedSession(formData) {
+  if (!state.selectedSessionId) throw new Error('Select a thread first.');
+  const text = String(formData.get('text') || '').trim();
+  if (!text) throw new Error('Prompt text is required.');
+  const agent = String(formData.get('agent') || '').trim() || null;
+  const result = await api('/api/sessions/' + encodeURIComponent(state.selectedSessionId) + '/prompt', {
+    method: 'POST',
+    body: JSON.stringify({ text, agent }),
+  });
+  if (result?.view) state.sessionViews[state.selectedSessionId] = result.view;
+  await loadSessions({ keepSelection: true });
+  await refreshSelectedSession();
+}
+
 function renderAll() {
   renderWorkspace();
   renderByok();
@@ -584,6 +1151,8 @@ function renderAll() {
   renderGateway();
   renderBilling();
   renderUsage();
+  renderThreadList();
+  renderChat();
   renderRoutes();
 }
 
@@ -621,6 +1190,13 @@ async function refreshDashboard() {
   setStatus('Workbench synced', 'ok');
   setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
   renderAll();
+  await loadSessions({ keepSelection: true });
+  if (state.selectedSessionId) {
+    const view = state.sessionViews[state.selectedSessionId];
+    const afterSequence = typeof view?.projection?.sequence === 'number' ? view.projection.sequence : 0;
+    openSessionEvents(state.selectedSessionId, afterSequence);
+  }
+  openWorkspaceEvents(state.workspaceEvents.cursor || 0);
 }
 
 async function submitForm(form, handler) {
@@ -635,6 +1211,22 @@ async function submitForm(form, handler) {
   } finally {
     setBusy(form, false);
     renderWorkspace();
+  }
+}
+
+async function submitScopedForm(form, handler, options = {}) {
+  const formData = new FormData(form);
+  setBusy(form, true);
+  try {
+    await handler(formData, form);
+    if (options.reset !== false) form.reset();
+    if (options.refresh) await refreshDashboard();
+    renderAll();
+  } catch (error) {
+    setStatus(error.message || 'Action failed', 'error');
+  } finally {
+    setBusy(form, false);
+    renderAll();
   }
 }
 
@@ -788,6 +1380,48 @@ function bindForms() {
     renderSignedOut();
   });
   qs('#refresh').addEventListener('click', () => refreshDashboard().catch((error) => setStatus(error.message, 'error')));
+  qs('#refresh-threads').addEventListener('click', () => loadSessions({ keepSelection: true }).catch((error) => setStatus(error.message, 'error')));
+  qs('#thread-load-more').addEventListener('click', () => {
+    state.threadLimit += ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#new-thread-shortcut').addEventListener('click', () => {
+    setRoute('threads', true);
+    qs('#session-form input[name="profileName"]')?.focus();
+  });
+  qs('#thread-query').addEventListener('input', (event) => {
+    state.threadFilters.query = event.currentTarget.value;
+    state.threadLimit = ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#thread-status').addEventListener('change', (event) => {
+    state.threadFilters.status = event.currentTarget.value;
+    state.threadLimit = ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#thread-profile').addEventListener('input', (event) => {
+    state.threadFilters.profile = event.currentTarget.value;
+    state.threadLimit = ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#thread-project').addEventListener('change', (event) => {
+    state.threadFilters.project = event.currentTarget.value;
+    state.threadLimit = ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#thread-tag').addEventListener('input', (event) => {
+    state.threadFilters.tag = event.currentTarget.value;
+    state.threadLimit = ${CLOUD_WEB_THREAD_PAGE_SIZE};
+    renderThreadList();
+  });
+  qs('#session-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitScopedForm(event.currentTarget, createCloudSessionFromForm, { refresh: false });
+  });
+  qs('#prompt-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitScopedForm(event.currentTarget, promptSelectedSession, { refresh: false });
+  });
   qs('#byok-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitForm(event.currentTarget, setByokSecret);
@@ -836,6 +1470,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     routes: CLOUD_WEB_ROUTES,
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
     api: CLOUD_WEB_CLIENT_ENDPOINTS,
+    sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
   return `<!doctype html>
@@ -858,7 +1493,7 @@ ${publicBrandingCss(branding)}
       background: var(--bg);
       color: var(--text);
     }
-    button, input, select {
+    button, input, select, textarea {
       font: inherit;
     }
     button {
@@ -896,7 +1531,7 @@ ${publicBrandingCss(branding)}
       text-decoration: none;
     }
     a:hover { text-decoration: underline; }
-    input, select {
+    input, select, textarea {
       min-height: 36px;
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -905,7 +1540,13 @@ ${publicBrandingCss(branding)}
       padding: 0 10px;
       min-width: 0;
     }
-    input:focus, select:focus, button:focus-visible {
+    textarea {
+      min-height: 108px;
+      padding: 9px 10px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+    input:focus, select:focus, textarea:focus, button:focus-visible {
       outline: 2px solid var(--focus);
       outline-offset: 2px;
     }
@@ -1104,6 +1745,15 @@ ${publicBrandingCss(branding)}
     .form-grid .span {
       grid-column: 1 / -1;
     }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: end;
+    }
+    .toolbar label {
+      flex: 1 1 150px;
+    }
     .check-row {
       display: flex;
       gap: 12px;
@@ -1152,6 +1802,20 @@ ${publicBrandingCss(branding)}
       color: var(--muted);
       font-size: 12px;
       font-weight: 700;
+    }
+    .thread-row {
+      width: 100%;
+      text-align: left;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+    }
+    .thread-row[data-selected="true"] {
+      background: #eef8f2;
+      box-shadow: inset 3px 0 0 var(--accent);
     }
     .empty-row {
       color: var(--muted);
@@ -1211,6 +1875,60 @@ ${publicBrandingCss(branding)}
       margin: 0;
       color: var(--muted);
       line-height: 1.45;
+    }
+    .chat-shell {
+      display: grid;
+      grid-template-rows: auto minmax(260px, 1fr);
+      min-height: 520px;
+    }
+    .timeline {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      overflow: auto;
+      max-height: 58vh;
+      padding-right: 2px;
+    }
+    .message-bubble {
+      max-width: 880px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+    .message-bubble[data-role="assistant"] {
+      background: var(--muted-surface);
+    }
+    .message-heading {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .message-bubble p {
+      margin: 0;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .wait-banner, .activity-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px 10px;
+      min-width: 0;
+    }
+    .activity-block {
+      display: grid;
+      gap: 8px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+    .activity-block h4 {
+      margin: 0;
+      font-size: 13px;
     }
     .secret-reveal {
       border: 1px solid #a6cfb8;
@@ -1306,23 +2024,59 @@ ${publicBrandingCss(branding)}
               <h2>Threads</h2>
               <div class="meta">Cloud workspace threads</div>
             </div>
-            <button class="primary" type="button" disabled data-policy-state="deferred">New thread</button>
+            <button class="primary" id="new-thread-shortcut" type="button" data-chat-control="true">New thread</button>
           </div>
-          <div class="panel">
-            <div class="table-shell" role="table" aria-label="Cloud threads">
-              <div class="table-row table-head" role="row">
-                <span role="columnheader">Thread</span>
-                <span role="columnheader">Status</span>
-                <span role="columnheader">Surface</span>
-                <span role="columnheader">Updated</span>
+          <div class="workbench-split">
+            <div class="panel">
+              <div class="toolbar" aria-label="Thread filters">
+                <label><span>Search</span><input id="thread-query" autocomplete="off" placeholder="title, profile, project, tag"></label>
+                <label><span>Status</span><select id="thread-status">
+                  <option value="all">All</option>
+                  <option value="running">Running</option>
+                  <option value="approval">Awaiting approval</option>
+                  <option value="question">Awaiting answer</option>
+                  <option value="idle">Idle</option>
+                  <option value="errored">Error</option>
+                  <option value="closed">Closed</option>
+                </select></label>
+                <label><span>Profile</span><input id="thread-profile" autocomplete="off" placeholder="${escapeHtml(policy.profileName)}"></label>
+                <label><span>Project</span><select id="thread-project">
+                  <option value="all">All</option>
+                  <option value="chat">Chat-only</option>
+                  <option value="git">Git</option>
+                  <option value="snapshot">Uploaded snapshot</option>
+                </select></label>
+                <label><span>Tag/filter</span><input id="thread-tag" autocomplete="off" placeholder="tag or smart filter"></label>
+                <button id="refresh-threads" type="button">Refresh</button>
               </div>
-              <div class="table-row empty-row" role="row">
-                <span role="cell">No cloud threads loaded.</span>
-                <span role="cell">-</span>
-                <span role="cell">-</span>
-                <span role="cell">-</span>
+              <div class="table-shell" role="table" aria-label="Cloud threads">
+                <div class="table-row table-head" role="row">
+                  <span role="columnheader">Thread</span>
+                  <span role="columnheader">Status</span>
+                  <span role="columnheader">Project</span>
+                  <span role="columnheader">Updated</span>
+                </div>
+                <div id="thread-list"></div>
+              </div>
+              <div class="section-header">
+                <div class="meta"><span id="thread-count">0</span> thread(s). <span id="thread-limit-status">No threads loaded</span>.</div>
+                <button id="thread-load-more" type="button" hidden>Load more</button>
               </div>
             </div>
+            <form class="panel" id="session-form">
+              <h3>Create cloud thread</h3>
+              <div class="form-grid">
+                <label><span>Profile</span><input name="profileName" autocomplete="off" value="${escapeHtml(policy.profileName)}" data-chat-control="true"></label>
+                <label><span>Git repository URL</span><input name="repositoryUrl" autocomplete="off" placeholder="https://github.com/org/repo.git" data-chat-control="true"></label>
+                <label><span>Ref</span><input name="ref" autocomplete="off" placeholder="main" data-chat-control="true"></label>
+                <label><span>Subdirectory</span><input name="subdirectory" autocomplete="off" placeholder="optional" data-chat-control="true"></label>
+                <label class="span"><span>Credential ref</span><input name="credentialRef" autocomplete="off" placeholder="secret://git/github-readonly" data-chat-control="true"></label>
+                <label><span>Snapshot title</span><input name="snapshotTitle" autocomplete="off" placeholder="Browser upload" data-chat-control="true"></label>
+                <label><span>Uploaded snapshot</span><input name="snapshotFiles" type="file" multiple webkitdirectory data-chat-control="true"></label>
+                <button class="primary span" type="submit" data-chat-control="true">Create thread</button>
+              </div>
+              <p class="empty">Cloud policy validates git and uploaded snapshot sources before execution. Local desktop paths and local MCP details are not uploaded implicitly.</p>
+            </form>
           </div>
         </section>
 
@@ -1335,14 +2089,25 @@ ${publicBrandingCss(branding)}
             <span class="pill" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'enabled' : 'disabled'}</span>
           </div>
           <div class="workbench-split">
-            <div class="panel">
-              <h3>Timeline</h3>
-              <p class="empty">No thread selected.</p>
+            <div class="panel chat-shell">
+              <div class="section-header">
+                <div>
+                  <h3 id="chat-session-title">No thread selected</h3>
+                  <div class="meta" id="chat-session-meta">Select a cloud thread</div>
+                </div>
+                <span class="pill" id="chat-event-status">idle</span>
+              </div>
+              <div class="timeline" id="chat-timeline" aria-live="polite">
+                <p class="empty">No thread selected.</p>
+              </div>
             </div>
-            <form class="panel">
+            <form class="panel" id="prompt-form">
               <h3>Composer</h3>
-              <label><span>Message</span><input disabled placeholder="Select a cloud thread"></label>
-              <button class="primary" type="button" disabled>Send</button>
+              <label class="span"><span>Message</span><textarea name="text" disabled placeholder="Select a cloud thread"></textarea></label>
+              <label><span>Agent</span><input name="agent" autocomplete="off" placeholder="optional agent override" disabled></label>
+              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
+              <div class="row compact"><strong>Policy</strong><span>${policy.features.chat ? 'chat enabled' : 'chat disabled'}</span></div>
+              <button class="primary" type="submit" disabled>Send</button>
             </form>
           </div>
         </section>
