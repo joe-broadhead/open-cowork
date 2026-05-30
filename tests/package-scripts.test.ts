@@ -9,6 +9,9 @@ type PackageJson = {
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
 const websitePackageJson = JSON.parse(readFileSync(new URL('../apps/website/package.json', import.meta.url), 'utf8')) as PackageJson
+const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
+const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
   const script = source.scripts?.[name]
@@ -43,6 +46,14 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
   ])
+
+  assert.deepEqual(splitScriptSteps(requireScript('test:coverage')), [
+    'pnpm test:coverage:node',
+    'pnpm test:coverage:renderer',
+    'node scripts/coverage-summary.mjs --check',
+  ])
+
+  assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/desktop test:coverage:renderer')
 
   assert.deepEqual(splitScriptSteps(requireScript('test:cloud-web')), [
     'pnpm build:shared',
@@ -99,9 +110,12 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:soak'), 'node scripts/launch-readiness.mjs --mode soak')
   assert.equal(requireScript('deploy:launch:validate'), 'node scripts/validate-launch-readiness.mjs')
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
+  assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {
+  assert.equal(requireScript('build:desktop'), 'pnpm --filter @open-cowork/desktop build')
+  assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
   assert.equal(requireScript('build:packages'), 'pnpm --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
   assert.equal(requireScript('build:website'), 'pnpm --filter @open-cowork/website build')
@@ -120,7 +134,7 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   ])
 })
 
-test('root typecheck script covers shared, MCP, and desktop packages', () => {
+test('root typecheck script covers package, MCP, gateway, website, and desktop surfaces', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm build:packages',
     'pnpm typecheck:mcps',
@@ -139,9 +153,64 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged')), [
     'pnpm --filter @open-cowork/desktop test:e2e:packaged',
   ])
+  assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional')), [
+    'pnpm --filter @open-cowork/desktop test:e2e:packaged:optional',
+  ])
 
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged', desktopPackageJson)), [
     'node ../../scripts/require-packaged-executable.mjs',
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
+  assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional', desktopPackageJson)), [
+    'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
+  ])
+})
+
+test('ci and release workflows use canonical release gate scripts', () => {
+  for (const command of [
+    'pnpm lint',
+    'pnpm test',
+    'pnpm test:cloud-web',
+    'pnpm test:renderer',
+    'pnpm typecheck',
+    'pnpm perf:check',
+    'pnpm build',
+    'pnpm docs:build',
+    'pnpm deploy:validate -- --require-tools',
+    'pnpm deploy:launch:validate',
+    'pnpm deploy:private-beta:validate',
+    'pnpm ops:validate',
+    'pnpm audit --prod --audit-level moderate',
+    'pnpm audit --audit-level critical',
+  ]) {
+    assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
+  }
+
+  for (const command of [
+    'pnpm lint',
+    'pnpm typecheck',
+    'pnpm test',
+    'pnpm test:renderer',
+    'pnpm perf:check',
+    'pnpm docs:build',
+    'pnpm --dir apps/desktop test:e2e:packaged',
+    'pnpm audit --prod --audit-level moderate',
+    'pnpm audit --audit-level critical',
+    'node scripts/verify-release-tag-signature.mjs',
+  ]) {
+    assert.match(releaseWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must run ${command}`)
+  }
+
+  for (const evidence of [
+    'Generate CycloneDX SBOM',
+    'Generate SPDX SBOM',
+    'Validate SBOMs',
+    'THIRD_PARTY_NOTICES.md',
+    'SHA256SUMS.txt',
+    'SHA256SUMS.txt.asc',
+  ]) {
+    assert.match(releaseWorkflow, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must preserve ${evidence}`)
+  }
+
+  assert.match(packagingDocs, /gh attestation verify/)
 })
