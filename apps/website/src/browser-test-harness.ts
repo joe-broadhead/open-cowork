@@ -259,6 +259,11 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       state.byok = [{ providerId, credentialKind: (request.body as Record<string, unknown>)?.kmsRef ? 'kms_ref' : 'api_key', last4: '9999', status: 'active', updatedAt: iso(8), lastValidatedAt: null }]
       return jsonResponse({ secret: state.byok[0] })
     }
+    if (request.method === 'DELETE' && request.pathname.startsWith('/api/byok/')) {
+      const providerId = decodeURIComponent(request.pathname.split('/')[3] || 'unknown')
+      state.byok = state.byok.map((secret: any) => secret.providerId === providerId ? { ...secret, status: 'disabled', disabledAt: iso(12) } : secret)
+      return jsonResponse({ ok: true })
+    }
     if (request.method === 'GET' && request.pathname === '/api/api-tokens') return jsonResponse({ tokens: state.tokens })
     if (request.method === 'POST' && request.pathname === '/api/api-tokens') {
       const token = {
@@ -271,6 +276,11 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       }
       state.tokens = [token, ...state.tokens]
       return jsonResponse({ token, plaintext: 'occ_created_token_value' })
+    }
+    if (request.method === 'DELETE' && request.pathname.startsWith('/api/api-tokens/')) {
+      const tokenId = decodeURIComponent(request.pathname.split('/')[3] || '')
+      state.tokens = state.tokens.map((token: any) => token.tokenId === tokenId ? { ...token, revokedAt: iso(13) } : token)
+      return jsonResponse({ ok: true })
     }
     if (request.method === 'GET' && request.pathname === '/api/billing/subscription') {
       return jsonResponse({
@@ -318,6 +328,12 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       state.members = [{ accountId: `acct-${state.members.length + 1}`, email: (request.body as Record<string, unknown>)?.email, role: (request.body as Record<string, unknown>)?.role || 'member', status: 'invited', updatedAt: iso(9) }, ...state.members]
       return jsonResponse({ member: state.members[0] })
     }
+    const memberUpdateMatch = request.pathname.match(/^\/api\/admin\/members\/([^/]+)\/update$/)
+    if (request.method === 'POST' && memberUpdateMatch) {
+      const accountId = decodeURIComponent(memberUpdateMatch[1])
+      state.members = state.members.map((member: any) => member.accountId === accountId ? { ...member, ...(request.body as Record<string, unknown>), updatedAt: iso(14) } : member)
+      return jsonResponse({ member: state.members.find((member: any) => member.accountId === accountId) })
+    }
     if (request.method === 'GET' && request.pathname === '/api/admin/audit') {
       return jsonResponse({ events: [{ eventId: 'audit-1', eventType: 'byok.updated', actorType: 'user', actorId: 'user-1', targetType: 'byok', targetId: 'anthropic', metadata: { token: '[redacted]' }, createdAt: iso(8) }] })
     }
@@ -336,6 +352,10 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'GET' && request.pathname === '/api/channels/deliveries') return jsonResponse({ deliveries: state.deliveries })
     if (request.method === 'POST' && request.pathname.includes('/retry')) {
       state.deliveries = state.deliveries.map((delivery: any) => ({ ...delivery, status: delivery.deliveryId === request.pathname.split('/')[4] ? 'pending' : delivery.status }))
+      return jsonResponse({ delivery: state.deliveries[0] })
+    }
+    if (request.method === 'POST' && request.pathname.includes('/dead-letter')) {
+      state.deliveries = state.deliveries.map((delivery: any) => ({ ...delivery, status: delivery.deliveryId === request.pathname.split('/')[4] ? 'dead' : delivery.status }))
       return jsonResponse({ delivery: state.deliveries[0] })
     }
     if (request.method === 'GET' && request.pathname === '/api/diagnostics') {
@@ -371,6 +391,12 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       const run = { id: 'run-2', workflowId: workflow.id, status: 'running', sessionId: session.sessionId, createdAt: iso(11), triggerType: 'manual' }
       state.runs = [run, ...state.runs]
       return jsonResponse({ workflow: { ...workflow, latestRunStatus: 'running', latestRunSessionId: session.sessionId }, run })
+    }
+    const workflowArchiveMatch = request.pathname.match(/^\/api\/workflows\/([^/]+)\/archive$/)
+    if (request.method === 'POST' && workflowArchiveMatch) {
+      const workflowId = decodeURIComponent(workflowArchiveMatch[1])
+      state.workflows = state.workflows.map((workflow: any) => workflow.id === workflowId ? { ...workflow, status: 'archived' } : workflow)
+      return jsonResponse({ workflow: state.workflows.find((workflow: any) => workflow.id === workflowId) })
     }
     if (request.method === 'POST' && request.pathname === '/api/project-sources/validate') {
       if (options.projectSourceDenied) return jsonResponse({ allowed: false, reason: 'Project source blocked by policy.' })
