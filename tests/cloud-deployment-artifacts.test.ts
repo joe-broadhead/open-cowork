@@ -98,6 +98,7 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /runbooks\/managed-byok-saas\.md/)
   assert.match(docs, /pnpm deploy:validate/)
   assert.match(docs, /pnpm deploy:smoke/)
+  assert.match(docs, /pnpm deploy:desktop:smoke/)
 })
 
 test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
@@ -187,6 +188,7 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   const smoke = readRepoFile('deploy/gcp/smoke/README.md')
   const preflightScript = readRepoFile('scripts/gcp-reference-preflight.mjs')
   const smokeScript = readRepoFile('scripts/gcp-reference-smoke.mjs')
+  const desktopSmokeScript = readRepoFile('scripts/desktop-cloud-sync-smoke.mjs')
 
   assert.match(readme, /GCP Reference Deployment/)
   assert.match(readme, /Cloud SQL for PostgreSQL/)
@@ -196,6 +198,8 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   assert.match(readme, /OPEN_COWORK_GCP_REGION/)
   assert.match(readme, /pnpm deploy:gcp:preflight/)
   assert.match(readme, /pnpm deploy:gcp:smoke/)
+  assert.match(readme, /pnpm deploy:desktop:smoke/)
+  assert.match(readme, /Desktop cloud-sync smoke/)
   assert.match(readme, /kubectl apply -f deploy\/gcp\/gke\/external-secret\.example\.yaml/)
   assert.match(readme, /kubectl apply -f deploy\/gcp\/gke\/managed-certificate\.example\.yaml/)
   assert.match(readme, /OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true/)
@@ -240,6 +244,8 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
 
   assert.match(smoke, /OPEN_COWORK_GCP_BUCKET/)
   assert.match(smoke, /OPEN_COWORK_GCP_SECRET_REF/)
+  assert.match(smoke, /OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL/)
+  assert.match(smoke, /pnpm deploy:desktop:smoke/)
   assert.match(preflightScript, /requiredApis/)
   assert.match(preflightScript, /optionalApis/)
   assert.match(preflightScript, /^ {2}'iamcredentials\.googleapis\.com',$/m)
@@ -254,6 +260,14 @@ test('GCP reference deployment defines split roles, Cloud Run demo, and smoke ga
   assert.match(smokeScript, /'versions'/)
   assert.match(smokeScript, /'access'/)
   assert.equal(smokeScript.includes('--cloud-token'), false)
+  assert.match(desktopSmokeScript, /CloudWorkspaceAdapter/)
+  assert.match(desktopSmokeScript, /OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN/)
+  assert.match(desktopSmokeScript, /subscribeWorkspaceEvents/)
+  assert.match(desktopSmokeScript, /subscribeSessionEvents/)
+  assert.match(desktopSmokeScript, /revokeApiToken/)
+  assert.match(desktopSmokeScript, /offlineMutationsBlocked/)
+  assert.match(desktopSmokeScript, /LOCAL_WORKSPACE_ID/)
+  assert.equal(desktopSmokeScript.includes('--desktop-token'), false)
   assert.doesNotMatch(readme, /opencowork/)
 })
 

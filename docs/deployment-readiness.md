@@ -238,6 +238,20 @@ OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
 pnpm deploy:gcp:smoke
 ```
 
+For the Desktop cloud-sync gate against the same deployed Cloud environment:
+
+```bash
+OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... \
+pnpm deploy:desktop:smoke
+```
+
+This smoke uses the Desktop main-process cloud adapter and cache path, not a
+separate test-only client. It validates Desktop OIDC metadata when configured, bearer-auth
+HTTP/SSE, Desktop-to-Web and Web-to-Desktop session continuation, prompt/abort
+routing, read-only offline cache fallback, local workspace isolation, and
+ephemeral Desktop token revocation.
+
 For operator-only readiness checks:
 
 ```bash

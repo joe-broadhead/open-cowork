@@ -180,6 +180,26 @@ they must not be injected as process env vars.
     pnpm deploy:gcp:smoke
     ```
 
+13. Run the Desktop cloud-sync smoke with an admin-scoped token so the script
+    can issue and revoke an ephemeral Desktop token. Keep tokens in the shell
+    environment or your private deployment repo secret store; do not pass them
+    on the command line:
+
+    ```bash
+    OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... \
+    pnpm deploy:desktop:smoke
+    ```
+
+    This is the #496 gate for deployed GCP environments. It validates the same
+    Desktop cloud adapter/cache path used by Electron, including Desktop OIDC
+    metadata when OIDC auth is configured, bearer-auth HTTP/SSE, Desktop-created and Web-created cloud
+    sessions, prompt/abort routing, read-only offline cache fallback, local
+    workspace isolation, and token revocation. Set
+    `OPEN_COWORK_DESKTOP_SMOKE_SKIP_PROMPT=true` only for pre-worker surface
+    checks; the full #496 acceptance gate should run prompts against a worker
+    with BYOK/model credentials configured.
+
 For quick Helm overrides, keep the same provider-neutral keys used by the
 other recipes:
 
@@ -246,6 +266,7 @@ Rollback order:
 - `OPEN_COWORK_GCP_REGION=... pnpm deploy:gcp:preflight`
 - `OPEN_COWORK_SMOKE_CLOUD_URL=https://... pnpm deploy:smoke -- --skip-gateway`
 - `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... pnpm deploy:gcp:smoke`
+- `OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://... OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... pnpm deploy:desktop:smoke`
 - Cloud logs contain no raw database URLs, BYOK keys, API tokens, OAuth tokens,
   channel credentials, or signed object URLs.
 
