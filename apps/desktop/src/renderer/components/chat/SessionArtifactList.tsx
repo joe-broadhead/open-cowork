@@ -18,12 +18,22 @@ function isPreviewableArtifact(artifact: SessionArtifact) {
   return extension ? IMAGE_ARTIFACT_EXTENSIONS.has(extension) : false
 }
 
+function artifactWorkspaceScope(workspaceId?: string) {
+  return workspaceId ? { workspaceId } : {}
+}
+
 export function SessionArtifactList({
   sessionId,
   artifacts,
+  workspaceId,
+  canRevealArtifact = true,
+  revealDisabledReason = 'Cloud artifacts cannot be revealed in the local filesystem.',
 }: {
   sessionId: string
   artifacts: ReturnType<typeof listSessionArtifacts>
+  workspaceId?: string
+  canRevealArtifact?: boolean
+  revealDisabledReason?: string
 }) {
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [composerAction, setComposerAction] = useState<{
@@ -69,6 +79,7 @@ export function SessionArtifactList({
       void window.coworkApi.artifact.readAttachment({
         sessionId,
         filePath: artifact.filePath,
+        ...artifactWorkspaceScope(workspaceId),
       }).then((payload) => {
         if (cancelled) return
         if (!payload.mime.startsWith('image/')) {
@@ -150,6 +161,7 @@ export function SessionArtifactList({
                     const payload = await window.coworkApi.artifact.readAttachment({
                       sessionId,
                       filePath: artifact.filePath,
+                      ...artifactWorkspaceScope(workspaceId),
                     })
                     dispatchComposerCompose({
                       attachments: [attachmentFromArtifact(payload)],
@@ -171,6 +183,7 @@ export function SessionArtifactList({
                       const payload = await window.coworkApi.artifact.readAttachment({
                         sessionId,
                         filePath: artifact.filePath,
+                        ...artifactWorkspaceScope(workspaceId),
                       })
                       dispatchComposerCompose({
                         text: buildChartRerenderPrompt(payload.chart || artifact.chart!),
@@ -186,17 +199,24 @@ export function SessionArtifactList({
                 </button>
               ) : null}
 
-              <button
-                onClick={async () => {
-                  await window.coworkApi.artifact.reveal({
-                    sessionId,
-                    filePath: artifact.filePath,
-                  })
-                }}
-                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
-              >
-                Reveal
-              </button>
+              {canRevealArtifact && artifact.source !== 'cloud' ? (
+                <button
+                  onClick={async () => {
+                    await window.coworkApi.artifact.reveal({
+                      sessionId,
+                      filePath: artifact.filePath,
+                      ...artifactWorkspaceScope(workspaceId),
+                    })
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Reveal
+                </button>
+              ) : (
+                <span className="px-2.5 py-1.5 text-[11px] text-text-muted" title={revealDisabledReason}>
+                  {artifact.source === 'cloud' ? 'Cloud artifact' : 'Reveal disabled'}
+                </span>
+              )}
 
               <button
                 onClick={async () => {
@@ -206,6 +226,7 @@ export function SessionArtifactList({
                       sessionId,
                       filePath: artifact.filePath,
                       suggestedName: artifact.filename,
+                      ...artifactWorkspaceScope(workspaceId),
                     })
                   } finally {
                     setExportingId(null)

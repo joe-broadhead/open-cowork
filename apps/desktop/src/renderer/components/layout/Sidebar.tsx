@@ -12,6 +12,7 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
+import { useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 interface Props {
   currentView: AppView
@@ -289,23 +290,16 @@ function WorkspaceSwitcher() {
   const setCurrentSession = useSessionStore((state) => state.setCurrentSession)
   const setActiveWorkspace = useSessionStore((state) => state.setActiveWorkspace)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
+  const supportByWorkspace = useWorkspaceSupportStore((state) => state.supportByWorkspace)
+  const loadWorkspaceSupport = useWorkspaceSupportStore((state) => state.loadWorkspaceSupport)
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([LOCAL_WORKSPACE_FALLBACK])
-  const [supportByWorkspace, setSupportByWorkspace] = useState<Record<string, WorkspaceApiSupport[]>>({})
   const [open, setOpen] = useState(false)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
 
   const refreshSupport = async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
-    const workspaceApi = window.coworkApi?.workspace
-    if (!workspaceApi?.support) return
-    const entries = await Promise.all(listedWorkspaces.map(async (workspace) => {
-      try {
-        return [workspace.id, await workspaceApi.support(workspace.id)] as const
-      } catch {
-        return [workspace.id, []] as const
-      }
-    }))
-    if (!cancelled()) setSupportByWorkspace(Object.fromEntries(entries))
+    await Promise.all(listedWorkspaces.map((workspace) => loadWorkspaceSupport(workspace.id, { force: true }).catch(() => [])))
+    if (cancelled()) return
   }
 
   useEffect(() => {
@@ -333,7 +327,7 @@ function WorkspaceSwitcher() {
     return () => {
       cancelled = true
     }
-  }, [setActiveWorkspace, setSessions])
+  }, [loadWorkspaceSupport, setActiveWorkspace, setSessions])
 
   const activateWorkspace = async (workspace: WorkspaceInfo) => {
     const previousId = activeWorkspace.id

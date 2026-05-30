@@ -132,12 +132,19 @@ export function App() {
     handleRuntimeRestart,
   } = useRuntimeHealth(loadSessions, reportAppError)
 
-  const createAndActivateSession = useCallback(async (directory?: string): Promise<SessionInfo | null> => {
+  const createAndActivateSession = useCallback(async (directory?: string, options?: SessionPromptOptions): Promise<SessionInfo | null> => {
     try {
-      const session = await window.coworkApi.session.create(directory)
+      const workspaceOptions = options?.workspaceId ? { workspaceId: options.workspaceId } : undefined
+      const session = workspaceOptions
+        ? await window.coworkApi.session.create(directory, workspaceOptions)
+        : await window.coworkApi.session.create(directory)
       addSession(session)
       setCurrentSession(session.id)
-      await window.coworkApi.session.activate(session.id)
+      if (workspaceOptions) {
+        await window.coworkApi.session.activate(session.id, workspaceOptions)
+      } else {
+        await window.coworkApi.session.activate(session.id)
+      }
       setView('chat')
       return session
     } catch (err) {
@@ -177,7 +184,7 @@ export function App() {
     agent?: string,
     options?: SessionPromptOptions,
   ) => {
-    const session = await createAndActivateSession()
+    const session = await createAndActivateSession(undefined, options)
     if (!session) return
     try {
       const files = attachments && attachments.length > 0

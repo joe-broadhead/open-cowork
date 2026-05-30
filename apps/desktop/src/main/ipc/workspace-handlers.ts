@@ -88,6 +88,19 @@ export function registerWorkspaceHandlers(context: IpcHandlerContext) {
     const result = await context.workspaceGateway.sync(event, workspaceId)
     const activeWorkspaceId = workspaceId || context.workspaceGateway.activeWorkspaceId(event)
     await subscribeWorkspaceUpdates(context, event, activeWorkspaceId)
+    const workspace = context.workspaceGateway.list(event).find((entry) => entry.id === activeWorkspaceId)
+    if (workspace?.kind === 'cloud' && workspace.status === 'online') {
+      const sessions = await context.workspaceGateway.listCloudSessions(event, activeWorkspaceId)
+      const sender = event.sender as { isDestroyed?: () => boolean, send?: (channel: string, payload: unknown) => void }
+      if (!sender.isDestroyed?.()) {
+        sender.send?.('workspace:sessions-updated', {
+          workspaceId: activeWorkspaceId,
+          sessions,
+          lastEventSequence: null,
+          syncedAt: result.syncedAt,
+        })
+      }
+    }
     return result
   })
 }

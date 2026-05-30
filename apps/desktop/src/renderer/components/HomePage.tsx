@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
+import { useActiveWorkspaceSupport } from '../stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
 import { formatAgentLabel } from '../helpers/agent-label'
 import { formatDate, t } from '../helpers/i18n'
 import { summarizeMcpConnections } from '../helpers/mcp-status-summary'
@@ -108,12 +110,32 @@ function HomeEyebrow({ brandName }: { brandName: string }) {
   )
 }
 
-function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefillAgent }: {
+function HomeComposer({
+  onSubmit,
+  disabled,
+  placeholder,
+  specialistAgents,
+  prefillAgent,
+  workspaceOptions,
+  canPrompt = true,
+  sendDisabledReason = null,
+  attachmentsAllowed = true,
+  attachmentsDisabledReason = null,
+  modelControlsManaged = false,
+  modelControlsReason = null,
+}: {
   onSubmit: (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => void | Promise<void>
   disabled: boolean
   placeholder: string
   specialistAgents: MentionableAgent[]
   prefillAgent: { id: string; nonce: number } | null
+  workspaceOptions?: { workspaceId: string }
+  canPrompt?: boolean
+  sendDisabledReason?: string | null
+  attachmentsAllowed?: boolean
+  attachmentsDisabledReason?: string | null
+  modelControlsManaged?: boolean
+  modelControlsReason?: string | null
 }) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -130,7 +152,9 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
-  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection()
+  const attachmentPolicyReason = attachmentsDisabledReason || t('chat.attachFileDisabled', 'File attachments are disabled by this workspace policy.')
+  const promptPolicyReason = sendDisabledReason || t('chat.sendDisabled', 'Prompting is disabled by this workspace policy.')
+  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(null, workspaceOptions)
   const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels)
 
   useEffect(() => {
@@ -148,9 +172,13 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     if (!files || files.length === 0) return
+    if (!attachmentsAllowed) {
+      addGlobalError(attachmentPolicyReason)
+      return
+    }
     const next = await filesToAttachments(files)
     setAttachments((current) => [...current, ...next])
-  }, [])
+  }, [addGlobalError, attachmentPolicyReason, attachmentsAllowed])
 
   useEffect(() => {
     if (!prefillAgent) return
@@ -172,21 +200,30 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim()
     if ((!trimmed && attachments.length === 0) || disabled) return
+    if (!canPrompt) {
+      addGlobalError(promptPolicyReason)
+      return
+    }
+    if (attachments.length > 0 && !attachmentsAllowed) {
+      addGlobalError(attachmentPolicyReason)
+      return
+    }
     const directInvocation = resolveDirectAgentInvocation(trimmed, specialistAgents)
     const promptText = directInvocation.text
     if (!promptText && attachments.length === 0) return
     const currentAttachments = [...attachments]
+    const promptAgent = directInvocation.agent || agentMode
+    const promptOptions = modelControlsManaged ? undefined : reasoningSelection.promptOptions
+    if (promptOptions) {
+      await onSubmit(promptText, currentAttachments, promptAgent, promptOptions)
+    } else {
+      await onSubmit(promptText, currentAttachments, promptAgent)
+    }
     setText('')
     setAttachments([])
     setInlinePicker(null)
     autosize()
-    const promptAgent = directInvocation.agent || agentMode
-    if (reasoningSelection.promptOptions) {
-      await onSubmit(promptText, currentAttachments, promptAgent, reasoningSelection.promptOptions)
-    } else {
-      await onSubmit(promptText, currentAttachments, promptAgent)
-    }
-  }, [text, attachments, disabled, onSubmit, specialistAgents, agentMode, reasoningSelection.promptOptions])
+  }, [text, attachments, disabled, canPrompt, attachmentsAllowed, specialistAgents, agentMode, modelControlsManaged, reasoningSelection.promptOptions, onSubmit, addGlobalError, promptPolicyReason, attachmentPolicyReason])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -241,7 +278,12 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
   const restBorder = '1px solid rgba(148, 148, 172, 0.18)'
   const dropBorder = '1px solid var(--color-accent)'
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel || t('chat.modelFallback', 'Model')
-  const canSend = !disabled && (text.trim() || attachments.length > 0)
+  const policyBlockedReason = !canPrompt
+    ? promptPolicyReason
+    : attachments.length > 0 && !attachmentsAllowed
+      ? attachmentPolicyReason
+      : null
+  const canSend = !disabled && !policyBlockedReason && (text.trim() || attachments.length > 0)
   const inlineMenuWidth = 260
   const chromeRect = inputChromeRef.current?.getBoundingClientRect()
   const anchorRect = chromeRect || textareaRef.current?.getBoundingClientRect() || null
@@ -406,13 +448,21 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
           isAwaitingPermission={false}
           isAwaitingQuestion={false}
           canSend={!!canSend}
+          sendDisabledReason={policyBlockedReason}
           onAddFiles={addFiles}
+          attachmentsAllowed={attachmentsAllowed}
+          attachmentsDisabledReason={attachmentPolicyReason}
+          modelControlsManaged={modelControlsManaged}
+          modelControlsReason={modelControlsReason}
+          reasoningControlsManaged={modelControlsManaged}
           onToggleModelMenu={() => {
+            if (modelControlsManaged) return
             setInlinePicker(null)
             setShowReasoningMenu(false)
             setShowModelMenu(!showModelMenu)
           }}
           onToggleReasoningMenu={() => {
+            if (modelControlsManaged) return
             setInlinePicker(null)
             setShowModelMenu(false)
             setShowReasoningMenu(!showReasoningMenu)
@@ -438,6 +488,7 @@ function HomeComposer({ onSubmit, disabled, placeholder, specialistAgents, prefi
         currentModel={currentModel}
         onClose={() => setShowModelMenu(false)}
         onSelect={async (modelId) => {
+          if (modelControlsManaged) return
           const previousModel = currentModel
           setCurrentModel(modelId)
           setShowModelMenu(false)
@@ -559,7 +610,13 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
   const sessions = useSessionStore((s) => s.sessions)
   const [submitting, setSubmitting] = useState(false)
   const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
-  const specialistAgents = useMentionableAgents(null)
+  const workspaceSupport = useActiveWorkspaceSupport()
+  const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
+  const workspaceOptions = useMemo(
+    () => activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId },
+    [activeWorkspaceIsLocal, workspaceSupport.workspaceId],
+  )
+  const specialistAgents = useMentionableAgents(null, workspaceOptions)
 
   const suggestedAgents = useMemo(() => {
     return specialistAgents
@@ -578,17 +635,24 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
 
   const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
     if (submitting) return
+    if (attachments.length > 0 && !workspaceSupport.flags.canAttachFiles) {
+      useSessionStore.getState().addGlobalError(workspaceSupport.flags.reasons.attachFiles)
+      return
+    }
     setSubmitting(true)
     try {
-      if (options) {
-        await onStartThread(text, attachments, agent, options)
+      const scopedOptions = activeWorkspaceIsLocal
+        ? options
+        : { ...(options || {}), workspaceId: workspaceSupport.workspaceId }
+      if (scopedOptions) {
+        await onStartThread(text, attachments, agent, scopedOptions)
       } else {
         await onStartThread(text, attachments, agent)
       }
     } finally {
       setSubmitting(false)
     }
-  }, [onStartThread, submitting])
+  }, [activeWorkspaceIsLocal, onStartThread, submitting, workspaceSupport.flags, workspaceSupport.workspaceId])
 
   const handlePickAgent = useCallback((agentId: string) => {
     setAgentPrefill({ id: agentId, nonce: Date.now() })
@@ -634,6 +698,13 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
             placeholder={composerPlaceholder}
             specialistAgents={specialistAgents}
             prefillAgent={agentPrefill}
+            workspaceOptions={workspaceOptions}
+            canPrompt={workspaceSupport.flags.canPrompt}
+            sendDisabledReason={workspaceSupport.flags.reasons.prompt}
+            attachmentsAllowed={workspaceSupport.flags.canAttachFiles}
+            attachmentsDisabledReason={workspaceSupport.flags.reasons.attachFiles}
+            modelControlsManaged={!workspaceSupport.flags.canUseMachineRuntimeConfig}
+            modelControlsReason={workspaceSupport.flags.reasons.machineRuntimeConfig}
           />
         </div>
 

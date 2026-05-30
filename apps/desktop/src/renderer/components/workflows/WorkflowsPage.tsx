@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate } from '../../helpers/i18n'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -80,6 +82,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [runtimeConfigSource, setRuntimeConfigSource] = useState<EffectiveAppSettings['runtimeConfigSource']>('app')
+  const workspaceSupport = useActiveWorkspaceSupport()
+  const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
+  const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
 
   const activeWorkflows = useMemo(
     () => payload.workflows.filter((workflow) => workflow.status !== 'archived'),
@@ -90,7 +95,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const refresh = async () => {
     setLoading(true)
     try {
-      setPayload(await window.coworkApi.workflows.list())
+      setPayload(activeWorkspaceIsLocal
+        ? await window.coworkApi.workflows.list()
+        : await window.coworkApi.workflows.list(workspaceOptions))
     } finally {
       setLoading(false)
     }
@@ -98,7 +105,10 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
   useEffect(() => {
     void refresh()
-    void window.coworkApi.settings.get().then((settings) => {
+    const settingsRequest = activeWorkspaceIsLocal
+      ? window.coworkApi.settings.get()
+      : window.coworkApi.settings.get(workspaceOptions)
+    void settingsRequest.then((settings) => {
       setRuntimeConfigSource(settings.runtimeConfigSource === 'machine' ? 'machine' : 'app')
     }).catch(() => {
       setRuntimeConfigSource('app')
@@ -106,13 +116,19 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     return window.coworkApi.on.workflowUpdated(() => {
       void refresh()
     })
-  }, [])
-  const workflowDraftBlocked = runtimeConfigSource === 'machine'
+  }, [workspaceOptions?.workspaceId])
+  const workflowDraftBlocked = !activeWorkspaceIsLocal || runtimeConfigSource === 'machine'
+  const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow
+  const workflowActionReason = workflowActionBlocked ? workspaceSupport.flags.reasons.runWorkflow : null
 
   const runAction = async (workflowId: string, action: () => Promise<unknown>, message: string) => {
     setBusyId(workflowId)
     setFeedback(null)
     try {
+      if (workflowActionBlocked) {
+        setFeedback(workflowActionReason || 'Workflow runs are disabled by this workspace policy.')
+        return
+      }
       const result = await action()
       setFeedback(message)
       if (result && typeof result === 'object' && 'sessionId' in result) {
@@ -128,6 +144,10 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   }
 
   const startDraft = async () => {
+    if (!activeWorkspaceIsLocal) {
+      setFeedback('Cloud workflow creation is managed by the cloud workspace. Existing cloud workflows can be run when policy allows it.')
+      return
+    }
     if (workflowDraftBlocked) {
       setFeedback('Switch OpenCode config source to In app before adding workflows. Workflow setup uses Cowork’s Workflow Designer agent and Workflows tool.')
       return
@@ -135,7 +155,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     setBusyId('new')
     setFeedback(null)
     try {
-      const session = await window.coworkApi.workflows.startDraft()
+      const session = activeWorkspaceIsLocal
+        ? await window.coworkApi.workflows.startDraft()
+        : await window.coworkApi.workflows.startDraft(null, workspaceOptions)
       onOpenThread(session.id)
       await refresh()
     } catch (error) {
@@ -171,7 +193,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
             className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void startDraft()}
               disabled={busyId === 'new' || workflowDraftBlocked}
-              title={workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
+              title={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
             >
             {busyId === 'new' ? 'Starting...' : 'Add workflow'}
           </button>
@@ -192,7 +214,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
               <h2 className="text-lg font-semibold text-primary">No workflows yet</h2>
               <p className="mt-2 max-w-md text-sm text-muted">
                 {workflowDraftBlocked
-                  ? 'Workflow setup requires the in-app OpenCode config source because it uses Cowork’s Workflow Designer agent and Workflows tool.'
+                  ? activeWorkspaceIsLocal
+                    ? 'Workflow setup requires the in-app OpenCode config source because it uses Cowork’s Workflow Designer agent and Workflows tool.'
+                    : 'Cloud workflow creation is managed by the cloud workspace. Existing workflows will appear here when available.'
                   : 'Start with a thread. The Workflow Designer agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
               </p>
               <button
@@ -200,7 +224,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                 className="mt-5 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => void startDraft()}
                 disabled={workflowDraftBlocked}
-                title={workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
+                title={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
               >
                 Add workflow
               </button>
@@ -234,21 +258,38 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     <button
                       type="button"
                       className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={busyId === workflow.id || workflow.status === 'running'}
-                      onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.runNow(workflow.id), 'Workflow run started.')}
+                      disabled={busyId === workflow.id || workflow.status === 'running' || workflowActionBlocked}
+                      title={workflowActionReason || undefined}
+                      onClick={() => void runAction(workflow.id, () => (
+                        activeWorkspaceIsLocal
+                          ? window.coworkApi.workflows.runNow(workflow.id)
+                          : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
+                      ), 'Workflow run started.')}
                     >
                       Run
                     </button>
                     {workflow.status === 'paused' ? (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.resume(workflow.id), 'Workflow resumed.')}>
+                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                        activeWorkspaceIsLocal
+                          ? window.coworkApi.workflows.resume(workflow.id)
+                          : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
+                      ), 'Workflow resumed.')}>
                         Resume
                       </button>
                     ) : (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.pause(workflow.id), 'Workflow paused.')}>
+                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                        activeWorkspaceIsLocal
+                          ? window.coworkApi.workflows.pause(workflow.id)
+                          : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
+                      ), 'Workflow paused.')}>
                         Pause
                       </button>
                     )}
-                    <button type="button" className="rounded-md border border-red-400/30 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/10" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.archive(workflow.id), 'Workflow archived.')}>
+                    <button type="button" className="rounded-md border border-red-400/30 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                      activeWorkspaceIsLocal
+                        ? window.coworkApi.workflows.archive(workflow.id)
+                        : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
+                    ), 'Workflow archived.')}>
                       Archive
                     </button>
                   </div>
@@ -288,9 +329,11 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-secondary hover:bg-muted" onClick={() => void copyWebhook(workflow)}>
                       Copy curl
                     </button>
-                    <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-secondary hover:bg-muted" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), 'Webhook secret regenerated.')}>
-                      Regenerate
-                    </button>
+                    {activeWorkspaceIsLocal ? (
+                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-secondary hover:bg-muted" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), 'Webhook secret regenerated.')}>
+                        Regenerate
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </article>

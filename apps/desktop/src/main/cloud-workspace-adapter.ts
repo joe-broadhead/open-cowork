@@ -52,6 +52,7 @@ export type CloudPromptInput = {
 
 export type CloudWorkspaceSessionAdapter = {
   policy(): Promise<WorkspacePolicy>
+  sync?(): Promise<void>
   listSessions(): Promise<SessionInfo[]>
   createSession(input?: { projectSource?: CloudProjectSourceInput | null }): Promise<SessionInfo>
   validateProjectSource?(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
@@ -487,7 +488,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     return setting
   }
 
-  private async refreshWorkspaceSnapshot(): Promise<void> {
+  async sync(): Promise<void> {
     const sessions = await this.listSessions()
     await Promise.allSettled(sessions.map((session) => this.getSessionView(session.id)))
     if (this.transport.listArtifacts) {
@@ -516,7 +517,7 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
         void (async () => {
           try {
             if (event.type === 'snapshot.required') {
-              await this.refreshWorkspaceSnapshot()
+              await this.sync()
               this.cache?.resetEventCursor(cacheKey, 'workspace', 0)
               input.onEvent(event)
               return

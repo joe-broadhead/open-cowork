@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type {
   CloudProjectSnapshotInventory,
   CloudProjectSourceInput,
-  WorkspaceApiSupport,
 } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from '../../stores/session-workspace-keys'
+import { supportEntry, supportAllows, useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 
@@ -27,15 +27,6 @@ function reportThreadError(error: unknown, view: string) {
   }
 }
 
-function supportEntry(support: WorkspaceApiSupport[], api: string) {
-  return support.find((entry) => entry.api === api)
-}
-
-function supportAllows(entry: WorkspaceApiSupport | undefined) {
-  if (!entry) return true
-  return entry.status === 'supported' || entry.status === 'read_only' || entry.verdict?.allowed === true
-}
-
 export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
@@ -52,21 +43,11 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const [snapshotInventory, setSnapshotInventory] = useState<CloudProjectSnapshotInventory | null>(null)
   const [projectBusy, setProjectBusy] = useState(false)
   const [projectError, setProjectError] = useState<string | null>(null)
-  const [workspaceSupportState, setWorkspaceSupportState] = useState<{
-    workspaceId: string
-    entries: WorkspaceApiSupport[]
-    loaded: boolean
-    error: string | null
-  }>({
-    workspaceId: 'local',
-    entries: [],
-    loaded: false,
-    error: null,
-  })
+  const workspaceSupportState = useActiveWorkspaceSupport()
 
   const normalizedWorkspaceId = normalizeWorkspaceId(activeWorkspaceId)
   const activeWorkspaceIsLocal = normalizedWorkspaceId === LOCAL_WORKSPACE_ID
-  const workspaceSupport = workspaceSupportState.workspaceId === normalizedWorkspaceId ? workspaceSupportState.entries : []
+  const workspaceSupport = workspaceSupportState.workspaceId === normalizedWorkspaceId ? workspaceSupportState.support : []
   const workspaceSupportLoaded = workspaceSupportState.workspaceId === normalizedWorkspaceId && workspaceSupportState.loaded
   const workspaceSupportError = workspaceSupportState.workspaceId === normalizedWorkspaceId ? workspaceSupportState.error : null
   const createSupport = supportEntry(workspaceSupport, 'sessions.create')
@@ -76,9 +57,9 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       ? t('newThread.policyChecking', 'Checking cloud workspace policy.')
       : createSupport?.verdict?.reason || t('newThread.createBlocked', 'Thread creation is disabled by this workspace policy.'))
   const localFilesReason = localFilesSupport?.verdict?.reason || t('newThread.localFilesBlocked', 'Cloud workspaces do not implicitly upload local files.')
-  const blankDisabled = (!activeWorkspaceIsLocal && (!workspaceSupportLoaded || Boolean(workspaceSupportError))) || !supportAllows(createSupport)
+  const blankDisabled = (!activeWorkspaceIsLocal && (!workspaceSupportLoaded || Boolean(workspaceSupportError))) || !supportAllows(createSupport, { mutation: true })
   const projectDisabled = activeWorkspaceIsLocal
-    ? blankDisabled || !supportAllows(localFilesSupport)
+    ? blankDisabled || !supportAllows(localFilesSupport, { mutation: true })
     : blankDisabled
   const projectDisabledReason = blankDisabled
     ? cloudCreateReason
@@ -93,40 +74,6 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
     : activeWorkspaceIsLocal
       ? t('newThread.projectHint', 'Local-only action - choose a directory the agent can read and edit')
       : t('newThread.cloudProjectHint', 'Cloud-safe action - choose Git or upload an explicit snapshot')
-
-  useEffect(() => {
-    let cancelled = false
-    setWorkspaceSupportState({
-      workspaceId: normalizedWorkspaceId,
-      entries: [],
-      loaded: false,
-      error: null,
-    })
-    window.coworkApi.workspace.support(normalizedWorkspaceId)
-      .then((support) => {
-        if (!cancelled) {
-          setWorkspaceSupportState({
-            workspaceId: normalizedWorkspaceId,
-            entries: support,
-            loaded: true,
-            error: null,
-          })
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWorkspaceSupportState({
-            workspaceId: normalizedWorkspaceId,
-            entries: [],
-            loaded: true,
-            error: t('newThread.policyUnavailable', 'Could not load this workspace policy.'),
-          })
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [normalizedWorkspaceId])
 
   const closeProjectDialog = () => {
     setShowCloudProjectDialog(false)

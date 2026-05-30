@@ -1,9 +1,19 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 describe('Sidebar', () => {
+  beforeEach(() => {
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {},
+      loadedByWorkspace: {},
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+  })
+
   it('keeps the upstream sidebar layout when no branding config is provided', () => {
     render(
       <Sidebar

@@ -1,8 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CoworkAPI, EffectiveAppSettings, WorkflowListPayload } from '@open-cowork/shared'
 import { WorkflowsPage } from './WorkflowsPage'
+import { useSessionStore } from '../../stores/session'
+import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 function payload(overrides: Partial<WorkflowListPayload> = {}): WorkflowListPayload {
   return {
@@ -99,6 +101,16 @@ function installApi(
 }
 
 describe('WorkflowsPage', () => {
+  beforeEach(() => {
+    useSessionStore.setState({ activeWorkspaceId: 'local' })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {},
+      loadedByWorkspace: {},
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+  })
+
   it('starts workflow creation in a setup thread', async () => {
     const { api } = installApi(payload({ workflows: [] }))
     const onOpenThread = vi.fn()
@@ -136,6 +148,38 @@ describe('WorkflowsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run' }))
 
     expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1')
+    await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
+  })
+
+  it('uses cloud workflow APIs and hides local webhook mutation controls', async () => {
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {
+        'cloud:test': WORKSPACE_SUPPORT_APIS.map((api) => ({
+          api,
+          status: api === 'workflows.list' || api === 'workflows.run' ? 'supported' : 'not_supported',
+          verdict: {
+            allowed: api === 'workflows.list' || api === 'workflows.run',
+            reason: api.startsWith('workflows') ? null : 'Blocked by cloud policy.',
+          },
+        })),
+      },
+      loadedByWorkspace: { 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+    const { api } = installApi()
+    const onOpenThread = vi.fn()
+
+    render(<WorkflowsPage onOpenThread={onOpenThread} />)
+
+    expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
+    expect(api.workflows?.list).toHaveBeenCalledWith({ workspaceId: 'cloud:test' })
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }))
+
+    expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1', { workspaceId: 'cloud:test' })
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
   })
 
