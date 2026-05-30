@@ -179,3 +179,45 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     quotaBlocked.close()
   }
 })
+
+test('cloud web browser requires typed confirmation for destructive admin actions', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+
+    Object.defineProperty(harness.window, 'prompt', { value: () => 'wrong-id', configurable: true })
+    harness.clickText('#token-list button', 'Revoke')
+    await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Confirmation did not match the token id/))
+    assert.equal(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/api-tokens/token-1'), undefined)
+
+    const prompts = ['anthropic', 'token-1', 'acct-2', 'workflow-1', 'delivery-1', 'Operator reviewed the stuck delivery.']
+    Object.defineProperty(harness.window, 'prompt', {
+      value: () => prompts.shift() || '',
+      configurable: true,
+    })
+
+    harness.clickText('#byok-list button', 'Disable')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/byok/anthropic')))
+
+    harness.clickText('#token-list button', 'Revoke')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'DELETE' && request.path === '/api/api-tokens/token-1')))
+
+    const memberRow = [...harness.document.querySelectorAll('#member-list .member-row')]
+      .find((row) => row.textContent?.includes('member@example.test'))
+    assert.ok(memberRow)
+    ;(memberRow.querySelector('button.danger') as HTMLButtonElement).click()
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members/acct-2/update')))
+
+    harness.clickText('#workflow-detail button', 'Archive')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/workflows/workflow-1/archive')))
+
+    harness.clickText('#delivery-list button', 'Dead-letter')
+    await waitFor(() => {
+      const request = harness.lastRequest((entry) => entry.method === 'POST' && entry.path === '/api/channels/deliveries/delivery-1/dead-letter')
+      assert.ok(request)
+      assert.equal((request.body as Record<string, unknown>).lastError, 'Operator reviewed the stuck delivery.')
+    })
+  } finally {
+    harness.close()
+  }
+})
