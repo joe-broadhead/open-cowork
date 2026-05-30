@@ -253,6 +253,17 @@ test('Acme downstream example validates against the public schema', () => {
   assert.doesNotThrow(() => validateConfigSemantics(config, 'examples/downstream/acme/open-cowork.config.json'))
 })
 
+test('private beta deployment examples validate against the public schema', () => {
+  for (const path of [
+    'deploy/private-beta/hosted-byok.config.example.json',
+    'deploy/private-beta/self-host-oss.config.example.json',
+  ]) {
+    const config = JSON.parse(readFileSync(path, 'utf-8'))
+    assert.doesNotThrow(() => validateResolvedConfig(config, path))
+    assert.doesNotThrow(() => validateConfigSemantics(config, path))
+  }
+})
+
 test('gateway deployer config validates shared branding providers and safety semantics', () => {
   const config = cloneConfig()
   config.allowedEnvPlaceholders = [

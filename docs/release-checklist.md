@@ -19,6 +19,7 @@ Reference workflows in the repository root:
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
 - [ ] `pnpm deploy:launch:validate`
+- [ ] `pnpm deploy:private-beta:validate`
 - [ ] perf baseline environment is intentional; refresh
       the environment-specific `benchmarks/perf-baseline.*.json` on the
       target CI runner with `pnpm perf:baseline` after Node, runner OS,
@@ -81,6 +82,9 @@ Reference workflows in the repository root:
 
 - [ ] `pnpm deploy:load:plan` has been reviewed for the selected
       `private-beta` or `public-beta` target profile.
+- [ ] for managed BYOK private beta, `pnpm deploy:private-beta:validate`
+      passed and `docs/runbooks/private-beta-launch.md` has an owner,
+      design-partner checklist, support path, and known limits.
 - [ ] `pnpm deploy:load` passed in strict mode against the production-like
       Cloud/Gateway deployment.
 - [ ] `pnpm deploy:soak` passed in strict mode against the production-like

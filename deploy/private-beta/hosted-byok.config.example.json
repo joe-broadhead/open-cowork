@@ -1,0 +1,223 @@
+{
+  "$schema": "../../open-cowork.config.schema.json",
+  "allowedEnvPlaceholders": [
+    "OPEN_COWORK_CLOUD_DATABASE_URL",
+    "OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS",
+    "OPEN_COWORK_CLOUD_COOKIE_SECRET",
+    "OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET",
+    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
+    "OPEN_COWORK_GATEWAY_ADMIN_TOKEN"
+  ],
+  "branding": {
+    "name": "Open Cowork",
+    "appId": "com.example.open-cowork.privatebeta",
+    "dataDirName": "open-cowork-private-beta",
+    "helpUrl": "https://support.example.com/open-cowork",
+    "projectNamespace": "open-cowork-private-beta",
+    "sidebar": {
+      "top": {
+        "variant": "text",
+        "title": "Open Cowork",
+        "subtitle": "Private beta"
+      },
+      "lower": {
+        "text": "Managed BYOK private beta",
+        "linkLabel": "Support",
+        "linkUrl": "https://support.example.com/open-cowork"
+      }
+    }
+  },
+  "auth": {
+    "mode": "none"
+  },
+  "providers": {
+    "available": [],
+    "defaultProvider": null,
+    "defaultModel": null
+  },
+  "tools": [],
+  "skills": [],
+  "mcps": [],
+  "agents": [],
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "ask",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  },
+  "cloud": {
+    "defaultProfile": "focused-agent",
+    "publicBranding": {
+      "productName": "Open Cowork Private Beta",
+      "shortName": "OC",
+      "logoUrl": "https://assets.example.com/open-cowork/logo.png",
+      "supportUrl": "https://support.example.com/open-cowork",
+      "privacyUrl": "https://legal.example.com/privacy",
+      "securityUrl": "https://security.example.com/open-cowork",
+      "legalUrl": "https://legal.example.com/terms",
+      "dashboard": {
+        "title": "Open Cowork private beta",
+        "subtitle": "Manage BYOK, desktop sync, and gateway access for your org.",
+        "byokDescription": "Add provider keys for your org. Keys are write-only from user surfaces.",
+        "connectionsDescription": "Issue scoped Desktop and API tokens for approved users.",
+        "gatewayDescription": "Connect approved channels through managed gateway bindings.",
+        "billingDescription": "Private beta billing is manual or stubbed until self-serve billing is enabled."
+      },
+      "managedOrgConnectionLabels": {
+        "desktopToken": "Desktop private beta token",
+        "gatewayToken": "Gateway private beta token",
+        "apiToken": "Private beta API token",
+        "cloudUrl": "Private beta cloud URL"
+      }
+    },
+    "auth": {
+      "mode": "oidc",
+      "issuerUrl": "https://idp.example.com",
+      "clientId": "open-cowork-private-beta",
+      "clientSecretRef": "env:OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET",
+      "cookieSecretRef": "env:OPEN_COWORK_CLOUD_COOKIE_SECRET",
+      "signupMode": "invite",
+      "allowSelfServiceSignup": false,
+      "allowedEmailDomains": ["example.com"]
+    },
+    "storage": {
+      "controlPlane": {
+        "kind": "postgres",
+        "urlRef": "env:OPEN_COWORK_CLOUD_DATABASE_URL"
+      },
+      "objectStore": {
+        "kind": "s3",
+        "bucket": "open-cowork-private-beta-artifacts",
+        "region": "us-east-1",
+        "prefix": "private-beta/",
+        "credentialsRef": "env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS"
+      }
+    },
+    "runtime": {
+      "configSource": "app",
+      "launcher": "node",
+      "allowMachineRuntimeConfig": false,
+      "allowLocalStdioMcps": false,
+      "allowHostProjectDirectories": false,
+      "allowedLocalMcpNames": [],
+      "allowedHostProjectDirectories": []
+    },
+    "features": {
+      "chat": true,
+      "agents": true,
+      "artifacts": true,
+      "threadIndex": true,
+      "workflows": true,
+      "webhooks": true,
+      "settings": true,
+      "customSkills": true,
+      "customAgents": true,
+      "customMcps": false
+    },
+    "profiles": {
+      "focused-agent": {
+        "label": "Focused agent",
+        "description": "Private beta profile for one approved agent and cloud-safe tools.",
+        "agents": ["general"],
+        "tools": ["bash", "edit", "web"],
+        "mcps": [],
+        "runtime": {
+          "configSource": "app",
+          "launcher": "node",
+          "allowMachineRuntimeConfig": false,
+          "allowLocalStdioMcps": false,
+          "allowHostProjectDirectories": false,
+          "allowedLocalMcpNames": [],
+          "allowedHostProjectDirectories": []
+        }
+      }
+    },
+    "abuse": {
+      "enabled": true,
+      "maxConcurrentSessionsPerOrg": 12,
+      "maxActiveWorkersPerOrg": 4,
+      "maxPromptsPerHour": 240,
+      "maxGatewayDeliveriesPerHour": 600,
+      "maxArtifactBytesPerDay": 1073741824,
+      "httpRateLimit": {
+        "enabled": true,
+        "windowMs": 60000,
+        "maxRequests": 900
+      },
+      "authBackoff": {
+        "enabled": true,
+        "windowMs": 600000,
+        "maxFailures": 12,
+        "backoffMs": 300000
+      }
+    },
+    "billing": {
+      "enabled": true,
+      "provider": "stub",
+      "defaultPlanKey": "private-beta-design-partner",
+      "plans": {
+        "private-beta-design-partner": {
+          "label": "Private beta design partner",
+          "entitlements": {
+            "allowedProfiles": ["focused-agent"],
+            "allowedProviders": null,
+            "maxConcurrentSessionsPerOrg": 12,
+            "maxActiveWorkersPerOrg": 4,
+            "maxPromptsPerHour": 240,
+            "maxGatewayDeliveriesPerHour": 600,
+            "maxArtifactBytesPerDay": 1073741824,
+            "allowNewSessions": true,
+            "allowPrompts": true,
+            "allowWorkers": true
+          }
+        }
+      }
+    }
+  },
+  "cloudDesktop": {
+    "enabled": true,
+    "allowUserAddedConnections": false,
+    "preconfiguredConnections": [
+      {
+        "baseUrl": "https://cowork.example.com",
+        "label": "Open Cowork Private Beta"
+      }
+    ],
+    "requireManagedOrg": true,
+    "cacheMode": "metadata-only",
+    "cacheEncryptionFallback": "fail-startup"
+  },
+  "gateway": {
+    "branding": {
+      "productName": "Open Cowork Private Beta",
+      "shortName": "OC",
+      "supportUrl": "https://support.example.com/open-cowork",
+      "privacyUrl": "https://legal.example.com/privacy",
+      "securityUrl": "https://security.example.com/open-cowork",
+      "legalUrl": "https://legal.example.com/terms"
+    },
+    "cloud": {
+      "baseUrl": "https://cowork.example.com",
+      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
+      "allowInsecureHttp": false
+    },
+    "server": {
+      "host": "0.0.0.0",
+      "port": 8790,
+      "publicBaseUrl": "https://gateway.example.com",
+      "adminToken": "{env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN}"
+    },
+    "mode": "managed",
+    "logging": {
+      "level": "info"
+    },
+    "metrics": {
+      "enabled": true
+    },
+    "diagnostics": {
+      "enabled": false
+    },
+    "providers": []
+  }
+}

@@ -138,6 +138,9 @@ new key as failed metadata only when that is safe for the provider.
 Private beta can run with manual billing, closed/invite org signup mode, and a
 small number of managed gateway channels. Public self-serve requires:
 
+- the private beta launch package in `docs/runbooks/private-beta-launch.md`
+  and `deploy/private-beta/` has been validated with
+  `pnpm deploy:private-beta:validate`,
 - signup mode explicitly set,
 - token TTLs enforced,
 - invite/domain controls documented,

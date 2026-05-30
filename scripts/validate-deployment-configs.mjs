@@ -266,6 +266,12 @@ function validateDocs() {
     'docs/runbooks/backup-restore.md',
     'docs/runbooks/restore-drill-report.md',
     'docs/runbooks/managed-byok-saas.md',
+    'docs/runbooks/private-beta-launch.md',
+    'docs/runbooks/private-beta-support.md',
+    'deploy/private-beta/README.md',
+    'deploy/private-beta/private-beta-plans.json',
+    'deploy/private-beta/hosted-byok.config.example.json',
+    'deploy/private-beta/self-host-oss.config.example.json',
     'deploy/README.md',
     'deploy/observability/metrics-catalog.json',
     'deploy/observability/prometheus-alerts.yaml',
@@ -328,6 +334,36 @@ function validateDocs() {
   ]) {
     if (!byok.includes(phrase)) {
       throw new Error(`docs/runbooks/managed-byok-saas.md must include ${phrase}`)
+    }
+  }
+
+  const privateBeta = read('docs/runbooks/private-beta-launch.md')
+  for (const phrase of [
+    'Managed BYOK Onboarding Checklist',
+    'Hosted BYOK Setup Flow',
+    'OSS Self-Host Equivalent',
+    'Managed Vs Self-Host Responsibilities',
+    'Security Posture',
+    'Known Private Beta Constraints',
+    'Open Cowork does not resell model tokens',
+  ]) {
+    if (!privateBeta.includes(phrase)) {
+      throw new Error(`docs/runbooks/private-beta-launch.md must include ${phrase}`)
+    }
+  }
+
+  const privateBetaSupport = read('docs/runbooks/private-beta-support.md')
+  for (const phrase of [
+    'Support Intake',
+    'Triage Matrix',
+    'Diagnostics Workflow',
+    'BYOK Issue Handling',
+    'Gateway Issue Handling',
+    'Desktop Sync Issue Handling',
+    'Never attach raw secrets',
+  ]) {
+    if (!privateBetaSupport.includes(phrase)) {
+      throw new Error(`docs/runbooks/private-beta-support.md must include ${phrase}`)
     }
   }
 

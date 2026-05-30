@@ -69,6 +69,7 @@
     "deploy:load": "node scripts/launch-readiness.mjs --mode load",
     "deploy:soak": "node scripts/launch-readiness.mjs --mode soak",
     "deploy:launch:validate": "node scripts/validate-launch-readiness.mjs",
+    "deploy:private-beta:validate": "node scripts/validate-private-beta-package.mjs",
     "ops:validate": "node scripts/validate-ops-readiness.mjs",
     "notices": "node scripts/generate-third-party-notices.mjs",
     "proof:cloud:opencode-portability": "node --no-warnings --experimental-strip-types scripts/opencode-portability-proof.ts",

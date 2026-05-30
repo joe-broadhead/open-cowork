@@ -43,6 +43,10 @@ roles and shared Postgres/object storage.
 - Use `cloud.billing.provider=none` or `stub` for OSS self-host deployments.
   Stripe or future billing adapters are managed-hosting configuration, not a
   core runtime dependency.
+- For managed BYOK private beta, use
+  `docs/runbooks/private-beta-launch.md`, `docs/runbooks/private-beta-support.md`,
+  and `deploy/private-beta/` to keep onboarding, support, plan placeholders,
+  and OSS self-host boundaries explicit before inviting design partners.
 - Run schema and semantic validation for downstream configs before rollout:
   `node --no-warnings --experimental-strip-types --test tests/config-schema-validation.test.ts`.
 
