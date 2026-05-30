@@ -70,6 +70,41 @@
         "maxGatewayRetryRatePerMinute": 5,
         "maxSseReconnectsPerMinute": 3
       }
+    },
+    "enterprise-scale": {
+      "description": "Production enterprise-readiness target for large downstream or managed orgs after public-beta evidence is green.",
+      "durationMs": 900000,
+      "soakDurationMs": 43200000,
+      "concurrency": 100,
+      "requestRatePerSecond": 50,
+      "capacityTargets": {
+        "concurrentCloudUsers": 500,
+        "concurrentDesktopClients": 200,
+        "concurrentGatewayChannels": 100,
+        "concurrentSseStreams": 1000,
+        "storedCloudThreads": 100000,
+        "sessionCreatesPerMinute": 300,
+        "promptCommandsPerMinute": 600,
+        "activeWorkerSessions": 100,
+        "workflowRunsPerMinute": 100,
+        "gatewayInboundMessagesPerMinute": 1500,
+        "gatewayOutboundDeliveriesPerMinute": 1500,
+        "artifactUploadsPerMinute": 200,
+        "adminDashboardReadsPerMinute": 600
+      },
+      "thresholds": {
+        "maxOverallErrorRate": 0.0025,
+        "maxOperationErrorRate": 0.01,
+        "p95ReadLatencyMs": 350,
+        "p95MutationLatencyMs": 900,
+        "p95GatewayLatencyMs": 500,
+        "maxProjectionLagEvents": 5,
+        "maxCommandOldestAgeMs": 10000,
+        "maxUnexpectedQuotaRejections": 0,
+        "maxGatewayDeadLetters": 0,
+        "maxGatewayRetryRatePerMinute": 3,
+        "maxSseReconnectsPerMinute": 2
+      }
     }
   }
 }

@@ -25,7 +25,13 @@ import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
-import type { ApiTokenScope, ChannelProviderId } from './control-plane-store.ts'
+import type {
+  ApiTokenScope,
+  ChannelProviderId,
+  ControlPlaneSessionStatus,
+  SessionEventRecord,
+  WorkspaceEventRecord,
+} from './control-plane-store.ts'
 import { recordCloudHttpRequest } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
 import {
@@ -79,6 +85,7 @@ export type CloudHttpServerOptions = {
   strictTransportSecurity?: boolean
   maxBodyBytes?: number
   ssePollMs?: number
+  sseReplayHub?: CloudSseReplayHub
   trustProxyHeaders?: boolean
 }
 
@@ -106,6 +113,96 @@ type RouteContext = {
   cookieSession: CloudCookieSession | null
   url: URL
   segments: string[]
+}
+
+type SequencedSseEvent = { sequence: number }
+
+type SseReplaySubscriber = {
+  lastSequence: number
+  listener: (event: SequencedSseEvent) => void
+  onError?: (error: unknown) => void
+}
+
+type SseReplayTopic = {
+  subscribers: Set<SseReplaySubscriber>
+  loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
+  lastSequence: number
+  polling: boolean
+  timer: ReturnType<typeof setInterval>
+}
+
+export class CloudSseReplayHub {
+  private readonly topics = new Map<string, SseReplayTopic>()
+
+  subscribe(
+    input: {
+      key: string
+      afterSequence: number
+      pollMs: number
+      loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
+      listener: (event: SequencedSseEvent) => void
+      onError?: (error: unknown) => void
+    },
+  ) {
+    let topic = this.topics.get(input.key)
+    if (!topic) {
+      topic = {
+        subscribers: new Set(),
+        loadEvents: input.loadEvents,
+        lastSequence: input.afterSequence,
+        polling: false,
+        timer: setInterval(() => {
+          void this.poll(input.key)
+        }, input.pollMs),
+      }
+      this.topics.set(input.key, topic)
+    }
+    const subscriber: SseReplaySubscriber = {
+      lastSequence: input.afterSequence,
+      listener: input.listener,
+      onError: input.onError,
+    }
+    topic.subscribers.add(subscriber)
+    return () => {
+      const current = this.topics.get(input.key)
+      if (!current) return
+      current.subscribers.delete(subscriber)
+      if (current.subscribers.size > 0) return
+      clearInterval(current.timer)
+      this.topics.delete(input.key)
+    }
+  }
+
+  get topicCount() {
+    return this.topics.size
+  }
+
+  close() {
+    for (const topic of this.topics.values()) clearInterval(topic.timer)
+    this.topics.clear()
+  }
+
+  private async poll(key: string) {
+    const topic = this.topics.get(key)
+    if (!topic || topic.polling) return
+    topic.polling = true
+    try {
+      const events = await topic.loadEvents(topic.lastSequence)
+      for (const event of events) {
+        if (event.sequence <= topic.lastSequence) continue
+        topic.lastSequence = event.sequence
+        for (const subscriber of topic.subscribers) {
+          if (event.sequence <= subscriber.lastSequence) continue
+          subscriber.listener(event)
+          subscriber.lastSequence = event.sequence
+        }
+      }
+    } catch (error) {
+      for (const subscriber of topic.subscribers) subscriber.onError?.(error)
+    } finally {
+      topic.polling = false
+    }
+  }
 }
 
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
@@ -338,6 +435,12 @@ function parseLimit(url: URL) {
   if (!raw) return undefined
   const parsed = Number(raw)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function parseSessionStatus(value: string | null): ControlPlaneSessionStatus | null {
+  return value === 'idle' || value === 'running' || value === 'closed' || value === 'errored'
+    ? value
+    : null
 }
 
 function readNonNegativeInteger(value: unknown, fallback = 0) {
@@ -695,21 +798,19 @@ async function handleSse(
   }, (event) => {
     writeIfNew(event)
   })
-  let pollActive = false
-  const pollTimer = setInterval(() => {
-    if (pollActive) return
-    pollActive = true
-    void options.service.listEvents(context.principal, sessionId, lastSequence)
-      .then((events) => {
-        for (const event of events) writeIfNew(event)
-      })
-      .catch(() => {})
-      .finally(() => {
-        pollActive = false
-      })
+  const replayUnsubscribe = options.sseReplayHub?.subscribe({
+    key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
+    afterSequence: lastSequence,
+    pollMs: ssePollMs(options),
+    loadEvents: (sequence) => options.service.listEvents(context.principal, sessionId, sequence),
+    listener: (event) => writeIfNew(event as SessionEventRecord),
+  })
+  const keepAliveTimer = setInterval(() => {
+    res.write(': keep-alive\n\n')
   }, ssePollMs(options))
   req.on('close', () => {
-    clearInterval(pollTimer)
+    clearInterval(keepAliveTimer)
+    replayUnsubscribe?.()
     unsubscribe()
   })
 }
@@ -775,22 +876,19 @@ async function handleWorkspaceSse(
   }, (event) => {
     writeIfNew(event)
   })
-  let pollActive = false
-  const pollTimer = setInterval(() => {
-    if (pollActive) return
-    pollActive = true
-    void options.service.listWorkspaceEvents(context.principal, lastSequence)
-      .then((events) => {
-        for (const event of events) writeIfNew(event)
-        res.write(': keep-alive\n\n')
-      })
-      .catch(() => {})
-      .finally(() => {
-        pollActive = false
-      })
+  const replayUnsubscribe = options.sseReplayHub?.subscribe({
+    key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
+    afterSequence: lastSequence,
+    pollMs: ssePollMs(options),
+    loadEvents: (sequence) => options.service.listWorkspaceEvents(context.principal, sequence),
+    listener: (event) => writeIfNew(event as WorkspaceEventRecord),
+  })
+  const keepAliveTimer = setInterval(() => {
+    res.write(': keep-alive\n\n')
   }, ssePollMs(options))
   req.on('close', () => {
-    clearInterval(pollTimer)
+    clearInterval(keepAliveTimer)
+    replayUnsubscribe?.()
     unsubscribe()
   })
 }
@@ -1376,7 +1474,18 @@ async function handleApiRequest(
   }
 
   if (!sessionId && req.method === 'GET') {
-    writeJson(res, 200, { sessions: await options.service.listSessions(context.principal) }, options.corsOrigin)
+    const page = await options.service.listSessionsPage(context.principal, {
+      limit: parseLimit(context.url),
+      cursor: context.url.searchParams.get('cursor'),
+      status: parseSessionStatus(context.url.searchParams.get('status')),
+      profileName: context.url.searchParams.get('profileName'),
+      query: context.url.searchParams.get('q') || context.url.searchParams.get('query'),
+    })
+    writeJson(res, 200, {
+      sessions: page.items,
+      nextCursor: page.nextCursor,
+      totalEstimate: page.totalEstimate,
+    }, options.corsOrigin)
     return
   }
 
@@ -1412,6 +1521,16 @@ async function handleApiRequest(
       projection: cloudView.projection,
       view: cloudSessionViewToSessionView(cloudView),
     }, options.corsOrigin)
+    return
+  }
+
+  if (action === 'projection-status' && req.method === 'GET') {
+    writeJson(res, 200, await options.service.getSessionProjectionStatus(context.principal, sessionId), options.corsOrigin)
+    return
+  }
+
+  if (action === 'projection-repair' && req.method === 'POST') {
+    writeJson(res, 200, await options.service.repairSessionProjection(context.principal, sessionId), options.corsOrigin)
     return
   }
 
@@ -1620,10 +1739,13 @@ async function handleAuthRequest(
 export class CloudHttpServer {
   private readonly server: Server
   private readonly options: CloudHttpServerOptions
+  private readonly sseReplayHub: CloudSseReplayHub
 
   constructor(options: CloudHttpServerOptions) {
+    this.sseReplayHub = options.sseReplayHub || new CloudSseReplayHub()
     this.options = {
       ...options,
+      sseReplayHub: this.sseReplayHub,
       webhookSecurity: options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore(),
     }
     this.server = createServer((req, res) => {
@@ -1655,6 +1777,7 @@ export class CloudHttpServer {
         else resolve()
       })
     })
+    this.sseReplayHub.close()
   }
 
   private async enforceIpRateLimit(req: IncomingMessage) {

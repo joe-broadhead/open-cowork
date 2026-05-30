@@ -99,6 +99,35 @@ class ConfigBackedRuntime implements CloudRuntimeAdapter {
   async abortSession() {}
 }
 
+class ClosableRuntime implements CloudRuntimeAdapter {
+  readonly context: CloudRuntimeExecutionContext
+  readonly onClose: (sessionId: string) => void
+
+  constructor(input: WorkerScopedRuntimeFactoryInput, onClose: (sessionId: string) => void) {
+    this.context = input.execution
+    this.onClose = onClose
+  }
+
+  async createSession() {
+    return {
+      id: `runtime-${this.context.sessionId}`,
+      title: 'Runtime session',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+  }
+
+  async promptSession() {
+    return { events: [] }
+  }
+
+  async abortSession() {}
+
+  async close() {
+    this.onClose(this.context.sessionId)
+  }
+}
+
 function seededStore() {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-a', name: 'Tenant A' })
@@ -175,6 +204,76 @@ test('worker-scoped BYOK runtime injects provider options for the correct tenant
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('worker-scoped runtime cache evicts least-recently-used idle runtimes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-cache-'))
+  const store = seededStore()
+  const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'))
+  const created: string[] = []
+  const closed: string[] = []
+  const metrics: unknown[] = []
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric(record) { metrics.push(record) },
+    span() {},
+  }
+  const runtime = createWorkerScopedRuntimeAdapter({
+    paths: createCloudPathProvider(root),
+    policy: resolveCloudRuntimePolicy(DEFAULT_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
+    env: { PATH: process.env.PATH },
+    config: DEFAULT_CONFIG,
+    byokSecrets,
+    observability,
+    maxRuntimeEntries: 1,
+    runtimeIdleTtlMs: 60_000,
+    runtimeFactory(input) {
+      created.push(input.execution.sessionId)
+      return new ClosableRuntime(input, (sessionId) => closed.push(sessionId))
+    },
+  })
+
+  try {
+    await runtime.promptSession({
+      sessionId: 'runtime-a',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-a' },
+    })
+    assert.deepEqual(created, ['session-a'])
+    assert.deepEqual(closed, [])
+
+    await runtime.promptSession({
+      sessionId: 'runtime-b',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-b' },
+    })
+    assert.deepEqual(created, ['session-a', 'session-b'])
+    assert.deepEqual(closed, ['session-a'])
+
+    await runtime.promptSession({
+      sessionId: 'runtime-b',
+      parts: [],
+      agent: 'build',
+      context: { tenantId: 'tenant-a', sessionId: 'session-b' },
+    })
+    assert.deepEqual(created, ['session-a', 'session-b'])
+    assert.equal(metrics.some((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_runtime_cache_misses_total'
+    )), true)
+    assert.equal(metrics.some((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_runtime_cache_hits_total'
+    )), true)
+    assert.equal(metrics.some((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_runtime_cache_evictions_total'
+      && ((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'max_entries'
+    )), true)
+  } finally {
+    await runtime.close?.()
+    rmSync(root, { recursive: true, force: true })
+  }
+  assert.deepEqual(closed, ['session-a', 'session-b'])
 })
 
 test('worker-scoped BYOK runtime resolves KMS references only during worker config injection', async () => {

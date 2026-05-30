@@ -18,6 +18,8 @@ Capacity targets live in
 
 - `private-beta`: design-partner and internal managed BYOK rollout.
 - `public-beta`: first public hosted BYOK rollout.
+- `enterprise-scale`: large organization readiness target for downstream or
+  managed orgs after public-beta evidence is already green.
 
 Each profile defines initial targets for:
 
@@ -30,10 +32,10 @@ Each profile defines initial targets for:
 - artifact throughput.
 - admin dashboard reads.
 
-The targets are intentionally first-launch targets, not enterprise SLOs. Raise
-them only after production evidence shows Postgres, object storage, BYOK
-provider quota, worker leases, SSE fanout, and gateway delivery loops have
-headroom.
+Private and public beta are launch gates. `enterprise-scale` is the production
+growth gate: run it only after the lower profiles are green and the deployment
+has enough database, object-store, worker, and gateway capacity to absorb the
+larger thread, SSE, and command queues.
 
 ## Required Environment
 
@@ -53,7 +55,8 @@ export OPEN_COWORK_LOAD_STRICT=true
 
 Optional knobs:
 
-- `OPEN_COWORK_LOAD_PROFILE=private-beta` or `public-beta`
+- `OPEN_COWORK_LOAD_PROFILE=private-beta`, `public-beta`, or
+  `enterprise-scale`
 - `OPEN_COWORK_LOAD_DURATION_MS=...`
 - `OPEN_COWORK_LOAD_CONCURRENCY=...`
 - `OPEN_COWORK_LOAD_REQUEST_RATE=...`

@@ -5,6 +5,8 @@ import {
   generateCloudApiToken,
   hashChannelInteractionToken,
   hashCloudApiToken,
+  decodeSessionPageCursor,
+  encodeSessionPageCursor,
 } from './control-plane-store.ts'
 import type {
   WorkflowRunStatus,
@@ -58,6 +60,7 @@ import type {
   IssuedApiTokenRecord,
   IssuedChannelInteractionRecord,
   IssueApiTokenInput,
+  ListSessionsPageInput,
   ListChannelDeliveriesInput,
   MembershipRecord,
   OrgMemberRecord,
@@ -2358,11 +2361,157 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return result.rows.map(sessionFromRow)
   }
 
+  async listSessionsPage(input: ListSessionsPageInput) {
+    await this.requireTenantUser(input.tenantId, input.userId)
+    const limit = Math.max(1, Math.min(500, Math.floor(input.limit ?? 100)))
+    const cursor = decodeSessionPageCursor(input.cursor)
+    const params: unknown[] = [input.tenantId, input.userId]
+    const where = ['tenant_id = $1', 'user_id = $2']
+    if (input.status) {
+      params.push(input.status)
+      where.push(`status = $${params.length}`)
+    }
+    if (input.profileName) {
+      params.push(input.profileName)
+      where.push(`profile_name = $${params.length}`)
+    }
+    const query = input.query?.trim().toLowerCase()
+    if (query) {
+      params.push(`%${query}%`)
+      where.push(`(
+        lower(COALESCE(title, '')) LIKE $${params.length}
+        OR lower(session_id) LIKE $${params.length}
+        OR lower(opencode_session_id) LIKE $${params.length}
+        OR lower(profile_name) LIKE $${params.length}
+      )`)
+    }
+    if (cursor) {
+      params.push(cursor.updatedAt, cursor.sessionId)
+      const updatedAtParam = params.length - 1
+      const sessionIdParam = params.length
+      where.push(`(updated_at < $${updatedAtParam} OR (updated_at = $${updatedAtParam} AND session_id > $${sessionIdParam}))`)
+    }
+    params.push(limit + 1)
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_sessions
+       WHERE ${where.join(' AND ')}
+       ORDER BY updated_at DESC, session_id
+       LIMIT $${params.length}`,
+      params,
+    )
+    const rows = result.rows.map(sessionFromRow)
+    const items = rows.slice(0, limit)
+    return {
+      items,
+      nextCursor: rows.length > limit && items.length > 0 ? encodeSessionPageCursor(items[items.length - 1]!) : null,
+      totalEstimate: rows.length > limit ? limit + 1 : rows.length,
+    }
+  }
+
   async listAllSessions() {
     const result = await this.pool.query(
       `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id`,
     )
     return result.rows.map(sessionFromRow)
+  }
+
+  async claimRunnableSessions(input: {
+    workerId: string
+    limit?: number | null
+    now?: Date
+    ttlMs?: number
+  }) {
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const ttlMs = input.ttlMs ?? 30_000
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
+    return this.withTransaction(async (client) => {
+      const countRow = await this.one(
+        `SELECT count(*)::int AS count
+         FROM (
+           SELECT commands.tenant_id, commands.session_id
+           FROM cloud_session_commands commands
+           LEFT JOIN cloud_worker_leases leases
+             ON leases.tenant_id = commands.tenant_id
+            AND leases.session_id = commands.session_id
+           WHERE commands.target_lease_token IS NULL
+             AND commands.status IN ('pending', 'running')
+             AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
+           GROUP BY commands.tenant_id, commands.session_id
+         ) runnable`,
+        [nowMs],
+        client,
+      )
+      const selected = await client.query(
+        `SELECT sessions.*, runnable.first_sequence
+         FROM cloud_sessions sessions
+         JOIN (
+           SELECT commands.tenant_id, commands.session_id, min(commands.created_sequence) AS first_sequence
+           FROM cloud_session_commands commands
+           LEFT JOIN cloud_worker_leases leases
+             ON leases.tenant_id = commands.tenant_id
+            AND leases.session_id = commands.session_id
+           WHERE commands.target_lease_token IS NULL
+             AND commands.status IN ('pending', 'running')
+             AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
+           GROUP BY commands.tenant_id, commands.session_id
+           ORDER BY first_sequence, commands.tenant_id, commands.session_id
+           LIMIT $2
+         ) runnable
+           ON runnable.tenant_id = sessions.tenant_id
+          AND runnable.session_id = sessions.session_id
+         ORDER BY runnable.first_sequence, sessions.tenant_id, sessions.session_id
+         FOR UPDATE OF sessions SKIP LOCKED`,
+        [nowMs, limit],
+      )
+      const leases = []
+      for (const row of selected.rows) {
+        const tenantId = String(row.tenant_id)
+        const sessionId = String(row.session_id)
+        const currentLease = await this.getLease(tenantId, sessionId, client, true)
+        if (currentLease && currentLease.leaseExpiresAt > nowMs) continue
+        const attempt = numberValue(row.next_lease_attempt) + 1
+        const leaseRecord = {
+          tenantId,
+          sessionId,
+          leasedBy: input.workerId,
+          leaseToken: `${tenantId}:${sessionId}:${attempt}:${input.workerId}`,
+          leaseExpiresAt: nowMs + ttlMs,
+          checkpointVersion: currentLease?.checkpointVersion || 0,
+        }
+        await client.query(
+          `UPDATE cloud_sessions
+           SET next_lease_attempt = $3, status = 'running', updated_at = $4
+           WHERE tenant_id = $1 AND session_id = $2`,
+          [tenantId, sessionId, attempt, now.toISOString()],
+        )
+        const result = await client.query(
+          `INSERT INTO cloud_worker_leases (
+            tenant_id, session_id, leased_by, lease_token, lease_expires_at_ms, checkpoint_version
+           )
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (tenant_id, session_id) DO UPDATE
+           SET leased_by = EXCLUDED.leased_by,
+               lease_token = EXCLUDED.lease_token,
+               lease_expires_at_ms = EXCLUDED.lease_expires_at_ms,
+               checkpoint_version = EXCLUDED.checkpoint_version
+           RETURNING *`,
+          [
+            tenantId,
+            sessionId,
+            leaseRecord.leasedBy,
+            leaseRecord.leaseToken,
+            leaseRecord.leaseExpiresAt,
+            leaseRecord.checkpointVersion,
+          ],
+        )
+        leases.push(leaseFromRow(result.rows[0]))
+      }
+      return {
+        leases,
+        pendingSessionCount: numberValue(countRow.count),
+      }
+    })
   }
 
   async bindSessionRuntime(input: {

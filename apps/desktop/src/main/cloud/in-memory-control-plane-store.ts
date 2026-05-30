@@ -361,6 +361,22 @@ export type SessionRecord = {
   updatedAt: string
 }
 
+export type ListSessionsPageInput = {
+  tenantId: string
+  userId: string
+  limit?: number | null
+  cursor?: string | null
+  status?: ControlPlaneSessionStatus | null
+  profileName?: string | null
+  query?: string | null
+}
+
+export type ListSessionsPageRecord = {
+  items: SessionRecord[]
+  nextCursor: string | null
+  totalEstimate: number
+}
+
 export type SessionEventRecord = {
   tenantId: string
   sessionId: string
@@ -401,6 +417,18 @@ export type WorkerLeaseRecord = {
   leaseToken: string
   leaseExpiresAt: number
   checkpointVersion: number
+}
+
+export type ClaimRunnableSessionsInput = {
+  workerId: string
+  limit?: number | null
+  now?: Date
+  ttlMs?: number
+}
+
+export type RunnableSessionClaimRecord = {
+  leases: WorkerLeaseRecord[]
+  pendingSessionCount: number
 }
 
 export type SessionCommandRecord = {
@@ -1051,7 +1079,9 @@ export type ControlPlaneStore = {
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
   findSession(sessionId: string): MaybePromise<SessionRecord | null>
   listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>
+  listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
   listAllSessions(): MaybePromise<SessionRecord[]>
+  claimRunnableSessions(input: ClaimRunnableSessionsInput): MaybePromise<RunnableSessionClaimRecord>
   bindSessionRuntime(input: {
     tenantId: string
     sessionId: string
@@ -1165,6 +1195,36 @@ const BILLING_SUBSCRIPTION_STATUSES = new Set<BillingSubscriptionStatus>([
 
 function nowIso(now: Date | undefined) {
   return (now || new Date()).toISOString()
+}
+
+function normalizeListLimit(value: number | null | undefined, fallback = 100, max = 500) {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(1, Math.min(max, Math.floor(value || fallback)))
+}
+
+export function encodeSessionPageCursor(session: Pick<SessionRecord, 'updatedAt' | 'sessionId'>) {
+  return Buffer.from(JSON.stringify({
+    updatedAt: session.updatedAt,
+    sessionId: session.sessionId,
+  }), 'utf8').toString('base64url')
+}
+
+export function decodeSessionPageCursor(cursor: string | null | undefined): { updatedAt: string, sessionId: string } | null {
+  if (!cursor) return null
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    if (
+      parsed
+      && typeof parsed === 'object'
+      && typeof parsed.updatedAt === 'string'
+      && typeof parsed.sessionId === 'string'
+    ) {
+      return { updatedAt: parsed.updatedAt, sessionId: parsed.sessionId }
+    }
+  } catch {
+    return null
+  }
+  return null
 }
 
 function stableId(prefix: string, ...parts: string[]) {
@@ -2632,11 +2692,91 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     this.requireTenantUser(tenantId, userId)
     return Array.from(this.sessions.values())
       .filter((session) => session.record.tenantId === tenantId && session.record.userId === userId)
+      .sort((left, right) => (
+        right.record.updatedAt.localeCompare(left.record.updatedAt)
+        || left.record.sessionId.localeCompare(right.record.sessionId)
+      ))
       .map((session) => clone(session.record))
+  }
+
+  listSessionsPage(input: ListSessionsPageInput): ListSessionsPageRecord {
+    this.requireTenantUser(input.tenantId, input.userId)
+    const limit = normalizeListLimit(input.limit)
+    const cursor = decodeSessionPageCursor(input.cursor)
+    const query = input.query?.trim().toLowerCase() || null
+    const filtered = Array.from(this.sessions.values())
+      .map((session) => session.record)
+      .filter((session) => session.tenantId === input.tenantId && session.userId === input.userId)
+      .filter((session) => !input.status || session.status === input.status)
+      .filter((session) => !input.profileName || session.profileName === input.profileName)
+      .filter((session) => !query || [
+        session.title || '',
+        session.sessionId,
+        session.opencodeSessionId,
+        session.profileName,
+      ].some((field) => field.toLowerCase().includes(query)))
+      .sort((left, right) => (
+        right.updatedAt.localeCompare(left.updatedAt)
+        || left.sessionId.localeCompare(right.sessionId)
+      ))
+      .filter((session) => !cursor
+        || session.updatedAt < cursor.updatedAt
+        || (session.updatedAt === cursor.updatedAt && session.sessionId > cursor.sessionId))
+    const page = filtered.slice(0, limit)
+    const hasMore = filtered.length > limit
+    return {
+      items: page.map((session) => clone(session)),
+      nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!) : null,
+      totalEstimate: filtered.length,
+    }
   }
 
   listAllSessions(): SessionRecord[] {
     return Array.from(this.sessions.values()).map((session) => clone(session.record))
+  }
+
+  claimRunnableSessions(input: ClaimRunnableSessionsInput): RunnableSessionClaimRecord {
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const ttlMs = input.ttlMs ?? 30_000
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
+    const candidates = Array.from(this.sessions.values())
+      .map((session) => {
+        if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
+        const runnable = session.commands
+          .filter((command) => command.targetLeaseToken === null)
+          .filter((command) => command.status === 'pending' || command.status === 'running')
+          .sort((a, b) => a.createdSequence - b.createdSequence)[0]
+        return runnable ? { session, firstSequence: runnable.createdSequence } : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+      .sort((a, b) => (
+        a.firstSequence - b.firstSequence
+        || a.session.record.tenantId.localeCompare(b.session.record.tenantId)
+        || a.session.record.sessionId.localeCompare(b.session.record.sessionId)
+      ))
+
+    const leases: WorkerLeaseRecord[] = []
+    for (const candidate of candidates.slice(0, limit)) {
+      const session = candidate.session
+      const attempt = session.nextLeaseAttempt += 1
+      const lease: WorkerLeaseRecord = {
+        tenantId: session.record.tenantId,
+        sessionId: session.record.sessionId,
+        leasedBy: input.workerId,
+        leaseToken: `${session.record.tenantId}:${session.record.sessionId}:${attempt}:${input.workerId}`,
+        leaseExpiresAt: nowMs + ttlMs,
+        checkpointVersion: session.lease?.checkpointVersion || 0,
+      }
+      session.lease = lease
+      session.record.status = 'running'
+      session.record.updatedAt = now.toISOString()
+      leases.push(clone(lease))
+    }
+    return {
+      leases,
+      pendingSessionCount: candidates.length,
+    }
   }
 
   bindSessionRuntime(input: {

@@ -213,3 +213,73 @@ test('cloud assistant chunks keep projection running until explicit idle event',
   assert.equal(idleView.isGenerating, false)
   assert.equal((await store.getSessionForTenant(principal.tenantId, sessionId))?.status, 'idle')
 })
+
+test('cloud session projection repair rebuilds durable view from ordered event log', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'repair-session',
+    opencodeSessionId: 'runtime-repair-session',
+    profileName: 'full',
+    title: 'Repair me',
+    createdAt: new Date('2026-05-27T10:00:00.000Z'),
+  })
+  const service = new CloudSessionService(
+    store,
+    new FakeRuntime(),
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+  )
+  const principal = {
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.test',
+    authSource: 'local' as const,
+  }
+
+  store.appendSessionEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'repair-session',
+    type: 'prompt.submitted',
+    payload: {
+      messageId: 'repair:user',
+      text: 'rebuild from events',
+      agent: 'build',
+    },
+    createdAt: new Date('2026-05-27T10:01:00.000Z'),
+  })
+  store.appendSessionEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'repair-session',
+    type: 'assistant.message',
+    payload: {
+      messageId: 'repair:assistant',
+      content: 'projection repaired',
+    },
+    createdAt: new Date('2026-05-27T10:02:00.000Z'),
+  })
+  assert.equal(await store.getSessionProjection('tenant-1', 'repair-session'), null)
+  const statusBeforeRepair = await service.getSessionProjectionStatus(principal, 'repair-session')
+  assert.equal(statusBeforeRepair.latestEventSequence, 2)
+  assert.equal(statusBeforeRepair.projectionSequence, 0)
+  assert.equal(statusBeforeRepair.lag, 2)
+
+  const repaired = await service.repairSessionProjection(principal, 'repair-session')
+  assert.equal(repaired.repaired, true)
+  assert.equal(repaired.eventCount, 2)
+  assert.equal(repaired.latestEventSequence, 2)
+  assert.equal(repaired.projectionSequence, 2)
+  assert.equal(repaired.lag, 0)
+
+  const view = asRecord(asRecord((await service.getSessionView(principal, 'repair-session')).projection).view)
+  assert.deepEqual(asArray(view.messages).map((message) => asRecord(message).content), [
+    'rebuild from events',
+    'projection repaired',
+  ])
+
+  const secondPass = await service.repairSessionProjection(principal, 'repair-session')
+  assert.equal(secondPass.repaired, false)
+  assert.equal(secondPass.projectionSequence, 2)
+})

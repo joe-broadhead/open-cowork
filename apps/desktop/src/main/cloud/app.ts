@@ -128,6 +128,8 @@ export type CloudAppOptions = {
   port?: number
   workerPollMs?: number
   schedulerPollMs?: number
+  runtimeCacheMaxEntries?: number
+  runtimeCacheIdleTtlMs?: number
   corsOrigin?: string | null
   autoProcessCommands?: boolean
 }
@@ -399,6 +401,8 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     port: parsePort(envValue(env, 'PORT') || envValue(env, 'OPEN_COWORK_CLOUD_PORT'), 8787),
     workerPollMs,
     schedulerPollMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS'), workerPollMs),
+    runtimeCacheMaxEntries: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES'), 100),
+    runtimeCacheIdleTtlMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS'), 30 * 60 * 1000),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
     autoProcessCommands: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS'), true),
     checkpointsEnabled: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED'), false),
@@ -992,6 +996,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           },
           observability,
           runtimeFactory: options.runtimeFactory || defaultCloudRuntimeFactory,
+          maxRuntimeEntries: options.runtimeCacheMaxEntries ?? envOptions.runtimeCacheMaxEntries,
+          runtimeIdleTtlMs: options.runtimeCacheIdleTtlMs ?? envOptions.runtimeCacheIdleTtlMs,
         })
       : createUnavailableRuntimeAdapter()
   )

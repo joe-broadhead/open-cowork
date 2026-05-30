@@ -546,6 +546,22 @@ export const CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS = [
     WHERE provider_subscription_id IS NOT NULL`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_MIGRATION_ID = '007_scale_foundation'
+
+export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS = [
+  `CREATE INDEX IF NOT EXISTS cloud_sessions_user_cursor_idx
+    ON cloud_sessions (tenant_id, user_id, updated_at DESC, session_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_sessions_user_status_cursor_idx
+    ON cloud_sessions (tenant_id, user_id, status, updated_at DESC, session_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_sessions_user_profile_cursor_idx
+    ON cloud_sessions (tenant_id, user_id, profile_name, updated_at DESC, session_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_session_commands_runnable_idx
+    ON cloud_session_commands (status, target_lease_token, tenant_id, session_id, created_sequence)
+    WHERE status IN ('pending', 'running')`,
+  `CREATE INDEX IF NOT EXISTS cloud_worker_leases_expiry_idx
+    ON cloud_worker_leases (tenant_id, session_id, lease_expires_at_ms)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -570,5 +586,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_BILLING_SUBSCRIPTIONS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS,
   },
 ] as const

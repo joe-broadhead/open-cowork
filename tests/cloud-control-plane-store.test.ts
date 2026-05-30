@@ -28,6 +28,54 @@ test('cloud control plane keeps tenant/user/session state isolated', () => {
   assert.throws(() => store.listSessions('tenant-2', 'user-1'), /Unknown tenant/)
 })
 
+test('cloud control plane paginates and filters user session lists', () => {
+  const store = seededStore()
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    opencodeSessionId: 'oc-session-2',
+    profileName: 'data-analyst',
+    title: 'Revenue model',
+    createdAt: new Date('2026-01-01T00:02:00.000Z'),
+  })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-3',
+    opencodeSessionId: 'oc-session-3',
+    profileName: 'full',
+    title: 'Hiring plan',
+    createdAt: new Date('2026-01-01T00:01:00.000Z'),
+  })
+  store.updateSessionStatus({
+    tenantId: 'tenant-1',
+    sessionId: 'session-3',
+    status: 'closed',
+    updatedAt: new Date('2026-01-01T00:03:00.000Z'),
+  })
+
+  const first = store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', limit: 2 })
+  assert.deepEqual(first.items.map((session) => session.sessionId), ['session-3', 'session-2'])
+  assert.ok(first.nextCursor)
+  const second = store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', limit: 2, cursor: first.nextCursor })
+  assert.deepEqual(second.items.map((session) => session.sessionId), ['session-1'])
+  assert.equal(second.nextCursor, null)
+
+  assert.deepEqual(
+    store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', status: 'closed' }).items.map((session) => session.sessionId),
+    ['session-3'],
+  )
+  assert.deepEqual(
+    store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', profileName: 'data-analyst' }).items.map((session) => session.sessionId),
+    ['session-2'],
+  )
+  assert.deepEqual(
+    store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', query: 'revenue' }).items.map((session) => session.sessionId),
+    ['session-2'],
+  )
+})
+
 test('cloud control plane keeps product domains isolated by tenant and org', () => {
   const store = seededStore()
   const org1 = store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'tenant-1', name: 'Acme' })
@@ -329,6 +377,77 @@ test('cloud control plane commands are idempotent and owned by the current lease
   assert.equal(reclaimed?.commandId, 'cmd-2')
   assert.equal(reclaimed?.claimedLeaseToken, takeoverLease.leaseToken)
   assert.equal(store.ackSessionCommand(takeoverLease, 'cmd-2').status, 'acked')
+})
+
+test('cloud control plane claims only runnable sessions for workers', () => {
+  const store = seededStore()
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    opencodeSessionId: 'oc-session-2',
+    profileName: 'full',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-3',
+    opencodeSessionId: 'oc-session-3',
+    profileName: 'full',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  store.enqueueSessionCommand({
+    commandId: 'cmd-1',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+  })
+  store.enqueueSessionCommand({
+    commandId: 'cmd-2',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    kind: 'prompt',
+  })
+  store.enqueueSessionCommand({
+    commandId: 'cmd-targeted',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-3',
+    kind: 'abort',
+    targetLeaseToken: 'tenant-1:session-3:1:other-worker',
+  })
+
+  const first = store.claimRunnableSessions({
+    workerId: 'worker-a',
+    limit: 1,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+    ttlMs: 1_000,
+  })
+  assert.equal(first.pendingSessionCount, 2)
+  assert.deepEqual(first.leases.map((lease) => lease.sessionId), ['session-1'])
+
+  const second = store.claimRunnableSessions({
+    workerId: 'worker-b',
+    limit: 10,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+    ttlMs: 1_000,
+  })
+  assert.equal(second.pendingSessionCount, 1)
+  assert.deepEqual(second.leases.map((lease) => lease.sessionId), ['session-2'])
+
+  const claimed = store.claimNextSessionCommand(first.leases[0]!)
+  assert.equal(claimed?.commandId, 'cmd-1')
+  const reclaimed = store.claimRunnableSessions({
+    workerId: 'worker-c',
+    limit: 10,
+    now: new Date('2026-01-01T00:00:02.000Z'),
+    ttlMs: 1_000,
+  })
+  assert.equal(reclaimed.leases.some((lease) => lease.sessionId === 'session-1'), true)
+  assert.equal(reclaimed.leases.some((lease) => lease.sessionId === 'session-3'), false)
 })
 
 test('cloud control plane records worker heartbeats, settings metadata, and migrations', () => {

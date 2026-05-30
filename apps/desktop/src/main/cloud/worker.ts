@@ -11,6 +11,7 @@ export type CloudWorkerCheckpointHooks = {
 }
 
 export class CloudWorker {
+  private readonly claimBatchSize = 100
   private readonly leases = new Map<string, WorkerLeaseRecord>()
   private readonly restoredLeaseTokens = new Set<string>()
   private readonly store: ControlPlaneStore
@@ -90,13 +91,40 @@ export class CloudWorker {
   async processAllSessionCommands(): Promise<number> {
     const startedAt = Date.now()
     let processed = 0
-    const sessions = await this.store.listAllSessions()
-    for (const session of sessions) {
-      processed += await this.processSessionCommands(session.tenantId, session.sessionId)
+    let pendingSessionCount = 0
+    while (true) {
+      const claimStartedAt = Date.now()
+      const claims = await this.store.claimRunnableSessions({
+        workerId: this.workerId,
+        limit: this.claimBatchSize,
+        now: new Date(),
+        ttlMs: this.leaseTtlMs,
+      })
+      pendingSessionCount = Math.max(pendingSessionCount, claims.pendingSessionCount)
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_runnable_session_claim_duration_ms',
+        value: Date.now() - claimStartedAt,
+        workerId: this.workerId,
+        status: 'ok',
+      })
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_runnable_sessions_claimed_total',
+        value: claims.leases.length,
+        workerId: this.workerId,
+        status: claims.leases.length > 0 ? 'claimed' : 'empty',
+      })
+      if (claims.leases.length === 0) break
+      let processedThisBatch = 0
+      for (const lease of claims.leases) {
+        this.leases.set(this.leaseKey(lease.tenantId, lease.sessionId), lease)
+        processedThisBatch += await this.processSessionCommands(lease.tenantId, lease.sessionId)
+      }
+      processed += processedThisBatch
+      if (claims.leases.length < this.claimBatchSize || processedThisBatch === 0) break
     }
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_command_queue_depth',
-      value: sessions.length,
+      value: pendingSessionCount,
       workerId: this.workerId,
     })
     await recordCloudWorkerMetric(this.observability, {

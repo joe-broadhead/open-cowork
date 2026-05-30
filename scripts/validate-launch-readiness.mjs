@@ -55,7 +55,7 @@ for (const path of [
 }
 
 const targets = readJson(targetsPath)
-for (const profileName of ['private-beta', 'public-beta']) {
+for (const profileName of ['private-beta', 'public-beta', 'enterprise-scale']) {
   const profile = targets.profiles?.[profileName]
   if (!profile) throw new Error(`${targetsPath} is missing ${profileName}`)
   assertPositiveNumber(profile.durationMs, `${profileName}.durationMs`)

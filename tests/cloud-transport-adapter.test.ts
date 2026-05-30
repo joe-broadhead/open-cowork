@@ -37,6 +37,13 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
       }
       return jsonResponse({ sessions: [{ sessionId: 'session-1' }] })
     }
+    if (url.includes('/api/sessions?')) {
+      return jsonResponse({
+        sessions: [{ sessionId: 'session-2' }],
+        nextCursor: 'cursor-2',
+        totalEstimate: 2,
+      })
+    }
     if (url.endsWith('/api/import/sessions')) {
       return jsonResponse({
         session: { sessionId: 'session-imported' },
@@ -254,6 +261,17 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
   assert.equal((await transport.getConfig()).profileName, 'full')
   assert.equal((await transport.getRuntimeStatus()).commandProcessing, 'delegated')
   assert.deepEqual((await transport.listSessions()).map((session) => session.sessionId), ['session-1'])
+  assert.deepEqual(await transport.listSessionsPage?.({
+    limit: 25,
+    cursor: 'cursor-1',
+    status: 'running',
+    profileName: 'full',
+    query: 'revenue',
+  }), {
+    sessions: [{ sessionId: 'session-2' }],
+    nextCursor: 'cursor-2',
+    totalEstimate: 2,
+  })
   assert.equal((await transport.createSession()).session.sessionId, 'session-1')
   assert.equal((await transport.importSession({
     source: { kind: 'local-session', fingerprint: 'sha256:import', title: 'Imported' },
