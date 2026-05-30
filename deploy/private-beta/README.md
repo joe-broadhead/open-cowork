@@ -12,6 +12,15 @@ Files:
   billing, self-host Gateway, and placeholder secret refs.
 - `private-beta-plans.json`: plan and entitlement placeholders for private
   beta. It intentionally carries no prices or commercial assumptions.
+- `private-beta-launch-profile.template.json`: launch-profile template covering
+  entitlements, allowed provider policy, gateway availability, support owners,
+  RPO/RTO, required launch evidence, and go/no-go placeholders.
+- `design-partner-onboarding.template.md`: repeatable 10-step onboarding
+  evidence template for invite, BYOK, Desktop, Web, Gateway, token lifecycle,
+  and redaction proof.
+- `go-no-go-report.template.md`: final managed BYOK launch decision template
+  for exact commit/artifacts, validation commands, load/soak, failover/restore,
+  security boundaries, risks, and sign-off.
 
 These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as
@@ -33,6 +42,8 @@ The hosted path is for an operator-managed private beta:
 5. Configure BYOK and quotas per org.
 6. Preconfigure Desktop with the managed cloud URL.
 7. Store Gateway service tokens and channel credentials in platform secrets.
+8. Copy the onboarding, launch-profile, and go/no-go templates into a private
+   operations tracker and fill them with real evidence there, not in this repo.
 
 ## OSS Self-Host
 
@@ -51,6 +62,7 @@ Run:
 pnpm deploy:private-beta:validate
 pnpm deploy:validate
 pnpm deploy:launch:validate
+pnpm ops:validate
 ```
 
 before inviting design partners.

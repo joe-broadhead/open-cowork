@@ -35,6 +35,20 @@ Private beta includes:
 - BYOK setup and status,
 - quotas, usage summaries, audit logs, diagnostics, and support workflow.
 
+The public repository owns the reusable launch package:
+
+- `deploy/private-beta/private-beta-launch-profile.template.json` defines the
+  generic launch profile, entitlements, provider policy, gateway availability,
+  RPO/RTO, required evidence, and security-boundary placeholders.
+- `deploy/private-beta/design-partner-onboarding.template.md` defines the
+  repeatable design-partner onboarding evidence checklist.
+- `deploy/private-beta/go-no-go-report.template.md` defines the final decision
+  record.
+
+Completed copies belong in a private operations repository or ticket system.
+Do not commit real org ids, project ids, customer names, domains, prices,
+provider keys, cloud account ids, token values, or launch evidence here.
+
 Private beta excludes:
 
 - public self-serve signup,
@@ -60,6 +74,17 @@ Before inviting a design partner, the operator must be able to demonstrate:
 ## Managed BYOK Onboarding Checklist
 
 Complete each item for every design partner.
+
+The private onboarding record must cover this exact 10-step flow: create or
+invite org owner, verify membership and role, configure BYOK through the
+write-only endpoint, run provider validation or audited override, issue Desktop
+token or managed connection config, issue Gateway service token and channel
+binding when enabled, confirm Cloud Web bootstrap and admin surface, run the
+first synced cloud thread from Web, continue the same thread from Desktop, and
+continue or notify through Gateway.
+
+The onboarding evidence record should preserve these checkpoint names: create or invite org owner;
+verify membership and role; write-only endpoint; continue the same thread from Desktop.
 
 ### 1. Account And Org
 
@@ -227,6 +252,12 @@ Private beta is a **go** only when:
 - support runbook is current,
 - known limits are documented,
 - there is an owner for every launch-day alert.
+
+The final go/no-go report must record the launch profile and target
+environment, exact commit and release artifacts, validation commands with timestamps,
+load and soak summaries, restore drill summary, security-boundary checklist,
+support owner, known risks with mitigations, and the explicit `go`, `conditional-go`,
+or `no-go` decision.
 
 If any required smoke, security, support, or recovery evidence is missing, the
 launch remains conditional and should not invite new design partners.
