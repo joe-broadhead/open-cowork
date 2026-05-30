@@ -1,19 +1,20 @@
-{{- if not .Values.gateway.cloudBaseUrl }}
+{{- $sharedConfig := or .Values.gateway.configPath .Values.gateway.configDir .Values.gateway.downstreamRoot }}
+{{- if and (not $sharedConfig) (not .Values.gateway.cloudBaseUrl) }}
 {{- fail "gateway.cloudBaseUrl is required." }}
 {{- end }}
-{{- if and (not .Values.gateway.serviceToken) (not .Values.gateway.existingSecret) }}
+{{- if and (not $sharedConfig) (not .Values.gateway.serviceToken) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.serviceToken or gateway.existingSecret is required." }}
 {{- end }}
-{{- if and (not .Values.gateway.providersJson) (not .Values.gateway.telegram.botToken) (not .Values.gateway.slack.botToken) (not .Values.gateway.email.inboundSecret) (not .Values.gateway.webhook.deliveryUrl) (not .Values.gateway.existingSecret) }}
+{{- if and (not $sharedConfig) (not .Values.gateway.providersJson) (not .Values.gateway.telegram.botToken) (not .Values.gateway.slack.botToken) (not .Values.gateway.email.inboundSecret) (not .Values.gateway.webhook.deliveryUrl) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.providersJson, gateway.telegram.botToken, gateway.slack.botToken, gateway.email.inboundSecret, gateway.webhook.deliveryUrl, or gateway.existingSecret is required to configure at least one gateway provider." }}
 {{- end }}
 {{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
 {{- end }}
-{{- if and .Values.gateway.metrics.enabled (eq .Values.gateway.host "0.0.0.0") (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
+{{- if and .Values.gateway.metrics.enabled (eq .Values.gateway.host "0.0.0.0") (not $sharedConfig) (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.adminToken or gateway.existingSecret is required when gateway metrics are enabled on a public bind." }}
 {{- end }}
-{{- if and .Values.gateway.diagnostics.enabled (eq .Values.gateway.host "0.0.0.0") (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
+{{- if and .Values.gateway.diagnostics.enabled (eq .Values.gateway.host "0.0.0.0") (not $sharedConfig) (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.adminToken or gateway.existingSecret is required when gateway diagnostics are enabled on a public bind." }}
 {{- end }}
 {{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}

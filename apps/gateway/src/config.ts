@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import type { ChannelProviderId } from '@open-cowork/gateway-channel'
-import type { PublicBrandingConfig } from '@open-cowork/shared'
+import { jsonConfigCandidates, parseJsoncText } from '@open-cowork/shared'
+import type { GatewayDeploymentConfig, PublicBrandingConfig } from '@open-cowork/shared'
 
 export type GatewayMode = 'self-host' | 'managed'
 export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
@@ -44,18 +46,8 @@ export type GatewayProviderConfig = {
   settings: Record<string, unknown>
 }
 
-export type GatewayRawConfig = Partial<{
-  branding: Partial<PublicBrandingConfig>
-  cloud: Partial<GatewayConfig['cloud']>
-  server: Partial<GatewayConfig['server']>
-  mode: GatewayMode
-  logging: Partial<GatewayConfig['logging']>
-  metrics: Partial<GatewayConfig['metrics']>
-  diagnostics: Partial<GatewayConfig['diagnostics']>
-  providers: Array<Partial<GatewayProviderConfig> & {
-    kind: GatewayProviderKind
-  }>
-}>
+export type GatewayRawConfig = GatewayDeploymentConfig
+type GatewayRawProvider = NonNullable<GatewayRawConfig['providers']>[number]
 
 export type GatewayEnv = Record<string, string | undefined>
 
@@ -163,22 +155,126 @@ export function redactGatewayEnv(env: GatewayEnv): Record<string, string> {
 }
 
 function readRawConfig(env: GatewayEnv): GatewayRawConfig {
+  const central = readCentralGatewayConfig(env)
+  const configPath = readString(env.OPEN_COWORK_GATEWAY_CONFIG)
+  const fromGatewayFile = configPath
+    ? parseGatewayConfigFile(readFileSync(configPath, 'utf8'), configPath)
+    : {}
   const json = readString(env.OPEN_COWORK_GATEWAY_CONFIG_JSON)
-  if (json) return parseConfigJson(json, 'OPEN_COWORK_GATEWAY_CONFIG_JSON')
+  const fromJson = json
+    ? parseGatewayConfigJson(json, 'OPEN_COWORK_GATEWAY_CONFIG_JSON')
+    : {}
 
-  const path = readString(env.OPEN_COWORK_GATEWAY_CONFIG)
-  if (!path) return {}
-  return parseConfigJson(readFileSync(path, 'utf8'), path)
+  return mergeGatewayRawConfigs(mergeGatewayRawConfigs(central, fromGatewayFile), fromJson)
 }
 
-function parseConfigJson(value: string, source: string): GatewayRawConfig {
+function readCentralGatewayConfig(env: GatewayEnv): GatewayRawConfig {
+  const candidates = centralConfigCandidates(env)
+  let merged: GatewayRawConfig = {}
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue
+    const parsed = parseOpenCoworkConfig(readFileSync(candidate, 'utf8'), candidate, env)
+    if (parsed.gateway) {
+      merged = mergeGatewayRawConfigs(merged, parsed.gateway)
+    }
+  }
+  return merged
+}
+
+function centralConfigCandidates(env: GatewayEnv) {
+  const candidates: string[] = []
+  candidates.push(...jsonConfigCandidates(resolve(process.cwd(), 'open-cowork.config.json')))
+  for (const root of [
+    readString(env.OPEN_COWORK_CONFIG_DIR),
+    readString(env.OPEN_COWORK_DOWNSTREAM_ROOT),
+  ]) {
+    if (!root) continue
+    candidates.push(...jsonConfigCandidates(resolve(root, 'config.json')))
+    candidates.push(...jsonConfigCandidates(resolve(root, 'open-cowork.config.json')))
+  }
+  const explicitPath = readString(env.OPEN_COWORK_CONFIG_PATH)
+  if (explicitPath) candidates.push(...jsonConfigCandidates(resolve(explicitPath)))
+  return Array.from(new Set(candidates))
+}
+
+function parseOpenCoworkConfig(value: string, source: string, env: GatewayEnv): { gateway?: GatewayRawConfig } {
+  const parsed = parseGatewayConfigFile(value, source) as Record<string, unknown>
+  const allowed = new Set(Array.isArray(parsed.allowedEnvPlaceholders)
+    ? parsed.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string')
+    : [])
+  return resolveGatewayEnvPlaceholders({
+    gateway: parsed.gateway,
+  }, allowed, env, source) as { gateway?: GatewayRawConfig }
+}
+
+function parseGatewayConfigJson(value: string, source: string): GatewayRawConfig {
+  return parseJson(value, source) as GatewayRawConfig
+}
+
+function parseGatewayConfigFile(value: string, source: string): GatewayRawConfig {
   try {
-    return JSON.parse(value) as GatewayRawConfig
+    return parseJsoncText(value) as GatewayRawConfig
   } catch (error) {
     throw new Error(`Invalid gateway config JSON from ${source}: ${error instanceof Error ? error.message : String(error)}`, {
       cause: error,
     })
   }
+}
+
+function parseConfigJson(value: string, source: string): GatewayRawConfig {
+  return parseGatewayConfigJson(value, source)
+}
+
+function parseJson(value: string, source: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch (error) {
+    throw new Error(`Invalid gateway config JSON from ${source}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
+  }
+}
+
+function mergeGatewayRawConfigs(base: GatewayRawConfig, override: GatewayRawConfig): GatewayRawConfig {
+  return deepMergeGateway(base, override) as GatewayRawConfig
+}
+
+function deepMergeGateway(base: unknown, override: unknown): unknown {
+  if (Array.isArray(override)) return override
+  if (override && typeof override === 'object') {
+    const current = base && typeof base === 'object' && !Array.isArray(base)
+      ? base as Record<string, unknown>
+      : {}
+    return Object.fromEntries(Object.entries({
+      ...current,
+      ...(override as Record<string, unknown>),
+    }).map(([key, value]) => [
+      key,
+      Object.prototype.hasOwnProperty.call(override as Record<string, unknown>, key)
+        ? deepMergeGateway(current[key], value)
+        : value,
+    ]))
+  }
+  return override === undefined ? base : override
+}
+
+function resolveGatewayEnvPlaceholders(value: unknown, allowed: ReadonlySet<string>, env: GatewayEnv, source: string): unknown {
+  if (typeof value === 'string') {
+    return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_match, envName) => {
+      if (!allowed.has(envName)) {
+        throw new Error(`Invalid gateway config JSON from ${source}: environment placeholder ${envName} is not allowlisted.`)
+      }
+      return env[envName] || ''
+    })
+  }
+  if (Array.isArray(value)) return value.map((entry) => resolveGatewayEnvPlaceholders(entry, allowed, env, source))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+      key,
+      resolveGatewayEnvPlaceholders(entry, allowed, env, source),
+    ]))
+  }
+  return value
 }
 
 function parseBrandingJson(env: GatewayEnv) {
@@ -274,7 +370,9 @@ function resolveGatewayBranding(raw: GatewayRawConfig['branding'], env: GatewayE
 
 function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv): GatewayProviderConfig[] {
   const envProviders = readProvidersFromEnv(env)
-  const providers = rawProviders?.length ? rawProviders : envProviders
+  const providers = rawProviders?.length
+    ? mergeProviderOverrides(rawProviders, envProviders)
+    : envProviders
   const normalized = providers?.length
     ? providers.map((provider, index) => normalizeProvider(provider, index))
     : readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false)
@@ -285,6 +383,54 @@ function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: Ga
     throw new Error('At least one gateway provider must be enabled. Set OPEN_COWORK_GATEWAY_PROVIDERS, configure Telegram/webhook credentials, or explicitly enable the local fake provider with OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true.')
   }
   return normalized
+}
+
+function mergeProviderOverrides(
+  rawProviders: NonNullable<GatewayRawConfig['providers']>,
+  envProviders: GatewayRawConfig['providers'],
+): NonNullable<GatewayRawConfig['providers']> {
+  if (!envProviders?.length) return rawProviders
+  const used = new Set<number>()
+  const merged = rawProviders.map((provider) => {
+    const overrideIndex = envProviders.findIndex((candidate, index) => !used.has(index) && providerOverrideMatches(provider, candidate))
+    if (overrideIndex < 0) return provider
+    used.add(overrideIndex)
+    return mergeProviderConfig(provider, envProviders[overrideIndex]!)
+  })
+  for (const [index, provider] of envProviders.entries()) {
+    if (!used.has(index)) merged.push(provider)
+  }
+  return merged
+}
+
+function providerOverrideMatches(base: GatewayRawProvider, override: GatewayRawProvider) {
+  const baseId = readString(base.id)
+  const overrideId = readString(override.id)
+  if (baseId && overrideId && baseId === overrideId) return true
+  const baseBinding = readString(base.channelBindingId)
+  const overrideBinding = readString(override.channelBindingId)
+  if (base.kind === override.kind && baseBinding && overrideBinding && baseBinding === overrideBinding) return true
+  return base.kind === override.kind
+}
+
+function mergeProviderConfig(
+  base: GatewayRawProvider,
+  override: GatewayRawProvider,
+): GatewayRawProvider {
+  return {
+    ...base,
+    ...override,
+    id: readString(base.id) || readString(override.id) || undefined,
+    channelBindingId: readString(base.channelBindingId) || readString(override.channelBindingId),
+    credentials: {
+      ...(base.credentials || {}),
+      ...(override.credentials || {}),
+    },
+    settings: {
+      ...(base.settings || {}),
+      ...(override.settings || {}),
+    },
+  }
 }
 
 function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
@@ -301,14 +447,14 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       id: 'telegram',
       kind: 'telegram',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID) || 'telegram',
-      credentials: {
+      credentials: cleanStringRecord({
         botToken: telegramToken,
-        webhookSecret: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET),
-      },
-      settings: {
-        mode: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_MODE) || 'polling',
-        respondInGroups: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS) || 'commands_only',
-      },
+        webhookSecret: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET) || undefined,
+      }),
+      settings: cleanRecord({
+        mode: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_MODE) || undefined,
+        respondInGroups: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS) || undefined,
+      }),
     })
   }
 
@@ -319,15 +465,15 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       kind: 'slack',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID) || 'slack',
       externalWorkspaceId: readNullableString(env.OPEN_COWORK_GATEWAY_SLACK_TEAM_ID),
-      credentials: {
+      credentials: cleanStringRecord({
         botToken: slackToken,
-        signingSecret: readString(env.OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET),
-      },
-      settings: {
-        teamId: readString(env.OPEN_COWORK_GATEWAY_SLACK_TEAM_ID),
-        defaultChannelId: readString(env.OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID),
-        apiBaseUrl: readString(env.OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL),
-      },
+        signingSecret: readString(env.OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET) || undefined,
+      }),
+      settings: cleanRecord({
+        teamId: readString(env.OPEN_COWORK_GATEWAY_SLACK_TEAM_ID) || undefined,
+        defaultChannelId: readString(env.OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID) || undefined,
+        apiBaseUrl: readString(env.OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL) || undefined,
+      }),
     })
   }
 
@@ -338,18 +484,18 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       kind: 'email',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID) || 'email',
       externalWorkspaceId: readNullableString(env.OPEN_COWORK_GATEWAY_EMAIL_DOMAIN),
-      credentials: {
+      credentials: cleanStringRecord({
         inboundSecret: emailInboundSecret,
-        smtpPassword: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD),
-      },
-      settings: {
-        from: readString(env.OPEN_COWORK_GATEWAY_EMAIL_FROM),
-        inboundAddress: readString(env.OPEN_COWORK_GATEWAY_EMAIL_ADDRESS),
-        smtpHost: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST),
-        smtpPort: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT),
-        smtpSecure: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE),
-        smtpUsername: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME),
-      },
+        smtpPassword: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD) || undefined,
+      }),
+      settings: cleanRecord({
+        from: readString(env.OPEN_COWORK_GATEWAY_EMAIL_FROM) || undefined,
+        inboundAddress: readString(env.OPEN_COWORK_GATEWAY_EMAIL_ADDRESS) || undefined,
+        smtpHost: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST) || undefined,
+        smtpPort: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT) || undefined,
+        smtpSecure: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE) || undefined,
+        smtpUsername: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME) || undefined,
+      }),
     })
   }
 
@@ -359,9 +505,9 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       id: 'webhook',
       kind: 'webhook',
       channelBindingId: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID) || 'webhook',
-      credentials: {
-        sharedSecret: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET),
-      },
+      credentials: cleanStringRecord({
+        sharedSecret: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET) || undefined,
+      }),
       settings: {
         deliveryUrl: webhookDeliveryUrl,
       },
@@ -501,7 +647,8 @@ function cleanStringRecord(value: unknown) {
 
 function cleanRecord(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return { ...(value as Record<string, unknown>) }
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''))
 }
 
 function redactCredentialRecord(value: Record<string, string>) {

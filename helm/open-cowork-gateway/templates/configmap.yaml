@@ -5,6 +5,9 @@ metadata:
   labels:
     {{- include "open-cowork-gateway.labels" . | nindent 4 }}
 data:
+  OPEN_COWORK_CONFIG_PATH: {{ .Values.gateway.configPath | quote }}
+  OPEN_COWORK_CONFIG_DIR: {{ .Values.gateway.configDir | quote }}
+  OPEN_COWORK_DOWNSTREAM_ROOT: {{ .Values.gateway.downstreamRoot | quote }}
   OPEN_COWORK_CLOUD_BASE_URL: {{ .Values.gateway.cloudBaseUrl | quote }}
   OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: {{ .Values.gateway.allowInsecureHttp | quote }}
   OPEN_COWORK_GATEWAY_HOST: {{ .Values.gateway.host | quote }}

@@ -6,6 +6,9 @@ metadata:
     {{- include "open-cowork-cloud.labels" . | nindent 4 }}
 data:
   OPEN_COWORK_CLOUD_PROFILE: {{ .Values.cloud.profile | quote }}
+  OPEN_COWORK_CONFIG_PATH: {{ .Values.cloud.configPath | quote }}
+  OPEN_COWORK_CONFIG_DIR: {{ .Values.cloud.configDir | quote }}
+  OPEN_COWORK_DOWNSTREAM_ROOT: {{ .Values.cloud.downstreamRoot | quote }}
   OPEN_COWORK_CLOUD_ROOT: {{ .Values.cloud.root | quote }}
   OPEN_COWORK_CLOUD_AUTH_MODE: {{ .Values.cloud.auth.mode | quote }}
   OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: {{ .Values.cloud.allowInsecureAuth | quote }}

@@ -125,6 +125,42 @@ config by merging these sources in order (later entries override earlier ones):
 keys they want to change. `<dataDirName>` comes from `branding.dataDirName` in
 the active config.
 
+## Cloud, desktop, and gateway knobs
+
+Downstream deployments should keep one deployer-facing config file as the
+source of product policy and then let infrastructure manifests inject secrets.
+The public schema now covers the three product surfaces:
+
+| Surface | Config keys | What belongs here |
+|---|---|---|
+| Desktop | `branding`, `cloudDesktop` | App name, sidebar/home copy, managed cloud URLs, cache mode, and whether users may add their own cloud orgs. |
+| Cloud Web/control plane | `cloud.publicBranding`, `cloud.auth`, `cloud.storage`, `cloud.features`, `cloud.profiles`, `cloud.projectSources`, `cloud.abuse`, `cloud.billing` | Public dashboard name/logo/legal links, OIDC metadata, database/object-store/secret refs, profile allowlists, project-source policy, quotas, and self-host or managed billing mode. |
+| Gateway | `gateway.branding`, `gateway.cloud`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | Headless channel branding, cloud URL, service-token source, public gateway URL, provider bindings, and operator endpoints. |
+
+Gateway can load the same central file as Desktop and Cloud through
+`OPEN_COWORK_CONFIG_PATH`, `OPEN_COWORK_CONFIG_DIR`, or
+`OPEN_COWORK_DOWNSTREAM_ROOT`. Gateway-specific env and
+`OPEN_COWORK_GATEWAY_CONFIG` / `OPEN_COWORK_GATEWAY_CONFIG_JSON` remain
+available as overrides. This lets an internal deployment keep `branding`,
+`cloud.publicBranding`, `cloudDesktop`, and `gateway.branding` in one audited
+file while Kubernetes, Compose, or a VPS process manager supplies secrets from
+the local secret manager.
+
+Production safety rules are enforced in config validation:
+
+- public cloud, desktop, gateway, telemetry, update, and logo/legal URLs must
+  be HTTPS, except loopback/local development URLs
+- `cloud.billing.provider=none` or `stub` keeps self-host deployments free of
+  commercial billing dependencies
+- gateway provider enablement is explicit; no provider is started unless it is
+  configured through `gateway.providers`, gateway provider env, or the local
+  fake-provider development flag
+- public gateway metrics or diagnostics require `gateway.server.adminToken`
+- webhook gateway ingress requires a shared secret
+- the fake gateway provider cannot be exposed from a public bind
+- environment placeholders such as `{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}`
+  only resolve when listed in `allowedEnvPlaceholders`
+
 ## Environment variables
 
 | Variable | Purpose | Default |
@@ -132,6 +168,8 @@ the active config.
 | `OPEN_COWORK_DOWNSTREAM_ROOT` | Root directory for a downstream distribution. Supplies config, skills, and MCPs. | unset |
 | `OPEN_COWORK_CONFIG_PATH` | Absolute path to a single override config file. Takes priority over `CONFIG_DIR` / `DOWNSTREAM_ROOT` config discovery. | unset |
 | `OPEN_COWORK_CONFIG_DIR` | Directory containing `config.json` or `open-cowork.config.json`. Merged after the single-file override. | unset |
+| `OPEN_COWORK_GATEWAY_CONFIG` | Gateway-only JSON config file. Overrides the shared `gateway` section when running `apps/gateway`. | unset |
+| `OPEN_COWORK_GATEWAY_CONFIG_JSON` | Inline gateway-only JSON config. Highest-priority gateway override for process managers and tests. | unset |
 | `OPEN_COWORK_SANDBOX_DIR` | Root directory where sandbox threads create workspaces. | `~/Open Cowork Sandbox` |
 | `OPEN_COWORK_CHART_TIMEOUT_MS` | Main-process chart render timeout. Clamped to `[250, 10000]` ms. | `1500` |
 

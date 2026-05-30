@@ -61,6 +61,14 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-scheduler:')
   assertIncludes('docker-compose.cloud-gateway.yml', 'open-cowork-gateway:')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
+  for (const file of composeFiles) {
+    assertIncludes(file, 'OPEN_COWORK_CONFIG_PATH')
+    assertIncludes(file, 'OPEN_COWORK_CONFIG_DIR')
+    assertIncludes(file, 'OPEN_COWORK_DOWNSTREAM_ROOT')
+    assertIncludes(file, '${OPEN_COWORK_CONFIG_PATH:-./open-cowork.config.json}:${OPEN_COWORK_CONFIG_PATH:-/etc/open-cowork/open-cowork.config.json}:ro')
+    assertIncludes(file, '${OPEN_COWORK_CONFIG_DIR:-.}:${OPEN_COWORK_CONFIG_DIR:-/etc/open-cowork/config}:ro')
+    assertIncludes(file, '${OPEN_COWORK_DOWNSTREAM_ROOT:-.}:${OPEN_COWORK_DOWNSTREAM_ROOT:-/etc/open-cowork/downstream}:ro')
+  }
 }
 
 function validateCompose() {
@@ -93,6 +101,15 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required when gateway metrics are enabled on a public bind')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
 }
 
 function validateHelm() {
@@ -188,6 +205,17 @@ function validateHelm() {
       '--set',
       'gateway.telegram.botToken=ci-telegram-token',
     ])
+    run('helm', [
+      'template',
+      'open-cowork-gateway-shared-config',
+      gatewayChart,
+      '--set',
+      'image.repository=example.com/open-cowork-gateway',
+      '--set',
+      'image.tag=ci',
+      '--set',
+      'gateway.configPath=/etc/open-cowork/open-cowork.config.json',
+    ])
     expectFailure(
       'helm',
       [
@@ -259,6 +287,11 @@ function validateDocs() {
     'performance and scale',
     'api bootstrap',
     'content-security-policy',
+    'cloud.publicbranding',
+    'clouddesktop',
+    'gateway.providers',
+    'open_cowork_config_path',
+    'cloud.billing.provider=none',
     'otlp/logging',
     'backups/restore',
     'no billing provider or the stub billing provider',
@@ -280,6 +313,52 @@ function validateDocs() {
   ]) {
     if (!byok.includes(phrase)) {
       throw new Error(`docs/runbooks/managed-byok-saas.md must include ${phrase}`)
+    }
+  }
+
+  const deployReadme = read('deploy/README.md')
+  for (const phrase of [
+    'cloud.publicBranding',
+    'cloudDesktop',
+    'gateway.providers',
+    'OPEN_COWORK_CONFIG_PATH',
+    'cloud.billing.provider',
+  ]) {
+    if (!deployReadme.includes(phrase)) {
+      throw new Error(`deploy/README.md must include ${phrase}`)
+    }
+  }
+
+  const downstream = read('docs/downstream.md')
+  for (const phrase of [
+    'cloud.publicBranding',
+    'cloudDesktop',
+    'gateway.providers',
+    'OPEN_COWORK_CONFIG_PATH',
+    'cloud.billing.provider=none',
+  ]) {
+    if (!downstream.includes(phrase)) {
+      throw new Error(`docs/downstream.md must include ${phrase}`)
+    }
+  }
+
+  const acmeReadme = read('examples/downstream/acme/README.md')
+  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers']) {
+    if (!acmeReadme.includes(phrase)) {
+      throw new Error(`examples/downstream/acme/README.md must include ${phrase}`)
+    }
+  }
+
+  const acmeConfig = read('examples/downstream/acme/open-cowork.config.json')
+  for (const phrase of [
+    '"gateway"',
+    '"providers"',
+    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
+    'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
+    'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
+  ]) {
+    if (!acmeConfig.includes(phrase)) {
+      throw new Error(`examples/downstream/acme/open-cowork.config.json must include ${phrase}`)
     }
   }
 }

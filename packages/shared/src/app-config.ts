@@ -136,6 +136,47 @@ export interface PublicBrandingConfig {
   managedOrgConnectionLabels?: ManagedOrgConnectionLabels
 }
 
+export type GatewayDeploymentMode = 'self-host' | 'managed'
+export type GatewayDeploymentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
+export type GatewayDeploymentProviderKind = 'fake' | 'telegram' | 'slack' | 'email' | 'webhook'
+
+export interface GatewayDeploymentProviderConfig {
+  id?: string
+  kind: GatewayDeploymentProviderKind
+  enabled?: boolean
+  channelBindingId: string
+  externalWorkspaceId?: string | null
+  defaultAgent?: string | null
+  credentials?: Record<string, string>
+  settings?: Record<string, unknown>
+}
+
+export interface GatewayDeploymentConfig {
+  branding?: Partial<PublicBrandingConfig>
+  cloud?: {
+    baseUrl?: string
+    serviceToken?: string
+    allowInsecureHttp?: boolean
+  }
+  server?: {
+    host?: string
+    port?: number
+    publicBaseUrl?: string | null
+    adminToken?: string | null
+  }
+  mode?: GatewayDeploymentMode
+  logging?: {
+    level?: GatewayDeploymentLogLevel
+  }
+  metrics?: {
+    enabled?: boolean
+  }
+  diagnostics?: {
+    enabled?: boolean
+  }
+  providers?: GatewayDeploymentProviderConfig[]
+}
+
 export const DEFAULT_PUBLIC_BRANDING: PublicBrandingConfig = {
   productName: 'Open Cowork Cloud',
   shortName: 'OC',

@@ -26,6 +26,26 @@ Local Compose may run `all-in-one` cloud for speed. Provider demos may use
 all-in-one for a focused pilot. Shared or hosted deployments should use split
 roles and shared Postgres/object storage.
 
+## Deployer Config
+
+- Keep downstream product policy in `open-cowork.config.json`; keep
+  provider-specific wiring in Compose, Helm, Terraform, or platform manifests.
+- Use `branding` for Desktop, `cloud.publicBranding` for Cloud Web, and
+  `gateway.branding` for headless channel surfaces so all three clients expose
+  the same downstream product name, logo, legal links, support links, and
+  managed connection labels.
+- Use `cloudDesktop.preconfiguredConnections` for managed-org Desktop builds
+  instead of hardcoding cloud URLs in renderer code.
+- Use `gateway.providers[]` for channel provider bindings and credential refs.
+  Gateway can read this section through `OPEN_COWORK_CONFIG_PATH`,
+  `OPEN_COWORK_CONFIG_DIR`, or `OPEN_COWORK_DOWNSTREAM_ROOT`, with
+  `OPEN_COWORK_GATEWAY_*` env vars as deployment overrides.
+- Use `cloud.billing.provider=none` or `stub` for OSS self-host deployments.
+  Stripe or future billing adapters are managed-hosting configuration, not a
+  core runtime dependency.
+- Run schema and semantic validation for downstream configs before rollout:
+  `node --no-warnings --experimental-strip-types --test tests/config-schema-validation.test.ts`.
+
 ## Production Checklist
 
 ### Auth

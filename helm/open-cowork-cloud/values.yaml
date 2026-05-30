@@ -19,6 +19,9 @@ fullnameOverride: ""
 
 cloud:
   profile: full
+  configPath: ""
+  configDir: ""
+  downstreamRoot: ""
   root: /data/open-cowork-cloud
   allowInsecureAuth: false
   allowInsecurePublicAuth: false
