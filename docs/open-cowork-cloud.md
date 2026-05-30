@@ -503,6 +503,25 @@ and Web-created session continuation, verifies prompt/abort routing, confirms
 read-only offline cache behavior, proves the local workspace remains
 independent, and revokes the ephemeral token.
 
+Validate the Gateway deployment path before calling channel access
+production-ready:
+
+```bash
+OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:gateway:smoke
+```
+
+The Gateway smoke checks managed Gateway health/readiness and public operator
+endpoint protection, then runs a loopback self-host Gateway process with a fake
+provider against the deployed Cloud control plane. It issues and revokes a
+short-lived gateway-scoped service token, creates temporary channel state,
+proves least privilege, sends an inbound channel prompt, waits for session SSE
+rendering, routes an approval interaction, drains an async delivery, and
+exercises retry/dead-letter controls.
+
 ## Validation
 
 The regular `pnpm test` suite covers the in-memory control-plane adapter and

@@ -1,12 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'
-import type { CloudRuntimeAdapter, CloudRuntimePromptPart } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
+import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { createCloudGateway, createGatewayDaemon, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
@@ -31,26 +32,27 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
   async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
     this.prompts.push({ sessionId: input.sessionId, parts: input.parts, agent: input.agent })
+    const events: CloudRuntimeEvent[] = [{
+      type: 'assistant.message',
+      payload: {
+        sessionId: input.sessionId,
+        messageId: `${input.sessionId}:assistant:${this.prompts.length}`,
+        content: 'gateway smoke response',
+      },
+    }, {
+      type: 'permission.requested',
+      payload: {
+        sessionId: input.sessionId,
+        permissionId: `${input.sessionId}:permission:${this.prompts.length}`,
+        title: 'Approve smoke permission',
+        description: 'Allow the fake runtime action?',
+      },
+    }, {
+      type: 'session.idle',
+      payload: { sessionId: input.sessionId },
+    }]
     return {
-      events: [{
-        type: 'assistant.message',
-        payload: {
-          sessionId: input.sessionId,
-          messageId: `${input.sessionId}:assistant:${this.prompts.length}`,
-          content: 'gateway smoke response',
-        },
-      }, {
-        type: 'permission.requested',
-        payload: {
-          sessionId: input.sessionId,
-          permissionId: `${input.sessionId}:permission:${this.prompts.length}`,
-          title: 'Approve smoke permission',
-          description: 'Allow the fake runtime action?',
-        },
-      }, {
-        type: 'session.idle',
-        payload: { sessionId: input.sessionId },
-      }],
+      events,
     }
   }
 
@@ -73,6 +75,54 @@ class FakeRuntime implements CloudRuntimeAdapter {
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>
+}
+
+async function runGatewayCloudSmokeScript(input: {
+  cloudUrl: string
+  adminToken: string
+  prompt: string
+  timeoutMs?: number
+}) {
+  const args = [
+    'scripts/gateway-cloud-smoke.mjs',
+    '--cloud-url',
+    input.cloudUrl,
+    '--allow-insecure-http',
+    '--timeout-ms',
+    String(input.timeoutMs ?? 5_000),
+  ]
+  const child = spawn(process.execPath, args, {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN: input.adminToken,
+      OPEN_COWORK_GATEWAY_SMOKE_PROMPT: input.prompt,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (chunk) => { stdout += chunk })
+  child.stderr.on('data', (chunk) => { stderr += chunk })
+
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM')
+      reject(new Error(`Gateway cloud smoke script timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`))
+    }, 25_000)
+    timer.unref()
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      resolve(code)
+    })
+  })
+  return { exitCode, stdout, stderr }
 }
 
 function waitFor<T>(setup: (resolve: (value: T) => void, reject: (error: unknown) => void) => { close(): void } | undefined, timeoutMs = 1000) {
@@ -202,7 +252,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       externalThreadId: 'thread-wrapper',
     }))?.binding.bindingId, bound.binding.bindingId)
 
-    const sessionEvent = waitFor((resolve, reject) => cloudGateway.subscribeSessionEvents({
+    const sessionEvent = waitFor<{ sequence: number, payload: { content?: unknown } }>((resolve, reject) => cloudGateway.subscribeSessionEvents({
       sessionId: bound.session.session.sessionId,
       afterSequence: 0,
       onEvent: (event) => {
@@ -271,7 +321,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     })
     assert.deepEqual(runtime.permissions.at(-1), { permissionId: 'permission-interaction-wrapper', allowed: false })
 
-    const deliveryEvent = waitFor((resolve, reject) => cloudGateway.subscribeDeliveries({
+    const deliveryEvent = waitFor<{ deliveryId: string }>((resolve, reject) => cloudGateway.subscribeDeliveries({
       claimedBy: 'gateway-wrapper-smoke',
       ttlMs: 5_000,
       onDelivery: resolve,
@@ -362,6 +412,120 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     } finally {
       await gateway.stop()
     }
+  } finally {
+    await cloud.close()
+  }
+})
+
+test('gateway cloud smoke script validates self-host gateway against deployed cloud control plane', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-smoke', name: 'Tenant Smoke' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-smoke', name: 'Tenant Smoke' })
+  const account = store.createAccount({
+    accountId: 'account-smoke',
+    idpSubject: 'subject-smoke',
+    email: 'owner-smoke@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-smoke', userId: account.accountId, email: account.email, role: 'admin' })
+  store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Gateway smoke admin token',
+    scopes: ['admin', 'gateway'],
+  })
+
+  const runtime = new FakeRuntime()
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const service = new CloudSessionService(store, runtime, policy)
+  const worker = new CloudWorker(store, service, 'worker-smoke')
+  const cloud = createCloudHttpServer({
+    service,
+    worker,
+    policy,
+    auth: createApiTokenCloudAuthResolver(store),
+    autoProcessCommands: true,
+    ssePollMs: 10,
+  })
+  const cloudUrl = await cloud.listen()
+  const prompt = 'gateway deployment smoke fixture'
+
+  try {
+    const result = await runGatewayCloudSmokeScript({
+      cloudUrl,
+      adminToken: issued.plaintext,
+      prompt,
+    })
+    assert.equal(result.exitCode, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    assert.equal(result.stdout.includes(issued.plaintext), false)
+    assert.equal(result.stderr.includes(issued.plaintext), false)
+
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean
+      results: {
+        cloudSetup: {
+          gatewayTokenScope: string
+          leastPrivilegeChecks: string[]
+        }
+        selfHost: {
+          prompt: {
+            commandAccepted: boolean
+            projection: {
+              messages: number
+            }
+          }
+          interaction: {
+            acknowledged: boolean
+          }
+          delivery: {
+            status: string
+            retryInitialStatus: string
+            retryStatus: string
+            deadLetterStatus: string
+            gatewayOperatorRetryStatus: number
+            gatewayOperatorDeadLetterStatus: number
+          }
+          operatorEndpoints: {
+            metrics: string
+            diagnostics: string
+          }
+        }
+        tokenRevocation: {
+          rejected: boolean
+        }
+      }
+    }
+    assert.equal(payload.ok, true)
+    assert.equal(payload.results.cloudSetup.gatewayTokenScope, 'gateway')
+    assert.deepEqual(payload.results.cloudSetup.leastPrivilegeChecks, [
+      'channel_admin_forbidden',
+      'api_token_admin_forbidden',
+    ])
+    assert.equal(payload.results.selfHost.prompt.commandAccepted, true)
+    assert.equal(payload.results.selfHost.prompt.projection.messages > 0, true)
+    assert.equal(payload.results.selfHost.interaction.acknowledged, true)
+    assert.equal(payload.results.selfHost.delivery.status, 'sent')
+    assert.equal(payload.results.selfHost.delivery.retryInitialStatus, 'failed')
+    assert.equal(payload.results.selfHost.delivery.retryStatus, 'sent')
+    assert.equal(payload.results.selfHost.delivery.deadLetterStatus, 'dead')
+    assert.equal(payload.results.selfHost.delivery.gatewayOperatorRetryStatus >= 400, true)
+    assert.equal(payload.results.selfHost.delivery.gatewayOperatorDeadLetterStatus >= 400, true)
+    assert.deepEqual(payload.results.selfHost.operatorEndpoints, {
+      metrics: 'admin_only',
+      diagnostics: 'admin_only',
+    })
+    assert.equal(payload.results.tokenRevocation.rejected, true)
+    assert.equal(runtime.prompts.some((entry) => entry.parts.some((part) => part.type === 'text' && part.text === prompt)), true)
+
+    const issuedSmokeTokens = store.listApiTokens(org.orgId)
+      .filter((token) => token.name.startsWith('Gateway deployment smoke '))
+    assert.equal(issuedSmokeTokens.length, 1)
+    assert.equal(typeof issuedSmokeTokens[0]?.revokedAt, 'string')
   } finally {
     await cloud.close()
   }
