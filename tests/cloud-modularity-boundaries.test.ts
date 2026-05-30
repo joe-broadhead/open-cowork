@@ -9,10 +9,10 @@ const cloudClientRoot = join(root, 'packages/cloud-client/src')
 const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 
 const lineThreshold = 2_000
-const documentedLargeFileExceptions = new Set([
-  'apps/desktop/src/main/cloud/in-memory-control-plane-store.ts',
-  'apps/desktop/src/main/cloud/postgres-control-plane-store.ts',
-  'apps/desktop/src/main/cloud/session-service.ts',
+const documentedLargeFileBudgets = new Map([
+  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 3_900],
+  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_000],
+  ['apps/desktop/src/main/cloud/session-service.ts', 4_100],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {
@@ -31,12 +31,31 @@ test('cloud core has enforceable domain module boundaries', () => {
     assert.equal(existsSync(join(cloudRoot, 'control-plane-domains', file)), true, `${file} domain store contract is missing`)
   }
 
+  const expectedPostgresDomains = [
+    'billing.ts',
+    'byok.ts',
+    'channels.ts',
+    'identity.ts',
+    'schema.ts',
+    'sessions.ts',
+    'shared.ts',
+    'thread-index.ts',
+    'webhooks.ts',
+    'workflows.ts',
+  ]
+  for (const file of expectedPostgresDomains) {
+    assert.equal(existsSync(join(cloudRoot, 'postgres-domains', file)), true, `${file} Postgres domain mapper is missing`)
+  }
+
   const expectedRoutes = [
     'api-tokens.ts',
     'billing.ts',
     'byok.ts',
+    'capabilities.ts',
     'channels.ts',
     'project-sources.ts',
+    'settings.ts',
+    'threads.ts',
     'workspace.ts',
   ]
   for (const file of expectedRoutes) {
@@ -51,6 +70,7 @@ test('cloud core has enforceable domain module boundaries', () => {
     'channel-service.ts',
     'workflow-service.ts',
     'projection-service.ts',
+    'session-command-service.ts',
   ]
   for (const file of expectedServices) {
     assert.equal(existsSync(join(cloudRoot, 'services', file)), true, `${file} domain service is missing`)
@@ -88,16 +108,57 @@ test('large cloud source files are documented exceptions', () => {
       const relativePath = relative(root, file)
       const lineCount = readFileSync(file, 'utf8').split('\n').length
       if (lineCount <= lineThreshold) continue
+      const budget = documentedLargeFileBudgets.get(relativePath)
       assert.equal(
-        documentedLargeFileExceptions.has(relativePath),
-        true,
-        `${relativePath} has ${lineCount} lines and needs a documented modularity exception or further splitting`,
+        typeof budget,
+        'number',
+        `${relativePath} has ${lineCount} lines and needs a documented modularity budget or further splitting`,
+      )
+      assert.ok(
+        lineCount <= budget!,
+        `${relativePath} has ${lineCount} lines and exceeds its modularity budget of ${budget}`,
       )
       assert.match(
         architectureDoc,
         new RegExp(relativePath.split('/').at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
         `${relativePath} is a large-file exception but is not documented in docs/architecture.md`,
       )
+    }
+  }
+})
+
+test('postgres store delegates row mapping to domain modules', () => {
+  const source = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
+  assert.doesNotMatch(source, /function \w+FromRow\(/, 'Postgres row mappers belong in postgres-domains/*')
+  assert.match(source, /postgres-domains\/identity\.ts/)
+  assert.match(source, /postgres-domains\/sessions\.ts/)
+  assert.match(source, /postgres-domains\/channels\.ts/)
+  assert.match(source, /postgres-domains\/workflows\.ts/)
+
+  for (const file of sourceFiles(join(cloudRoot, 'postgres-domains'))) {
+    const relativePath = relative(root, file)
+    const lineCount = readFileSync(file, 'utf8').split('\n').length
+    assert.ok(lineCount <= 250, `${relativePath} has ${lineCount} lines; Postgres domain mappers should stay narrow`)
+  }
+})
+
+test('session service delegates command payload parsing to command service module', () => {
+  const source = readFileSync(join(cloudRoot, 'session-service.ts'), 'utf8')
+  assert.doesNotMatch(source, /function normalize(Prompt|QuestionReply|QuestionReject|Permission)Payload\(/)
+  assert.match(source, /services\/session-command-service\.ts/)
+})
+
+test('cloud route and service modules stay behind store and runtime boundaries', () => {
+  const checkedRoots = [
+    join(cloudRoot, 'http-routes'),
+    join(cloudRoot, 'services'),
+  ]
+  for (const checkedRoot of checkedRoots) {
+    for (const file of sourceFiles(checkedRoot)) {
+      const relativePath = relative(root, file)
+      const source = readFileSync(file, 'utf8')
+      assert.doesNotMatch(source, /postgres-control-plane-store/, `${relativePath} must not import concrete Postgres stores`)
+      assert.doesNotMatch(source, /@opencode-ai\/sdk/, `${relativePath} must not import OpenCode runtime surfaces`)
     }
   }
 })

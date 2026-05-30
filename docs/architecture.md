@@ -133,20 +133,25 @@ Cloud code is split by domain before it is split by provider. The public store
 surface stays available from `control-plane-store.ts`, but narrow domain
 contracts live under `control-plane-domains/` so identity, sessions,
 workflows, channels, BYOK, billing, settings, and thread index code can be
-tested independently. HTTP routes live under `http-routes/`, and the
+tested independently. Postgres row mappers live under `postgres-domains/`
+so SQL result shapes are owned beside their domain instead of being embedded
+in the compatibility store facade. HTTP routes live under `http-routes/`, and the
 `@open-cowork/cloud-client` package exposes both the backward-compatible
 top-level barrel and domain barrels under `src/domains/`.
 
 Cloud source files should stay below 2,000 lines. Current documented
-exceptions are implementation backlogs, not target architecture:
+exceptions have explicit budgets and are implementation backlogs, not target
+architecture:
 
-- `in-memory-control-plane-store.ts`: compatibility implementation for the
-  full domain store contract.
-- `postgres-control-plane-store.ts`: compatibility implementation for the
-  full Postgres-backed store plus webhook security store.
-- `session-service.ts`: compatibility orchestration facade around runtime
-  execution, workflows, quotas, channel coordination, BYOK, billing, and
-  projection services.
+- `in-memory-control-plane-store.ts` (budget 3,900 lines): compatibility
+  implementation for the full domain store contract.
+- `postgres-control-plane-store.ts` (budget 4,000 lines): compatibility
+  implementation for the full Postgres-backed store plus webhook security
+  store. Domain row mappers belong in `postgres-domains/`.
+- `session-service.ts` (budget 4,100 lines): compatibility orchestration
+  facade around runtime execution, workflows, quotas, channel coordination,
+  BYOK, billing, projection services, and the focused command payload service
+  under `services/session-command-service.ts`.
 
 New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the

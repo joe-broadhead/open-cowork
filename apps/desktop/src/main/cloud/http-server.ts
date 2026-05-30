@@ -22,8 +22,11 @@ import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
+import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
+import { handleSettingsApiRoute } from './http-routes/settings.ts'
+import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
@@ -473,8 +476,7 @@ function readChannelProvider(value: unknown): ChannelProviderId | undefined {
 function parseTagIds(url: URL) {
   const repeated = url.searchParams.getAll('tagId')
   const csv = url.searchParams.get('tagIds')?.split(',') || []
-  const values = [...repeated, ...csv].map((value) => value.trim()).filter(Boolean)
-  return values.length > 0 ? values : undefined
+  return [...repeated, ...csv].map((value) => value.trim()).filter(Boolean)
 }
 
 function firstHeader(value: string | string[] | undefined) {
@@ -980,10 +982,12 @@ async function handleApiRequest(
     readJsonBody,
     readString,
     readRecord,
+    readStringArray,
     readOptionalDate,
     readApiTokenScopes,
     readOptionalCloudProjectSource,
     parseLimit,
+    parseTagIds,
     writeJson,
     writeError,
     writePolicyError,
@@ -1078,213 +1082,47 @@ async function handleApiRequest(
   }
 
   if (resource === 'capabilities') {
-    if (!options.policy.features.agents && !options.policy.features.customSkills && !options.policy.features.customMcps) {
-      writePolicyError(res, 403, 'Capabilities are disabled for this cloud profile.', 'capabilities.disabled', options.corsOrigin)
-      return
-    }
-    const collection = sessionId
-    const itemId = action
-    const itemAction = artifactId
-    if (!collection && req.method === 'GET') {
-      writeJson(res, 200, await options.service.listCapabilityCatalog(context.principal), options.corsOrigin)
-      return
-    }
-    if (collection === 'tools') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, { tools: await options.service.listCapabilityTools(context.principal) }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'GET') {
-        const tool = await options.service.getCapabilityTool(context.principal, itemId)
-        if (!tool) {
-          writeError(res, 404, 'Capability tool was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { tool }, options.corsOrigin)
-        return
-      }
-    }
-    if (collection === 'skills') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, { skills: await options.service.listCapabilitySkills(context.principal) }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'GET') {
-        const skill = await options.service.getCapabilitySkill(context.principal, itemId)
-        if (!skill) {
-          writeError(res, 404, 'Capability skill was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { skill }, options.corsOrigin)
-        return
-      }
-      if (itemId && itemAction === 'bundle' && req.method === 'GET') {
-        const bundle = await options.service.getCapabilitySkillBundle(context.principal, itemId)
-        if (!bundle) {
-          writeError(res, 404, 'Capability skill bundle was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { bundle }, options.corsOrigin)
-        return
-      }
-    }
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleCapabilitiesApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
   if (resource === 'settings') {
-    if (!options.policy.features.settings) {
-      writePolicyError(res, 403, 'Settings are disabled for this cloud profile.', 'settings.disabled', options.corsOrigin)
-      return
-    }
-    const settingKey = sessionId ? decodeURIComponent(sessionId) : null
-    if (!settingKey && req.method === 'GET') {
-      writeJson(res, 200, {
-        settings: await options.service.listSettingMetadata(context.principal),
-      }, options.corsOrigin)
-      return
-    }
-    if (settingKey && req.method === 'GET') {
-      writeJson(res, 200, {
-        setting: await options.service.getSettingMetadata(context.principal, settingKey),
-      }, options.corsOrigin)
-      return
-    }
-    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-      const keyName = settingKey || readString(body.key)
-      const value = readRecord(body.value)
-      if (!keyName || !value) {
-        writeError(res, 400, 'Setting key and object value are required.', options.corsOrigin)
-        return
-      }
-      writeJson(res, 200, {
-        setting: await options.service.setSettingMetadata(context.principal, {
-          key: keyName,
-          value,
-        }),
-      }, options.corsOrigin)
-      return
-    }
-    writeError(res, 405, 'Method not allowed.', options.corsOrigin)
+    await handleSettingsApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
   if (resource === 'threads') {
-    if (!options.policy.features.threadIndex) {
-      writePolicyError(res, 403, 'Thread index is disabled for this cloud profile.', 'thread_index.disabled', options.corsOrigin)
-      return
-    }
-    const collection = sessionId
-    const itemId = action
-    const itemAction = artifactId
-
-    if (!collection && req.method === 'GET') {
-      writeJson(res, 200, {
-        threads: await options.service.listThreadMetadata(context.principal, {
-          tagIds: parseTagIds(context.url),
-          limit: parseLimit(context.url),
-        }),
-      }, options.corsOrigin)
-      return
-    }
-
-    if (collection === 'tags') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, { tags: await options.service.listThreadTags(context.principal) }, options.corsOrigin)
-        return
-      }
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const name = readString(body.name)
-        if (!name) {
-          writeError(res, 400, 'Tag name is required.', options.corsOrigin)
-          return
-        }
-        const tag = await options.service.createThreadTag(context.principal, {
-          name,
-          color: readString(body.color),
-        })
-        writeJson(res, 201, { tag }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'PATCH') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const tag = await options.service.updateThreadTag(context.principal, itemId, {
-          name: body.name === undefined ? undefined : readString(body.name) || '',
-          color: body.color === undefined ? undefined : readString(body.color),
-        })
-        if (!tag) {
-          writeError(res, 404, 'Thread tag was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { tag }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'DELETE') {
-        writeJson(res, 200, {
-          deleted: await options.service.deleteThreadTag(context.principal, itemId),
-        }, options.corsOrigin)
-        return
-      }
-      if (itemId && (itemAction === 'apply' || itemAction === 'remove') && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const sessionIds = readStringArray(body.sessionIds)
-        if (!sessionIds) {
-          writeError(res, 400, 'sessionIds must be an array of strings.', options.corsOrigin)
-          return
-        }
-        if (itemAction === 'apply') {
-          await options.service.applyThreadTag(context.principal, itemId, sessionIds)
-        } else {
-          await options.service.removeThreadTag(context.principal, itemId, sessionIds)
-        }
-        writeJson(res, 200, { ok: true }, options.corsOrigin)
-        return
-      }
-    }
-
-    if (collection === 'smart-filters') {
-      if (!itemId && req.method === 'GET') {
-        writeJson(res, 200, {
-          filters: await options.service.listThreadSmartFilters(context.principal),
-        }, options.corsOrigin)
-        return
-      }
-      if (!itemId && req.method === 'POST') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const name = readString(body.name)
-        const query = readRecord(body.query)
-        if (!name || !query) {
-          writeError(res, 400, 'Smart filter name and query are required.', options.corsOrigin)
-          return
-        }
-        const filter = await options.service.createThreadSmartFilter(context.principal, { name, query })
-        writeJson(res, 201, { filter }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'PATCH') {
-        const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
-        const filter = await options.service.updateThreadSmartFilter(context.principal, itemId, {
-          name: body.name === undefined ? undefined : readString(body.name) || '',
-          query: body.query === undefined ? undefined : readRecord(body.query) || {},
-        })
-        if (!filter) {
-          writeError(res, 404, 'Smart filter was not found.', options.corsOrigin)
-          return
-        }
-        writeJson(res, 200, { filter }, options.corsOrigin)
-        return
-      }
-      if (itemId && !itemAction && req.method === 'DELETE') {
-        writeJson(res, 200, {
-          deleted: await options.service.deleteThreadSmartFilter(context.principal, itemId),
-        }, options.corsOrigin)
-        return
-      }
-    }
-
-    writeError(res, 404, 'Not found.', options.corsOrigin)
+    await handleThreadsApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
     return
   }
 
