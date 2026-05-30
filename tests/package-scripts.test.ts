@@ -94,6 +94,10 @@ test('root deployment scripts expose provider smoke gates', () => {
   ])
   assert.equal(requireScript('deploy:gcp:preflight'), 'node scripts/gcp-reference-preflight.mjs')
   assert.equal(requireScript('deploy:gcp:smoke'), 'node scripts/gcp-reference-smoke.mjs')
+  assert.equal(requireScript('deploy:load:plan'), 'node scripts/launch-readiness.mjs --mode plan')
+  assert.equal(requireScript('deploy:load'), 'node scripts/launch-readiness.mjs --mode load')
+  assert.equal(requireScript('deploy:soak'), 'node scripts/launch-readiness.mjs --mode soak')
+  assert.equal(requireScript('deploy:launch:validate'), 'node scripts/validate-launch-readiness.mjs')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {

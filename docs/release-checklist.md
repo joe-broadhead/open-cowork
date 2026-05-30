@@ -18,6 +18,7 @@ Reference workflows in the repository root:
 - [ ] `pnpm typecheck`
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
+- [ ] `pnpm deploy:launch:validate`
 - [ ] perf baseline environment is intentional; refresh
       the environment-specific `benchmarks/perf-baseline.*.json` on the
       target CI runner with `pnpm perf:baseline` after Node, runner OS,
@@ -75,6 +76,20 @@ Reference workflows in the repository root:
 - [ ] `CHANGELOG.md`: rename the `[Unreleased]` heading to `[X.Y.Z] - YYYY-MM-DD` with the tag version (without the leading `v`) and tag date, then add a fresh empty `[Unreleased]` section above it for the next cycle
 - [ ] `CHANGELOG.md` release date equals the tag date
 - [ ] release notes drafted from the `[X.Y.Z]` block (Added / Changed / Fixed / Removed)
+
+### Managed cloud launch readiness
+
+- [ ] `pnpm deploy:load:plan` has been reviewed for the selected
+      `private-beta` or `public-beta` target profile.
+- [ ] `pnpm deploy:load` passed in strict mode against the production-like
+      Cloud/Gateway deployment.
+- [ ] `pnpm deploy:soak` passed in strict mode against the production-like
+      Cloud/Gateway deployment.
+- [ ] load and soak JSON/Markdown reports are attached to the release or
+      downstream operations evidence.
+- [ ] `docs/runbooks/launch-readiness-report.md` has a completed Go/No-Go
+      decision, Known limits, Cost and scaling notes, and Final smoke status.
+- [ ] final Cloud Web/Desktop/Gateway smoke gates passed after the soak run.
 
 ## Tagged release
 

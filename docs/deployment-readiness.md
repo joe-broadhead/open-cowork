@@ -238,6 +238,74 @@ The validator checks:
 - Presence of provider recipes, this checklist, and the managed BYOK SaaS
   runbook.
 
+## Load, Soak, And Launch Gates
+
+Before private-beta or public-beta rollout, define the exact launch profile and
+run the load/soak harness in strict mode. The committed target profiles are in
+`deploy/load/launch-readiness-targets.json`:
+
+- `private-beta` for design-partner and internal managed BYOK rollout.
+- `public-beta` for the first broader hosted BYOK rollout.
+
+Generate the planned route matrix:
+
+```bash
+OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
+OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
+OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
+OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
+OPEN_COWORK_LOAD_INCLUDE_SSE=true \
+OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
+OPEN_COWORK_LOAD_STRICT=true \
+pnpm deploy:load:plan
+```
+
+Run the short load gate:
+
+```bash
+OPEN_COWORK_LOAD_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_LOAD_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
+OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
+OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
+OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
+OPEN_COWORK_LOAD_INCLUDE_SSE=true \
+OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
+OPEN_COWORK_LOAD_STRICT=true \
+OPEN_COWORK_LOAD_PROFILE=private-beta \
+pnpm deploy:load
+```
+
+Run the long soak gate after the load gate is green:
+
+```bash
+OPEN_COWORK_LOAD_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_LOAD_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
+OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
+OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
+OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
+OPEN_COWORK_LOAD_INCLUDE_SSE=true \
+OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
+OPEN_COWORK_LOAD_STRICT=true \
+OPEN_COWORK_LOAD_PROFILE=private-beta \
+pnpm deploy:soak
+```
+
+The harness writes JSON and Markdown reports under
+`.open-cowork-test/launch-readiness/` by default. Attach those reports,
+dashboard evidence, cost notes, known limits, and final smoke results to
+`docs/runbooks/launch-readiness-report.md` or a downstream private operations
+repository. Use `pnpm deploy:launch:validate` to verify the committed gate
+artifacts stay in sync.
+
+After the ordinary load and soak gates pass with zero unexpected quota
+rejections, run a deliberate quota-pressure pass with
+`OPEN_COWORK_LOAD_EXPECT_QUOTA_REJECTIONS=true` and a low downstream quota
+overlay. That pass should produce 429/402-style rejections without 5xx spikes,
+worker crashes, or gateway delivery wedges.
+
 ## Runtime Smoke Checks
 
 For a local Compose deployment:

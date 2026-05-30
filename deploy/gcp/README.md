@@ -245,6 +245,29 @@ they must not be injected as process env vars.
     `OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION`; launch gates
     should enable it.
 
+16. Run the launch load and soak gates for the selected target profile. Keep
+    tokens in environment variables or a private deployment repo secret store;
+    do not commit real project ids, service names, domains, or tokens:
+
+    ```bash
+    OPEN_COWORK_LOAD_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_LOAD_GATEWAY_URL=https://gateway.example.com \
+    OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
+    OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
+    OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
+    OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
+    OPEN_COWORK_LOAD_INCLUDE_SSE=true \
+    OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
+    OPEN_COWORK_LOAD_STRICT=true \
+    OPEN_COWORK_LOAD_PROFILE=private-beta \
+    pnpm deploy:load
+    ```
+
+    After the load gate is green, run `pnpm deploy:soak` with the same
+    environment. Attach the JSON/Markdown reports, dashboard evidence, cost
+    notes, and known limits to the release evidence before treating the GCP
+    deployment as private-beta ready.
+
 For quick Helm overrides, keep the same provider-neutral keys used by the
 other recipes:
 
@@ -314,6 +337,8 @@ Rollback order:
 - `OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://... OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... pnpm deploy:desktop:smoke`
 - `OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... pnpm deploy:gateway:smoke`
 - `OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://... OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true pnpm deploy:continuation:smoke`
+- `OPEN_COWORK_LOAD_CLOUD_URL=https://... OPEN_COWORK_LOAD_GATEWAY_URL=https://... OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true OPEN_COWORK_LOAD_INCLUDE_SSE=true OPEN_COWORK_LOAD_OPERATOR_CHECKS=true OPEN_COWORK_LOAD_STRICT=true pnpm deploy:load`
+- `OPEN_COWORK_LOAD_CLOUD_URL=https://... OPEN_COWORK_LOAD_GATEWAY_URL=https://... OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true OPEN_COWORK_LOAD_INCLUDE_SSE=true OPEN_COWORK_LOAD_OPERATOR_CHECKS=true OPEN_COWORK_LOAD_STRICT=true pnpm deploy:soak`
 - Cloud logs contain no raw database URLs, BYOK keys, API tokens, OAuth tokens,
   channel credentials, or signed object URLs.
 

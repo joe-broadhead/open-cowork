@@ -105,3 +105,25 @@ Gateway fake provider, verifies durable projection parity, resolves a
 permission from Web, resolves a question from Gateway, checks artifact metadata,
 prompts the same cloud thread concurrently from Web and Desktop, verifies stale
 Desktop cursors replay from durable state, and revokes all smoke tokens.
+
+## Launch Load And Soak
+
+```bash
+OPEN_COWORK_LOAD_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_LOAD_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
+OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
+OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
+OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
+OPEN_COWORK_LOAD_INCLUDE_SSE=true \
+OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
+OPEN_COWORK_LOAD_STRICT=true \
+OPEN_COWORK_LOAD_PROFILE=private-beta \
+pnpm deploy:load
+```
+
+Run `pnpm deploy:soak` with the same environment after the load gate is green.
+The harness writes JSON and Markdown reports under
+`.open-cowork-test/launch-readiness/`. Attach those reports, Cloud Monitoring
+or dashboard evidence, cost notes, and known limits to the release evidence
+before calling a GCP rollout private-beta ready.
