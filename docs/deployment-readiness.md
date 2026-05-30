@@ -181,12 +181,15 @@ roles and shared Postgres/object storage.
 ### OTLP/Logging
 
 - Use JSON logs in production.
-- Configure `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` and gateway metrics scraping
-  where available.
+- Configure `OPEN_COWORK_CLOUD_OTLP_ENDPOINT`, scrape authenticated
+  `GET /api/metrics` for Cloud where Prometheus is used, and scrape Gateway
+  `/metrics` with the Gateway admin token.
 - Include request ids, org ids, session ids, run ids, worker ids, scheduler ids,
   and gateway delivery ids.
 - Redact BYOK keys, API tokens, cookies, OAuth tokens, webhook secrets,
   database URLs, object-store signed URLs, and local paths.
+- Keep deployable metric, dashboard, and alert assets under
+  `deploy/observability/` in sync with the production SLOs.
 
 ### Backups/Restore
 
@@ -196,6 +199,9 @@ roles and shared Postgres/object storage.
 - Start web with workers at zero, verify projections and session lists, start
   one worker, run a smoke prompt, then start scheduler and gateway.
 - Verify channel deliveries resume from durable cursors without duplicates.
+- Follow `docs/runbooks/backup-restore.md` and keep the latest redacted drill
+  evidence in `docs/runbooks/restore-drill-report.md` or a downstream private
+  operations repository.
 
 ## Deployment Validation
 
@@ -320,7 +326,8 @@ pnpm deploy:smoke
 The smoke script validates cloud `/healthz`, the Cloud Web Workbench at `GET /`,
 workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
 gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
-runtime/heartbeat endpoints and gateway metrics when tokens are provided.
+runtime/heartbeat/metrics endpoints and gateway metrics when tokens are
+provided.
 
 ## Provider Recipe Contract
 

@@ -73,6 +73,146 @@ Gateway delivery lag is operationally separate from cloud execution lag.
 5. For bad provider credentials, rotate the channel secret and restart only the
    affected gateway deployment.
 
+## Web Unavailable Or Erroring
+
+Use this when `GET /healthz` fails, Cloud Web returns elevated 5xx responses,
+or users cannot load the Cloud Web Workbench.
+
+1. Check ingress/load-balancer health and TLS certificate status.
+2. Check `open_cowork_cloud_http_requests_total` by status and role.
+3. Check structured logs by `request_id` for the failing route.
+4. Verify Postgres connectivity from the web role.
+5. Verify cookie/OIDC configuration if only authenticated routes fail.
+6. Scale web replicas up only after the dependency error is understood.
+7. If a new image caused the failure, roll back web first; keep workers running
+   only if command processing remains healthy.
+
+## Worker Backlog
+
+Use this when prompt latency rises, commands remain pending, or projection lag
+grows.
+
+1. Check `open_cowork_cloud_command_queue_depth`,
+   `open_cowork_cloud_command_oldest_age_ms`, and
+   `open_cowork_cloud_worker_loop_duration_ms`.
+2. Check worker heartbeats and active sessions in `GET /api/workers/heartbeats`.
+3. Check lease signals: `open_cowork_cloud_worker_lease_claims_total`,
+   `open_cowork_cloud_worker_lease_renewals_total`, and
+   `open_cowork_cloud_worker_stale_owner_rejections_total`.
+4. Check BYOK reveal failures and provider errors before scaling workers.
+5. Scale workers horizontally only when Postgres connection pool and provider
+   quota have headroom.
+6. If one session is poisoning the queue, use session abort/retry controls
+   rather than direct database edits.
+
+## Scheduler Stalled
+
+Use this when scheduled workflows do not start or heartbeat age exceeds the
+alert threshold.
+
+1. Check scheduler heartbeat freshness.
+2. Check `open_cowork_cloud_scheduler_claims_total` and
+   `open_cowork_cloud_scheduler_failures_total`.
+3. Confirm exactly one scheduler deployment group is active for the environment.
+4. Confirm database time and application time are not drifting.
+5. Restart scheduler only after checking logs for claim transaction failures.
+6. Verify one due workflow claim after restart and confirm no double-fire.
+
+## Postgres Connection Exhaustion
+
+Use this when web, worker, scheduler, or Gateway routes fail with database pool
+or timeout errors.
+
+1. Check managed database connection count, wait events, slow queries, and CPU.
+2. Temporarily scale workers down before web if user reads must remain
+   available.
+3. Check queue depth and scheduler claims; high worker concurrency may be
+   exhausting the pool.
+4. Confirm migrations are not running repeatedly.
+5. Add pool capacity or a connection pooler only after bounding worker replicas.
+6. Do not increase all role replicas at the same time.
+
+## Object-Store Errors
+
+Use this when artifacts, uploads, exports, or checkpoint restore/save fails.
+
+1. Check object-store service health and credentials/workload identity.
+2. Verify bucket/container/prefix exists and has versioning enabled.
+3. Check checkpoint restore logs before allowing workers to resume failed
+   sessions.
+4. For transient object-store failures, keep web reads available and pause
+   worker scale-up.
+5. For permission failures, rotate or repair object-store credentials and run
+   one artifact read/write smoke.
+
+## KMS Or Secret Adapter Errors
+
+Use this when BYOK metadata exists but runtime reveal, cookie secret, OIDC
+secret, channel credential, or envelope decryption fails.
+
+1. Check secret manager/KMS availability and IAM on the runtime service account.
+2. Confirm `OPEN_COWORK_CLOUD_SECRET_KEY_REF`,
+   `OPEN_COWORK_CLOUD_COOKIE_SECRET_REF`, OIDC refs, and gateway secret refs
+   point to current versions.
+3. Do not copy plaintext secrets into environment variables as a workaround in
+   managed deployments.
+4. If a KMS key was rotated, verify old ciphertext can still be revealed before
+   disabling old key material.
+5. Run BYOK metadata and worker validation smoke after repair.
+
+## OIDC Outage
+
+Use this when sign-in, token refresh, or browser callback handling fails.
+
+1. Check IdP status and OIDC discovery document.
+2. Check `OPEN_COWORK_CLOUD_PUBLIC_URL`, callback path, client id, and client
+   secret reference.
+3. Check auth failure rate and backoff state.
+4. Keep existing authenticated sessions unless cookie secret rotation is part of
+   the incident.
+5. Do not switch public deployments to `auth.mode=none`.
+6. If emergency admin access is needed, use a scoped API token through private
+   networking and audit the action.
+
+## Gateway Provider Outage
+
+Use this when Telegram, Slack, email, webhook, or another channel provider
+fails while cloud sessions still execute.
+
+1. Check gateway `/ready` provider status and
+   `open_cowork_gateway_delivery_retries_total`.
+2. Keep cloud workers running; failed channel delivery should retry or
+   dead-letter without blocking execution.
+3. Rotate only the affected channel credential if provider auth failed.
+4. Use `/deliveries?status=failed` and retry/dead-letter controls after the
+   provider recovers.
+5. Notify users that desktop and web remain authoritative while chat delivery is
+   degraded.
+
+## Webhook Abuse
+
+Use this when webhook auth failures, replay rejections, or rate-limit denials
+spike.
+
+1. Confirm public webhook routes require HMAC/shared-secret signatures.
+2. Check replay and auth-failure counters by source.
+3. Rotate the affected webhook secret if a signing secret may be exposed.
+4. Tighten rate limits or temporarily disable the affected channel binding.
+5. Preserve audit and redacted diagnostics for incident review.
+
+## BYOK Provider Key Failure
+
+Use this when model calls fail because a user provider key is missing, expired,
+revoked, or rejected by provider policy.
+
+1. Confirm read APIs expose metadata only: provider, last4/fingerprint, status,
+   and health.
+2. Check `open_cowork_cloud_byok_reveal_failures_total` without logging
+   plaintext.
+3. Mark the provider credential invalid/expired through BYOK metadata.
+4. Ask the org owner/admin to rotate the provider key.
+5. Resume worker execution only after a bounded validation succeeds.
+
 ## Secret Rotation
 
 Rotate secrets without moving them through logs, chat, issue comments, or

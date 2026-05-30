@@ -18,7 +18,7 @@ import {
 import { createHttpSseCloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
 import { CloudWorkspaceAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
-import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
+import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
@@ -119,7 +119,7 @@ function createFixture(options: {
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
-  const worker = new CloudWorker(store, service, 'worker-1', 30_000, {}, options.abuse || null)
+  const worker = new CloudWorker(store, service, 'worker-1', 30_000, {}, options.abuse || null, options.observability || null)
   const server = createCloudHttpServer({
     service,
     artifacts,
@@ -1852,6 +1852,97 @@ test('cloud HTTP server attaches request ids and emits observability records', a
   } finally {
     await fixture.server.close()
   }
+})
+
+test('cloud HTTP server exposes operator-scoped Prometheus metrics', async () => {
+  const memberFixture = createFixture({
+    observability: createPrometheusCloudObservability(),
+    auth: () => ({
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      orgId: 'tenant-1',
+      userId: 'member-1',
+      accountId: 'member-1',
+      email: 'member@example.test',
+      role: 'member',
+      authSource: 'local',
+    }),
+  })
+  const memberBaseUrl = await memberFixture.server.listen()
+  try {
+    const blocked = await fetch(`${memberBaseUrl}/api/metrics`)
+    assert.equal(blocked.status, 403)
+  } finally {
+    await memberFixture.server.close()
+  }
+
+  const observability = createPrometheusCloudObservability()
+  const fixture = createFixture({ observability })
+  const baseUrl = await fixture.server.listen()
+
+  try {
+    const health = await fetch(`${baseUrl}/healthz`)
+    assert.equal(health.status, 200)
+    await health.text()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    const metrics = await fetch(`${baseUrl}/api/metrics`)
+    assert.equal(metrics.status, 200)
+    const text = await metrics.text()
+    assert.match(text, /open_cowork_cloud_http_requests_total/)
+    assert.match(text, /open_cowork_cloud_http_request_duration_ms/)
+    assert.doesNotMatch(text, /request-1/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server emits auth and quota denial metrics', async () => {
+  const metrics: unknown[] = []
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric(record) { metrics.push(record) },
+    span() {},
+  }
+  const authFixture = createFixture({
+    observability,
+    auth: () => {
+      throw new CloudHttpError(401, 'Cloud authentication is required.', { policyCode: 'auth.invalid_token' })
+    },
+  })
+  const authBaseUrl = await authFixture.server.listen()
+  try {
+    const rejected = await fetch(`${authBaseUrl}/api/workspace`)
+    assert.equal(rejected.status, 401)
+    await rejected.text()
+  } finally {
+    await authFixture.server.close()
+  }
+
+  const quotaFixture = createFixture({
+    observability,
+    abuse: testAbuseConfig({
+      httpRateLimit: {
+        enabled: true,
+        windowMs: 60_000,
+        maxRequests: 1,
+      },
+    }),
+  })
+  const quotaBaseUrl = await quotaFixture.server.listen()
+  try {
+    const first = await fetch(`${quotaBaseUrl}/api/workspace`)
+    assert.equal(first.status, 200)
+    await first.text()
+    const second = await fetch(`${quotaBaseUrl}/api/workspace`)
+    assert.equal(second.status, 429)
+    await second.text()
+  } finally {
+    await quotaFixture.server.close()
+  }
+
+  assert.equal(metrics.some((metric) => (metric as Record<string, unknown>).name === 'open_cowork_cloud_auth_failures_total'), true)
+  assert.equal(metrics.some((metric) => (metric as Record<string, unknown>).name === 'open_cowork_cloud_quota_rejections_total'), true)
 })
 
 test('cloud HTTP browser session cookies use secure flags and enforce CSRF on mutating routes', async () => {

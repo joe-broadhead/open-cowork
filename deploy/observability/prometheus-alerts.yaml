@@ -1,0 +1,122 @@
+groups:
+  - name: open-cowork-cloud
+    rules:
+      - alert: OpenCoworkCloudHighHttpErrorRate
+        expr: sum(rate(open_cowork_cloud_http_requests_total{http_response_status_code=~"5.."}[5m])) / clamp_min(sum(rate(open_cowork_cloud_http_requests_total[5m])), 1) > 0.05
+        for: 10m
+        labels:
+          severity: page
+          surface: cloud
+        annotations:
+          summary: Open Cowork Cloud HTTP 5xx rate is above 5%.
+          runbook: docs/runbooks/cloud-managed-operations.md#web-unavailable-or-erroring
+      - alert: OpenCoworkWorkerBacklogGrowing
+        expr: max(open_cowork_cloud_command_queue_depth) > 100 or max(open_cowork_cloud_command_oldest_age_ms) > 300000
+        for: 15m
+        labels:
+          severity: page
+          surface: worker
+        annotations:
+          summary: Worker command backlog is large or old.
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkSchedulerStalled
+        expr: absent(rate(open_cowork_cloud_scheduler_claims_total[30m])) and max(open_cowork_cloud_scheduler_loop_duration_ms) == 0
+        for: 30m
+        labels:
+          severity: ticket
+          surface: scheduler
+        annotations:
+          summary: Scheduler has not claimed due workflow work recently.
+          runbook: docs/runbooks/cloud-managed-operations.md#scheduler-stalled
+      - alert: OpenCoworkProjectionLag
+        expr: max(open_cowork_cloud_projection_lag_events) > 25
+        for: 10m
+        labels:
+          severity: page
+          surface: projection
+        annotations:
+          summary: Durable event projection lag is above threshold.
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkAuthFailuresSpike
+        expr: sum(rate(open_cowork_cloud_auth_failures_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: ticket
+          surface: auth
+        annotations:
+          summary: Cloud authentication failures are spiking.
+          runbook: docs/runbooks/cloud-managed-operations.md#oidc-outage
+      - alert: OpenCoworkQuotaAbuse
+        expr: sum(rate(open_cowork_cloud_quota_rejections_total[5m])) > 20
+        for: 10m
+        labels:
+          severity: ticket
+          surface: abuse
+        annotations:
+          summary: Quota or rate-limit rejections are elevated.
+          runbook: docs/runbooks/cloud-managed-operations.md#webhook-abuse
+      - alert: OpenCoworkByokRevealFailures
+        expr: sum(rate(open_cowork_cloud_byok_reveal_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          surface: byok
+        annotations:
+          summary: BYOK plaintext reveal failed in worker runtime path.
+          runbook: docs/runbooks/cloud-managed-operations.md#byok-provider-key-failure
+      - alert: OpenCoworkObjectStoreErrors
+        expr: sum(rate(open_cowork_object_store_errors_total[5m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          surface: object-store
+        annotations:
+          summary: Object-store adapter is failing artifact or checkpoint operations.
+          runbook: docs/runbooks/cloud-managed-operations.md#object-store-errors
+      - alert: OpenCoworkPostgresUnavailable
+        expr: pg_up == 0
+        for: 5m
+        labels:
+          severity: page
+          surface: postgres
+        annotations:
+          summary: Postgres exporter reports database unavailable.
+          runbook: docs/runbooks/cloud-managed-operations.md#postgres-connection-exhaustion
+      - alert: OpenCoworkPostgresConnectionPressure
+        expr: max(pg_stat_activity_count) > 0.8 * max(pg_settings_max_connections)
+        for: 10m
+        labels:
+          severity: ticket
+          surface: postgres
+        annotations:
+          summary: Postgres connection usage is above 80% of max connections.
+          runbook: docs/runbooks/cloud-managed-operations.md#postgres-connection-exhaustion
+  - name: open-cowork-gateway
+    rules:
+      - alert: OpenCoworkGatewayDeliveryBacklog
+        expr: sum(rate(open_cowork_gateway_delivery_retries_total[10m])) > 1 or sum(rate(open_cowork_gateway_delivery_dead_letters_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          surface: gateway
+        annotations:
+          summary: Gateway deliveries are retrying or dead-lettering.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage
+      - alert: OpenCoworkGatewayStreamReconnects
+        expr: sum(rate(open_cowork_gateway_stream_reconnects_total[5m])) > 5
+        for: 10m
+        labels:
+          severity: ticket
+          surface: gateway
+        annotations:
+          summary: Gateway session streams are reconnecting repeatedly.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-backlog
+      - alert: OpenCoworkGatewayNoProviders
+        expr: open_cowork_gateway_providers < 1
+        for: 5m
+        labels:
+          severity: page
+          surface: gateway
+        annotations:
+          summary: Gateway is running without any active channel providers.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage

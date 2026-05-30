@@ -122,6 +122,8 @@ nav:
       - Open Cowork Cloud: open-cowork-cloud.md
       - Deployment Readiness: deployment-readiness.md
       - Cloud Managed Operations: runbooks/cloud-managed-operations.md
+      - Backup and Restore: runbooks/backup-restore.md
+      - Restore Drill Report: runbooks/restore-drill-report.md
       - Managed BYOK SaaS: runbooks/managed-byok-saas.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md

@@ -1,0 +1,122 @@
+{
+  "title": "Open Cowork Cloud Overview",
+  "uid": "open-cowork-cloud-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["open-cowork", "cloud", "gateway"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Cloud HTTP rate and errors",
+      "targets": [
+        { "expr": "sum(rate(open_cowork_cloud_http_requests_total[5m])) by (cloud_role, http_response_status_code)" },
+        { "expr": "sum(rate(open_cowork_cloud_http_requests_total{http_response_status_code=~\"5..\"}[5m]))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cloud request latency",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_http_request_duration_ms) by (cloud_role, url_path)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cloud session and prompt latency",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_session_create_duration_ms) by (profile_name)" },
+        { "expr": "max(open_cowork_cloud_prompt_enqueue_duration_ms) by (profile_name)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker backlog and leases",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_command_queue_depth)" },
+        { "expr": "max(open_cowork_cloud_command_oldest_age_ms)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_lease_claims_total[5m])) by (status)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_lease_renewals_total[5m])) by (status)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_stale_owner_rejections_total[5m]))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Scheduler claims and failures",
+      "targets": [
+        { "expr": "sum(rate(open_cowork_cloud_scheduler_claims_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_cloud_scheduler_failures_total[5m]))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Projection and SSE health",
+      "targets": [
+        { "expr": "max(open_cowork_cloud_projection_lag_events)" },
+        { "expr": "max(open_cowork_cloud_sse_connections)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Auth, quota, and BYOK failures",
+      "targets": [
+        { "expr": "sum(rate(open_cowork_cloud_auth_failures_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_cloud_quota_rejections_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_cloud_byok_reveal_failures_total[5m]))" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres connections",
+      "targets": [
+        { "expr": "pg_up" },
+        { "expr": "pg_stat_activity_count" },
+        { "expr": "pg_settings_max_connections" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Object-store errors",
+      "targets": [
+        { "expr": "sum(rate(open_cowork_object_store_errors_total[5m])) by (kind, operation)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Gateway delivery health",
+      "targets": [
+        { "expr": "sum(rate(open_cowork_gateway_incoming_messages_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_gateway_deliveries_received_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_gateway_deliveries_sent_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_gateway_delivery_retries_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_gateway_delivery_dead_letters_total[5m]))" },
+        { "expr": "max(open_cowork_gateway_delivery_latency_ms_total)" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Gateway active providers and streams",
+      "targets": [
+        { "expr": "open_cowork_gateway_providers" },
+        { "expr": "open_cowork_gateway_session_streams" },
+        { "expr": "sum(rate(open_cowork_gateway_stream_reconnects_total[5m]))" }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Correlated structured logs",
+      "targets": [
+        { "expr": "{service_name=~\"open-cowork-cloud|open-cowork-gateway\"} | json | request_id != \"\"" }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "org",
+        "type": "query",
+        "query": "label_values(org_id)",
+        "hide": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "version": 1,
+  "description": "Provider-neutral Open Cowork Cloud and Gateway operational metric contract.",
+  "metrics": [
+    {
+      "name": "open_cowork_cloud_http_requests_total",
+      "type": "counter",
+      "owner": "cloud-web",
+      "description": "HTTP request rate and error basis by role, route, method, and status."
+    },
+    {
+      "name": "open_cowork_cloud_http_request_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-web",
+      "description": "Cloud HTTP request latency in milliseconds."
+    },
+    {
+      "name": "open_cowork_cloud_session_create_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-control-plane",
+      "description": "Session creation latency. Emit from Cloud session service or derive from request/span data."
+    },
+    {
+      "name": "open_cowork_cloud_prompt_enqueue_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-control-plane",
+      "description": "Prompt command enqueue latency. Emit from prompt enqueue paths or derive from request/span data."
+    },
+    {
+      "name": "open_cowork_cloud_command_queue_depth",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Sessions scanned by worker command loop; pair with DB queue-age queries for backlog."
+    },
+    {
+      "name": "open_cowork_cloud_command_oldest_age_ms",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Oldest pending command age. May be emitted by DB collector or dashboard SQL."
+    },
+    {
+      "name": "open_cowork_cloud_worker_lease_claims_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Worker lease claim attempts by status."
+    },
+    {
+      "name": "open_cowork_cloud_worker_lease_renewals_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Successful worker lease renewals."
+    },
+    {
+      "name": "open_cowork_cloud_worker_stale_owner_rejections_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Stale worker ownership or checkpoint/projection rejection signals."
+    },
+    {
+      "name": "open_cowork_cloud_worker_loop_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Worker command loop duration."
+    },
+    {
+      "name": "open_cowork_cloud_scheduler_claims_total",
+      "type": "counter",
+      "owner": "cloud-scheduler",
+      "description": "Due workflow claims by scheduler."
+    },
+    {
+      "name": "open_cowork_cloud_scheduler_failures_total",
+      "type": "counter",
+      "owner": "cloud-scheduler",
+      "description": "Scheduler loop failures."
+    },
+    {
+      "name": "open_cowork_cloud_projection_lag_events",
+      "type": "gauge",
+      "owner": "cloud-control-plane",
+      "description": "Difference between latest durable event sequence and projected session sequence."
+    },
+    {
+      "name": "open_cowork_cloud_sse_connections",
+      "type": "gauge",
+      "owner": "cloud-web",
+      "description": "Active cloud workspace/session SSE connections."
+    },
+    {
+      "name": "open_cowork_cloud_quota_rejections_total",
+      "type": "counter",
+      "owner": "cloud-control-plane",
+      "description": "Quota or rate-limit denials by policy code."
+    },
+    {
+      "name": "open_cowork_cloud_auth_failures_total",
+      "type": "counter",
+      "owner": "cloud-web",
+      "description": "Authentication failures and backoff claims by auth source."
+    },
+    {
+      "name": "open_cowork_cloud_byok_reveal_failures_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "BYOK plaintext reveal failures without including secret material."
+    },
+    {
+      "name": "open_cowork_object_store_errors_total",
+      "type": "counter",
+      "owner": "object-store-adapter",
+      "description": "Object-store read/write/list/delete failures by adapter kind and operation."
+    },
+    {
+      "name": "pg_up",
+      "type": "gauge",
+      "owner": "postgres-exporter",
+      "description": "Postgres exporter availability. Provided by the deployer's managed database exporter."
+    },
+    {
+      "name": "pg_stat_activity_count",
+      "type": "gauge",
+      "owner": "postgres-exporter",
+      "description": "Postgres active connection count. Provided by the deployer's managed database exporter."
+    },
+    {
+      "name": "pg_settings_max_connections",
+      "type": "gauge",
+      "owner": "postgres-exporter",
+      "description": "Postgres maximum connection setting. Provided by the deployer's managed database exporter."
+    },
+    {
+      "name": "open_cowork_gateway_incoming_messages_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Inbound channel messages handled."
+    },
+    {
+      "name": "open_cowork_gateway_deliveries_received_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Cloud channel deliveries received by gateway."
+    },
+    {
+      "name": "open_cowork_gateway_deliveries_sent_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Cloud channel deliveries sent to provider."
+    },
+    {
+      "name": "open_cowork_gateway_delivery_retries_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Channel deliveries scheduled for retry."
+    },
+    {
+      "name": "open_cowork_gateway_delivery_dead_letters_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Channel deliveries dead-lettered."
+    },
+    {
+      "name": "open_cowork_gateway_delivery_latency_ms_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Total gateway delivery handling latency in milliseconds."
+    },
+    {
+      "name": "open_cowork_gateway_session_streams",
+      "type": "gauge",
+      "owner": "gateway",
+      "description": "Active gateway session event streams."
+    },
+    {
+      "name": "open_cowork_gateway_stream_reconnects_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Gateway stream reconnects after cloud SSE or render failures."
+    }
+  ]
+}

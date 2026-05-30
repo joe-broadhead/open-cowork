@@ -84,7 +84,7 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
   assert.equal(providers[0]?.credentials.apiKey, 'tele...[redacted]...7890')
   assert.equal(providers[0]?.settings.callbackSecret, 'prov...[redacted]...7890')
   assert.equal(providers[0]?.settings.privateKey, 'prov...[redacted]...7890')
-  assert.equal(providers[0]?.settings.deliveryUrl, 'https://webhook.example.test/out?token=%5Bredacted%5D')
+  assert.equal(providers[0]?.settings.deliveryUrl, 'https://webhook.example.test/out?token=[redacted]')
   assert.equal(providers[0]?.settings.workspacePath, '/Users/[redacted]')
 })
 

@@ -1678,6 +1678,31 @@ export class CloudHttpServer {
     }
   }
 
+  private async recordPolicyErrorMetric(error: CloudHttpError | CloudServiceError, req: IncomingMessage, url: URL) {
+    const policyCode = error.policyCode || ''
+    const isQuotaRejection = error.status === 429 || policyCode.startsWith('quota.') || policyCode.startsWith('rate_limit.')
+    const isAuthFailure = error.status === 401 || policyCode.startsWith('auth.')
+    const name = isQuotaRejection
+      ? 'open_cowork_cloud_quota_rejections_total'
+      : isAuthFailure
+        ? 'open_cowork_cloud_auth_failures_total'
+        : null
+    if (!name) return
+    await this.options.observability?.metric({
+      name,
+      value: 1,
+      unit: '1',
+      attributes: {
+        'http.request.method': req.method || 'GET',
+        'url.path': url.pathname,
+        'http.response.status_code': error.status,
+        'cloud.role': this.options.policy.role,
+        'cloud.profile': this.options.policy.profileName,
+        policy_code: policyCode || undefined,
+      },
+    })
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse) {
     const startedAt = Date.now()
     const requestId = firstHeader(req.headers['x-request-id']).trim() || randomUUID()
@@ -1770,6 +1795,7 @@ export class CloudHttpServer {
       })
     } catch (error) {
       if (error instanceof CloudHttpError) {
+        await this.recordPolicyErrorMetric(error, req, url)
         writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,
@@ -1777,6 +1803,7 @@ export class CloudHttpServer {
         return
       }
       if (error instanceof CloudServiceError) {
+        await this.recordPolicyErrorMetric(error, req, url)
         writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,

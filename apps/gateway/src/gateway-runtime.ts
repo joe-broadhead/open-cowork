@@ -56,6 +56,7 @@ export function createGatewayRuntime(
             void handleDelivery(delivery, providers, cloud, metrics)
           },
           onError: () => {
+            metrics.cloudSubscriptionErrors += 1
             metrics.errors += 1
           },
         }))
@@ -145,10 +146,12 @@ async function handleDelivery(
   cloud: CloudGateway,
   metrics: GatewayMetrics,
 ) {
+  const startedAt = Date.now()
   metrics.deliveriesReceived += 1
   const registration = findDeliveryProvider(providers, delivery)
   if (!registration) {
     metrics.errors += 1
+    metrics.deliveryDeadLetters += 1
     await cloud.ackDelivery(delivery.deliveryId, {
       status: 'dead',
       claimedBy: delivery.claimedBy,
@@ -164,10 +167,14 @@ async function handleDelivery(
       claimedBy: delivery.claimedBy,
       lastError: null,
     })
+    metrics.deliveriesSent += 1
+    metrics.deliveryLatencyMsTotal += Math.max(0, Date.now() - startedAt)
   } catch (error) {
     metrics.errors += 1
     const failure = classifyProviderFailure(error)
     const shouldRetry = failure.transient && delivery.attemptCount < MAX_DELIVERY_ATTEMPTS
+    if (shouldRetry) metrics.deliveryRetries += 1
+    else metrics.deliveryDeadLetters += 1
     await cloud.ackDelivery(delivery.deliveryId, {
       status: shouldRetry ? 'failed' : 'dead',
       claimedBy: delivery.claimedBy,

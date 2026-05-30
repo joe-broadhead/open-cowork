@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from 'node:crypto'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
-import { type GatewayConfig, redactGatewayConfig } from './config.js'
+import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText } from './config.js'
 import { createGatewayRuntime, type GatewayRuntime } from './gateway-runtime.js'
 import { renderPrometheusMetrics } from './metrics.js'
 
@@ -119,7 +119,7 @@ async function handleRequest(
       writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
       return
     }
-    const body = renderPrometheusMetrics(runtime.metrics, runtime.providers.registrations.length)
+    const body = renderPrometheusMetrics(runtime.metrics, runtime.providers.registrations.length, runtime.streams.activeCount())
     res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' })
     res.end(body)
     return
@@ -195,6 +195,7 @@ async function handleRequest(
 
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
+    runtime.metrics.webhookRequests += 1
     const body = await readRequestBody(req)
     const payload = parseRequestBody(body.raw, req.headers['content-type'])
     const result = await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers, body.raw)
@@ -212,7 +213,7 @@ function providerStatus(runtime: GatewayRuntime) {
     provider: registration.provider.id,
     started: registration.started,
     healthy: registration.healthy,
-    error: registration.lastError,
+    error: registration.lastError ? redactGatewayDiagnosticText(registration.lastError) : null,
   }))
 }
 

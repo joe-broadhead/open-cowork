@@ -670,9 +670,24 @@ function redactUnknown(value: unknown): unknown {
 function redactValue(key: string, value: unknown): unknown {
   if (typeof value === 'string') {
     if (/token|secret|password|credential|authorization|api[_-]?key|private[_-]?key|access[_-]?key/i.test(key)) return redactSecret(value)
-    return redactLocalPaths(redactUrlSecrets(value))
+    return redactGatewayDiagnosticText(value)
   }
   return redactUnknown(value)
+}
+
+export function redactGatewayDiagnosticText(value: string) {
+  return redactLocalPaths(redactUrlSecretsInText(value)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(?:token|secret|password|credential|api[_-]?key)=([^\s"'&]+)/gi, (match) => {
+      const [key] = match.split('=')
+      return `${key}=[redacted]`
+    })
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]'))
+}
+
+function redactUrlSecretsInText(value: string) {
+  return value.replace(/\bhttps?:\/\/[^\s"'<>]+/gi, (url) => redactUrlSecrets(url))
 }
 
 function redactUrlSecrets(value: string) {

@@ -106,6 +106,7 @@ export function createGatewaySessionStreamManager(
       },
       onError: () => {
         metrics.errors += 1
+        metrics.streamReconnects += 1
         state.subscription?.close()
         state.subscription = null
         scheduleRetry(state)
@@ -165,6 +166,7 @@ export function createGatewaySessionStreamManager(
       state.renderFailures.set(event.sequence, attempts)
       const failure = classifyProviderFailure(error)
       if (failure.transient && attempts < maxRenderAttempts) {
+        metrics.streamReconnects += 1
         state.subscription?.close()
         state.subscription = null
         scheduleRetry(state)
@@ -174,6 +176,7 @@ export function createGatewaySessionStreamManager(
         await skipFailedEvent(state, event)
       } catch {
         metrics.errors += 1
+        metrics.streamReconnects += 1
         state.subscription?.close()
         state.subscription = null
         scheduleRetry(state)

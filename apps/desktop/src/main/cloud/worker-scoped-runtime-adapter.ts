@@ -1,7 +1,12 @@
 import type { OpenCoworkConfig } from '../config-types.ts'
 import type { ByokSecretStore } from './byok-secret-store.ts'
-import { buildCloudByokRuntimeConfig, type CloudByokRuntimeProviderPolicy } from './byok-runtime-config.ts'
+import {
+  buildCloudByokRuntimeConfig,
+  CloudByokRuntimeConfigError,
+  type CloudByokRuntimeProviderPolicy,
+} from './byok-runtime-config.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
+import type { CloudObservabilityAdapter } from './observability.ts'
 import type { PathProvider } from './path-provider.ts'
 import { createCloudSessionPathProvider } from './path-provider.ts'
 import type {
@@ -33,6 +38,7 @@ export type WorkerScopedRuntimeAdapterOptions = {
   config: OpenCoworkConfig
   byokSecrets: ByokSecretStore
   byokPolicy?: CloudByokRuntimeProviderPolicy | null
+  observability?: CloudObservabilityAdapter | null
   runtimeFactory: WorkerScopedRuntimeFactory
 }
 
@@ -93,13 +99,31 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     if (existing) return existing.adapter
 
     const scopedPaths = createCloudSessionPathProvider(options.paths, context.tenantId, context.sessionId)
-    const runtimeConfig = await buildCloudByokRuntimeConfig({
-      appConfig: options.config,
-      byokSecrets: options.byokSecrets,
-      context,
-      allowKmsRef: true,
-      byokPolicy: options.byokPolicy,
-    })
+    let runtimeConfig: WorkerScopedRuntimeFactoryInput['runtimeConfig']
+    try {
+      runtimeConfig = await buildCloudByokRuntimeConfig({
+        appConfig: options.config,
+        byokSecrets: options.byokSecrets,
+        context,
+        allowKmsRef: true,
+        byokPolicy: options.byokPolicy,
+      })
+    } catch (error) {
+      if (error instanceof CloudByokRuntimeConfigError) {
+        await options.observability?.metric({
+          name: 'open_cowork_cloud_byok_reveal_failures_total',
+          value: 1,
+          unit: '1',
+          attributes: {
+            provider_id: error.providerId,
+            reason: error.code,
+            tenant_id: context.tenantId,
+            session_id: context.sessionId,
+          },
+        })
+      }
+      throw error
+    }
     const adapter = await options.runtimeFactory({
       paths: scopedPaths,
       policy: options.policy,
