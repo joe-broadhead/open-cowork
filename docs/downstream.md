@@ -157,7 +157,11 @@ Production safety rules are enforced in config validation:
   fake-provider development flag
 - public gateway metrics or diagnostics require `gateway.server.adminToken`
 - webhook gateway ingress requires a shared secret
-- the fake gateway provider cannot be exposed from a public bind
+- the fake gateway provider cannot be exposed from a public bind unless
+  `OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true` is set deliberately for
+  a self-hosted demo
+- public `cloud.auth.mode=header` deployments require a header auth secret and
+  signed timestamped identity headers from the trusted proxy
 - environment placeholders such as `{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}`
   only resolve when listed in `allowedEnvPlaceholders`
 

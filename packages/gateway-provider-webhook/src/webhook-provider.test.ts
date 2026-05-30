@@ -435,6 +435,32 @@ describe("WebhookProvider", () => {
     expect(deliveryIds[1]).toBe(deliveryIds[0]);
   });
 
+  it("caps bridge retry attempts and retry-after delays", async () => {
+    const sleeps: number[] = [];
+    let calls = 0;
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      retryAttempts: 99,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      fetch: async () => {
+        calls += 1;
+        return new Response("", {
+          status: 429,
+          headers: { "retry-after": "3600" }
+        });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery failed: 429",
+    );
+
+    expect(calls).toBe(5);
+    expect(sleeps).toEqual([10000, 10000, 10000, 10000]);
+  });
+
   it("does not retry non-transient bridge delivery failures", async () => {
     let calls = 0;
     const provider = new WebhookProvider({

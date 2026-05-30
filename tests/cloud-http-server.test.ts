@@ -181,6 +181,10 @@ function cookieValue(headers: string[], name: string) {
   return value ? decodeURIComponent(value.slice(prefix.length)) : null
 }
 
+function headerValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] || '' : value || ''
+}
+
 function testAbuseConfig(overrides: Partial<CloudAbuseConfig> = {}): CloudAbuseConfig {
   return {
     ...DEFAULT_CONFIG.cloud.abuse,
@@ -1018,6 +1022,52 @@ test('cloud HTTP server returns public errors for malformed request bodies', asy
   }
 })
 
+test('cloud HTTP server applies security headers and exact-match non-credentialed CORS', async () => {
+  const fixture = createFixture()
+  const server = createCloudHttpServer({
+    service: fixture.service,
+    artifacts: fixture.artifacts,
+    worker: fixture.worker,
+    policy: fixture.policy,
+    auth: () => ({
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      orgId: 'tenant-1',
+      userId: 'user-1',
+      accountId: 'user-1',
+      email: 'user@example.test',
+      role: 'owner',
+      authSource: 'local',
+    }),
+    corsOrigin: 'https://app.example.test',
+    strictTransportSecurity: true,
+  })
+  const baseUrl = await server.listen()
+  try {
+    const html = await fetch(`${baseUrl}/`, {
+      headers: { origin: 'https://app.example.test' },
+    })
+    assert.equal(html.headers.get('access-control-allow-origin'), 'https://app.example.test')
+    assert.equal(html.headers.get('access-control-allow-credentials'), null)
+    assert.equal(html.headers.get('vary'), 'Origin')
+    assert.equal(html.headers.get('x-content-type-options'), 'nosniff')
+    assert.equal(html.headers.get('referrer-policy'), 'no-referrer')
+    assert.equal(html.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')
+    const csp = html.headers.get('content-security-policy') || ''
+    assert.match(csp, /script-src 'self' 'nonce-/)
+    assert.match(csp, /object-src 'none'/)
+    assert.doesNotMatch(csp, /unsafe-inline/)
+
+    const mismatched = await fetch(`${baseUrl}/api/config`, {
+      headers: { origin: 'https://evil.example.test' },
+    })
+    assert.equal(mismatched.headers.get('access-control-allow-origin'), null)
+    assert.equal(mismatched.headers.get('x-content-type-options'), 'nosniff')
+  } finally {
+    await server.close()
+  }
+})
+
 test('cloud HTTP server authenticates bearer API tokens and rejects revoked tokens', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
@@ -1068,6 +1118,89 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
   }
 })
 
+test('cloud HTTP tenant isolation fails closed for sessions, artifacts, BYOK, and usage APIs', async () => {
+  const tenantOneByokFixture = 'credential-tenant-one-1234567890'
+  const tenant1Principal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner1@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const tenant2Principal = {
+    tenantId: 'tenant-2',
+    tenantName: 'Tenant 2',
+    orgId: 'tenant-2',
+    userId: 'owner-2',
+    accountId: 'owner-2',
+    email: 'owner2@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-tenant']) === 'tenant-2' ? tenant2Principal : tenant1Principal,
+  })
+  const baseUrl = await fixture.server.listen()
+  const tenant2Headers = { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' }
+  try {
+    await fixture.service.ensurePrincipal(tenant1Principal)
+    await fixture.service.ensurePrincipal(tenant2Principal)
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const uploaded = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'private.txt',
+        dataBase64: Buffer.from('tenant one').toString('base64'),
+      }),
+    }))
+    const artifactId = String(asRecord(uploaded.artifact).artifactId)
+    await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: tenantOneByokFixture }),
+    })
+    await fixture.store.recordUsageEvent({
+      orgId: 'tenant-1',
+      accountId: 'owner-1',
+      eventType: 'prompt.enqueued',
+      unit: 'count',
+      quantity: 1,
+    })
+
+    for (const path of [
+      `/api/sessions/${sessionId}`,
+      `/api/sessions/${sessionId}/view`,
+      `/api/sessions/${sessionId}/artifacts`,
+      `/api/sessions/${sessionId}/artifacts/${artifactId}`,
+    ]) {
+      const response = await fetch(`${baseUrl}${path}`, { headers: tenant2Headers })
+      assert.equal(response.status, 404)
+    }
+    const tenant2Prompt = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: tenant2Headers,
+      body: JSON.stringify({ text: 'steal' }),
+    })
+    assert.equal(tenant2Prompt.status, 404)
+
+    const tenant2Byok = await readJson(await fetch(`${baseUrl}/api/byok`, { headers: tenant2Headers }))
+    assert.deepEqual(asArray(tenant2Byok.secrets), [])
+    const tenant2Usage = await readJson(await fetch(`${baseUrl}/api/usage/events`, { headers: tenant2Headers }))
+    assert.deepEqual(asArray(tenant2Usage.events), [])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP API token issuance applies default and maximum expirations', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -1093,6 +1226,18 @@ test('cloud HTTP API token issuance applies default and maximum expirations', as
       }),
     })
     assert.equal(tooLong.status, 400)
+
+    const malformed = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Malformed',
+        scopes: ['gateway'],
+        expiresAt: 'not-a-date',
+      }),
+    })
+    assert.equal(malformed.status, 400)
+    assert.match(String((await readJson(malformed)).error), /valid ISO timestamp/)
   } finally {
     await fixture.server.close()
   }
@@ -1194,7 +1339,7 @@ test('cloud HTTP worker status endpoints require operator privileges', async () 
     assert.equal((await fixture.service.listWorkerHeartbeats(workerPrincipal)).length, 0)
     await assert.rejects(
       () => fixture.service.getDiagnosticsBundle(workerPrincipal),
-      /Cloud diagnostics require org admin/,
+      /Cloud diagnostics require operator/,
     )
   } finally {
     await fixture.server.close()
@@ -1468,6 +1613,26 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     name: 'Gateway-only token',
     scopes: ['gateway'],
   })
+  store.createTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
+  const org2 = store.ensureOrgForTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
+  const account2 = store.createAccount({
+    accountId: 'account-2',
+    idpSubject: 'subject-2',
+    email: 'other-member@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-2', userId: account2.accountId, email: account2.email, role: 'admin' })
+  store.upsertMembership({
+    orgId: org2.orgId,
+    accountId: account2.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issuedTenant2 = store.issueApiToken({
+    orgId: org2.orgId,
+    accountId: account2.accountId,
+    name: 'Other org gateway token',
+    scopes: ['gateway', 'admin'],
+  })
 
   const runtime = new FakeRuntimeAdapter()
   const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
@@ -1491,6 +1656,10 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   }
   const gatewayOnlyHeaders = {
     authorization: `Bearer ${gatewayOnlyIssued.plaintext}`,
+    'content-type': 'application/json',
+  }
+  const tenant2Headers = {
+    authorization: `Bearer ${issuedTenant2.plaintext}`,
     'content-type': 'application/json',
   }
   try {
@@ -1521,6 +1690,9 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(bindingResponse.status, 201)
     const channelBinding = asRecord((await readJson(bindingResponse)).binding)
     assert.equal(channelBinding.credentialRef, 'secret/telegram')
+
+    const tenant2Bindings = await readJson(await fetch(`${baseUrl}/api/channels/bindings`, { headers: tenant2Headers }))
+    assert.deepEqual(asArray(tenant2Bindings.bindings), [])
 
     const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
       method: 'POST',
@@ -1758,6 +1930,38 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(deliveryResponse.status, 201)
 
+    const mismatchedDelivery = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        deliveryId: 'delivery-mismatch',
+        agentId: 'agent-1',
+        channelBindingId: secondChannelBinding.bindingId,
+        sessionBindingId: sessionBinding.bindingId,
+        provider: 'telegram',
+        target: { externalChatId: 'chat-1', externalThreadId: 'thread-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-1' },
+      }),
+    })
+    assert.equal(mismatchedDelivery.status, 403)
+
+    const crossOrgDelivery = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      method: 'POST',
+      headers: tenant2Headers,
+      body: JSON.stringify({
+        deliveryId: 'delivery-cross-org',
+        agentId: 'agent-1',
+        channelBindingId: channelBinding.bindingId,
+        sessionBindingId: sessionBinding.bindingId,
+        provider: 'telegram',
+        target: { externalChatId: 'chat-1', externalThreadId: 'thread-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-1' },
+      }),
+    })
+    assert.equal(crossOrgDelivery.status, 404)
+
     const controller = new AbortController()
     const stream = await fetch(`${baseUrl}/api/channels/deliveries/stream?claimedBy=test-gateway`, {
       headers: { authorization: `Bearer ${issued.plaintext}` },
@@ -1865,7 +2069,7 @@ test('cloud HTTP server exposes operator-scoped Prometheus metrics', async () =>
       accountId: 'member-1',
       email: 'member@example.test',
       role: 'member',
-      authSource: 'local',
+      authSource: 'user',
     }),
   })
   const memberBaseUrl = await memberFixture.server.listen()

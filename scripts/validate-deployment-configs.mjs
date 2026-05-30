@@ -100,7 +100,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
-  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required when gateway metrics are enabled on a public bind')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required on public gateway binds')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
@@ -188,6 +188,8 @@ function validateHelm() {
       '--set',
       'gateway.serviceToken=ci-gateway-token',
       '--set',
+      'gateway.adminToken=ci-gateway-admin-token',
+      '--set',
       'gateway.telegram.botToken=ci-telegram-token',
     ])
     run('helm', [
@@ -202,6 +204,8 @@ function validateHelm() {
       'gateway.cloudBaseUrl=https://cloud.example.com',
       '--set',
       'gateway.serviceToken=ci-gateway-token',
+      '--set',
+      'gateway.adminToken=ci-gateway-admin-token',
       '--set',
       'gateway.telegram.botToken=ci-telegram-token',
     ])
@@ -227,6 +231,8 @@ function validateHelm() {
         '--set',
         'gateway.serviceToken=ci-gateway-token',
         '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
         'gateway.webhook.deliveryUrl=https://bridge.example.com/inbound',
       ],
       'gateway.webhook.sharedSecret or gateway.existingSecret is required'
@@ -246,7 +252,7 @@ function validateHelm() {
         '--set',
         'gateway.metrics.enabled=true',
       ],
-      'gateway.adminToken or gateway.existingSecret is required when gateway metrics are enabled on a public bind'
+      'gateway.adminToken or gateway.existingSecret is required on public gateway binds'
     )
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })

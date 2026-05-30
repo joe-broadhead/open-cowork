@@ -240,6 +240,7 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
     },
     server: {
       host: '0.0.0.0',
+      adminToken: 'admin-token',
     },
     metrics: {
       enabled: false,
@@ -260,6 +261,40 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
     },
     server: {
       host: '0.0.0.0',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
+  }), /fake provider cannot be exposed/)
+
+  assert.doesNotThrow(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER: 'true',
+  }))
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '0.0.0.0',
     },
     metrics: {
       enabled: true,
@@ -270,6 +305,22 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       credentials: { botToken: 'telegram-token' },
     }],
   }), /ADMIN_TOKEN/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      host: '127.0.0.1',
+      publicBaseUrl: 'https://gateway.example.test',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /public deployments require OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
 
   assert.throws(() => resolveGatewayConfig({
     cloud: {

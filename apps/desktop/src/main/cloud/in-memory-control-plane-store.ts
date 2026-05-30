@@ -2187,7 +2187,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       eventType: 'channel_binding.created',
       targetType: 'channel_binding',
       targetId: record.bindingId,
-      metadata: { provider: record.provider, displayName: record.displayName, credentialRef: record.credentialRef },
+      metadata: { provider: record.provider, displayName: record.displayName, credentialRefConfigured: Boolean(record.credentialRef) },
       createdAt: input.createdAt,
     })
     return clone(record)
@@ -2260,8 +2260,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   bindChannelSession(input: BindChannelSessionInput): ChannelSessionBindingRecord {
     const channelBinding = this.channelBindings.get(input.channelBindingId)
     if (!channelBinding || channelBinding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
-    if (!this.headlessAgents.has(input.agentId)) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const agent = this.headlessAgents.get(input.agentId)
+    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    if (channelBinding.agentId !== agent.agentId) throw new Error('Channel session binding agent does not match channel binding.')
     const provider = normalizeProvider(input.provider)
+    if (channelBinding.provider !== provider) throw new Error('Channel session binding provider does not match channel binding.')
     const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
     const externalChatId = normalizeText(input.externalChatId, CHANNEL_TEXT_MAX_LENGTH, 'External chat id')
     const externalThreadId = normalizeText(input.externalThreadId, CHANNEL_TEXT_MAX_LENGTH, 'External thread id')
@@ -2342,6 +2345,15 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   createChannelInteraction(input: CreateChannelInteractionInput): IssuedChannelInteractionRecord {
     if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const org = this.orgs.get(input.orgId)
+    const agent = this.headlessAgents.get(input.agentId)
+    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const session = this.getSessionForTenant(org?.tenantId || input.orgId, input.sessionId)
+    if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
+    if (input.createdByIdentityId) {
+      const identity = this.channelIdentities.get(input.createdByIdentityId)
+      if (!identity || identity.orgId !== input.orgId) throw new Error(`Unknown channel identity ${input.createdByIdentityId}.`)
+    }
     const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
     const tokenHash = hashChannelInteractionToken(plaintextToken)
     const existing = this.channelInteractions.get(input.interactionId)
@@ -2443,6 +2455,24 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   createChannelDelivery(input: CreateChannelDeliveryInput): ChannelDeliveryRecord {
     if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
+    const agent = this.headlessAgents.get(input.agentId)
+    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
+    const channelBinding = this.channelBindings.get(input.channelBindingId)
+    if (!channelBinding || channelBinding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
+    const provider = normalizeProvider(input.provider)
+    if (channelBinding.agentId !== agent.agentId) throw new Error('Channel delivery binding does not match headless agent.')
+    if (channelBinding.provider !== provider) throw new Error('Channel delivery provider does not match channel binding.')
+    if (input.sessionBindingId) {
+      const sessionBinding = this.channelSessionBindings.get(input.sessionBindingId)
+      if (!sessionBinding || sessionBinding.orgId !== input.orgId) throw new Error(`Unknown channel session binding ${input.sessionBindingId}.`)
+      if (
+        sessionBinding.agentId !== agent.agentId
+        || sessionBinding.channelBindingId !== channelBinding.bindingId
+        || sessionBinding.provider !== provider
+      ) {
+        throw new Error('Channel delivery session binding does not match channel binding.')
+      }
+    }
     const existing = this.channelDeliveries.get(input.deliveryId)
     if (existing) return clone(existing)
     const now = nowIso(input.createdAt)
@@ -2452,7 +2482,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
       channelBindingId: normalizeText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
       sessionBindingId: normalizeNullableText(input.sessionBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
-      provider: normalizeProvider(input.provider),
+      provider,
       target: normalizeRecord(input.target, 'Channel delivery target'),
       eventType: normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery event type'),
       payload: normalizeRecord(input.payload, 'Channel delivery payload'),

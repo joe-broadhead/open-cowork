@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
 import type { PublicBrandingConfig } from '@open-cowork/shared'
@@ -59,6 +59,14 @@ import type { WorkflowWebhookSecurityStore } from '../workflow/workflow-webhook-
 type Env = Record<string, string | undefined>
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
+const DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS = 5 * 60 * 1000
+const HEADER_AUTH_SIGNED_HEADERS = [
+  'x-open-cowork-tenant-id',
+  'x-open-cowork-tenant-name',
+  'x-open-cowork-user-id',
+  'x-open-cowork-user-email',
+  'x-open-cowork-user-role',
+] as const
 
 export type CloudRoleRuntimeFactoryInput = {
   paths: PathProvider
@@ -238,6 +246,14 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
       || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
       || config.cloud.auth.headerSecret,
+    headerAllowUnsigned: parseBoolean(
+      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED'),
+      config.cloud.auth.headerAllowUnsigned || false,
+    ),
+    headerMaxSignatureAgeMs: parsePositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS'),
+      config.cloud.auth.headerMaxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
+    ),
     issuerUrl: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_ISSUER_URL') || config.cloud.auth.issuerUrl,
     clientId: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_ID') || config.cloud.auth.clientId,
     clientSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef,
@@ -538,15 +554,28 @@ function constantTimeStringEqual(left: string | null | undefined, right: string 
 
 export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> = {}, options: {
   headerSecret?: string | null
+  requireSignedHeaders?: boolean
+  maxSignatureAgeMs?: number
+  now?: () => Date
 } = {}): CloudAuthResolver {
   return (req) => {
     const expectedSecret = options.headerSecret?.trim()
     if (expectedSecret && !constantTimeStringEqual(readHeader(req, 'x-open-cowork-header-auth-secret'), expectedSecret)) {
       throw new CloudHttpError(401, 'Trusted header authentication secret is invalid.')
     }
+    if (expectedSecret && options.requireSignedHeaders) {
+      assertHeaderAuthSignature(req, expectedSecret, {
+        maxAgeMs: options.maxSignatureAgeMs || DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS,
+        now: options.now,
+      })
+    }
     const tenantId = readHeader(req, 'x-open-cowork-tenant-id') || defaults.tenantId || 'default'
     const userId = readHeader(req, 'x-open-cowork-user-id') || defaults.userId || 'local-user'
     const email = readHeader(req, 'x-open-cowork-user-email') || defaults.email || 'local@example.test'
+    const role = readHeader(req, 'x-open-cowork-user-role') || defaults.role || 'member'
+    if (role !== 'owner' && role !== 'admin' && role !== 'member') {
+      throw new CloudHttpError(401, 'Trusted header authentication role is invalid.')
+    }
     return {
       tenantId,
       orgId: defaults.orgId || tenantId,
@@ -554,9 +583,53 @@ export function createHeaderCloudAuthResolver(defaults: Partial<CloudPrincipal> 
       userId,
       accountId: defaults.accountId || userId,
       email,
-      role: (readHeader(req, 'x-open-cowork-user-role') as CloudPrincipal['role']) || defaults.role || 'member',
+      role,
       authSource: 'header',
     }
+  }
+}
+
+function canonicalHeaderAuthPayload(req: IncomingMessage, timestamp: string) {
+  return [
+    'v1',
+    timestamp,
+    ...HEADER_AUTH_SIGNED_HEADERS.map((name) => readHeader(req, name) || ''),
+  ].join('\n')
+}
+
+export function signHeaderCloudAuthRequest(input: {
+  headers: Record<string, string | undefined>
+  secret: string
+  timestamp: string
+}) {
+  const payload = [
+    'v1',
+    input.timestamp,
+    ...HEADER_AUTH_SIGNED_HEADERS.map((name) => input.headers[name] || input.headers[name.toLowerCase()] || ''),
+  ].join('\n')
+  return `v1=${createHmac('sha256', input.secret).update(payload).digest('hex')}`
+}
+
+function assertHeaderAuthSignature(req: IncomingMessage, secret: string, options: {
+  maxAgeMs: number
+  now?: () => Date
+}) {
+  const timestamp = readHeader(req, 'x-open-cowork-header-auth-timestamp')
+  const signature = readHeader(req, 'x-open-cowork-header-auth-signature')
+  if (!timestamp || !signature) {
+    throw new CloudHttpError(401, 'Trusted header authentication signature is required.')
+  }
+  const timestampMs = Number(timestamp) * 1000
+  if (!Number.isFinite(timestampMs)) {
+    throw new CloudHttpError(401, 'Trusted header authentication timestamp is invalid.')
+  }
+  const nowMs = (options.now?.() || new Date()).getTime()
+  if (Math.abs(nowMs - timestampMs) > options.maxAgeMs) {
+    throw new CloudHttpError(401, 'Trusted header authentication timestamp is outside the allowed window.')
+  }
+  const expected = `v1=${createHmac('sha256', secret).update(canonicalHeaderAuthPayload(req, timestamp)).digest('hex')}`
+  if (!constantTimeStringEqual(signature, expected)) {
+    throw new CloudHttpError(401, 'Trusted header authentication signature is invalid.')
   }
 }
 
@@ -629,7 +702,11 @@ export function createCloudAuthResolverForConfig(
     return createOidcCloudAuthResolver(config.cloud.auth, options)
   }
   if (config.cloud.auth.mode === 'header') {
-    return createHeaderCloudAuthResolver({}, { headerSecret: config.cloud.auth.headerSecret })
+    return createHeaderCloudAuthResolver({}, {
+      headerSecret: config.cloud.auth.headerSecret,
+      requireSignedHeaders: Boolean(config.cloud.auth.headerSecret && !config.cloud.auth.headerAllowUnsigned),
+      maxSignatureAgeMs: config.cloud.auth.headerMaxSignatureAgeMs,
+    })
   }
   return createLocalCloudAuthResolver()
 }
@@ -656,15 +733,60 @@ export function isLoopbackCloudHost(hostname: string | null | undefined) {
     || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
 }
 
+function parseDeploymentOrigin(value: string | null | undefined, label: string) {
+  const text = value?.trim()
+  if (!text) return null
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    throw new Error(`${label} must be a valid URL origin.`)
+  }
+  if (url.username || url.password) throw new Error(`${label} must not include credentials.`)
+  if (url.pathname !== '/' || url.search || url.hash) throw new Error(`${label} must be an origin without a path, query, or fragment.`)
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error(`${label} must use HTTP or HTTPS.`)
+  return url
+}
+
+function assertPublicHttpsOrigin(value: string | null | undefined, label: string) {
+  const url = parseDeploymentOrigin(value, label)
+  if (!url) return null
+  if (url.protocol !== 'https:' || isLoopbackCloudHost(url.hostname)) {
+    throw new Error(`${label} for public deployments must use HTTPS with a non-loopback host.`)
+  }
+  return url
+}
+
+function publicUrlEnablesStrictTransportSecurity(value: string | null | undefined) {
+  try {
+    const url = parseDeploymentOrigin(value, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
+    return Boolean(url && url.protocol === 'https:' && !isLoopbackCloudHost(url.hostname))
+  } catch {
+    return false
+  }
+}
+
 export function assertCloudAuthDeploymentSafe(input: {
   role: CloudRuntimePolicy['role']
   hostname: string
   auth: CloudAuthConfig
   publicUrl?: string | null
+  corsOrigin?: string | null
+  cookieSecure?: boolean
   env?: Env
 }) {
   if (!shouldRunCloudWeb(input.role)) return
   if (parseBoolean(envValue(input.env || process.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) return
+  if (!isLoopbackCloudHost(input.hostname) && input.cookieSecure === false) {
+    throw new Error('Cloud browser session cookies must be Secure on public deployments. Remove OPEN_COWORK_CLOUD_COOKIE_SECURE=false or use the explicit local/demo override.')
+  }
+  if (input.corsOrigin?.trim()) {
+    if (input.corsOrigin.trim() === '*') {
+      throw new Error('OPEN_COWORK_CLOUD_CORS_ORIGIN cannot be "*" when credentials are enabled.')
+    }
+    if (isLoopbackCloudHost(input.hostname)) parseDeploymentOrigin(input.corsOrigin, 'OPEN_COWORK_CLOUD_CORS_ORIGIN')
+    else assertPublicHttpsOrigin(input.corsOrigin, 'OPEN_COWORK_CLOUD_CORS_ORIGIN')
+  }
   if (input.auth.mode === 'none') {
     if (isLoopbackCloudHost(input.hostname)) return
     throw new Error(
@@ -676,8 +798,14 @@ export function assertCloudAuthDeploymentSafe(input: {
       'Cloud auth mode "header" on a public bind requires OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET or OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF so caller-supplied identity headers cannot be spoofed.',
     )
   }
+  if (input.auth.mode === 'header' && input.auth.headerAllowUnsigned && !isLoopbackCloudHost(input.hostname)) {
+    throw new Error('Cloud auth mode "header" on a public bind requires signed trusted headers. OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED is local/demo-only.')
+  }
   if (input.auth.mode === 'oidc' && !input.publicUrl?.trim() && !isLoopbackCloudHost(input.hostname)) {
     throw new Error('Cloud OIDC public deployments require OPEN_COWORK_CLOUD_PUBLIC_URL so redirect URIs do not trust forwarded headers.')
+  }
+  if (input.auth.mode === 'oidc' && input.publicUrl?.trim() && !isLoopbackCloudHost(input.hostname)) {
+    assertPublicHttpsOrigin(input.publicUrl, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
   }
 }
 
@@ -788,6 +916,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     hostname: listenHostname,
     auth: authConfig,
     publicUrl: envOptions.publicUrl,
+    corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
+    cookieSecure: envOptions.cookieSecure,
     env,
   })
   const resolvedAuthConfig = {
@@ -1006,6 +1136,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         webhookSecurity,
         autoProcessCommands: options.autoProcessCommands ?? (policy.role === 'all-in-one' && envOptions.autoProcessCommands),
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
+        strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
         trustProxyHeaders: envOptions.trustProxyHeaders,
       })
     : null

@@ -1657,7 +1657,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           eventType: 'channel_binding.created',
           targetType: 'channel_binding',
           targetId: binding.bindingId,
-          metadata: { provider: binding.provider, displayName: binding.displayName, credentialRef: binding.credentialRef },
+          metadata: { provider: binding.provider, displayName: binding.displayName, credentialRefConfigured: Boolean(binding.credentialRef) },
           createdAt: input.createdAt,
         })
       }
@@ -1768,6 +1768,24 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async bindChannelSession(input: BindChannelSessionInput) {
     const provider = normalizeProvider(input.provider)
     const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+    const relationship = await this.maybeOne(
+      `SELECT b.binding_id
+       FROM cloud_channel_bindings b
+       JOIN headless_agents a
+         ON a.agent_id = $3
+        AND a.org_id = $1
+       JOIN cloud_orgs o
+         ON o.org_id = $1
+       JOIN cloud_sessions s
+         ON s.tenant_id = o.tenant_id
+        AND s.session_id = $4
+       WHERE b.org_id = $1
+         AND b.binding_id = $2
+         AND b.agent_id = a.agent_id
+         AND b.provider = $5`,
+      [input.orgId, input.channelBindingId, input.agentId, input.sessionId, provider],
+    )
+    if (!relationship) throw new Error('Channel session binding references must belong to the same org, agent, provider, and session.')
     const now = nowIso(input.createdAt)
     const result = await this.pool.query(
       `INSERT INTO cloud_channel_session_bindings (
@@ -1871,6 +1889,22 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async createChannelInteraction(input: CreateChannelInteractionInput): Promise<IssuedChannelInteractionRecord> {
     const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })
+    const relationship = await this.maybeOne(
+      `SELECT a.agent_id
+       FROM headless_agents a
+       JOIN cloud_orgs o
+         ON o.org_id = $1
+       JOIN cloud_sessions s
+         ON s.tenant_id = o.tenant_id
+        AND s.session_id = $3
+       LEFT JOIN cloud_channel_identities i
+         ON i.identity_id = $4
+       WHERE a.org_id = $1
+         AND a.agent_id = $2
+         AND ($4::text IS NULL OR i.org_id = $1)`,
+      [input.orgId, input.agentId, input.sessionId, input.createdByIdentityId || null],
+    )
+    if (!relationship) throw new Error('Channel interaction references must belong to the same org, agent, session, and identity.')
     const result = await this.pool.query(
       `INSERT INTO cloud_channel_interactions (
         interaction_id, org_id, agent_id, session_id, provider, external_interaction_id,
@@ -2059,6 +2093,28 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async createChannelDelivery(input: CreateChannelDeliveryInput) {
     const now = nowIso(input.createdAt)
+    const provider = normalizeProvider(input.provider)
+    const relationship = await this.maybeOne(
+      `SELECT b.binding_id
+       FROM headless_agents a
+       JOIN cloud_channel_bindings b
+         ON b.binding_id = $3
+        AND b.org_id = $1
+        AND b.agent_id = a.agent_id
+        AND b.provider = $5
+       LEFT JOIN cloud_channel_session_bindings sb
+         ON sb.binding_id = $4
+       WHERE a.org_id = $1
+         AND a.agent_id = $2
+         AND ($4::text IS NULL OR (
+           sb.org_id = $1
+           AND sb.agent_id = a.agent_id
+           AND sb.channel_binding_id = b.binding_id
+           AND sb.provider = $5
+         ))`,
+      [input.orgId, input.agentId, input.channelBindingId, input.sessionBindingId || null, provider],
+    )
+    if (!relationship) throw new Error('Channel delivery references must belong to the same org, agent, provider, binding, and session binding.')
     const result = await this.pool.query(
       `INSERT INTO cloud_channel_deliveries (
         delivery_id, org_id, agent_id, channel_binding_id, session_binding_id,
@@ -2074,7 +2130,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         input.agentId,
         input.channelBindingId,
         input.sessionBindingId || null,
-        normalizeProvider(input.provider),
+        provider,
         JSON.stringify(normalizeRecord(input.target, 'Channel delivery target')),
         normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery event type'),
         JSON.stringify(normalizeRecord(input.payload, 'Channel delivery payload')),

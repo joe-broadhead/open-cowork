@@ -163,9 +163,19 @@ roles and shared Postgres/object storage.
   `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` using
   `x-open-cowork-gateway-webhook-timestamp` and
   `x-open-cowork-gateway-webhook-signature`.
-- The fake provider is local/demo-only and must not be exposed publicly.
+- The fake provider is local/demo-only. Public demo exposure requires the
+  deliberate `OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true` override and
+  must not be used for production traffic.
 - Gateway metrics and diagnostics on `0.0.0.0` require an admin token or
   private networking.
+
+### Trusted Header Auth
+
+- `cloud.auth.mode=header` is for deployments behind a trusted identity proxy.
+- Public deployments require `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` and signed
+  timestamped identity headers. Unsigned header auth is only for local demos.
+- Header-auth role headers must map to `owner`, `admin`, or `member`; unknown
+  roles are rejected rather than treated as privileged users.
 
 ### Quotas/Rate Limits
 
