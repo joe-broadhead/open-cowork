@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ModelInfoSnapshot, SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
-import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
+import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
 import { listSessionArtifacts } from './session-artifacts'
 import { SessionArtifactList } from './SessionArtifactList'
@@ -29,6 +30,10 @@ type RuntimeModelState = {
   providerId: string | null
   modelId: string | null
   contextLimit: number | null
+}
+
+function artifactsContainCloud(view: SessionView) {
+  return (view.artifacts || []).some((artifact) => artifact.source === 'cloud')
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -149,6 +154,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const sessions = useSessionStore((state) => state.sessions)
   const currentView = useSessionStore((state) => state.currentView)
+  const workspaceSupport = useActiveWorkspaceSupport()
   // Subscribe to the whole map so the selector returns a stable
   // reference (zustand uses Object.is by default; returning `[]` from
   // a selector on every call triggers infinite re-renders). Slice
@@ -178,7 +184,8 @@ export function SessionInspector({ onClose }: InspectorProps) {
   // Chart PNGs live outside the session dir under appData, so they're
   // available in both modes — keep the tab when either kind is
   // present.
-  const showArtifactsTab = !currentSession?.directory || chartArtifacts.length > 0
+  const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
+  const showArtifactsTab = (!currentSession?.directory && activeWorkspaceIsLocal) || chartArtifacts.length > 0 || artifactsContainCloud(currentView)
 
   useEffect(() => {
     let cancelled = false
@@ -186,7 +193,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
     async function loadRuntimeModel() {
       try {
         const [settings, info] = await Promise.all([
-          window.coworkApi.settings.get(),
+          window.coworkApi.settings.get(activeWorkspaceId === LOCAL_WORKSPACE_ID ? undefined : { workspaceId: activeWorkspaceId }),
           window.coworkApi.model.info(),
         ])
         if (cancelled) return
@@ -215,7 +222,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
     return () => {
       cancelled = true
     }
-  }, [currentSessionId])
+  }, [activeWorkspaceId, currentSessionId])
 
   useEffect(() => {
     if (tab === 'artifacts' && !showArtifactsTab) {
@@ -379,9 +386,17 @@ export function SessionInspector({ onClose }: InspectorProps) {
 
         {tab === 'artifacts' && currentSessionId && (
           <div>
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Sandbox Artifacts</div>
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">
+              {activeWorkspaceIsLocal ? 'Sandbox Artifacts' : 'Cloud Artifacts'}
+            </div>
             <div className="mt-3">
-              <SessionArtifactList sessionId={currentSessionId} artifacts={artifacts} />
+              <SessionArtifactList
+                sessionId={currentSessionId}
+                artifacts={artifacts}
+                workspaceId={activeWorkspaceIsLocal ? undefined : activeWorkspaceId}
+                canRevealArtifact={workspaceSupport.flags.canRevealArtifact}
+                revealDisabledReason={workspaceSupport.flags.reasons.revealArtifact}
+              />
             </div>
           </div>
         )}

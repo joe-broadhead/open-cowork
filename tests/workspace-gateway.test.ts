@@ -173,6 +173,7 @@ test('workspace gateway marks local desktop-only capabilities as local supported
 
   assert.equal(supportStatus(support, 'sessions.fileSnippet').status, 'supported')
   assert.equal(supportStatus(support, 'sessions.diff').status, 'supported')
+  assert.equal(supportStatus(support, 'artifacts.reveal').status, 'supported')
   assert.equal(supportStatus(support, 'localFiles').status, 'supported')
   assert.equal(supportStatus(support, 'localStdioMcps').status, 'supported')
   assert.equal(supportStatus(support, 'machineRuntimeConfig').status, 'supported')
@@ -191,6 +192,7 @@ test('workspace gateway registers cloud connections without enabling unauthentic
   const support = await gateway.supportMatrix(event(1), workspace.id)
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.status, 'blocked_by_policy')
   assert.equal(support.find((entry) => entry.api === 'localFiles')?.status, 'not_supported')
+  assert.equal(support.find((entry) => entry.api === 'artifacts.reveal')?.status, 'not_supported')
   await assert.rejects(() => gateway.sync(event(1), workspace.id), /Sign in|not available/)
 })
 
@@ -286,6 +288,8 @@ test('workspace gateway keeps host paths, local stdio MCPs, and machine config o
   assert.match(supportStatus(support, 'localStdioMcps').verdict?.reason || '', /local stdio MCPs/)
   assert.equal(supportStatus(support, 'machineRuntimeConfig').status, 'not_supported')
   assert.match(supportStatus(support, 'machineRuntimeConfig').verdict?.reason || '', /machine-native runtime config/)
+  assert.equal(supportStatus(support, 'artifacts.reveal').status, 'not_supported')
+  assert.match(supportStatus(support, 'artifacts.reveal').verdict?.reason || '', /local filesystem/)
 })
 
 test('workspace gateway loads and removes persisted cloud connections', () => {
@@ -688,6 +692,81 @@ test('workspace gateway routes online cloud session calls through the cloud adap
     'settings:get:portable-settings',
     'settings:set:portable-settings:openai',
   ])
+})
+
+test('workspace gateway cloud sync refreshes adapter snapshot and persists sync time', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-workspace-sync-'))
+  const registry = new FileCloudWorkspaceRegistry(join(root, 'cloud-workspaces.json'))
+  const persisted = registry.upsert({ baseUrl: 'https://cloud.example.test', label: 'Acme' })
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(root, 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  credentials.save({
+    workspaceId: persisted.id,
+    accessToken: 'cloud-access-token',
+    expiresAt: '2030-05-27T12:00:00.000Z',
+  })
+  let syncCalls = 0
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    sync: async () => { syncCalls += 1 },
+    listSessions: async () => [],
+    createSession: async () => ({
+      id: 'cloud-session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }),
+    getSessionInfo: async () => null,
+    getSessionView: async () => ({
+      messages: [],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      pendingApprovals: [],
+      pendingQuestions: [],
+      errors: [],
+      todos: [],
+      executionPlan: [],
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      lastInputTokens: 0,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      activeAgent: null,
+      lastItemWasTool: false,
+      revision: 0,
+      lastEventAt: 0,
+      isGenerating: false,
+      isAwaitingPermission: false,
+      isAwaitingQuestion: false,
+    }),
+    promptSession: async () => undefined,
+    abortSession: async () => undefined,
+  }
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: registry,
+    cloudCredentialStore: credentials,
+    cloudAdapterFactory: () => adapter,
+  })
+
+  const result = await gateway.sync(event(1), persisted.id)
+
+  assert.equal(syncCalls, 1)
+  assert.equal(result.ok, true)
+  assert.equal(registry.list().find((entry) => entry.id === persisted.id)?.lastSyncedAt, result.syncedAt)
+  assert.equal(gateway.list(event(1)).find((workspace) => workspace.id === persisted.id)?.lastSyncedAt, result.syncedAt)
 })
 
 test('workspace gateway subscribes cloud workspace events once per sender', async () => {

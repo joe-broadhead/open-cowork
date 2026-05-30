@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceRule } from '@open-cowork/shared'
 import type { ToolCall } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
 import { TOOL_TRACE_RULES_CHANGED_EVENT } from '../../helpers/tool-trace-events'
 import { MermaidChart } from './MermaidChart'
@@ -103,6 +104,10 @@ function toolAttachmentKey(attachment: ToolAttachment, seen: Map<string, number>
   return occurrence === 0 ? base : `${base}:${occurrence + 1}`
 }
 
+function artifactWorkspaceScope(workspaceId?: string) {
+  return workspaceId ? { workspaceId } : {}
+}
+
 interface Props {
   tools: ToolCall[]
   compact?: boolean
@@ -164,6 +169,7 @@ function ArtifactCard({
 export function ToolTrace({ tools, compact = false }: Props) {
   const activeAgent = useSessionStore((s) => s.currentView.activeAgent)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
+  const activeWorkspaceId = useSessionStore((s) => s.activeWorkspaceId)
   const sessions = useSessionStore((s) => s.sessions)
   const allDone = tools.every((tool) => tool.status === 'complete' || tool.status === 'error')
   const [expanded, setExpanded] = useState(!allDone)
@@ -173,7 +179,8 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
   const currentSession = sessions.find((session) => session.id === currentSessionId) || null
   const toolTraceRules = useToolTraceRules(currentSession?.directory)
-  const privateWorkspace = !currentSession?.directory
+  const privateWorkspace = activeWorkspaceId === LOCAL_WORKSPACE_ID && !currentSession?.directory
+  const workspaceIdForArtifact = activeWorkspaceId === LOCAL_WORKSPACE_ID ? undefined : activeWorkspaceId
   const artifacts = privateWorkspace ? listArtifactsForTools(tools) : []
 
   // Auto-expand while running so user sees progress
@@ -194,6 +201,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
       const payload = await window.coworkApi.artifact.readAttachment({
         sessionId: currentSessionId,
         filePath: artifact.filePath,
+        ...artifactWorkspaceScope(workspaceIdForArtifact),
       })
       dispatchComposerCompose({
         attachments: [attachmentFromArtifact(payload)],
@@ -298,6 +306,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
                 sessionId: currentSessionId,
                 filePath: artifact.filePath,
                 suggestedName: artifact.filename,
+                ...artifactWorkspaceScope(workspaceIdForArtifact),
               })
             } finally {
               setExportingArtifactId(null)
@@ -307,6 +316,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             await window.coworkApi.artifact.reveal({
               sessionId: currentSessionId,
               filePath: artifact.filePath,
+              ...artifactWorkspaceScope(workspaceIdForArtifact),
             })
           }}
         />

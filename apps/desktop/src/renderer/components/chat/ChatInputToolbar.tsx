@@ -15,6 +15,12 @@ type ChatInputToolbarProps = {
   isAwaitingPermission: boolean
   isAwaitingQuestion: boolean
   canSend: boolean
+  sendDisabledReason?: string | null
+  attachmentsAllowed?: boolean
+  attachmentsDisabledReason?: string | null
+  modelControlsManaged?: boolean
+  modelControlsReason?: string | null
+  reasoningControlsManaged?: boolean
   onAddFiles: (files: FileList | File[]) => Promise<void> | void
   onToggleModelMenu: () => void
   onToggleReasoningMenu?: () => void
@@ -38,6 +44,12 @@ export function ChatInputToolbar({
   isAwaitingPermission,
   isAwaitingQuestion,
   canSend,
+  sendDisabledReason,
+  attachmentsAllowed = true,
+  attachmentsDisabledReason,
+  modelControlsManaged = false,
+  modelControlsReason,
+  reasoningControlsManaged = false,
   onAddFiles,
   onToggleModelMenu,
   onToggleReasoningMenu,
@@ -50,9 +62,13 @@ export function ChatInputToolbar({
     <div className="flex items-center justify-between px-3 pb-2.5 pt-0.5">
       <div className="flex items-center gap-1">
         <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-          title={t('chat.attachFile', 'Attach file')}
+          onClick={() => {
+            if (!attachmentsAllowed) return
+            fileInputRef.current?.click()
+          }}
+          disabled={!attachmentsAllowed}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          title={attachmentsAllowed ? t('chat.attachFile', 'Attach file') : attachmentsDisabledReason || t('chat.attachFileDisabled', 'File attachments are disabled by this workspace policy.')}
         >
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
             <line x1="7.5" y1="3" x2="7.5" y2="12" />
@@ -74,9 +90,11 @@ export function ChatInputToolbar({
 
         <div>
           <button
-            ref={modelButtonRef}
-            onClick={onToggleModelMenu}
-            className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1"
+          ref={modelButtonRef}
+            onClick={modelControlsManaged ? undefined : onToggleModelMenu}
+            disabled={modelControlsManaged}
+            title={modelControlsManaged ? modelControlsReason || t('chat.modelManagedByPolicy', 'This workspace manages model selection.') : undefined}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {modelLabel}
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
@@ -88,9 +106,10 @@ export function ChatInputToolbar({
         {showReasoningControl && onToggleReasoningMenu ? (
           <button
             ref={reasoningButtonRef}
-            onClick={onToggleReasoningMenu}
-            className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1"
-            title={t('chat.reasoningDescription', 'Reasoning mode for models that expose OpenCode variants')}
+            onClick={reasoningControlsManaged ? undefined : onToggleReasoningMenu}
+            disabled={reasoningControlsManaged}
+            className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
+            title={reasoningControlsManaged ? modelControlsReason || t('chat.reasoningManagedByPolicy', 'This workspace manages reasoning settings.') : t('chat.reasoningDescription', 'Reasoning mode for models that expose OpenCode variants')}
           >
             {t('chat.reasoningChip', 'Think')} {reasoningLabel || t('chat.reasoningAuto', 'Auto')}
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
@@ -186,6 +205,7 @@ export function ChatInputToolbar({
         <button
           onClick={() => void (isGenerating ? onStop() : onSubmit())}
           disabled={!canSend && !isGenerating}
+          title={!canSend && !isGenerating ? sendDisabledReason || undefined : undefined}
           className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
             isGenerating
               ? 'bg-transparent text-text-muted hover:text-red'

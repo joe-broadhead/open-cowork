@@ -12,6 +12,8 @@ import {
   type AppearancePreferences,
 } from '../../helpers/theme'
 import { useSessionStore } from '../../stores/session'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
@@ -46,6 +48,44 @@ function stripMaskedSettingsCredentials(settings: EffectiveAppSettings): Effecti
   }
 }
 
+function CloudModelsPolicyPanel({ settings }: { settings: EffectiveAppSettings }) {
+  const provider = settings.effectiveProviderId || settings.selectedProviderId || 'Profile default'
+  const model = settings.effectiveModel || settings.selectedModelId || 'Profile default'
+  const smallModel = settings.effectiveSmallModel || settings.selectedSmallModelId || 'Profile default'
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
+        <div className="text-[12px] font-semibold text-text">{t('settings.cloudModels.title', 'Cloud profile runtime')}</div>
+        <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+          {t('settings.cloudModels.description', 'This cloud workspace resolves providers, models, credentials, and runtime config through its cloud profile. Desktop shows policy-managed metadata only and never receives raw provider keys.')}
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: t('settings.cloudModels.provider', 'Provider'), value: provider },
+          { label: t('settings.cloudModels.model', 'Model'), value: model },
+          { label: t('settings.cloudModels.smallModel', 'Small model'), value: smallModel },
+        ].map((entry) => (
+          <div key={entry.label} className="rounded-2xl border border-border-subtle bg-elevated px-3 py-3">
+            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{entry.label}</div>
+            <div className="mt-1 truncate text-[12px] font-semibold text-text" title={entry.value}>{entry.value}</div>
+            <div className="mt-1 text-[10px] text-text-muted">{t('settings.cloudModels.managed', 'Policy managed')}</div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
+        <div className="text-[12px] font-semibold text-text">{t('settings.cloudModels.credentials', 'Credential status')}</div>
+        <div className="mt-2 grid gap-2 text-[11px] text-text-muted">
+          <div>{t('settings.cloudModels.adminManaged', 'admin_managed: configured by the organisation and hidden from clients.')}</div>
+          <div>{t('settings.cloudModels.configured', 'configured: a cloud BYOK secret exists, but plaintext is never synced to desktop.')}</div>
+          <div>{t('settings.cloudModels.missing', 'missing: the workspace cannot execute until an admin adds the required key.')}</div>
+          <div>{t('settings.cloudModels.expired', 'expired: the cloud credential needs to be refreshed or replaced.')}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPanel({
   onClose,
 }: {
@@ -61,6 +101,9 @@ export function SettingsPanel({
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
   const [lastCleanup, setLastCleanup] = useState<SandboxCleanupResult | null>(null)
   const addGlobalError = useSessionStore((state) => state.addGlobalError)
+  const workspaceSupport = useActiveWorkspaceSupport()
+  const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
+  const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -77,9 +120,9 @@ export function SettingsPanel({
     // tab fetches only the active provider's real credential bag below.
     let cancelled = false
     Promise.all([
-      window.coworkApi.settings.get(),
+      activeWorkspaceIsLocal ? window.coworkApi.settings.get() : window.coworkApi.settings.get(workspaceOptions),
       window.coworkApi.app.config(),
-      window.coworkApi.artifact.storageStats(),
+      activeWorkspaceIsLocal ? window.coworkApi.artifact.storageStats() : Promise.resolve(null),
     ])
       .then(([nextSettings, nextConfig, nextStorage]) => {
         if (cancelled) return
@@ -93,9 +136,10 @@ export function SettingsPanel({
         reportSettingsPanelError(err, 'Failed to load settings panel')
       })
     return () => { cancelled = true }
-  }, [addGlobalError])
+  }, [activeWorkspaceIsLocal, addGlobalError, workspaceOptions?.workspaceId])
 
   useEffect(() => {
+    if (!activeWorkspaceIsLocal) return
     const providerId = settings?.effectiveProviderId
     if (!providerId) return
     let cancelled = false
@@ -121,7 +165,7 @@ export function SettingsPanel({
       reportSettingsPanelError(err, `Failed to load provider credentials for ${providerId}`)
     })
     return () => { cancelled = true }
-  }, [addGlobalError, settings?.effectiveProviderId])
+  }, [activeWorkspaceIsLocal, addGlobalError, settings?.effectiveProviderId])
 
   useEffect(() => {
     return () => {
@@ -136,39 +180,54 @@ export function SettingsPanel({
     () => [
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
         { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
-        { id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') },
+        ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
         { id: 'workflows' as const, label: t('settings.tab.workflows', 'Workflows'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
-        { id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') },
+        ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
       ],
-    [],
+    [activeWorkspaceIsLocal],
   )
+
+  useEffect(() => {
+    if (tabs.some((entry) => entry.id === tab)) return
+    setTab('appearance')
+  }, [tab, tabs])
 
   const persistSettings = async (options: { showSaved?: boolean } = {}) => {
     if (!settings) return false
     const { showSaved = true } = options
     setSaveError(null)
     try {
-      const savedSettings = await window.coworkApi.settings.set({
-        selectedProviderId: settings.selectedProviderId,
-        selectedModelId: settings.selectedModelId,
-        selectedSmallModelId: settings.selectedSmallModelId ?? null,
-        providerCredentials: settings.providerCredentials,
-        integrationCredentials: settings.integrationCredentials,
-        bashPermission: settings.bashPermission,
-        fileWritePermission: settings.fileWritePermission,
-        enableBash: settings.enableBash,
-        enableFileWrite: settings.enableFileWrite,
-        runtimeConfigSource: settings.runtimeConfigSource,
-        runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
-        workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
-        workflowRunInBackground: settings.workflowRunInBackground,
-        workflowDesktopNotifications: settings.workflowDesktopNotifications,
-        workflowQuietHoursStart: settings.workflowQuietHoursStart,
-        workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
-      })
+      const savedSettings = await window.coworkApi.settings.set(activeWorkspaceIsLocal
+        ? {
+            selectedProviderId: settings.selectedProviderId,
+            selectedModelId: settings.selectedModelId,
+            selectedSmallModelId: settings.selectedSmallModelId ?? null,
+            providerCredentials: settings.providerCredentials,
+            integrationCredentials: settings.integrationCredentials,
+            bashPermission: settings.bashPermission,
+            fileWritePermission: settings.fileWritePermission,
+            enableBash: settings.enableBash,
+            enableFileWrite: settings.enableFileWrite,
+            runtimeConfigSource: settings.runtimeConfigSource,
+            runtimeToolingBridgeEnabled: settings.runtimeToolingBridgeEnabled,
+            workflowLaunchAtLogin: settings.workflowLaunchAtLogin,
+            workflowRunInBackground: settings.workflowRunInBackground,
+            workflowDesktopNotifications: settings.workflowDesktopNotifications,
+            workflowQuietHoursStart: settings.workflowQuietHoursStart,
+            workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+          }
+        : {
+            workspaceId: workspaceSupport.workspaceId,
+            selectedProviderId: settings.selectedProviderId,
+            selectedModelId: settings.selectedModelId,
+            selectedSmallModelId: settings.selectedSmallModelId ?? null,
+            workflowDesktopNotifications: settings.workflowDesktopNotifications,
+            workflowQuietHoursStart: settings.workflowQuietHoursStart,
+            workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+          })
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings
-      if (savedSettings.effectiveProviderId) {
+      if (activeWorkspaceIsLocal && savedSettings.effectiveProviderId) {
         try {
           next = {
             ...savedSettings,
@@ -214,6 +273,7 @@ export function SettingsPanel({
   const runCleanup = async (mode: SandboxCleanupResult['mode']) => {
     try {
       setRunningCleanup(mode)
+      if (!activeWorkspaceIsLocal) return
       const result = await window.coworkApi.artifact.cleanup(mode)
       setLastCleanup(result)
       setStorageStats(await window.coworkApi.artifact.storageStats())
@@ -246,7 +306,11 @@ export function SettingsPanel({
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
         <div>
           <div className="text-[14px] font-semibold text-text">{t('settings.title', 'Settings')}</div>
-          <div className="text-[11px] text-text-muted mt-0.5">{t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')}</div>
+          <div className="text-[11px] text-text-muted mt-0.5">
+            {activeWorkspaceIsLocal
+              ? t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')
+              : t('settings.cloudSubtitle', 'Tune portable cloud workspace preferences. Runtime and credentials are policy-managed.')}
+          </div>
         </div>
         <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer transition-colors">{t('settings.done', 'Done')}</button>
       </div>
@@ -278,14 +342,18 @@ export function SettingsPanel({
               </div>
             )}
             {tab === 'models' && (
-              <ModelsPanel
-                config={config}
-                settings={settings}
-                update={update}
-                updateProviderCredential={updateProviderCredential}
-                onConfigRefreshed={setConfig}
-                onPersistSettings={() => persistSettings({ showSaved: false })}
-              />
+              activeWorkspaceIsLocal ? (
+                <ModelsPanel
+                  config={config}
+                  settings={settings}
+                  update={update}
+                  updateProviderCredential={updateProviderCredential}
+                  onConfigRefreshed={setConfig}
+                  onPersistSettings={() => persistSettings({ showSaved: false })}
+                />
+              ) : (
+                <CloudModelsPolicyPanel settings={settings} />
+              )
             )}
             {tab === 'permissions' && (
               <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
@@ -307,6 +375,9 @@ export function SettingsPanel({
             <div className="text-[11px]">
               <div className="text-text-muted">
                 {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
+                {!activeWorkspaceIsLocal
+                  ? ` ${t('settings.cloudSaveHint', 'Only portable cloud preferences are saved for this workspace.')}`
+                  : ''}
               </div>
               {saveError ? (
                 <div className="mt-1" style={{ color: 'var(--color-red)' }}>

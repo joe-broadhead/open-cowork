@@ -84,6 +84,9 @@ export type WorkspaceGatewayOptions = {
   cloudAdapterFactory?: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   cloudLogin?: (connection: CloudWorkspaceConnectionRecord) => Promise<CloudWorkspaceLoginResult>
   cloudRefresh?: (connection: CloudWorkspaceConnectionRecord, refreshToken: string) => Promise<CloudWorkspaceLoginResult>
+  cloudReconnectBaseMs?: number
+  cloudReconnectMaxMs?: number
+  cloudReconnectMaxAttempts?: number
 }
 
 const LOCAL_WORKSPACE: WorkspaceRegistration = {
@@ -147,6 +150,7 @@ const WORKSPACE_SUPPORT_APIS = [
   'artifacts.list',
   'artifacts.upload',
   'artifacts.download',
+  'artifacts.reveal',
   'settings.portable',
   'customContent.agents',
   'customContent.skills',
@@ -236,6 +240,7 @@ export class WorkspaceGateway {
   private readonly cloudAdapters = new Map<string, CloudWorkspaceSessionAdapter>()
   private readonly cloudSessionSubscriptions = new Map<string, CloudTransportSubscription>()
   private readonly cloudWorkspaceSubscriptions = new Map<string, CloudTransportSubscription>()
+  private readonly cloudSubscriptionRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly managedCloudWorkspaceIds = new Set<string>()
   private readonly activeBySender = new Map<number, string>()
   private readonly syncedAtByWorkspace = new Map<string, string>()
@@ -246,6 +251,9 @@ export class WorkspaceGateway {
   private readonly cloudAdapterFactory: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   private readonly cloudLogin: (connection: CloudWorkspaceConnectionRecord) => Promise<CloudWorkspaceLoginResult>
   private readonly cloudRefresh: (connection: CloudWorkspaceConnectionRecord, refreshToken: string) => Promise<CloudWorkspaceLoginResult>
+  private readonly cloudReconnectBaseMs: number
+  private readonly cloudReconnectMaxMs: number
+  private readonly cloudReconnectMaxAttempts: number
 
   constructor(options: WorkspaceGatewayOptions = {}) {
     this.cloudDesktopConfig = options.cloudDesktop || DEFAULT_CONFIG.cloudDesktop
@@ -260,6 +268,9 @@ export class WorkspaceGateway {
     const authenticator = createCloudWorkspaceDesktopAuthenticator()
     this.cloudLogin = options.cloudLogin || ((connection) => authenticator.login(connection))
     this.cloudRefresh = options.cloudRefresh || ((connection, refreshToken) => authenticator.refresh(connection, refreshToken))
+    this.cloudReconnectBaseMs = Math.max(0, options.cloudReconnectBaseMs ?? 500)
+    this.cloudReconnectMaxMs = Math.max(this.cloudReconnectBaseMs, options.cloudReconnectMaxMs ?? 10_000)
+    this.cloudReconnectMaxAttempts = Math.max(0, options.cloudReconnectMaxAttempts ?? 8)
     this.registerWorkspace(LOCAL_WORKSPACE)
     if (!this.cloudDesktopConfig.enabled) return
     const persistedConnections = new Map((this.cloudRegistry?.list() || []).map((connection) => [connection.id, connection]))
@@ -473,6 +484,7 @@ export class WorkspaceGateway {
       supportedIf('artifacts.list', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.upload', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.download', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
+      cloudSupport('artifacts.reveal', 'not_supported', 'Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.'),
       supportedIf('settings.portable', feature('settings'), 'Cloud portable settings are disabled by this workspace policy.'),
       supportedIf('customContent.agents', feature('customAgents'), 'Cloud custom agents are disabled by this workspace policy.'),
       supportedIf('customContent.skills', feature('customSkills'), 'Cloud custom skills are disabled by this workspace policy.'),
@@ -487,7 +499,12 @@ export class WorkspaceGateway {
   async sync(event: WorkspaceEventLike, workspaceIdInput?: string | null): Promise<WorkspaceSyncResult> {
     const workspace = this.resolveWorkspace(event, workspaceIdInput)
     if (workspace.kind === 'cloud') {
-      await this.requireCloudAdapter(workspace)
+      const adapter = await this.requireCloudAdapter(workspace)
+      if (adapter.sync) {
+        await adapter.sync()
+      } else {
+        await adapter.listSessions()
+      }
     }
     const syncedAt = new Date().toISOString()
     this.syncedAtByWorkspace.set(workspace.id, syncedAt)
@@ -983,30 +1000,65 @@ export class WorkspaceGateway {
     },
   ): Promise<void> {
     const workspace = this.resolveWorkspace(event, input.workspaceId)
-    const adapter = await this.requireCloudAdapter(workspace)
-    if (!adapter.subscribeSessionEvents) return
     const key = this.cloudSessionSubscriptionKey(workspace.id, sessionId)
     if (this.cloudSessionSubscriptions.has(key)) return
-    let subscription: CloudTransportSubscription | null = null
-    let failedDuringSubscribe = false
-    const onError = (error: unknown) => {
-      failedDuringSubscribe = true
-      if (subscription && this.cloudSessionSubscriptions.get(key) === subscription) {
-        this.cloudSessionSubscriptions.delete(key)
-        try { subscription.close() } catch { /* best effort */ }
+
+    let retryAttempt = 0
+    let lastSequence = input.afterSequence
+    const retryKey = `session:${key}`
+    const subscribe = async (afterSequence?: number) => {
+      const latestWorkspace = this.workspaces.get(workspace.id)
+      if (!latestWorkspace) return
+      let adapter: CloudWorkspaceSessionAdapter
+      try {
+        adapter = await this.requireCloudAdapter(latestWorkspace)
+      } catch (error) {
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudSessionSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+        return
       }
-      input.onError?.(error)
+      if (!adapter.subscribeSessionEvents) return
+      if (this.cloudSessionSubscriptions.has(key)) return
+      let subscription: CloudTransportSubscription | null = null
+      let failedDuringSubscribe = false
+      const onError = (error: unknown) => {
+        failedDuringSubscribe = true
+        if (subscription && this.cloudSessionSubscriptions.get(key) === subscription) {
+          this.cloudSessionSubscriptions.delete(key)
+          try { subscription.close() } catch { /* best effort */ }
+        }
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudSessionSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+      }
+      try {
+        subscription = adapter.subscribeSessionEvents(sessionId, {
+          afterSequence,
+          onEvent: (cloudEvent) => {
+            retryAttempt = 0
+            lastSequence = cloudEvent.sequence
+            input.onEvent(cloudEvent)
+          },
+          onError,
+        })
+      } catch (error) {
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudSessionSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+        return
+      }
+      if (failedDuringSubscribe) {
+        try { subscription.close() } catch { /* best effort */ }
+        return
+      }
+      this.clearCloudSubscriptionRetry(retryKey)
+      this.cloudSessionSubscriptions.set(key, subscription)
     }
-    subscription = adapter.subscribeSessionEvents(sessionId, {
-      afterSequence: input.afterSequence,
-      onEvent: input.onEvent,
-      onError,
-    })
-    if (failedDuringSubscribe) {
-      try { subscription.close() } catch { /* best effort */ }
-      return
-    }
-    this.cloudSessionSubscriptions.set(key, subscription)
+    await subscribe(input.afterSequence)
   }
 
   async subscribeCloudWorkspaceEvents(
@@ -1019,30 +1071,65 @@ export class WorkspaceGateway {
     },
   ): Promise<void> {
     const workspace = this.resolveWorkspace(event, input.workspaceId)
-    const adapter = await this.requireCloudAdapter(workspace)
-    if (!adapter.subscribeWorkspaceEvents) return
     const key = this.cloudWorkspaceSubscriptionKey(workspace.id, senderKey(event))
     if (this.cloudWorkspaceSubscriptions.has(key)) return
-    let subscription: CloudTransportSubscription | null = null
-    let failedDuringSubscribe = false
-    const onError = (error: unknown) => {
-      failedDuringSubscribe = true
-      if (subscription && this.cloudWorkspaceSubscriptions.get(key) === subscription) {
-        this.cloudWorkspaceSubscriptions.delete(key)
-        try { subscription.close() } catch { /* best effort */ }
+
+    let retryAttempt = 0
+    let lastSequence = input.afterSequence
+    const retryKey = `workspace:${key}`
+    const subscribe = async (afterSequence?: number) => {
+      const latestWorkspace = this.workspaces.get(workspace.id)
+      if (!latestWorkspace) return
+      let adapter: CloudWorkspaceSessionAdapter
+      try {
+        adapter = await this.requireCloudAdapter(latestWorkspace)
+      } catch (error) {
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudWorkspaceSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+        return
       }
-      input.onError?.(error)
+      if (!adapter.subscribeWorkspaceEvents) return
+      if (this.cloudWorkspaceSubscriptions.has(key)) return
+      let subscription: CloudTransportSubscription | null = null
+      let failedDuringSubscribe = false
+      const onError = (error: unknown) => {
+        failedDuringSubscribe = true
+        if (subscription && this.cloudWorkspaceSubscriptions.get(key) === subscription) {
+          this.cloudWorkspaceSubscriptions.delete(key)
+          try { subscription.close() } catch { /* best effort */ }
+        }
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudWorkspaceSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+      }
+      try {
+        subscription = adapter.subscribeWorkspaceEvents({
+          afterSequence,
+          onEvent: (cloudEvent) => {
+            retryAttempt = 0
+            lastSequence = cloudEvent.sequence
+            input.onEvent(cloudEvent)
+          },
+          onError,
+        })
+      } catch (error) {
+        input.onError?.(error)
+        this.scheduleCloudSubscriptionRetry(retryKey, key, this.cloudWorkspaceSubscriptions, retryAttempt++, () => {
+          void subscribe(lastSequence)
+        })
+        return
+      }
+      if (failedDuringSubscribe) {
+        try { subscription.close() } catch { /* best effort */ }
+        return
+      }
+      this.clearCloudSubscriptionRetry(retryKey)
+      this.cloudWorkspaceSubscriptions.set(key, subscription)
     }
-    subscription = adapter.subscribeWorkspaceEvents({
-      afterSequence: input.afterSequence,
-      onEvent: input.onEvent,
-      onError,
-    })
-    if (failedDuringSubscribe) {
-      try { subscription.close() } catch { /* best effort */ }
-      return
-    }
-    this.cloudWorkspaceSubscriptions.set(key, subscription)
+    await subscribe(input.afterSequence)
   }
 
   private resolveWorkspace(event: WorkspaceEventLike, workspaceIdInput?: string | null): WorkspaceRegistration {
@@ -1162,7 +1249,43 @@ export class WorkspaceGateway {
     return `${workspaceId}:${senderId}`
   }
 
+  private cloudSubscriptionRetryDelayMs(attempt: number) {
+    if (this.cloudReconnectMaxAttempts === 0) return null
+    if (attempt >= this.cloudReconnectMaxAttempts) return null
+    return Math.min(this.cloudReconnectMaxMs, this.cloudReconnectBaseMs * 2 ** Math.max(0, attempt))
+  }
+
+  private scheduleCloudSubscriptionRetry(
+    retryKey: string,
+    subscriptionKey: string,
+    subscriptions: Map<string, CloudTransportSubscription>,
+    attempt: number,
+    retry: () => void,
+  ) {
+    if (subscriptions.has(subscriptionKey) || this.cloudSubscriptionRetryTimers.has(retryKey)) return
+    const delay = this.cloudSubscriptionRetryDelayMs(attempt)
+    if (delay === null) return
+    const timer = setTimeout(() => {
+      this.cloudSubscriptionRetryTimers.delete(retryKey)
+      if (subscriptions.has(subscriptionKey)) return
+      retry()
+    }, delay)
+    this.cloudSubscriptionRetryTimers.set(retryKey, timer)
+  }
+
+  private clearCloudSubscriptionRetry(retryKey: string) {
+    const timer = this.cloudSubscriptionRetryTimers.get(retryKey)
+    if (!timer) return
+    clearTimeout(timer)
+    this.cloudSubscriptionRetryTimers.delete(retryKey)
+  }
+
   private closeCloudSubscriptionsForWorkspace(workspaceId: string) {
+    for (const [key, timer] of this.cloudSubscriptionRetryTimers.entries()) {
+      if (!key.startsWith(`session:${workspaceId}:`) && !key.startsWith(`workspace:${workspaceId}:`)) continue
+      clearTimeout(timer)
+      this.cloudSubscriptionRetryTimers.delete(key)
+    }
     for (const [key, subscription] of this.cloudSessionSubscriptions.entries()) {
       if (!key.startsWith(`${workspaceId}:`)) continue
       try { subscription.close() } catch { /* best effort */ }

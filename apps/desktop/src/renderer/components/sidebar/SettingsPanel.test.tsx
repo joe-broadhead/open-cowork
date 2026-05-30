@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
+import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { SettingsPanel } from './SettingsPanel'
 
 function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSettings {
@@ -92,12 +93,19 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks()
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
     globalErrors: [],
     busySessions: new Set(),
     awaitingPermissionSessions: new Set(),
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+  })
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: {},
+    loadedByWorkspace: {},
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
   })
 })
 
@@ -296,6 +304,66 @@ describe('SettingsPanel', () => {
 
     expect(screen.queryByRole('switch', { name: 'Improvement proposals' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Scheduled consolidation' })).not.toBeInTheDocument()
+  })
+
+  it('limits cloud settings to portable policy-managed fields', async () => {
+    const user = userEvent.setup()
+    const settingsSet = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings(updates))
+    const getProviderCredentials = vi.fn(async () => ({ apiKey: 'should-not-load' }))
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {
+        'cloud:test': WORKSPACE_SUPPORT_APIS.map((api) => ({
+          api,
+          status: api === 'settings.portable' ? 'supported' : 'not_supported',
+          verdict: {
+            allowed: api === 'settings.portable',
+            reason: api === 'settings.portable' ? null : 'Blocked by cloud policy.',
+          },
+        })),
+      },
+      loadedByWorkspace: { 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => config),
+      },
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials,
+        set: settingsSet,
+      },
+      artifact: {
+        storageStats: vi.fn(async () => {
+          throw new Error('local storage must not load for cloud settings')
+        }),
+      },
+    })
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Models/ }))
+
+    expect(screen.getByText('Cloud profile runtime')).toBeInTheDocument()
+    expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Storage')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('sk-or-...')).not.toBeInTheDocument()
+    expect(getProviderCredentials).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0]).toEqual({
+      workspaceId: 'cloud:test',
+      selectedProviderId: 'openrouter',
+      selectedModelId: 'anthropic/claude-sonnet-4',
+      selectedSmallModelId: null,
+      workflowDesktopNotifications: true,
+      workflowQuietHoursStart: null,
+      workflowQuietHoursEnd: null,
+    })
   })
 
   it('does not overwrite credential edits when scoped provider credentials resolve late', async () => {

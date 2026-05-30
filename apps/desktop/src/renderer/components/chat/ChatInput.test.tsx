@@ -2,13 +2,21 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
+import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { ChatInput } from './ChatInput'
 
 const HISTORY_KEY = 'open-cowork-prompt-history'
 
 function seedCurrentSession() {
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: {},
+    loadedByWorkspace: {},
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
+  })
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
     globalErrors: [],
     busySessions: new Set(),
     awaitingPermissionSessions: new Set(),
@@ -26,6 +34,57 @@ function seedCurrentSession() {
     },
   ])
   useSessionStore.getState().setCurrentSession('session-1')
+}
+
+function seedCloudSession() {
+  useSessionStore.setState({
+    activeWorkspaceId: 'cloud:test',
+    sessionsByWorkspace: {
+      'cloud:test': [{
+        id: 'session-1',
+        title: 'Cloud session',
+        directory: null,
+        createdAt: '2026-04-29T00:00:00.000Z',
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      }],
+    },
+    sessions: [{
+      id: 'session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-04-29T00:00:00.000Z',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }],
+    currentSessionId: 'session-1',
+    globalErrors: [],
+    busySessions: new Set(),
+    awaitingPermissionSessions: new Set(),
+    awaitingQuestionSessions: new Set(),
+    sessionStateById: {},
+    chartArtifactsBySession: {},
+  })
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: {
+      'cloud:test': WORKSPACE_SUPPORT_APIS.map((api) => {
+        if (api === 'localFiles' || api === 'machineRuntimeConfig' || api === 'artifacts.reveal') {
+          return {
+            api,
+            status: 'not_supported',
+            verdict: {
+              allowed: false,
+              reason: api === 'localFiles'
+                ? 'Cloud workspaces do not implicitly upload local files.'
+                : 'This cloud profile manages runtime configuration.',
+            },
+          }
+        }
+        return { api, status: 'supported', verdict: { allowed: true, reason: null } }
+      }),
+    },
+    loadedByWorkspace: { 'cloud:test': true },
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
+  })
 }
 
 function installModelRuntime() {
@@ -264,6 +323,31 @@ describe('ChatInput', () => {
       expect(api.session.setComposerPreferences).toHaveBeenCalledWith('session-a', { modelId: 'model-a' })
     })
     expect(api.settings.set).not.toHaveBeenCalled()
+  })
+
+  it('gates cloud composer controls and sends prompts with workspace scope', async () => {
+    const api = installModelRuntime()
+    seedCloudSession()
+
+    render(<ChatInput />)
+
+    expect(await screen.findByRole('button', { name: /Model A/ })).toBeDisabled()
+    expect(screen.getByTitle('Cloud workspaces do not implicitly upload local files.')).toBeDisabled()
+
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Continue in cloud' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(api.session.prompt).toHaveBeenCalledWith(
+        'session-1',
+        'Continue in cloud',
+        undefined,
+        'build',
+        { workspaceId: 'cloud:test' },
+      )
+    })
+    expect(api.session.setComposerPreferences).not.toHaveBeenCalled()
   })
 
   it('does not let a stale failed composer save roll back the latest reasoning choice', async () => {

@@ -2,6 +2,7 @@ import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo,
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import type { Session } from '../../stores/session'
+import type { WorkspaceOptions } from '@open-cowork/shared'
 import type { Attachment, ChatInputModelEntry, InlinePickerState, MentionableAgent } from './chat-input-types'
 import { formatAgentLabel } from '../../helpers/agent-label.ts'
 import { ensureAttachmentId } from './chat-input-utils.ts'
@@ -42,7 +43,7 @@ function reportChatSettingsError(error: unknown) {
   }
 }
 
-export function useChatRuntimeSelection(session?: Session | null) {
+export function useChatRuntimeSelection(session?: Session | null, workspaceOptions?: WorkspaceOptions) {
   const [settingsModel, setSettingsModel] = useState('')
   const [localModelOverride, setLocalModelOverride] = useState<string | null>(null)
   const [provider, setProvider] = useState('')
@@ -54,7 +55,10 @@ export function useChatRuntimeSelection(session?: Session | null) {
   useEffect(() => {
     let disposed = false
     const refreshRuntimeSelection = () => {
-      Promise.all([window.coworkApi.settings.get(), window.coworkApi.app.config()]).then(([settings, config]) => {
+      const settingsRequest = workspaceOptions?.workspaceId
+        ? window.coworkApi.settings.get(workspaceOptions)
+        : window.coworkApi.settings.get()
+      Promise.all([settingsRequest, window.coworkApi.app.config()]).then(([settings, config]) => {
         if (disposed) return
         setSettingsModel(settings.effectiveModel || settings.selectedModelId || '')
         setProvider(settings.effectiveProviderId || '')
@@ -83,7 +87,7 @@ export function useChatRuntimeSelection(session?: Session | null) {
       disposed = true
       unsubscribe()
     }
-  }, [addGlobalError])
+  }, [addGlobalError, workspaceOptions?.workspaceId])
 
   useEffect(() => {
     setLocalModelOverride(null)
@@ -142,22 +146,26 @@ export function useReasoningVariantSelection(
   }
 }
 
-export function useMentionableAgents(currentProjectDirectory: string | null) {
-  const cacheKey = currentProjectDirectory || ''
+export function useMentionableAgents(currentProjectDirectory: string | null, workspaceOptions?: WorkspaceOptions) {
+  const cacheKey = `${workspaceOptions?.workspaceId || 'local'}:${currentProjectDirectory || ''}`
   const [specialistAgents, setSpecialistAgents] = useState<MentionableAgent[]>(() =>
     mentionableAgentCache.get(cacheKey)?.value || [])
 
   useEffect(() => {
     let disposed = false
     let cancelIdle: (() => void) | null = null
-    const nextCacheKey = currentProjectDirectory || ''
+    const nextCacheKey = `${workspaceOptions?.workspaceId || 'local'}:${currentProjectDirectory || ''}`
     const cached = mentionableAgentCache.get(nextCacheKey)?.value
     if (cached) setSpecialistAgents(cached)
 
     const loadMentionableAgents = () => {
       const existing = mentionableAgentCache.get(nextCacheKey)
       if (existing?.promise) return existing.promise
-      const context = currentProjectDirectory ? { directory: currentProjectDirectory } : undefined
+      const context = workspaceOptions?.workspaceId
+        ? workspaceOptions
+        : currentProjectDirectory
+          ? { directory: currentProjectDirectory }
+          : undefined
       const promise = Promise.all([
         window.coworkApi.app.builtinAgents(),
         window.coworkApi.agents.list(context),
@@ -211,7 +219,7 @@ export function useMentionableAgents(currentProjectDirectory: string | null) {
       cancelIdle?.()
       unsubscribe()
     }
-  }, [currentProjectDirectory])
+  }, [currentProjectDirectory, workspaceOptions?.workspaceId])
 
   return specialistAgents
 }
@@ -222,12 +230,16 @@ export function useComposerExternalEvents({
   setInput,
   setAttachments,
   setInlinePicker,
+  attachmentsAllowed = true,
+  onBlockedAttachment,
 }: {
   textareaRef: RefObject<HTMLTextAreaElement | null>
   resizeComposerTextarea: ResizeComposerTextarea
   setInput: Dispatch<SetStateAction<string>>
   setAttachments: Dispatch<SetStateAction<Attachment[]>>
   setInlinePicker: Dispatch<SetStateAction<InlinePickerState | null>>
+  attachmentsAllowed?: boolean
+  onBlockedAttachment?: () => void
 }) {
   useEffect(() => {
     const focusComposer = (cursor?: number) => {
@@ -276,7 +288,12 @@ export function useComposerExternalEvents({
 
       setInlinePicker(null)
       if (nextAttachments.length > 0) {
-        setAttachments((current) => [...current, ...nextAttachments])
+        if (!attachmentsAllowed) {
+          onBlockedAttachment?.()
+          if (!nextText.trim()) return
+        } else {
+          setAttachments((current) => [...current, ...nextAttachments])
+        }
       }
 
       if (nextText.trim()) {
@@ -299,5 +316,5 @@ export function useComposerExternalEvents({
       window.removeEventListener(COMPOSER_INSERT_EVENT, insertHandler as EventListener)
       window.removeEventListener(COMPOSER_COMPOSE_EVENT, composeHandler as EventListener)
     }
-  }, [resizeComposerTextarea, setAttachments, setInlinePicker, setInput, textareaRef])
+  }, [attachmentsAllowed, onBlockedAttachment, resizeComposerTextarea, setAttachments, setInlinePicker, setInput, textareaRef])
 }

@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore, type Session } from '../../stores/session'
+import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
@@ -84,6 +86,14 @@ export function ChatInput() {
   const [showReasoningMenu, setShowReasoningMenu] = useState(false)
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const { navigate, recordPrompt } = usePromptHistory()
+  const workspaceSupport = useActiveWorkspaceSupport()
+  const workspaceOptions = useMemo(
+    () => workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
+      ? undefined
+      : { workspaceId: workspaceSupport.workspaceId },
+    [workspaceSupport.workspaceId],
+  )
+  const runtimeControlsManaged = !workspaceSupport.flags.canUseMachineRuntimeConfig
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
     [currentSessionId, sessions],
@@ -93,9 +103,13 @@ export function ChatInput() {
     [currentSessionId, sessions],
   )
   const setSessionComposerPreferences = useSessionStore((s) => s.setSessionComposerPreferences)
-  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(currentSession)
+  const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(currentSession, workspaceOptions)
   const saveComposerPreferences = useCallback((preferences: ComposerPreferencePatch) => {
     if (!currentSessionId) return
+    if (runtimeControlsManaged) {
+      addGlobalError(workspaceSupport.flags.reasons.machineRuntimeConfig)
+      return
+    }
     const sessionsBeforeSave = useSessionStore.getState().sessions
     const sessionBeforeSave = sessionsBeforeSave.find((session) => session.id === currentSessionId)
     const saveVersions = new Map<string, number>()
@@ -129,12 +143,12 @@ export function ChatInput() {
         addGlobalError,
       )
     })
-  }, [addGlobalError, currentSessionId, setSessionComposerPreferences])
+  }, [addGlobalError, currentSessionId, runtimeControlsManaged, setSessionComposerPreferences, workspaceSupport.flags.reasons.machineRuntimeConfig])
   const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels, {
     selectedVariant: currentSession?.composerReasoningVariant ?? null,
     onVariantChange: (variant) => saveComposerPreferences({ reasoningVariant: variant }),
   })
-  const specialistAgents = useMentionableAgents(currentProjectDirectory)
+  const specialistAgents = useMentionableAgents(currentProjectDirectory, workspaceOptions)
 
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
     if (!element) return
@@ -143,6 +157,10 @@ export function ChatInput() {
   }, [])
 
   const addFiles = async (files: FileList | File[]) => {
+    if (!workspaceSupport.flags.canAttachFiles) {
+      addGlobalError(workspaceSupport.flags.reasons.attachFiles)
+      return
+    }
     const newAttachments = await filesToAttachments(files)
     setAttachments(prev => [...prev, ...newAttachments])
   }
@@ -150,6 +168,14 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
+    if (!workspaceSupport.flags.canPrompt) {
+      addGlobalError(workspaceSupport.flags.reasons.prompt)
+      return
+    }
+    if (attachments.length > 0 && !workspaceSupport.flags.canAttachFiles) {
+      addGlobalError(workspaceSupport.flags.reasons.attachFiles)
+      return
+    }
     const directInvocation = resolveDirectAgentInvocation(text, specialistAgents)
     const promptText = directInvocation.text
     setInlinePicker(null)
@@ -157,10 +183,6 @@ export function ChatInput() {
     recordPrompt(text)
 
     const currentAttachments = [...attachments]
-    setInput('')
-    setAttachments([])
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
-
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
       if (!promptText && files.length === 0) {
@@ -168,11 +190,17 @@ export function ChatInput() {
       }
       const message = promptText || 'Describe this image.'
       const promptAgent = directInvocation.agent || agentMode
-      if (reasoningSelection.promptOptions) {
-        await window.coworkApi.session.prompt(currentSessionId, message, files.length > 0 ? files : undefined, promptAgent, reasoningSelection.promptOptions)
+      const promptOptions = runtimeControlsManaged
+        ? workspaceOptions
+        : { ...(reasoningSelection.promptOptions || {}), ...(workspaceOptions || {}) }
+      if (Object.keys(promptOptions || {}).length > 0) {
+        await window.coworkApi.session.prompt(currentSessionId, message, files.length > 0 ? files : undefined, promptAgent, promptOptions)
       } else {
         await window.coworkApi.session.prompt(currentSessionId, message, files.length > 0 ? files : undefined, promptAgent)
       }
+      setInput('')
+      setAttachments([])
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
     } catch (err) {
       reportComposerError(
         t('chat.promptFailed', 'Could not send the prompt. Please try again.'),
@@ -181,7 +209,7 @@ export function ChatInput() {
         addGlobalError,
       )
     }
-  }, [input, attachments, currentSessionId, agentMode, specialistAgents, addGlobalError, reasoningSelection.promptOptions])
+  }, [input, attachments, currentSessionId, workspaceSupport.flags, specialistAgents, recordPrompt, agentMode, runtimeControlsManaged, workspaceOptions, reasoningSelection.promptOptions, addGlobalError])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -239,6 +267,8 @@ export function ChatInput() {
     setInput,
     setAttachments,
     setInlinePicker,
+    attachmentsAllowed: workspaceSupport.flags.canAttachFiles,
+    onBlockedAttachment: () => addGlobalError(workspaceSupport.flags.reasons.attachFiles),
   })
 
   // Global Shift+Tab to toggle agent mode — works even when textarea loses focus
@@ -272,7 +302,11 @@ export function ChatInput() {
   const handleStop = useCallback(async () => {
     if (!currentSessionId) return
     try {
-      await window.coworkApi.session.abort(currentSessionId)
+      if (workspaceOptions) {
+        await window.coworkApi.session.abort(currentSessionId, workspaceOptions)
+      } else {
+        await window.coworkApi.session.abort(currentSessionId)
+      }
     } catch (err) {
       reportComposerError(
         t('chat.abortFailed', 'Could not stop generation. Please try again.'),
@@ -281,7 +315,7 @@ export function ChatInput() {
         addGlobalError,
       )
     }
-  }, [currentSessionId, addGlobalError])
+  }, [currentSessionId, workspaceOptions, addGlobalError])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (inlinePicker && inlineSuggestions.length > 0) {
@@ -359,6 +393,10 @@ export function ChatInput() {
     }
     if (files.length > 0) {
       e.preventDefault()
+      if (!workspaceSupport.flags.canAttachFiles) {
+        addGlobalError(workspaceSupport.flags.reasons.attachFiles)
+        return
+      }
       await addFiles(files)
     }
   }
@@ -367,11 +405,20 @@ export function ChatInput() {
     e.preventDefault()
     setDragOver(false)
     if (e.dataTransfer.files.length > 0) {
+      if (!workspaceSupport.flags.canAttachFiles) {
+        addGlobalError(workspaceSupport.flags.reasons.attachFiles)
+        return
+      }
       await addFiles(e.dataTransfer.files)
     }
   }
 
-  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion
+  const sendBlockedReason = !workspaceSupport.flags.canPrompt
+    ? workspaceSupport.flags.reasons.prompt
+    : attachments.length > 0 && !workspaceSupport.flags.canAttachFiles
+      ? workspaceSupport.flags.reasons.attachFiles
+      : null
+  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion && !sendBlockedReason
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel
   const inlineMenuWidth = 260
   // Anchor the menu to the outer input chrome (the whole composer block)
@@ -459,13 +506,21 @@ export function ChatInput() {
             isAwaitingPermission={isAwaitingPermission}
             isAwaitingQuestion={isAwaitingQuestion}
             canSend={!!canSend}
+            sendDisabledReason={sendBlockedReason}
+            attachmentsAllowed={workspaceSupport.flags.canAttachFiles}
+            attachmentsDisabledReason={workspaceSupport.flags.reasons.attachFiles}
+            modelControlsManaged={runtimeControlsManaged}
+            modelControlsReason={workspaceSupport.flags.reasons.machineRuntimeConfig}
+            reasoningControlsManaged={runtimeControlsManaged}
             onAddFiles={addFiles}
             onToggleModelMenu={() => {
+              if (runtimeControlsManaged) return
               setInlinePicker(null)
               setShowReasoningMenu(false)
               setShowModelMenu(!showModelMenu)
             }}
             onToggleReasoningMenu={() => {
+              if (runtimeControlsManaged) return
               setInlinePicker(null)
               setShowModelMenu(false)
               setShowReasoningMenu(!showReasoningMenu)
@@ -478,7 +533,7 @@ export function ChatInput() {
                 const store = useSessionStore.getState()
                 store.addSession(forked)
                 store.setCurrentSession(forked.id)
-                await window.coworkApi.session.activate(forked.id, { force: true })
+                await window.coworkApi.session.activate(forked.id, { force: true, ...(workspaceOptions || {}) })
               }
             }}
             onStop={handleStop}
@@ -503,6 +558,7 @@ export function ChatInput() {
         currentModel={currentModel}
         onClose={() => setShowModelMenu(false)}
         onSelect={async (modelId) => {
+          if (runtimeControlsManaged) return
           setCurrentModel(modelId)
           setShowModelMenu(false)
           saveComposerPreferences({ modelId })
