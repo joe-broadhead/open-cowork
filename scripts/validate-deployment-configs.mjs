@@ -294,6 +294,7 @@ function validateGcpReference() {
     'deploy/gcp/smoke/README.md',
     'scripts/gcp-reference-preflight.mjs',
     'scripts/gcp-reference-smoke.mjs',
+    'scripts/desktop-cloud-sync-smoke.mjs',
   ]
   for (const path of requiredGcpFiles) {
     if (!existsSync(path)) {
@@ -311,6 +312,7 @@ function validateGcpReference() {
     'OPEN_COWORK_GCP_REGION',
     'pnpm deploy:gcp:preflight',
     'pnpm deploy:gcp:smoke',
+    'pnpm deploy:desktop:smoke',
     'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
     'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
     'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
@@ -373,6 +375,22 @@ function validateGcpReference() {
   ]) {
     if (!cloudRun.includes(phrase)) {
       throw new Error(`deploy/gcp/cloud-run/all-in-one.service.yaml.example must include ${phrase}`)
+    }
+  }
+
+  const desktopSmoke = read('scripts/desktop-cloud-sync-smoke.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL',
+    'OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN',
+    'CloudWorkspaceAdapter',
+    'subscribeWorkspaceEvents',
+    'subscribeSessionEvents',
+    'offlineMutationsBlocked',
+    'revokeApiToken',
+    'LOCAL_WORKSPACE_ID',
+  ]) {
+    if (!desktopSmoke.includes(phrase)) {
+      throw new Error(`scripts/desktop-cloud-sync-smoke.mjs must include ${phrase}`)
     }
   }
 }

@@ -60,6 +60,7 @@
     "cloud:smoke:compose": "bash scripts/ci-cloud-compose-smoke.sh",
     "deploy:validate": "node scripts/validate-deployment-configs.mjs",
     "deploy:smoke": "node scripts/smoke-deployment.mjs",
+    "deploy:desktop:smoke": "pnpm build:shared && node --no-warnings --experimental-strip-types scripts/desktop-cloud-sync-smoke.mjs",
     "deploy:gcp:preflight": "node scripts/gcp-reference-preflight.mjs",
     "deploy:gcp:smoke": "node scripts/gcp-reference-smoke.mjs",
     "notices": "node scripts/generate-third-party-notices.mjs",

@@ -78,6 +78,18 @@ pnpm deploy:smoke
 The same smoke command works for local Compose, Kubernetes/Helm, and the cloud
 provider recipes once traffic is routed to the chosen endpoints.
 
+Validate Desktop cloud workspace sync against the same deployment:
+
+```bash
+OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... \
+pnpm deploy:desktop:smoke
+```
+
+Keep Desktop smoke tokens in environment variables or a private secret store;
+the script intentionally does not accept token values as command-line
+arguments.
+
 GCP adds a provider-specific infra smoke:
 
 ```bash

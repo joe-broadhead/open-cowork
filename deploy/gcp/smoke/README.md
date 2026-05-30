@@ -46,3 +46,21 @@ pnpm deploy:gcp:smoke
 The GCP smoke runs the Cloud Web smoke, writes/reads/deletes a temporary object
 in Cloud Storage, and resolves a Secret Manager reference without printing the
 secret value.
+
+## Desktop Cloud Sync Smoke
+
+```bash
+OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... \
+pnpm deploy:desktop:smoke
+```
+
+This validates the deployed cloud from the Desktop client's point of view using
+the same main-process cloud adapter/cache code as Electron Desktop. With an
+admin-scoped token, the smoke issues a short-lived Desktop token, connects over
+bearer-auth HTTP/SSE, creates a Desktop-originated session, verifies Cloud Web
+API visibility, creates a Web-originated session, verifies Desktop visibility,
+prompts from both sides, sends an abort command, checks read-only offline cache
+fallback, verifies the local workspace remains independent, and revokes the
+ephemeral token. Use `OPEN_COWORK_DESKTOP_SMOKE_SKIP_PROMPT=true` only for
+early surface checks before workers/BYOK are ready.

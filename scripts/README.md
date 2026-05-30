@@ -17,6 +17,7 @@ pnpm cloud:start
 pnpm cloud:smoke:compose
 pnpm deploy:validate
 pnpm deploy:smoke
+pnpm deploy:desktop:smoke
 pnpm deploy:gcp:preflight
 pnpm deploy:gcp:smoke
 pnpm notices
@@ -48,6 +49,15 @@ reachability, and gateway readiness endpoints. Override
 `OPEN_COWORK_SMOKE_CLOUD_URL` and `OPEN_COWORK_SMOKE_GATEWAY_URL` for provider
 deployments, or use `--skip-cloud` / `--skip-gateway` when checking one
 surface.
+
+`pnpm deploy:desktop:smoke` validates the Desktop cloud-workspace path against
+a running cloud deployment. It uses the same main-process cloud adapter and
+cache code as Electron Desktop, verifies HTTPS/base URL handling, Desktop OIDC
+metadata when configured, bearer-auth HTTP/SSE, Desktop-created and Web-created session
+continuation, prompt/abort routing, read-only offline cache fallback, local
+workspace isolation, and token revocation when
+`OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN` is provided. Tokens are read from
+environment variables only, not command-line arguments.
 
 `pnpm deploy:gcp:preflight` is a read-only GCP check for the reference
 deployment. It verifies the active `gcloud` account/project, region, required

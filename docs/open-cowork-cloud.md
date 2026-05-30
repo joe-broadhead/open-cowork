@@ -487,6 +487,22 @@ OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
 pnpm deploy:smoke
 ```
 
+Validate the Desktop cloud-workspace path against that deployment before
+calling desktop sync production-ready:
+
+```bash
+OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... \
+pnpm deploy:desktop:smoke
+```
+
+The Desktop smoke uses the Electron main-process cloud adapter/cache code,
+issues a short-lived Desktop token when an admin token is provided, validates
+Desktop OIDC metadata when configured, exercises bearer-auth HTTP/SSE, checks Desktop-created
+and Web-created session continuation, verifies prompt/abort routing, confirms
+read-only offline cache behavior, proves the local workspace remains
+independent, and revokes the ephemeral token.
+
 ## Validation
 
 The regular `pnpm test` suite covers the in-memory control-plane adapter and
