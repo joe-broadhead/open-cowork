@@ -91,6 +91,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   const allowInsecureHttp = readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP, raw.cloud?.allowInsecureHttp ?? false)
   const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
   const serverHost = readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost
+  const serverPublicBaseUrl = readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl)
   if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL or cloud.baseUrl is required.')
   if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN or cloud.serviceToken is required.')
   const config: GatewayConfig = {
@@ -103,7 +104,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     server: {
       host: serverHost,
       port: readPort(env.OPEN_COWORK_GATEWAY_PORT ?? raw.server?.port, defaultPort),
-      publicBaseUrl: readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl),
+      publicBaseUrl: serverPublicBaseUrl,
       adminToken: readNullableString(env.OPEN_COWORK_GATEWAY_ADMIN_TOKEN) ?? readNullableString(raw.server?.adminToken),
     },
     mode,
@@ -116,7 +117,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     diagnostics: {
       enabled: readBoolean(env.OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED, raw.diagnostics?.enabled ?? mode === 'self-host'),
     },
-    providers: normalizeProviders(raw.providers, env),
+    providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl),
   }
   assertGatewayConfigSafe(config, {
     allowPublicFakeProvider: readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER, false),
@@ -368,13 +369,13 @@ function resolveGatewayBranding(raw: GatewayRawConfig['branding'], env: GatewayE
   }
 }
 
-function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv): GatewayProviderConfig[] {
-  const envProviders = readProvidersFromEnv(env)
+function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv, gatewayPublicBaseUrl?: string | null): GatewayProviderConfig[] {
+  const envProviders = readProvidersFromEnv(env, gatewayPublicBaseUrl)
   const providers = rawProviders?.length
     ? mergeProviderOverrides(rawProviders, envProviders)
     : envProviders
   const normalized = providers?.length
-    ? providers.map((provider, index) => normalizeProvider(provider, index))
+    ? providers.map((provider, index) => normalizeProvider(provider, index, gatewayPublicBaseUrl))
     : readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false)
       ? [defaultFakeProvider(env)]
       : []
@@ -433,7 +434,7 @@ function mergeProviderConfig(
   }
 }
 
-function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
+function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | null): GatewayRawConfig['providers'] {
   const providersJson = readString(env.OPEN_COWORK_GATEWAY_PROVIDERS)
   if (providersJson) {
     const parsed = parseConfigJson(`{"providers":${providersJson}}`, 'OPEN_COWORK_GATEWAY_PROVIDERS')
@@ -453,6 +454,7 @@ function readProvidersFromEnv(env: GatewayEnv): GatewayRawConfig['providers'] {
       }),
       settings: cleanRecord({
         mode: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_MODE) || undefined,
+        publicBaseUrl: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL) || gatewayPublicBaseUrl || undefined,
         respondInGroups: readString(env.OPEN_COWORK_GATEWAY_TELEGRAM_RESPOND_IN_GROUPS) || undefined,
       }),
     })
@@ -527,15 +529,33 @@ function defaultFakeProvider(env: GatewayEnv): GatewayProviderConfig {
   }, 0)
 }
 
-function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: GatewayProviderKind }, index: number): GatewayProviderConfig {
+function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: GatewayProviderKind }, index: number, gatewayPublicBaseUrl?: string | null): GatewayProviderConfig {
   const kind = readProviderKind(raw.kind)
   const id = readString(raw.id) || `${kind}-${index + 1}`
   const channelBindingId = readString(raw.channelBindingId)
   if (!channelBindingId) throw new Error(`Gateway provider ${id} requires channelBindingId.`)
   const credentials = cleanStringRecord(raw.credentials)
-  const settings = cleanRecord(raw.settings)
+  const settings = cleanRecord({
+    ...(raw.settings || {}),
+    ...(kind === 'telegram' && !readString(raw.settings?.publicBaseUrl) && gatewayPublicBaseUrl
+      ? { publicBaseUrl: gatewayPublicBaseUrl }
+      : {}),
+  })
   if (kind === 'webhook' && !credentials.sharedSecret) {
     throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated webhook ingress.`)
+  }
+  if (kind === 'telegram') {
+    if (!credentials.botToken) throw new Error(`Gateway provider ${id} requires credential botToken.`)
+    const telegramMode = readString(settings.mode) || 'polling'
+    if (telegramMode !== 'polling' && telegramMode !== 'webhook') {
+      throw new Error(`Gateway provider ${id} has unsupported Telegram mode ${telegramMode}. Use polling or webhook.`)
+    }
+    if (telegramMode === 'webhook') {
+      if (!credentials.webhookSecret) throw new Error(`Gateway provider ${id} requires credential webhookSecret when Telegram webhook mode is enabled.`)
+      const publicBaseUrl = readString(settings.publicBaseUrl)
+      if (!publicBaseUrl) throw new Error(`Gateway provider ${id} requires setting publicBaseUrl or OPEN_COWORK_GATEWAY_PUBLIC_URL when Telegram webhook mode is enabled.`)
+      assertHttpsPublicUrl(publicBaseUrl, `Gateway provider ${id} Telegram publicBaseUrl`)
+    }
   }
   if (kind === 'slack') {
     if (!credentials.botToken) throw new Error(`Gateway provider ${id} requires credential botToken.`)
@@ -601,6 +621,17 @@ function isPublicBaseUrl(value: string | null) {
   } catch {
     return false
   }
+}
+
+function assertHttpsPublicUrl(value: string, label: string) {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`${label} must be a valid HTTPS URL.`)
+  }
+  if (url.protocol !== 'https:') throw new Error(`${label} must use HTTPS.`)
+  if (isLoopbackHost(url.hostname)) throw new Error(`${label} must be publicly reachable, not loopback.`)
 }
 
 function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFakeProvider: boolean }) {

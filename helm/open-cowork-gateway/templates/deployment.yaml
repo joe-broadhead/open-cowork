@@ -17,6 +17,12 @@
 {{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.webhook.sharedSecret or gateway.existingSecret is required when the generic webhook provider is enabled." }}
 {{- end }}
+{{- if and (eq .Values.gateway.telegram.mode "webhook") (not .Values.gateway.telegram.webhookSecret) (not .Values.gateway.existingSecret) }}
+{{- fail "gateway.telegram.webhookSecret or gateway.existingSecret is required when Telegram webhook mode is enabled." }}
+{{- end }}
+{{- if and (eq .Values.gateway.telegram.mode "webhook") (not .Values.gateway.telegram.publicUrl) (not .Values.gateway.publicUrl) }}
+{{- fail "gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled." }}
+{{- end }}
 {{- if and .Values.gateway.slack.botToken (not .Values.gateway.slack.signingSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.slack.signingSecret or gateway.existingSecret is required when the Slack provider is enabled." }}
 {{- end }}

@@ -139,6 +139,20 @@ Use the all-in-one reference for quick local checks:
 docker compose -f docker-compose.cloud.yml up --build
 ```
 
+Use the Gateway appliance references when a user should talk to Cloud from a
+headless channel:
+
+```bash
+docker compose -f docker-compose.gateway-remote.yml up --build
+docker compose -f docker-compose.cloud-gateway.yml up --build
+```
+
+The remote Gateway compose file connects to an existing Cloud URL and binds
+loopback by default. The Cloud + Gateway compose file runs a local all-in-one
+Cloud control plane, Postgres, MinIO, and Gateway on one host. See
+`docs/gateway-appliance.md` for VPS, Mac mini, Raspberry Pi, systemd, launchd,
+Telegram webhook, TLS, firewall, upgrade, and rollback guidance.
+
 Use the split-role reference when testing the scalable topology:
 
 ```bash

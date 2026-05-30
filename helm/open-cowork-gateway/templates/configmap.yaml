@@ -20,6 +20,7 @@ data:
   OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: {{ .Values.gateway.diagnostics.enabled | quote }}
   OPEN_COWORK_GATEWAY_TELEGRAM_CHANNEL_BINDING_ID: {{ .Values.gateway.telegram.channelBindingId | quote }}
   OPEN_COWORK_GATEWAY_TELEGRAM_MODE: {{ .Values.gateway.telegram.mode | quote }}
+  OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL: {{ .Values.gateway.telegram.publicUrl | quote }}
   OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID: {{ .Values.gateway.slack.channelBindingId | quote }}
   OPEN_COWORK_GATEWAY_SLACK_TEAM_ID: {{ .Values.gateway.slack.teamId | quote }}
   OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID: {{ .Values.gateway.slack.defaultChannelId | quote }}
