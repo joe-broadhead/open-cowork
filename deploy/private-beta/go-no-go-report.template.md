@@ -1,0 +1,97 @@
+# Managed BYOK Private-Beta Go/No-Go Report Template
+
+Use this template for a release candidate or design-partner launch decision.
+Store completed reports in a private operations repository or ticket system.
+The public repo keeps the evidence shape only.
+
+## Launch Profile And Environment
+
+- Launch profile template:
+- Target environment:
+- Launch readiness target: `private-beta`
+- Org/onboarding tracker:
+- Cloud URL:
+- Gateway URL:
+- Region(s):
+- Support owner:
+- Incident channel:
+
+## Exact Commit And Release Artifact
+
+- Commit SHA:
+- Release tag:
+- Cloud image digest:
+- Gateway image digest:
+- Desktop build identifier:
+- Helm/Compose/Terraform revision:
+- Config revision:
+
+## Validation Commands With Timestamps
+
+| Command | Timestamp | Operator | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| `pnpm deploy:validate` | | | | |
+| `pnpm deploy:launch:validate` | | | | |
+| `pnpm deploy:private-beta:validate` | | | | |
+| `pnpm ops:validate` | | | | |
+| `pnpm test:cloud-continuation` | | | | |
+| `pnpm test:cloud-web` | | | | |
+| BYOK security tests | | | | |
+| billing entitlement tests | | | | |
+| `git diff --check` | | | | |
+
+## Load And Soak Summary
+
+- Load profile: `private-beta`
+- Load report:
+- Soak profile: `private-beta`
+- Soak report:
+- p95 read latency:
+- p95 mutation latency:
+- p95 gateway latency:
+- max projection lag:
+- max command age:
+- SSE reconnects:
+- gateway retries:
+- gateway dead letters:
+- quota rejections:
+- billing gate denials:
+
+## Failover And Restore Summary
+
+- Worker restart/failover with pending commands:
+- Gateway restart with pending deliveries:
+- Backup restore drill:
+- Postgres restore proof:
+- object-store artifact download after restore:
+- BYOK provider call after worker restart:
+- scheduler recovery:
+- diagnostics redaction sample:
+
+## Security Boundary Checklist
+
+- [ ] BYOK plaintext absent from read APIs, logs, diagnostics, launch reports,
+      renderer state, Desktop cache, and Gateway logs.
+- [ ] Desktop local workspaces stay local and are not uploaded implicitly.
+- [ ] Gateway is a channel client and delivery adapter, not an execution runtime.
+- [ ] Public gateway ingress is signed or HMAC-authenticated.
+- [ ] Public Cloud auth uses OIDC or signed trusted-header auth.
+- [ ] Tokens are show-once, scoped, expiring by default, and revocable.
+- [ ] No real project ids, customer names, domains, prices, provider keys,
+      billing ids, or cloud account ids are copied into public repo artifacts.
+
+## Known Risks And Mitigations
+
+| Risk | Impact | Mitigation | Owner | Follow-up |
+| --- | --- | --- | --- | --- |
+| | | | | |
+
+## Decision
+
+- Decision: `{go|conditional-go|no-go}`
+- Decision owner:
+- Reviewers:
+- Support owner:
+- Conditions:
+- Follow-up issues:
+- Next review date:

@@ -77,6 +77,38 @@ For user/provider key issues:
    to revoke the provider key with the provider, rotate cloud envelope/KMS
    material if needed, and follow `docs/runbooks/managed-byok-saas.md`.
 
+## Incident Checklists
+
+### Suspected Key Exposure
+
+1. Stop new worker claims for the affected org or provider profile.
+2. Revoke or disable the affected BYOK secret metadata record.
+3. Ask the customer to revoke the provider key with the upstream provider.
+4. Rotate envelope/KMS material if ciphertext handling is in doubt.
+5. Review logs, diagnostics, audit exports, Desktop cache artifacts, Gateway
+   logs, and launch reports for plaintext exposure.
+6. Record the incident timeline, affected orgs, mitigation, and follow-up
+   tests in the private incident tracker.
+
+### Token Compromise
+
+1. Revoke the suspected Desktop, Gateway, API, or operator token.
+2. Verify the token cannot authenticate on the next request or SSE reconnect.
+3. Rotate related service credentials when scope is uncertain.
+4. Review audit events for unexpected org, BYOK, gateway, billing, or admin
+   actions.
+5. Issue replacement scoped tokens only after the actor identity is verified.
+
+### Channel Identity Misbinding
+
+1. Pause the affected channel binding or headless agent.
+2. Verify inbound actor identity separately from gateway service-token auth.
+3. Check `cloud_channel_identities`, session bindings, interaction tokens, and
+   delivery cursors for the affected provider/thread.
+4. Rebind the channel only after owner/admin confirmation.
+5. Audit whether approvals/questions were resolved by the wrong actor and
+   record remediation.
+
 ## Gateway Issue Handling
 
 For channel issues:
@@ -102,6 +134,21 @@ For Desktop cloud workspace issues:
 5. Confirm local workspace remains usable if cloud is offline.
 6. If cache corruption is suspected, ask the user to export diagnostics first,
    then clear the cloud cache for that workspace only.
+
+## Customer Offboarding
+
+Use offboarding when a private-beta partner leaves, a trial ends, or an
+incident requires org shutdown:
+
+1. Disable new execution by pausing entitlement/profile access.
+2. Revoke Desktop, Gateway, API, and operator-issued tokens.
+3. Disable BYOK secret metadata and confirm no worker can reveal plaintext.
+4. Remove or pause channel bindings and delivery streams.
+5. Export customer-owned data according to the agreed retention policy.
+6. Remove or quarantine object-store prefixes after export and retention review.
+7. Preserve audit logs for the agreed retention period.
+8. Confirm support can no longer access the org except through approved audit
+   retention workflows.
 
 ## Escalation Evidence
 

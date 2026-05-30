@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "purpose": "managed-byok-private-beta-launch-profile-template",
+  "evidenceBoundary": {
+    "publicRepo": "Template only. Keep real org ids, project ids, customer names, domains, prices, cloud account ids, provider keys, token values, support rosters, and launch evidence in private operations.",
+    "privateOpsRecord": "{private-ops-ticket-or-runbook-url}",
+    "redactionRequiredBeforeSharing": true
+  },
+  "profile": {
+    "profileKey": "private-beta-design-partner",
+    "planKey": "private-beta-design-partner",
+    "targetEnvironment": "{production-like-environment-name}",
+    "launchReadinessTarget": "private-beta",
+    "billingMode": "manual-or-stub",
+    "signupMode": "invite",
+    "support": {
+      "primaryOwner": "{support-owner}",
+      "secondaryOwner": "{secondary-support-owner}",
+      "escalationChannel": "{private-ops-channel}",
+      "supportHours": "{support-hours-and-timezone}",
+      "responseTargets": {
+        "sev1Minutes": 30,
+        "sev2BusinessHours": 4,
+        "sev3BusinessDays": 2
+      }
+    },
+    "entitlements": {
+      "maxSeatsPerOrg": 10,
+      "maxConcurrentSessionsPerOrg": 12,
+      "maxActiveWorkersPerOrg": 4,
+      "maxPromptsPerHour": 240,
+      "maxApiRequestsPerMinute": 600,
+      "maxWorkerMinutesPerHour": 720,
+      "maxGatewayDeliveriesPerHour": 600,
+      "maxGatewayChannelBindingsPerOrg": 10,
+      "maxArtifactBytesPerDay": 1073741824,
+      "allowNewSessions": true,
+      "allowPrompts": true,
+      "allowWorkers": true
+    },
+    "allowedProviderPolicy": {
+      "providerIds": ["anthropic", "openai"],
+      "validation": "required-before-first-run-or-audited-override",
+      "runtimeInjection": "provider-options-only",
+      "blockedByDefault": ["github-copilot"],
+      "plaintextReadbackAllowed": false
+    },
+    "gatewayProviderAvailability": [
+      {
+        "provider": "telegram",
+        "status": "enabled",
+        "requirements": ["service-token", "channel-identity-rbac", "provider-signing-or-managed-secret"]
+      },
+      {
+        "provider": "slack",
+        "status": "pilot",
+        "requirements": ["signing-secret", "channel-identity-rbac", "inline-approval-buttons"]
+      },
+      {
+        "provider": "email",
+        "status": "pilot",
+        "requirements": ["inbound-shared-secret", "threaded-replies", "token-approval-fallback"]
+      },
+      {
+        "provider": "webhook",
+        "status": "enabled-for-testing",
+        "requirements": ["timestamped-hmac", "no-public-unsigned-ingress"]
+      }
+    ],
+    "rpoRto": {
+      "postgresRpoMinutes": 15,
+      "objectStoreRpoMinutes": 15,
+      "secretManagerRpoMinutes": 60,
+      "targetRtoMinutes": 60,
+      "restoreDrillRequired": true
+    },
+    "requiredEvidence": {
+      "launchReadinessDryRun": true,
+      "loadRunProfile": "private-beta",
+      "soakRunProfile": "private-beta",
+      "workerFailoverWithPendingCommands": true,
+      "gatewayRestartWithPendingDeliveries": true,
+      "backupRestoreDrill": true,
+      "objectStoreArtifactAfterRestore": true,
+      "byokProviderCallAfterWorkerRestart": true,
+      "desktopWebGatewayContinuation": true,
+      "tokenRevocationProof": true,
+      "diagnosticsRedactionProof": true
+    },
+    "requiredSmokeCommands": [
+      "pnpm deploy:private-beta:validate",
+      "pnpm deploy:launch:validate",
+      "pnpm ops:validate",
+      "pnpm deploy:smoke",
+      "pnpm deploy:desktop:smoke",
+      "pnpm deploy:gateway:smoke",
+      "pnpm deploy:continuation:smoke",
+      "pnpm deploy:load",
+      "pnpm deploy:soak"
+    ],
+    "securityBoundaries": {
+      "byokPlaintextReadApis": "forbidden",
+      "desktopLocalThreadUpload": "explicit-copy-only",
+      "gatewayExecutionAuthority": "cloud-control-plane-only",
+      "publicWebhookIngress": "signed-only",
+      "diagnostics": "redacted-before-support",
+      "publicRepoEvidence": "templates-only"
+    },
+    "goNoGo": {
+      "decision": "{go|conditional-go|no-go}",
+      "decisionOwner": "{decision-owner}",
+      "supportOwner": "{support-owner}",
+      "knownRiskItems": ["{known risk and mitigation}"],
+      "signoffRequired": true
+    }
+  }
+}
