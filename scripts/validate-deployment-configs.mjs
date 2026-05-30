@@ -295,6 +295,7 @@ function validateGcpReference() {
     'scripts/gcp-reference-preflight.mjs',
     'scripts/gcp-reference-smoke.mjs',
     'scripts/desktop-cloud-sync-smoke.mjs',
+    'scripts/gateway-cloud-smoke.mjs',
   ]
   for (const path of requiredGcpFiles) {
     if (!existsSync(path)) {
@@ -313,6 +314,7 @@ function validateGcpReference() {
     'pnpm deploy:gcp:preflight',
     'pnpm deploy:gcp:smoke',
     'pnpm deploy:desktop:smoke',
+    'pnpm deploy:gateway:smoke',
     'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
     'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
     'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
@@ -391,6 +393,26 @@ function validateGcpReference() {
   ]) {
     if (!desktopSmoke.includes(phrase)) {
       throw new Error(`scripts/desktop-cloud-sync-smoke.mjs must include ${phrase}`)
+    }
+  }
+
+  const gatewaySmoke = read('scripts/gateway-cloud-smoke.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL',
+    'OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN',
+    'OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL',
+    'createGatewayDaemon',
+    'createHeadlessAgent',
+    'createChannelBinding',
+    'resolveChannelIdentity',
+    'OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN',
+    'revokeApiToken',
+    'Gateway fake webhook',
+    'dead-letter',
+    'leastPrivilegeChecks',
+  ]) {
+    if (!gatewaySmoke.includes(phrase)) {
+      throw new Error(`scripts/gateway-cloud-smoke.mjs must include ${phrase}`)
     }
   }
 }

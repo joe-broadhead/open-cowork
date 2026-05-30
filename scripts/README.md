@@ -18,6 +18,7 @@ pnpm cloud:smoke:compose
 pnpm deploy:validate
 pnpm deploy:smoke
 pnpm deploy:desktop:smoke
+pnpm deploy:gateway:smoke
 pnpm deploy:gcp:preflight
 pnpm deploy:gcp:smoke
 pnpm notices
@@ -58,6 +59,17 @@ continuation, prompt/abort routing, read-only offline cache fallback, local
 workspace isolation, and token revocation when
 `OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN` is provided. Tokens are read from
 environment variables only, not command-line arguments.
+
+`pnpm deploy:gateway:smoke` validates the Gateway deployment path against a
+running cloud deployment. It builds the Gateway package, checks managed Gateway
+health/readiness when `OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL` is set, verifies
+public metrics/diagnostics are blocked, issues a short-lived gateway-scoped
+service token from `OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN`, creates temporary
+headless-agent/channel binding state, proves least privilege, runs a loopback
+self-host fake-provider Gateway, validates inbound prompt routing, session SSE
+rendering, approval interaction routing, async delivery, retry/dead-letter
+controls, and token revocation. Tokens are read from environment variables
+only, not command-line arguments.
 
 `pnpm deploy:gcp:preflight` is a read-only GCP check for the reference
 deployment. It verifies the active `gcloud` account/project, region, required

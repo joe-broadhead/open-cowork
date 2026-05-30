@@ -90,6 +90,27 @@ Keep Desktop smoke tokens in environment variables or a private secret store;
 the script intentionally does not accept token values as command-line
 arguments.
 
+Validate the Gateway as both a managed endpoint and a self-host/VPS-style
+cloud client against the same deployment:
+
+```bash
+OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:gateway:smoke
+```
+
+The Gateway smoke issues a short-lived gateway-scoped service token, creates
+temporary headless-agent/channel binding state through admin APIs, proves the
+gateway token cannot administer channels or mint tokens, runs a loopback fake
+provider Gateway like a VPS/self-host process, validates inbound message to
+cloud prompt, channel rendering, approval interaction routing, async delivery,
+retry/dead-letter controls, operator-scoped diagnostics/metrics, and token
+revocation. Keep tokens in environment variables or a private secret store;
+the script intentionally does not accept token values as command-line
+arguments.
+
 GCP adds a provider-specific infra smoke:
 
 ```bash

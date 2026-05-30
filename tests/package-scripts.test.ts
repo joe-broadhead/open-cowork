@@ -83,6 +83,10 @@ test('root deployment scripts expose provider smoke gates', () => {
     'pnpm build:shared',
     'node --no-warnings --experimental-strip-types scripts/desktop-cloud-sync-smoke.mjs',
   ])
+  assert.deepEqual(splitScriptSteps(requireScript('deploy:gateway:smoke')), [
+    'pnpm build:gateway',
+    'node scripts/gateway-cloud-smoke.mjs',
+  ])
   assert.equal(requireScript('deploy:gcp:preflight'), 'node scripts/gcp-reference-preflight.mjs')
   assert.equal(requireScript('deploy:gcp:smoke'), 'node scripts/gcp-reference-smoke.mjs')
 })

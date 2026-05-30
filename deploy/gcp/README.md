@@ -200,6 +200,29 @@ they must not be injected as process env vars.
     checks; the full #496 acceptance gate should run prompts against a worker
     with BYOK/model credentials configured.
 
+14. Run the Gateway cloud smoke with an admin-scoped Cloud token and, when a
+    managed Gateway endpoint is deployed, its Gateway admin token. Keep all
+    tokens in the shell environment or your private deployment repo secret
+    store; do not pass them on the command line:
+
+    ```bash
+    OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+    OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+    OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+    pnpm deploy:gateway:smoke
+    ```
+
+    This is the #497 gate for deployed GCP environments. It validates managed
+    Gateway health/readiness and public operator endpoint protection, then runs
+    a loopback self-host Gateway process against the deployed Cloud control
+    plane with an ephemeral gateway-scoped token. The self-host path exercises
+    channel binding setup, token least privilege, inbound fake-channel prompt,
+    session SSE rendering, approval interaction routing, async/proactive
+    delivery, retry/dead-letter controls, and token revocation. The fake
+    provider remains loopback-only; do not expose fake ingress on public
+    Gateway deployments.
+
 For quick Helm overrides, keep the same provider-neutral keys used by the
 other recipes:
 
@@ -267,6 +290,7 @@ Rollback order:
 - `OPEN_COWORK_SMOKE_CLOUD_URL=https://... pnpm deploy:smoke -- --skip-gateway`
 - `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... pnpm deploy:gcp:smoke`
 - `OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://... OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... pnpm deploy:desktop:smoke`
+- `OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... pnpm deploy:gateway:smoke`
 - Cloud logs contain no raw database URLs, BYOK keys, API tokens, OAuth tokens,
   channel credentials, or signed object URLs.
 

@@ -64,3 +64,25 @@ prompts from both sides, sends an abort command, checks read-only offline cache
 fallback, verifies the local workspace remains independent, and revokes the
 ephemeral token. Use `OPEN_COWORK_DESKTOP_SMOKE_SKIP_PROMPT=true` only for
 early surface checks before workers/BYOK are ready.
+
+## Gateway Cloud Smoke
+
+```bash
+OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:gateway:smoke
+```
+
+This validates the #497 Gateway deployment path. The smoke checks the managed
+Gateway endpoint when `OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL` is set, verifies
+metrics/diagnostics are not public, issues a short-lived gateway-scoped token,
+creates temporary headless-agent/channel binding state through Cloud admin
+APIs, proves the gateway token cannot administer channels or mint tokens, runs
+a loopback self-host Gateway process with the fake provider, sends an inbound
+message through `/webhooks/fake`, waits for Cloud session SSE rendering, routes
+an approval interaction, drains an async delivery, exercises retry/dead-letter
+operator controls, and revokes the service token. Use
+`OPEN_COWORK_GATEWAY_SMOKE_REQUIRE_MANAGED=true` when a managed Gateway
+endpoint is mandatory for the environment.

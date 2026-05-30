@@ -252,6 +252,24 @@ HTTP/SSE, Desktop-to-Web and Web-to-Desktop session continuation, prompt/abort
 routing, read-only offline cache fallback, local workspace isolation, and
 ephemeral Desktop token revocation.
 
+For the Gateway gate against the same deployed Cloud environment:
+
+```bash
+OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:gateway:smoke
+```
+
+This smoke validates both managed and self-host Gateway paths. It checks the
+managed Gateway health/readiness and operator endpoint protection, creates
+temporary cloud channel state, proves a gateway-scoped token cannot administer
+channels or mint tokens, runs a loopback fake-provider Gateway against the
+deployed Cloud URL, verifies inbound prompt routing, session SSE rendering,
+approval interaction routing, async delivery, retry/dead-letter controls, and
+ephemeral token revocation.
+
 For operator-only readiness checks:
 
 ```bash
