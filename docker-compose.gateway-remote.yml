@@ -1,7 +1,10 @@
+# Local/demo Gateway appliance reference only. Production overlays must pin the
+# Gateway image, replace demo tokens, and use HTTPS Cloud/Gateway origins.
 services:
   open-cowork-gateway:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_GATEWAY_IMAGE:-open-cowork-gateway:local}
     build:
       context: .
       dockerfile: docker/open-cowork-gateway/Dockerfile

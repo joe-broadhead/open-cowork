@@ -1,13 +1,15 @@
 image:
   repository: ghcr.io/joe-broadhead/open-cowork-cloud
-  tag: latest
+  tag: "0.0.0"
+  digest: ""
   pullPolicy: IfNotPresent
 
 gateway:
   enabled: false
   image:
     repository: ghcr.io/joe-broadhead/open-cowork-gateway
-    tag: latest
+    tag: "0.0.0"
+    digest: ""
     pullPolicy: IfNotPresent
   gateway:
     cloudBaseUrl: ""
@@ -96,12 +98,22 @@ roles:
     port: 8787
     autoProcessCommands: false
     resources: {}
+    topologySpreadConstraints: []
+    podDisruptionBudget:
+      enabled: false
+      minAvailable: 1
+      maxUnavailable: ""
   worker:
     enabled: false
     replicas: 1
     pollMs: 1000
     checkpointsEnabled: true
     resources: {}
+    topologySpreadConstraints: []
+    podDisruptionBudget:
+      enabled: false
+      minAvailable: 1
+      maxUnavailable: ""
     persistence:
       enabled: false
       size: 20Gi
@@ -111,6 +123,11 @@ roles:
     replicas: 1
     pollMs: 1000
     resources: {}
+    topologySpreadConstraints: []
+    podDisruptionBudget:
+      enabled: false
+      minAvailable: 1
+      maxUnavailable: ""
 
 service:
   type: ClusterIP

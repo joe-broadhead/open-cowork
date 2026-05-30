@@ -9,7 +9,9 @@ function readRepoFile(path: string) {
 
 test('split cloud compose declares web, worker, and scheduler roles', () => {
   const compose = readRepoFile('docker-compose.cloud.split.yml')
+  assert.match(compose, /Local\/demo split-role reference only/)
   assert.match(compose, /open-cowork-cloud-web:/)
+  assert.match(compose, /image: \$\{OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local\}/)
   assert.match(compose, /OPEN_COWORK_CLOUD_ROLE: web/)
   assert.match(compose, /OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: "false"/)
   assert.match(compose, /OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: "true"/)
@@ -39,8 +41,11 @@ test('split cloud compose declares web, worker, and scheduler roles', () => {
 
 test('combined cloud and gateway compose declares self-host gateway wiring', () => {
   const compose = readRepoFile('docker-compose.cloud-gateway.yml')
+  assert.match(compose, /Local\/demo Cloud plus Gateway reference only/)
   assert.match(compose, /open-cowork-cloud:/)
   assert.match(compose, /open-cowork-gateway:/)
+  assert.match(compose, /image: \$\{OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local\}/)
+  assert.match(compose, /image: \$\{OPEN_COWORK_GATEWAY_IMAGE:-open-cowork-gateway:local\}/)
   assert.match(compose, /docker\/open-cowork-gateway\/Dockerfile/)
   assert.match(compose, /OPEN_COWORK_CONFIG_PATH: \$\{OPEN_COWORK_CONFIG_PATH:-\}/)
   assert.match(compose, /OPEN_COWORK_CONFIG_DIR: \$\{OPEN_COWORK_CONFIG_DIR:-\}/)
@@ -129,6 +134,9 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(chart, /name: open-cowork-cloud/)
   assert.match(chart, /open-cowork-gateway/)
   assert.match(values, /web:/)
+  assert.match(values, /tag: "0\.0\.0"/)
+  assert.match(values, /digest: ""/)
+  assert.doesNotMatch(values, /tag: latest/)
   assert.match(values, /worker:/)
   assert.match(values, /scheduler:/)
   assert.match(values, /gateway:/)
@@ -151,6 +159,8 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(values, /logFormat: json/)
   assert.match(values, /otlpEndpoint: ""/)
   assert.match(values, /checkpointsEnabled: true/)
+  assert.match(values, /topologySpreadConstraints: \[\]/)
+  assert.match(values, /podDisruptionBudget:/)
   assert.match(values, /podSecurityContext:/)
   assert.match(values, /runAsNonRoot: true/)
   assert.match(values, /containerSecurityContext:/)
@@ -164,14 +174,22 @@ test('cloud Helm chart keeps provider-neutral role wiring explicit', () => {
   assert.match(deployment, /OPEN_COWORK_CLOUD_ROLE/)
   assert.match(deployment, /cloud\.auth\.mode=none requires explicit cloud\.allowInsecureAuth=true/)
   assert.match(deployment, /cloud\.auth\.mode=none with public service or ingress requires explicit cloud\.allowInsecurePublicAuth=true/)
+  assert.match(deployment, /image\.tag=latest is not allowed/)
   assert.match(deployment, /worker and scheduler roles require a shared control plane/)
+  assert.match(deployment, /roles\.worker\.replicas > 1 requires cloud\.checkpoints\.enabled=true/)
+  assert.match(deployment, /cloud\.objectStore\.kind=filesystem is local\/demo-only/)
+  assert.match(deployment, /roles\.worker\.replicas > 1 requires cloud\.objectStore\.bucket/)
   assert.match(deployment, /OPEN_COWORK_CLOUD_WORKER_ID/)
   assert.match(deployment, /OPEN_COWORK_CLOUD_SCHEDULER_ID/)
   assert.match(deployment, /serviceAccountName:/)
   assert.match(deployment, /livenessProbe:/)
   assert.match(deployment, /roles\.worker\.persistence\.enabled cannot be used/)
+  assert.match(deployment, /topologySpreadConstraints:/)
   assert.match(deployment, /emptyDir: {}/)
   assert.match(deployment, /securityContext:/)
+  const cloudPdb = readRepoFile('helm/open-cowork-cloud/templates/pdb.yaml')
+  assert.match(cloudPdb, /PodDisruptionBudget/)
+  assert.match(cloudPdb, /podDisruptionBudget\.enabled/)
   assert.match(configMap, /OPEN_COWORK_CLOUD_OBJECT_STORE_KIND/)
   assert.match(configMap, /OPEN_COWORK_CONFIG_PATH/)
   assert.match(configMap, /OPEN_COWORK_CONFIG_DIR/)
@@ -370,6 +388,9 @@ test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => 
 
   assert.match(chart, /name: open-cowork-gateway/)
   assert.match(values, /repository: ghcr\.io\/joe-broadhead\/open-cowork-gateway/)
+  assert.match(values, /tag: "0\.0\.0"/)
+  assert.match(values, /digest: ""/)
+  assert.doesNotMatch(values, /tag: latest/)
   assert.match(values, /mode: self-host/)
   assert.match(values, /configPath: ""/)
   assert.match(values, /configDir: ""/)
@@ -389,7 +410,10 @@ test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => 
   assert.match(values, /runAsNonRoot: true/)
   assert.match(values, /containerSecurityContext:/)
   assert.match(values, /allowPrivilegeEscalation: false/)
+  assert.match(values, /topologySpreadConstraints: \[\]/)
+  assert.match(values, /podDisruptionBudget:/)
   assert.match(deployment, /gateway\.cloudBaseUrl is required/)
+  assert.match(deployment, /image\.tag=latest is not allowed/)
   assert.match(deployment, /gateway\.serviceToken or gateway\.existingSecret is required/)
   assert.match(deployment, /gateway\.providersJson, gateway\.telegram\.botToken, gateway\.slack\.botToken, gateway\.email\.inboundSecret, gateway\.webhook\.deliveryUrl, or gateway\.existingSecret is required/)
   assert.match(deployment, /gateway\.adminToken or gateway\.existingSecret is required/)
@@ -400,6 +424,10 @@ test('gateway Helm chart keeps provider-neutral gateway wiring explicit', () => 
   assert.match(deployment, /gateway\.email\.from and gateway\.email\.smtpHost are required/)
   assert.match(deployment, /\/health/)
   assert.match(deployment, /\/ready/)
+  assert.match(deployment, /topologySpreadConstraints:/)
+  const gatewayPdb = readRepoFile('helm/open-cowork-gateway/templates/pdb.yaml')
+  assert.match(gatewayPdb, /PodDisruptionBudget/)
+  assert.match(gatewayPdb, /podDisruptionBudget\.enabled/)
   assert.match(configMap, /OPEN_COWORK_CLOUD_BASE_URL/)
   assert.match(configMap, /OPEN_COWORK_CONFIG_PATH/)
   assert.match(configMap, /OPEN_COWORK_CONFIG_DIR/)
@@ -427,6 +455,8 @@ test('Acme downstream example covers desktop, cloud, and gateway branding parity
 
   assert.match(readme, /Internal enterprise mode/)
   assert.match(readme, /Managed BYOK SaaS mode/)
+  assert.match(readme, /immutable downstream release tag or digest/)
+  assert.match(readme, /cloud\.billing\.provider=none/)
   assert.match(readme, /OPEN_COWORK_CONFIG_PATH/)
   assert.match(readme, /cloud\.publicBranding/)
   assert.match(readme, /cloudDesktop/)
@@ -444,10 +474,16 @@ test('Acme downstream example covers desktop, cloud, and gateway branding parity
   assert.match(desktopConfig, /"kind": "slack"/)
   assert.match(desktopConfig, /"kind": "email"/)
   assert.match(cloudValues, /productName: Acme Cowork/)
+  assert.match(cloudValues, /tag: v2026\.05\.0/)
+  assert.match(cloudValues, /topologySpreadConstraints:/)
+  assert.match(cloudValues, /podDisruptionBudget:/)
   assert.match(cloudValues, /oidcIssuerUrl: https:\/\/idp\.acme\.example/)
   assert.match(cloudValues, /profile: data-analyst/)
   assert.match(gatewayValues, /cloudBaseUrl: https:\/\/cowork\.acme\.example/)
   assert.match(gatewayValues, /productName: Acme Cowork/)
+  assert.match(gatewayValues, /tag: v2026\.05\.0/)
+  assert.match(gatewayValues, /topologySpreadConstraints:/)
+  assert.match(gatewayValues, /podDisruptionBudget:/)
   assert.match(gatewayValues, /channelBindingId: acme-telegram/)
 })
 
@@ -502,6 +538,12 @@ test('cloud provider recipes stay thin compositions of the shared image and adap
   assert.match(index, /OPEN_COWORK_CONFIG_PATH/)
   assert.match(index, /Postgres/)
   assert.match(index, /OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true/)
+  assert.match(index, /image\.tag=latest/)
+  assert.match(index, /OPEN_COWORK_CLOUD_IMAGE/)
+  assert.match(index, /HPA or KEDA/)
+  assert.match(index, /PodDisruptionBudgets/)
+  assert.match(index, /topology spread constraints/)
+  assert.match(index, /cloud\.objectStore\.kind/)
   assert.match(index, /no billing/)
   assert.match(index, /stub billing provider/)
   assert.match(index, /pnpm deploy:validate/)
@@ -513,25 +555,43 @@ test('cloud provider recipes stay thin compositions of the shared image and adap
     aws: ['RDS for PostgreSQL', 'S3', 'Secrets Manager', 'EKS', 'open-cowork-gateway', 'CloudWatch Logs', 'RDS PITR'],
     azure: ['Azure Database for PostgreSQL', 'Azure Blob Storage', 'Key Vault', 'AKS', 'open-cowork-gateway', 'Azure Monitor', 'Azure PostgreSQL PITR'],
     digitalocean: ['Managed PostgreSQL', 'Spaces', 'DOKS', 'App Platform', 'open-cowork-gateway', 'App Platform logs', 'Managed PostgreSQL backups'],
+    kubernetes: ['Generic Kubernetes Recipe', 'provider-neutral Helm charts', 'open-cowork-cloud-secrets', 'open-cowork-gateway-secrets', 'Prometheus/OTLP collector', 'Postgres PITR'],
   }
 
   for (const [provider, expected] of Object.entries(recipes)) {
     const readme = readRepoFile(`deploy/${provider}/README.md`)
     assert.match(readme, /open-cowork-cloud/)
-    assert.match(readme, /cloud.checkpoints.enabled=true/)
-    assert.match(readme, /helm upgrade --install open-cowork-cloud/)
-    assert.match(readme, /helm upgrade --install open-cowork-gateway/)
-    assert.match(readme, /gateway.existingSecret=open-cowork-gateway-secrets/)
+    assert.match(readme, /open-cowork-gateway/)
+    assert.match(readme, /pnpm deploy:validate/)
+    assert.match(readme, /pnpm deploy:smoke/)
+    assert.match(readme, /pnpm deploy:gateway:smoke/)
+    assert.match(readme, /pnpm deploy:continuation:smoke/)
+    assert.match(readme, /provider-config only|adapter wiring only/)
     assert.match(readme, /OPEN_COWORK_CLOUD_PUBLIC_URL/)
     assert.match(readme, /OPEN_COWORK_GATEWAY_PUBLIC_URL/)
     assert.match(readme, /provider webhook signing secrets/)
-    assert.match(readme, /billing disabled\/stubbed/)
-    assert.match(readme, /pnpm deploy:smoke/)
-    assert.match(readme, /adapter wiring only/)
+    assert.doesNotMatch(readme, /\b\d{12}\b/)
+    assert.doesNotMatch(readme, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+    if (provider !== 'kubernetes') {
+      assert.match(readme, /cloud.checkpoints.enabled=true/)
+      assert.match(readme, /helm upgrade --install open-cowork-cloud/)
+      assert.match(readme, /helm upgrade --install open-cowork-gateway/)
+      assert.match(readme, /gateway.existingSecret=open-cowork-gateway-secrets/)
+      assert.match(readme, /billing disabled\/stubbed/)
+    }
     for (const phrase of expected) {
       assert.match(readme, new RegExp(phrase))
     }
   }
+
+  const gatewayAppliance = readRepoFile('deploy/gateway-appliance/README.md')
+  assert.match(gatewayAppliance, /VPS\/Local Compose Recipe/)
+  assert.match(gatewayAppliance, /provider-config only/)
+  assert.match(gatewayAppliance, /docker-compose.gateway-remote.yml/)
+  assert.match(gatewayAppliance, /docker-compose.cloud-gateway.yml/)
+  assert.match(gatewayAppliance, /pnpm deploy:validate/)
+  assert.match(gatewayAppliance, /pnpm deploy:gateway:smoke/)
+  assert.match(gatewayAppliance, /OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true/)
 })
 
 test('deployment readiness checklist and managed BYOK runbook cover production gates', () => {
@@ -568,6 +628,11 @@ test('deployment readiness checklist and managed BYOK runbook cover production g
     'pnpm deploy:validate',
     'pnpm deploy:smoke',
     'Provider Recipe Contract',
+    'HPA or KEDA',
+    'PodDisruptionBudgets',
+    'topology spread constraints',
+    'Helm image pinning',
+    'billing-free path',
   ]) {
     assert.match(readiness, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))
   }
@@ -699,7 +764,11 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(validate, /docs\/runbooks\/backup-restore\.md/)
   assert.match(validate, /docs\/runbooks\/restore-drill-report\.md/)
   assert.match(validate, /unsafe-public-cloud/)
+  assert.match(validate, /latest-cloud-image/)
+  assert.match(validate, /unsafe-multi-worker-cloud/)
+  assert.match(validate, /image\.tag=latest is not allowed/)
   assert.match(validate, /unsafe-webhook-gateway/)
+  assert.match(validate, /latest-gateway-image/)
   assert.match(validate, /unsafe-metrics-gateway/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_CLOUD_URL/)
   assert.match(smoke, /OPEN_COWORK_SMOKE_GATEWAY_URL/)

@@ -219,7 +219,7 @@ test('gateway diagnostics are disabled by default in managed mode', async () => 
   }
 })
 
-test('gateway provider registry wires fake, Telegram, Slack, email, and webhook providers', () => {
+test('gateway provider registry wires fake, first-party, bridge, and CLI providers', () => {
   const registry = createGatewayProviderRegistry(resolveGatewayConfig({
     cloud: {
       baseUrl: 'https://cloud.example.test',
@@ -270,6 +270,46 @@ test('gateway provider registry wires fake, Telegram, Slack, email, and webhook 
       settings: {
         deliveryUrl: 'https://bridge.example.test/outbound',
       },
+    }, {
+      id: 'discord',
+      kind: 'discord',
+      channelBindingId: 'discord-binding',
+      credentials: {
+        sharedSecret: 'discord-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/discord',
+      },
+    }, {
+      id: 'whatsapp',
+      kind: 'whatsapp',
+      channelBindingId: 'whatsapp-binding',
+      credentials: {
+        sharedSecret: 'whatsapp-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/whatsapp',
+      },
+    }, {
+      id: 'signal',
+      kind: 'signal',
+      channelBindingId: 'signal-binding',
+      credentials: {
+        sharedSecret: 'signal-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/signal',
+      },
+    }, {
+      id: 'cli',
+      kind: 'cli',
+      channelBindingId: 'cli-binding',
+      credentials: {
+        sharedSecret: 'cli-secret',
+      },
+      settings: {
+        deliveryUrl: 'http://127.0.0.1:8844/cli',
+      },
     }],
   }))
 
@@ -297,7 +337,25 @@ test('gateway provider registry wires fake, Telegram, Slack, email, and webhook 
     id: 'webhook',
     kind: 'webhook',
     provider: 'webhook',
+  }, {
+    id: 'discord',
+    kind: 'discord',
+    provider: 'discord',
+  }, {
+    id: 'whatsapp',
+    kind: 'whatsapp',
+    provider: 'whatsapp',
+  }, {
+    id: 'signal',
+    kind: 'signal',
+    provider: 'signal',
+  }, {
+    id: 'cli',
+    kind: 'cli',
+    provider: 'cli',
   }])
+  assert.equal(registry.registrations.find((entry) => entry.config.kind === 'whatsapp')?.provider.capabilities.inlineButtons, true)
+  assert.equal(registry.registrations.find((entry) => entry.config.kind === 'signal')?.provider.capabilities.inlineButtons, false)
 })
 
 test('gateway daemon accepts signed Slack webhook verification payloads', async () => {

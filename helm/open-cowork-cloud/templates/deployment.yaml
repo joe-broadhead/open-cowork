@@ -1,3 +1,9 @@
+{{- if and (not $.Values.image.tag) (not $.Values.image.digest) }}
+{{- fail "image.tag or image.digest is required; pin a release tag or immutable digest instead of relying on latest." }}
+{{- end }}
+{{- if eq $.Values.image.tag "latest" }}
+{{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
+{{- end }}
 {{- range $roleName, $role := .Values.roles }}
 {{- if $role.enabled }}
 {{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "oidc") (or (not $.Values.cloud.auth.oidcIssuerUrl) (not $.Values.cloud.auth.oidcClientId)) }}
@@ -14,6 +20,18 @@
 {{- end }}
 {{- if and (eq $roleName "worker") $role.persistence.enabled (gt (int $role.replicas) 1) }}
 {{- fail "roles.worker.persistence.enabled cannot be used with roles.worker.replicas > 1; use object-store checkpoints and ephemeral worker roots for horizontally scaled workers." }}
+{{- end }}
+{{- if and (eq $roleName "worker") (gt (int $role.replicas) 1) (not $.Values.cloud.checkpoints.enabled) }}
+{{- fail "roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true so another worker can restore runtime/workspace state." }}
+{{- end }}
+{{- if and (eq $roleName "worker") (gt (int $role.replicas) 1) (not $role.checkpointsEnabled) }}
+{{- fail "roles.worker.replicas > 1 requires roles.worker.checkpointsEnabled=true." }}
+{{- end }}
+{{- if and (eq $roleName "worker") (gt (int $role.replicas) 1) (eq $.Values.cloud.objectStore.kind "filesystem") }}
+{{- fail "roles.worker.replicas > 1 requires a shared object store; cloud.objectStore.kind=filesystem is local/demo-only." }}
+{{- end }}
+{{- if and (eq $roleName "worker") (gt (int $role.replicas) 1) (not $.Values.cloud.objectStore.bucket) }}
+{{- fail "roles.worker.replicas > 1 requires cloud.objectStore.bucket for artifacts, snapshots, and checkpoints." }}
 {{- end }}
 ---
 apiVersion: apps/v1
@@ -43,7 +61,7 @@ spec:
       {{- end }}
       containers:
         - name: open-cowork-cloud
-          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          image: "{{ include "open-cowork-cloud.image" $ }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           {{- with $.Values.containerSecurityContext }}
           securityContext:
@@ -112,6 +130,10 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+      {{- end }}
+      {{- with $role.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}
 {{- end }}

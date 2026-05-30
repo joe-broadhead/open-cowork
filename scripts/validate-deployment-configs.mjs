@@ -53,22 +53,35 @@ function assertIncludes(path, text) {
   }
 }
 
+function assertNotIncludes(path, text) {
+  const contents = read(path)
+  if (contents.includes(text)) {
+    throw new Error(`${path} must not include ${text}`)
+  }
+}
+
 function staticComposeChecks() {
   for (const file of composeFiles) {
     assertIncludes(file, 'services:')
     assertIncludes(file, 'postgres:')
+    assertIncludes(file, 'Local/demo')
   }
   for (const file of gatewayOnlyComposeFiles) {
     assertIncludes(file, 'services:')
+    assertIncludes(file, 'Local/demo')
     assertIncludes(file, 'open-cowork-gateway:')
     assertIncludes(file, 'OPEN_COWORK_GATEWAY_HOST')
     assertIncludes(file, 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
   }
   assertIncludes('docker-compose.cloud.yml', 'minio:')
+  assertIncludes('docker-compose.cloud.yml', 'OPEN_COWORK_CLOUD_IMAGE')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-web:')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-worker:')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-scheduler:')
+  assertIncludes('docker-compose.cloud.split.yml', 'OPEN_COWORK_CLOUD_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'open-cowork-gateway:')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_CLOUD_IMAGE')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
   for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
@@ -106,12 +119,25 @@ function validateCompose() {
 }
 
 function staticHelmChecks() {
+  assertNotIncludes('helm/open-cowork-cloud/values.yaml', 'tag: latest')
+  assertNotIncludes('helm/open-cowork-gateway/values.yaml', 'tag: latest')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'digest: ""')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'digest: ""')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.objectStore.kind=filesystem is local/demo-only')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.objectStore.bucket')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'topologySpreadConstraints')
+  assertIncludes('helm/open-cowork-cloud/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required on public gateway binds')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'topologySpreadConstraints')
+  assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
@@ -148,6 +174,8 @@ function validateHelm() {
       '--set',
       'cloud.auth.mode=oidc',
       '--set',
+      'image.tag=ci',
+      '--set',
       'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
       '--set',
       'cloud.auth.oidcClientId=open-cowork-cloud-ci',
@@ -181,8 +209,50 @@ function validateHelm() {
       'helm',
       [
         'template',
+        'latest-cloud-image',
+        cloudChart,
+        '--set',
+        'image.tag=latest',
+        '--set',
+        'cloud.auth.mode=oidc',
+        '--set',
+        'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+        '--set',
+        'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+      ],
+      'image.tag=latest is not allowed'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-multi-worker-cloud',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.auth.mode=oidc',
+        '--set',
+        'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+        '--set',
+        'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.worker.replicas=2',
+      ],
+      'roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
         'unsafe-public-cloud',
         cloudChart,
+        '--set',
+        'image.tag=ci',
         '--set',
         'cloud.auth.mode=none',
         '--set',
@@ -198,6 +268,8 @@ function validateHelm() {
       gatewayChart,
       '--set',
       'gateway.cloudBaseUrl=https://cloud.example.com',
+      '--set',
+      'image.tag=ci',
       '--set',
       'gateway.serviceToken=ci-gateway-token',
       '--set',
@@ -233,6 +305,25 @@ function validateHelm() {
       '--set',
       'gateway.configPath=/etc/open-cowork/open-cowork.config.json',
     ])
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'latest-gateway-image',
+        gatewayChart,
+        '--set',
+        'image.tag=latest',
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+      ],
+      'image.tag=latest is not allowed'
+    )
     expectFailure(
       'helm',
       [
@@ -321,6 +412,7 @@ function validateDocs() {
     'deploy/aws/README.md',
     'deploy/azure/README.md',
     'deploy/digitalocean/README.md',
+    'deploy/kubernetes/README.md',
   ]
   for (const path of requiredDocs) {
     if (!existsSync(path)) {
@@ -337,6 +429,10 @@ function validateDocs() {
     'secret adapter/kms',
     'public url/https',
     'worker/scheduler scaling',
+    'hpa or keda',
+    'poddisruptionbudgets',
+    'topology spread constraints',
+    'helm image pinning',
     'gateway service token',
     'provider webhook signing',
     'quotas/rate limits',
@@ -357,6 +453,7 @@ function validateDocs() {
     'docs/runbooks/backup-restore.md',
     'docs/runbooks/restore-drill-report.md',
     'no billing provider or the stub billing provider',
+    'billing-free path',
   ]) {
     if (!readiness.includes(phrase)) {
       throw new Error(`docs/deployment-readiness.md must include ${phrase}`)
@@ -471,6 +568,9 @@ function validateDocs() {
 
   const deployReadme = read('deploy/README.md')
   for (const phrase of [
+    'Provider Recipes',
+    'deploy/kubernetes/',
+    'VPS/local Compose',
     'cloud.publicBranding',
     'cloudDesktop',
     'gateway.providers',
@@ -478,10 +578,86 @@ function validateDocs() {
     'docker-compose.gateway-remote.yml',
     'OPEN_COWORK_CONFIG_PATH',
     'cloud.billing.provider',
+    'OPEN_COWORK_CLOUD_IMAGE',
+    'image.tag=latest',
+    'HPA or KEDA',
+    'PodDisruptionBudgets',
+    'topology spread',
+    'cloud.objectStore.kind',
   ]) {
     if (!deployReadme.includes(phrase)) {
       throw new Error(`deploy/README.md must include ${phrase}`)
     }
+  }
+
+  const recipeChecks = {
+    'deploy/aws/README.md': [
+      'RDS for PostgreSQL',
+      'S3',
+      'Secrets Manager',
+      'EKS',
+      'ECS/Fargate',
+      'ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-cloud',
+      'aws-sm://open-cowork/cloud-secret-key?region=REGION',
+    ],
+    'deploy/azure/README.md': [
+      'Azure Database for PostgreSQL',
+      'Azure Blob Storage',
+      'Key Vault',
+      'AKS',
+      'Azure Container Apps',
+      'REGISTRY.azurecr.io/open-cowork-cloud',
+      'azure-kv://VAULT_NAME/secrets/open-cowork-cloud-key/VERSION',
+    ],
+    'deploy/digitalocean/README.md': [
+      'Managed PostgreSQL',
+      'Spaces',
+      'DOKS',
+      'App Platform',
+      'registry.digitalocean.com/REGISTRY/open-cowork-cloud',
+      'cloud.objectStore.kind=digitalocean-spaces',
+    ],
+    'deploy/kubernetes/README.md': [
+      'Generic Kubernetes Recipe',
+      'provider-neutral Helm charts',
+      'registry.example.com/open-cowork/open-cowork-cloud',
+      'open-cowork-cloud-secrets',
+      'open-cowork-gateway-secrets',
+      'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
+    ],
+    'deploy/gateway-appliance/README.md': [
+      'VPS/Local Compose Recipe',
+      'docker-compose.gateway-remote.yml',
+      'docker-compose.cloud-gateway.yml',
+      'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true',
+    ],
+  }
+
+  for (const [path, providerPhrases] of Object.entries(recipeChecks)) {
+    const recipe = read(path)
+    for (const phrase of [
+      'open-cowork-cloud',
+      'open-cowork-gateway',
+      'provider-config only',
+      'pnpm deploy:validate',
+      'pnpm deploy:smoke',
+      'pnpm deploy:gateway:smoke',
+      'pnpm deploy:continuation:smoke',
+      ...providerPhrases,
+    ]) {
+      if (!recipe.includes(phrase)) {
+        throw new Error(`${path} must include ${phrase}`)
+      }
+    }
+    for (const forbidden of [
+      /\b\d{12}\b/,
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    ]) {
+      if (forbidden.test(recipe)) {
+        throw new Error(`${path} appears to include a real provider identifier`)
+      }
+    }
+    assertNoProviderHostedUrls(path, recipe)
   }
 
   const gatewayAppliance = read('docs/gateway-appliance.md')
@@ -520,6 +696,12 @@ function validateDocs() {
     'gateway.providers',
     'OPEN_COWORK_CONFIG_PATH',
     'cloud.billing.provider=none',
+    'immutable release tag or digest',
+    'multi-worker Cloud requires checkpointing',
+    'HPA/KEDA policy',
+    'PodDisruptionBudgets',
+    'topology spread constraints',
+    'billing-free path',
   ]) {
     if (!downstream.includes(phrase)) {
       throw new Error(`docs/downstream.md must include ${phrase}`)
@@ -527,7 +709,7 @@ function validateDocs() {
   }
 
   const acmeReadme = read('examples/downstream/acme/README.md')
-  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers']) {
+  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none']) {
     if (!acmeReadme.includes(phrase)) {
       throw new Error(`examples/downstream/acme/README.md must include ${phrase}`)
     }
@@ -700,6 +882,30 @@ function validateGcpReference() {
   ]) {
     if (!continuationSmoke.includes(phrase)) {
       throw new Error(`scripts/cloud-continuation-smoke.mjs must include ${phrase}`)
+    }
+  }
+}
+
+function assertNoProviderHostedUrls(path, contents) {
+  const providerHostPatterns = [
+    /^[a-z0-9-]+\.amazonaws\.com$/i,
+    /^[a-z0-9-]+\.azurewebsites\.net$/i,
+    /^[a-z0-9-]+\.ondigitalocean\.app$/i,
+  ]
+
+  for (const token of contents.split(/\s+/)) {
+    const cleaned = token.replace(/^[("'`<]+|[)"'`>,.;]+$/g, '')
+    if (!cleaned.startsWith('https://')) continue
+
+    let hostname = ''
+    try {
+      hostname = new URL(cleaned).hostname
+    } catch {
+      continue
+    }
+
+    if (providerHostPatterns.some((pattern) => pattern.test(hostname))) {
+      throw new Error(`${path} appears to include a real provider-hosted URL`)
     }
   }
 }

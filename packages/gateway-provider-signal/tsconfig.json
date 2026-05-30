@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "@open-cowork/gateway-channel": ["../gateway-channel/dist/index.d.ts"],
+      "@open-cowork/gateway-channel/*": ["../gateway-channel/dist/*"],
+      "@open-cowork/gateway-provider-webhook": ["../gateway-provider-webhook/dist/index.d.ts"],
+      "@open-cowork/gateway-provider-webhook/*": ["../gateway-provider-webhook/dist/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

@@ -1,6 +1,7 @@
 image:
   repository: ghcr.io/joe-broadhead/open-cowork-gateway
-  tag: latest
+  tag: "0.0.0"
+  digest: ""
   pullPolicy: IfNotPresent
 
 nameOverride: ""
@@ -86,6 +87,13 @@ containerSecurityContext:
       - ALL
 
 resources: {}
+
+topologySpreadConstraints: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
 
 ingress:
   enabled: false

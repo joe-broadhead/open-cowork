@@ -7,6 +7,21 @@ server, or local Docker host.
 Gateway remains a Cloud client. It does not spawn OpenCode and does not own
 control-plane Postgres state.
 
+## VPS/Local Compose Recipe
+
+Use this path for self-hosted Gateway appliances and small local Cloud pilots:
+
+| Mode | Compose file | Backing services | Intended use |
+| --- | --- | --- | --- |
+| Remote Cloud | `docker-compose.gateway-remote.yml` | Existing managed Cloud plus this host's Gateway process | VPS, Mac mini, Raspberry Pi, or internal server channel appliance |
+| Local all-in-one | `docker-compose.cloud-gateway.yml` | Cloud, Postgres, MinIO, and Gateway on one Docker host | Local demos, OSS self-host pilots, and internal installs |
+
+The Compose files are provider-config only. Keep real domains, tokens, bot
+tokens, SMTP credentials, and webhook secrets in a private `.env.gateway` file
+or host secret store. Do not commit generated env files. Local all-in-one mode
+uses the same `open-cowork-cloud` and `open-cowork-gateway` images as the
+managed provider recipes.
+
 ## Modes
 
 Remote Cloud mode runs only Gateway on this host:
@@ -35,6 +50,32 @@ docker compose --env-file .env.gateway -f docker-compose.cloud-gateway.yml up -d
 
 The local all-in-one path is for self-hosted OSS pilots and internal installs.
 It does not require commercial billing.
+
+## Shared Validation
+
+Run the same deployment validators and smokes as the managed provider recipes:
+
+```bash
+pnpm deploy:validate
+
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+pnpm deploy:smoke
+
+OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:gateway:smoke
+
+OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+pnpm deploy:continuation:smoke
+```
+
+For local all-in-one smoke checks, use localhost URLs and keep
+`OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true` loopback-only.
 
 ## Files
 

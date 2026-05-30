@@ -1,6 +1,6 @@
 image:
   repository: registry.acme.example/open-cowork-gateway
-  tag: stable
+  tag: v2026.05.0
 
 gateway:
   mode: self-host
@@ -49,6 +49,18 @@ gateway:
   webhook:
     deliveryUrl: ""
     sharedSecret: ""
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: open-cowork-gateway
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
 
 ingress:
   enabled: true

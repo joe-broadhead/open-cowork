@@ -468,7 +468,10 @@
       "additionalProperties": false,
       "properties": {
         "id": { "$ref": "#/$defs/cloudName" },
-        "kind": { "type": "string", "enum": ["fake", "telegram", "slack", "email", "webhook"] },
+        "kind": {
+          "type": "string",
+          "enum": ["fake", "telegram", "slack", "email", "webhook", "discord", "whatsapp", "signal", "cli"]
+        },
         "enabled": { "type": "boolean" },
         "channelBindingId": { "$ref": "#/$defs/cloudName" },
         "externalWorkspaceId": {

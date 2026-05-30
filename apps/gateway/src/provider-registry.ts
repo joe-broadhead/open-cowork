@@ -6,10 +6,14 @@ import type {
   ChannelTarget,
   IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
+import { CliProvider } from '@open-cowork/gateway-provider-cli'
+import { DiscordProvider } from '@open-cowork/gateway-provider-discord'
 import { EmailProvider } from '@open-cowork/gateway-provider-email'
+import { SignalProvider } from '@open-cowork/gateway-provider-signal'
 import { SlackProvider } from '@open-cowork/gateway-provider-slack'
 import { TelegramProvider } from '@open-cowork/gateway-provider-telegram'
 import { WebhookProvider } from '@open-cowork/gateway-provider-webhook'
+import { WhatsAppProvider } from '@open-cowork/gateway-provider-whatsapp'
 import { FakeChannelProvider } from '@open-cowork/gateway-testing'
 
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'
@@ -115,6 +119,13 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
         })
         return
       }
+      if (isBridgeWebhookProviderKind(registration.config.kind)) {
+        await (registration.provider as WebhookProvider).handleWebhookPayload(payload, {
+          headers,
+          rawBody,
+        })
+        return
+      }
       if (registration.config.kind === 'fake') {
         await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider.id, payload))
         return
@@ -146,6 +157,13 @@ function createProvider(config: GatewayProviderConfig): ChannelProvider {
       sharedSecret: config.credentials.sharedSecret,
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes),
     })
+  }
+
+  if (isBridgeWebhookProviderKind(config.kind)) {
+    const bridgeConfig = bridgeProviderConfig(config)
+    if (config.kind === 'discord') return new DiscordProvider(bridgeConfig)
+    if (config.kind === 'whatsapp') return new WhatsAppProvider(bridgeConfig)
+    return new SignalProvider(bridgeConfig)
   }
 
   if (config.kind === 'telegram') {
@@ -187,7 +205,21 @@ function createProvider(config: GatewayProviderConfig): ChannelProvider {
     })
   }
 
+  if (config.kind === 'cli') return new CliProvider()
+
   throw new Error(`Provider kind ${config.kind} is not implemented by the gateway app yet.`)
+}
+
+function isBridgeWebhookProviderKind(kind: GatewayProviderConfig['kind']): kind is 'discord' | 'whatsapp' | 'signal' {
+  return kind === 'discord' || kind === 'whatsapp' || kind === 'signal'
+}
+
+function bridgeProviderConfig(config: GatewayProviderConfig) {
+  return {
+    deliveryUrl: requiredSetting(config, 'deliveryUrl'),
+    sharedSecret: requiredCredential(config, 'sharedSecret'),
+    maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes),
+  }
 }
 
 function fakeMessage(provider: ChannelProvider['id'], payload: unknown): IncomingChannelMessage {

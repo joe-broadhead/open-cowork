@@ -190,9 +190,18 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../../packages/gateway-channel
+      '@open-cowork/gateway-provider-cli':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-cli
+      '@open-cowork/gateway-provider-discord':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-discord
       '@open-cowork/gateway-provider-email':
         specifier: workspace:*
         version: link:../../packages/gateway-provider-email
+      '@open-cowork/gateway-provider-signal':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-signal
       '@open-cowork/gateway-provider-slack':
         specifier: workspace:*
         version: link:../../packages/gateway-provider-slack
@@ -202,6 +211,9 @@ importers:
       '@open-cowork/gateway-provider-webhook':
         specifier: workspace:*
         version: link:../../packages/gateway-provider-webhook
+      '@open-cowork/gateway-provider-whatsapp':
+        specifier: workspace:*
+        version: link:../../packages/gateway-provider-whatsapp
       '@open-cowork/gateway-testing':
         specifier: workspace:*
         version: link:../../packages/gateway-testing
@@ -349,11 +361,56 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/gateway-provider-cli:
+    dependencies:
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../gateway-channel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/gateway-provider-discord:
+    dependencies:
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../gateway-channel
+      '@open-cowork/gateway-provider-webhook':
+        specifier: workspace:*
+        version: link:../gateway-provider-webhook
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/gateway-provider-email:
     dependencies:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../gateway-channel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/gateway-provider-signal:
+    dependencies:
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../gateway-channel
+      '@open-cowork/gateway-provider-webhook':
+        specifier: workspace:*
+        version: link:../gateway-provider-webhook
     devDependencies:
       '@types/node':
         specifier: ^22.12.0
@@ -396,6 +453,22 @@ importers:
       '@open-cowork/gateway-channel':
         specifier: workspace:*
         version: link:../gateway-channel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.12.0
+        version: 22.19.19
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/gateway-provider-whatsapp:
+    dependencies:
+      '@open-cowork/gateway-channel':
+        specifier: workspace:*
+        version: link:../gateway-channel
+      '@open-cowork/gateway-provider-webhook':
+        specifier: workspace:*
+        version: link:../gateway-provider-webhook
     devDependencies:
       '@types/node':
         specifier: ^22.12.0

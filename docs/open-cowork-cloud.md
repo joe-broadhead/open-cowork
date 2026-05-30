@@ -163,6 +163,13 @@ The split compose file starts `web`, `worker`, and `scheduler` services against
 shared Postgres and MinIO. The web role writes commands only; the worker role
 binds OpenCode runtime sessions and executes them.
 
+All Compose references are local/demo manifests. They use local builds,
+loopback HTTP URLs, local Postgres/MinIO credentials, and explicit insecure
+auth overrides. For production, move to Helm or a downstream private Compose
+overlay that pins `OPEN_COWORK_CLOUD_IMAGE` and `OPEN_COWORK_GATEWAY_IMAGE` to
+release tags or digests, replaces every demo secret, uses HTTPS origins, and
+backs checkpoints with provider object storage.
+
 The cloud web role serves the browser web app at `/`. It uses the same
 HTTP/SSE contract as API clients: sessions are loaded from durable projections,
 prompts are written as commands, and session event streams reconnect from the

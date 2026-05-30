@@ -77,6 +77,9 @@ const secretEnvKeys = [
   'OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET',
   'OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD',
   'OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET',
+  'OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET',
+  'OPEN_COWORK_GATEWAY_WHATSAPP_SHARED_SECRET',
+  'OPEN_COWORK_GATEWAY_SIGNAL_SHARED_SECRET',
   'OPEN_COWORK_GATEWAY_PROVIDERS',
 ]
 
@@ -516,6 +519,34 @@ function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | n
     })
   }
 
+  for (const kind of ['discord', 'whatsapp', 'signal'] as const) {
+    const prefix = `OPEN_COWORK_GATEWAY_${kind.toUpperCase()}`
+    const deliveryUrl = readString(env[`${prefix}_DELIVERY_URL`])
+    if (!deliveryUrl) continue
+    providers.push({
+      id: kind,
+      kind,
+      channelBindingId: readString(env[`${prefix}_CHANNEL_BINDING_ID`]) || kind,
+      externalWorkspaceId: readNullableString(env[`${prefix}_WORKSPACE_ID`]),
+      credentials: cleanStringRecord({
+        sharedSecret: readString(env[`${prefix}_SHARED_SECRET`]) || undefined,
+      }),
+      settings: cleanRecord({
+        deliveryUrl,
+        maxAttachmentBytes: readString(env[`${prefix}_MAX_ATTACHMENT_BYTES`]) || undefined,
+      }),
+    })
+  }
+
+  if (readBoolean(env.OPEN_COWORK_GATEWAY_CLI_ENABLED, false)) {
+    providers.push({
+      id: 'cli',
+      kind: 'cli',
+      channelBindingId: readString(env.OPEN_COWORK_GATEWAY_CLI_CHANNEL_BINDING_ID) || 'cli',
+      externalWorkspaceId: readNullableString(env.OPEN_COWORK_GATEWAY_CLI_WORKSPACE_ID),
+    })
+  }
+
   return providers
 }
 
@@ -543,6 +574,11 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
   })
   if (kind === 'webhook' && !credentials.sharedSecret) {
     throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated webhook ingress.`)
+  }
+  if (kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
+    if (!credentials.sharedSecret) throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated ${kind} bridge ingress.`)
+    const deliveryUrl = readString(settings.deliveryUrl)
+    if (!deliveryUrl) throw new Error(`Gateway provider ${id} requires setting deliveryUrl for ${kind} bridge delivery.`)
   }
   if (kind === 'telegram') {
     if (!credentials.botToken) throw new Error(`Gateway provider ${id} requires credential botToken.`)
@@ -580,11 +616,8 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
 
 function readProviderKind(value: unknown): GatewayProviderKind {
   const kind = readString(value)
-  if (kind === 'fake' || kind === 'telegram' || kind === 'slack' || kind === 'email' || kind === 'webhook') {
+  if (kind === 'fake' || kind === 'telegram' || kind === 'slack' || kind === 'email' || kind === 'webhook' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal' || kind === 'cli') {
     return kind
-  }
-  if (kind === 'cli' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
-    throw new Error(`Gateway provider kind ${kind} is reserved for the roadmap but is not implemented by this gateway build yet.`)
   }
   throw new Error(`Unsupported gateway provider kind: ${kind || String(value)}`)
 }
@@ -645,6 +678,9 @@ function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFa
   }
   if (publicExposure && config.providers.some((provider) => provider.enabled && provider.kind === 'fake') && !(options.allowPublicFakeProvider && config.mode === 'self-host')) {
     throw new Error('Gateway fake provider cannot be exposed publicly unless OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true is set explicitly for a self-host demo.')
+  }
+  if (publicExposure && config.providers.some((provider) => provider.enabled && provider.kind === 'cli')) {
+    throw new Error('Gateway CLI provider is local-only and cannot be exposed publicly.')
   }
 }
 

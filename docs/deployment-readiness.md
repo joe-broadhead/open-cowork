@@ -26,6 +26,13 @@ Local Compose may run `all-in-one` cloud for speed. Provider demos may use
 all-in-one for a focused pilot. Shared or hosted deployments should use split
 roles and shared Postgres/object storage.
 
+Compose files in this repo are local/demo references. They intentionally ship
+loopback URLs, local MinIO, local Postgres, insecure auth overrides, fake/demo
+tokens, and `build:` blocks for fast validation. Production downstream
+overlays must pin OCI images by release tag or digest, replace every demo
+secret, use HTTPS public URLs, and move Postgres/object storage/secrets to the
+provider control plane.
+
 ## Deployer Config
 
 - Keep downstream product policy in `open-cowork.config.json`; keep
@@ -89,6 +96,10 @@ roles and shared Postgres/object storage.
 - Do not rely on local filesystem object storage for scaled workers.
 - Confirm object-store read/write with a smoke artifact or checkpoint-enabled
   session before enabling multiple workers.
+- Multi-worker scale-out requires shared object storage for checkpoints and
+  artifacts. Helm fails closed when `roles.worker.replicas > 1` is paired with
+  filesystem object storage, missing buckets, disabled global checkpoints, or
+  disabled worker checkpoints.
 
 ### Secret Adapter/KMS
 
@@ -146,6 +157,13 @@ roles and shared Postgres/object storage.
   workers unless a single-worker persistent root is intentionally configured.
 - Run at least one scheduler. Multiple schedulers are safe when they use
   database claims.
+- For Kubernetes, add HPA or KEDA in the provider overlay that owns metrics.
+  HPA is appropriate for web CPU/memory or worker CPU/memory capacity; KEDA is
+  appropriate for command queue depth, backlog age, or provider-native queue
+  metrics.
+- Enable PodDisruptionBudgets for production web, worker, scheduler, and
+  gateway workloads, then use topology spread constraints so replicas are
+  distributed across nodes and zones.
 - Monitor worker heartbeat age, scheduler heartbeat age, command latency,
   projection lag, and lease reclaim counts.
 
@@ -239,6 +257,8 @@ The validator checks:
 - Helm fail-closed behavior for unsafe public cloud auth, public gateway
   metrics without admin auth, and generic webhook ingress without a shared
   secret.
+- Helm image pinning, no-`latest` policy, and multi-worker checkpoint/object
+  store guardrails.
 - Presence of provider recipes, this checklist, and the managed BYOK SaaS
   runbook.
 
@@ -418,16 +438,23 @@ provided.
 Provider recipes under `deploy/gcp`, `deploy/aws`, `deploy/azure`, and
 `deploy/digitalocean` must stay thin. They should define:
 
-- image repository and tag,
+- image repository plus immutable release tag or digest,
 - public HTTPS origins,
 - OIDC or trusted header auth,
 - Postgres control-plane URL,
 - object-store adapter settings,
 - secret manager/KMS references,
 - worker/scheduler replica counts,
+- HPA or KEDA policy, PodDisruptionBudgets, and topology spread constraints,
 - gateway service token and provider signing secrets,
 - OTLP/logging endpoints,
 - backup/restore ownership.
 
 They must not require changes to session, runtime, projection, gateway,
 OpenCode SDK, billing, or BYOK core code.
+
+Self-host OSS recipes must preserve a billing-free path:
+`cloud.billing.enabled=false` with `cloud.billing.provider=none`, or the stub
+provider when operators want visible billing states without payment-provider
+dependencies. Managed SaaS billing belongs in downstream hosting overlays, not
+in the self-host contract.

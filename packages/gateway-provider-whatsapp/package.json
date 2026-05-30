@@ -1,0 +1,35 @@
+{
+  "name": "@open-cowork/gateway-provider-whatsapp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "WhatsApp bridge channel provider for the Open Cowork gateway",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "packages/gateway-provider-whatsapp"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-webhook build && tsc",
+    "typecheck": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-webhook build && tsc --noEmit",
+    "test": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-provider-whatsapp build && node --no-warnings --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/gateway-provider-webhook": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^6.0.3"
+  }
+}

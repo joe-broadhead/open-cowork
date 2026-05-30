@@ -138,7 +138,16 @@ export interface PublicBrandingConfig {
 
 export type GatewayDeploymentMode = 'self-host' | 'managed'
 export type GatewayDeploymentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
-export type GatewayDeploymentProviderKind = 'fake' | 'telegram' | 'slack' | 'email' | 'webhook'
+export type GatewayDeploymentProviderKind =
+  | 'fake'
+  | 'telegram'
+  | 'slack'
+  | 'email'
+  | 'webhook'
+  | 'discord'
+  | 'whatsapp'
+  | 'signal'
+  | 'cli'
 
 export interface GatewayDeploymentProviderConfig {
   id?: string
