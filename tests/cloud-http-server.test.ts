@@ -2668,6 +2668,44 @@ test('cloud HTTP SSE polls durable events written by another service instance', 
   }
 })
 
+test('cloud HTTP exposes operator projection lag and repair routes', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    await fixture.store.appendSessionEvent({
+      tenantId: 'tenant-1',
+      sessionId: 'oc-session-1',
+      type: 'assistant.message',
+      payload: {
+        messageId: 'repair-http-message',
+        content: 'repair over http',
+      },
+    })
+
+    const status = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/projection-status`))
+    assert.equal(asRecord(status).latestEventSequence, 2)
+    assert.equal(asRecord(status).projectionSequence, 1)
+    assert.equal(asRecord(status).lag, 1)
+
+    const repaired = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/projection-repair`, {
+      method: 'POST',
+    }))
+    assert.equal(asRecord(repaired).repaired, true)
+    assert.equal(asRecord(repaired).projectionSequence, 2)
+
+    const view = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/view`))
+    const projectionView = asRecord(asRecord(view.projection).view)
+    assert.equal(asRecord(asArray(projectionView.messages).at(-1)).content, 'repair over http')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP exposes worker heartbeat visibility for operators', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()

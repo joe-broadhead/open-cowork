@@ -17,6 +17,21 @@ export type AppendProjectedEventInput = {
 
 export type CloudProjectionStore = ProjectionControlPlaneStore
 
+export type RepairSessionProjectionInput = {
+  tenantId: string
+  sessionId: string
+  leaseToken?: string | null
+}
+
+export type RepairSessionProjectionResult = {
+  repaired: boolean
+  eventCount: number
+  latestEventSequence: number
+  priorProjectionSequence: number
+  projectionSequence: number
+  lag: number
+}
+
 function readString(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
@@ -105,5 +120,49 @@ export class CloudSessionProjectionService {
     this.sessionEvents.publish(event)
     this.workspaceEvents.publish(workspaceEvent)
     return event
+  }
+
+  async repairSessionProjection(input: RepairSessionProjectionInput): Promise<RepairSessionProjectionResult> {
+    const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)
+    if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
+
+    const events = await this.store.listSessionEvents(input.tenantId, input.sessionId, 0)
+    const priorProjection = await this.store.getSessionProjection(input.tenantId, input.sessionId)
+    const latestEventSequence = events.at(-1)?.sequence || 0
+    const priorProjectionSequence = priorProjection?.sequence || 0
+
+    if (events.length === 0) {
+      return {
+        repaired: false,
+        eventCount: 0,
+        latestEventSequence: 0,
+        priorProjectionSequence,
+        projectionSequence: priorProjectionSequence,
+        lag: 0,
+      }
+    }
+
+    let view = normalizeCloudSessionProjectionView(null, session)
+    for (const event of events) {
+      view = reduceCloudSessionProjectionEvent(session, view, event)
+    }
+
+    const projection = await this.store.writeSessionProjection({
+      tenantId: input.tenantId,
+      sessionId: input.sessionId,
+      sequence: latestEventSequence,
+      view,
+      leaseToken: input.leaseToken,
+      updatedAt: new Date(events.at(-1)?.createdAt || session.updatedAt),
+    })
+
+    return {
+      repaired: projection.sequence > priorProjectionSequence,
+      eventCount: events.length,
+      latestEventSequence,
+      priorProjectionSequence,
+      projectionSequence: projection.sequence,
+      lag: Math.max(0, latestEventSequence - projection.sequence),
+    }
   }
 }

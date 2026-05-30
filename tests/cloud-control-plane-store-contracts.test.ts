@@ -62,6 +62,9 @@ function runControlPlaneDomainContracts(
         profileName: 'default',
         title: 'Contract session',
       })
+      const firstSessionPage = await store.listSessionsPage({ tenantId, userId, limit: 1 })
+      assert.deepEqual(firstSessionPage.items.map((session) => session.sessionId), [sessionId])
+      assert.equal(firstSessionPage.nextCursor, null)
       const event = await store.appendSessionEvent({
         tenantId,
         sessionId,
@@ -86,6 +89,24 @@ function runControlPlaneDomainContracts(
         },
       })
       assert.equal((await store.getSessionProjection(tenantId, sessionId))?.sequence, event.sequence)
+
+      const command = await store.enqueueSessionCommand({
+        commandId: `${prefix}-command`,
+        tenantId,
+        userId,
+        sessionId,
+        kind: 'prompt',
+        payload: { text: 'contract prompt' },
+      })
+      assert.equal(command.status, 'pending')
+      const runnableClaim = await store.claimRunnableSessions({
+        workerId: `${prefix}-worker`,
+        limit: 10,
+        now: new Date('2026-01-01T00:00:00.000Z'),
+        ttlMs: 30_000,
+      })
+      assert.equal(runnableClaim.pendingSessionCount >= 1, true)
+      assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
 
       await store.createHeadlessAgent({
         orgId: org.orgId,

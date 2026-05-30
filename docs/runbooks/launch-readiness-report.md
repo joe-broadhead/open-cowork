@@ -18,7 +18,7 @@ redacted.
 - Gateway URL:
 - Image tags:
 - Helm/Compose/Terraform revision:
-- Target profile: `private-beta` or `public-beta`
+- Target profile: `private-beta`, `public-beta`, or `enterprise-scale`
 - Report owner:
 - Date:
 

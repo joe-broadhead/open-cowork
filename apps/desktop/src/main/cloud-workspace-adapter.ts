@@ -178,7 +178,19 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   async listSessions(): Promise<SessionInfo[]> {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
-      const sessions = (await this.transport.listSessions()).map(toSessionInfo)
+      const records: SessionRecord[] = []
+      if (this.transport.listSessionsPage) {
+        let cursor: string | null = null
+        do {
+          const page = await this.transport.listSessionsPage({ limit: 500, cursor })
+          records.push(...page.sessions)
+          if (page.nextCursor === cursor) break
+          cursor = page.nextCursor
+        } while (cursor)
+      } else {
+        records.push(...await this.transport.listSessions())
+      }
+      const sessions = records.map(toSessionInfo)
       this.cache?.upsertSessionList(cacheKey, sessions)
       return sessions
     } catch (error) {

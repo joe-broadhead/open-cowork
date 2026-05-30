@@ -214,6 +214,20 @@ export type SessionRecord = {
   updatedAt: string
 }
 
+export type ListSessionsInput = {
+  limit?: number | null
+  cursor?: string | null
+  status?: CloudClientSessionStatus | null
+  profileName?: string | null
+  query?: string | null
+}
+
+export type SessionListPage = {
+  sessions: SessionRecord[]
+  nextCursor: string | null
+  totalEstimate: number
+}
+
 export type SessionCommandRecord = {
   commandId: string
   tenantId: string
@@ -538,6 +552,7 @@ export type CloudTransportAdapter = {
   getWorkspace(): Promise<CloudWorkspaceOverview>
   getRuntimeStatus(): Promise<CloudRuntimeStatus>
   listSessions(): Promise<SessionRecord[]>
+  listSessionsPage?(input?: ListSessionsInput): Promise<SessionListPage>
   createSession(input?: { profileName?: string | null; projectSource?: CloudProjectSourceInput | null }): Promise<CloudSessionView>
   validateProjectSource(input: CloudProjectSourceInput): Promise<CloudProjectSourcePolicyVerdict>
   uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
@@ -1103,6 +1118,15 @@ export function createHttpSseCloudTransportAdapter(
     },
     async listSessions() {
       return (await request<{ sessions: SessionRecord[] }>('/api/sessions')).sessions
+    },
+    listSessionsPage(input = {}) {
+      return request<SessionListPage>(`/api/sessions${queryString({
+        limit: input.limit,
+        cursor: input.cursor,
+        status: input.status,
+        profileName: input.profileName,
+        q: input.query,
+      })}`)
     },
     createSession(input = {}) {
       return request<CloudSessionView>('/api/sessions', {

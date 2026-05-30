@@ -180,7 +180,10 @@ The information architecture is split into two surfaces:
 
 The Threads and Chat panels are the first interactive workbench surfaces:
 
-- `GET /api/sessions` loads the org-scoped durable session list.
+- `GET /api/sessions` loads the user-scoped durable session list. It accepts
+  `limit`, opaque `cursor`, `status`, `profileName`, and text query via `q` or
+  `query`, and returns `sessions`, `nextCursor`, and `totalEstimate` so large
+  orgs never require unbounded list scans.
 - `GET /api/sessions/:id/view` hydrates the selected thread from its durable
   projection and shared `SessionView`.
 - `POST /api/sessions` creates a browser-origin cloud thread with a chat-only,
@@ -190,6 +193,9 @@ The Threads and Chat panels are the first interactive workbench surfaces:
 - `GET /api/sessions/:id/events` and `GET /api/events` keep the selected thread
   and thread list live through SSE, resuming from durable event sequences after
   reconnect.
+- Operator-only `GET /api/sessions/:id/projection-status` and
+  `POST /api/sessions/:id/projection-repair` expose projection lag and replay
+  repair from the durable event log.
 
 The Chat panel renders the full cloud runtime projection contract rather than a
 minimal message list. It includes user and assistant messages, streaming-safe

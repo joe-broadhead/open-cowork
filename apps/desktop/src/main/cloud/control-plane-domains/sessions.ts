@@ -6,7 +6,9 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'getSessionForTenant'
   | 'findSession'
   | 'listSessions'
+  | 'listSessionsPage'
   | 'listAllSessions'
+  | 'claimRunnableSessions'
   | 'bindSessionRuntime'
   | 'updateSessionStatus'
   | 'appendSessionEvent'
@@ -28,6 +30,7 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
 
 export type ProjectionControlPlaneStore = Pick<SessionControlPlaneStore,
   | 'appendSessionEvent'
+  | 'listSessionEvents'
   | 'getSessionForTenant'
   | 'appendWorkspaceEvent'
   | 'getSessionProjection'

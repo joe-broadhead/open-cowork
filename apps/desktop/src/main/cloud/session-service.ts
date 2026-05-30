@@ -56,6 +56,8 @@ import type {
   SessionEventRecord,
   SessionProjectionRecord,
   SessionRecord,
+  ListSessionsPageInput,
+  ListSessionsPageRecord,
   ThreadSmartFilterRecord,
   ThreadTagRecord,
   UsageEventRecord,
@@ -1333,6 +1335,18 @@ export class CloudSessionService {
     return this.store.listSessions(principal.tenantId, principal.userId)
   }
 
+  async listSessionsPage(
+    principal: CloudPrincipal,
+    input: Omit<ListSessionsPageInput, 'tenantId' | 'userId'> = {},
+  ): Promise<ListSessionsPageRecord> {
+    await this.ensurePrincipal(principal)
+    return this.store.listSessionsPage({
+      ...input,
+      tenantId: principal.tenantId,
+      userId: principal.userId,
+    })
+  }
+
   async getSessionView(principal: CloudPrincipal, sessionId: string): Promise<CloudSessionView> {
     await this.ensurePrincipal(principal)
     const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
@@ -1346,6 +1360,38 @@ export class CloudSessionService {
   async listEvents(principal: CloudPrincipal, sessionId: string, afterSequence = 0): Promise<SessionEventRecord[]> {
     await this.getSessionView(principal, sessionId)
     return this.store.listSessionEvents(principal.tenantId, sessionId, afterSequence)
+  }
+
+  async getSessionProjectionStatus(principal: CloudPrincipal, sessionId: string) {
+    await this.getSessionView(principal, sessionId)
+    if (!principalCanViewOperations(principal)) {
+      throw new CloudServiceError(403, 'Projection status requires operator privileges.')
+    }
+    const [events, projection] = await Promise.all([
+      this.store.listSessionEvents(principal.tenantId, sessionId, 0),
+      this.store.getSessionProjection(principal.tenantId, sessionId),
+    ])
+    const latestEventSequence = events.at(-1)?.sequence || 0
+    const projectionSequence = projection?.sequence || 0
+    return {
+      sessionId,
+      eventCount: events.length,
+      latestEventSequence,
+      projectionSequence,
+      lag: Math.max(0, latestEventSequence - projectionSequence),
+      projectionUpdatedAt: projection?.updatedAt || null,
+    }
+  }
+
+  async repairSessionProjection(principal: CloudPrincipal, sessionId: string) {
+    await this.getSessionView(principal, sessionId)
+    if (!principalCanViewOperations(principal)) {
+      throw new CloudServiceError(403, 'Projection repair requires operator privileges.')
+    }
+    return this.projections.repairSessionProjection({
+      tenantId: principal.tenantId,
+      sessionId,
+    })
   }
 
   async listWorkspaceEvents(principal: CloudPrincipal, afterSequence = 0) {

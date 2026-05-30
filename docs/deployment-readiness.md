@@ -250,6 +250,8 @@ run the load/soak harness in strict mode. The committed target profiles are in
 
 - `private-beta` for design-partner and internal managed BYOK rollout.
 - `public-beta` for the first broader hosted BYOK rollout.
+- `enterprise-scale` for large downstream or managed org readiness after
+  public-beta evidence is green.
 
 Generate the planned route matrix:
 

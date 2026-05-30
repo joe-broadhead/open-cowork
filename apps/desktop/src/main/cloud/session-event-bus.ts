@@ -8,9 +8,17 @@ export type CloudSessionEventFilter = {
 
 export type CloudSessionEventListener = (event: SessionEventRecord) => void
 
-type Subscription = {
-  filter: CloudSessionEventFilter
-  listener: CloudSessionEventListener
+export type CloudEventFanoutSubscription = () => void
+
+export type CloudEventFanoutAdapter<EventRecord, Filter> = {
+  publish(event: EventRecord): void
+  subscribe(filter: Filter, listener: (event: EventRecord) => void): CloudEventFanoutSubscription
+  readonly subscriberCount: number
+}
+
+type Subscription<EventRecord, Filter> = {
+  filter: Filter
+  listener: (event: EventRecord) => void
 }
 
 function matches(filter: CloudSessionEventFilter, event: SessionEventRecord) {
@@ -20,17 +28,22 @@ function matches(filter: CloudSessionEventFilter, event: SessionEventRecord) {
   return true
 }
 
-export class CloudSessionEventBus {
-  private readonly subscriptions = new Set<Subscription>()
+export class InMemoryCloudEventFanoutAdapter<EventRecord, Filter> implements CloudEventFanoutAdapter<EventRecord, Filter> {
+  private readonly subscriptions = new Set<Subscription<EventRecord, Filter>>()
+  private readonly matches: (filter: Filter, event: EventRecord) => boolean
 
-  publish(event: SessionEventRecord) {
+  constructor(matchesEvent: (filter: Filter, event: EventRecord) => boolean) {
+    this.matches = matchesEvent
+  }
+
+  publish(event: EventRecord) {
     for (const subscription of this.subscriptions) {
-      if (!matches(subscription.filter, event)) continue
+      if (!this.matches(subscription.filter, event)) continue
       subscription.listener(event)
     }
   }
 
-  subscribe(filter: CloudSessionEventFilter, listener: CloudSessionEventListener) {
+  subscribe(filter: Filter, listener: (event: EventRecord) => void) {
     const subscription = { filter, listener }
     this.subscriptions.add(subscription)
     return () => {
@@ -40,6 +53,28 @@ export class CloudSessionEventBus {
 
   get subscriberCount() {
     return this.subscriptions.size
+  }
+}
+
+export class CloudSessionEventBus {
+  private readonly fanout: CloudEventFanoutAdapter<SessionEventRecord, CloudSessionEventFilter>
+
+  constructor(
+    fanout: CloudEventFanoutAdapter<SessionEventRecord, CloudSessionEventFilter> = new InMemoryCloudEventFanoutAdapter(matches),
+  ) {
+    this.fanout = fanout
+  }
+
+  publish(event: SessionEventRecord) {
+    this.fanout.publish(event)
+  }
+
+  subscribe(filter: CloudSessionEventFilter, listener: CloudSessionEventListener) {
+    return this.fanout.subscribe(filter, listener)
+  }
+
+  get subscriberCount() {
+    return this.fanout.subscriberCount
   }
 }
 
@@ -51,11 +86,6 @@ export type CloudWorkspaceEventFilter = {
 
 export type CloudWorkspaceEventListener = (event: WorkspaceEventRecord) => void
 
-type WorkspaceSubscription = {
-  filter: CloudWorkspaceEventFilter
-  listener: CloudWorkspaceEventListener
-}
-
 function matchesWorkspaceEvent(filter: CloudWorkspaceEventFilter, event: WorkspaceEventRecord) {
   if (filter.tenantId && filter.tenantId !== event.tenantId) return false
   if (filter.userId && filter.userId !== event.userId) return false
@@ -64,24 +94,23 @@ function matchesWorkspaceEvent(filter: CloudWorkspaceEventFilter, event: Workspa
 }
 
 export class CloudWorkspaceEventBus {
-  private readonly subscriptions = new Set<WorkspaceSubscription>()
+  private readonly fanout: CloudEventFanoutAdapter<WorkspaceEventRecord, CloudWorkspaceEventFilter>
+
+  constructor(
+    fanout: CloudEventFanoutAdapter<WorkspaceEventRecord, CloudWorkspaceEventFilter> = new InMemoryCloudEventFanoutAdapter(matchesWorkspaceEvent),
+  ) {
+    this.fanout = fanout
+  }
 
   publish(event: WorkspaceEventRecord) {
-    for (const subscription of this.subscriptions) {
-      if (!matchesWorkspaceEvent(subscription.filter, event)) continue
-      subscription.listener(event)
-    }
+    this.fanout.publish(event)
   }
 
   subscribe(filter: CloudWorkspaceEventFilter, listener: CloudWorkspaceEventListener) {
-    const subscription = { filter, listener }
-    this.subscriptions.add(subscription)
-    return () => {
-      this.subscriptions.delete(subscription)
-    }
+    return this.fanout.subscribe(filter, listener)
   }
 
   get subscriberCount() {
-    return this.subscriptions.size
+    return this.fanout.subscriberCount
   }
 }
