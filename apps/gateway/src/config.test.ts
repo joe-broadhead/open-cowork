@@ -203,10 +203,10 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       serviceToken: 'service-token',
     },
     providers: [{
-      kind: 'discord' as never,
-      channelBindingId: 'discord-binding',
+      kind: 'teams' as never,
+      channelBindingId: 'teams-binding',
     }],
-  }), /roadmap|not implemented|Unsupported/)
+  }), /Unsupported/)
 
   assert.throws(() => resolveGatewayConfig({
     cloud: {
@@ -230,6 +230,84 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       channelBindingId: 'fake-binding',
     }],
   }).cloud.baseUrl, 'http://cloud.example.test')
+})
+
+test('gateway config accepts signed bridge providers without cloud control-plane changes', () => {
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'whatsapp-prod',
+      kind: 'whatsapp',
+      channelBindingId: 'whatsapp-binding',
+      credentials: {
+        sharedSecret: 'whatsapp-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/whatsapp',
+      },
+    }, {
+      id: 'cli-local',
+      kind: 'cli',
+      channelBindingId: 'cli-binding',
+      credentials: {
+        sharedSecret: 'cli-secret',
+      },
+      settings: {
+        deliveryUrl: 'http://127.0.0.1:8844/cli',
+      },
+    }],
+  })
+
+  assert.deepEqual(config.providers.map((provider) => ({
+    id: provider.id,
+    kind: provider.kind,
+    channelBindingId: provider.channelBindingId,
+    deliveryUrl: provider.settings.deliveryUrl,
+  })), [{
+    id: 'whatsapp-prod',
+    kind: 'whatsapp',
+    channelBindingId: 'whatsapp-binding',
+    deliveryUrl: 'https://bridge.example.test/whatsapp',
+  }, {
+    id: 'cli-local',
+    kind: 'cli',
+    channelBindingId: 'cli-binding',
+    deliveryUrl: 'http://127.0.0.1:8844/cli',
+  }])
+})
+
+test('gateway config fails closed for incomplete bridge providers', () => {
+  const base = {
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+  }
+
+  assert.throws(() => resolveGatewayConfig({
+    ...base,
+    providers: [{
+      kind: 'discord',
+      channelBindingId: 'discord-binding',
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/discord',
+      },
+    }],
+  }), /credential sharedSecret/)
+
+  assert.throws(() => resolveGatewayConfig({
+    ...base,
+    providers: [{
+      kind: 'signal',
+      channelBindingId: 'signal-binding',
+      credentials: {
+        sharedSecret: 'signal-secret',
+      },
+    }],
+  }), /setting deliveryUrl/)
 })
 
 test('gateway config rejects unsafe public admin, fake, and webhook ingress defaults', () => {
@@ -333,6 +411,33 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       settings: { deliveryUrl: 'https://bridge.example.test/out' },
     }],
   }), /sharedSecret/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      kind: 'whatsapp',
+      channelBindingId: 'whatsapp',
+      settings: { deliveryUrl: 'https://bridge.example.test/whatsapp' },
+    }],
+  }), /sharedSecret/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      publicBaseUrl: 'https://gateway.example.test',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'cli',
+      channelBindingId: 'cli',
+    }],
+  }), /CLI provider is local-only/)
 })
 
 test('gateway config inherits public URL for Telegram webhook mode', () => {
@@ -390,7 +495,7 @@ test('gateway config fails closed for unsafe Telegram webhook setup', () => {
   }), /HTTPS/)
 })
 
-test('gateway config loads Slack, email, Telegram, and webhook providers from env together', () => {
+test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI providers from env together', () => {
   const config = resolveGatewayConfig({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
@@ -406,6 +511,13 @@ test('gateway config loads Slack, email, Telegram, and webhook providers from en
     OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD: 'smtp-password',
     OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: 'https://bridge.example.test/out',
     OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET: 'webhook-secret',
+    OPEN_COWORK_GATEWAY_DISCORD_DELIVERY_URL: 'https://bridge.example.test/discord',
+    OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET: 'discord-secret',
+    OPEN_COWORK_GATEWAY_WHATSAPP_DELIVERY_URL: 'https://bridge.example.test/whatsapp',
+    OPEN_COWORK_GATEWAY_WHATSAPP_SHARED_SECRET: 'whatsapp-secret',
+    OPEN_COWORK_GATEWAY_SIGNAL_DELIVERY_URL: 'https://bridge.example.test/signal',
+    OPEN_COWORK_GATEWAY_SIGNAL_SHARED_SECRET: 'signal-secret',
+    OPEN_COWORK_GATEWAY_CLI_ENABLED: 'true',
   })
 
   assert.deepEqual(config.providers.map((provider) => ({
@@ -428,9 +540,26 @@ test('gateway config loads Slack, email, Telegram, and webhook providers from en
     id: 'webhook',
     kind: 'webhook',
     channelBindingId: 'webhook',
+  }, {
+    id: 'discord',
+    kind: 'discord',
+    channelBindingId: 'discord',
+  }, {
+    id: 'whatsapp',
+    kind: 'whatsapp',
+    channelBindingId: 'whatsapp',
+  }, {
+    id: 'signal',
+    kind: 'signal',
+    channelBindingId: 'signal',
+  }, {
+    id: 'cli',
+    kind: 'cli',
+    channelBindingId: 'cli',
   }])
   assert.equal(config.providers.find((provider) => provider.kind === 'slack')?.externalWorkspaceId, 'T123')
   assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.smtpHost, 'smtp.example.test')
+  assert.equal(config.providers.find((provider) => provider.kind === 'discord')?.credentials.sharedSecret, 'discord-secret')
 })
 
 test('gateway config loads the shared open-cowork config gateway section with allowlisted env placeholders', () => {

@@ -1,6 +1,6 @@
 image:
   repository: registry.acme.example/open-cowork-cloud
-  tag: stable
+  tag: v2026.05.0
 
 cloud:
   profile: data-analyst
@@ -58,6 +58,16 @@ roles:
     enabled: true
     replicas: 2
     checkpointsEnabled: true
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: worker
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
   scheduler:
     enabled: true
     replicas: 1

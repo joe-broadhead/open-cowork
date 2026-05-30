@@ -1,7 +1,11 @@
+# Local/demo split-role reference only. Production overlays must pin OCI
+# images, replace demo secrets, use HTTPS public URLs, and move
+# Postgres/object storage to provider-managed services.
 services:
   open-cowork-cloud-web:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}
     build:
       context: .
       dockerfile: docker/open-cowork-cloud/Dockerfile
@@ -44,6 +48,7 @@ services:
   open-cowork-cloud-worker:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}
     build:
       context: .
       dockerfile: docker/open-cowork-cloud/Dockerfile
@@ -80,6 +85,7 @@ services:
   open-cowork-cloud-scheduler:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}
     build:
       context: .
       dockerfile: docker/open-cowork-cloud/Dockerfile

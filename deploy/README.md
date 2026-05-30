@@ -12,6 +12,9 @@ Use these invariants across every provider:
   credentials and long-poll/webhook connections, not OpenCode execution.
 - Use Postgres for the control plane.
 - Use object storage for artifacts and runtime/workspace checkpoints.
+- Pin `open-cowork-cloud` and `open-cowork-gateway` images by release tag or
+  digest. Do not use `latest`, `stable`, mutable registry aliases, or a local
+  Compose build as a production image source.
 - Use OIDC or explicit `OPEN_COWORK_CLOUD_AUTH_MODE=header` behind a trusted
   reverse-proxy identity layer before exposing the web role publicly;
   `OPEN_COWORK_CLOUD_AUTH_MODE=none` requires an explicit insecure local/demo
@@ -22,7 +25,7 @@ Use these invariants across every provider:
 - Keep Cloud Run/App Platform/all-in-one deployments for demos or focused
   pilots unless the platform gives workers predictable long-running CPU.
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
-  replicas beyond one.
+  replicas beyond one, and store checkpoints in a shared object store.
 - Keep billing optional for self-hosted OSS deployments. Use no billing
   provider or the stub billing provider unless you are operating managed SaaS.
 - Run `pnpm deploy:validate` before release and `pnpm deploy:smoke` against a
@@ -33,6 +36,32 @@ Use these invariants across every provider:
 The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
 and can also be enabled as the cloud chart's optional gateway dependency.
+
+## Provider Recipes
+
+Each provider recipe is a deployment overlay for the same product topology. Do
+not add provider-specific runtime branches to Cloud, Gateway, Desktop sync, or
+OpenCode session execution.
+
+| Target | Recipe | Scalable shape | Demo/pilot shape |
+| --- | --- | --- | --- |
+| GCP | `deploy/gcp/` | GKE, Cloud SQL for PostgreSQL, Cloud Storage, Secret Manager, Artifact Registry | Cloud Run all-in-one |
+| AWS | `deploy/aws/` | EKS or ECS split roles, RDS for PostgreSQL, S3, Secrets Manager or SSM, ECR | ECS/Fargate all-in-one task |
+| Azure | `deploy/azure/` | AKS or Container Apps split roles, Azure Database for PostgreSQL, Blob Storage, Key Vault, ACR | Container Apps all-in-one service |
+| DigitalOcean | `deploy/digitalocean/` | DOKS split roles, Managed PostgreSQL, Spaces, registry, External Secrets or Kubernetes Secrets | App Platform all-in-one component |
+| Generic Kubernetes | `deploy/kubernetes/` | Provider-neutral Helm on any conformant Kubernetes cluster | Single namespace split-role pilot |
+| VPS/local Compose | `deploy/gateway-appliance/` plus root Compose files | Remote Gateway appliance against managed Cloud, or local all-in-one Cloud + Gateway | Local all-in-one Compose |
+
+Every recipe must stay provider-config only:
+
+- Use placeholders such as `PROJECT`, `ACCOUNT`, `SUBSCRIPTION`, `REGION`,
+  `CLUSTER_NAME`, `OPEN_COWORK_BUCKET`, and `cowork.example.com`.
+- Do not commit real account IDs, project IDs, subscription IDs, tenant IDs,
+  domains, image tags, database URLs, tokens, or channel credentials.
+- Keep secret values in the provider secret manager, External Secrets, private
+  `.env` files, or a private deployment repo.
+- Keep `web`, `worker`, `scheduler`, and Gateway independently scalable when a
+  provider offers long-running compute.
 
 For VPS, Mac mini, Raspberry Pi, and internal-server installs, use the Gateway
 appliance path in `docs/gateway-appliance.md` plus the templates under
@@ -65,6 +94,57 @@ Public URLs must be HTTPS except localhost development URLs. Public gateway
 metrics/diagnostics require an admin token, webhook providers require a shared
 secret, and self-host deployments can keep `cloud.billing.provider` set to
 `none` or `stub`.
+
+## Image Strategy
+
+Helm charts default to the chart app version placeholder and fail closed when
+`image.tag=latest`. Production overlays must set either a release `image.tag`
+or `image.digest`. Prefer immutable digests for regulated environments:
+
+```bash
+helm upgrade --install open-cowork-cloud ./helm/open-cowork-cloud \
+  --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
+  --set image.digest=sha256:REPLACE_WITH_RELEASE_DIGEST \
+  --set cloud.auth.mode=oidc \
+  --set cloud.auth.oidcIssuerUrl=https://issuer.example.com \
+  --set cloud.auth.oidcClientId=open-cowork-cloud
+```
+
+Release tags are acceptable when your registry prevents tag mutation:
+
+```bash
+--set image.tag=v0.1.0
+```
+
+The Compose files expose `OPEN_COWORK_CLOUD_IMAGE` and
+`OPEN_COWORK_GATEWAY_IMAGE` for local image-name overrides, but they still
+include `build:` blocks and insecure local defaults. Treat them as local/demo
+references unless a downstream private repo removes the local build and
+replaces every demo secret, public URL, auth mode, and object-store credential.
+
+## Kubernetes Scaling
+
+The base Helm chart keeps autoscaling provider-neutral. Add HPA or KEDA
+resources in the deployment overlay that owns metrics and cluster policy:
+
+- HPA: target `Deployment/open-cowork-cloud-web` for HTTP/API pressure and
+  `Deployment/open-cowork-cloud-worker` for CPU/memory-constrained worker
+  capacity.
+- KEDA: scale workers from durable queue depth, backlog age, or another
+  provider-native metric that maps to command pressure.
+- PodDisruptionBudgets: enable
+  `roles.<role>.podDisruptionBudget.enabled=true` for production web, worker,
+  scheduler, and gateway deployments.
+- topology spread constraints: set `roles.<role>.topologySpreadConstraints[]` and
+  `gateway.topologySpreadConstraints[]` in private overlays so web and worker
+  pods do not collapse onto one node or zone.
+
+Scale-out workers require all of the following before `roles.worker.replicas`
+is greater than one: `cloud.checkpoints.enabled=true`,
+`roles.worker.checkpointsEnabled=true`, a non-filesystem
+`cloud.objectStore.kind`, and `cloud.objectStore.bucket`. Local filesystem
+storage and one PVC shared by multiple worker replicas are local/demo-only
+patterns, not a production checkpoint contract.
 
 ## Required Production Inputs
 

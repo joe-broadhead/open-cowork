@@ -182,6 +182,21 @@ Self-host OSS deployments can leave `cloud.billing.enabled=false` and
 billing webhooks, BYOK validator/override evidence, quotas, and launch
 readiness gates before public traffic.
 
+Downstream deployment recipes must also preserve these production contracts:
+
+- images are pinned by immutable release tag or digest; `latest`, `stable`,
+  and other mutable aliases are not acceptable defaults
+- local/demo Compose defaults are replaced before shared use: auth, public
+  URLs, cookie/internal/service tokens, object-store credentials, and fake
+  providers
+- multi-worker Cloud requires checkpointing plus a shared object store for
+  artifacts, uploaded snapshots, workspace snapshots, and runtime checkpoints
+- Kubernetes overlays own HPA/KEDA policy, PodDisruptionBudgets, and
+  topology spread constraints; they should not change cloud runtime or gateway
+  code
+- self-host OSS keeps a billing-free path with `cloud.billing.provider=none`
+  or the stub provider
+
 ## Environment variables
 
 | Variable | Purpose | Default |

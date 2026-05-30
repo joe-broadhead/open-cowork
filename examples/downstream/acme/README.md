@@ -11,6 +11,10 @@ It includes:
 - `cloud-values.yaml`: Helm values for the Acme cloud control plane.
 - `gateway-values.yaml`: Helm values for the Acme headless gateway.
 
+The values pin images with an example release tag. Replace that tag with an
+immutable downstream release tag or digest in a private deployment repo; do not
+ship `latest`, `stable`, or another mutable registry alias.
+
 ## Distribution Modes
 
 Internal enterprise mode:
@@ -31,6 +35,10 @@ Managed BYOK SaaS mode:
 
 The OpenCode runtime boundary does not change in either mode. OpenCode owns
 execution; Open Cowork owns branding, policy, sync, tenancy, and deployability.
+
+Self-host Acme installs can keep `cloud.billing.enabled=false` and
+`cloud.billing.provider=none`. Managed SaaS billing is an Acme hosting overlay,
+not a requirement for the OSS self-host path.
 
 ## Shared Config And Secret Injection
 

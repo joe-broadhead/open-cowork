@@ -1,3 +1,9 @@
+{{- if and (not .Values.image.tag) (not .Values.image.digest) }}
+{{- fail "image.tag or image.digest is required; pin a release tag or immutable digest instead of relying on latest." }}
+{{- end }}
+{{- if eq .Values.image.tag "latest" }}
+{{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
+{{- end }}
 {{- $sharedConfig := or .Values.gateway.configPath .Values.gateway.configDir .Values.gateway.downstreamRoot }}
 {{- if and (not $sharedConfig) (not .Values.gateway.cloudBaseUrl) }}
 {{- fail "gateway.cloudBaseUrl is required." }}
@@ -51,7 +57,7 @@ spec:
       {{- end }}
       containers:
         - name: open-cowork-gateway
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ include "open-cowork-gateway.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.containerSecurityContext }}
           securityContext:
@@ -77,3 +83,7 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

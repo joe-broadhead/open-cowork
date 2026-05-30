@@ -1,7 +1,11 @@
+# Local/demo Cloud plus Gateway reference only. Production overlays must pin
+# OCI images, replace demo secrets, use HTTPS public URLs, and move
+# Postgres/object storage to provider-managed services.
 services:
   open-cowork-cloud:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_CLOUD_IMAGE:-open-cowork-cloud:local}
     build:
       context: .
       dockerfile: docker/open-cowork-cloud/Dockerfile
@@ -46,6 +50,7 @@ services:
   open-cowork-gateway:
     init: true
     restart: unless-stopped
+    image: ${OPEN_COWORK_GATEWAY_IMAGE:-open-cowork-gateway:local}
     build:
       context: .
       dockerfile: docker/open-cowork-gateway/Dockerfile

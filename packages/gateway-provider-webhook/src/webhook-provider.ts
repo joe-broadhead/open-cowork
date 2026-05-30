@@ -16,6 +16,7 @@ export interface WebhookProviderConfig {
   providerId?: ChannelProviderId;
   deliveryUrl: string;
   sharedSecret?: string;
+  capabilities?: Partial<ChannelCapabilities>;
   maxSignatureAgeMs?: number;
   maxAttachmentBytes?: number;
   fetch?: typeof globalThis.fetch;
@@ -75,22 +76,7 @@ export interface MapWebhookPayloadOptions {
 
 export class WebhookProvider implements ChannelProvider {
   readonly id: ChannelProviderId;
-  readonly capabilities: ChannelCapabilities = {
-    threads: true,
-    messageEditing: true,
-    inlineButtons: true,
-    fileUploads: true,
-    fileDownloads: false,
-    typingIndicator: true,
-    maxTextLength: 4096,
-    preferredParseMode: "plain",
-    parseModes: ["plain"],
-    maxButtonsPerMessage: 8,
-    maxButtonRowsPerMessage: 4,
-    maxButtonTokenBytes: 64,
-    maxFileBytes: 25 * 1024 * 1024,
-    supportsEphemeralResponses: false
-  };
+  readonly capabilities: ChannelCapabilities;
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private readonly seenIngressSignatures = new Map<string, number>();
@@ -101,6 +87,10 @@ export class WebhookProvider implements ChannelProvider {
       validateHeaderValue(config.sharedSecret, "Webhook shared secret");
     }
     this.id = config.providerId ?? "webhook";
+    this.capabilities = {
+      ...defaultWebhookCapabilities,
+      ...config.capabilities
+    };
   }
 
   async start(handler: (message: IncomingChannelMessage) => Promise<void>): Promise<void> {
@@ -122,6 +112,7 @@ export class WebhookProvider implements ChannelProvider {
   }
 
   async sendText(target: ChannelTarget, text: string, options?: SendOptions): Promise<SentMessage> {
+    validateWebhookText(text, this.capabilities, `${this.id} bridge`);
     return this.deliver({
       type: "text",
       target,
@@ -131,6 +122,10 @@ export class WebhookProvider implements ChannelProvider {
   }
 
   async editText(target: ChannelTarget, messageId: string, text: string, options?: SendOptions): Promise<void> {
+    if (!this.capabilities.messageEditing) {
+      throw new Error(`${this.id} bridge does not support message editing`);
+    }
+    validateWebhookText(text, this.capabilities, `${this.id} bridge`);
     const cleanMessageId = cleanRequiredString(messageId, "Webhook delivery messageId", 512);
     if (!cleanMessageId) {
       throw new Error("Webhook delivery messageId is required");
@@ -145,6 +140,12 @@ export class WebhookProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
+    if (!this.capabilities.fileUploads) {
+      throw new Error(`${this.id} bridge does not support outgoing files`);
+    }
+    if (file.data && file.data.byteLength > (this.capabilities.maxFileBytes ?? defaultWebhookCapabilities.maxFileBytes!)) {
+      throw new Error(`${this.id} bridge file exceeds maxFileBytes ${this.capabilities.maxFileBytes}`);
+    }
     return this.deliver({
       type: "file",
       target,
@@ -153,7 +154,11 @@ export class WebhookProvider implements ChannelProvider {
   }
 
   async sendButtons(target: ChannelTarget, text: string, buttons: ChannelButton[][]): Promise<SentMessage> {
-    validateWebhookButtons(buttons);
+    if (!this.capabilities.inlineButtons) {
+      throw new Error(`${this.id} bridge does not support inline buttons`);
+    }
+    validateWebhookText(text, this.capabilities, `${this.id} bridge`);
+    validateWebhookButtons(buttons, this.capabilities);
     return this.deliver({
       type: "buttons",
       target,
@@ -176,6 +181,9 @@ export class WebhookProvider implements ChannelProvider {
   }
 
   async setTyping(target: ChannelTarget): Promise<void> {
+    if (!this.capabilities.typingIndicator) {
+      throw new Error(`${this.id} bridge does not support typing indicators`);
+    }
     await this.deliver({
       type: "typing",
       target
@@ -265,6 +273,23 @@ export class WebhookProvider implements ChannelProvider {
     }
   }
 }
+
+export const defaultWebhookCapabilities: ChannelCapabilities = {
+  threads: true,
+  messageEditing: true,
+  inlineButtons: true,
+  fileUploads: true,
+  fileDownloads: false,
+  typingIndicator: true,
+  maxTextLength: 4096,
+  preferredParseMode: "plain",
+  parseModes: ["plain"],
+  maxButtonsPerMessage: 8,
+  maxButtonRowsPerMessage: 4,
+  maxButtonTokenBytes: 64,
+  maxFileBytes: 25 * 1024 * 1024,
+  supportsEphemeralResponses: false
+};
 
 export function signWebhookIngressPayload(rawBody: string, sharedSecret: string, timestamp: string): string {
   return `v1=${createHmac("sha256", sharedSecret).update(`v1:${timestamp}:${rawBody}`).digest("hex")}`;
@@ -363,14 +388,32 @@ export function mapWebhookPayload(
   };
 }
 
-export function validateWebhookButtons(buttons: ChannelButton[][]): void {
+export function validateWebhookButtons(buttons: ChannelButton[][], capabilities: Pick<ChannelCapabilities, "maxButtonRowsPerMessage" | "maxButtonsPerMessage" | "maxButtonTokenBytes"> = defaultWebhookCapabilities): void {
+  const maxRows = capabilities.maxButtonRowsPerMessage ?? 4;
+  const maxButtons = capabilities.maxButtonsPerMessage ?? 8;
+  const maxTokenBytes = capabilities.maxButtonTokenBytes ?? 64;
+  if (buttons.length > maxRows) {
+    throw new Error(`Webhook buttons exceed maxButtonRowsPerMessage ${maxRows}`);
+  }
+  if (buttons.flat().length > maxButtons) {
+    throw new Error(`Webhook buttons exceed maxButtonsPerMessage ${maxButtons}`);
+  }
   for (const row of buttons) {
     for (const button of row) {
       if (!button.label.trim()) {
         throw new Error("Webhook button label cannot be empty");
       }
       validateInteractionToken(button.token, "Webhook button token");
+      if (Buffer.byteLength(button.token, "utf8") > maxTokenBytes) {
+        throw new Error(`Webhook button token exceeds maxButtonTokenBytes ${maxTokenBytes}`);
+      }
     }
+  }
+}
+
+function validateWebhookText(text: string, capabilities: Pick<ChannelCapabilities, "maxTextLength">, label: string): void {
+  if (text.length > capabilities.maxTextLength) {
+    throw new Error(`${label} text exceeds maxTextLength ${capabilities.maxTextLength}`);
   }
 }
 

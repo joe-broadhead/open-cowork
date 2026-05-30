@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `5b6c2cab0cf5ff11b71038817138f1d1b737a4d92fa32b24d8b8bee3947206d2`
-- Production package entries: 498
-- Bundled license directories: 460 (38 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `aef2e522c9570e6ea758d61a708289f085f96c08646a6c75e6d7c2baa6fdaa66`
+- Production package entries: 503
+- Bundled license directories: 460 (43 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -55,10 +55,15 @@ Each package remains licensed under its own license terms. The table below is pr
 | @open-cowork/cloud-client | link:../../packages/cloud-client | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../../packages/gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-channel | link:../gateway-channel | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-cli | link:../../packages/gateway-provider-cli | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-discord | link:../../packages/gateway-provider-discord | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-email | link:../../packages/gateway-provider-email | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-signal | link:../../packages/gateway-provider-signal | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-slack | link:../../packages/gateway-provider-slack | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-telegram | link:../../packages/gateway-provider-telegram | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-provider-webhook | link:../../packages/gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-webhook | link:../gateway-provider-webhook | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
+| @open-cowork/gateway-provider-whatsapp | link:../../packages/gateway-provider-whatsapp | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/gateway-testing | link:../../packages/gateway-testing | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../../packages/shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |
 | @open-cowork/shared | link:../shared | MIT |  | https://github.com/joe-broadhead/open-cowork.git |

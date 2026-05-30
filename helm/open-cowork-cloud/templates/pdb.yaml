@@ -1,0 +1,22 @@
+{{- range $roleName, $role := .Values.roles }}
+{{- if and $role.enabled $role.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "open-cowork-cloud.fullname" $ }}-{{ $roleName }}
+  labels:
+    {{- include "open-cowork-cloud.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $roleName }}
+spec:
+  {{- if $role.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ $role.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ $role.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "open-cowork-cloud.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $roleName }}
+{{- end }}
+{{- end }}
