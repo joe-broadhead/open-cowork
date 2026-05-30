@@ -143,9 +143,12 @@ test('worker-scoped BYOK runtime injects provider options for the correct tenant
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'), {
     ids: { randomUUID: () => `secret-${nextId += 1}` },
+    validators: { openrouter: () => true },
   })
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
+  await byokSecrets.validateActiveSecret({ orgId: 'tenant-a', providerId: 'openrouter' })
   await byokSecrets.setSecret({ orgId: 'tenant-b', providerId: 'openrouter', plaintext: KEY_B })
+  await byokSecrets.validateActiveSecret({ orgId: 'tenant-b', providerId: 'openrouter' })
   const captures: WorkerScopedRuntimeFactoryInput[] = []
   const runtimes: ConfigBackedRuntime[] = []
   const runtime = createWorkerScopedRuntimeAdapter({
@@ -293,6 +296,11 @@ test('worker-scoped BYOK runtime resolves KMS references only during worker conf
     },
   })
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', kmsRef: 'aws-sm://open-cowork/test/openrouter' })
+  await byokSecrets.activateWithoutValidation({
+    orgId: 'tenant-a',
+    providerId: 'openrouter',
+    reason: 'unit test uses explicit KMS override to exercise worker-only reveal',
+  })
   await assert.rejects(
     () => byokSecrets.revealActiveSecret({ orgId: 'tenant-a', providerId: 'openrouter' }),
     /worker-authorized reveal path/,
@@ -345,8 +353,10 @@ test('worker-scoped BYOK runtime enforces provider policy before revealing activ
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'), {
     ids: { randomUUID: () => `secret-${nextId += 1}` },
+    validators: { openrouter: () => true },
   })
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
+  await byokSecrets.validateActiveSecret({ orgId: 'tenant-a', providerId: 'openrouter' })
   let factoryCalls = 0
   const metrics: unknown[] = []
   const observability: CloudObservabilityAdapter = {
@@ -407,8 +417,10 @@ test('missing or disabled required BYOK key fails before runtime spawn', async (
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('byok-runtime-test-key'), {
     ids: { randomUUID: () => `secret-${nextId += 1}` },
+    validators: { openrouter: () => true },
   })
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
+  await byokSecrets.validateActiveSecret({ orgId: 'tenant-a', providerId: 'openrouter' })
   await byokSecrets.disableSecret({ orgId: 'tenant-a', providerId: 'openrouter' })
   let factoryCalls = 0
   const metrics: unknown[] = []

@@ -116,7 +116,7 @@ export class CloudWorker {
       if (claims.leases.length === 0) break
       let processedThisBatch = 0
       for (const lease of claims.leases) {
-        this.leases.set(this.leaseKey(lease.tenantId, lease.sessionId), lease)
+        await this.store.releaseSessionLease(lease)
         processedThisBatch += await this.processSessionCommands(lease.tenantId, lease.sessionId)
       }
       processed += processedThisBatch
@@ -162,13 +162,16 @@ export class CloudWorker {
     try {
       await this.service.assertWorkerExecutionAllowed(tenantId)
     } catch (error) {
-      if (error && typeof error === 'object' && 'status' in error && (error as { status?: unknown }).status === 402) {
+      const status = error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: unknown }).status
+        : null
+      if (status === 402 || status === 429) {
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_lease_denials_total',
           workerId: this.workerId,
           tenantId,
           sessionId,
-          status: 'entitlement_denied',
+          status: status === 402 ? 'entitlement_denied' : 'quota_denied',
         })
         return null
       }
@@ -198,17 +201,17 @@ export class CloudWorker {
         })
       }
     }
-    const maxActiveWorkersPerOrg = await this.service.activeWorkerQuotaForTenant(tenantId)
+    const activeWorkerQuota = await this.service.activeWorkerQuotaForTenant(tenantId)
     const claimed = await this.store.claimSessionLease(
       tenantId,
       sessionId,
       this.workerId,
       new Date(),
       this.leaseTtlMs,
-      this.abuse?.enabled && maxActiveWorkersPerOrg
+      this.abuse?.enabled && activeWorkerQuota
         ? {
-            orgId: tenantId,
-            maxActiveWorkersPerOrg,
+            orgId: activeWorkerQuota.orgId,
+            maxActiveWorkersPerOrg: activeWorkerQuota.limit,
             policyCode: 'quota.active_workers_exceeded',
           }
         : null,

@@ -193,14 +193,15 @@ export function createStripeBillingAdapter(options: StripeBillingAdapterOptions)
     },
 
     handleWebhook(input: BillingWebhookInput): BillingWebhookResult {
-      if (options.webhookSecret) {
-        verifyStripeSignature({
-          rawBody: input.rawBody,
-          signatureHeader: firstHeader(input.headers, 'stripe-signature'),
-          webhookSecret: options.webhookSecret,
-          now: now(),
-        })
+      if (!options.webhookSecret) {
+        throw new BillingWebhookAuthError('Stripe webhook secret is required.')
       }
+      verifyStripeSignature({
+        rawBody: input.rawBody,
+        signatureHeader: firstHeader(input.headers, 'stripe-signature'),
+        webhookSecret: options.webhookSecret,
+        now: now(),
+      })
       const event = input.body
       const eventId = readString(event.id)
       const eventType = readString(event.type)
@@ -228,7 +229,7 @@ export function createStripeBillingAdapter(options: StripeBillingAdapterOptions)
             status: 'active',
             seats: 1,
             entitlements: planEntitlements(options.config, planKey),
-            metadata: { stripeEventType: eventType },
+            metadata: { stripeEventId: eventId, stripeEventType: eventType },
           },
         }
       }
@@ -260,6 +261,7 @@ export function createStripeBillingAdapter(options: StripeBillingAdapterOptions)
               : null,
             cancelAtPeriodEnd: readBoolean(object.cancel_at_period_end),
             metadata: {
+              stripeEventId: eventId,
               stripeEventType: eventType,
               priceId,
             },

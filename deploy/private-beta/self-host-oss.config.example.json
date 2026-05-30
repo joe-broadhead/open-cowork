@@ -101,7 +101,9 @@
       "maxConcurrentSessionsPerOrg": 24,
       "maxActiveWorkersPerOrg": 8,
       "maxPromptsPerHour": 600,
+      "maxWorkerMinutesPerHour": 1440,
       "maxGatewayDeliveriesPerHour": 1200,
+      "maxGatewayChannelBindingsPerOrg": 25,
       "maxArtifactBytesPerDay": 2147483648
     },
     "billing": {

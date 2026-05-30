@@ -4,7 +4,13 @@ import type { UsageEventRecord } from '../control-plane-store.ts'
 export type CloudQuotaServiceDelegate = {
   assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number): Promise<void>
   recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number): Promise<void>
-  recordWorkerMinutes(input: { tenantId: string, minutes: number, now?: Date }): Promise<void>
+  recordArtifactDownloaded?(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number): Promise<void>
+  recordWorkerMinutes(input: {
+    tenantId: string
+    sessionId: string
+    workerId: string
+    elapsedMs: number
+  }): Promise<void>
   listUsageEvents(principal: CloudPrincipal, limit?: number): Promise<UsageEventRecord[]>
   claimHttpRateLimit(input: { scope: string, source: string, now?: Date }): Promise<void>
   checkCloudAuthBackoff(input: { scope: string, source?: string, now?: Date }): Promise<void>
@@ -26,7 +32,16 @@ export class CloudQuotaService {
     return this.delegate.recordArtifactUploaded(principal, sessionId, artifactId, bytes)
   }
 
-  recordWorkerMinutes(input: { tenantId: string, minutes: number, now?: Date }) {
+  recordArtifactDownloaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
+    return this.delegate.recordArtifactDownloaded?.(principal, sessionId, artifactId, bytes)
+  }
+
+  recordWorkerMinutes(input: {
+    tenantId: string
+    sessionId: string
+    workerId: string
+    elapsedMs: number
+  }) {
     return this.delegate.recordWorkerMinutes(input)
   }
 

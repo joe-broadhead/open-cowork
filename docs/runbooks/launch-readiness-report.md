@@ -99,6 +99,37 @@ Record:
 - [ ] `pnpm deploy:continuation:smoke`
 - [ ] provider-specific smoke such as `pnpm deploy:gcp:smoke` where applicable
 
+## Quota And Abuse Evidence
+
+- prompt/hour quota pressure result:
+- worker-minute quota pressure result:
+- active-worker quota pressure result:
+- gateway channel binding quota result:
+- gateway delivery quota result:
+- artifact upload/download metering result:
+- HTTP rate-limit result and `Retry-After` sample:
+- auth backoff result and audit/metric sample:
+
+## Restore And Backup Evidence
+
+- latest backup job id:
+- restore drill report location:
+- Postgres restore sample:
+- object-store restore sample:
+- secret/KMS reference check:
+- worker recovery smoke:
+- scheduler recovery smoke:
+- gateway delivery cursor recovery smoke:
+- redaction sample reviewed:
+
+## Public Repo Evidence Boundary
+
+The public `open-cowork` repository stores this evidence contract and generic
+validators only. Real managed SaaS launch evidence should live in a private
+operations repository or ticket system with cloud project ids, customer names,
+URLs, and provider-specific identifiers redacted before any excerpt is copied
+back into public docs.
+
 ## Cost And Scaling Notes
 
 - cloud web replica count and observed CPU/memory:

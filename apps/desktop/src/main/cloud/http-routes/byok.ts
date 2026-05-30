@@ -15,7 +15,22 @@ export async function handleByokApiRoute(input: CloudApiRouteInput): Promise<boo
 
   if (providerId && action === 'validate' && req.method === 'POST') {
     const secret = await options.service.validateByokSecret(context.principal, providerId)
-    tools.writeJson(res, 200, { secret, validated: Boolean(secret?.lastValidatedAt) }, options.corsOrigin)
+    tools.writeJson(res, 200, {
+      secret,
+      validated: secret?.status === 'active' && Boolean(secret.lastValidatedAt),
+    }, options.corsOrigin)
+    return true
+  }
+
+  if (providerId && action === 'override' && req.method === 'POST') {
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const reason = tools.readString(body.reason)
+    if (!reason) {
+      tools.writeError(res, 400, 'BYOK validation override requires a reason.', options.corsOrigin)
+      return true
+    }
+    const secret = await options.service.overrideByokSecretValidation(context.principal, providerId, reason)
+    tools.writeJson(res, 200, { secret, overridden: Boolean(secret) }, options.corsOrigin)
     return true
   }
 

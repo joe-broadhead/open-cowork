@@ -331,7 +331,9 @@ function normalizeCloudAbuseConfig(raw: CloudConfig['abuse'] | undefined): Cloud
     maxConcurrentSessionsPerOrg: nullablePositiveNumber(raw?.maxConcurrentSessionsPerOrg, defaults.maxConcurrentSessionsPerOrg),
     maxActiveWorkersPerOrg: nullablePositiveNumber(raw?.maxActiveWorkersPerOrg, defaults.maxActiveWorkersPerOrg),
     maxPromptsPerHour: nullablePositiveNumber(raw?.maxPromptsPerHour, defaults.maxPromptsPerHour),
+    maxWorkerMinutesPerHour: nullablePositiveNumber(raw?.maxWorkerMinutesPerHour, defaults.maxWorkerMinutesPerHour),
     maxGatewayDeliveriesPerHour: nullablePositiveNumber(raw?.maxGatewayDeliveriesPerHour, defaults.maxGatewayDeliveriesPerHour),
+    maxGatewayChannelBindingsPerOrg: nullablePositiveNumber(raw?.maxGatewayChannelBindingsPerOrg, defaults.maxGatewayChannelBindingsPerOrg),
     maxArtifactBytesPerDay: nullablePositiveNumber(raw?.maxArtifactBytesPerDay, defaults.maxArtifactBytesPerDay),
     httpRateLimit: {
       ...defaults.httpRateLimit,
@@ -364,7 +366,9 @@ function normalizeBillingEntitlements(raw: CloudConfig['billing']['plans'][strin
     maxConcurrentSessionsPerOrg: nullablePositiveNumber(raw.maxConcurrentSessionsPerOrg, null),
     maxActiveWorkersPerOrg: nullablePositiveNumber(raw.maxActiveWorkersPerOrg, null),
     maxPromptsPerHour: nullablePositiveNumber(raw.maxPromptsPerHour, null),
+    maxWorkerMinutesPerHour: nullablePositiveNumber(raw.maxWorkerMinutesPerHour, null),
     maxGatewayDeliveriesPerHour: nullablePositiveNumber(raw.maxGatewayDeliveriesPerHour, null),
+    maxGatewayChannelBindingsPerOrg: nullablePositiveNumber(raw.maxGatewayChannelBindingsPerOrg, null),
     maxArtifactBytesPerDay: nullablePositiveNumber(raw.maxArtifactBytesPerDay, null),
   }
 }

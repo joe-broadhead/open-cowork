@@ -10,6 +10,7 @@ export type CloudByokServiceDelegate = {
     kmsRef?: string | null
   }): Promise<ByokSecretMetadata>
   validateByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null>
+  overrideByokSecretValidation(principal: CloudPrincipal, providerId: string, reason: string): Promise<ByokSecretMetadata | null>
   disableByokSecret(principal: CloudPrincipal, providerId: string): Promise<ByokSecretMetadata | null>
 }
 
@@ -38,6 +39,10 @@ export class CloudByokService {
 
   validateSecret(principal: CloudPrincipal, providerId: string) {
     return this.delegate.validateByokSecret(principal, providerId)
+  }
+
+  overrideValidation(principal: CloudPrincipal, providerId: string, reason: string) {
+    return this.delegate.overrideByokSecretValidation(principal, providerId, reason)
   }
 
   disableSecret(principal: CloudPrincipal, providerId: string) {

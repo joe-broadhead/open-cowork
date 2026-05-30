@@ -70,7 +70,7 @@ export type CloudChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' 
 export type CloudChannelIdentityRole = 'owner' | 'admin' | 'member' | 'approver' | 'viewer'
 export type CloudChannelIdentityStatus = 'active' | 'disabled' | 'pending'
 export type CloudChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
-export type CloudByokSecretStatus = 'active' | 'disabled' | 'expired' | 'invalid'
+export type CloudByokSecretStatus = 'pending_validation' | 'active' | 'disabled' | 'expired' | 'invalid' | 'unsupported'
 
 export type CloudByokSecretMetadata = {
   secretId: string
@@ -320,7 +320,7 @@ export type CloudWorkspaceOverview = {
   }
 }
 
-export type CloudApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'worker-internal'
+export type CloudApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'operator' | 'worker-internal'
 
 export type CloudApiTokenRecord = {
   tokenId: string
@@ -361,7 +361,7 @@ export type CloudAdminPolicyOverview = {
     status: string
   }
   signup: {
-    mode: 'closed' | 'invite' | 'domain' | 'open'
+    mode: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
     allowSelfServiceSignup: boolean
     allowedEmailDomains: string[]
     invitesEnabled: boolean
@@ -609,6 +609,7 @@ export type CloudTransportAdapter = {
   getByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   setByokSecret?(providerId: string, input: CloudSetByokSecretInput): Promise<CloudByokSecretMetadata>
   validateByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
+  overrideByokSecretValidation?(providerId: string, input: { reason: string }): Promise<CloudByokSecretMetadata | null>
   deleteByokSecret?(providerId: string): Promise<CloudByokSecretMetadata | null>
   listUsageEvents?(limit?: number): Promise<CloudUsageEventRecord[]>
   getUsageSummary?(limit?: number): Promise<CloudUsageSummary>
@@ -1386,6 +1387,12 @@ export function createHttpSseCloudTransportAdapter(
       return (await request<{ secret: CloudByokSecretMetadata | null }>(
         `/api/byok/${encodePath(providerId)}/validate`,
         { method: 'POST' },
+      )).secret
+    },
+    async overrideByokSecretValidation(providerId, input) {
+      return (await request<{ secret: CloudByokSecretMetadata | null }>(
+        `/api/byok/${encodePath(providerId)}/override`,
+        { method: 'POST', body: input },
       )).secret
     },
     async deleteByokSecret(providerId) {

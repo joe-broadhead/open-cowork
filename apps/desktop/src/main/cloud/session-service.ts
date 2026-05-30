@@ -149,7 +149,7 @@ export type CloudAdminPolicyOverview = {
     status: string
   }
   signup: {
-    mode: 'closed' | 'invite' | 'domain' | 'open'
+    mode: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
     allowSelfServiceSignup: boolean
     allowedEmailDomains: string[]
     invitesEnabled: boolean
@@ -312,7 +312,7 @@ export type ByokManagementPolicy = {
 
 export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
-  signupMode?: 'closed' | 'invite' | 'domain' | 'open'
+  signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
   allowedEmailDomains?: readonly string[]
 }
 
@@ -415,7 +415,9 @@ const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   maxConcurrentSessionsPerOrg: null,
   maxActiveWorkersPerOrg: null,
   maxPromptsPerHour: null,
+  maxWorkerMinutesPerHour: null,
   maxGatewayDeliveriesPerHour: null,
+  maxGatewayChannelBindingsPerOrg: null,
   maxArtifactBytesPerDay: null,
   httpRateLimit: {
     enabled: false,
@@ -516,14 +518,15 @@ function publicApiToken(token: ApiTokenRecord): PublicApiTokenRecord {
   return publicToken
 }
 
-function resolvedSignupMode(policy: CloudIdentityPolicy): 'closed' | 'invite' | 'domain' | 'open' {
+function resolvedSignupMode(policy: CloudIdentityPolicy): 'disabled' | 'closed' | 'invite' | 'domain' | 'open' {
+  if (policy.signupMode === 'closed') return 'disabled'
   if (policy.signupMode) return policy.signupMode
   if (!policy.allowSelfServiceSignup) return 'invite'
   return policy.allowedEmailDomains?.length ? 'domain' : 'open'
 }
 
 function normalizeApiTokenScopes(scopes: ApiTokenScope[] | undefined | null): ApiTokenScope[] {
-  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'worker-internal'])
+  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'operator', 'worker-internal'])
   if ((scopes || []).some((scope) => !allowed.has(scope))) {
     throw new CloudServiceError(400, 'API token includes an unsupported scope.')
   }
@@ -551,6 +554,12 @@ function normalizeByokProviderIdForPolicy(value: string) {
   return providerId
 }
 
+function principalEmailDomain(email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase()
+  const at = normalized?.lastIndexOf('@') ?? -1
+  return normalized && at >= 0 ? normalized.slice(at + 1) : null
+}
+
 function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'gateway')
@@ -559,7 +568,7 @@ function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
 
 function principalCanViewOperations(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin') || hasTokenScope(principal, 'worker-internal')
+  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'operator') || hasTokenScope(principal, 'worker-internal')
   return false
 }
 
@@ -796,7 +805,7 @@ export class CloudSessionService {
     orgId: string
     quotaKey: string
     limit: number | null | undefined
-    entitlementLimitKey?: 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
+    entitlementLimitKey?: 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
     quantity?: number
     windowMs: number
     policyCode: QuotaPolicyCode
@@ -825,7 +834,7 @@ export class CloudSessionService {
   private async effectiveQuotaLimit(
     orgId: string,
     fallback: number | null | undefined,
-    key?: 'maxConcurrentSessionsPerOrg' | 'maxActiveWorkersPerOrg' | 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay',
+    key?: 'maxConcurrentSessionsPerOrg' | 'maxActiveWorkersPerOrg' | 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxGatewayChannelBindingsPerOrg' | 'maxArtifactBytesPerDay',
   ) {
     if (!key || !this.billingConfig || !isBillingConfigured(this.billingConfig)) return fallback
     const subscription = await this.store.getBillingSubscription(orgId)
@@ -849,14 +858,23 @@ export class CloudSessionService {
 
   async ensurePrincipal(principal: CloudPrincipal) {
     const signupMode = resolvedSignupMode(this.identityPolicy)
+    const allowedDomains = (this.identityPolicy.allowedEmailDomains || [])
+      .map((domain) => domain.trim().toLowerCase())
+      .filter(Boolean)
+    if (principal.authSource !== 'local' && signupMode === 'domain' && allowedDomains.length > 0) {
+      const emailDomain = principalEmailDomain(principal.email)
+      if (!emailDomain || !allowedDomains.includes(emailDomain)) {
+        throw new CloudServiceError(403, 'Cloud signup is restricted to approved email domains.')
+      }
+    }
     const existingMembership = await this.store.resolvePrincipalMembership({
       tenantId: principal.tenantId,
       accountId: principal.accountId || principal.userId,
       idpSubject: principal.userId,
       email: principal.email,
     })
-    const requiresExistingMembership = principal.authSource === 'user'
-      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'closed' || signupMode === 'invite')
+    const requiresExistingMembership = principal.authSource !== 'local' && principal.authSource !== 'api_token'
+      && (!this.identityPolicy.allowSelfServiceSignup || signupMode === 'disabled' || signupMode === 'closed' || signupMode === 'invite')
     if (requiresExistingMembership) {
       const acceptableStatuses: ControlPlaneMembershipStatus[] = signupMode === 'invite'
         ? ['active', 'invited']
@@ -1460,6 +1478,22 @@ export class CloudSessionService {
     })
   }
 
+  async overrideByokSecretValidation(
+    principal: CloudPrincipal,
+    providerId: string,
+    reason: string,
+  ): Promise<ByokSecretMetadata | null> {
+    await this.ensurePrincipal(principal)
+    this.assertByokAllowed(principal)
+    const normalizedProviderId = await this.assertByokProviderAllowed(principal, providerId)
+    return this.requireByokSecrets().activateWithoutValidation({
+      orgId: this.principalOrgId(principal),
+      providerId: normalizedProviderId,
+      reason,
+      actor: this.byokAuditActor(principal),
+    })
+  }
+
   async listHeadlessAgents(principal: CloudPrincipal): Promise<HeadlessAgentRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
@@ -1478,6 +1512,11 @@ export class CloudSessionService {
   ): Promise<HeadlessAgentRecord> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'channel.manage',
+      profileName: input.profileName || this.policy.profileName,
+    })
     return this.store.createHeadlessAgent({
       agentId: input.agentId || this.ids.randomUUID(),
       orgId: this.principalOrgId(principal),
@@ -1502,6 +1541,11 @@ export class CloudSessionService {
   ): Promise<HeadlessAgentRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'channel.manage',
+      profileName: input.profileName || undefined,
+    })
     return this.store.updateHeadlessAgent({
       orgId: this.principalOrgId(principal),
       agentId,
@@ -1534,19 +1578,38 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
     const orgId = this.principalOrgId(principal)
+    await this.assertBillingAllowed({
+      orgId,
+      action: 'channel.manage',
+    })
     const agent = await this.store.getHeadlessAgent(orgId, input.agentId)
     if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
-    return this.store.createChannelBinding({
-      bindingId: input.bindingId || this.ids.randomUUID(),
+    const bindingLimit = this.quotaLimit(await this.effectiveQuotaLimit(
       orgId,
-      agentId: input.agentId,
-      provider: input.provider,
-      externalWorkspaceId: input.externalWorkspaceId,
-      displayName: input.displayName,
-      status: input.status,
-      credentialRef: input.credentialRef,
-      settings: input.settings,
-    })
+      this.abuse.maxGatewayChannelBindingsPerOrg,
+      'maxGatewayChannelBindingsPerOrg',
+    ))
+    try {
+      return await this.store.createChannelBinding({
+        bindingId: input.bindingId || this.ids.randomUUID(),
+        orgId,
+        agentId: input.agentId,
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId,
+        displayName: input.displayName,
+        status: input.status,
+        credentialRef: input.credentialRef,
+        settings: input.settings,
+        quota: bindingLimit
+          ? {
+            maxGatewayChannelBindingsPerOrg: bindingLimit,
+            policyCode: 'quota.gateway_channel_bindings_exceeded',
+          }
+          : null,
+      })
+    } catch (error) {
+      this.translateQuotaError(error, 'Gateway channel binding quota exceeded.', 'quota.gateway_channel_bindings_exceeded')
+    }
   }
 
   async updateChannelBinding(
@@ -1561,6 +1624,10 @@ export class CloudSessionService {
   ): Promise<ChannelBindingRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'channel.manage',
+    })
     return this.store.updateChannelBinding({
       orgId: this.principalOrgId(principal),
       bindingId,
@@ -1634,6 +1701,11 @@ export class CloudSessionService {
     })
     const agent = await this.store.getHeadlessAgent(orgId, channelBinding.agentId)
     if (!agent || agent.status !== 'active') throw new CloudServiceError(403, 'Headless agent is not active.')
+    await this.assertBillingAllowed({
+      orgId,
+      action: 'gateway.session.bind',
+      profileName: agent.profileName,
+    })
 
     const existing = await this.store.findChannelSessionBindingByThread({
       orgId,
@@ -2466,6 +2538,11 @@ export class CloudSessionService {
   }
 
   async assertArtifactUploadAllowed(principal: CloudPrincipal, bytes: number) {
+    await this.assertBillingAllowed({
+      orgId: this.principalOrgId(principal),
+      action: 'artifact.upload',
+      profileName: this.policy.profileName,
+    })
     await this.consumeQuota({
       orgId: this.principalOrgId(principal),
       quotaKey: 'artifact_bytes:day',
@@ -2489,6 +2566,17 @@ export class CloudSessionService {
     })
   }
 
+  async recordArtifactDownloaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
+    await this.recordUsage({
+      orgId: this.principalOrgId(principal),
+      accountId: principal.accountId || principal.userId,
+      eventType: 'artifact.downloaded',
+      quantity: bytes,
+      unit: 'byte',
+      metadata: { tenantId: principal.tenantId, sessionId, artifactId },
+    })
+  }
+
   async recordWorkerMinutes(input: {
     tenantId: string
     sessionId: string
@@ -2498,6 +2586,34 @@ export class CloudSessionService {
     if (!this.abuse.enabled) return null
     const org = await this.store.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId })
     const minutes = Math.max(1, Math.ceil(input.elapsedMs / 60_000))
+    const workerMinuteLimit = this.quotaLimit(await this.effectiveQuotaLimit(
+      org.orgId,
+      this.abuse.maxWorkerMinutesPerHour,
+      'maxWorkerMinutesPerHour',
+    ))
+    if (workerMinuteLimit) {
+      const now = new Date()
+      const quota = await this.store.consumeUsageQuota({
+        orgId: org.orgId,
+        quotaKey: 'worker_minutes:hour',
+        limit: workerMinuteLimit,
+        quantity: minutes,
+        windowMs: HOUR_MS,
+        now,
+        policyCode: 'quota.worker_minutes_per_hour_exceeded',
+      })
+      if (!quota.allowed && quota.remaining > 0) {
+        await this.store.consumeUsageQuota({
+          orgId: org.orgId,
+          quotaKey: 'worker_minutes:hour',
+          limit: workerMinuteLimit,
+          quantity: quota.remaining,
+          windowMs: HOUR_MS,
+          now,
+          policyCode: 'quota.worker_minutes_per_hour_exceeded',
+        })
+      }
+    }
     return this.store.recordUsageEvent({
       orgId: org.orgId,
       eventType: 'worker.minute',
@@ -2542,7 +2658,7 @@ export class CloudSessionService {
       label: string
       unit: CloudUsageQuotaWindowRecord['unit']
       limit: number | null | undefined
-      entitlementLimitKey?: 'maxPromptsPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
+      entitlementLimitKey?: 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
       windowMs: number
       policyCode: string
     }> = [
@@ -2563,6 +2679,15 @@ export class CloudSessionService {
         entitlementLimitKey: 'maxGatewayDeliveriesPerHour',
         windowMs: HOUR_MS,
         policyCode: 'quota.gateway_deliveries_per_hour_exceeded',
+      },
+      {
+        quotaKey: 'worker_minutes:hour',
+        label: 'Worker minutes per hour',
+        unit: 'minute',
+        limit: this.abuse.maxWorkerMinutesPerHour,
+        entitlementLimitKey: 'maxWorkerMinutesPerHour',
+        windowMs: HOUR_MS,
+        policyCode: 'quota.worker_minutes_per_hour_exceeded',
       },
       {
         quotaKey: 'artifact_bytes:day',
@@ -2829,42 +2954,53 @@ export class CloudSessionService {
     }
   }
 
+  async verifyBillingWebhook(input: {
+    headers: Record<string, string | undefined>
+    rawBody: string
+    body: Record<string, unknown>
+  }): Promise<BillingWebhookResult> {
+    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
+      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
+    }
+    try {
+      return this.billingAdapter.handleWebhook(input)
+    } catch (error) {
+      this.translateBillingAdapterError(error)
+    }
+  }
+
+  async applyBillingWebhookResult(result: BillingWebhookResult): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
+    let subscriptionRecord: BillingSubscriptionRecord | null = null
+    if (result.subscription) {
+      subscriptionRecord = await this.store.upsertBillingSubscription(result.subscription)
+      await this.store.recordAuditEvent({
+        eventId: `billing_${result.providerId}_${result.eventId}`,
+        orgId: result.subscription.orgId,
+        actorType: 'system',
+        actorId: `billing.${result.providerId}`,
+        eventType: 'billing.webhook.processed',
+        targetType: 'billing_subscription',
+        targetId: result.subscription.providerSubscriptionId || result.subscription.orgId,
+        metadata: {
+          providerId: result.providerId,
+          eventType: result.eventType,
+          planKey: result.subscription.planKey,
+          status: result.subscription.status,
+        },
+      })
+    }
+    return {
+      ...result,
+      subscriptionRecord,
+    }
+  }
+
   async handleBillingWebhook(input: {
     headers: Record<string, string | undefined>
     rawBody: string
     body: Record<string, unknown>
   }): Promise<BillingWebhookResult & { subscriptionRecord?: BillingSubscriptionRecord | null }> {
-    if (!this.billingConfig || !isBillingConfigured(this.billingConfig) || !this.billingAdapter) {
-      throw new CloudServiceError(404, 'Billing is not enabled for this cloud deployment.')
-    }
-    try {
-      const result = await this.billingAdapter.handleWebhook(input)
-      let subscriptionRecord: BillingSubscriptionRecord | null = null
-      if (result.subscription) {
-        subscriptionRecord = await this.store.upsertBillingSubscription(result.subscription)
-        await this.store.recordAuditEvent({
-          eventId: `billing_${result.providerId}_${result.eventId}`,
-          orgId: result.subscription.orgId,
-          actorType: 'system',
-          actorId: `billing.${result.providerId}`,
-          eventType: 'billing.webhook.processed',
-          targetType: 'billing_subscription',
-          targetId: result.subscription.providerSubscriptionId || result.subscription.orgId,
-          metadata: {
-            providerId: result.providerId,
-            eventType: result.eventType,
-            planKey: result.subscription.planKey,
-            status: result.subscription.status,
-          },
-        })
-      }
-      return {
-        ...result,
-        subscriptionRecord,
-      }
-    } catch (error) {
-      this.translateBillingAdapterError(error)
-    }
+    return this.applyBillingWebhookResult(await this.verifyBillingWebhook(input))
   }
 
   async claimHttpRateLimit(input: {
@@ -3713,15 +3849,34 @@ export class CloudSessionService {
       action: 'worker.execute',
       profileName: this.policy.profileName,
     })
+    const workerMinuteLimit = this.quotaLimit(await this.effectiveQuotaLimit(
+      org.orgId,
+      this.abuse.maxWorkerMinutesPerHour,
+      'maxWorkerMinutesPerHour',
+    ))
+    if (workerMinuteLimit) {
+      const now = Date.now()
+      const windowStart = windowStartMs(now, HOUR_MS)
+      const counter = (await this.store.listUsageQuotaCounters(org.orgId))
+        .find((entry) => entry.quotaKey === 'worker_minutes:hour' && entry.windowStartedAtMs === windowStart)
+      if ((counter?.quantity || 0) >= workerMinuteLimit) {
+        throw this.quotaError(
+          'Cloud worker minute quota exceeded.',
+          'quota.worker_minutes_per_hour_exceeded',
+          Math.max(0, windowStart + HOUR_MS - now),
+        )
+      }
+    }
   }
 
   async activeWorkerQuotaForTenant(tenantId: string) {
     const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
-    return this.quotaLimit(await this.effectiveQuotaLimit(
+    const limit = this.quotaLimit(await this.effectiveQuotaLimit(
       org.orgId,
       this.abuse.maxActiveWorkersPerOrg,
       'maxActiveWorkersPerOrg',
     ))
+    return limit ? { orgId: org.orgId, limit } : null
   }
 
   private byokAuditActor(principal: CloudPrincipal) {

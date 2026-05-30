@@ -260,7 +260,7 @@ export type CloudProfileConfig = {
 
 export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
-  signupMode?: 'closed' | 'invite' | 'domain' | 'open'
+  signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
   headerSecret?: string
   headerAllowUnsigned?: boolean
   headerMaxSignatureAgeMs?: number
@@ -306,7 +306,9 @@ export type CloudAbuseConfig = {
   maxConcurrentSessionsPerOrg: number | null
   maxActiveWorkersPerOrg: number | null
   maxPromptsPerHour: number | null
+  maxWorkerMinutesPerHour: number | null
   maxGatewayDeliveriesPerHour: number | null
+  maxGatewayChannelBindingsPerOrg: number | null
   maxArtifactBytesPerDay: number | null
   httpRateLimit: CloudRateLimitConfig
   authBackoff: CloudAuthBackoffConfig
@@ -323,7 +325,9 @@ export type CloudBillingEntitlements = {
   maxConcurrentSessionsPerOrg?: number | null
   maxActiveWorkersPerOrg?: number | null
   maxPromptsPerHour?: number | null
+  maxWorkerMinutesPerHour?: number | null
   maxGatewayDeliveriesPerHour?: number | null
+  maxGatewayChannelBindingsPerOrg?: number | null
   maxArtifactBytesPerDay?: number | null
   allowNewSessions?: boolean
   allowPrompts?: boolean
@@ -518,7 +522,9 @@ const DEFAULT_CLOUD_ABUSE: CloudAbuseConfig = {
   maxConcurrentSessionsPerOrg: 100,
   maxActiveWorkersPerOrg: 20,
   maxPromptsPerHour: 600,
+  maxWorkerMinutesPerHour: 1200,
   maxGatewayDeliveriesPerHour: 1000,
+  maxGatewayChannelBindingsPerOrg: 25,
   maxArtifactBytesPerDay: 10 * 1024 * 1024 * 1024,
   httpRateLimit: {
     enabled: true,

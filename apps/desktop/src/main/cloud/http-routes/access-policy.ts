@@ -1,0 +1,31 @@
+import type { CloudPrincipal } from '../session-service.ts'
+
+export type GatewayRouteAccessInput = {
+  resource: string | undefined
+  action: string | undefined
+  method: string | undefined
+  sessionId: string | undefined
+  artifactId: string | undefined
+}
+
+export function principalHasGatewayAccess(principal: CloudPrincipal) {
+  if (principal.authSource === 'local' || principal.authSource === 'header') return true
+  if (principal.authSource === 'api_token') {
+    return principal.tokenScopes?.includes('gateway') || principal.tokenScopes?.includes('admin') || false
+  }
+  return principal.role === 'owner' || principal.role === 'admin'
+}
+
+export function principalHasDesktopApiAccess(principal: CloudPrincipal) {
+  if (principal.authSource === 'api_token') {
+    return principal.tokenScopes?.includes('desktop') || principal.tokenScopes?.includes('admin') || false
+  }
+  return true
+}
+
+export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {
+  if (input.resource === 'channels') return true
+  if (input.resource !== 'sessions' || !input.sessionId || input.method !== 'GET') return false
+  if (!input.action || input.action === 'view' || input.action === 'events') return true
+  return input.action === 'artifacts' && Boolean(input.artifactId)
+}

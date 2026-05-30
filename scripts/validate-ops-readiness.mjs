@@ -174,6 +174,9 @@ for (const phrase of [
   'Cost And Scaling Notes',
   'Known Limits',
   'Final Smoke',
+  'Quota And Abuse Evidence',
+  'Restore And Backup Evidence',
+  'Public Repo Evidence Boundary',
 ]) {
   assertIncludes(launchReportPath, phrase)
 }

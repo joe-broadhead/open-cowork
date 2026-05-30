@@ -204,12 +204,13 @@ function parseCsv(value: string | null) {
 }
 
 function parseSignupMode(value: string | null | undefined) {
+  if (value === 'disabled') return 'disabled'
   if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
   return null
 }
 
 function inferSignupMode(input: {
-  requestedSignupMode?: 'closed' | 'invite' | 'domain' | 'open' | null
+  requestedSignupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open' | null
   allowSelfServiceSignup: boolean
   allowedEmailDomains?: string[] | null
 }) {
@@ -230,9 +231,9 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     || (envSwitchedToOidc ? null : parseSignupMode(config.cloud.auth.signupMode))
   const allowSelfServiceSignup = requestedSelfService
     ? parseBoolean(requestedSelfService, false)
-    : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
-      ? true
-      : requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
+      : requestedSignupMode === 'open' || requestedSignupMode === 'domain'
+        ? true
+      : requestedSignupMode === 'disabled' || requestedSignupMode === 'closed' || requestedSignupMode === 'invite'
         ? false
         : envSwitchedToOidc
           ? false
@@ -294,9 +295,17 @@ export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>,
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR'),
       defaults.maxPromptsPerHour,
     ),
+    maxWorkerMinutesPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR'),
+      defaults.maxWorkerMinutesPerHour,
+    ),
     maxGatewayDeliveriesPerHour: parseOptionalPositiveInt(
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR'),
       defaults.maxGatewayDeliveriesPerHour,
+    ),
+    maxGatewayChannelBindingsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG'),
+      defaults.maxGatewayChannelBindingsPerOrg,
     ),
     maxArtifactBytesPerDay: parseOptionalPositiveInt(
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY'),

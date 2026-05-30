@@ -344,6 +344,10 @@ test('cloud auth config requires explicit self-service opt-in for managed OIDC s
     OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
     OPEN_COWORK_CLOUD_SIGNUP_MODE: 'closed',
   }).signupMode, 'closed')
+  assert.equal(resolveCloudAuthConfig(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_AUTH_MODE: 'oidc',
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'disabled',
+  }).signupMode, 'disabled')
 
   const explicitConfig = {
     ...DEFAULT_CONFIG,

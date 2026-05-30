@@ -165,6 +165,23 @@ Production safety rules are enforced in config validation:
 - environment placeholders such as `{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}`
   only resolve when listed in `allowedEnvPlaceholders`
 
+Managed BYOK SaaS deployments should keep downstream-specific prices, project
+ids, legal URLs, and brand assets outside this public repository. The public
+repo should contain only generic examples and these portable supply points:
+
+| Area | Public config/env surface | Secret source |
+|---|---|---|
+| Billing mode | `cloud.billing.enabled`, `cloud.billing.provider`, `OPEN_COWORK_CLOUD_BILLING_ENABLED`, `OPEN_COWORK_CLOUD_BILLING_PROVIDER`, `OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN` | None for `none`/`stub`; provider credentials through refs for managed SaaS. |
+| Stripe | `cloud.billing.stripe.*`, `OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF`, `OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF`, `OPEN_COWORK_CLOUD_STRIPE_PRICE_ID`, `OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL`, `OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL`, `OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL` | Platform secret manager or env refs for API key and webhook secret. |
+| BYOK | `cloud.profiles`, `cloud.billing.plans.*.entitlements.allowedProviders`, provider validators in cloud process wiring | Provider keys enter only through `/api/byok`; plaintext is never stored in config. |
+| Quotas | `cloud.abuse.*`, `OPEN_COWORK_CLOUD_MAX_*` env overrides | No secrets. |
+| Public URLs | `cloud.publicBranding`, `cloudDesktop.preconfiguredConnections`, Gateway `publicUrl` | Use generic URLs here; downstream managed repo owns real domains. |
+
+Self-host OSS deployments can leave `cloud.billing.enabled=false` and
+`cloud.billing.provider=none`; hosted SaaS deployments should require signed
+billing webhooks, BYOK validator/override evidence, quotas, and launch
+readiness gates before public traffic.
+
 ## Environment variables
 
 | Variable | Purpose | Default |

@@ -135,6 +135,20 @@ test('stripe billing adapter creates checkout and verifies subscription webhooks
   }), /authorization/i)
 })
 
+test('stripe billing adapter rejects webhooks without a configured signing secret', async () => {
+  const body = JSON.stringify({ id: 'evt_unsigned', type: 'customer.subscription.updated', data: { object: {} } })
+  const adapter = createStripeBillingAdapter({
+    config: billingConfig(),
+    apiKey: 'sk_test_secret',
+  })
+
+  assert.throws(() => adapter.handleWebhook({
+    headers: {},
+    rawBody: body,
+    body: JSON.parse(body) as Record<string, unknown>,
+  }), /webhook secret is required/i)
+})
+
 test('billing entitlement evaluator returns machine-readable 402 decisions', () => {
   const config = billingConfig()
   assert.equal(evaluateBillingEntitlement({

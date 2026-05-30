@@ -528,7 +528,9 @@
         "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxWorkerMinutesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxGatewayChannelBindingsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "httpRateLimit": { "$ref": "#/$defs/cloudRateLimit" },
         "authBackoff": { "$ref": "#/$defs/cloudAuthBackoff" }
@@ -606,7 +608,9 @@
         "maxConcurrentSessionsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxActiveWorkersPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxPromptsPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxWorkerMinutesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxGatewayDeliveriesPerHour": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
+        "maxGatewayChannelBindingsPerOrg": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "maxArtifactBytesPerDay": { "$ref": "#/$defs/cloudPositiveIntegerOrNull" },
         "allowNewSessions": { "type": "boolean" },
         "allowPrompts": { "type": "boolean" },
@@ -733,7 +737,7 @@
         "cookieSecretRef": { "type": "string", "maxLength": 512 },
         "allowedEmailDomains": { "$ref": "#/$defs/cloudStringList" },
         "allowSelfServiceSignup": { "type": "boolean" },
-        "signupMode": { "type": "string", "enum": ["closed", "invite", "domain", "open"] }
+        "signupMode": { "type": "string", "enum": ["disabled", "closed", "invite", "domain", "open"] }
       }
     },
     "cloudStorage": {
