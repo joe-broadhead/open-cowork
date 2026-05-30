@@ -13,6 +13,11 @@ import {
 } from '@open-cowork/shared'
 import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
+import {
+  principalHasDesktopApiAccess,
+  principalHasGatewayAccess,
+  routeAllowsGatewayOnlyToken,
+} from './http-routes/access-policy.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
@@ -406,7 +411,7 @@ function readStringArray(value: unknown) {
 function readApiTokenScopes(value: unknown): ApiTokenScope[] | null {
   const scopes = readStringArray(value)
   if (!scopes) return null
-  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'worker-internal'])
+  const allowed = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'operator', 'worker-internal'])
   if (scopes.some((scope) => !allowed.has(scope as ApiTokenScope))) return null
   const normalized = [...new Set(scopes as ApiTokenScope[])]
   return normalized.length > 0 ? normalized : null
@@ -463,14 +468,6 @@ function readEnum<T extends string>(value: unknown, allowed: readonly T[]): T | 
 
 function readChannelProvider(value: unknown): ChannelProviderId | undefined {
   return readEnum(value, ['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'] as const)
-}
-
-function principalHasGatewayAccess(principal: CloudPrincipal) {
-  if (principal.authSource === 'local' || principal.authSource === 'header') return true
-  if (principal.authSource === 'api_token') {
-    return principal.tokenScopes?.includes('gateway') || principal.tokenScopes?.includes('admin') || false
-  }
-  return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function parseTagIds(url: URL) {
@@ -710,7 +707,12 @@ async function handleBillingWebhook(
     })
     if (!authAccepted) throw new CloudHttpError(429, 'Too many rejected billing webhook requests. Try again later.')
     const { body, rawBody } = await readJsonBodyWithRaw(req, options.maxBodyBytes || 256 * 1024)
-    const eventId = readString(body.id) || createHash('sha256').update(rawBody).digest('hex')
+    const verified = await options.service.verifyBillingWebhook({
+      headers: requestHeaderRecord(req),
+      rawBody,
+      body,
+    })
+    const eventId = verified.eventId || readString(body.id) || createHash('sha256').update(rawBody).digest('hex')
     replayClaim = await securityStore.claimSignature({
       key: `billing:${eventId}`,
       nowMs: startedAt,
@@ -721,11 +723,7 @@ async function handleBillingWebhook(
       writeJson(res, 200, { ok: true, replayed: true }, options.corsOrigin)
       return
     }
-    const result = await options.service.handleBillingWebhook({
-      headers: requestHeaderRecord(req),
-      rawBody,
-      body,
-    })
+    const result = await options.service.applyBillingWebhookResult(verified)
     await replayClaim.accept()
     writeJson(res, 200, {
       ok: true,
@@ -964,6 +962,17 @@ async function handleApiRequest(
   const artifactId = context.segments[4]
   if (api !== 'api') {
     writeError(res, 404, 'Not found.', options.corsOrigin)
+    return
+  }
+
+  if (!principalHasDesktopApiAccess(context.principal) && !routeAllowsGatewayOnlyToken({
+    resource,
+    action,
+    method: req.method,
+    sessionId,
+    artifactId,
+  })) {
+    writeError(res, 403, 'Desktop cloud API access requires a desktop-scoped API token.', options.corsOrigin)
     return
   }
 

@@ -23,8 +23,9 @@ gateway channel bindings.
 
 Choose one org signup mode per environment:
 
-- `closed`: operators create orgs manually. Use for private beta and internal
+- `disabled`: operators create orgs manually. Use for private beta and internal
   enterprise installs.
+- `closed`: backward-compatible alias for `disabled`.
 - `invite`: users can join only with an invite token or approved membership
   record. Use for design partners and paid trials.
 - `domain`: users can self-serve when their email domain is allowlisted.
@@ -75,11 +76,20 @@ Before marking a provider key active:
 1. Store the key through the BYOK secret store using org/provider AAD.
 2. Reveal plaintext only inside the worker role validation path.
 3. Build provider runtime config as `provider.<id>.options`.
-4. Run a bounded model-call validation or provider metadata check.
+4. Run a bounded model-call validation or provider metadata check through a
+   registered provider validator.
 5. Confirm read APIs return only status, provider, last4/fingerprint, and
    health.
 6. Confirm logs, diagnostics, HTTP payloads, renderer state, and cache contain
    no raw key material.
+
+New keys remain `pending_validation` until a registered validator passes.
+Unknown providers move to `unsupported`, not `active`. If a managed operator
+must enable a provider before an automated validator exists, use
+`POST /api/byok/:provider/override` with a redacted reason and retain the audit
+event as launch evidence. Runtime injection must only reveal secrets whose
+metadata is `active` and has a validation timestamp from either a validator pass
+or that audited override.
 
 If validation fails, keep the previous active key if one exists and store the
 new key as failed metadata only when that is safe for the provider.

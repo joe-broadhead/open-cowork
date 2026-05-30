@@ -11,7 +11,7 @@ import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../confi
 
 export type ControlPlaneRole = 'owner' | 'admin' | 'member'
 export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
-export type ApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'worker-internal'
+export type ApiTokenScope = 'desktop' | 'gateway' | 'admin' | 'operator' | 'worker-internal'
 export type AuditActorType = 'user' | 'api_token' | 'system'
 export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
 export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
@@ -26,12 +26,13 @@ export type ChannelSessionBindingStatus = 'active' | 'archived'
 export type ChannelInteractionKind = 'permission' | 'question'
 export type ChannelInteractionStatus = 'pending' | 'used' | 'expired' | 'revoked'
 export type ChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
-export type ByokSecretStatus = 'active' | 'disabled' | 'expired' | 'invalid'
+export type ByokSecretStatus = 'pending_validation' | 'active' | 'disabled' | 'expired' | 'invalid' | 'unsupported'
 export type UsageEventType =
   | 'session.created'
   | 'prompt.enqueued'
   | 'worker.minute'
   | 'artifact.uploaded'
+  | 'artifact.downloaded'
   | 'gateway.delivery.claimed'
 export type UsageUnit = 'count' | 'byte' | 'minute'
 export type BillingSubscriptionStatus = CloudSubscriptionStatus
@@ -40,7 +41,9 @@ export type QuotaPolicyCode =
   | 'quota.concurrent_sessions_exceeded'
   | 'quota.active_workers_exceeded'
   | 'quota.prompts_per_hour_exceeded'
+  | 'quota.worker_minutes_per_hour_exceeded'
   | 'quota.gateway_deliveries_per_hour_exceeded'
+  | 'quota.gateway_channel_bindings_exceeded'
   | 'quota.artifact_bytes_per_day_exceeded'
   | 'rate_limit.http_exceeded'
   | 'auth.backoff'
@@ -725,6 +728,10 @@ export type CreateChannelBindingInput = {
   credentialRef?: string | null
   settings?: Record<string, unknown>
   createdAt?: Date
+  quota?: {
+    maxGatewayChannelBindingsPerOrg?: number | null
+    policyCode?: string
+  } | null
 }
 
 export type UpdateChannelBindingInput = {
@@ -1114,6 +1121,7 @@ export type ControlPlaneStore = {
       policyCode?: QuotaPolicyCode | string
     } | null,
   ): MaybePromise<WorkerLeaseRecord | null>
+  releaseSessionLease(lease: WorkerLeaseRecord, now?: Date): MaybePromise<boolean>
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
@@ -1918,11 +1926,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       targetId: record.providerSubscriptionId || record.orgId,
       metadata: {
         providerId: record.providerId,
+        previousPlanKey: existing?.planKey || null,
+        previousStatus: existing?.status || null,
+        previousEntitlementsHash: existing ? stableJson(existing.entitlements) : null,
         planKey: record.planKey,
         status: record.status,
+        entitlementsHash: stableJson(record.entitlements),
         seats: record.seats,
         providerCustomerId: record.providerCustomerId,
         providerSubscriptionId: record.providerSubscriptionId,
+        providerEventId: input.metadata?.stripeEventId || input.metadata?.eventId || null,
       },
       createdAt: input.updatedAt,
     })
@@ -2025,11 +2038,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
     }
     const now = nowIso(input.createdAt)
-    const status = input.status || 'active'
-    const priorActive = status === 'active'
-      ? this.getActiveByokSecret(input.orgId, providerId)
-      : null
-    if (priorActive) {
+    const status = input.status || 'pending_validation'
+    const priorActive = this.getActiveByokSecret(input.orgId, providerId)
+    if (priorActive && status === 'active') {
       const previous = this.byokSecrets.get(priorActive.secretId)
       if (previous) {
         previous.status = 'disabled'
@@ -2059,7 +2070,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       accountId: record.createdByAccountId,
       actorType: input.actor?.actorType || 'system',
       actorId: input.actor?.actorId || null,
-      eventType: priorActive ? 'byok_secret.rotated' : 'byok_secret.created',
+      eventType: priorActive
+        ? status === 'active'
+          ? 'byok_secret.rotated'
+          : 'byok_secret.rotation_started'
+        : 'byok_secret.created',
       targetType: 'byok_secret',
       targetId: record.secretId,
       metadata: {
@@ -2078,17 +2093,27 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const normalizedProviderId = normalizeByokProviderId(providerId)
     return Array.from(this.byokSecrets.values())
       .filter((secret) => secret.orgId === orgId && secret.providerId === normalizedProviderId)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
+      .sort((left, right) => (
+        right.updatedAt.localeCompare(left.updatedAt)
+        || right.createdAt.localeCompare(left.createdAt)
+        || right.secretId.localeCompare(left.secretId)
+      ))
       .map((secret) => clone(secret))[0] || null
   }
 
   getActiveByokSecret(orgId: string, providerId: string): ByokSecretRecord | null {
     const normalizedProviderId = normalizeByokProviderId(providerId)
-    const secret = Array.from(this.byokSecrets.values()).find((candidate) => (
-      candidate.orgId === orgId
-      && candidate.providerId === normalizedProviderId
-      && candidate.status === 'active'
-    ))
+    const secret = Array.from(this.byokSecrets.values())
+      .filter((candidate) => (
+        candidate.orgId === orgId
+        && candidate.providerId === normalizedProviderId
+        && candidate.status === 'active'
+      ))
+      .sort((left, right) => (
+        right.updatedAt.localeCompare(left.updatedAt)
+        || right.createdAt.localeCompare(left.createdAt)
+        || right.secretId.localeCompare(left.secretId)
+      ))[0]
     return secret ? clone(secret) : null
   }
 
@@ -2096,34 +2121,49 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (!this.orgs.has(orgId)) throw new Error(`Unknown org ${orgId}.`)
     return Array.from(this.byokSecrets.values())
       .filter((secret) => secret.orgId === orgId)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.providerId.localeCompare(right.providerId))
+      .sort((left, right) => (
+        right.updatedAt.localeCompare(left.updatedAt)
+        || right.createdAt.localeCompare(left.createdAt)
+        || left.providerId.localeCompare(right.providerId)
+        || right.secretId.localeCompare(left.secretId)
+      ))
       .map((secret) => clone(secret))
   }
 
   disableByokSecret(input: DisableByokSecretInput): ByokSecretRecord | null {
     const providerId = normalizeByokProviderId(input.providerId)
-    const existing = input.secretId
-      ? this.byokSecrets.get(input.secretId)
-      : Array.from(this.byokSecrets.values()).find((secret) => (
-        secret.orgId === input.orgId
-        && secret.providerId === providerId
-        && secret.status === 'active'
-      ))
-    if (!existing || existing.orgId !== input.orgId || existing.providerId !== providerId) return null
-    existing.status = 'disabled'
-    existing.updatedAt = nowIso(input.disabledAt)
-    this.recordAuditEvent({
-      orgId: existing.orgId,
-      accountId: input.actor?.accountId || existing.createdByAccountId,
-      actorType: input.actor?.actorType || 'system',
-      actorId: input.actor?.actorId || null,
-      eventType: 'byok_secret.disabled',
-      targetType: 'byok_secret',
-      targetId: existing.secretId,
-      metadata: { providerId: existing.providerId, status: existing.status, last4: existing.last4, keyFingerprint: existing.keyFingerprint },
-      createdAt: input.disabledAt,
-    })
-    return clone(existing)
+    const selected = input.secretId
+      ? [this.byokSecrets.get(input.secretId)].filter((secret): secret is ByokSecretRecord => Boolean(secret))
+      : Array.from(this.byokSecrets.values())
+        .filter((secret) => (
+          secret.orgId === input.orgId
+          && secret.providerId === providerId
+          && secret.status !== 'disabled'
+        ))
+        .sort((left, right) => (
+          right.updatedAt.localeCompare(left.updatedAt)
+          || right.createdAt.localeCompare(left.createdAt)
+          || right.secretId.localeCompare(left.secretId)
+        ))
+    const matching = selected.filter((secret) => secret.orgId === input.orgId && secret.providerId === providerId && secret.status !== 'disabled')
+    if (matching.length === 0) return null
+    const disabledAt = nowIso(input.disabledAt)
+    for (const secret of matching) {
+      secret.status = 'disabled'
+      secret.updatedAt = disabledAt
+      this.recordAuditEvent({
+        orgId: secret.orgId,
+        accountId: input.actor?.accountId || secret.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'byok_secret.disabled',
+        targetType: 'byok_secret',
+        targetId: secret.secretId,
+        metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
+        createdAt: input.disabledAt,
+      })
+    }
+    return clone(matching[0])
   }
 
   recordByokSecretValidation(input: RecordByokSecretValidationInput): ByokSecretRecord | null {
@@ -2138,6 +2178,30 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (!existing || existing.orgId !== input.orgId || existing.providerId !== providerId) return null
     existing.lastValidatedAt = nowIso(input.validatedAt)
     existing.validationError = input.validationError || null
+    const priorActive = input.status === 'active'
+      ? Array.from(this.byokSecrets.values()).find((candidate) => (
+        candidate.secretId !== existing.secretId
+        && candidate.orgId === existing.orgId
+        && candidate.providerId === existing.providerId
+        && candidate.status === 'active'
+      )) || null
+      : null
+    if (input.status === 'active') {
+      if (!existing.rotatedFromSecretId && priorActive) {
+        existing.rotatedFromSecretId = priorActive.secretId
+      }
+      for (const candidate of this.byokSecrets.values()) {
+        if (
+          candidate.secretId !== existing.secretId
+          && candidate.orgId === existing.orgId
+          && candidate.providerId === existing.providerId
+          && candidate.status === 'active'
+        ) {
+          candidate.status = 'disabled'
+          candidate.updatedAt = existing.lastValidatedAt
+        }
+      }
+    }
     if (input.status) existing.status = input.status
     existing.updatedAt = existing.lastValidatedAt
     this.recordAuditEvent({
@@ -2157,6 +2221,25 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       },
       createdAt: input.validatedAt,
     })
+    if (input.status === 'active' && (priorActive || existing.rotatedFromSecretId)) {
+      this.recordAuditEvent({
+        orgId: existing.orgId,
+        accountId: input.actor?.accountId || existing.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'byok_secret.rotated',
+        targetType: 'byok_secret',
+        targetId: existing.secretId,
+        metadata: {
+          providerId: existing.providerId,
+          status: existing.status,
+          last4: existing.last4,
+          keyFingerprint: existing.keyFingerprint,
+          rotatedFromSecretId: existing.rotatedFromSecretId || priorActive?.secretId || null,
+        },
+        createdAt: input.validatedAt,
+      })
+    }
     return clone(existing)
   }
 
@@ -2225,6 +2308,22 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
     const existing = this.channelBindings.get(input.bindingId)
     if (existing) return clone(existing)
+    const bindingLimit = input.quota?.maxGatewayChannelBindingsPerOrg
+    if (bindingLimit && bindingLimit > 0) {
+      const activeBindings = Array.from(this.channelBindings.values())
+        .filter((binding) => binding.orgId === input.orgId && binding.status !== 'disabled')
+        .length
+      if (activeBindings >= bindingLimit) {
+        quotaExceeded({
+          message: 'Gateway channel binding quota exceeded.',
+          policyCode: input.quota?.policyCode || 'quota.gateway_channel_bindings_exceeded',
+          retryAfterMs: 60_000,
+          limit: bindingLimit,
+          used: activeBindings,
+          resetAt: new Date(Date.now() + 60_000).toISOString(),
+        })
+      }
+    }
     const now = nowIso(input.createdAt)
     const record: ChannelBindingRecord = {
       bindingId: normalizeText(input.bindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
@@ -2976,6 +3075,15 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     session.record.status = 'running'
     session.record.updatedAt = now.toISOString()
     return clone(lease)
+  }
+
+  releaseSessionLease(lease: WorkerLeaseRecord, now = new Date()): boolean {
+    const session = this.requireSession(lease.tenantId, lease.sessionId)
+    if (!session.lease || session.lease.leaseToken !== lease.leaseToken) return false
+    session.lease = null
+    session.record.status = 'idle'
+    session.record.updatedAt = now.toISOString()
+    return true
   }
 
   renewSessionLease(lease: WorkerLeaseRecord, now = new Date(), ttlMs = 30_000): WorkerLeaseRecord {

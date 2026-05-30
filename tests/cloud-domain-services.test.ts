@@ -111,6 +111,10 @@ test('cloud domain services expose testable seams without an HTTP server', async
       calls.push('byok.validate')
       return null
     },
+    async overrideByokSecretValidation() {
+      calls.push('byok.override')
+      return null
+    },
     async disableByokSecret() {
       calls.push('byok.disable')
       return null

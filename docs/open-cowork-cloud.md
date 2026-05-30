@@ -625,7 +625,7 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN` | Internal-only token for operational endpoints such as scheduler tick probes. Keep it in a platform secret store. |
 | `OPEN_COWORK_CLOUD_INTERNAL_TOKEN_REF` | Optional env secret ref for the internal operational token. |
 | `OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH` | OIDC callback path; defaults to `/auth/callback`. |
-| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `closed`, `invite`, `domain`, or `open`. `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `closed` allows only existing active memberships. |
+| `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
 | `OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP` | Explicitly allows first-login OIDC org membership creation. Keep disabled for invite-only managed deployments. |
@@ -636,6 +636,23 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` | Optional OpenTelemetry OTLP HTTP base endpoint; exports traces to `/v1/traces` and metrics to `/v1/metrics`. |
 | `OPEN_COWORK_CLOUD_OTLP_HEADERS` | Optional JSON object of OTLP HTTP headers, stored as a secret when it contains collector credentials. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
+
+Managed billing variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `OPEN_COWORK_CLOUD_BILLING_ENABLED` | Enables provider-neutral billing enforcement. Leave `false` for self-host OSS deployments. |
+| `OPEN_COWORK_CLOUD_BILLING_PROVIDER` | `none`, `stub`, or `stripe`. Public hosted deployments should not use `none`. |
+| `OPEN_COWORK_CLOUD_BILLING_DEFAULT_PLAN` | Default plan key used for checkout and provider webhook mapping. |
+| `OPEN_COWORK_CLOUD_STRIPE_API_KEY` / `OPEN_COWORK_CLOUD_STRIPE_API_KEY_REF` | Stripe API credential or env secret ref for checkout/portal calls. |
+| `OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET` / `OPEN_COWORK_CLOUD_STRIPE_WEBHOOK_SECRET_REF` | Stripe webhook signing secret. Required for Stripe webhook handling. |
+| `OPEN_COWORK_CLOUD_STRIPE_PRICE_ID` | Default Stripe price id for the default plan. |
+| `OPEN_COWORK_CLOUD_STRIPE_SUCCESS_URL` / `OPEN_COWORK_CLOUD_STRIPE_CANCEL_URL` / `OPEN_COWORK_CLOUD_STRIPE_PORTAL_RETURN_URL` | Public URLs used by Stripe hosted checkout and portal flows. |
+
+BYOK provider keys are never supplied through environment variables. Users add
+them through `/api/byok`; records remain `pending_validation` until a provider
+validator passes, or an org admin uses the audited override endpoint with a
+redacted reason.
 
 Gateway variables:
 
@@ -677,7 +694,9 @@ to `0` to disable that quota for self-hosted/private installs.
 | `OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG` | Maximum non-closed cloud sessions per org. |
 | `OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG` | Maximum active worker leases per org. |
 | `OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR` | Per-org prompt enqueue quota. |
+| `OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR` | Per-org worker-minute quota used to block new execution after hourly usage is exhausted. |
 | `OPEN_COWORK_CLOUD_MAX_GATEWAY_DELIVERIES_PER_HOUR` | Per-org gateway delivery claim quota. |
+| `OPEN_COWORK_CLOUD_MAX_GATEWAY_CHANNEL_BINDINGS_PER_ORG` | Maximum active gateway channel bindings per org. |
 | `OPEN_COWORK_CLOUD_MAX_ARTIFACT_BYTES_PER_DAY` | Per-org artifact upload byte quota. |
 | `OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_ENABLED` | Enables HTTP request rate limiting. |
 | `OPEN_COWORK_CLOUD_HTTP_RATE_LIMIT_WINDOW_MS` | HTTP rate-limit window. |

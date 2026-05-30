@@ -97,11 +97,6 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
   const defaultProviderId = appConfig.providers.defaultProvider
   const providerEntries: Record<string, ProviderConfig> = {}
   const metadata = await byokSecrets.listMetadata(context.tenantId)
-  const activeProviderIds = new Set(
-    metadata
-      .filter((secret) => secret.status === 'active')
-      .map((secret) => secret.providerId),
-  )
 
   for (const [providerId, descriptor] of Object.entries(appConfig.providers.descriptors || {})) {
     const policyVerdict = await resolveProviderPolicy({
@@ -115,7 +110,10 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
       defaultProviderId,
       credentials: descriptor.credentials,
     })
-    const hasActiveSecret = activeProviderIds.has(providerId)
+    const hasConfiguredSecret = metadata.some((secret) => (
+      secret.providerId === providerId
+      && secret.status !== 'disabled'
+    ))
     if (!policyVerdict.allowed) {
       if (providerId === defaultProviderId || shouldRequire) {
         throw new CloudByokRuntimeConfigError(
@@ -124,7 +122,7 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
           policyVerdict.reason || `Provider "${providerId}" is not available for cloud BYOK execution.`,
         )
       }
-      if (hasActiveSecret) {
+      if (hasConfiguredSecret) {
         log(
           'runtime',
           `cloud-byok skipped provider=${providerId} tenant=${context.tenantId} session=${context.sessionId} reason=${policyVerdict.code}`,
@@ -132,7 +130,7 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
       }
       continue
     }
-    if (!shouldRequire && !hasActiveSecret) continue
+    if (!shouldRequire && !hasConfiguredSecret) continue
 
     const credential = providerCredentialField(descriptor.credentials)
     if (!credential) continue
@@ -145,6 +143,9 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      if (!shouldRequire && /No active BYOK secret|must be validated/i.test(message)) {
+        continue
+      }
       const code = /kms/i.test(message) ? 'kms_not_supported' : 'missing_required_byok'
       throw new CloudByokRuntimeConfigError(
         providerId,

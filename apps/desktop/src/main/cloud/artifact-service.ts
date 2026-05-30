@@ -148,6 +148,7 @@ export class CloudArtifactService {
     if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const object = await this.objectStore.getObject(artifact.key)
     if (!object) throw new CloudServiceError(404, 'Cloud artifact object was not found.')
+    await this.sessionService.recordArtifactDownloaded(principal, sessionId, artifactId, object.body.byteLength)
     return {
       ...artifact,
       contentType: object.contentType || artifact.contentType,

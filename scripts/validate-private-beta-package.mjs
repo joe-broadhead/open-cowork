@@ -148,7 +148,9 @@ for (const plan of plans.plans) {
   assertPositiveInteger(plan.entitlements?.maxConcurrentSessionsPerOrg, `${plan.planKey}.maxConcurrentSessionsPerOrg`)
   assertPositiveInteger(plan.entitlements?.maxActiveWorkersPerOrg, `${plan.planKey}.maxActiveWorkersPerOrg`)
   assertPositiveInteger(plan.entitlements?.maxPromptsPerHour, `${plan.planKey}.maxPromptsPerHour`)
+  assertPositiveInteger(plan.entitlements?.maxWorkerMinutesPerHour, `${plan.planKey}.maxWorkerMinutesPerHour`)
   assertPositiveInteger(plan.entitlements?.maxGatewayDeliveriesPerHour, `${plan.planKey}.maxGatewayDeliveriesPerHour`)
+  assertPositiveInteger(plan.entitlements?.maxGatewayChannelBindingsPerOrg, `${plan.planKey}.maxGatewayChannelBindingsPerOrg`)
   assertPositiveInteger(plan.entitlements?.maxArtifactBytesPerDay, `${plan.planKey}.maxArtifactBytesPerDay`)
   if (plan.entitlements?.allowWorkers !== true || plan.entitlements?.allowPrompts !== true) {
     throw new Error(`${plan.planKey} must allow private beta execution`)

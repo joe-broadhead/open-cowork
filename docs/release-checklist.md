@@ -20,6 +20,7 @@ Reference workflows in the repository root:
 - [ ] `pnpm perf:check`
 - [ ] `pnpm deploy:launch:validate`
 - [ ] `pnpm deploy:private-beta:validate`
+- [ ] `pnpm ops:validate`
 - [ ] perf baseline environment is intentional; refresh
       the environment-specific `benchmarks/perf-baseline.*.json` on the
       target CI runner with `pnpm perf:baseline` after Node, runner OS,

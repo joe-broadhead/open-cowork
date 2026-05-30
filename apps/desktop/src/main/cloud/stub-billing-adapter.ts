@@ -63,9 +63,10 @@ export function createStubBillingAdapter(config: CloudBillingConfig): BillingAda
         }
       }
       const planKey = readString(subscription.planKey) || config.defaultPlanKey
+      const eventId = readString(body.id) || `stub_event_${orgId}_${planKey}`
       return {
         providerId: 'stub',
-        eventId: readString(body.id) || `stub_event_${orgId}_${planKey}`,
+        eventId,
         eventType: readString(body.type) || 'customer.subscription.updated',
         subscription: {
           orgId,
@@ -77,6 +78,7 @@ export function createStubBillingAdapter(config: CloudBillingConfig): BillingAda
           seats: Number(subscription.seats) || 1,
           entitlements: planEntitlements(config, planKey),
           metadata: {
+            eventId,
             source: 'stub_webhook',
           },
         },

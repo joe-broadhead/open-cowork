@@ -8,6 +8,7 @@ const boundaryDoc = readFileSync(join(root, 'docs/opencode-sdk-v2-boundary.md'),
 
 const ignoredDirectories = new Set([
   '.git',
+  '.open-cowork-test',
   'coverage',
   'dist',
   'node_modules',
@@ -104,7 +105,7 @@ test('only the desktop package declares OpenCode runtime dependencies', () => {
 
 function sourceFiles(directory: string): string[] {
   const files: string[] = []
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  for (const entry of safeReadDirectory(directory)) {
     if (ignoredDirectories.has(entry.name)) continue
     const path = join(directory, entry.name)
     if (entry.isDirectory()) files.push(...sourceFiles(path))
@@ -115,13 +116,22 @@ function sourceFiles(directory: string): string[] {
 
 function packageManifests(directory: string): string[] {
   const manifests: string[] = []
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  for (const entry of safeReadDirectory(directory)) {
     if (ignoredDirectories.has(entry.name)) continue
     const path = join(directory, entry.name)
     if (entry.isDirectory()) manifests.push(...packageManifests(path))
     else if (entry.isFile() && entry.name === 'package.json') manifests.push(path)
   }
   return manifests
+}
+
+function safeReadDirectory(directory: string) {
+  try {
+    return readdirSync(directory, { withFileTypes: true })
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return []
+    throw error
+  }
 }
 
 function sourceExtension(path: string) {

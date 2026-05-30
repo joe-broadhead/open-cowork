@@ -241,6 +241,9 @@ jobs:
       - name: Run private beta launch package validator
         run: pnpm deploy:private-beta:validate
 
+      - name: Run operations readiness validator
+        run: pnpm ops:validate
+
   # Run the desktop smoke suite and package the app on macOS so
   # platform-specific regressions (IPC, renderer boot, native modules,
   # packaging hooks) surface on every PR instead of only when we cut a

@@ -5,7 +5,7 @@ import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
-import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
+import { createByokSecretStore, type ByokSecretStoreOptions } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import {
@@ -104,6 +104,7 @@ function createFixture(options: {
     billing?: CloudBillingConfig | null
     billingAdapter?: BillingAdapter | null
     identityPolicy?: CloudIdentityPolicy
+    byokSecretStoreOptions?: Omit<ByokSecretStoreOptions, 'ids'>
   } = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
@@ -112,6 +113,7 @@ function createFixture(options: {
   let nextId = 0
   const byokSecrets = createByokSecretStore(store, createEnvelopeSecretAdapter('cloud-http-test-byok-key'), {
     ids: { randomUUID: () => `byok-${nextId += 1}` },
+    ...options.byokSecretStoreOptions,
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
@@ -531,6 +533,93 @@ test('cloud HTTP server enforces prompt quotas before processing commands and ex
   }
 })
 
+test('cloud HTTP server blocks worker execution when worker-minute quota is exhausted', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxWorkerMinutesPerHour: 1,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const now = new Date()
+    fixture.store.consumeUsageQuota({
+      orgId: 'tenant-1',
+      quotaKey: 'worker_minutes:hour',
+      quantity: 1,
+      limit: 1,
+      windowMs: 60 * 60 * 1000,
+      now,
+      policyCode: 'quota.worker_minutes_per_hour_exceeded',
+    })
+
+    const prompt = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'do not execute' }),
+    })
+    assert.equal(prompt.status, 202)
+    const body = await readJson(prompt)
+    assert.equal(body.processed, 0)
+    assert.equal(fixture.runtime.prompts.length, 0)
+
+    const summary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
+    const quotas = asArray(summary.quotas).map(asRecord)
+    const workerMinutes = quotas.find((quota) => quota.quotaKey === 'worker_minutes:hour')
+    assert.equal(workerMinutes?.limit, 1)
+    assert.equal(workerMinutes?.used, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server saturates worker-minute quota when a command crosses the limit', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxWorkerMinutesPerHour: 10,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  await fixture.server.listen()
+  try {
+    fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+    fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+    const now = new Date()
+    fixture.store.consumeUsageQuota({
+      orgId: 'tenant-1',
+      quotaKey: 'worker_minutes:hour',
+      quantity: 9,
+      limit: 10,
+      windowMs: 60 * 60 * 1000,
+      now,
+      policyCode: 'quota.worker_minutes_per_hour_exceeded',
+    })
+
+    await fixture.service.recordWorkerMinutes({
+      tenantId: 'tenant-1',
+      sessionId: 'session-crossing',
+      workerId: 'worker-a',
+      elapsedMs: 2 * 60_000,
+    })
+
+    const counters = await fixture.store.listUsageQuotaCounters('tenant-1')
+    const workerMinutes = counters.find((counter) => counter.quotaKey === 'worker_minutes:hour')
+    assert.equal(workerMinutes?.quantity, 10)
+    await assert.rejects(
+      () => fixture.service.assertWorkerExecutionAllowed('tenant-1'),
+      /Cloud worker minute quota exceeded/,
+    )
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server blocks session quotas before eager runtime creation', async () => {
   const fixture = createFixture({
     abuse: testAbuseConfig({
@@ -620,6 +709,58 @@ test('cloud HTTP server auth backoff applies to the source when bearer tokens ro
   }
 })
 
+test('cloud HTTP server blocks excess gateway channel bindings before persistence', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxGatewayChannelBindingsPerOrg: 1,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const agentResponse = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'agent-quota',
+        name: 'Quota agent',
+        profileName: 'full',
+      }),
+    })
+    assert.equal(agentResponse.status, 201)
+
+    const firstBinding = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'binding-quota-1',
+        agentId: 'agent-quota',
+        provider: 'telegram',
+        displayName: 'Telegram',
+      }),
+    })
+    assert.equal(firstBinding.status, 201)
+
+    const secondBinding = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'binding-quota-2',
+        agentId: 'agent-quota',
+        provider: 'slack',
+        displayName: 'Slack',
+      }),
+    })
+    assert.equal(secondBinding.status, 429)
+    const body = await readJson(secondBinding)
+    assert.equal(asRecord(body.verdict).policyCode, 'quota.gateway_channel_bindings_exceeded')
+    const listed = await readJson(await fetch(`${baseUrl}/api/channels/bindings`))
+    assert.equal(asArray(listed.bindings).length, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server blocks artifact uploads that exceed daily byte quota', async () => {
   const fixture = createFixture({
     abuse: testAbuseConfig({
@@ -658,6 +799,9 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
   const rawFirst = 'credential-http-first-1234567890'
   const rawSecond = 'credential-http-second-abcdefghi'
   const fixture = createFixture({
+    byokSecretStoreOptions: {
+      validators: { anthropic: () => true },
+    },
     auth: () => ({
       tenantId: 'tenant-1',
       orgId: 'tenant-1',
@@ -680,7 +824,7 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     const created = await readJson(createResponse)
     const createdSecret = asRecord(created.secret)
     assert.equal(createdSecret.providerId, 'anthropic')
-    assert.equal(createdSecret.status, 'active')
+    assert.equal(createdSecret.status, 'pending_validation')
     assert.equal(createdSecret.credentialKind, 'plaintext')
     assert.equal(createdSecret.last4, '7890')
     assert.equal(JSON.stringify(created).includes(rawFirst), false)
@@ -710,8 +854,13 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     })
     assert.equal(rotateResponse.status, 201)
     const rotated = await readJson(rotateResponse)
+    assert.equal(asRecord(rotated.secret).status, 'pending_validation')
     assert.equal(asRecord(rotated.secret).last4, 'fghi')
     assert.equal(JSON.stringify(rotated).includes(rawSecond), false)
+
+    const validateRotated = await fetch(`${baseUrl}/api/byok/anthropic/validate`, { method: 'POST' })
+    assert.equal(validateRotated.status, 200)
+    assert.equal(asRecord((await readJson(validateRotated)).secret).status, 'active')
 
     const records = await fixture.store.listByokSecrets('tenant-1')
     assert.equal(records.length, 2)
@@ -726,6 +875,7 @@ test('cloud HTTP server exposes metadata-only BYOK APIs with rotation, disable, 
     assert.equal(deleted.disabled, true)
     assert.equal(asRecord(deleted.secret).status, 'disabled')
     assert.equal(await fixture.store.getActiveByokSecret('tenant-1', 'anthropic'), null)
+    assert.equal((await fixture.store.listByokSecrets('tenant-1')).filter((record) => record.status !== 'disabled').length, 0)
 
     const provider = await readJson(await fetch(`${baseUrl}/api/byok/anthropic`))
     assert.equal(asRecord(provider.secret).status, 'disabled')
@@ -787,6 +937,52 @@ test('cloud HTTP BYOK APIs enforce provider availability and org entitlement pol
   }
 })
 
+test('cloud HTTP BYOK override activates an unvalidated provider with audited reason', async () => {
+  const rawKey = 'credential-http-override-1234567890'
+  const fixture = createFixture({
+    auth: () => ({
+      tenantId: 'tenant-1',
+      orgId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      userId: 'owner-1',
+      accountId: 'owner-1',
+      email: 'owner@example.test',
+      role: 'owner',
+      authSource: 'user',
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/byok/custom-provider`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: rawKey }),
+    }))
+    assert.equal(asRecord(created.secret).status, 'pending_validation')
+
+    const validated = await readJson(await fetch(`${baseUrl}/api/byok/custom-provider/validate`, { method: 'POST' }))
+    assert.equal(asRecord(validated.secret).status, 'unsupported')
+    assert.equal(validated.validated, false)
+
+    const override = await fetch(`${baseUrl}/api/byok/custom-provider/override`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: `manual smoke ${rawKey}` }),
+    })
+    assert.equal(override.status, 200)
+    const overridden = await readJson(override)
+    assert.equal(overridden.overridden, true)
+    assert.equal(asRecord(overridden.secret).status, 'active')
+    assert.equal(JSON.stringify(overridden).includes(rawKey), false)
+
+    const auditPayload = JSON.stringify(await fixture.store.listAuditEvents('tenant-1'))
+    assert.match(auditPayload, /byok_secret.validation_override/)
+    assert.equal(auditPayload.includes(rawKey), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions with 402', async () => {
   const billing = testBillingConfig()
   const fixture = createFixture({
@@ -830,6 +1026,41 @@ test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions
     assert.equal(createdResponse.status, 201)
     const sessionId = String(asRecord((await readJson(createdResponse)).session).sessionId)
 
+    const agentResponse = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'billing-agent',
+        name: 'Billing agent',
+        profileName: 'full',
+      }),
+    })
+    assert.equal(agentResponse.status, 201)
+    const bindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'billing-binding',
+        agentId: 'billing-agent',
+        provider: 'telegram',
+        displayName: 'Billing Telegram',
+      }),
+    })
+    assert.equal(bindingResponse.status, 201)
+    const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalUserId: 'billing-user',
+        accountId: 'owner-1',
+        role: 'member',
+        status: 'active',
+      }),
+    })
+    assert.equal(identityResponse.status, 200)
+    const identity = asRecord((await readJson(identityResponse)).identity)
+
     await fixture.store.upsertBillingSubscription({
       orgId: 'tenant-1',
       providerId: 'stub',
@@ -856,6 +1087,46 @@ test('cloud HTTP billing routes use stub adapter and gate canceled subscriptions
     assert.equal(blockedPrompt.status, 402)
     const promptBody = await readJson(blockedPrompt)
     assert.equal(asRecord(promptBody.verdict).policyCode, 'billing.subscription_inactive')
+
+    const blockedArtifact = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'blocked.txt',
+        contentType: 'text/plain',
+        dataBase64: Buffer.from('blocked').toString('base64'),
+      }),
+    })
+    assert.equal(blockedArtifact.status, 402)
+    assert.equal(asRecord((await readJson(blockedArtifact)).verdict).policyCode, 'billing.subscription_inactive')
+
+    const blockedBinding = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'billing-binding-blocked',
+        agentId: 'billing-agent',
+        provider: 'slack',
+        displayName: 'Blocked Slack',
+      }),
+    })
+    assert.equal(blockedBinding.status, 402)
+    assert.equal(asRecord((await readJson(blockedBinding)).verdict).policyCode, 'billing.subscription_inactive')
+
+    const blockedChannelBind = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: 'billing-binding',
+        provider: 'telegram',
+        externalChatId: 'billing-chat',
+        externalThreadId: 'billing-thread',
+        title: 'Billing blocked thread',
+      }),
+    })
+    assert.equal(blockedChannelBind.status, 402)
+    assert.equal(asRecord((await readJson(blockedChannelBind)).verdict).policyCode, 'billing.subscription_inactive')
 
     await fixture.store.enqueueSessionCommand({
       commandId: 'queued-before-cancel',
@@ -915,7 +1186,12 @@ test('cloud billing webhook updates subscriptions idempotently with replay prote
     })
     assert.equal(replay.status, 200)
     assert.equal((await readJson(replay)).replayed, true)
-    assert.equal((await fixture.store.listAuditEvents('tenant-1')).filter((event) => event.eventType === 'billing.webhook.processed').length, 1)
+    const audit = await fixture.store.listAuditEvents('tenant-1')
+    assert.equal(audit.filter((event) => event.eventType === 'billing.webhook.processed').length, 1)
+    assert.equal(
+      audit.filter((event) => event.eventType === 'billing.subscription.created' || event.eventType === 'billing.subscription.updated').length,
+      1,
+    )
   } finally {
     await fixture.server.close()
   }
@@ -990,7 +1266,7 @@ test('cloud HTTP BYOK KMS refs require explicit deployer policy and validate wit
     })
     assert.equal(createResponse.status, 201)
     const created = await readJson(createResponse)
-    assert.equal(asRecord(created.secret).status, 'active')
+    assert.equal(asRecord(created.secret).status, 'pending_validation')
     assert.equal(asRecord(created.secret).credentialKind, 'kms_ref')
     assert.equal(JSON.stringify(created).includes('kmsRef'), false)
 
@@ -998,8 +1274,8 @@ test('cloud HTTP BYOK KMS refs require explicit deployer policy and validate wit
     assert.equal(validateResponse.status, 200)
     const validated = await readJson(validateResponse)
     assert.equal(validated.validated, false)
-    assert.equal(asRecord(validated.secret).status, 'active')
-    assert.equal(asRecord(validated.secret).lastValidatedAt, null)
+    assert.equal(asRecord(validated.secret).status, 'pending_validation')
+    assert.equal(typeof asRecord(validated.secret).lastValidatedAt, 'string')
     assert.equal(JSON.stringify(validated).includes('kmsRef'), false)
   } finally {
     await fixture.server.close()
@@ -1087,8 +1363,8 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
   const issued = store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
-    name: 'Gateway token',
-    scopes: ['gateway'],
+    name: 'Desktop token',
+    scopes: ['desktop'],
   })
 
   const runtime = new FakeRuntimeAdapter()
@@ -1113,6 +1389,83 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
       headers: { authorization: `Bearer ${issued.plaintext}` },
     })
     assert.equal(rejected.status, 401)
+  } finally {
+    await server.close()
+  }
+})
+
+test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const account = store.createAccount({
+    accountId: 'account-1',
+    idpSubject: 'subject-1',
+    email: 'member@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-1', userId: account.accountId, email: account.email })
+  store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Gateway token',
+    scopes: ['gateway'],
+  })
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const service = new CloudSessionService(store, new FakeRuntimeAdapter(), policy)
+  const server = createCloudHttpServer({
+    service,
+    policy,
+    auth: createApiTokenCloudAuthResolver(store),
+    autoProcessCommands: true,
+  })
+  const baseUrl = await server.listen()
+  try {
+    const workspace = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.equal(workspace.status, 403)
+
+    const channelDeliveries = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.notEqual(channelDeliveries.status, 403)
+
+    store.createSession({
+      tenantId: 'tenant-1',
+      userId: account.accountId,
+      sessionId: 'gateway-readable-session',
+      opencodeSessionId: 'gateway-readable-opencode-session',
+      profileName: 'full',
+    })
+    const session = await fetch(`${baseUrl}/api/sessions/gateway-readable-session`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.equal(session.status, 200)
+
+    const sessionList = await fetch(`${baseUrl}/api/sessions`, {
+      headers: { authorization: `Bearer ${issued.plaintext}` },
+    })
+    assert.equal(sessionList.status, 403)
+
+    const createSession = await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${issued.plaintext}`, 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(createSession.status, 403)
+
+    const prompt = await fetch(`${baseUrl}/api/sessions/gateway-readable-session/prompt`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${issued.plaintext}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'blocked' }),
+    })
+    assert.equal(prompt.status, 403)
   } finally {
     await server.close()
   }
@@ -3173,16 +3526,17 @@ test('cloud HTTP rejects workflow APIs when the cloud profile disables them', as
 })
 
 test('cloud HTTP artifacts use object storage and durable artifact events', async () => {
-  const fixture = createFixture()
+  const fixture = createFixture({ abuse: testAbuseConfig() })
   const baseUrl = await fixture.server.listen()
   try {
-    await fetch(`${baseUrl}/api/sessions`, {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
-    })
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
 
-    const uploadedResponse = await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts`, {
+    const uploadedResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -3197,14 +3551,18 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
     assert.equal(uploaded.filename, 'report.txt')
     assert.equal(uploaded.size, 'cloud artifact'.length)
 
-    const listed = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts`))
+    const listed = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
     const artifacts = asArray(listed.artifacts)
     assert.equal(artifacts.length, 1)
     assert.equal(asRecord(artifacts[0]).artifactId, uploaded.artifactId)
 
-    const read = await readJson(await fetch(`${baseUrl}/api/sessions/oc-session-1/artifacts/${uploaded.artifactId}`))
+    const read = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}`))
     const artifact = asRecord(read.artifact)
     assert.equal(Buffer.from(String(artifact.dataBase64), 'base64').toString('utf8'), 'cloud artifact')
+    const usage = await readJson(await fetch(`${baseUrl}/api/usage/events`))
+    const usageEvents = asArray(usage.events).map(asRecord)
+    const downloaded = usageEvents.find((event) => event.eventType === 'artifact.downloaded')
+    assert.equal(downloaded?.quantity, 'cloud artifact'.length)
 
     await assert.rejects(() => fixture.artifacts.readSessionArtifact({
       tenantId: 'tenant-2',
@@ -3215,7 +3573,7 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
       email: 'user2@example.test',
       role: 'owner' as const,
       authSource: 'user' as const,
-    }, 'oc-session-1', String(uploaded.artifactId)), /Cloud session was not found|Unknown session|Unknown tenant/)
+    }, sessionId, String(uploaded.artifactId)), /Cloud session was not found|Unknown session|Unknown tenant/)
   } finally {
     await fixture.server.close()
   }

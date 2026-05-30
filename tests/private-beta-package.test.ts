@@ -78,6 +78,8 @@ test('private beta plan placeholders do not commit prices or token resale assump
     assert.equal(plan.entitlements.allowPrompts, true)
     assert.equal(plan.entitlements.allowWorkers, true)
     assert.equal(typeof plan.entitlements.maxPromptsPerHour, 'number')
+    assert.equal(typeof plan.entitlements.maxWorkerMinutesPerHour, 'number')
+    assert.equal(typeof plan.entitlements.maxGatewayChannelBindingsPerOrg, 'number')
     if (plan.billingMode === 'manual') {
       assert.match(plan.notes, /No token resale/)
     }

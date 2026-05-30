@@ -1009,12 +1009,23 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
        JOIN cloud_memberships m ON m.org_id = o.org_id
        JOIN cloud_accounts a ON a.account_id = m.account_id
        WHERE (o.tenant_id = $1 OR o.org_id = $1)
-         AND ($2::text IS NULL OR a.account_id = $2)
-         AND ($3::text IS NULL OR a.idp_subject = $3)
-         AND ($4::text IS NULL OR lower(a.email) = lower($4))
-       ORDER BY m.updated_at DESC
+         AND (
+           ($2::text IS NOT NULL AND a.account_id = $2)
+           OR ($3::text IS NOT NULL AND a.idp_subject = $3)
+           OR ($4::text IS NOT NULL AND lower(a.email) = lower($4))
+           OR ($5::text IS NOT NULL AND a.account_id = $5)
+         )
+       ORDER BY
+         CASE
+           WHEN $2::text IS NOT NULL AND a.account_id = $2 THEN 0
+           WHEN $3::text IS NOT NULL AND a.idp_subject = $3 THEN 1
+           WHEN $4::text IS NOT NULL AND lower(a.email) = lower($4) THEN 2
+           WHEN $5::text IS NOT NULL AND a.account_id = $5 THEN 3
+           ELSE 4
+         END,
+         m.updated_at DESC
        LIMIT 1`,
-      [input.tenantId, input.accountId || input.userId || null, input.idpSubject || null, input.email || null],
+      [input.tenantId, input.accountId || null, input.idpSubject || null, input.email || null, input.userId || null],
     )
     if (!row) return null
     return {
@@ -1191,6 +1202,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async upsertBillingSubscription(input: UpsertBillingSubscriptionInput) {
     await this.requireOrg(input.orgId)
     const now = nowIso(input.updatedAt)
+    const priorRow = await this.maybeOne(
+      `SELECT * FROM cloud_subscriptions WHERE org_id = $1`,
+      [input.orgId],
+    )
+    const prior = priorRow ? billingSubscriptionFromRow(priorRow) : null
     const result = await this.pool.query(
       `INSERT INTO cloud_subscriptions (
         org_id, plan_key, provider_id, provider_customer_id, provider_subscription_id,
@@ -1231,16 +1247,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       orgId: subscription.orgId,
       actorType: 'system',
       actorId: 'billing.subscription.upsert',
-      eventType: 'billing.subscription.updated',
+      eventType: prior ? 'billing.subscription.updated' : 'billing.subscription.created',
       targetType: 'billing_subscription',
       targetId: subscription.providerSubscriptionId || subscription.orgId,
       metadata: {
         providerId: subscription.providerId,
+        previousPlanKey: prior?.planKey || null,
+        previousStatus: prior?.status || null,
+        previousEntitlementsHash: prior ? stableJson(prior.entitlements) : null,
         planKey: subscription.planKey,
         status: subscription.status,
+        entitlementsHash: stableJson(subscription.entitlements),
         seats: subscription.seats,
         providerCustomerId: subscription.providerCustomerId,
         providerSubscriptionId: subscription.providerSubscriptionId,
+        providerEventId: input.metadata?.stripeEventId || input.metadata?.eventId || null,
       },
       createdAt: input.updatedAt,
     })
@@ -1378,19 +1399,23 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       if ((ciphertext && kmsRef) || (!ciphertext && !kmsRef)) {
         throw new Error('BYOK secret requires exactly one of ciphertext or kmsRef.')
       }
-      const status = input.status || 'active'
+      const status = input.status || 'pending_validation'
       const now = nowIso(input.createdAt)
-      let priorActive: ByokSecretRecord | null = null
-      if (status === 'active') {
-        const prior = await client.query(
+      const prior = status === 'active'
+        ? await client.query(
           `UPDATE cloud_byok_secrets
            SET status = 'disabled', updated_at = $3
            WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
            RETURNING *`,
           [input.orgId, providerId, now],
         )
-        priorActive = prior.rows[0] ? byokSecretFromRow(prior.rows[0]) : null
-      }
+        : await client.query(
+          `SELECT * FROM cloud_byok_secrets
+           WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
+           LIMIT 1`,
+          [input.orgId, providerId],
+        )
+      const priorActive = prior.rows[0] ? byokSecretFromRow(prior.rows[0]) : null
       const result = await client.query(
         `INSERT INTO cloud_byok_secrets (
           secret_id, org_id, provider_id, status, ciphertext, kms_ref, last4,
@@ -1419,7 +1444,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         accountId: secret.createdByAccountId,
         actorType: input.actor?.actorType || 'system',
         actorId: input.actor?.actorId || null,
-        eventType: priorActive ? 'byok_secret.rotated' : 'byok_secret.created',
+        eventType: priorActive
+          ? status === 'active'
+            ? 'byok_secret.rotated'
+            : 'byok_secret.rotation_started'
+          : 'byok_secret.created',
         targetType: 'byok_secret',
         targetId: secret.secretId,
         metadata: {
@@ -1450,6 +1479,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const row = await this.maybeOne(
       `SELECT * FROM cloud_byok_secrets
        WHERE org_id = $1 AND provider_id = $2 AND status = 'active'
+       ORDER BY updated_at DESC, created_at DESC, secret_id DESC
        LIMIT 1`,
       [orgId, normalizeByokProviderId(providerId)],
     )
@@ -1460,7 +1490,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const result = await this.pool.query(
       `SELECT * FROM cloud_byok_secrets
        WHERE org_id = $1
-       ORDER BY updated_at DESC, provider_id, secret_id`,
+       ORDER BY updated_at DESC, created_at DESC, provider_id, secret_id DESC`,
       [orgId],
     )
     return result.rows.map(byokSecretFromRow)
@@ -1476,24 +1506,32 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          WHERE org_id = $1
            AND provider_id = $2
            AND ($3::text IS NULL OR secret_id = $3)
-           AND status = 'active'
+           AND status <> 'disabled'
          RETURNING *`,
         [input.orgId, providerId, input.secretId || null, now],
       )
       if (!result.rows[0]) return null
-      const secret = byokSecretFromRow(result.rows[0])
-      await this.recordAuditEventWithExecutor(client, {
-        orgId: secret.orgId,
-        accountId: input.actor?.accountId || secret.createdByAccountId,
-        actorType: input.actor?.actorType || 'system',
-        actorId: input.actor?.actorId || null,
-        eventType: 'byok_secret.disabled',
-        targetType: 'byok_secret',
-        targetId: secret.secretId,
-        metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
-        createdAt: input.disabledAt,
-      })
-      return secret
+      const secrets = result.rows
+        .map(byokSecretFromRow)
+        .sort((left, right) => (
+          right.updatedAt.localeCompare(left.updatedAt)
+          || right.createdAt.localeCompare(left.createdAt)
+          || right.secretId.localeCompare(left.secretId)
+        ))
+      for (const secret of secrets) {
+        await this.recordAuditEventWithExecutor(client, {
+          orgId: secret.orgId,
+          accountId: input.actor?.accountId || secret.createdByAccountId,
+          actorType: input.actor?.actorType || 'system',
+          actorId: input.actor?.actorId || null,
+          eventType: 'byok_secret.disabled',
+          targetType: 'byok_secret',
+          targetId: secret.secretId,
+          metadata: { providerId: secret.providerId, status: secret.status, last4: secret.last4, keyFingerprint: secret.keyFingerprint },
+          createdAt: input.disabledAt,
+        })
+      }
+      return secrets[0]
     })
   }
 
@@ -1501,18 +1539,61 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.withTransaction(async (client) => {
       const providerId = normalizeByokProviderId(input.providerId)
       const now = nowIso(input.validatedAt)
+      let priorActive: ByokSecretRecord | null = null
+      let targetSecretId = input.secretId || null
+      if (input.status === 'active') {
+        const target = await client.query(
+          `SELECT * FROM cloud_byok_secrets
+           WHERE org_id = $1
+             AND provider_id = $2
+             AND ($3::text IS NULL OR secret_id = $3)
+             AND ($3::text IS NOT NULL OR status = 'active')
+           ORDER BY updated_at DESC, created_at DESC, secret_id DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [input.orgId, providerId, targetSecretId],
+        )
+        if (!target.rows[0]) return null
+        targetSecretId = String(target.rows[0].secret_id)
+        const prior = await client.query(
+          `UPDATE cloud_byok_secrets
+           SET status = 'disabled', updated_at = $4
+           WHERE org_id = $1
+             AND provider_id = $2
+             AND secret_id <> $3
+             AND status = 'active'
+           RETURNING *`,
+          [input.orgId, providerId, targetSecretId, now],
+        )
+        priorActive = prior.rows
+          .map(byokSecretFromRow)
+          .sort((left, right) => (
+            right.updatedAt.localeCompare(left.updatedAt)
+            || right.createdAt.localeCompare(left.createdAt)
+            || right.secretId.localeCompare(left.secretId)
+          ))[0] || null
+      }
       const result = await client.query(
         `UPDATE cloud_byok_secrets
          SET status = COALESCE($4, status),
              last_validated_at = $5,
              validation_error = $6,
+             rotated_from_secret_id = COALESCE(rotated_from_secret_id, $7),
              updated_at = $5
          WHERE org_id = $1
            AND provider_id = $2
            AND ($3::text IS NULL OR secret_id = $3)
            AND ($3::text IS NOT NULL OR status = 'active')
          RETURNING *`,
-        [input.orgId, providerId, input.secretId || null, input.status || null, now, input.validationError || null],
+        [
+          input.orgId,
+          providerId,
+          targetSecretId,
+          input.status || null,
+          now,
+          input.validationError || null,
+          input.status === 'active' ? priorActive?.secretId || null : null,
+        ],
       )
       if (!result.rows[0]) return null
       const secret = byokSecretFromRow(result.rows[0])
@@ -1533,6 +1614,25 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         },
         createdAt: input.validatedAt,
       })
+      if (input.status === 'active' && (priorActive || secret.rotatedFromSecretId)) {
+        await this.recordAuditEventWithExecutor(client, {
+          orgId: secret.orgId,
+          accountId: input.actor?.accountId || secret.createdByAccountId,
+          actorType: input.actor?.actorType || 'system',
+          actorId: input.actor?.actorId || null,
+          eventType: 'byok_secret.rotated',
+          targetType: 'byok_secret',
+          targetId: secret.secretId,
+          metadata: {
+            providerId: secret.providerId,
+            status: secret.status,
+            last4: secret.last4,
+            keyFingerprint: secret.keyFingerprint,
+            rotatedFromSecretId: secret.rotatedFromSecretId || priorActive?.secretId || null,
+          },
+          createdAt: input.validatedAt,
+        })
+      }
       return secret
     })
   }
@@ -1625,6 +1725,28 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async createChannelBinding(input: CreateChannelBindingInput) {
     return this.withTransaction(async (client) => {
       const now = nowIso(input.createdAt)
+      const bindingLimit = input.quota?.maxGatewayChannelBindingsPerOrg
+      if (bindingLimit && bindingLimit > 0) {
+        await this.lockQuota(client, input.orgId, 'gateway_channel_bindings')
+        const countRow = await this.one(
+          `SELECT count(*)::int AS count
+           FROM cloud_channel_bindings
+           WHERE org_id = $1 AND status <> 'disabled'`,
+          [input.orgId],
+          client,
+        )
+        const activeBindings = numberValue(countRow.count)
+        if (activeBindings >= bindingLimit) {
+          throw new ControlPlaneQuotaExceededError({
+            message: 'Gateway channel binding quota exceeded.',
+            policyCode: input.quota?.policyCode || 'quota.gateway_channel_bindings_exceeded',
+            retryAfterMs: 60_000,
+            limit: bindingLimit,
+            used: activeBindings,
+            resetAt: new Date(Date.now() + 60_000).toISOString(),
+          })
+        }
+      }
       const result = await client.query(
         `INSERT INTO cloud_channel_bindings (
           binding_id, org_id, agent_id, provider, external_workspace_id,
@@ -2838,6 +2960,28 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         ],
       )
       return leaseFromRow(result.rows[0])
+    })
+  }
+
+  async releaseSessionLease(lease: WorkerLeaseRecord, now = new Date()) {
+    return this.withTransaction(async (client) => {
+      const result = await client.query(
+        `DELETE FROM cloud_worker_leases
+         WHERE tenant_id = $1
+           AND session_id = $2
+           AND lease_token = $3
+         RETURNING lease_token`,
+        [lease.tenantId, lease.sessionId, lease.leaseToken],
+      )
+      if (!result.rows[0]) return false
+      await client.query(
+        `UPDATE cloud_sessions
+         SET status = 'idle', updated_at = $3
+         WHERE tenant_id = $1
+           AND session_id = $2`,
+        [lease.tenantId, lease.sessionId, nowIso(now)],
+      )
+      return true
     })
   }
 

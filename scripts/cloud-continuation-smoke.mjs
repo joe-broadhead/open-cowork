@@ -818,7 +818,7 @@ async function runSmoke() {
       runId,
     })
 
-    const gatewayWorkspace = await transport(baseUrl, tokenState.tokens.gateway).getWorkspace()
+    const gatewayWorkspace = await transport(baseUrl, tokenState.tokens.web).getWorkspace()
     if (workspace.tenantId !== gatewayWorkspace.tenantId) {
       throw new Error('Web and Gateway tokens resolved to different tenant scopes.')
     }

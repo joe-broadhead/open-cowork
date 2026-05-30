@@ -688,6 +688,8 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(scriptsReadme, /pnpm deploy:gateway:smoke/)
   assert.match(scriptsReadme, /pnpm deploy:continuation:smoke/)
   assert.match(scriptsReadme, /pnpm ops:validate/)
+  const ciWorkflow = readRepoFile('.github/workflows/ci.yml')
+  assert.match(ciWorkflow, /pnpm ops:validate/)
   assert.match(validate, /docker-compose\.cloud\.yml/)
   assert.match(validate, /docker-compose\.cloud\.split\.yml/)
   assert.match(validate, /docker-compose\.cloud-gateway\.yml/)

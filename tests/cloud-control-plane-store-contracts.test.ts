@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 
 import {
+  ControlPlaneQuotaExceededError,
   InMemoryControlPlaneStore,
   type ControlPlaneStore,
 } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
@@ -53,6 +54,25 @@ function runControlPlaneDomainContracts(
       })
       const principal = await store.resolvePrincipalMembership({ tenantId, accountId })
       assert.equal(principal?.org.orgId, org.orgId)
+      const invitedEmail = `${prefix}-invitee@example.test`
+      const invitedAccount = await store.createAccount({
+        accountId: `${prefix}-invited-account`,
+        email: invitedEmail,
+      })
+      await store.upsertMembership({
+        orgId: org.orgId,
+        accountId: invitedAccount.accountId,
+        role: 'member',
+        status: 'invited',
+      })
+      const invitedPrincipal = await store.resolvePrincipalMembership({
+        tenantId,
+        accountId: `${prefix}-oidc-subject`,
+        idpSubject: `${prefix}-oidc-subject`,
+        email: invitedEmail,
+      })
+      assert.equal(invitedPrincipal?.account.accountId, invitedAccount.accountId)
+      assert.equal(invitedPrincipal?.membership.status, 'invited')
 
       await store.createSession({
         tenantId,
@@ -125,6 +145,21 @@ function runControlPlaneDomainContracts(
         externalWorkspaceId: 'workspace-1',
         displayName: 'Webhook',
       })
+      await assert.rejects(
+        Promise.resolve().then(() => store.createChannelBinding({
+          orgId: org.orgId,
+          agentId,
+          bindingId: `${prefix}-channel-binding-over-limit`,
+          provider: 'slack',
+          externalWorkspaceId: 'workspace-2',
+          displayName: 'Slack',
+          quota: {
+            maxGatewayChannelBindingsPerOrg: 1,
+            policyCode: 'quota.gateway_channel_bindings_exceeded',
+          },
+        })),
+        ControlPlaneQuotaExceededError,
+      )
       const identity = await store.upsertChannelIdentity({
         orgId: org.orgId,
         provider: 'webhook',
@@ -157,6 +192,15 @@ function runControlPlaneDomainContracts(
         keyFingerprint: `${prefix}-fingerprint`,
         createdByAccountId: accountId,
       })
+      assert.equal(byok.status, 'pending_validation')
+      assert.equal(await store.getActiveByokSecret(org.orgId, 'anthropic'), null)
+      const validatedByok = await store.recordByokSecretValidation({
+        orgId: org.orgId,
+        providerId: 'anthropic',
+        secretId: byok.secretId,
+        status: 'active',
+      })
+      assert.equal(validatedByok?.status, 'active')
       assert.equal((await store.getActiveByokSecret(org.orgId, 'anthropic'))?.secretId, byok.secretId)
 
       const subscription = await store.upsertBillingSubscription({

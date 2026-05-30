@@ -148,7 +148,14 @@ test('real Postgres cloud store persists and rotates BYOK secrets atomically', {
       last4: '1111',
       keyFingerprint: 'fingerprint-1',
     })
-    assert.equal(first.status, 'active')
+    assert.equal(first.status, 'pending_validation')
+    const activeFirst = await store.recordByokSecretValidation({
+      orgId: org.orgId,
+      providerId: 'anthropic',
+      secretId: first.secretId,
+      status: 'active',
+    })
+    assert.equal(activeFirst?.status, 'active')
     const second = await store.createByokSecret({
       secretId: `${ids.tenantId}-byok-2`,
       orgId: org.orgId,
@@ -157,8 +164,15 @@ test('real Postgres cloud store persists and rotates BYOK secrets atomically', {
       last4: '2222',
       keyFingerprint: 'fingerprint-2',
     })
-    assert.equal(second.status, 'active')
+    assert.equal(second.status, 'pending_validation')
     assert.equal(second.rotatedFromSecretId, first.secretId)
+    const activeSecond = await store.recordByokSecretValidation({
+      orgId: org.orgId,
+      providerId: 'anthropic',
+      secretId: second.secretId,
+      status: 'active',
+    })
+    assert.equal(activeSecond?.status, 'active')
     const records = await store.listByokSecrets(org.orgId)
     assert.equal(records.filter((record) => record.providerId === 'anthropic' && record.status === 'active').length, 1)
     assert.equal(records.find((record) => record.secretId === first.secretId)?.status, 'disabled')

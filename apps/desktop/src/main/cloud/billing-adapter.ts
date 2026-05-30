@@ -8,7 +8,14 @@ import type {
   UpsertBillingSubscriptionInput,
 } from './control-plane-store.ts'
 
-export type BillingAction = 'session.create' | 'prompt.enqueue' | 'worker.execute' | 'byok.provider'
+export type BillingAction =
+  | 'session.create'
+  | 'prompt.enqueue'
+  | 'worker.execute'
+  | 'byok.provider'
+  | 'artifact.upload'
+  | 'gateway.session.bind'
+  | 'channel.manage'
 
 export type BillingEntitlementVerdict = {
   allowed: boolean

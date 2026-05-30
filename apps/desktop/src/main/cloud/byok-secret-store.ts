@@ -89,6 +89,12 @@ export type ByokSecretStore = {
   setSecret(input: SetByokSecretInput): Promise<ByokSecretMetadata>
   disableSecret(input: { orgId: string, providerId: string, actor?: AuditActorInput }): Promise<ByokSecretMetadata | null>
   recordValidation(input: RecordByokValidationInput): Promise<ByokSecretMetadata | null>
+  activateWithoutValidation(input: {
+    orgId: string
+    providerId: string
+    reason: string
+    actor?: AuditActorInput
+  }): Promise<ByokSecretMetadata | null>
   validateActiveSecret(input: ValidateByokSecretInput): Promise<ByokSecretMetadata | null>
   revealActiveSecret(input: RevealByokSecretInput): Promise<string>
 }
@@ -101,6 +107,7 @@ export type ByokSecretStoreOptions = {
 
 const PROVIDER_ID_MAX_LENGTH = 64
 const VALIDATION_ERROR_MAX_LENGTH = 512
+const OVERRIDE_REASON_MAX_LENGTH = 512
 
 function normalizeProviderId(value: string) {
   const providerId = value.trim().toLowerCase()
@@ -127,19 +134,31 @@ function byokAad(orgId: string, providerId: string, secretId: string) {
   return `byok:${orgId}:${providerId}:${secretId}`
 }
 
-function redactSecretLikeText(value: string) {
-  return value
+function redactSecretLikeText(value: string, exactSecrets: readonly string[] = []) {
+  let redacted = value
+  for (const secret of exactSecrets) {
+    if (!secret) continue
+    redacted = redacted.split(secret).join('[redacted]')
+  }
+  return redacted
     .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
     .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
 }
 
-function sanitizeValidationError(value: string | null | undefined) {
+function sanitizeValidationError(value: string | null | undefined, exactSecrets: readonly string[] = []) {
   if (!value) return null
-  const sanitized = redactSecretLikeText(value.trim())
+  const sanitized = redactSecretLikeText(value.trim(), exactSecrets)
   return sanitized.length > VALIDATION_ERROR_MAX_LENGTH
     ? `${sanitized.slice(0, VALIDATION_ERROR_MAX_LENGTH - 3)}...`
     : sanitized
+}
+
+function sanitizeOverrideReason(value: string) {
+  const sanitized = sanitizeValidationError(nonEmptyText(value, 'BYOK validation override reason'))
+  return sanitized && sanitized.length > OVERRIDE_REASON_MAX_LENGTH
+    ? `${sanitized.slice(0, OVERRIDE_REASON_MAX_LENGTH - 3)}...`
+    : sanitized || 'Operator override'
 }
 
 function normalizeValidationOutcome(result: ByokProviderValidationResult): {
@@ -256,6 +275,7 @@ export function createByokSecretStore(
           last4: normalizedPlaintext.slice(-4),
           keyFingerprint: fingerprintSecret(normalizedPlaintext),
           createdByAccountId: input.createdByAccountId,
+          status: 'pending_validation',
           actor: input.actor,
         })
         return byokSecretMetadata(record)
@@ -270,6 +290,7 @@ export function createByokSecretStore(
         last4: normalizedKmsRef.slice(-4),
         keyFingerprint: fingerprintSecret(`kms:${normalizedKmsRef}`),
         createdByAccountId: input.createdByAccountId,
+        status: 'pending_validation',
         actor: input.actor,
       })
       return byokSecretMetadata(record)
@@ -296,12 +317,54 @@ export function createByokSecretStore(
       return record ? byokSecretMetadata(record) : null
     },
 
+    async activateWithoutValidation(input) {
+      const providerId = normalizeProviderId(input.providerId)
+      const secret = await store.getByokSecret(input.orgId, providerId)
+      if (!secret || secret.status === 'disabled') return null
+      const reason = sanitizeOverrideReason(input.reason)
+      const record = await store.recordByokSecretValidation({
+        orgId: input.orgId,
+        providerId,
+        secretId: secret.secretId,
+        status: 'active',
+        validationError: `Operator override: ${reason}`,
+        actor: input.actor,
+      })
+      if (record) {
+        await store.recordAuditEvent({
+          orgId: input.orgId,
+          accountId: input.actor?.accountId || secret.createdByAccountId,
+          actorType: input.actor?.actorType || 'system',
+          actorId: input.actor?.actorId || null,
+          eventType: 'byok_secret.validation_override',
+          targetType: 'byok_secret',
+          targetId: secret.secretId,
+          metadata: {
+            providerId,
+            status: 'active',
+            reason,
+            last4: secret.last4,
+            keyFingerprint: secret.keyFingerprint,
+          },
+        })
+      }
+      return record ? byokSecretMetadata(record) : null
+    },
+
     async validateActiveSecret(input) {
       const providerId = normalizeProviderId(input.providerId)
-      const secret = await store.getActiveByokSecret(input.orgId, providerId)
-      if (!secret) return null
+      const secret = await store.getByokSecret(input.orgId, providerId)
+      if (!secret || secret.status === 'disabled') return null
       if (secret.kmsRef && !input.allowKmsRef) {
-        return byokSecretMetadata(secret)
+        const record = await store.recordByokSecretValidation({
+          orgId: input.orgId,
+          providerId,
+          secretId: secret.secretId,
+          status: 'pending_validation',
+          validationError: 'KMS-backed BYOK secrets require worker-authorized validation before activation.',
+          actor: input.actor,
+        })
+        return record ? byokSecretMetadata(record) : byokSecretMetadata(secret)
       }
 
       const validator = validators[providerId]
@@ -310,15 +373,16 @@ export function createByokSecretStore(
           orgId: input.orgId,
           providerId,
           secretId: secret.secretId,
-          status: 'active',
-          validationError: null,
+          status: 'unsupported',
+          validationError: `No BYOK validator is configured for provider "${providerId}".`,
           actor: input.actor,
         })
         return record ? byokSecretMetadata(record) : null
       }
 
+      let plaintext: string | null = null
       try {
-        const plaintext = await revealSecretRecord(secret, { ...input, providerId })
+        plaintext = await revealSecretRecord(secret, { ...input, providerId })
         const outcome = normalizeValidationOutcome(
           await validator({
             orgId: input.orgId,
@@ -333,7 +397,7 @@ export function createByokSecretStore(
           providerId,
           secretId: secret.secretId,
           status: outcome.status,
-          validationError: sanitizeValidationError(outcome.validationError),
+          validationError: sanitizeValidationError(outcome.validationError, [plaintext]),
           actor: input.actor,
         })
         return record ? byokSecretMetadata(record) : null
@@ -343,7 +407,7 @@ export function createByokSecretStore(
           providerId,
           secretId: secret.secretId,
           status: 'invalid',
-          validationError: sanitizeValidationError(error instanceof Error ? error.message : String(error)),
+          validationError: sanitizeValidationError(error instanceof Error ? error.message : String(error), plaintext ? [plaintext] : []),
           actor: input.actor,
         })
         return record ? byokSecretMetadata(record) : null
@@ -354,6 +418,9 @@ export function createByokSecretStore(
       const providerId = normalizeProviderId(input.providerId)
       const secret = await store.getActiveByokSecret(input.orgId, providerId)
       if (!secret) throw new Error(`No active BYOK secret configured for provider ${providerId}.`)
+      if (!secret.lastValidatedAt) {
+        throw new Error(`BYOK secret for provider ${providerId} must be validated or explicitly operator-overridden before runtime use.`)
+      }
       return revealSecretRecord(secret, { ...input, providerId })
     },
   }

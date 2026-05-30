@@ -8,6 +8,7 @@ import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secr
 const FIRST_KEY = 'credential-sample-first-1234567890'
 const SECOND_KEY = 'credential-sample-second-abcdefghi'
 const VALIDATION_KEY = ['sk', 'validation', 'secret', '1234567890abcdef'].join('-')
+const CUSTOM_VALIDATION_KEY = 'custom-provider-key'
 
 function seededStore() {
   const store = new InMemoryControlPlaneStore()
@@ -23,6 +24,7 @@ test('BYOK secret store encrypts keys, returns metadata only, rotates active rec
   let nextId = 0
   const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
     ids: { randomUUID: () => `secret-${nextId += 1}` },
+    validators: { anthropic: () => true },
   })
 
   const first = await byok.setSecret({
@@ -33,8 +35,10 @@ test('BYOK secret store encrypts keys, returns metadata only, rotates active rec
     actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
   })
   assert.equal(first.providerId, 'anthropic')
-  assert.equal(first.status, 'active')
+  assert.equal(first.status, 'pending_validation')
   assert.equal(first.last4, '7890')
+  const validatedFirst = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
+  assert.equal(validatedFirst?.status, 'active')
   assert.equal(await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }), FIRST_KEY)
 
   const rawFirst = await store.getActiveByokSecret('tenant-1', 'anthropic')
@@ -49,8 +53,10 @@ test('BYOK secret store encrypts keys, returns metadata only, rotates active rec
     plaintext: SECOND_KEY,
     createdByAccountId: 'owner-1',
   })
-  assert.equal(second.status, 'active')
+  assert.equal(second.status, 'pending_validation')
   assert.equal(second.last4, 'fghi')
+  const validatedSecond = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
+  assert.equal(validatedSecond?.status, 'active')
   assert.equal(await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }), SECOND_KEY)
 
   const records = await store.listByokSecrets('tenant-1')
@@ -71,9 +77,11 @@ test('BYOK disable prevents active reveal', async () => {
   const store = seededStore()
   const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
     ids: { randomUUID: () => 'secret-disable' },
+    validators: { openai: () => true },
   })
 
   await byok.setSecret({ orgId: 'tenant-1', providerId: 'openai', plaintext: FIRST_KEY })
+  await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'openai' })
   const disabled = await byok.disableSecret({ orgId: 'tenant-1', providerId: 'openai' })
   assert.equal(disabled?.status, 'disabled')
   await assert.rejects(
@@ -86,9 +94,11 @@ test('BYOK ciphertext is bound to org provider and secret context', async () => 
   const store = seededStore()
   const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
     ids: { randomUUID: () => 'secret-cross-org' },
+    validators: { anthropic: () => true },
   })
 
   await byok.setSecret({ orgId: 'tenant-1', providerId: 'anthropic', plaintext: FIRST_KEY })
+  await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
   const source = await store.getActiveByokSecret('tenant-1', 'anthropic')
   assert.ok(source?.ciphertext)
 
@@ -99,6 +109,13 @@ test('BYOK ciphertext is bound to org provider and secret context', async () => 
     ciphertext: source.ciphertext,
     last4: source.last4,
     keyFingerprint: source.keyFingerprint,
+    status: 'active',
+  })
+  await store.recordByokSecretValidation({
+    orgId: 'tenant-2',
+    providerId: 'anthropic',
+    secretId: 'byok_copied_ciphertext',
+    status: 'active',
   })
 
   await assert.rejects(
@@ -127,6 +144,74 @@ test('BYOK validation audit metadata is redacted', async () => {
   assert.equal(audit.some((event) => event.eventType === 'byok_secret.validated'), true)
   assert.equal(JSON.stringify(audit).includes(FIRST_KEY), false)
   assert.match(JSON.stringify(audit), /\[redacted\]/)
+})
+
+test('BYOK secrets remain inactive without a provider validator until audited override', async () => {
+  const store = seededStore()
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => 'secret-unsupported' },
+  })
+
+  const created = await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'unknown-provider',
+    plaintext: FIRST_KEY,
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(created.status, 'pending_validation')
+  await assert.rejects(
+    () => byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'unknown-provider' }),
+    /No active BYOK secret/,
+  )
+
+  const unsupported = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'unknown-provider',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(unsupported?.status, 'unsupported')
+  assert.match(unsupported?.validationError || '', /No BYOK validator/)
+
+  const overridden = await byok.activateWithoutValidation({
+    orgId: 'tenant-1',
+    providerId: 'unknown-provider',
+    reason: `manual provider smoke test ${FIRST_KEY}`,
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(overridden?.status, 'active')
+  assert.equal(typeof overridden?.lastValidatedAt, 'string')
+  assert.equal(await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'unknown-provider' }), FIRST_KEY)
+
+  const auditPayload = JSON.stringify(await store.listAuditEvents('tenant-1'))
+  assert.equal(auditPayload.includes(FIRST_KEY), false)
+  assert.match(auditPayload, /byok_secret.validation_override/)
+  assert.match(auditPayload, /\[redacted\]/)
+})
+
+test('BYOK disable revokes non-active provider secrets', async () => {
+  const store = seededStore()
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => 'secret-disable-unsupported' },
+  })
+
+  await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'unknown-provider',
+    plaintext: CUSTOM_VALIDATION_KEY,
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  const unsupported = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'unknown-provider',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(unsupported?.status, 'unsupported')
+
+  const disabled = await byok.disableSecret({ orgId: 'tenant-1', providerId: 'unknown-provider' })
+  assert.equal(disabled?.status, 'disabled')
+  assert.equal((await byok.getMetadata('tenant-1', 'unknown-provider'))?.status, 'disabled')
+  assert.equal((await store.listByokSecrets('tenant-1')).filter((record) => record.status !== 'disabled').length, 0)
+  assert.equal(JSON.stringify(await store.listAuditEvents('tenant-1')).includes(CUSTOM_VALIDATION_KEY), false)
 })
 
 test('BYOK provider validation hooks mark active and invalid without leaking raw provider errors', async () => {
@@ -176,6 +261,34 @@ test('BYOK provider validation hooks mark active and invalid without leaking raw
   assert.match(auditPayload, /\[redacted\]/)
 })
 
+test('BYOK provider validation redacts exact plaintext even when it is not token-shaped', async () => {
+  const store = seededStore()
+  const byok = createByokSecretStore(store, createEnvelopeSecretAdapter('unit-test-byok-key'), {
+    ids: { randomUUID: () => 'secret-short-redaction' },
+    validators: {
+      custom(input) {
+        throw new Error(`provider echoed ${input.plaintext}`)
+      },
+    },
+  })
+
+  await byok.setSecret({
+    orgId: 'tenant-1',
+    providerId: 'custom',
+    plaintext: CUSTOM_VALIDATION_KEY,
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  const invalid = await byok.validateActiveSecret({
+    orgId: 'tenant-1',
+    providerId: 'custom',
+    actor: { actorType: 'user', actorId: 'owner-1', accountId: 'owner-1' },
+  })
+  assert.equal(invalid?.status, 'invalid')
+  assert.equal(invalid?.validationError?.includes(CUSTOM_VALIDATION_KEY), false)
+  assert.match(invalid?.validationError || '', /\[redacted\]/)
+  assert.equal(JSON.stringify(await store.listAuditEvents('tenant-1')).includes(CUSTOM_VALIDATION_KEY), false)
+})
+
 test('BYOK KMS references reveal only through explicit worker-authorized paths', async () => {
   const store = seededStore()
   const kmsPlaintext = 'credential-kms-backed-1234567890'
@@ -201,17 +314,15 @@ test('BYOK KMS references reveal only through explicit worker-authorized paths',
     providerId: 'anthropic',
     kmsRef: 'gcp-sm://projects/acme/secrets/anthropic/versions/latest',
   })
-  assert.equal(created.status, 'active')
+  assert.equal(created.status, 'pending_validation')
   assert.equal(JSON.stringify(created).includes(kmsPlaintext), false)
 
   await assert.rejects(
     () => byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }),
-    /worker-authorized reveal path/,
+    /No active BYOK secret/,
   )
-  assert.equal(
-    await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic', allowKmsRef: true }),
-    kmsPlaintext,
-  )
+  const pending = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
+  assert.equal(pending?.status, 'pending_validation')
 
   const validated = await byok.validateActiveSecret({
     orgId: 'tenant-1',
@@ -219,5 +330,9 @@ test('BYOK KMS references reveal only through explicit worker-authorized paths',
     allowKmsRef: true,
   })
   assert.equal(validated?.status, 'active')
+  assert.equal(
+    await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic', allowKmsRef: true }),
+    kmsPlaintext,
+  )
   assert.equal(resolvedRef, 'gcp-sm://projects/acme/secrets/anthropic/versions/latest')
 })
