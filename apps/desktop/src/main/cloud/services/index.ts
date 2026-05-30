@@ -12,3 +12,15 @@ export { CloudWorkflowService } from './workflow-service.ts'
 export type { CloudWorkflowServiceDelegate } from './workflow-service.ts'
 export { CloudProjectionService } from './projection-service.ts'
 export type { AppendProjectedEventInput } from './projection-service.ts'
+export {
+  normalizePermissionPayload,
+  normalizePromptPayload,
+  normalizeQuestionRejectPayload,
+  normalizeQuestionReplyPayload,
+} from './session-command-service.ts'
+export type {
+  PermissionRespondPayload,
+  PromptCommandPayload,
+  QuestionRejectPayload,
+  QuestionReplyPayload,
+} from './session-command-service.ts'

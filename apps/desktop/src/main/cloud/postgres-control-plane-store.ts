@@ -11,35 +11,23 @@ import {
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
-  WorkflowTrigger,
-  WorkflowTriggerType,
 } from '@open-cowork/shared'
 import type {
   AttachWorkflowRunSessionInput,
   AppendWorkspaceEventInput,
-  AccountRecord,
-  ApiTokenRecord,
   AuditEventRecord,
   AckChannelDeliveryInput,
   BindChannelSessionInput,
-  BillingSubscriptionRecord,
   ByokSecretRecord,
-  ChannelBindingRecord,
-  ChannelDeliveryRecord,
-  ChannelIdentityRecord,
-  ChannelInteractionRecord,
   ChannelProviderId,
-  ChannelSessionBindingRecord,
   ClaimDueWorkflowRunInput,
   ClaimChannelDeliveryInput,
   ClaimRateLimitInput,
   ClaimedWorkflowRunRecord,
-  CloudAuthBackoffRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
   ConsumeUsageQuotaInput,
   CompleteWorkflowRunInput,
-  ControlPlaneCommandStatus,
   ControlPlaneRole,
   ControlPlaneSessionStatus,
   ControlPlaneStore,
@@ -56,15 +44,12 @@ import type {
   DisableByokSecretInput,
   FailWorkflowRunInput,
   FindChannelInteractionInput,
-  HeadlessAgentRecord,
   IssuedApiTokenRecord,
   IssuedChannelInteractionRecord,
   IssueApiTokenInput,
   ListSessionsPageInput,
   ListChannelDeliveriesInput,
-  MembershipRecord,
   OrgMemberRecord,
-  OrgRecord,
   PrincipalMembershipRecord,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
@@ -73,17 +58,10 @@ import type {
   RevokeApiTokenInput,
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
-  SchemaMigrationRecord,
   SessionCommandRecord,
   SessionEventRecord,
-  SessionProjectionRecord,
-  SessionRecord,
-  SettingMetadataRecord,
-  TenantRecord,
   ThreadMetadataRecord,
-  ThreadSmartFilterRecord,
   ThreadTagLinkInput,
-  ThreadTagRecord,
   UsageEventRecord,
   UsageQuotaCounterRecord,
   UpdateChannelBindingInput,
@@ -95,14 +73,11 @@ import type {
   UpsertBillingSubscriptionInput,
   UpsertChannelIdentityInput,
   UpsertMembershipInput,
-  UserRecord,
-  WorkerHeartbeatRecord,
   WorkerLeaseRecord,
   WorkerRole,
   WorkspaceEventRecord,
 } from './control-plane-store.ts'
 import type {
-  WebhookAuthFailureRecord,
   WorkflowWebhookReplayClaim,
   WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
@@ -110,9 +85,42 @@ import {
   CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS,
   CLOUD_CONTROL_PLANE_MIGRATIONS,
 } from './postgres-schema.ts'
+import { usageEventFromRow, billingSubscriptionFromRow } from './postgres-domains/billing.ts'
+import { byokSecretFromRow } from './postgres-domains/byok.ts'
+import {
+  channelBindingFromRow,
+  channelDeliveryFromRow,
+  channelIdentityFromRow,
+  channelInteractionFromRow,
+  channelSessionBindingFromRow,
+  headlessAgentFromRow,
+} from './postgres-domains/channels.ts'
+import {
+  accountFromRow,
+  apiTokenFromRow,
+  auditEventFromRow,
+  cloudAuthBackoffFromRow,
+  membershipFromRow,
+  orgFromRow,
+  tenantFromRow,
+  userFromRow,
+} from './postgres-domains/identity.ts'
+import { migrationFromRow } from './postgres-domains/schema.ts'
+import {
+  commandFromRow,
+  eventFromRow,
+  heartbeatFromRow,
+  leaseFromRow,
+  projectionFromRow,
+  sessionFromRow,
+  settingFromRow,
+  workspaceEventFromRow,
+} from './postgres-domains/sessions.ts'
+import { iso, jsonRecord, numberValue, type QueryResult, type QueryRow } from './postgres-domains/shared.ts'
+import { threadSmartFilterFromRow, threadTagFromRow } from './postgres-domains/thread-index.ts'
+import { webhookAuthFailureFromRow } from './postgres-domains/webhooks.ts'
+import { workflowFromRow, workflowRunFromRow } from './postgres-domains/workflows.ts'
 
-type QueryRow = Record<string, unknown>
-type QueryResult<Row extends QueryRow = QueryRow> = { rows: Row[] }
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
 }
@@ -173,44 +181,6 @@ function workspaceOperationFromType(type: string) {
 
 function optionalTrimmedText(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function iso(value: unknown) {
-  if (value instanceof Date) return value.toISOString()
-  if (typeof value === 'string') return new Date(value).toISOString()
-  throw new Error('Expected a timestamp column.')
-}
-
-function numberValue(value: unknown) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) throw new Error('Expected a numeric column.')
-  return parsed
-}
-
-function stringOrNull(value: unknown) {
-  return typeof value === 'string' ? value : null
-}
-
-function isoOrNull(value: unknown) {
-  return value ? iso(value) : null
-}
-
-function jsonRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
-function jsonStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : []
-}
-
-function workflowTriggers(value: unknown): WorkflowTrigger[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is WorkflowTrigger => Boolean(entry && typeof entry === 'object' && !Array.isArray(entry)))
-    : []
 }
 
 function normalizeText(value: unknown, maxLength: number, label: string) {
@@ -318,447 +288,6 @@ function redactAuditMetadata(value: Record<string, unknown> | undefined): Record
     }
   }
   return redacted
-}
-
-function tenantFromRow(row: QueryRow): TenantRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    name: String(row.name),
-    createdAt: iso(row.created_at),
-  }
-}
-
-function userFromRow(row: QueryRow): UserRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    email: String(row.email),
-    role: String(row.role) as ControlPlaneRole,
-    createdAt: iso(row.created_at),
-  }
-}
-
-function orgFromRow(row: QueryRow): OrgRecord {
-  return {
-    orgId: String(row.org_id),
-    tenantId: String(row.tenant_id),
-    name: String(row.name),
-    planKey: stringOrNull(row.plan_key),
-    status: String(row.status),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function accountFromRow(row: QueryRow): AccountRecord {
-  return {
-    accountId: String(row.account_id),
-    idpSubject: stringOrNull(row.idp_subject),
-    email: String(row.email),
-    displayName: stringOrNull(row.display_name),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function membershipFromRow(row: QueryRow): MembershipRecord {
-  return {
-    orgId: String(row.org_id),
-    accountId: String(row.account_id),
-    role: String(row.role) as ControlPlaneRole,
-    status: String(row.status) as MembershipRecord['status'],
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function apiTokenFromRow(row: QueryRow): ApiTokenRecord {
-  return {
-    tokenId: String(row.token_id),
-    orgId: String(row.org_id),
-    accountId: stringOrNull(row.account_id),
-    name: String(row.name),
-    tokenHash: String(row.token_hash),
-    scopes: jsonStringArray(row.scopes) as ApiTokenRecord['scopes'],
-    last4: String(row.last4),
-    expiresAt: isoOrNull(row.expires_at),
-    revokedAt: isoOrNull(row.revoked_at),
-    lastUsedAt: isoOrNull(row.last_used_at),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function auditEventFromRow(row: QueryRow): AuditEventRecord {
-  return {
-    eventId: String(row.event_id),
-    orgId: String(row.org_id),
-    accountId: stringOrNull(row.account_id),
-    actorType: String(row.actor_type) as AuditEventRecord['actorType'],
-    actorId: stringOrNull(row.actor_id),
-    eventType: String(row.event_type),
-    targetType: stringOrNull(row.target_type),
-    targetId: stringOrNull(row.target_id),
-    metadata: jsonRecord(row.metadata),
-    createdAt: iso(row.created_at),
-  }
-}
-
-function usageEventFromRow(row: QueryRow): UsageEventRecord {
-  return {
-    eventId: String(row.event_id),
-    orgId: String(row.org_id),
-    accountId: stringOrNull(row.account_id),
-    eventType: String(row.event_type),
-    quantity: numberValue(row.quantity),
-    unit: String(row.unit),
-    metadata: jsonRecord(row.metadata),
-    createdAt: iso(row.created_at),
-  }
-}
-
-function byokSecretFromRow(row: QueryRow): ByokSecretRecord {
-  return {
-    secretId: String(row.secret_id),
-    orgId: String(row.org_id),
-    providerId: String(row.provider_id),
-    status: String(row.status) as ByokSecretRecord['status'],
-    ciphertext: stringOrNull(row.ciphertext),
-    kmsRef: stringOrNull(row.kms_ref),
-    last4: String(row.last4),
-    keyFingerprint: String(row.key_fingerprint),
-    createdByAccountId: stringOrNull(row.created_by_account_id),
-    rotatedFromSecretId: stringOrNull(row.rotated_from_secret_id),
-    lastValidatedAt: isoOrNull(row.last_validated_at),
-    validationError: stringOrNull(row.validation_error),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function headlessAgentFromRow(row: QueryRow): HeadlessAgentRecord {
-  return {
-    agentId: String(row.agent_id),
-    orgId: String(row.org_id),
-    tenantId: String(row.tenant_id),
-    profileName: String(row.profile_name),
-    name: String(row.name),
-    status: String(row.status) as HeadlessAgentRecord['status'],
-    managed: row.managed === true,
-    createdByAccountId: stringOrNull(row.created_by_account_id),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function channelBindingFromRow(row: QueryRow): ChannelBindingRecord {
-  return {
-    bindingId: String(row.binding_id),
-    orgId: String(row.org_id),
-    agentId: String(row.agent_id),
-    provider: String(row.provider) as ChannelProviderId,
-    externalWorkspaceId: stringOrNull(row.external_workspace_id),
-    displayName: String(row.display_name),
-    status: String(row.status) as ChannelBindingRecord['status'],
-    credentialRef: stringOrNull(row.credential_ref),
-    settings: jsonRecord(row.settings),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function channelIdentityFromRow(row: QueryRow): ChannelIdentityRecord {
-  return {
-    identityId: String(row.identity_id),
-    orgId: String(row.org_id),
-    provider: String(row.provider) as ChannelProviderId,
-    externalWorkspaceId: stringOrNull(row.external_workspace_id),
-    externalUserId: String(row.external_user_id),
-    accountId: stringOrNull(row.account_id),
-    role: String(row.role) as ChannelIdentityRecord['role'],
-    status: String(row.status) as ChannelIdentityRecord['status'],
-    metadata: jsonRecord(row.metadata),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function channelSessionBindingFromRow(row: QueryRow): ChannelSessionBindingRecord {
-  return {
-    bindingId: String(row.binding_id),
-    orgId: String(row.org_id),
-    agentId: String(row.agent_id),
-    channelBindingId: String(row.channel_binding_id),
-    provider: String(row.provider) as ChannelProviderId,
-    externalWorkspaceId: stringOrNull(row.external_workspace_id),
-    externalThreadId: String(row.external_thread_id),
-    externalChatId: String(row.external_chat_id),
-    sessionId: String(row.session_id),
-    lastEventSequence: numberValue(row.last_event_sequence),
-    lastWorkspaceSequence: numberValue(row.last_workspace_sequence),
-    lastChatMessageId: stringOrNull(row.last_chat_message_id),
-    status: String(row.status) as ChannelSessionBindingRecord['status'],
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function channelInteractionFromRow(row: QueryRow): ChannelInteractionRecord {
-  return {
-    interactionId: String(row.interaction_id),
-    orgId: String(row.org_id),
-    agentId: String(row.agent_id),
-    sessionId: String(row.session_id),
-    provider: String(row.provider) as ChannelProviderId,
-    externalInteractionId: stringOrNull(row.external_interaction_id),
-    tokenHash: String(row.token_hash),
-    kind: String(row.kind) as ChannelInteractionRecord['kind'],
-    targetId: String(row.target_id),
-    status: String(row.status) as ChannelInteractionRecord['status'],
-    createdByIdentityId: stringOrNull(row.created_by_identity_id),
-    expiresAt: iso(row.expires_at),
-    usedAt: isoOrNull(row.used_at),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function billingSubscriptionFromRow(row: QueryRow): BillingSubscriptionRecord {
-  return {
-    orgId: String(row.org_id),
-    planKey: String(row.plan_key),
-    providerId: String(row.provider_id),
-    providerCustomerId: stringOrNull(row.provider_customer_id),
-    providerSubscriptionId: stringOrNull(row.provider_subscription_id),
-    status: String(row.status) as BillingSubscriptionRecord['status'],
-    seats: numberValue(row.seats),
-    entitlements: jsonRecord(row.entitlements) as BillingSubscriptionRecord['entitlements'],
-    currentPeriodEnd: isoOrNull(row.current_period_end),
-    cancelAtPeriodEnd: row.cancel_at_period_end === true,
-    metadata: jsonRecord(row.metadata),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
-  return {
-    deliveryId: String(row.delivery_id),
-    orgId: String(row.org_id),
-    agentId: String(row.agent_id),
-    channelBindingId: String(row.channel_binding_id),
-    sessionBindingId: stringOrNull(row.session_binding_id),
-    provider: String(row.provider) as ChannelProviderId,
-    target: jsonRecord(row.target),
-    eventType: String(row.event_type),
-    payload: jsonRecord(row.payload),
-    status: String(row.status) as ChannelDeliveryRecord['status'],
-    attemptCount: numberValue(row.attempt_count),
-    claimedBy: stringOrNull(row.claimed_by),
-    claimExpiresAt: isoOrNull(row.claim_expires_at),
-    nextAttemptAt: iso(row.next_attempt_at),
-    lastError: stringOrNull(row.last_error),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function sessionFromRow(row: QueryRow): SessionRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    sessionId: String(row.session_id),
-    opencodeSessionId: String(row.opencode_session_id),
-    profileName: String(row.profile_name),
-    status: String(row.status) as ControlPlaneSessionStatus,
-    title: stringOrNull(row.title),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function eventFromRow(row: QueryRow): SessionEventRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    sessionId: String(row.session_id),
-    eventId: String(row.event_id),
-    sequence: numberValue(row.sequence),
-    type: String(row.type),
-    payload: jsonRecord(row.payload),
-    createdAt: iso(row.created_at),
-  }
-}
-
-function workspaceEventFromRow(row: QueryRow): WorkspaceEventRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    sessionId: stringOrNull(row.session_id),
-    eventId: String(row.event_id),
-    sequence: numberValue(row.sequence),
-    entityType: String(row.entity_type),
-    entityId: String(row.entity_id),
-    operation: String(row.operation),
-    projectionVersion: numberValue(row.projection_version),
-    type: String(row.type),
-    payload: jsonRecord(row.payload),
-    createdAt: iso(row.created_at),
-  }
-}
-
-function projectionFromRow(row: QueryRow): SessionProjectionRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    sessionId: String(row.session_id),
-    sequence: numberValue(row.sequence),
-    view: jsonRecord(row.view),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function leaseFromRow(row: QueryRow): WorkerLeaseRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    sessionId: String(row.session_id),
-    leasedBy: String(row.leased_by),
-    leaseToken: String(row.lease_token),
-    leaseExpiresAt: numberValue(row.lease_expires_at_ms),
-    checkpointVersion: numberValue(row.checkpoint_version),
-  }
-}
-
-function commandFromRow(row: QueryRow): SessionCommandRecord {
-  return {
-    commandId: String(row.command_id),
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    sessionId: String(row.session_id),
-    kind: String(row.kind) as SessionCommandRecord['kind'],
-    payload: jsonRecord(row.payload),
-    targetLeaseToken: stringOrNull(row.target_lease_token),
-    createdSequence: numberValue(row.created_sequence),
-    createdAt: iso(row.created_at),
-    status: String(row.status) as ControlPlaneCommandStatus,
-    claimedBy: stringOrNull(row.claimed_by),
-    claimedLeaseToken: stringOrNull(row.claimed_lease_token),
-    ackedAt: row.acked_at ? iso(row.acked_at) : null,
-    error: stringOrNull(row.error),
-  }
-}
-
-function heartbeatFromRow(row: QueryRow): WorkerHeartbeatRecord {
-  return {
-    workerId: String(row.worker_id),
-    role: String(row.role) as WorkerRole,
-    activeSessionIds: Array.isArray(row.active_session_ids)
-      ? row.active_session_ids.map(String)
-      : [],
-    lastSeenAt: iso(row.last_seen_at),
-  }
-}
-
-function settingFromRow(row: QueryRow): SettingMetadataRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: stringOrNull(row.user_id),
-    key: String(row.key),
-    value: jsonRecord(row.value),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function workflowFromRow(row: QueryRow): CloudWorkflowRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    id: String(row.workflow_id),
-    title: String(row.title),
-    instructions: String(row.instructions),
-    agentName: String(row.agent_name || 'build'),
-    skillNames: jsonStringArray(row.skill_names),
-    toolIds: jsonStringArray(row.tool_ids),
-    status: String(row.status) as WorkflowStatus,
-    projectDirectory: stringOrNull(row.project_directory),
-    draftSessionId: stringOrNull(row.draft_session_id),
-    triggers: workflowTriggers(row.triggers),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-    nextRunAt: isoOrNull(row.next_run_at),
-    lastRunAt: isoOrNull(row.last_run_at),
-    latestRunId: stringOrNull(row.latest_run_id),
-    latestRunStatus: row.latest_run_status ? String(row.latest_run_status) as WorkflowRunStatus : null,
-    latestRunSessionId: stringOrNull(row.latest_run_session_id),
-    latestRunSummary: stringOrNull(row.latest_run_summary),
-    webhookUrl: null,
-  }
-}
-
-function workflowRunFromRow(row: QueryRow): CloudWorkflowRunRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    userId: String(row.user_id),
-    id: String(row.run_id),
-    workflowId: String(row.workflow_id),
-    sessionId: stringOrNull(row.session_id),
-    triggerType: String(row.trigger_type) as WorkflowTriggerType,
-    triggerPayload: row.trigger_payload ? jsonRecord(row.trigger_payload) : null,
-    status: String(row.status) as WorkflowRunStatus,
-    title: String(row.title),
-    summary: stringOrNull(row.summary),
-    error: stringOrNull(row.error),
-    createdAt: iso(row.created_at),
-    startedAt: isoOrNull(row.started_at),
-    finishedAt: isoOrNull(row.finished_at),
-  }
-}
-
-function threadTagFromRow(row: QueryRow): ThreadTagRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    tagId: String(row.tag_id),
-    name: String(row.name),
-    color: String(row.color),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function threadSmartFilterFromRow(row: QueryRow): ThreadSmartFilterRecord {
-  return {
-    tenantId: String(row.tenant_id),
-    filterId: String(row.filter_id),
-    name: String(row.name),
-    query: jsonRecord(row.query),
-    createdAt: iso(row.created_at),
-    updatedAt: iso(row.updated_at),
-  }
-}
-
-function migrationFromRow(row: QueryRow): SchemaMigrationRecord {
-  return {
-    id: String(row.id),
-    appliedAt: iso(row.applied_at),
-  }
-}
-
-function webhookAuthFailureFromRow(row: QueryRow): WebhookAuthFailureRecord {
-  return {
-    authWindowStartedAt: numberValue(row.auth_window_started_at_ms),
-    authFailureCount: numberValue(row.auth_failure_count),
-    blockedUntil: numberValue(row.blocked_until_ms),
-  }
-}
-
-function cloudAuthBackoffFromRow(row: QueryRow, nowMs: number): CloudAuthBackoffRecord {
-  const blockedUntilMs = numberValue(row.blocked_until_ms)
-  return {
-    allowed: blockedUntilMs <= nowMs,
-    scope: String(row.scope),
-    source: String(row.source),
-    failureCount: numberValue(row.auth_failure_count),
-    blockedUntilMs,
-    retryAfterMs: Math.max(0, blockedUntilMs - nowMs),
-  }
 }
 
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {

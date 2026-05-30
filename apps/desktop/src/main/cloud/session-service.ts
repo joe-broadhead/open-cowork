@@ -95,6 +95,15 @@ import {
   CloudSessionProjectionService,
   type AppendProjectedEventInput,
 } from './session-projection-service.ts'
+import {
+  normalizePermissionPayload,
+  normalizePromptPayload,
+  normalizeQuestionRejectPayload,
+  normalizeQuestionReplyPayload,
+  type PermissionRespondPayload,
+  type QuestionRejectPayload,
+  type QuestionReplyPayload,
+} from './services/session-command-service.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
 import {
   verifyWorkflowWebhookAuth,
@@ -359,25 +368,6 @@ export type CloudWorkflowStartResult = {
   command: SessionCommandRecord
 }
 
-type PromptCommandPayload = {
-  text: string
-  agent: string
-}
-
-type QuestionReplyPayload = {
-  requestId: string
-  answers: unknown[]
-}
-
-type QuestionRejectPayload = {
-  requestId: string
-}
-
-type PermissionRespondPayload = {
-  permissionId: string
-  response: unknown
-}
-
 type ChannelActorInput = {
   identityId?: string | null
   provider?: ChannelProviderId | null
@@ -621,33 +611,6 @@ function workflowRunTerminal(status: WorkflowRun['status']) {
 function workflowWebhookReplayKey(workflowId: string, auth: Extract<WorkflowWebhookAuth, { kind: 'signature' }>) {
   const workflowKey = createHash('sha256').update(workflowId).digest('hex').slice(0, 16)
   return `${workflowKey}:${auth.timestamp}:${auth.signature}`
-}
-
-function normalizePromptPayload(payload: Record<string, unknown>): PromptCommandPayload {
-  return {
-    text: readString(payload.text),
-    agent: readString(payload.agent, 'build'),
-  }
-}
-
-function normalizeQuestionReplyPayload(payload: Record<string, unknown>): QuestionReplyPayload {
-  return {
-    requestId: readString(payload.requestId),
-    answers: Array.isArray(payload.answers) ? payload.answers : [],
-  }
-}
-
-function normalizeQuestionRejectPayload(payload: Record<string, unknown>): QuestionRejectPayload {
-  return {
-    requestId: readString(payload.requestId),
-  }
-}
-
-function normalizePermissionPayload(payload: Record<string, unknown>): PermissionRespondPayload {
-  return {
-    permissionId: readString(payload.permissionId),
-    response: payload.response ?? null,
-  }
 }
 
 function normalizeImportCounts(value: Partial<SessionImportItemCounts> | undefined): SessionImportItemCounts {
