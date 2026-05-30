@@ -17,6 +17,8 @@ pnpm cloud:start
 pnpm cloud:smoke:compose
 pnpm deploy:validate
 pnpm deploy:smoke
+pnpm deploy:gcp:preflight
+pnpm deploy:gcp:smoke
 pnpm notices
 pnpm --dir apps/desktop dist:ci
 ```
@@ -46,3 +48,16 @@ reachability, and gateway readiness endpoints. Override
 `OPEN_COWORK_SMOKE_CLOUD_URL` and `OPEN_COWORK_SMOKE_GATEWAY_URL` for provider
 deployments, or use `--skip-cloud` / `--skip-gateway` when checking one
 surface.
+
+`pnpm deploy:gcp:preflight` is a read-only GCP check for the reference
+deployment. It verifies the active `gcloud` account/project, region, required
+APIs, and required files under `deploy/gcp`. Cloud KMS and Cloud Run are
+checked only when `OPEN_COWORK_GCP_REQUIRE_KMS=true`,
+`OPEN_COWORK_GCP_REQUIRE_CLOUD_RUN=true`, or
+`OPEN_COWORK_GCP_CLOUD_RUN_SERVICE` is set. Set `OPEN_COWORK_GCP_PROJECT` and
+`OPEN_COWORK_GCP_REGION` when those are not already configured in `gcloud`.
+
+`pnpm deploy:gcp:smoke` wraps the generic deployment smoke and adds GCP infra
+checks: Cloud Storage write/read/delete and Secret Manager access through a
+`gcp-sm://projects/{project}/secrets/{secret}/versions/{version}` ref. It does
+not print secret values.

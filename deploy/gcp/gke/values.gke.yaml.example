@@ -1,0 +1,106 @@
+# Copy this file into a private deployment repo and replace placeholders.
+# Do not commit real project ids, domains, image tags, or secret values here.
+
+image:
+  repository: REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud
+  tag: IMAGE_TAG
+  pullPolicy: IfNotPresent
+
+cloud:
+  profile: full
+  root: /data/open-cowork-cloud
+  existingSecret: open-cowork-cloud-secrets
+  auth:
+    mode: oidc
+    oidcIssuerUrl: https://accounts.google.com
+    oidcClientId: OIDC_CLIENT_ID
+    oidcCallbackPath: /auth/callback
+    allowedEmailDomains:
+      - example.com
+  cookieSecure: true
+  publicUrl: https://cowork.example.com
+  trustProxyHeaders: true
+  branding:
+    productName: Open Cowork Cloud
+    shortName: OC
+    supportUrl: https://cowork.example.com/support
+    privacyUrl: https://cowork.example.com/privacy
+    securityUrl: https://cowork.example.com/security
+    legalUrl: https://cowork.example.com/legal
+  observability:
+    serviceName: open-cowork-cloud
+    serviceVersion: IMAGE_TAG
+    logFormat: json
+    otlpEndpoint: ""
+  checkpoints:
+    enabled: true
+  objectStore:
+    kind: gcs
+    bucket: OPEN_COWORK_GCS_BUCKET
+    prefix: cloud
+
+roles:
+  web:
+    enabled: true
+    replicas: 2
+    port: 8787
+    autoProcessCommands: false
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+  worker:
+    enabled: true
+    replicas: 2
+    pollMs: 1000
+    checkpointsEnabled: true
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+  scheduler:
+    enabled: true
+    replicas: 1
+    pollMs: 1000
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+
+serviceAccount:
+  create: true
+  name: open-cowork-cloud
+  annotations:
+    iam.gke.io/gcp-service-account: open-cowork-cloud@PROJECT.iam.gserviceaccount.com
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.allow-http: "false"
+    kubernetes.io/ingress.global-static-ip-name: open-cowork-cloud
+    networking.gke.io/managed-certificates: open-cowork-cloud
+  hosts:
+    - host: cowork.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

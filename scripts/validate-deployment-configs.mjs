@@ -284,7 +284,101 @@ function validateDocs() {
   }
 }
 
+function validateGcpReference() {
+  const requiredGcpFiles = [
+    'deploy/gcp/README.md',
+    'deploy/gcp/gke/values.gke.yaml.example',
+    'deploy/gcp/gke/external-secret.example.yaml',
+    'deploy/gcp/gke/managed-certificate.example.yaml',
+    'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
+    'deploy/gcp/smoke/README.md',
+    'scripts/gcp-reference-preflight.mjs',
+    'scripts/gcp-reference-smoke.mjs',
+  ]
+  for (const path of requiredGcpFiles) {
+    if (!existsSync(path)) {
+      throw new Error(`${path} is required for the GCP reference deployment`)
+    }
+  }
+
+  const gcpReadme = read('deploy/gcp/README.md')
+  for (const phrase of [
+    'GKE split-role',
+    'Cloud SQL for PostgreSQL',
+    'Cloud Storage',
+    'Secret Manager',
+    'iamcredentials.googleapis.com',
+    'OPEN_COWORK_GCP_REGION',
+    'pnpm deploy:gcp:preflight',
+    'pnpm deploy:gcp:smoke',
+    'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
+    'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
+    'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
+    'Rollback order',
+    'GCP configuration is adapter wiring only',
+  ]) {
+    if (!gcpReadme.includes(phrase)) {
+      throw new Error(`deploy/gcp/README.md must include ${phrase}`)
+    }
+  }
+
+  const gkeValues = read('deploy/gcp/gke/values.gke.yaml.example')
+  for (const phrase of [
+    'REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud',
+    'existingSecret: open-cowork-cloud-secrets',
+    'mode: oidc',
+    'publicUrl: https://cowork.example.com',
+    'trustProxyHeaders: true',
+    'kind: gcs',
+    'enabled: true',
+    'replicas: 2',
+    'checkpointsEnabled: true',
+    'serviceAccount:',
+    'iam.gke.io/gcp-service-account',
+    'cloud.google.com/neg',
+    'kubernetes.io/ingress.class: gce',
+    'kubernetes.io/ingress.allow-http: "false"',
+  ]) {
+    if (!gkeValues.includes(phrase)) {
+      throw new Error(`deploy/gcp/gke/values.gke.yaml.example must include ${phrase}`)
+    }
+  }
+
+  const externalSecret = read('deploy/gcp/gke/external-secret.example.yaml')
+  for (const phrase of [
+    'ClusterSecretStore',
+    'gcpsm',
+    'workloadIdentity',
+    'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL',
+    'OPEN_COWORK_CLOUD_SECRET_KEY_REF',
+    'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET',
+  ]) {
+    if (!externalSecret.includes(phrase)) {
+      throw new Error(`deploy/gcp/gke/external-secret.example.yaml must include ${phrase}`)
+    }
+  }
+
+  const cloudRun = read('deploy/gcp/cloud-run/all-in-one.service.yaml.example')
+  for (const phrase of [
+    'run.googleapis.com/cloudsql-instances',
+    'run.googleapis.com/secrets',
+    'open-cowork-cloud-control-plane-url:projects/PROJECT_NUMBER/secrets/open-cowork-cloud-control-plane-url,',
+    'OPEN_COWORK_CLOUD_ROLE',
+    'all-in-one',
+    'OPEN_COWORK_CLOUD_AUTH_MODE',
+    'oidc',
+    'OPEN_COWORK_CLOUD_OBJECT_STORE_KIND',
+    'gcs',
+    'OPEN_COWORK_CLOUD_SECRET_KEY_REF',
+  ]) {
+    if (!cloudRun.includes(phrase)) {
+      throw new Error(`deploy/gcp/cloud-run/all-in-one.service.yaml.example must include ${phrase}`)
+    }
+  }
+}
+
 validateCompose()
 validateHelm()
 validateDocs()
+validateGcpReference()
 log('deployment configuration validation passed')

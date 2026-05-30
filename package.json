@@ -60,6 +60,8 @@
     "cloud:smoke:compose": "bash scripts/ci-cloud-compose-smoke.sh",
     "deploy:validate": "node scripts/validate-deployment-configs.mjs",
     "deploy:smoke": "node scripts/smoke-deployment.mjs",
+    "deploy:gcp:preflight": "node scripts/gcp-reference-preflight.mjs",
+    "deploy:gcp:smoke": "node scripts/gcp-reference-smoke.mjs",
     "notices": "node scripts/generate-third-party-notices.mjs",
     "proof:cloud:opencode-portability": "node --no-warnings --experimental-strip-types scripts/opencode-portability-proof.ts",
     "perf:bench": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts",

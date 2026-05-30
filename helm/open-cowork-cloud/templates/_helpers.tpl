@@ -34,3 +34,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-secrets" (include "open-cowork-cloud.fullname" .) -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "open-cowork-cloud.serviceAccountName" -}}
+{{- if .Values.serviceAccount.name -}}
+{{- .Values.serviceAccount.name -}}
+{{- else if .Values.serviceAccount.create -}}
+{{- include "open-cowork-cloud.fullname" . -}}
+{{- else -}}
+{{- "default" -}}
+{{- end -}}
+{{- end -}}

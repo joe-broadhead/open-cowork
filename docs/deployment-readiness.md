@@ -218,6 +218,26 @@ OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
 pnpm deploy:smoke
 ```
 
+For the GCP reference deployment, run a read-only project/API preflight before
+rollout:
+
+```bash
+OPEN_COWORK_GCP_PROJECT=PROJECT \
+OPEN_COWORK_GCP_REGION=us-central1 \
+pnpm deploy:gcp:preflight
+```
+
+After rollout, the GCP infra smoke can combine the Cloud Web smoke with Cloud
+Storage and Secret Manager checks:
+
+```bash
+OPEN_COWORK_GCP_PROJECT=PROJECT \
+OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+pnpm deploy:gcp:smoke
+```
+
 For operator-only readiness checks:
 
 ```bash

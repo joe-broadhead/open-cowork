@@ -38,6 +38,7 @@ cloud:
   internalTokenRef: ""
   cookieSecure: true
   publicUrl: ""
+  trustProxyHeaders: false
   branding:
     productName: Open Cowork Cloud
     shortName: OC
@@ -111,6 +112,7 @@ roles:
 service:
   type: ClusterIP
   port: 80
+  annotations: {}
 
 podSecurityContext:
   runAsNonRoot: true
@@ -123,6 +125,12 @@ containerSecurityContext:
   capabilities:
     drop:
       - ALL
+
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: true
 
 ingress:
   enabled: false

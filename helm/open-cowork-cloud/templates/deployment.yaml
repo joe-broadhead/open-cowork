@@ -35,6 +35,8 @@ spec:
         {{- include "open-cowork-cloud.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: {{ $roleName }}
     spec:
+      serviceAccountName: {{ include "open-cowork-cloud.serviceAccountName" $ }}
+      automountServiceAccountToken: {{ $.Values.serviceAccount.automountServiceAccountToken }}
       {{- with $.Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}

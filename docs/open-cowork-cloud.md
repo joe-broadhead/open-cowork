@@ -700,6 +700,14 @@ Recipe starting points live under `deploy/gcp`, `deploy/aws`, `deploy/azure`,
 and `deploy/digitalocean`. Each one maps provider services back to the same
 role, Postgres, object-store, and secret-manager contract.
 
+The GCP reference recipe includes a split-role GKE values file, External
+Secrets example, managed certificate example, Cloud Run all-in-one demo
+manifest, and provider smoke commands. Run `pnpm deploy:gcp:preflight` before
+rollout to check the active `gcloud` project, region, required APIs, and
+reference files without mutating resources. Run `pnpm deploy:gcp:smoke` after
+rollout to combine the Cloud Web smoke with Cloud Storage and Secret Manager
+checks.
+
 Managed operators should also keep the runbook in
 [`docs/runbooks/cloud-managed-operations.md`](runbooks/cloud-managed-operations.md)
 current for readiness, rollback, gateway backlog, secret rotation, and
