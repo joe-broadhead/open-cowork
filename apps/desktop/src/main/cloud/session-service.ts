@@ -556,13 +556,15 @@ function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
 }
 
 function principalCanViewOperations(principal: CloudPrincipal) {
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin') || hasTokenScope(principal, 'worker-internal')
-  return principal.role === 'owner' || principal.role === 'admin'
+  return false
 }
 
 function principalCanViewDiagnostics(principal: CloudPrincipal) {
+  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
-  return principal.role === 'owner' || principal.role === 'admin'
+  return false
 }
 
 function boundedText(value: unknown, label: string, maxLength: number) {
@@ -1334,7 +1336,7 @@ export class CloudSessionService {
   async getSessionView(principal: CloudPrincipal, sessionId: string): Promise<CloudSessionView> {
     await this.ensurePrincipal(principal)
     const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
-    if (!session) throw new Error(`Unknown session ${sessionId}.`)
+    if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
     return {
       session,
       projection: await this.store.getSessionProjection(principal.tenantId, sessionId),
@@ -1913,11 +1915,33 @@ export class CloudSessionService {
   ): Promise<ChannelDeliveryRecord> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
+    const orgId = this.principalOrgId(principal)
+    const agent = await this.store.getHeadlessAgent(orgId, input.agentId)
+    if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
+    const channelBinding = await this.store.getChannelBinding(orgId, input.channelBindingId)
+    if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
+    if (channelBinding.agentId !== agent.agentId) {
+      throw new CloudServiceError(403, 'Channel delivery binding does not belong to the selected headless agent.')
+    }
+    if (channelBinding.provider !== input.provider) {
+      throw new CloudServiceError(400, 'Channel delivery provider does not match the channel binding.')
+    }
+    if (input.sessionBindingId) {
+      const sessionBinding = await this.store.getChannelSessionBinding(orgId, input.sessionBindingId)
+      if (!sessionBinding) throw new CloudServiceError(404, 'Channel session binding was not found.')
+      if (
+        sessionBinding.agentId !== agent.agentId
+        || sessionBinding.channelBindingId !== channelBinding.bindingId
+        || sessionBinding.provider !== input.provider
+      ) {
+        throw new CloudServiceError(403, 'Channel delivery session binding does not belong to the selected channel binding.')
+      }
+    }
     return this.store.createChannelDelivery({
       deliveryId: input.deliveryId || this.ids.randomUUID(),
-      orgId: this.principalOrgId(principal),
-      agentId: input.agentId,
-      channelBindingId: input.channelBindingId,
+      orgId,
+      agentId: agent.agentId,
+      channelBindingId: channelBinding.bindingId,
       sessionBindingId: input.sessionBindingId,
       provider: input.provider,
       target: input.target,
@@ -2542,7 +2566,7 @@ export class CloudSessionService {
   async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
     await this.ensurePrincipal(principal)
     if (!principalCanViewDiagnostics(principal)) {
-      throw new CloudServiceError(403, 'Cloud diagnostics require org admin or admin-scoped API token privileges.')
+      throw new CloudServiceError(403, 'Cloud diagnostics require operator or admin-scoped API token privileges.')
     }
     const orgId = this.principalOrgId(principal)
     const deliverySampleLimit = 200

@@ -18,6 +18,7 @@ import {
   resolveCloudInternalToken,
   resolveCloudOidcClientSecret,
   resolveCloudPublicBranding,
+  signHeaderCloudAuthRequest,
   shouldRunCloudScheduler,
   shouldRunCloudWeb,
   shouldRunCloudWorker,
@@ -351,6 +352,18 @@ test('cloud auth config requires explicit self-service opt-in for managed OIDC s
     },
   }
   assert.equal(resolveCloudAuthConfig(explicitConfig, {}).allowSelfServiceSignup, true)
+
+  const staticOidcConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      auth: {
+        mode: 'oidc' as const,
+      },
+    },
+  }
+  assert.equal(resolveCloudAuthConfig(staticOidcConfig, {}).allowSelfServiceSignup, false)
+  assert.equal(resolveCloudAuthConfig(staticOidcConfig, {}).signupMode, 'invite')
 })
 
 test('cloud auth config supports explicit trusted header mode', async () => {
@@ -423,6 +436,13 @@ test('cloud public header and OIDC auth require spoofing-resistant deployment se
     env: {},
   }), /HEADER_AUTH_SECRET/)
 
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'header', headerSecret: 'trusted-proxy-secret', headerAllowUnsigned: true },
+    env: {},
+  }), /signed trusted headers/)
+
   assert.doesNotThrow(() => assertCloudAuthDeploymentSafe({
     role: 'web',
     hostname: '0.0.0.0',
@@ -444,6 +464,43 @@ test('cloud public header and OIDC auth require spoofing-resistant deployment se
     publicUrl: 'https://cloud.example.test',
     env: {},
   }))
+
+  for (const publicUrl of ['http://cloud.example.test', 'https://localhost', 'not-a-url']) {
+    assert.throws(() => assertCloudAuthDeploymentSafe({
+      role: 'web',
+      hostname: '0.0.0.0',
+      auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+      publicUrl,
+      env: {},
+    }), /PUBLIC_URL|valid URL|HTTPS/)
+  }
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    publicUrl: 'https://cloud.example.test',
+    cookieSecure: false,
+    env: {},
+  }), /cookies must be Secure/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    publicUrl: 'https://cloud.example.test',
+    corsOrigin: '*',
+    env: {},
+  }), /cannot be "\*"/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    publicUrl: 'https://cloud.example.test',
+    corsOrigin: 'http://app.example.test',
+    env: {},
+  }), /CORS_ORIGIN.*HTTPS/)
 })
 
 test('cloud control plane local adapter remains default without a postgres URL', async () => {
@@ -1245,7 +1302,20 @@ test('cloud app wires OIDC browser login when session cookies are configured', a
 })
 
 test('cloud header auth resolver maps request headers to tenant principal', async () => {
-  const auth = createHeaderCloudAuthResolver({}, { headerSecret: 'trusted-proxy-secret' })
+  const timestamp = Math.floor(Date.parse('2026-01-01T00:00:00.000Z') / 1000).toString()
+  const baseHeaders = {
+    'x-open-cowork-header-auth-secret': 'trusted-proxy-secret',
+    'x-open-cowork-header-auth-timestamp': timestamp,
+    'x-open-cowork-tenant-id': 'tenant-1',
+    'x-open-cowork-tenant-name': 'Tenant 1',
+    'x-open-cowork-user-id': 'user-1',
+    'x-open-cowork-user-email': 'user@example.test',
+  }
+  const auth = createHeaderCloudAuthResolver({}, {
+    headerSecret: 'trusted-proxy-secret',
+    requireSignedHeaders: true,
+    now: () => new Date('2026-01-01T00:01:00.000Z'),
+  })
   await assert.rejects(async () => {
     await auth({
       headers: {
@@ -1256,13 +1326,27 @@ test('cloud header auth resolver maps request headers to tenant principal', asyn
       },
     } as unknown as IncomingMessage)
   }, /secret is invalid/)
+  await assert.rejects(async () => {
+    await auth({
+      headers: baseHeaders,
+    } as unknown as IncomingMessage)
+  }, /signature is required/)
+  await assert.rejects(async () => {
+    await auth({
+      headers: {
+        ...baseHeaders,
+        'x-open-cowork-header-auth-signature': 'v1=bad',
+      },
+    } as unknown as IncomingMessage)
+  }, /signature is invalid/)
   const principal = await auth({
     headers: {
-      'x-open-cowork-header-auth-secret': 'trusted-proxy-secret',
-      'x-open-cowork-tenant-id': 'tenant-1',
-      'x-open-cowork-tenant-name': 'Tenant 1',
-      'x-open-cowork-user-id': 'user-1',
-      'x-open-cowork-user-email': 'user@example.test',
+      ...baseHeaders,
+      'x-open-cowork-header-auth-signature': signHeaderCloudAuthRequest({
+        headers: baseHeaders,
+        secret: 'trusted-proxy-secret',
+        timestamp,
+      }),
     },
   } as unknown as IncomingMessage)
 
@@ -1276,4 +1360,17 @@ test('cloud header auth resolver maps request headers to tenant principal', asyn
     role: 'member',
     authSource: 'header',
   })
+
+  const spoofed = {
+    ...baseHeaders,
+    'x-open-cowork-user-role': 'owner',
+    'x-open-cowork-header-auth-signature': signHeaderCloudAuthRequest({
+      headers: baseHeaders,
+      secret: 'trusted-proxy-secret',
+      timestamp,
+    }),
+  }
+  await assert.rejects(async () => {
+    await auth({ headers: spoofed } as unknown as IncomingMessage)
+  }, /signature is invalid/)
 })

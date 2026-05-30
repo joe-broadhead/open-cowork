@@ -162,7 +162,7 @@ jobs:
         run: bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud.split.yml
 
       - name: Run cloud plus gateway Compose smoke test
-        run: OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
+        run: OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
 
       - name: Install Helm
         run: |
@@ -209,6 +209,7 @@ jobs:
             --set gateway.enabled=true \
             --set gateway.gateway.cloudBaseUrl=https://cloud.example.com \
             --set gateway.gateway.serviceToken=ci-gateway-token \
+            --set gateway.gateway.adminToken=ci-gateway-admin-token \
             --set gateway.gateway.telegram.botToken=ci-telegram-token \
             > /tmp/open-cowork-cloud-with-gateway-rendered.yaml
           grep -q "OPEN_COWORK_GATEWAY_SERVICE_TOKEN" /tmp/open-cowork-cloud-with-gateway-rendered.yaml
@@ -218,12 +219,14 @@ jobs:
           helm lint helm/open-cowork-gateway \
             --set gateway.cloudBaseUrl=https://cloud.example.com \
             --set gateway.serviceToken=ci-gateway-token \
+            --set gateway.adminToken=ci-gateway-admin-token \
             --set gateway.telegram.botToken=ci-telegram-token
           helm template open-cowork-gateway helm/open-cowork-gateway \
             --set image.repository=example.com/open-cowork-gateway \
             --set image.tag=ci \
             --set gateway.cloudBaseUrl=https://cloud.example.com \
             --set gateway.serviceToken=ci-gateway-token \
+            --set gateway.adminToken=ci-gateway-admin-token \
             --set gateway.telegram.botToken=ci-telegram-token \
             > /tmp/open-cowork-gateway-rendered.yaml
           test -s /tmp/open-cowork-gateway-rendered.yaml

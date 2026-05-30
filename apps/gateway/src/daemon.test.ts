@@ -346,6 +346,117 @@ test('gateway daemon accepts signed Slack webhook verification payloads', async 
   }
 })
 
+test('gateway readiness hides provider inventory unless admin-authorized on public deployments', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      publicBaseUrl: 'https://gateway.example.test',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER: 'true',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const publicReady = await readJson(await fetch(`${url}/ready`))
+    assert.equal(publicReady.ok, true)
+    assert.equal(Object.prototype.hasOwnProperty.call(publicReady, 'providers'), false)
+
+    const adminReady = await readJson(await fetch(`${url}/ready`, {
+      headers: { authorization: 'Bearer admin-token' },
+    }))
+    assert.equal(adminReady.ok, true)
+    assert.equal(Array.isArray(adminReady.providers), true)
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway webhooks fail closed without leaking provider auth errors', async () => {
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'webhook',
+      kind: 'webhook',
+      channelBindingId: 'webhook-binding',
+      credentials: {
+        sharedSecret: 'webhook-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/outbound',
+      },
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const unsigned = await readJson(await fetch(`${url}/webhooks/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { chatId: 'chat-1' },
+        sender: { userId: 'user-1' },
+        text: 'hello',
+      }),
+    }))
+    assert.equal(unsigned.error, 'Gateway webhook authorization failed.')
+
+    const unsignedStatus = await fetch(`${url}/webhooks/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { chatId: 'chat-1' },
+        sender: { userId: 'user-1' },
+        text: 'hello',
+      }),
+    })
+    assert.equal(unsignedStatus.status, 401)
+
+    const malformed = await fetch(`${url}/webhooks/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"broken"',
+    })
+    assert.equal(malformed.status, 400)
+    assert.equal((await readJson(malformed)).error, 'Gateway webhook body must be valid JSON or form-encoded payload.')
+
+    const unknown = await fetch(`${url}/webhooks/missing`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(unknown.status, 404)
+    assert.equal((await readJson(unknown)).error, 'Gateway webhook provider was not found.')
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
 test('gateway daemon exposes admin delivery backlog controls', async () => {
   const calls: string[] = []
   const cloud = {

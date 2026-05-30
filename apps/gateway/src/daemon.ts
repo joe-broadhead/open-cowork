@@ -6,6 +6,12 @@ import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText } 
 import { createGatewayRuntime, type GatewayRuntime } from './gateway-runtime.js'
 import { renderPrometheusMetrics } from './metrics.js'
 
+class GatewayHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+  }
+}
+
 export type GatewayHttpServer = {
   server: Server
   listen(): Promise<string>
@@ -43,9 +49,16 @@ export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayR
   const server = createServer((req, res) => {
     void handleRequest(config, runtime, req, res, cloud).catch((error) => {
       runtime.metrics.errors += 1
+      if (error instanceof GatewayHttpError) {
+        writeJson(res, error.status, {
+          ok: false,
+          error: error.message,
+        })
+        return
+      }
       writeJson(res, 500, {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: 'Internal gateway error.',
       })
     })
   })
@@ -100,13 +113,14 @@ async function handleRequest(
 
   if (req.method === 'GET' && url.pathname === '/ready') {
     const ready = runtime.ready()
-    writeJson(res, ready ? 200 : 503, {
+    const body: Record<string, unknown> = {
       ok: ready,
       status: ready ? 'ready' : 'not_ready',
       branding: config.branding,
       cloudBaseUrl: config.cloud.baseUrl,
-      providers: providerStatus(runtime),
-    })
+    }
+    if (isAdminRequest(config, req)) body.providers = providerStatus(runtime)
+    writeJson(res, ready ? 200 : 503, body)
     return
   }
 
@@ -197,13 +211,37 @@ async function handleRequest(
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
     const body = await readRequestBody(req)
-    const payload = parseRequestBody(body.raw, req.headers['content-type'])
-    const result = await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers, body.raw)
+    let payload: unknown
+    try {
+      payload = parseRequestBody(body.raw, req.headers['content-type'])
+    } catch {
+      throw new GatewayHttpError(400, 'Gateway webhook body must be valid JSON or form-encoded payload.')
+    }
+    let result: Awaited<ReturnType<typeof runtime.providers.handleWebhook>>
+    try {
+      result = await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers, body.raw)
+    } catch (error) {
+      throw classifyGatewayWebhookError(error)
+    }
     writeJson(res, result?.challenge ? 200 : 202, result?.challenge ? { challenge: result.challenge } : { ok: true })
     return
   }
 
   writeJson(res, 404, { ok: false, error: 'Not found.' })
+}
+
+function classifyGatewayWebhookError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/unknown gateway provider|does not expose a webhook endpoint/i.test(message)) {
+    return new GatewayHttpError(404, 'Gateway webhook provider was not found.')
+  }
+  if (/signature|secret|authorization|authorized|token|timestamp|replay/i.test(message)) {
+    return new GatewayHttpError(401, 'Gateway webhook authorization failed.')
+  }
+  if (/payload|invalid|malformed|required|too large|control characters/i.test(message)) {
+    return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
+  }
+  return new GatewayHttpError(502, 'Gateway webhook provider failed.')
 }
 
 function providerStatus(runtime: GatewayRuntime) {

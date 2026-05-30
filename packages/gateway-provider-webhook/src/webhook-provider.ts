@@ -66,6 +66,8 @@ export interface WebhookIngressAuth {
 
 const maxWebhookAttachments = 20;
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
+const maxWebhookRetryAttempts = 5;
+const maxWebhookRetryDelayMs = 10_000;
 
 export interface MapWebhookPayloadOptions {
   maxAttachmentBytes?: number;
@@ -277,7 +279,7 @@ export async function withWebhookRetry<T>(
   operation: () => Promise<T>,
   options: WebhookRetryOptions = {},
 ): Promise<T> {
-  const attempts = options.attempts ?? 3;
+  const attempts = Math.max(1, Math.min(maxWebhookRetryAttempts, options.attempts ?? 3));
   const sleep = options.sleep ?? delay;
   let attempt = 0;
 
@@ -300,7 +302,7 @@ export function webhookRetryDelayMs(error: unknown, attempt: number): number | n
     return null;
   }
   if (error.status === 429) {
-    return error.retryAfterMs ?? cappedBackoffMs(attempt);
+    return Math.min(error.retryAfterMs ?? cappedBackoffMs(attempt), maxWebhookRetryDelayMs);
   }
   if (error.status >= 500 && error.status < 600) {
     return cappedBackoffMs(attempt);
@@ -632,17 +634,17 @@ function parseRetryAfterMs(value: string | null): number | null {
   }
   const seconds = Number(value);
   if (Number.isFinite(seconds)) {
-    return Math.max(0, seconds * 1000);
+    return Math.min(maxWebhookRetryDelayMs, Math.max(0, seconds * 1000));
   }
   const date = new Date(value);
   if (!Number.isNaN(date.getTime())) {
-    return Math.max(0, date.getTime() - Date.now());
+    return Math.min(maxWebhookRetryDelayMs, Math.max(0, date.getTime() - Date.now()));
   }
   return null;
 }
 
 function cappedBackoffMs(attempt: number): number {
-  return Math.min(10_000, 1000 * 2 ** Math.max(0, attempt - 1));
+  return Math.min(maxWebhookRetryDelayMs, 1000 * 2 ** Math.max(0, attempt - 1));
 }
 
 function delay(ms: number): Promise<void> {

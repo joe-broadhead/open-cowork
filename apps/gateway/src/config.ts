@@ -119,7 +119,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     providers: normalizeProviders(raw.providers, env),
   }
   assertGatewayConfigSafe(config, {
-    allowPublicFakeProvider: readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false),
+    allowPublicFakeProvider: readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER, false),
   })
   return config
 }
@@ -593,13 +593,27 @@ function isPublicBindHost(hostname: string) {
   return host === '0.0.0.0' || host === '::' || host === '[::]' || !isLoopbackHost(host)
 }
 
+function isPublicBaseUrl(value: string | null) {
+  if (!value) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !isLoopbackHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
 function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFakeProvider: boolean }) {
   const publicBind = isPublicBindHost(config.server.host)
+  const publicExposure = publicBind || isPublicBaseUrl(config.server.publicBaseUrl)
+  if (publicExposure && !config.server.adminToken) {
+    throw new Error('Gateway public deployments require OPEN_COWORK_GATEWAY_ADMIN_TOKEN for metrics, diagnostics, and delivery operations.')
+  }
   if (publicBind && (config.metrics.enabled || config.diagnostics.enabled) && !config.server.adminToken) {
     throw new Error('Gateway metrics or diagnostics on a public bind require OPEN_COWORK_GATEWAY_ADMIN_TOKEN.')
   }
-  if (publicBind && config.providers.some((provider) => provider.enabled && provider.kind === 'fake') && !options.allowPublicFakeProvider) {
-    throw new Error('Gateway fake provider cannot be exposed on a public bind unless OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true is set explicitly for local/demo use.')
+  if (publicExposure && config.providers.some((provider) => provider.enabled && provider.kind === 'fake') && !(options.allowPublicFakeProvider && config.mode === 'self-host')) {
+    throw new Error('Gateway fake provider cannot be exposed publicly unless OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true is set explicitly for a self-host demo.')
   }
 }
 

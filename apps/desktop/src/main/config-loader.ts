@@ -471,9 +471,18 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
       mode: CLOUD_AUTH_MODES.has(source.auth?.mode || '')
         ? source.auth.mode
         : DEFAULT_CONFIG.cloud.auth.mode,
+      signupMode: source.auth?.signupMode
+        ? source.auth.signupMode
+        : source.auth?.mode === 'oidc'
+          ? 'invite'
+          : DEFAULT_CONFIG.cloud.auth.signupMode,
       headerSecret: typeof source.auth?.headerSecret === 'string' && source.auth.headerSecret.trim()
         ? source.auth.headerSecret.trim()
         : undefined,
+      headerAllowUnsigned: typeof source.auth?.headerAllowUnsigned === 'boolean'
+        ? source.auth.headerAllowUnsigned
+        : false,
+      headerMaxSignatureAgeMs: nullablePositiveNumber(source.auth?.headerMaxSignatureAgeMs, 5 * 60 * 1000) || 5 * 60 * 1000,
       allowedEmailDomains: stringArray(source.auth?.allowedEmailDomains),
       allowSelfServiceSignup: typeof source.auth?.allowSelfServiceSignup === 'boolean'
         ? source.auth.allowSelfServiceSignup

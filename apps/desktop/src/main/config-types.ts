@@ -262,6 +262,8 @@ export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
   signupMode?: 'closed' | 'invite' | 'domain' | 'open'
   headerSecret?: string
+  headerAllowUnsigned?: boolean
+  headerMaxSignatureAgeMs?: number
   issuerUrl?: string
   clientId?: string
   clientSecretRef?: string

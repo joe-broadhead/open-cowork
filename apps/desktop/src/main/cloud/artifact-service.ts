@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ObjectStoreAdapter } from './object-store.ts'
 import { artifactObjectKey } from './object-store.ts'
-import type { CloudPrincipal, CloudSessionService } from './session-service.ts'
+import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
 
 export type CloudArtifactRecord = {
   artifactId: string
@@ -22,31 +22,31 @@ export type CloudArtifactUploadInput = {
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 
 function boundedFilename(value: unknown) {
-  if (typeof value !== 'string') throw new Error('Artifact filename is required.')
+  if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact filename is required.')
   const trimmed = value.trim()
-  if (!trimmed) throw new Error('Artifact filename is required.')
+  if (!trimmed) throw new CloudServiceError(400, 'Artifact filename is required.')
   if (trimmed.length > 256 || /[\\/\0]/.test(trimmed) || trimmed === '.' || trimmed === '..') {
-    throw new Error('Artifact filename is invalid.')
+    throw new CloudServiceError(400, 'Artifact filename is invalid.')
   }
   return trimmed
 }
 
 function boundedContentType(value: unknown) {
   if (value === null || value === undefined || value === '') return null
-  if (typeof value !== 'string') throw new Error('Artifact contentType must be a string.')
+  if (typeof value !== 'string') throw new CloudServiceError(400, 'Artifact contentType must be a string.')
   const trimmed = value.trim().toLowerCase()
   if (!/^[a-z0-9][a-z0-9.+-]{0,63}\/[a-z0-9][a-z0-9.+-]{0,127}$/.test(trimmed)) {
-    throw new Error('Artifact contentType is invalid.')
+    throw new CloudServiceError(400, 'Artifact contentType is invalid.')
   }
   return trimmed
 }
 
 function decodeBase64(value: unknown) {
-  if (typeof value !== 'string' || !value.trim()) throw new Error('Artifact dataBase64 is required.')
-  if (!/^[A-Za-z0-9+/=\s_-]+$/.test(value)) throw new Error('Artifact dataBase64 is invalid.')
+  if (typeof value !== 'string' || !value.trim()) throw new CloudServiceError(400, 'Artifact dataBase64 is required.')
+  if (!/^[A-Za-z0-9+/=\s_-]+$/.test(value)) throw new CloudServiceError(400, 'Artifact dataBase64 is invalid.')
   const buffer = Buffer.from(value, value.includes('-') || value.includes('_') ? 'base64url' : 'base64')
-  if (buffer.byteLength === 0) throw new Error('Artifact dataBase64 is empty.')
-  if (buffer.byteLength > MAX_ARTIFACT_BYTES) throw new Error('Artifact is too large.')
+  if (buffer.byteLength === 0) throw new CloudServiceError(400, 'Artifact dataBase64 is empty.')
+  if (buffer.byteLength > MAX_ARTIFACT_BYTES) throw new CloudServiceError(413, 'Artifact is too large.')
   return buffer
 }
 
@@ -145,9 +145,9 @@ export class CloudArtifactService {
   async readSessionArtifact(principal: CloudPrincipal, sessionId: string, artifactId: string) {
     const artifact = (await this.listSessionArtifacts(principal, sessionId))
       .find((entry) => entry.artifactId === artifactId)
-    if (!artifact) throw new Error(`Unknown artifact ${artifactId}.`)
+    if (!artifact) throw new CloudServiceError(404, 'Cloud artifact was not found.')
     const object = await this.objectStore.getObject(artifact.key)
-    if (!object) throw new Error(`Artifact object ${artifactId} is missing.`)
+    if (!object) throw new CloudServiceError(404, 'Cloud artifact object was not found.')
     return {
       ...artifact,
       contentType: object.contentType || artifact.contentType,

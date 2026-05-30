@@ -76,6 +76,7 @@ export type CloudHttpServerOptions = {
   observability?: CloudObservabilityAdapter | null
   autoProcessCommands?: boolean
   corsOrigin?: string | null
+  strictTransportSecurity?: boolean
   maxBodyBytes?: number
   ssePollMs?: number
   trustProxyHeaders?: boolean
@@ -149,12 +150,23 @@ function internalTokenIsValid(req: IncomingMessage, expected: string | null | un
   return typeof provided === 'string' && constantTimeEquals(provided, expected)
 }
 
+function writeSecurityHeaders(res: ServerResponse, options: { strictTransportSecurity?: boolean } = {}) {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  if (options.strictTransportSecurity) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+}
+
 function writeCorsHeaders(res: ServerResponse, origin: string | null | undefined) {
   if (!origin) return
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Origin', origin)
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-CSRF-Token')
-  res.setHeader('Access-Control-Allow-Credentials', 'true')
 }
 
 function writeJson(res: ServerResponse, status: number, body: unknown, origin?: string | null) {
@@ -179,6 +191,7 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
       "img-src 'self' data: https:",
       `style-src ${styleSrc}`,
       `script-src ${scriptSrc}`,
+      "object-src 'none'",
       "base-uri 'none'",
       "frame-ancestors 'none'",
       "form-action 'self'",
@@ -333,9 +346,11 @@ function readNonNegativeInteger(value: unknown, fallback = 0) {
 }
 
 function readOptionalDate(value: unknown) {
-  if (typeof value !== 'string' || !value.trim()) return null
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || !value.trim()) throw new CloudHttpError(400, 'Date value must be an ISO timestamp.')
   const date = new Date(value)
-  return Number.isFinite(date.getTime()) ? date : null
+  if (!Number.isFinite(date.getTime())) throw new CloudHttpError(400, 'Date value must be a valid ISO timestamp.')
+  return date
 }
 
 function readEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
@@ -379,6 +394,13 @@ function requestSource(req: IncomingMessage, trustProxyHeaders = false) {
     ? firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
     : ''
   return forwardedFor || req.socket.remoteAddress || 'unknown'
+}
+
+function requestCorsOrigin(req: IncomingMessage, configuredOrigin: string | null | undefined) {
+  const configured = configuredOrigin?.trim()
+  if (!configured) return null
+  const origin = firstHeader(req.headers.origin).trim()
+  return origin === configured ? configured : null
 }
 
 function requestHeaderRecord(req: IncomingMessage): Record<string, string | undefined> {
@@ -1707,7 +1729,12 @@ export class CloudHttpServer {
     const startedAt = Date.now()
     const requestId = firstHeader(req.headers['x-request-id']).trim() || randomUUID()
     const url = new URL(req.url || '/', 'http://localhost')
+    const requestOptions: CloudHttpServerOptions = {
+      ...this.options,
+      corsOrigin: requestCorsOrigin(req, this.options.corsOrigin),
+    }
     res.setHeader('X-Request-Id', requestId)
+    writeSecurityHeaders(res, { strictTransportSecurity: this.options.strictTransportSecurity })
     res.on('finish', () => {
       void recordCloudHttpRequest(this.options.observability, {
         requestId,
@@ -1721,7 +1748,7 @@ export class CloudHttpServer {
       }).catch(() => {})
     })
     try {
-      writeCorsHeaders(res, this.options.corsOrigin)
+      writeCorsHeaders(res, requestOptions.corsOrigin)
       if (req.method === 'OPTIONS') {
         res.writeHead(204)
         res.end()
@@ -1730,7 +1757,7 @@ export class CloudHttpServer {
 
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
         const nonce = randomBytes(16).toString('base64url')
-        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), this.options.corsOrigin, nonce)
+        writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), requestOptions.corsOrigin, nonce)
         return
       }
 
@@ -1739,17 +1766,17 @@ export class CloudHttpServer {
           ok: true,
           role: this.options.policy.role,
           profileName: this.options.policy.profileName,
-        }, this.options.corsOrigin)
+        }, requestOptions.corsOrigin)
         return
       }
 
       if (url.pathname.startsWith('/webhooks/workflows/')) {
-        await handleCloudWorkflowWebhook(req, res, this.options, url)
+        await handleCloudWorkflowWebhook(req, res, requestOptions, url)
         return
       }
 
       if (url.pathname === '/webhooks/billing') {
-        await handleBillingWebhook(req, res, this.options)
+        await handleBillingWebhook(req, res, requestOptions)
         return
       }
 
@@ -1774,7 +1801,7 @@ export class CloudHttpServer {
               segments: url.pathname.split('/').filter(Boolean),
             }
           : null
-        await handleAuthRequest(req, res, this.options, context, authWithBackoff)
+        await handleAuthRequest(req, res, requestOptions, context, authWithBackoff)
         return
       }
       const auth = this.options.auth || defaultAuthResolver
@@ -1789,14 +1816,14 @@ export class CloudHttpServer {
         segments: url.pathname.split('/').filter(Boolean),
       }
       const segments = url.pathname.split('/').filter(Boolean)
-      await handleApiRequest(req, res, this.options, {
+      await handleApiRequest(req, res, requestOptions, {
         ...context,
         segments,
       })
     } catch (error) {
       if (error instanceof CloudHttpError) {
         await this.recordPolicyErrorMetric(error, req, url)
-        writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
+        writeError(res, error.status, error.publicMessage, requestOptions.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,
         })
@@ -1804,13 +1831,13 @@ export class CloudHttpServer {
       }
       if (error instanceof CloudServiceError) {
         await this.recordPolicyErrorMetric(error, req, url)
-        writeError(res, error.status, error.publicMessage, this.options.corsOrigin, {
+        writeError(res, error.status, error.publicMessage, requestOptions.corsOrigin, {
           policyCode: error.policyCode,
           retryAfterMs: error.retryAfterMs,
         })
         return
       }
-      writeError(res, 500, 'Internal server error.', this.options.corsOrigin)
+      writeError(res, 500, 'Internal server error.', requestOptions.corsOrigin)
     }
   }
 }
