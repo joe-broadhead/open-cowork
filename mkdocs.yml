@@ -121,6 +121,8 @@ nav:
   - Operate:
       - Open Cowork Cloud: open-cowork-cloud.md
       - Deployment Readiness: deployment-readiness.md
+      - Launch Readiness Gates: runbooks/launch-readiness.md
+      - Launch Readiness Report: runbooks/launch-readiness-report.md
       - Cloud Managed Operations: runbooks/cloud-managed-operations.md
       - Backup and Restore: runbooks/backup-restore.md
       - Restore Drill Report: runbooks/restore-drill-report.md

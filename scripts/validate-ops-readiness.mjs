@@ -28,6 +28,8 @@ const dashboardPath = 'deploy/observability/grafana-open-cowork-overview.json'
 const operationsRunbookPath = 'docs/runbooks/cloud-managed-operations.md'
 const backupRunbookPath = 'docs/runbooks/backup-restore.md'
 const drillReportPath = 'docs/runbooks/restore-drill-report.md'
+const launchRunbookPath = 'docs/runbooks/launch-readiness.md'
+const launchReportPath = 'docs/runbooks/launch-readiness-report.md'
 
 for (const path of [
   metricCatalogPath,
@@ -36,6 +38,8 @@ for (const path of [
   operationsRunbookPath,
   backupRunbookPath,
   drillReportPath,
+  launchRunbookPath,
+  launchReportPath,
 ]) {
   assertFile(path)
 }
@@ -145,6 +149,33 @@ for (const phrase of [
   'Redaction',
 ]) {
   assertIncludes(drillReportPath, phrase)
+}
+
+for (const phrase of [
+  'OPEN_COWORK_LOAD_CLOUD_URL',
+  'OPEN_COWORK_LOAD_INCLUDE_MUTATIONS',
+  'OPEN_COWORK_LOAD_INCLUDE_SSE',
+  'OPEN_COWORK_LOAD_OPERATOR_CHECKS',
+  'OPEN_COWORK_LOAD_BYOK_PROVIDER',
+  'OPEN_COWORK_LOAD_EXPECT_QUOTA_REJECTIONS',
+  'OPEN_COWORK_LOAD_STRICT',
+  'private-beta',
+  'public-beta',
+  'pnpm deploy:load',
+  'pnpm deploy:soak',
+]) {
+  assertIncludes(launchRunbookPath, phrase)
+}
+
+for (const phrase of [
+  'Load Test Report',
+  'Soak Test Report',
+  'Go/No-Go',
+  'Cost And Scaling Notes',
+  'Known Limits',
+  'Final Smoke',
+]) {
+  assertIncludes(launchReportPath, phrase)
 }
 
 log('operations readiness artifacts validated')

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "private-beta": {
+      "description": "Initial managed BYOK private beta target for design partners and small internal teams.",
+      "durationMs": 300000,
+      "soakDurationMs": 14400000,
+      "concurrency": 12,
+      "requestRatePerSecond": 6,
+      "capacityTargets": {
+        "concurrentCloudUsers": 25,
+        "concurrentDesktopClients": 10,
+        "concurrentGatewayChannels": 5,
+        "concurrentSseStreams": 50,
+        "storedCloudThreads": 2500,
+        "sessionCreatesPerMinute": 30,
+        "promptCommandsPerMinute": 60,
+        "activeWorkerSessions": 10,
+        "workflowRunsPerMinute": 10,
+        "gatewayInboundMessagesPerMinute": 120,
+        "gatewayOutboundDeliveriesPerMinute": 120,
+        "artifactUploadsPerMinute": 20,
+        "adminDashboardReadsPerMinute": 60
+      },
+      "thresholds": {
+        "maxOverallErrorRate": 0.01,
+        "maxOperationErrorRate": 0.03,
+        "p95ReadLatencyMs": 750,
+        "p95MutationLatencyMs": 1500,
+        "p95GatewayLatencyMs": 1000,
+        "maxProjectionLagEvents": 25,
+        "maxCommandOldestAgeMs": 30000,
+        "maxUnexpectedQuotaRejections": 0,
+        "maxGatewayDeadLetters": 0,
+        "maxGatewayRetryRatePerMinute": 10,
+        "maxSseReconnectsPerMinute": 5
+      }
+    },
+    "public-beta": {
+      "description": "First public hosted BYOK target before broader launch.",
+      "durationMs": 600000,
+      "soakDurationMs": 28800000,
+      "concurrency": 40,
+      "requestRatePerSecond": 20,
+      "capacityTargets": {
+        "concurrentCloudUsers": 100,
+        "concurrentDesktopClients": 40,
+        "concurrentGatewayChannels": 25,
+        "concurrentSseStreams": 250,
+        "storedCloudThreads": 20000,
+        "sessionCreatesPerMinute": 120,
+        "promptCommandsPerMinute": 240,
+        "activeWorkerSessions": 40,
+        "workflowRunsPerMinute": 40,
+        "gatewayInboundMessagesPerMinute": 600,
+        "gatewayOutboundDeliveriesPerMinute": 600,
+        "artifactUploadsPerMinute": 80,
+        "adminDashboardReadsPerMinute": 240
+      },
+      "thresholds": {
+        "maxOverallErrorRate": 0.005,
+        "maxOperationErrorRate": 0.02,
+        "p95ReadLatencyMs": 500,
+        "p95MutationLatencyMs": 1200,
+        "p95GatewayLatencyMs": 750,
+        "maxProjectionLagEvents": 10,
+        "maxCommandOldestAgeMs": 15000,
+        "maxUnexpectedQuotaRejections": 0,
+        "maxGatewayDeadLetters": 0,
+        "maxGatewayRetryRatePerMinute": 5,
+        "maxSseReconnectsPerMinute": 3
+      }
+    }
+  }
+}
