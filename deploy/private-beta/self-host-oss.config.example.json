@@ -1,0 +1,164 @@
+{
+  "$schema": "../../open-cowork.config.schema.json",
+  "allowedEnvPlaceholders": [
+    "OPEN_COWORK_CLOUD_DATABASE_URL",
+    "OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS",
+    "OPEN_COWORK_CLOUD_COOKIE_SECRET",
+    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
+    "OPEN_COWORK_GATEWAY_ADMIN_TOKEN",
+    "OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET"
+  ],
+  "branding": {
+    "name": "Open Cowork Self Host",
+    "appId": "com.example.open-cowork.selfhost",
+    "dataDirName": "open-cowork-self-host",
+    "helpUrl": "https://support.example.com/open-cowork",
+    "projectNamespace": "open-cowork-self-host"
+  },
+  "auth": {
+    "mode": "none"
+  },
+  "providers": {
+    "available": [],
+    "defaultProvider": null,
+    "defaultModel": null
+  },
+  "tools": [],
+  "skills": [],
+  "mcps": [],
+  "agents": [],
+  "permissions": {
+    "bash": "ask",
+    "fileWrite": "ask",
+    "task": "allow",
+    "web": "allow",
+    "webSearch": true
+  },
+  "cloud": {
+    "defaultProfile": "general",
+    "publicBranding": {
+      "productName": "Open Cowork Self Host",
+      "shortName": "OC",
+      "supportUrl": "https://support.example.com/open-cowork",
+      "privacyUrl": "https://legal.example.com/privacy",
+      "securityUrl": "https://security.example.com/open-cowork",
+      "legalUrl": "https://legal.example.com/terms"
+    },
+    "auth": {
+      "mode": "oidc",
+      "issuerUrl": "https://idp.example.com",
+      "clientId": "open-cowork-self-host",
+      "cookieSecretRef": "env:OPEN_COWORK_CLOUD_COOKIE_SECRET",
+      "signupMode": "domain",
+      "allowSelfServiceSignup": false,
+      "allowedEmailDomains": ["example.com"]
+    },
+    "storage": {
+      "controlPlane": {
+        "kind": "postgres",
+        "urlRef": "env:OPEN_COWORK_CLOUD_DATABASE_URL"
+      },
+      "objectStore": {
+        "kind": "s3",
+        "bucket": "open-cowork-self-host-artifacts",
+        "region": "us-east-1",
+        "prefix": "self-host/",
+        "credentialsRef": "env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS"
+      }
+    },
+    "runtime": {
+      "configSource": "app",
+      "launcher": "node",
+      "allowMachineRuntimeConfig": false,
+      "allowLocalStdioMcps": false,
+      "allowHostProjectDirectories": false,
+      "allowedLocalMcpNames": [],
+      "allowedHostProjectDirectories": []
+    },
+    "features": {
+      "chat": true,
+      "agents": true,
+      "artifacts": true,
+      "threadIndex": true,
+      "workflows": true,
+      "webhooks": true,
+      "settings": true,
+      "customSkills": true,
+      "customAgents": true,
+      "customMcps": true
+    },
+    "profiles": {
+      "general": {
+        "label": "General",
+        "description": "Self-host profile controlled by the downstream deployer.",
+        "agents": ["general"],
+        "tools": [],
+        "mcps": []
+      }
+    },
+    "abuse": {
+      "enabled": true,
+      "maxConcurrentSessionsPerOrg": 24,
+      "maxActiveWorkersPerOrg": 8,
+      "maxPromptsPerHour": 600,
+      "maxGatewayDeliveriesPerHour": 1200,
+      "maxArtifactBytesPerDay": 2147483648
+    },
+    "billing": {
+      "enabled": false,
+      "provider": "none",
+      "defaultPlanKey": "self-host"
+    }
+  },
+  "cloudDesktop": {
+    "enabled": true,
+    "allowUserAddedConnections": true,
+    "preconfiguredConnections": [
+      {
+        "baseUrl": "https://cowork.example.com",
+        "label": "Self-host Open Cowork"
+      }
+    ],
+    "requireManagedOrg": false,
+    "cacheMode": "full",
+    "cacheEncryptionFallback": "metadata-only"
+  },
+  "gateway": {
+    "branding": {
+      "productName": "Open Cowork Self Host",
+      "shortName": "OC",
+      "supportUrl": "https://support.example.com/open-cowork"
+    },
+    "cloud": {
+      "baseUrl": "https://cowork.example.com",
+      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
+      "allowInsecureHttp": false
+    },
+    "server": {
+      "host": "0.0.0.0",
+      "port": 8790,
+      "publicBaseUrl": "https://gateway.example.com",
+      "adminToken": "{env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN}"
+    },
+    "mode": "self-host",
+    "metrics": {
+      "enabled": true
+    },
+    "diagnostics": {
+      "enabled": false
+    },
+    "providers": [
+      {
+        "id": "self-host-webhook",
+        "kind": "webhook",
+        "channelBindingId": "self-host-webhook",
+        "credentials": {
+          "sharedSecret": "{env:OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET}"
+        },
+        "settings": {
+          "deliveryUrl": "https://bridge.example.com/open-cowork/inbound"
+        }
+      }
+    ]
+  }
+}

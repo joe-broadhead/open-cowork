@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "purpose": "private-beta-placeholder",
+  "billingMode": "manual-or-stub",
+  "currency": null,
+  "prices": [],
+  "plans": [
+    {
+      "planKey": "private-beta-design-partner",
+      "label": "Private beta design partner",
+      "billingMode": "manual",
+      "notes": "Manual invoice or no-charge design partner agreement. No token resale.",
+      "entitlements": {
+        "allowedProfiles": ["general", "focused-agent"],
+        "allowedProviders": null,
+        "maxConcurrentSessionsPerOrg": 12,
+        "maxActiveWorkersPerOrg": 4,
+        "maxPromptsPerHour": 240,
+        "maxGatewayDeliveriesPerHour": 600,
+        "maxArtifactBytesPerDay": 1073741824,
+        "allowNewSessions": true,
+        "allowPrompts": true,
+        "allowWorkers": true
+      }
+    },
+    {
+      "planKey": "private-beta-internal",
+      "label": "Private beta internal",
+      "billingMode": "stub",
+      "notes": "Internal dogfood or OSS self-host validation profile.",
+      "entitlements": {
+        "allowedProfiles": null,
+        "allowedProviders": null,
+        "maxConcurrentSessionsPerOrg": 24,
+        "maxActiveWorkersPerOrg": 8,
+        "maxPromptsPerHour": 600,
+        "maxGatewayDeliveriesPerHour": 1200,
+        "maxArtifactBytesPerDay": 2147483648,
+        "allowNewSessions": true,
+        "allowPrompts": true,
+        "allowWorkers": true
+      }
+    }
+  ]
+}

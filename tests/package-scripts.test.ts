@@ -98,6 +98,7 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:load'), 'node scripts/launch-readiness.mjs --mode load')
   assert.equal(requireScript('deploy:soak'), 'node scripts/launch-readiness.mjs --mode soak')
   assert.equal(requireScript('deploy:launch:validate'), 'node scripts/validate-launch-readiness.mjs')
+  assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {

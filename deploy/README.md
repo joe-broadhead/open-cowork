@@ -92,7 +92,10 @@ Reusable observability assets live under `deploy/observability/`:
   delivery failures.
 
 See `docs/deployment-readiness.md` for the production checklist and
-`docs/runbooks/managed-byok-saas.md` for hosted BYOK operations.
+`docs/runbooks/managed-byok-saas.md` for hosted BYOK operations. For a managed
+BYOK private beta, use `docs/runbooks/private-beta-launch.md`,
+`docs/runbooks/private-beta-support.md`, and `deploy/private-beta/` before
+inviting design partners.
 
 ## Validation
 
@@ -100,6 +103,12 @@ Validate local manifests and Helm guardrails:
 
 ```bash
 pnpm deploy:validate
+```
+
+Validate the managed BYOK private beta launch package and OSS boundary:
+
+```bash
+pnpm deploy:private-beta:validate
 ```
 
 Smoke a running deployment:
