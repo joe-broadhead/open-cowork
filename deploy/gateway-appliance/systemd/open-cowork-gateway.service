@@ -1,0 +1,25 @@
+[Unit]
+Description=Open Cowork Gateway
+Documentation=https://github.com/joe-broadhead/open-cowork
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=open-cowork
+Group=open-cowork
+WorkingDirectory=/opt/open-cowork
+EnvironmentFile=/etc/open-cowork/gateway.env
+ExecStart=/usr/bin/env pnpm --filter @open-cowork/gateway start
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/open-cowork /var/log/open-cowork
+StandardOutput=append:/var/log/open-cowork/gateway.log
+StandardError=append:/var/log/open-cowork/gateway-error.log
+
+[Install]
+WantedBy=multi-user.target

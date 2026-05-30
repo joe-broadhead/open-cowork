@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.open-cowork.gateway</string>
+  <key>WorkingDirectory</key>
+  <string>/opt/open-cowork</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>pnpm</string>
+    <string>--filter</string>
+    <string>@open-cowork/gateway</string>
+    <string>start</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPEN_COWORK_GATEWAY_CONFIG</key>
+    <string>/etc/open-cowork/gateway.json</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/log/open-cowork/gateway.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/open-cowork/gateway-error.log</string>
+</dict>
+</plist>

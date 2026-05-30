@@ -42,6 +42,7 @@ gateway:
     botToken: ""
     channelBindingId: telegram
     mode: polling
+    publicUrl: ""
     webhookSecret: ""
   slack:
     botToken: ""

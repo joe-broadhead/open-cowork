@@ -12,6 +12,9 @@ const composeFiles = [
   'docker-compose.cloud.split.yml',
   'docker-compose.cloud-gateway.yml',
 ]
+const gatewayOnlyComposeFiles = [
+  'docker-compose.gateway-remote.yml',
+]
 
 function log(message) {
   process.stdout.write(`[deploy-validate] ${message}\n`)
@@ -55,13 +58,20 @@ function staticComposeChecks() {
     assertIncludes(file, 'services:')
     assertIncludes(file, 'postgres:')
   }
+  for (const file of gatewayOnlyComposeFiles) {
+    assertIncludes(file, 'services:')
+    assertIncludes(file, 'open-cowork-gateway:')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_HOST')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+  }
   assertIncludes('docker-compose.cloud.yml', 'minio:')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-web:')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-worker:')
   assertIncludes('docker-compose.cloud.split.yml', 'open-cowork-cloud-scheduler:')
   assertIncludes('docker-compose.cloud-gateway.yml', 'open-cowork-gateway:')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
-  for (const file of composeFiles) {
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+  for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
     assertIncludes(file, 'OPEN_COWORK_CONFIG_PATH')
     assertIncludes(file, 'OPEN_COWORK_CONFIG_DIR')
     assertIncludes(file, 'OPEN_COWORK_DOWNSTREAM_ROOT')
@@ -90,7 +100,7 @@ function validateCompose() {
     return
   }
 
-  for (const file of composeFiles) {
+  for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
     run('docker', ['compose', '-f', file, 'config', '--quiet'])
   }
 }
@@ -100,6 +110,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required on public gateway binds')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
@@ -107,9 +118,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'publicUrl: ""')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
 }
 
 function validateHelm() {
@@ -254,6 +267,27 @@ function validateHelm() {
       ],
       'gateway.adminToken or gateway.existingSecret is required on public gateway binds'
     )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-telegram-webhook-gateway',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'gateway.telegram.mode=webhook',
+        '--set',
+        'gateway.telegram.webhookSecret=ci-telegram-secret',
+      ],
+      'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled'
+    )
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
@@ -266,8 +300,15 @@ function validateDocs() {
     'docs/runbooks/backup-restore.md',
     'docs/runbooks/restore-drill-report.md',
     'docs/runbooks/managed-byok-saas.md',
+    'docs/gateway-appliance.md',
     'docs/runbooks/private-beta-launch.md',
     'docs/runbooks/private-beta-support.md',
+    'deploy/gateway-appliance/README.md',
+    'deploy/gateway-appliance/remote-cloud.env.example',
+    'deploy/gateway-appliance/local-all-in-one.env.example',
+    'deploy/gateway-appliance/systemd/open-cowork-gateway.service',
+    'deploy/gateway-appliance/launchd/com.open-cowork.gateway.plist',
+    'deploy/gateway-appliance/reverse-proxy/Caddyfile.example',
     'deploy/private-beta/README.md',
     'deploy/private-beta/private-beta-plans.json',
     'deploy/private-beta/hosted-byok.config.example.json',
@@ -433,11 +474,42 @@ function validateDocs() {
     'cloud.publicBranding',
     'cloudDesktop',
     'gateway.providers',
+    'docs/gateway-appliance.md',
+    'docker-compose.gateway-remote.yml',
     'OPEN_COWORK_CONFIG_PATH',
     'cloud.billing.provider',
   ]) {
     if (!deployReadme.includes(phrase)) {
       throw new Error(`deploy/README.md must include ${phrase}`)
+    }
+  }
+
+  const gatewayAppliance = read('docs/gateway-appliance.md')
+  for (const phrase of [
+    'Remote Cloud',
+    'Local All-In-One',
+    'VPS',
+    'Mac mini',
+    'Raspberry Pi',
+    'systemd',
+    'launchd',
+    'Telegram',
+    'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL',
+    'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
+    'docker-compose.gateway-remote.yml',
+    'docker-compose.cloud-gateway.yml',
+    'not an OpenCode runtime',
+    'Upgrade And Rollback',
+  ]) {
+    if (!gatewayAppliance.includes(phrase)) {
+      throw new Error(`docs/gateway-appliance.md must include ${phrase}`)
+    }
+  }
+
+  const gatewaySetup = read('scripts/gateway-appliance-setup.mjs')
+  for (const phrase of ['--mode remote', '--mode local', '--telegram-mode polling|webhook', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL']) {
+    if (!gatewaySetup.includes(phrase)) {
+      throw new Error(`scripts/gateway-appliance-setup.mjs must include ${phrase}`)
     }
   }
 

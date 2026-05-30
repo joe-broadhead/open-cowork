@@ -335,6 +335,61 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
   }), /sharedSecret/)
 })
 
+test('gateway config inherits public URL for Telegram webhook mode', () => {
+  const inherited = resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
+    OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
+  })
+  assert.equal(inherited.providers[0]?.settings.publicBaseUrl, 'https://gateway.example.test')
+
+  const providerSpecific = resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
+    OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL: 'https://telegram-gateway.example.test',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
+    OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
+  })
+  assert.equal(providerSpecific.providers[0]?.settings.publicBaseUrl, 'https://telegram-gateway.example.test')
+})
+
+test('gateway config fails closed for unsafe Telegram webhook setup', () => {
+  assert.throws(() => resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
+  }), /webhookSecret/)
+
+  assert.throws(() => resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
+    OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
+  }), /publicBaseUrl|PUBLIC_URL/)
+
+  assert.throws(() => resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_PUBLIC_URL: 'http://gateway.example.test',
+    OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
+    OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
+  }), /HTTPS/)
+})
+
 test('gateway config loads Slack, email, Telegram, and webhook providers from env together', () => {
   const config = resolveGatewayConfig({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',

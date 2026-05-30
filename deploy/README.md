@@ -34,6 +34,13 @@ The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
 and can also be enabled as the cloud chart's optional gateway dependency.
 
+For VPS, Mac mini, Raspberry Pi, and internal-server installs, use the Gateway
+appliance path in `docs/gateway-appliance.md` plus the templates under
+`deploy/gateway-appliance/`. The appliance supports remote Cloud mode through
+`docker-compose.gateway-remote.yml` and local all-in-one mode through
+`docker-compose.cloud-gateway.yml`. Both modes keep Gateway as a Cloud client,
+not an OpenCode runtime.
+
 ## Deployer Configuration
 
 Keep product policy in `open-cowork.config.json` and provider wiring in
