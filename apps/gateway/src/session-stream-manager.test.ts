@@ -271,6 +271,7 @@ test('session stream manager reconnects from the last persisted cursor', async (
   await waitFor(() => subscriptions.length === 2)
 
   assert.equal(metrics.errors, 1)
+  assert.equal(metrics.streamReconnects, 1)
   assert.equal(subscriptions[1].afterSequence, 9)
   manager.closeAll()
 })
@@ -446,6 +447,7 @@ test('session stream manager leaves failed provider sends retryable', async () =
   }
   subscriptions[0].onEvent(event)
   await waitFor(() => metrics.errors === 1)
+  assert.equal(metrics.streamReconnects, 1)
   assert.equal(cursorUpdates.length, 0)
   await waitFor(() => subscriptions.length === 2)
 

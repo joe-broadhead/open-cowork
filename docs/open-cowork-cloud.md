@@ -790,6 +790,9 @@ browser is not the only protection.
   or by durable worker polling.
 - `GET /api/workers/heartbeats` exposes worker and scheduler heartbeat state
   for authenticated operators.
+- `GET /api/metrics` exposes operator-scoped Prometheus metrics from the
+  in-process cloud observability adapter. Use OTLP for provider-managed
+  tracing/metrics and this endpoint for scrape-based dashboards.
 - Cloud HTTP requests emit structured request logs with request ids, role,
   profile, status, and duration. When `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` is
   set, the same request observations are exported as OTLP HTTP traces and

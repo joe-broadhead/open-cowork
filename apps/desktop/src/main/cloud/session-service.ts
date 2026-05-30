@@ -226,6 +226,14 @@ export type CloudDiagnosticsBundle = {
     commandProcessing: 'inline' | 'durable' | 'delegated'
     checkpoints: boolean
     heartbeatCount: number
+    heartbeats: Array<{
+      workerId: string
+      role: string
+      activeSessionCount: number
+      lastSeenAt: string
+      ageMs: number
+      stale: boolean
+    }>
   }
   billing: {
     enabled: boolean
@@ -548,13 +556,11 @@ function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
 }
 
 function principalCanViewOperations(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin') || hasTokenScope(principal, 'worker-internal')
   return principal.role === 'owner' || principal.role === 'admin'
 }
 
 function principalCanViewDiagnostics(principal: CloudPrincipal) {
-  if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
   return principal.role === 'owner' || principal.role === 'admin'
 }
@@ -2563,6 +2569,18 @@ export class CloudSessionService {
     for (const binding of bindings) {
       bindingsByProvider[binding.provider] = (bindingsByProvider[binding.provider] || 0) + 1
     }
+    const now = Date.now()
+    const runtimeHeartbeats = heartbeats.map((heartbeat) => {
+      const ageMs = Math.max(0, now - Date.parse(heartbeat.lastSeenAt))
+      return {
+        workerId: heartbeat.workerId,
+        role: heartbeat.role,
+        activeSessionCount: heartbeat.activeSessionIds.length,
+        lastSeenAt: heartbeat.lastSeenAt,
+        ageMs,
+        stale: ageMs > 60_000,
+      }
+    })
     return {
       generatedAt: new Date().toISOString(),
       redaction: 'secrets-redacted',
@@ -2579,6 +2597,7 @@ export class CloudSessionService {
         commandProcessing: this.policy.role === 'all-in-one' ? 'inline' : this.policy.role === 'worker' ? 'durable' : 'delegated',
         checkpoints: this.policy.role === 'all-in-one' || this.policy.role === 'worker',
         heartbeatCount: heartbeats.length,
+        heartbeats: runtimeHeartbeats,
       },
       billing,
       byok: {

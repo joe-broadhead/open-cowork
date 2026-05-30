@@ -37,6 +37,7 @@ export type CloudObservabilityAdapter = {
   log(record: CloudLogRecord): void | Promise<void>
   metric(record: CloudMetricRecord): void | Promise<void>
   span(record: CloudSpanRecord): void | Promise<void>
+  renderPrometheus?(): string
   flush?(): void | Promise<void>
   close?(): void | Promise<void>
 }
@@ -68,6 +69,13 @@ export type CloudHttpRequestObservation = {
   timestamp?: Date
 }
 
+type CloudPrometheusMetricPoint = {
+  kind: 'counter' | 'gauge'
+  help: string
+  value: number
+  labels: Record<string, string>
+}
+
 const DEFAULT_SERVICE_NAME = 'open-cowork-cloud'
 const SENSITIVE_FIELD = /(authorization|cookie|token|secret|password|credential|key)$/i
 const MAX_STRING_LENGTH = 512
@@ -77,6 +85,18 @@ const LOCAL_PATH_PATTERNS = [
   /\/home\/[^\s"'`:]+/g,
   /[A-Z]:\\Users\\[^\s"'`:]+/gi,
 ]
+const PROMETHEUS_HIGH_CARDINALITY_KEYS = new Set([
+  'duration_ms',
+  'error_message',
+  'request_id',
+  'session_id',
+  'user_id',
+  'account_id',
+  'run_id',
+  'command_id',
+  'delivery_id',
+  'gateway_binding_id',
+])
 
 function serviceAttributes(serviceName: string, serviceVersion: string | null | undefined) {
   return {
@@ -101,6 +121,14 @@ function redactAttribute(key: string, value: CloudObservabilityAttributeValue) {
 
 function redactCloudAttributeString(value: string) {
   let redacted = value.replace(SIGNED_URL_QUERY_PATTERN, '$1?[redacted]')
+  redacted = redacted
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+    .replace(/\b(?:token|secret|password|credential|api[_-]?key)=([^\s"'&]+)/gi, (match) => {
+      const [key] = match.split('=')
+      return `${key}=[redacted]`
+    })
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
   for (const pattern of LOCAL_PATH_PATTERNS) {
     redacted = redacted.replace(pattern, (match) => {
       const prefix = match.match(/^(\/Users|\/home|[A-Z]:\\Users)/i)?.[0] || '[home]'
@@ -119,6 +147,43 @@ export function sanitizeCloudObservabilityAttributes(attributes: CloudObservabil
     if (cleanValue !== undefined) sanitized[cleanKey] = cleanValue
   }
   return sanitized
+}
+
+function prometheusMetricName(name: string) {
+  const normalized = name.trim().replace(/[^a-zA-Z0-9_:]/g, '_').replace(/_+/g, '_')
+  return /^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(normalized) ? normalized : `open_cowork_cloud_${normalized}`
+}
+
+function prometheusLabelName(name: string) {
+  const normalized = name.trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_')
+  return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(normalized) ? normalized : `label_${normalized}`
+}
+
+function prometheusEscape(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"')
+}
+
+function metricLabels(attributes: CloudObservabilityAttributes = {}) {
+  const labels: Record<string, string> = {}
+  const sanitized = sanitizeCloudObservabilityAttributes(attributes)
+  for (const [key, value] of Object.entries(sanitized)) {
+    const label = prometheusLabelName(key)
+    if (PROMETHEUS_HIGH_CARDINALITY_KEYS.has(label)) continue
+    if (value === null) continue
+    labels[label] = String(value).slice(0, 128)
+  }
+  return labels
+}
+
+function metricKey(name: string, labels: Record<string, string>) {
+  return `${name}\n${Object.entries(labels).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}=${value}`).join('\n')}`
+}
+
+function renderPrometheusPoint(name: string, point: CloudPrometheusMetricPoint) {
+  const labelText = Object.entries(point.labels).sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}="${prometheusEscape(value)}"`)
+    .join(',')
+  return `${name}${labelText ? `{${labelText}}` : ''} ${point.value}`
 }
 
 function otlpAttributes(attributes: CloudObservabilityAttributes = {}) {
@@ -170,6 +235,9 @@ export function createCompositeCloudObservability(adapters: Array<CloudObservabi
     async span(record) {
       await Promise.all(active.map((adapter) => adapter.span(record)))
     },
+    renderPrometheus() {
+      return active.map((adapter) => adapter.renderPrometheus?.()).filter(Boolean).join('\n')
+    },
     async flush() {
       await Promise.all(active.map((adapter) => adapter.flush?.()))
     },
@@ -193,15 +261,16 @@ export function createConsoleCloudObservability(options: ConsoleCloudObservabili
       ...serviceAttributes(serviceName, serviceVersion),
       ...(record.attributes || {}),
     })
+    const message = redactCloudAttributeString(record.message || record.name).slice(0, MAX_STRING_LENGTH)
     if (format === 'pretty') {
-      sink(`[${timestamp}] [cloud:${record.level}] ${record.name}${record.message ? ` ${record.message}` : ''}`)
+      sink(`[${timestamp}] [cloud:${record.level}] ${record.name}${message ? ` ${message}` : ''}`)
       return
     }
     sink(JSON.stringify({
       ts: timestamp,
       level: record.level,
       name: record.name,
-      message: record.message || record.name,
+      message,
       attributes,
     }))
   }
@@ -237,6 +306,50 @@ export function createConsoleCloudObservability(options: ConsoleCloudObservabili
         },
         timestamp: record.endTime,
       })
+    },
+  }
+}
+
+export function createPrometheusCloudObservability(): CloudObservabilityAdapter {
+  const points = new Map<string, CloudPrometheusMetricPoint>()
+
+  return {
+    log() {},
+    metric(record) {
+      if (!Number.isFinite(record.value)) return
+      const name = prometheusMetricName(record.name)
+      const labels = metricLabels(record.attributes)
+      const key = metricKey(name, labels)
+      const kind = name.endsWith('_total') ? 'counter' : 'gauge'
+      const existing = points.get(key)
+      points.set(key, {
+        kind,
+        help: `${name} emitted by Open Cowork Cloud.`,
+        value: kind === 'counter' ? (existing?.value || 0) + record.value : record.value,
+        labels,
+      })
+    },
+    span() {},
+    renderPrometheus() {
+      const byName = new Map<string, CloudPrometheusMetricPoint[]>()
+      for (const [key, point] of points.entries()) {
+        const [name] = key.split('\n')
+        if (!name) continue
+        const metricPoints = byName.get(name) || []
+        metricPoints.push(point)
+        byName.set(name, metricPoints)
+      }
+      const lines: string[] = []
+      for (const [name, metricPoints] of [...byName.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+        const kind = metricPoints.some((point) => point.kind === 'counter') ? 'counter' : 'gauge'
+        lines.push(`# HELP ${name} ${metricPoints[0]?.help || `${name} emitted by Open Cowork Cloud.`}`)
+        lines.push(`# TYPE ${name} ${kind}`)
+        for (const point of metricPoints.sort((left, right) => JSON.stringify(left.labels).localeCompare(JSON.stringify(right.labels)))) {
+          lines.push(renderPrometheusPoint(name, point))
+        }
+      }
+      lines.push('')
+      return lines.join('\n')
     },
   }
 }
@@ -281,7 +394,7 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
             attributes: otlpAttributes(span.attributes),
             status: {
               code: span.status === 'error' ? 2 : 1,
-              ...(span.statusMessage ? { message: span.statusMessage } : {}),
+              ...(span.statusMessage ? { message: redactCloudAttributeString(span.statusMessage).slice(0, MAX_STRING_LENGTH) } : {}),
             },
           })),
         }],
@@ -368,6 +481,32 @@ export async function recordCloudHttpRequest(
     attributes,
     timestamp,
   })
+  await observability.metric({
+    name: 'open_cowork_cloud_http_requests_total',
+    value: 1,
+    unit: '1',
+    attributes: {
+      'http.request.method': input.method,
+      'url.path': input.path,
+      'http.response.status_code': input.statusCode,
+      'cloud.role': input.role,
+      'cloud.profile': input.profileName,
+    },
+    timestamp,
+  })
+  await observability.metric({
+    name: 'open_cowork_cloud_http_request_duration_ms',
+    value: input.durationMs,
+    unit: 'ms',
+    attributes: {
+      'http.request.method': input.method,
+      'url.path': input.path,
+      'http.response.status_code': input.statusCode,
+      'cloud.role': input.role,
+      'cloud.profile': input.profileName,
+    },
+    timestamp,
+  })
   await observability.span({
     name: 'cloud.http.request',
     startTime: new Date(timestamp.getTime() - input.durationMs),
@@ -377,6 +516,60 @@ export async function recordCloudHttpRequest(
       duration_ms: input.durationMs,
     },
     status,
+  })
+}
+
+export async function recordCloudWorkerMetric(
+  observability: CloudObservabilityAdapter | null | undefined,
+  input: {
+    name: string
+    value?: number
+    workerId: string
+    tenantId?: string | null
+    sessionId?: string | null
+    status?: string | null
+    durationMs?: number | null
+    timestamp?: Date
+  },
+) {
+  if (!observability) return
+  const timestamp = input.timestamp || new Date()
+  await observability.metric({
+    name: input.name,
+    value: input.value ?? 1,
+    unit: input.name.endsWith('_ms') ? 'ms' : '1',
+    attributes: {
+      worker_id: input.workerId,
+      tenant_id: input.tenantId || undefined,
+      session_id: input.sessionId || undefined,
+      status: input.status || undefined,
+    },
+    timestamp,
+  })
+}
+
+export async function recordCloudSchedulerMetric(
+  observability: CloudObservabilityAdapter | null | undefined,
+  input: {
+    name: string
+    value?: number
+    schedulerId: string
+    status?: string | null
+    durationMs?: number | null
+    timestamp?: Date
+  },
+) {
+  if (!observability) return
+  const timestamp = input.timestamp || new Date()
+  await observability.metric({
+    name: input.name,
+    value: input.value ?? 1,
+    unit: input.name.endsWith('_ms') ? 'ms' : '1',
+    attributes: {
+      scheduler_id: input.schedulerId,
+      status: input.status || undefined,
+    },
+    timestamp,
   })
 }
 
@@ -410,6 +603,7 @@ export function createCloudObservabilityFromEnv(env: Env = process.env) {
       serviceVersion,
       format,
     }))
+    adapters.push(createPrometheusCloudObservability())
   } else {
     throw new Error(`Invalid cloud log format "${format}".`)
   }

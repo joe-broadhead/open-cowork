@@ -95,6 +95,7 @@ test('cloud deployment docs cover provider-neutral split deployment', () => {
   assert.match(docs, /GET \/healthz/)
   assert.match(docs, /GET \/api\/runtime\/status/)
   assert.match(docs, /GET \/api\/workers\/heartbeats/)
+  assert.match(docs, /GET \/api\/metrics/)
   assert.match(docs, /web app at `\/`/)
   assert.match(docs, /Cloud Web Workbench readiness gates/)
   assert.match(docs, /pnpm test:cloud-web/)
@@ -519,6 +520,9 @@ test('deployment readiness checklist and managed BYOK runbook cover production g
     'quotas/rate limits',
     'OTLP/logging',
     'backups/restore',
+    'deploy/observability/',
+    'docs/runbooks/backup-restore.md',
+    'docs/runbooks/restore-drill-report.md',
     'no billing provider or the stub billing provider',
     'cloud.publicBranding',
     'cloudDesktop',
@@ -556,6 +560,86 @@ test('deployment readiness checklist and managed BYOK runbook cover production g
   const mkdocs = readRepoFile('mkdocs.yml')
   assert.match(mkdocs, /Deployment Readiness: deployment-readiness\.md/)
   assert.match(mkdocs, /Managed BYOK SaaS: runbooks\/managed-byok-saas\.md/)
+  assert.match(mkdocs, /Backup and Restore: runbooks\/backup-restore\.md/)
+  assert.match(mkdocs, /Restore Drill Report: runbooks\/restore-drill-report\.md/)
+})
+
+test('operations observability assets define metrics, dashboards, alerts, and restore drill gates', () => {
+  const packageJson = readRepoFile('package.json')
+  const validator = readRepoFile('scripts/validate-ops-readiness.mjs')
+  const catalog = readRepoFile('deploy/observability/metrics-catalog.json')
+  const alerts = readRepoFile('deploy/observability/prometheus-alerts.yaml')
+  const dashboard = readRepoFile('deploy/observability/grafana-open-cowork-overview.json')
+  const backup = readRepoFile('docs/runbooks/backup-restore.md')
+  const drill = readRepoFile('docs/runbooks/restore-drill-report.md')
+
+  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs"/)
+  assert.match(validator, /open_cowork_cloud_http_requests_total/)
+  assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
+
+  for (const metric of [
+    'open_cowork_cloud_http_requests_total',
+    'open_cowork_cloud_http_request_duration_ms',
+    'open_cowork_cloud_command_queue_depth',
+    'open_cowork_cloud_command_oldest_age_ms',
+    'open_cowork_cloud_worker_lease_claims_total',
+    'open_cowork_cloud_worker_lease_renewals_total',
+    'open_cowork_cloud_worker_stale_owner_rejections_total',
+    'open_cowork_cloud_scheduler_claims_total',
+    'open_cowork_cloud_projection_lag_events',
+    'open_cowork_cloud_sse_connections',
+    'open_cowork_cloud_quota_rejections_total',
+    'open_cowork_cloud_auth_failures_total',
+    'open_cowork_cloud_byok_reveal_failures_total',
+    'open_cowork_object_store_errors_total',
+    'pg_up',
+    'pg_stat_activity_count',
+    'open_cowork_gateway_deliveries_received_total',
+    'open_cowork_gateway_deliveries_sent_total',
+    'open_cowork_gateway_delivery_retries_total',
+    'open_cowork_gateway_delivery_dead_letters_total',
+    'open_cowork_gateway_session_streams',
+  ]) {
+    assert.match(catalog, new RegExp(metric))
+    assert.match(alerts + dashboard, new RegExp(metric))
+  }
+
+  for (const alert of [
+    'OpenCoworkCloudHighHttpErrorRate',
+    'OpenCoworkWorkerBacklogGrowing',
+    'OpenCoworkSchedulerStalled',
+    'OpenCoworkProjectionLag',
+    'OpenCoworkAuthFailuresSpike',
+    'OpenCoworkQuotaAbuse',
+    'OpenCoworkByokRevealFailures',
+    'OpenCoworkGatewayDeliveryBacklog',
+  ]) {
+    assert.match(alerts, new RegExp(alert))
+  }
+
+  for (const phrase of [
+    'pg_dump',
+    'pg_restore',
+    'aws s3 sync',
+    'gcloud storage rsync',
+    'az storage blob sync',
+    'Restore Drill Report Requirements',
+  ]) {
+    assert.match(backup, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+
+  for (const phrase of [
+    'Postgres restore',
+    'Object-store restore',
+    'Secret/KMS references',
+    'Session projection parity',
+    'Worker recovery',
+    'Scheduler recovery',
+    'Gateway recovery',
+    'Redaction',
+  ]) {
+    assert.match(drill, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
 })
 
 test('deployment validation and smoke scripts cover compose, helm, cloud, and gateway checks', () => {
@@ -568,15 +652,20 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(packageJson, /"deploy:smoke": "node scripts\/smoke-deployment\.mjs"/)
   assert.match(packageJson, /"deploy:gateway:smoke": "pnpm build:gateway && node scripts\/gateway-cloud-smoke\.mjs"/)
   assert.match(packageJson, /"deploy:continuation:smoke": "pnpm build:gateway && pnpm build:shared && node --no-warnings --experimental-strip-types scripts\/cloud-continuation-smoke\.mjs"/)
+  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs"/)
   assert.match(scriptsReadme, /pnpm deploy:validate/)
   assert.match(scriptsReadme, /pnpm deploy:smoke/)
   assert.match(scriptsReadme, /pnpm deploy:gateway:smoke/)
   assert.match(scriptsReadme, /pnpm deploy:continuation:smoke/)
+  assert.match(scriptsReadme, /pnpm ops:validate/)
   assert.match(validate, /docker-compose\.cloud\.yml/)
   assert.match(validate, /docker-compose\.cloud\.split\.yml/)
   assert.match(validate, /docker-compose\.cloud-gateway\.yml/)
   assert.match(validate, /helm\/open-cowork-cloud/)
   assert.match(validate, /helm\/open-cowork-gateway/)
+  assert.match(validate, /deploy\/observability\/metrics-catalog\.json/)
+  assert.match(validate, /docs\/runbooks\/backup-restore\.md/)
+  assert.match(validate, /docs\/runbooks\/restore-drill-report\.md/)
   assert.match(validate, /unsafe-public-cloud/)
   assert.match(validate, /unsafe-webhook-gateway/)
   assert.match(validate, /unsafe-metrics-gateway/)
@@ -591,6 +680,8 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(smoke, /\/api\/workspace/)
   assert.match(smoke, /\/api\/runtime\/status/)
   assert.match(smoke, /\/api\/workers\/heartbeats/)
+  assert.match(smoke, /\/api\/metrics/)
+  assert.match(smoke, /checkText/)
   assert.match(smoke, /\/health/)
   assert.match(smoke, /\/ready/)
   const gatewaySmoke = readRepoFile('scripts/gateway-cloud-smoke.mjs')
@@ -615,7 +706,17 @@ test('managed operations runbook covers readiness, rollback, diagnostics, and ga
     'GET /ready',
     'Rollback',
     'Worker Drains',
+    'Web Unavailable Or Erroring',
+    'Worker Backlog',
+    'Scheduler Stalled',
+    'Postgres Connection Exhaustion',
+    'Object-Store Errors',
+    'KMS Or Secret Adapter Errors',
+    'OIDC Outage',
     'Gateway Backlog',
+    'Gateway Provider Outage',
+    'Webhook Abuse',
+    'BYOK Provider Key Failure',
     'Secret Rotation',
     'Diagnostics',
     'API tokens',

@@ -5,6 +5,7 @@ import {
   createCloudObservabilityFromEnv,
   createConsoleCloudObservability,
   createOtlpHttpCloudObservability,
+  createPrometheusCloudObservability,
   recordCloudHttpRequest,
   sanitizeCloudObservabilityAttributes,
   type CloudObservabilityAdapter,
@@ -18,6 +19,7 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
     nested_secret: 'private',
     object_store_url: 'https://bucket.s3.amazonaws.com/private/file.txt?X-Amz-Signature=private',
     local_path: '/Users/alice/acme-private',
+    byok_error: 'provider failed for Bearer raw-token and user alice@example.test at /home/alice/project',
     count: 2,
     ok: true,
   }), {
@@ -27,6 +29,7 @@ test('cloud observability sanitizes secret-bearing attributes', () => {
     nested_secret: '[redacted]',
     object_store_url: 'https://bucket.s3.amazonaws.com/private/file.txt?[redacted]',
     local_path: '/Users/[redacted]',
+    byok_error: 'provider failed for Bearer [redacted] and user [redacted-email] at /home/[redacted]',
     count: 2,
     ok: true,
   })
@@ -44,7 +47,7 @@ test('cloud console observability writes structured JSON records', async () => {
   await adapter.log({
     level: 'info',
     name: 'cloud.test',
-    message: 'hello',
+    message: 'hello Bearer private-token from /Users/alice/acme',
     attributes: {
       request_id: 'req-1',
       token: 'private-token',
@@ -55,6 +58,7 @@ test('cloud console observability writes structured JSON records', async () => {
   assert.equal(parsed.ts, '2026-01-01T00:00:00.000Z')
   assert.equal(parsed.level, 'info')
   assert.equal(parsed.name, 'cloud.test')
+  assert.equal(parsed.message, 'hello Bearer [redacted] from /Users/[redacted]')
   assert.equal((parsed.attributes as Record<string, unknown>)['service.name'], 'open-cowork-cloud-test')
   assert.equal((parsed.attributes as Record<string, unknown>)['service.version'], '1.2.3')
   assert.equal((parsed.attributes as Record<string, unknown>).token, '[redacted]')
@@ -86,6 +90,38 @@ test('cloud HTTP request observation emits log, metric, and span records', async
   assert.equal((metrics[0] as Record<string, unknown>).value, 42)
   assert.equal((spans[0] as Record<string, unknown>).name, 'cloud.http.request')
   assert.equal((spans[0] as Record<string, unknown>).status, 'ok')
+})
+
+test('cloud Prometheus observability renders low-cardinality product metrics', async () => {
+  const adapter = createPrometheusCloudObservability()
+  await adapter.metric({
+    name: 'open_cowork_cloud_http_requests_total',
+    value: 1,
+    attributes: {
+      request_id: 'request-1',
+      session_id: 'session-1',
+      'http.request.method': 'GET',
+      'url.path': '/api/workspace',
+      token: 'secret-token',
+    },
+  })
+  await adapter.metric({
+    name: 'open_cowork_cloud_http_requests_total',
+    value: 1,
+    attributes: {
+      request_id: 'request-2',
+      session_id: 'session-2',
+      'http.request.method': 'GET',
+      'url.path': '/api/workspace',
+      token: 'secret-token',
+    },
+  })
+  const text = adapter.renderPrometheus?.() || ''
+  assert.match(text, /# TYPE open_cowork_cloud_http_requests_total counter/)
+  assert.match(text, /open_cowork_cloud_http_requests_total\{http_request_method="GET",token="\[redacted\]",url_path="\/api\/workspace"\} 2/)
+  assert.equal(text.includes('request-1'), false)
+  assert.equal(text.includes('session-1'), false)
+  assert.equal(text.includes('secret-token'), false)
 })
 
 test('cloud OTLP observability exports trace and metric payloads with headers', async () => {

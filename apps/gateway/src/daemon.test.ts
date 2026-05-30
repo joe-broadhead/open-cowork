@@ -118,7 +118,10 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
 
     const metrics = await fetch(`${url}/metrics`)
     assert.equal(metrics.status, 200)
-    assert.match(await metrics.text(), /open_cowork_gateway_providers 1/)
+    const metricsText = await metrics.text()
+    assert.match(metricsText, /open_cowork_gateway_providers 1/)
+    assert.match(metricsText, /open_cowork_gateway_session_streams 0/)
+    assert.match(metricsText, /open_cowork_gateway_webhook_requests_total 0/)
 
     const diagnostics = await readJson(await fetch(`${url}/diagnostics`))
     assert.equal((diagnostics.config as { cloud: { serviceToken: string } }).cloud.serviceToken, 'serv...[redacted]...7890')
@@ -128,7 +131,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     }> }).providers)[0]
     assert.equal(diagnosticProvider?.credentials.apiKey, 'prov...[redacted]...7890')
     assert.equal(diagnosticProvider?.settings.callbackSecret, 'prov...[redacted]...7890')
-    assert.equal(diagnosticProvider?.settings.deliveryUrl, 'https://example.test/deliver?token=%5Bredacted%5D')
+    assert.equal(diagnosticProvider?.settings.deliveryUrl, 'https://example.test/deliver?token=[redacted]')
     assert.equal(diagnosticProvider?.settings.workspacePath, '/home/[redacted]')
 
     const webhook = await fetch(`${url}/webhooks/fake`, {
@@ -138,6 +141,46 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     })
     assert.equal(webhook.status, 202)
     assert.deepEqual(prompted, ['ship it'])
+    assert.equal(runtime.metrics.webhookRequests, 1)
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway diagnostics redact provider health errors', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token-1234567890',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PORT: '0',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  runtime.providers.registrations[0].provider.health = () => ({
+    ok: false,
+    error: 'failed Bearer provider-token-1234567890 for alice@example.test at /Users/alice/acme?token=secret',
+  })
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const diagnostics = await readJson(await fetch(`${url}/diagnostics`))
+    const text = JSON.stringify(diagnostics)
+    assert.equal(text.includes('provider-token-1234567890'), false)
+    assert.equal(text.includes('alice@example.test'), false)
+    assert.equal(text.includes('/Users/alice'), false)
+    assert.match(text, /Bearer \[redacted\]/)
   } finally {
     await http.close()
     await runtime.stop()

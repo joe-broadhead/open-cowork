@@ -8,6 +8,7 @@ import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../apps/desktop/src/main/
 import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
 import type {
   CloudRuntimeAdapter,
@@ -248,6 +249,12 @@ test('worker-scoped BYOK runtime enforces provider policy before revealing activ
   })
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
   let factoryCalls = 0
+  const metrics: unknown[] = []
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric(record) { metrics.push(record) },
+    span() {},
+  }
   const runtime = createWorkerScopedRuntimeAdapter({
     paths: createCloudPathProvider(root),
     policy: resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
@@ -260,6 +267,7 @@ test('worker-scoped BYOK runtime enforces provider policy before revealing activ
         throw new Error('entitlement checker should not run for an unavailable provider')
       },
     },
+    observability,
     runtimeFactory() {
       factoryCalls += 1
       throw new Error('runtime factory should not be called')
@@ -284,6 +292,10 @@ test('worker-scoped BYOK runtime enforces provider policy before revealing activ
       /not available for cloud BYOK execution/,
     )
     assert.equal(factoryCalls, 0)
+    assert.equal(metrics.some((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
+      && (((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'provider_not_allowed')
+    )), true)
   } finally {
     await runtime.close?.()
     rmSync(root, { recursive: true, force: true })
@@ -300,12 +312,19 @@ test('missing or disabled required BYOK key fails before runtime spawn', async (
   await byokSecrets.setSecret({ orgId: 'tenant-a', providerId: 'openrouter', plaintext: KEY_A })
   await byokSecrets.disableSecret({ orgId: 'tenant-a', providerId: 'openrouter' })
   let factoryCalls = 0
+  const metrics: unknown[] = []
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric(record) { metrics.push(record) },
+    span() {},
+  }
   const runtime = createWorkerScopedRuntimeAdapter({
     paths: createCloudPathProvider(root),
     policy: resolveCloudRuntimePolicy(BYOK_TEST_CONFIG, { OPEN_COWORK_CLOUD_ROLE: 'worker', OPEN_COWORK_CLOUD_PROFILE: 'full' }),
     env: { PATH: process.env.PATH },
     config: BYOK_TEST_CONFIG,
     byokSecrets,
+    observability,
     runtimeFactory() {
       factoryCalls += 1
       throw new Error('runtime factory should not be called')
@@ -334,6 +353,10 @@ test('missing or disabled required BYOK key fails before runtime spawn', async (
     assert.equal(events.some((event) => (
       event.type === 'runtime.error'
       && JSON.stringify(event.payload).includes('requires an active BYOK credential')
+    )), true)
+    assert.equal(metrics.some((metric) => (
+      (metric as Record<string, unknown>).name === 'open_cowork_cloud_byok_reveal_failures_total'
+      && (((metric as Record<string, unknown>).attributes as Record<string, unknown>)?.reason === 'missing_required_byok')
     )), true)
   } finally {
     await runtime.close?.()

@@ -81,6 +81,16 @@ infrastructure:
 | Observability | JSON logs, OTLP endpoint, metrics, and redaction policy |
 | Recovery | Postgres and object-store backup/restore process |
 
+Reusable observability assets live under `deploy/observability/`:
+
+- `metrics-catalog.json` defines the Cloud and Gateway metric contract.
+- `grafana-open-cowork-overview.json` provides a provider-neutral dashboard
+  starting point for web, worker, scheduler, Gateway, auth, BYOK, quotas, and
+  delivery health.
+- `prometheus-alerts.yaml` defines launch-blocking alerts for user-impacting
+  errors, backlog, projection lag, auth abuse, BYOK failures, and Gateway
+  delivery failures.
+
 See `docs/deployment-readiness.md` for the production checklist and
 `docs/runbooks/managed-byok-saas.md` for hosted BYOK operations.
 

@@ -256,8 +256,14 @@ function validateHelm() {
 function validateDocs() {
   const requiredDocs = [
     'docs/deployment-readiness.md',
+    'docs/runbooks/cloud-managed-operations.md',
+    'docs/runbooks/backup-restore.md',
+    'docs/runbooks/restore-drill-report.md',
     'docs/runbooks/managed-byok-saas.md',
     'deploy/README.md',
+    'deploy/observability/metrics-catalog.json',
+    'deploy/observability/prometheus-alerts.yaml',
+    'deploy/observability/grafana-open-cowork-overview.json',
     'deploy/gcp/README.md',
     'deploy/aws/README.md',
     'deploy/azure/README.md',
@@ -294,6 +300,9 @@ function validateDocs() {
     'cloud.billing.provider=none',
     'otlp/logging',
     'backups/restore',
+    'deploy/observability/',
+    'docs/runbooks/backup-restore.md',
+    'docs/runbooks/restore-drill-report.md',
     'no billing provider or the stub billing provider',
   ]) {
     if (!readiness.includes(phrase)) {
@@ -313,6 +322,67 @@ function validateDocs() {
   ]) {
     if (!byok.includes(phrase)) {
       throw new Error(`docs/runbooks/managed-byok-saas.md must include ${phrase}`)
+    }
+  }
+
+  const operations = read('docs/runbooks/cloud-managed-operations.md')
+  for (const phrase of [
+    'Web Unavailable Or Erroring',
+    'Worker Backlog',
+    'Scheduler Stalled',
+    'Postgres Connection Exhaustion',
+    'Object-Store Errors',
+    'KMS Or Secret Adapter Errors',
+    'OIDC Outage',
+    'Gateway Provider Outage',
+    'Webhook Abuse',
+    'BYOK Provider Key Failure',
+  ]) {
+    if (!operations.includes(phrase)) {
+      throw new Error(`docs/runbooks/cloud-managed-operations.md must include ${phrase}`)
+    }
+  }
+
+  const metricsCatalog = read('deploy/observability/metrics-catalog.json')
+  for (const metric of [
+    'open_cowork_cloud_http_requests_total',
+    'open_cowork_cloud_command_queue_depth',
+    'open_cowork_cloud_worker_lease_claims_total',
+    'open_cowork_cloud_scheduler_claims_total',
+    'open_cowork_cloud_projection_lag_events',
+    'open_cowork_cloud_byok_reveal_failures_total',
+    'open_cowork_object_store_errors_total',
+    'pg_up',
+    'pg_stat_activity_count',
+    'open_cowork_gateway_delivery_retries_total',
+    'open_cowork_gateway_delivery_dead_letters_total',
+    'open_cowork_gateway_session_streams',
+  ]) {
+    if (!metricsCatalog.includes(metric)) {
+      throw new Error(`deploy/observability/metrics-catalog.json must include ${metric}`)
+    }
+  }
+
+  for (const path of ['deploy/observability/prometheus-alerts.yaml', 'deploy/observability/grafana-open-cowork-overview.json']) {
+    const artifact = read(path)
+    for (const phrase of ['Worker', 'Gateway', 'BYOK', 'projection']) {
+      if (!artifact.toLowerCase().includes(phrase.toLowerCase())) {
+        throw new Error(`${path} must include ${phrase}`)
+      }
+    }
+  }
+
+  const backupRestore = read('docs/runbooks/backup-restore.md')
+  for (const phrase of ['pg_dump', 'pg_restore', 'aws s3 sync', 'gcloud storage rsync', 'az storage blob sync']) {
+    if (!backupRestore.includes(phrase)) {
+      throw new Error(`docs/runbooks/backup-restore.md must include ${phrase}`)
+    }
+  }
+
+  const restoreDrill = read('docs/runbooks/restore-drill-report.md')
+  for (const phrase of ['Postgres restore', 'Object-store restore', 'Session projection parity', 'Gateway recovery', 'Redaction']) {
+    if (!restoreDrill.includes(phrase)) {
+      throw new Error(`docs/runbooks/restore-drill-report.md must include ${phrase}`)
     }
   }
 

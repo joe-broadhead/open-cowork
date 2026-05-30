@@ -73,6 +73,24 @@ async function checkReachableJson(url, options = {}) {
   }
 }
 
+async function checkText(url, options = {}) {
+  const response = await fetch(url, {
+    headers: options.token ? { Authorization: `Bearer ${options.token}` } : undefined,
+  })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}: ${text.slice(0, 400)}`)
+  }
+  for (const marker of options.markers || []) {
+    if (!text.includes(marker)) throw new Error(`${url} missing expected marker: ${marker}`)
+  }
+  return {
+    status: response.status,
+    contentType: response.headers.get('content-type') || '',
+    markers: options.markers || [],
+  }
+}
+
 async function checkHtml(url, options = {}) {
   const response = await fetch(url, {
     headers: options.token ? { Authorization: `Bearer ${options.token}` } : undefined,
@@ -151,6 +169,14 @@ async function main() {
         url: `${cloudUrl}/api/workers/heartbeats`,
         result: await checkJson(`${cloudUrl}/api/workers/heartbeats`, { token: cloudToken }),
       })
+      results.push({
+        check: 'cloud metrics',
+        url: `${cloudUrl}/api/metrics`,
+        result: await checkText(`${cloudUrl}/api/metrics`, {
+          token: cloudToken,
+          markers: ['open_cowork_cloud_http_requests_total'],
+        }),
+      })
     }
   }
 
@@ -169,7 +195,10 @@ async function main() {
       results.push({
         check: 'gateway metrics',
         url: `${gatewayUrl}/metrics`,
-        result: await checkJson(`${gatewayUrl}/metrics`, { token: gatewayAdminToken }),
+        result: await checkText(`${gatewayUrl}/metrics`, {
+          token: gatewayAdminToken,
+          markers: ['open_cowork_gateway_providers'],
+        }),
       })
     }
   }

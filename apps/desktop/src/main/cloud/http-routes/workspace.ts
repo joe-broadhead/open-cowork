@@ -21,6 +21,16 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
     return true
   }
 
+  if (resource === 'metrics' && !itemId && req.method === 'GET') {
+    await options.service.listWorkerHeartbeats(context.principal)
+    res.writeHead(200, {
+      'content-type': 'text/plain; version=0.0.4; charset=utf-8',
+      'cache-control': 'no-store',
+    })
+    res.end(options.observability?.renderPrometheus?.() || '')
+    return true
+  }
+
   if (resource === 'events' && !itemId && req.method === 'GET') {
     await tools.handleWorkspaceSse(req, res, options, context)
     return true

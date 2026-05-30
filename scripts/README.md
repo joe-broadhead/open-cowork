@@ -22,6 +22,7 @@ pnpm deploy:gateway:smoke
 pnpm deploy:continuation:smoke
 pnpm deploy:gcp:preflight
 pnpm deploy:gcp:smoke
+pnpm ops:validate
 pnpm notices
 pnpm --dir apps/desktop dist:ci
 ```
@@ -51,6 +52,13 @@ reachability, and gateway readiness endpoints. Override
 `OPEN_COWORK_SMOKE_CLOUD_URL` and `OPEN_COWORK_SMOKE_GATEWAY_URL` for provider
 deployments, or use `--skip-cloud` / `--skip-gateway` when checking one
 surface.
+Set `OPEN_COWORK_SMOKE_OPERATOR_CHECKS=true` and provide operator tokens to
+also validate cloud runtime status, worker heartbeats, cloud `/api/metrics`,
+and Gateway `/metrics`.
+
+`pnpm ops:validate` statically validates the production operations bundle:
+metric catalog, Grafana dashboard, Prometheus alert rules, incident runbooks,
+backup/restore instructions, and restore drill report requirements.
 
 `pnpm deploy:desktop:smoke` validates the Desktop cloud-workspace path against
 a running cloud deployment. It uses the same main-process cloud adapter and

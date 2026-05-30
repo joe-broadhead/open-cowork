@@ -65,6 +65,7 @@
     "deploy:continuation:smoke": "pnpm build:gateway && pnpm build:shared && node --no-warnings --experimental-strip-types scripts/cloud-continuation-smoke.mjs",
     "deploy:gcp:preflight": "node scripts/gcp-reference-preflight.mjs",
     "deploy:gcp:smoke": "node scripts/gcp-reference-smoke.mjs",
+    "ops:validate": "node scripts/validate-ops-readiness.mjs",
     "notices": "node scripts/generate-third-party-notices.mjs",
     "proof:cloud:opencode-portability": "node --no-warnings --experimental-strip-types scripts/opencode-portability-proof.ts",
     "perf:bench": "node --no-warnings --experimental-sqlite --experimental-strip-types scripts/perf-benchmark.ts",

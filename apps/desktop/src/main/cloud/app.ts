@@ -21,6 +21,8 @@ import {
 } from './http-server.ts'
 import {
   createCloudObservabilityFromEnv,
+  recordCloudSchedulerMetric,
+  recordCloudWorkerMetric,
   type CloudObservabilityAdapter,
 } from './observability.ts'
 import { createObjectStoreForCloud, type ObjectStoreAdapter } from './object-store.ts'
@@ -704,6 +706,16 @@ async function recordLoopError(
   error: unknown,
   attributes: Record<string, string | number | boolean | null | undefined> = {},
 ) {
+  await observability?.metric({
+    name: 'open_cowork_cloud_loop_errors_total',
+    value: 1,
+    unit: '1',
+    attributes: {
+      loop: name,
+      ...attributes,
+      error_name: error instanceof Error ? error.name : 'Error',
+    },
+  })
   await observability?.log({
     level: 'error',
     name,
@@ -721,7 +733,14 @@ function startWorkerLoop(worker: CloudWorker, pollMs: number, observability: Clo
     if (active) return
     active = true
     void worker.processAllSessionCommands()
-      .catch((error) => recordLoopError(observability, 'cloud.worker.loop.error', error))
+      .catch(async (error) => {
+        await recordCloudWorkerMetric(observability, {
+          name: 'open_cowork_cloud_worker_loop_failures_total',
+          workerId: 'loop',
+          status: 'error',
+        })
+        await recordLoopError(observability, 'cloud.worker.loop.error', error)
+      })
       .finally(() => {
         active = false
       })
@@ -735,7 +754,14 @@ function startSchedulerLoop(scheduler: CloudScheduler, pollMs: number, observabi
     if (active) return
     active = true
     void scheduler.processDueWorkflows()
-      .catch((error) => recordLoopError(observability, 'cloud.scheduler.loop.error', error))
+      .catch(async (error) => {
+        await recordCloudSchedulerMetric(observability, {
+          name: 'open_cowork_cloud_scheduler_failures_total',
+          schedulerId: 'loop',
+          status: 'error',
+        })
+        await recordLoopError(observability, 'cloud.scheduler.loop.error', error)
+      })
       .finally(() => {
         active = false
       })
@@ -834,6 +860,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
             allowedProviderIds: byokPolicy.allowedProviderIds,
             checkEntitlement: byokPolicy.checkRuntimeEntitlement,
           },
+          observability,
           runtimeFactory: options.runtimeFactory || defaultCloudRuntimeFactory,
         })
       : createUnavailableRuntimeAdapter()
@@ -935,10 +962,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           },
         },
         abuseConfig,
+        observability,
       )
     : null
   const scheduler = shouldRunCloudScheduler(policy.role)
-    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`)
+    ? new CloudScheduler(store, service, envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_ID') || `${policy.role}-scheduler`, observability)
     : null
 
   const runtimeUnsubscribe = worker && runtime.subscribeEvents
