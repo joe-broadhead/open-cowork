@@ -296,6 +296,7 @@ function validateGcpReference() {
     'scripts/gcp-reference-smoke.mjs',
     'scripts/desktop-cloud-sync-smoke.mjs',
     'scripts/gateway-cloud-smoke.mjs',
+    'scripts/cloud-continuation-smoke.mjs',
   ]
   for (const path of requiredGcpFiles) {
     if (!existsSync(path)) {
@@ -315,6 +316,7 @@ function validateGcpReference() {
     'pnpm deploy:gcp:smoke',
     'pnpm deploy:desktop:smoke',
     'pnpm deploy:gateway:smoke',
+    'pnpm deploy:continuation:smoke',
     'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
     'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
     'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
@@ -413,6 +415,28 @@ function validateGcpReference() {
   ]) {
     if (!gatewaySmoke.includes(phrase)) {
       throw new Error(`scripts/gateway-cloud-smoke.mjs must include ${phrase}`)
+    }
+  }
+
+  const continuationSmoke = read('scripts/cloud-continuation-smoke.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL',
+    'OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN',
+    'OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION',
+    'CloudWorkspaceAdapter',
+    'createGatewayDaemon',
+    'createHeadlessAgent',
+    'createChannelBinding',
+    'resolveChannelIdentity',
+    'bindGatewayToSession',
+    'runConcurrentPromptCheck',
+    'runReplayHydrationCheck',
+    'readCloudSessionProjection',
+    'X-Request-Id',
+    'revokeIssuedTokens',
+  ]) {
+    if (!continuationSmoke.includes(phrase)) {
+      throw new Error(`scripts/cloud-continuation-smoke.mjs must include ${phrase}`)
     }
   }
 }

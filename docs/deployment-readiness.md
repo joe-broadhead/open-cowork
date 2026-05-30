@@ -270,6 +270,24 @@ deployed Cloud URL, verifies inbound prompt routing, session SSE rendering,
 approval interaction routing, async delivery, retry/dead-letter controls, and
 ephemeral token revocation.
 
+For the full Web/Desktop/Gateway continuation parity gate:
+
+```bash
+OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+pnpm deploy:continuation:smoke
+```
+
+This is the production promise gate for the synced product. It checks Cloud Web
+bootstrap and request correlation, creates short-lived Web/Desktop/Gateway
+tokens, proves Web-created, Desktop-created, and Gateway-created sessions can be
+continued by the other surfaces, verifies durable projection parity after
+reload/replay, resolves approval and question state across surfaces, checks
+artifact metadata, exercises concurrent prompts on one cloud thread, validates
+stale Desktop cursor hydration, verifies Gateway channel rendering, and revokes
+all smoke tokens.
+
 For operator-only readiness checks:
 
 ```bash

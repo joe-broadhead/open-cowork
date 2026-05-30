@@ -522,6 +522,23 @@ proves least privilege, sends an inbound channel prompt, waits for session SSE
 rendering, routes an approval interaction, drains an async delivery, and
 exercises retry/dead-letter controls.
 
+Run the continuation parity smoke after Cloud Web, Desktop sync, and Gateway
+smokes pass:
+
+```bash
+OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+pnpm deploy:continuation:smoke
+```
+
+This #498 gate creates one deployment-level proof for the three-surface product
+promise: Cloud Web API, Desktop cloud workspace adapter, and Gateway channel
+adapter all continue the same tenant-scoped cloud sessions through durable
+commands, events, and projections. It also validates request-id correlation,
+permission/question resolution, artifact metadata, concurrent prompt ordering,
+stale cursor hydration, Gateway rendering, and smoke-token revocation.
+
 ## Validation
 
 The regular `pnpm test` suite covers the in-memory control-plane adapter and
@@ -539,6 +556,9 @@ That harness starts an in-process cloud, authenticates desktop, web, and
 gateway clients with bearer tokens, verifies SSE replay, proves approval and
 question resolution across all surfaces, and checks restart/offline desktop
 hydration from durable cloud projections.
+
+Run `pnpm deploy:continuation:smoke` against local Compose or a deployed cloud
+environment before calling Web/Desktop/Gateway sync production-ready.
 
 ```bash
 OPEN_COWORK_TEST_POSTGRES_URL='postgres://...' pnpm test tests/cloud-postgres-concurrency.test.ts

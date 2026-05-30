@@ -19,6 +19,7 @@ pnpm deploy:validate
 pnpm deploy:smoke
 pnpm deploy:desktop:smoke
 pnpm deploy:gateway:smoke
+pnpm deploy:continuation:smoke
 pnpm deploy:gcp:preflight
 pnpm deploy:gcp:smoke
 pnpm notices
@@ -70,6 +71,18 @@ self-host fake-provider Gateway, validates inbound prompt routing, session SSE
 rendering, approval interaction routing, async delivery, retry/dead-letter
 controls, and token revocation. Tokens are read from environment variables
 only, not command-line arguments.
+
+`pnpm deploy:continuation:smoke` validates the three-surface continuation
+promise against one running cloud deployment. It builds the Gateway and shared
+packages, issues short-lived Web/Desktop/Gateway API tokens from
+`OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN`, checks Cloud Web Workbench
+bootstrap and request-id correlation, creates and continues the same cloud
+sessions across Web API, Desktop cloud workspace adapter, and a loopback
+self-host Gateway fake provider, verifies projection parity, permission/question
+resolution, artifact metadata, concurrent prompt ordering, stale-cursor
+hydration, gateway rendering, and token revocation. Set
+`OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true` for launch gates
+that require task/tool/artifact/todo/cost projection fields.
 
 `pnpm deploy:gcp:preflight` is a read-only GCP check for the reference
 deployment. It verifies the active `gcloud` account/project, region, required
