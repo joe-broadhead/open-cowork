@@ -166,7 +166,9 @@ test('cloud OIDC auth fails closed for tampered signatures and expired tokens', 
     now: () => new Date('2026-05-26T12:00:00.000Z'),
   })
   const token = fixture.token()
-  const tampered = `${token.slice(0, -2)}aa`
+  const [header, payload, signature] = token.split('.')
+  const tamperedSignature = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`
+  const tampered = `${header}.${payload}.${tamperedSignature}`
 
   await assert.rejects(
     () => resolver(requestWithBearer(tampered)),
