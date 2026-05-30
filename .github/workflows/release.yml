@@ -109,7 +109,7 @@ jobs:
         run: pnpm perf:check
 
       - name: Strict docs build
-        run: mkdocs build --strict
+        run: pnpm docs:build
 
       - name: Whitespace check
         run: git diff --check

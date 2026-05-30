@@ -93,7 +93,7 @@ jobs:
       - name: Performance gate
         run: pnpm perf:check
 
-      - name: Build all (shared → MCPs → desktop)
+      - name: Build all (packages, MCPs, gateway, website, desktop)
         run: pnpm build
 
   cloud-gates:

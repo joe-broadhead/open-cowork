@@ -52,8 +52,9 @@ The repository includes:
   - Linux packaging validation
   - typecheck
   - perf gate
-  - dependency audit at `high` severity
-  - docs build
+  - production dependency audit at `moderate` severity
+  - full dependency audit at `critical` severity
+  - docs build through `pnpm docs:build`
 
 - `docs.yml`
   - builds MkDocs with `--strict`
@@ -311,3 +312,10 @@ The packaged macOS smoke lane can be run locally after packaging with:
 pnpm --dir apps/desktop dist:ci:mac
 OPEN_COWORK_PACKAGED_EXECUTABLE="$(node scripts/find-macos-packaged-executable.mjs)" pnpm test:e2e:packaged
 ```
+
+`pnpm test:e2e:packaged` is the release gate and fails before smoke test
+discovery unless `OPEN_COWORK_PACKAGED_EXECUTABLE` points at an executable
+file or a macOS `.app` bundle with a resolvable executable under
+`Contents/MacOS`. Broad discovery jobs that intentionally allow packaged
+tests to skip can use `pnpm test:e2e:packaged:optional`; do not use the
+optional command in release or branch-protection gates.

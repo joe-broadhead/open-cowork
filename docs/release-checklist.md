@@ -30,7 +30,7 @@ Reference workflows in the repository root:
 
 ### Documentation
 
-- [ ] `mkdocs build --strict`
+- [ ] `pnpm docs:build`
 - [ ] published docs site reflects the latest merged docs changes
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
