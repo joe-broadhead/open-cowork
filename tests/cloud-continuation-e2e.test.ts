@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -255,6 +256,56 @@ function createThrowingTransport(): CloudTransportAdapter {
 
 function ipcEvent(senderId: number) {
   return { sender: { id: senderId } } as never
+}
+
+async function runContinuationSmokeScript(input: {
+  cloudUrl: string
+  adminToken: string
+  promptPrefix: string
+}) {
+  const child = spawn(process.execPath, [
+    '--no-warnings',
+    '--experimental-strip-types',
+    'scripts/cloud-continuation-smoke.mjs',
+    '--cloud-url',
+    input.cloudUrl,
+    '--allow-insecure-http',
+    '--timeout-ms',
+    '5000',
+  ], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN: input.adminToken,
+      OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION: 'true',
+      OPEN_COWORK_CONTINUATION_SMOKE_PROMPT_PREFIX: input.promptPrefix,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (chunk) => { stdout += chunk })
+  child.stderr.on('data', (chunk) => { stderr += chunk })
+
+  const exitCode = await new Promise<number | null>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM')
+      reject(new Error(`Continuation smoke script timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`))
+    }, 30_000)
+    timer.unref()
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      resolve(code)
+    })
+  })
+
+  return { exitCode, stdout, stderr }
 }
 
 function assertContinuationProjection(view: SessionView, expectedText: string) {
@@ -552,6 +603,65 @@ test('gateway prompts continue the same cloud thread and resolve approvals for d
     assert.ok(webProjection)
     assert.equal(webProjection.pendingApprovals.length, 0)
     assert.equal(webProjection.pendingQuestions.length, 0)
+  } finally {
+    await fixture.cloud.close()
+  }
+})
+
+test('deployed continuation smoke script proves Web Desktop and Gateway projection parity', async () => {
+  const fixture = await createContinuationFixture()
+  try {
+    const promptPrefix = 'continuation script fixture'
+    const result = await runContinuationSmokeScript({
+      cloudUrl: fixture.baseUrl,
+      adminToken: fixture.webToken,
+      promptPrefix,
+    })
+    assert.equal(result.exitCode, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    assert.equal(result.stdout.includes(fixture.webToken), false)
+    assert.equal(result.stderr.includes(fixture.webToken), false)
+
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean
+      results: {
+        webSurface: { requestIdEchoed: boolean }
+        workspace: { tenantBound: boolean, gatewayTenantMatches: boolean }
+        sessions: {
+          webCreated: { sessionId: string, resolution: { permissionResolvedByWeb: boolean, questionResolvedByGateway: boolean }, parity: { raw: { messages: number, artifacts: number }, desktop: { messages: number, artifacts: number } } }
+          desktopCreated: { sessionId: string, parity: { raw: { messages: number }, desktop: { messages: number } } }
+          gatewayCreated: { sessionId: string, parity: { raw: { messages: number }, desktop: { messages: number } } }
+        }
+        concurrency: { markersPresent: { web: boolean, desktop: boolean }, after: { messages: number } }
+        replay: { firstEvent: { type: string, sequence: number }, hydrated: boolean }
+        gateway: { renderedMessages: number, activeStreams: number }
+        tokens: { revoked: Record<string, boolean> }
+      }
+    }
+
+    assert.equal(payload.ok, true)
+    assert.equal(payload.results.webSurface.requestIdEchoed, true)
+    assert.equal(payload.results.workspace.tenantBound, true)
+    assert.equal(payload.results.workspace.gatewayTenantMatches, true)
+    assert.equal(payload.results.sessions.webCreated.resolution.permissionResolvedByWeb, true)
+    assert.equal(payload.results.sessions.webCreated.resolution.questionResolvedByGateway, true)
+    assert.ok(payload.results.sessions.webCreated.parity.raw.messages > 0)
+    assert.ok(payload.results.sessions.webCreated.parity.desktop.messages >= payload.results.sessions.webCreated.parity.raw.messages)
+    assert.ok(payload.results.sessions.webCreated.parity.raw.artifacts > 0)
+    assert.ok(payload.results.sessions.webCreated.parity.desktop.artifacts >= payload.results.sessions.webCreated.parity.raw.artifacts)
+    assert.ok(payload.results.sessions.desktopCreated.parity.desktop.messages >= payload.results.sessions.desktopCreated.parity.raw.messages)
+    assert.ok(payload.results.sessions.gatewayCreated.parity.desktop.messages >= payload.results.sessions.gatewayCreated.parity.raw.messages)
+    assert.equal(payload.results.concurrency.markersPresent.web, true)
+    assert.equal(payload.results.concurrency.markersPresent.desktop, true)
+    assert.equal(payload.results.replay.firstEvent.type, 'session.created')
+    assert.equal(payload.results.replay.firstEvent.sequence, 1)
+    assert.equal(payload.results.replay.hydrated, true)
+    assert.ok(payload.results.gateway.renderedMessages > 0)
+    assert.ok(payload.results.gateway.activeStreams >= 3)
+    assert.deepEqual(payload.results.tokens.revoked, {
+      web: true,
+      desktop: true,
+      gateway: true,
+    })
   } finally {
     await fixture.cloud.close()
   }

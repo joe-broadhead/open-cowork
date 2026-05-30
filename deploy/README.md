@@ -111,6 +111,25 @@ revocation. Keep tokens in environment variables or a private secret store;
 the script intentionally does not accept token values as command-line
 arguments.
 
+Validate the three-surface continuation promise against the same Cloud control
+plane:
+
+```bash
+OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+pnpm deploy:continuation:smoke
+```
+
+The continuation smoke is the #498 product-promise gate. It checks Cloud Web
+bootstrap and request-id correlation, issues short-lived Web/Desktop/Gateway
+tokens, creates and continues cloud sessions across Web API, Desktop cloud
+workspace adapter, and a loopback self-host Gateway fake provider, validates
+projection parity, permission/question resolution, artifact metadata,
+concurrent prompt ordering, stale-cursor hydration, gateway rendering, and
+token revocation. Keep all token values in environment variables or a private
+secret store.
+
 GCP adds a provider-specific infra smoke:
 
 ```bash

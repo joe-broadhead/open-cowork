@@ -223,6 +223,28 @@ they must not be injected as process env vars.
     provider remains loopback-only; do not expose fake ingress on public
     Gateway deployments.
 
+15. Run the Web/Desktop/Gateway continuation smoke with an admin-scoped Cloud
+    token. This is the #498 gate and should run after the Cloud, Desktop, and
+    Gateway smoke gates are green:
+
+    ```bash
+    OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+    OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+    pnpm deploy:continuation:smoke
+    ```
+
+    The smoke issues short-lived Web/Desktop/Gateway tokens, checks Cloud Web
+    Workbench bootstrap and `X-Request-Id` correlation, proves Web-created,
+    Desktop-created, and Gateway-created sessions can be continued by the other
+    surfaces, validates shared durable projection parity, resolves a permission
+    from Web, resolves a question from Gateway, verifies artifact metadata,
+    exercises concurrent prompts on one cloud thread, verifies stale Desktop
+    cursors hydrate from durable projection state, and revokes all smoke tokens.
+    For early BYOK/runtime bring-up, omit
+    `OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION`; launch gates
+    should enable it.
+
 For quick Helm overrides, keep the same provider-neutral keys used by the
 other recipes:
 
@@ -291,6 +313,7 @@ Rollback order:
 - `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... pnpm deploy:gcp:smoke`
 - `OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://... OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... pnpm deploy:desktop:smoke`
 - `OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... pnpm deploy:gateway:smoke`
+- `OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://... OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true pnpm deploy:continuation:smoke`
 - Cloud logs contain no raw database URLs, BYOK keys, API tokens, OAuth tokens,
   channel credentials, or signed object URLs.
 

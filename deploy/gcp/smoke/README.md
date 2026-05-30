@@ -86,3 +86,22 @@ an approval interaction, drains an async delivery, exercises retry/dead-letter
 operator controls, and revokes the service token. Use
 `OPEN_COWORK_GATEWAY_SMOKE_REQUIRE_MANAGED=true` when a managed Gateway
 endpoint is mandatory for the environment.
+
+## Continuation Parity Smoke
+
+```bash
+OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
+pnpm deploy:continuation:smoke
+```
+
+This validates the #498 Web/Desktop/Gateway continuation promise against one
+deployed Cloud control plane. The smoke checks Cloud Web Workbench HTML/CSP and
+`X-Request-Id` correlation, issues short-lived Web/Desktop/Gateway tokens,
+creates Web-originated, Desktop-originated, and Gateway-originated sessions,
+continues each from another surface, binds/renders through a loopback self-host
+Gateway fake provider, verifies durable projection parity, resolves a
+permission from Web, resolves a question from Gateway, checks artifact metadata,
+prompts the same cloud thread concurrently from Web and Desktop, verifies stale
+Desktop cursors replay from durable state, and revokes all smoke tokens.
