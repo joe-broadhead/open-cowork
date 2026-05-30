@@ -58,6 +58,54 @@ export function validateConfigSemantics(raw: unknown, source: string, options?: 
       throw new Error(formatConfigError(source, `mcps[${index}]`, 'remote MCPs require a url'))
     }
   }
+
+  validateGatewaySemantics(config, source)
+}
+
+function validateGatewaySemantics(config: Partial<OpenCoworkConfig>, source: string) {
+  const gateway = config.gateway
+  if (!gateway || typeof gateway !== 'object') return
+  const publicBind = isPublicBindHost(gateway.server?.host || '127.0.0.1')
+  const adminToken = typeof gateway.server?.adminToken === 'string' && gateway.server.adminToken.trim()
+  const mode = gateway.mode === 'managed' ? 'managed' : 'self-host'
+  const metricsEnabled = gateway.metrics?.enabled ?? true
+  const diagnosticsEnabled = gateway.diagnostics?.enabled ?? mode === 'self-host'
+  if (publicBind && (metricsEnabled || diagnosticsEnabled) && !adminToken) {
+    throw new Error(formatConfigError(source, 'gateway.server.adminToken', 'is required when public gateway metrics or diagnostics are enabled'))
+  }
+
+  const cloudBaseUrl = typeof gateway.cloud?.baseUrl === 'string' ? gateway.cloud.baseUrl.trim() : ''
+  if (cloudBaseUrl) {
+    const url = new URL(cloudBaseUrl)
+    if (url.protocol === 'http:' && gateway.cloud?.allowInsecureHttp !== true && !isLoopbackHost(url.hostname)) {
+      throw new Error(formatConfigError(source, 'gateway.cloud.baseUrl', 'must use HTTPS unless gateway.cloud.allowInsecureHttp is true'))
+    }
+  }
+
+  for (const [index, provider] of (gateway.providers || []).entries()) {
+    if (provider.enabled === false) continue
+    const kind = provider.kind
+    if (publicBind && kind === 'fake') {
+      throw new Error(formatConfigError(source, `gateway.providers[${index}]`, 'fake provider cannot be exposed on a public bind'))
+    }
+    if (kind === 'webhook' && !provider.credentials?.sharedSecret) {
+      throw new Error(formatConfigError(source, `gateway.providers[${index}].credentials.sharedSecret`, 'is required for webhook ingress'))
+    }
+  }
+}
+
+function isLoopbackHost(hostname: string) {
+  const host = hostname.trim().toLowerCase()
+  return host === 'localhost'
+    || host === '127.0.0.1'
+    || host === '::1'
+    || host === '[::1]'
+    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+
+function isPublicBindHost(hostname: string) {
+  const host = hostname.trim().toLowerCase()
+  return host === '0.0.0.0' || host === '::' || host === '[::]' || !isLoopbackHost(host)
 }
 
 function resolvePlaceholderFilePath(rawPath: string, baseDir: string) {

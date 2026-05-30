@@ -64,6 +64,9 @@ const CLOUD_AUTH_MODES = new Set(['none', 'header', 'oidc'])
 const CLOUD_CONTROL_PLANE_KINDS = new Set(['local', 'postgres'])
 const CLOUD_OBJECT_STORE_KINDS = new Set(['filesystem', 's3', 'gcs', 'azure-blob', 'digitalocean-spaces', 'minio'])
 const PUBLIC_BRANDING_URL_KEYS = new Set(['logoUrl', 'supportUrl', 'privacyUrl', 'securityUrl', 'legalUrl'])
+const GATEWAY_MODES = new Set(['self-host', 'managed'])
+const GATEWAY_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error', 'silent'])
+const GATEWAY_PROVIDER_KINDS = new Set(['fake', 'telegram', 'slack', 'email', 'webhook'])
 
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
@@ -538,6 +541,67 @@ function normalizeCloudDesktopConfig(raw: CloudDesktopConfig | undefined): Cloud
   }
 }
 
+function normalizeGatewayConfig(raw: OpenCoworkConfig['gateway'] | undefined): OpenCoworkConfig['gateway'] {
+  const defaults = DEFAULT_CONFIG.gateway
+  const source = raw || defaults
+  const mode = GATEWAY_MODES.has(source.mode || '') ? source.mode : defaults.mode
+  const logLevel = GATEWAY_LOG_LEVELS.has(source.logging?.level || '') ? source.logging?.level : defaults.logging?.level
+  return {
+    ...defaults,
+    ...source,
+    branding: normalizePublicBranding(source.branding),
+    cloud: {
+      ...(defaults.cloud || {}),
+      ...(source.cloud || {}),
+      allowInsecureHttp: typeof source.cloud?.allowInsecureHttp === 'boolean'
+        ? source.cloud.allowInsecureHttp
+        : defaults.cloud?.allowInsecureHttp,
+    },
+    server: {
+      ...(defaults.server || {}),
+      ...(source.server || {}),
+      port: Number.isInteger(source.server?.port) && source.server!.port! >= 0 && source.server!.port! <= 65535
+        ? source.server!.port
+        : defaults.server?.port,
+    },
+    mode,
+    logging: {
+      ...(defaults.logging || {}),
+      ...(source.logging || {}),
+      level: logLevel,
+    },
+    metrics: {
+      ...(defaults.metrics || {}),
+      ...(source.metrics || {}),
+      enabled: typeof source.metrics?.enabled === 'boolean' ? source.metrics.enabled : defaults.metrics?.enabled,
+    },
+    diagnostics: {
+      ...(defaults.diagnostics || {}),
+      ...(source.diagnostics || {}),
+      enabled: typeof source.diagnostics?.enabled === 'boolean'
+        ? source.diagnostics.enabled
+        : defaults.diagnostics?.enabled,
+    },
+    providers: Array.isArray(source.providers)
+      ? source.providers
+        .filter((provider) => provider && GATEWAY_PROVIDER_KINDS.has(provider.kind))
+        .map((provider) => ({
+          ...provider,
+          id: typeof provider.id === 'string' && provider.id.trim() ? provider.id.trim() : undefined,
+          channelBindingId: typeof provider.channelBindingId === 'string' ? provider.channelBindingId.trim() : '',
+          externalWorkspaceId: typeof provider.externalWorkspaceId === 'string' && provider.externalWorkspaceId.trim()
+            ? provider.externalWorkspaceId.trim()
+            : null,
+          defaultAgent: typeof provider.defaultAgent === 'string' && provider.defaultAgent.trim()
+            ? provider.defaultAgent.trim()
+            : null,
+          credentials: provider.credentials && typeof provider.credentials === 'object' ? { ...provider.credentials } : {},
+          settings: provider.settings && typeof provider.settings === 'object' ? { ...provider.settings } : {},
+        }))
+      : defaults.providers,
+  }
+}
+
 function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
   return {
     ...raw,
@@ -597,6 +661,7 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
     },
     cloud: normalizeCloudConfig(raw.cloud),
     cloudDesktop: normalizeCloudDesktopConfig(raw.cloudDesktop),
+    gateway: normalizeGatewayConfig(raw.gateway),
   }
 }
 

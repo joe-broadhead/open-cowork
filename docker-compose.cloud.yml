@@ -8,6 +8,9 @@ services:
     environment:
       OPEN_COWORK_CLOUD_ROLE: all-in-one
       OPEN_COWORK_CLOUD_PROFILE: full
+      OPEN_COWORK_CONFIG_PATH: ${OPEN_COWORK_CONFIG_PATH:-}
+      OPEN_COWORK_CONFIG_DIR: ${OPEN_COWORK_CONFIG_DIR:-}
+      OPEN_COWORK_DOWNSTREAM_ROOT: ${OPEN_COWORK_DOWNSTREAM_ROOT:-}
       OPEN_COWORK_CLOUD_ROOT: /data/open-cowork-cloud
       OPEN_COWORK_CLOUD_HOST: 0.0.0.0
       OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: "true"
@@ -31,6 +34,9 @@ services:
       - "8787:8787"
     volumes:
       - open-cowork-cloud-data:/data/open-cowork-cloud
+      - ${OPEN_COWORK_CONFIG_PATH:-./open-cowork.config.json}:${OPEN_COWORK_CONFIG_PATH:-/etc/open-cowork/open-cowork.config.json}:ro
+      - ${OPEN_COWORK_CONFIG_DIR:-.}:${OPEN_COWORK_CONFIG_DIR:-/etc/open-cowork/config}:ro
+      - ${OPEN_COWORK_DOWNSTREAM_ROOT:-.}:${OPEN_COWORK_DOWNSTREAM_ROOT:-/etc/open-cowork/downstream}:ro
     depends_on:
       postgres:
         condition: service_healthy

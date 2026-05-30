@@ -8,6 +8,9 @@ fullnameOverride: ""
 
 gateway:
   mode: self-host
+  configPath: ""
+  configDir: ""
+  downstreamRoot: ""
   cloudBaseUrl: ""
   allowInsecureHttp: false
   serviceToken: ""

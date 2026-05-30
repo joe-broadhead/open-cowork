@@ -213,6 +213,7 @@
     },
     "cloud": { "$ref": "#/$defs/cloudConfig" },
     "cloudDesktop": { "$ref": "#/$defs/cloudDesktopConfig" },
+    "gateway": { "$ref": "#/$defs/gatewayConfig" },
     "i18n": {
       "type": "object",
       "additionalProperties": false,
@@ -384,6 +385,114 @@
         "label": { "type": "string", "minLength": 1, "maxLength": 80 }
       },
       "required": ["baseUrl"]
+    },
+    "gatewayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branding": { "$ref": "#/$defs/cloudPublicBranding" },
+        "cloud": { "$ref": "#/$defs/gatewayCloudConfig" },
+        "server": { "$ref": "#/$defs/gatewayServerConfig" },
+        "mode": { "type": "string", "enum": ["self-host", "managed"] },
+        "logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "level": { "type": "string", "enum": ["debug", "info", "warn", "error", "silent"] }
+          }
+        },
+        "metrics": { "$ref": "#/$defs/gatewayBooleanToggle" },
+        "diagnostics": { "$ref": "#/$defs/gatewayBooleanToggle" },
+        "providers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gatewayProviderConfig" }
+        }
+      }
+    },
+    "gatewayCloudConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https?://.+"
+        },
+        "serviceToken": { "type": "string", "maxLength": 4096 },
+        "allowInsecureHttp": { "type": "boolean" }
+      },
+      "allOf": [{
+        "if": {
+          "properties": {
+            "allowInsecureHttp": { "const": true }
+          },
+          "required": ["allowInsecureHttp"]
+        },
+        "then": {},
+        "else": {
+          "properties": {
+            "baseUrl": { "$ref": "#/$defs/httpsOrLocalhostUrl" }
+          }
+        }
+      }]
+    },
+    "gatewayServerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "maxLength": 253 },
+        "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "publicBaseUrl": {
+          "anyOf": [
+            { "$ref": "#/$defs/httpsOrLocalhostUrl" },
+            { "type": "null" }
+          ]
+        },
+        "adminToken": {
+          "anyOf": [
+            { "type": "string", "maxLength": 4096 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "gatewayBooleanToggle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "gatewayProviderConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/cloudName" },
+        "kind": { "type": "string", "enum": ["fake", "telegram", "slack", "email", "webhook"] },
+        "enabled": { "type": "boolean" },
+        "channelBindingId": { "$ref": "#/$defs/cloudName" },
+        "externalWorkspaceId": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "defaultAgent": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 512 },
+            { "type": "null" }
+          ]
+        },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "maxLength": 4096 }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["kind", "channelBindingId"]
     },
     "cloudName": {
       "type": "string",

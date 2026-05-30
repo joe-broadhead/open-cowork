@@ -9,6 +9,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY mcps ./mcps
 COPY scripts ./scripts
+COPY open-cowork.config.json open-cowork.config.schema.json ./
 COPY tsconfig.base.json ./
 
 RUN pnpm install --frozen-lockfile
@@ -26,6 +27,7 @@ COPY --from=build /app/apps ./apps
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/mcps ./mcps
 COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/open-cowork.config.json /app/open-cowork.config.schema.json ./
 COPY --from=build /app/tsconfig.base.json ./
 
 RUN pnpm install --frozen-lockfile --prod

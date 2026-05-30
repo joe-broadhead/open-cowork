@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'fs'
 import { validateResolvedConfig } from '../apps/desktop/src/main/config-schema.ts'
+import { validateConfigSemantics } from '../apps/desktop/src/main/config-layer-utils.ts'
 
 function readRootConfig() {
   return JSON.parse(readFileSync('open-cowork.config.json', 'utf-8'))
@@ -249,6 +250,131 @@ test('cloud public branding validates and rejects unsafe URLs or unknown keys', 
 test('Acme downstream example validates against the public schema', () => {
   const config = JSON.parse(readFileSync('examples/downstream/acme/open-cowork.config.json', 'utf-8'))
   assert.doesNotThrow(() => validateResolvedConfig(config, 'examples/downstream/acme/open-cowork.config.json'))
+  assert.doesNotThrow(() => validateConfigSemantics(config, 'examples/downstream/acme/open-cowork.config.json'))
+})
+
+test('gateway deployer config validates shared branding providers and safety semantics', () => {
+  const config = cloneConfig()
+  config.allowedEnvPlaceholders = [
+    'ACME_GATEWAY_SERVICE_TOKEN',
+    'ACME_GATEWAY_ADMIN_TOKEN',
+    'ACME_WEBHOOK_SECRET',
+  ]
+  config.gateway = {
+    branding: {
+      productName: 'Acme Cowork',
+      shortName: 'AC',
+      supportUrl: 'https://support.acme.example/cowork',
+    },
+    cloud: {
+      baseUrl: 'https://cowork.acme.example',
+      serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
+    },
+    server: {
+      host: '0.0.0.0',
+      port: 8790,
+      publicBaseUrl: 'https://cowork-gateway.acme.example',
+      adminToken: '{env:ACME_GATEWAY_ADMIN_TOKEN}',
+    },
+    mode: 'self-host',
+    metrics: {
+      enabled: true,
+    },
+    diagnostics: {
+      enabled: false,
+    },
+    providers: [{
+      id: 'acme-webhook',
+      kind: 'webhook',
+      channelBindingId: 'acme-webhook',
+      credentials: {
+        sharedSecret: '{env:ACME_WEBHOOK_SECRET}',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.acme.example/out',
+      },
+    }],
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
+  assert.doesNotThrow(() => validateConfigSemantics(config, 'gateway deployer config'))
+})
+
+test('gateway deployer config allows gateway-only secrets to be injected outside desktop validation', () => {
+  const config = cloneConfig()
+  config.gateway = {
+    cloud: {
+      baseUrl: 'https://cowork.acme.example',
+      serviceToken: '',
+    },
+    server: {
+      host: '127.0.0.1',
+      adminToken: '',
+    },
+    metrics: {
+      enabled: false,
+    },
+    diagnostics: {
+      enabled: false,
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'acme-telegram',
+      credentials: {
+        botToken: '',
+      },
+    }],
+  }
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
+  assert.doesNotThrow(() => validateConfigSemantics(config, 'gateway deployer config'))
+})
+
+test('gateway deployer config rejects unsafe public URLs and fail-open provider settings', () => {
+  const config = cloneConfig()
+  config.gateway = {
+    cloud: {
+      baseUrl: 'http://cowork.acme.example',
+      serviceToken: 'service-token',
+      allowInsecureHttp: false,
+    },
+    providers: [{
+      kind: 'webhook',
+      channelBindingId: 'acme-webhook',
+      settings: {
+        deliveryUrl: 'https://bridge.acme.example/out',
+      },
+    }],
+  }
+  assert.throws(() => validateResolvedConfig(config, 'gateway deployer config'), /gateway\.cloud\.baseUrl/)
+
+  config.gateway.cloud.allowInsecureHttp = true
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
+  assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /credentials\.sharedSecret/)
+
+  config.gateway.cloud.baseUrl = 'https://cowork.acme.example'
+  config.gateway.cloud.allowInsecureHttp = false
+  assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /credentials\.sharedSecret/)
+
+  config.gateway.providers = [{
+    kind: 'fake',
+    channelBindingId: 'fake-binding',
+  }]
+  config.gateway.server = { host: '0.0.0.0' }
+  config.gateway.metrics = { enabled: false }
+  config.gateway.diagnostics = { enabled: false }
+  assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /fake provider/)
+
+  config.gateway.providers = [{
+    kind: 'telegram',
+    channelBindingId: 'telegram',
+    credentials: {
+      botToken: 'telegram-token',
+    },
+  }]
+  delete config.gateway.metrics
+  delete config.gateway.diagnostics
+  assert.throws(() => validateConfigSemantics(config, 'gateway deployer config'), /adminToken/)
 })
 
 test('cloud deployment config rejects machine runtime config and unknown cloud keys', () => {

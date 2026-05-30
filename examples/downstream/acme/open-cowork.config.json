@@ -1,6 +1,15 @@
 {
   "$schema": "../../../open-cowork.config.schema.json",
-  "allowedEnvPlaceholders": [],
+  "allowedEnvPlaceholders": [
+    "OPEN_COWORK_GATEWAY_SERVICE_TOKEN",
+    "OPEN_COWORK_GATEWAY_ADMIN_TOKEN",
+    "OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN",
+    "OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET",
+    "OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN",
+    "OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET",
+    "OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET",
+    "OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD"
+  ],
   "branding": {
     "name": "Acme Cowork",
     "appId": "com.acme.cowork",
@@ -141,5 +150,89 @@
     "requireManagedOrg": true,
     "cacheMode": "metadata-only",
     "cacheEncryptionFallback": "fail-startup"
+  },
+  "gateway": {
+    "branding": {
+      "productName": "Acme Cowork",
+      "shortName": "AC",
+      "logoUrl": "https://assets.acme.example/cowork/logo.png",
+      "supportUrl": "https://support.acme.example/cowork",
+      "privacyUrl": "https://legal.acme.example/privacy",
+      "securityUrl": "https://security.acme.example/cowork",
+      "legalUrl": "https://legal.acme.example/terms",
+      "managedOrgConnectionLabels": {
+        "desktopToken": "Acme Desktop token",
+        "gatewayToken": "Acme Gateway token",
+        "apiToken": "Acme API token",
+        "cloudUrl": "Acme Cloud URL"
+      }
+    },
+    "cloud": {
+      "baseUrl": "https://cowork.acme.example",
+      "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
+      "allowInsecureHttp": false
+    },
+    "server": {
+      "host": "0.0.0.0",
+      "port": 8790,
+      "publicBaseUrl": "https://cowork-gateway.acme.example",
+      "adminToken": "{env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN}"
+    },
+    "mode": "self-host",
+    "logging": {
+      "level": "info"
+    },
+    "metrics": {
+      "enabled": false
+    },
+    "diagnostics": {
+      "enabled": false
+    },
+    "providers": [
+      {
+        "id": "acme-telegram",
+        "kind": "telegram",
+        "channelBindingId": "acme-telegram",
+        "credentials": {
+          "botToken": "{env:OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN}",
+          "webhookSecret": "{env:OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET}"
+        },
+        "settings": {
+          "mode": "webhook",
+          "publicBaseUrl": "https://cowork-gateway.acme.example"
+        }
+      },
+      {
+        "id": "acme-slack",
+        "kind": "slack",
+        "channelBindingId": "acme-slack",
+        "externalWorkspaceId": "T0123ACME",
+        "credentials": {
+          "botToken": "{env:OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN}",
+          "signingSecret": "{env:OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET}"
+        },
+        "settings": {
+          "teamId": "T0123ACME"
+        }
+      },
+      {
+        "id": "acme-email",
+        "kind": "email",
+        "channelBindingId": "acme-email",
+        "externalWorkspaceId": "acme.example",
+        "credentials": {
+          "inboundSecret": "{env:OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET}",
+          "smtpPassword": "{env:OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD}"
+        },
+        "settings": {
+          "from": "agent@acme.example",
+          "inboundAddress": "agent@acme.example",
+          "smtpHost": "smtp.acme.example",
+          "smtpPort": "587",
+          "smtpSecure": "false",
+          "smtpUsername": "agent@acme.example"
+        }
+      }
+    ]
   }
 }

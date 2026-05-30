@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
+  loadGatewayConfig,
   redactGatewayConfig,
   redactGatewayEnv,
   resolveGatewayConfig,
@@ -321,4 +325,208 @@ test('gateway config loads Slack, email, Telegram, and webhook providers from en
   }])
   assert.equal(config.providers.find((provider) => provider.kind === 'slack')?.externalWorkspaceId, 'T123')
   assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.smtpHost, 'smtp.example.test')
+})
+
+test('gateway config loads the shared open-cowork config gateway section with allowlisted env placeholders', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const configPath = join(tempRoot, 'open-cowork.config.json')
+    writeFileSync(configPath, JSON.stringify({
+      allowedEnvPlaceholders: [
+        'ACME_GATEWAY_SERVICE_TOKEN',
+        'ACME_TELEGRAM_BOT_TOKEN',
+        'ACME_TELEGRAM_WEBHOOK_SECRET',
+      ],
+      gateway: {
+        branding: {
+          productName: 'Acme Cowork',
+          shortName: 'AC',
+          supportUrl: 'https://support.acme.example/cowork',
+        },
+        cloud: {
+          baseUrl: 'https://cowork.acme.example',
+          serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
+        },
+        server: {
+          host: '127.0.0.1',
+          port: 0,
+        },
+        providers: [{
+          id: 'acme-telegram',
+          kind: 'telegram',
+          channelBindingId: 'acme-telegram',
+          credentials: {
+            botToken: '{env:ACME_TELEGRAM_BOT_TOKEN}',
+            webhookSecret: '{env:ACME_TELEGRAM_WEBHOOK_SECRET}',
+          },
+          settings: {
+            mode: 'webhook',
+            publicBaseUrl: 'https://cowork-gateway.acme.example',
+          },
+        }],
+      },
+    }))
+
+    const config = loadGatewayConfig({
+      OPEN_COWORK_CONFIG_PATH: configPath,
+      ACME_GATEWAY_SERVICE_TOKEN: 'service-token-from-central-config',
+      ACME_TELEGRAM_BOT_TOKEN: 'telegram-token-from-central-config',
+      ACME_TELEGRAM_WEBHOOK_SECRET: 'telegram-secret-from-central-config',
+    })
+
+    assert.equal(config.branding.productName, 'Acme Cowork')
+    assert.equal(config.cloud.baseUrl, 'https://cowork.acme.example')
+    assert.equal(config.cloud.serviceToken, 'service-token-from-central-config')
+    assert.equal(config.providers[0]?.id, 'acme-telegram')
+    assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-from-central-config')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('gateway config overlays provider env credentials onto shared provider bindings', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const configPath = join(tempRoot, 'open-cowork.config.json')
+    writeFileSync(configPath, JSON.stringify({
+      gateway: {
+        cloud: {
+          baseUrl: 'https://cowork.acme.example',
+          serviceToken: 'service-token-from-shared-config',
+        },
+        providers: [{
+          id: 'acme-telegram',
+          kind: 'telegram',
+          channelBindingId: 'acme-telegram',
+          settings: {
+            mode: 'webhook',
+            publicBaseUrl: 'https://cowork-gateway.acme.example',
+          },
+        }],
+      },
+    }))
+
+    const config = loadGatewayConfig({
+      OPEN_COWORK_CONFIG_PATH: configPath,
+      OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token-from-env',
+      OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-secret-from-env',
+    })
+
+    assert.equal(config.providers.length, 1)
+    assert.equal(config.providers[0]?.id, 'acme-telegram')
+    assert.equal(config.providers[0]?.channelBindingId, 'acme-telegram')
+    assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-from-env')
+    assert.equal(config.providers[0]?.credentials.webhookSecret, 'telegram-secret-from-env')
+    assert.equal(config.providers[0]?.settings.mode, 'webhook')
+    assert.equal(config.providers[0]?.settings.publicBaseUrl, 'https://cowork-gateway.acme.example')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('gateway config lets explicit config path override config directory gateway settings', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const dirRoot = join(tempRoot, 'dir')
+    const pathRoot = join(tempRoot, 'path')
+    const dirConfig = join(dirRoot, 'open-cowork.config.json')
+    const pathConfig = join(pathRoot, 'open-cowork.config.json')
+    mkdirSync(dirRoot)
+    mkdirSync(pathRoot)
+    writeFileSync(dirConfig, JSON.stringify({
+      gateway: {
+        branding: { productName: 'Directory Cowork' },
+        cloud: {
+          baseUrl: 'https://directory.acme.example',
+          serviceToken: 'directory-token',
+        },
+        providers: [{ kind: 'fake', channelBindingId: 'directory-fake' }],
+      },
+    }))
+    writeFileSync(pathConfig, JSON.stringify({
+      gateway: {
+        branding: { productName: 'Explicit Cowork' },
+        cloud: {
+          baseUrl: 'https://explicit.acme.example',
+          serviceToken: 'explicit-token',
+        },
+        providers: [{ kind: 'fake', channelBindingId: 'explicit-fake' }],
+      },
+    }))
+
+    const config = loadGatewayConfig({
+      OPEN_COWORK_CONFIG_DIR: dirRoot,
+      OPEN_COWORK_CONFIG_PATH: pathConfig,
+      OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
+    })
+
+    assert.equal(config.branding.productName, 'Explicit Cowork')
+    assert.equal(config.cloud.baseUrl, 'https://explicit.acme.example')
+    assert.equal(config.providers[0]?.channelBindingId, 'explicit-fake')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('gateway config discovers JSONC shared config files from config directories', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const configPath = join(tempRoot, 'config.jsonc')
+    writeFileSync(configPath, `{
+      // downstream config can use comments and trailing commas
+      "allowedEnvPlaceholders": ["ACME_GATEWAY_SERVICE_TOKEN"],
+      "gateway": {
+        "branding": {
+          "productName": "JSONC Cowork",
+        },
+        "cloud": {
+          "baseUrl": "https://cowork.acme.example",
+          "serviceToken": "{env:ACME_GATEWAY_SERVICE_TOKEN}",
+        },
+        "providers": [{
+          "kind": "fake",
+          "channelBindingId": "fake-binding",
+        }],
+      },
+    }`)
+
+    const config = loadGatewayConfig({
+      OPEN_COWORK_CONFIG_DIR: tempRoot,
+      ACME_GATEWAY_SERVICE_TOKEN: 'service-token-from-jsonc-config',
+      OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
+    })
+
+    assert.equal(config.branding.productName, 'JSONC Cowork')
+    assert.equal(config.cloud.serviceToken, 'service-token-from-jsonc-config')
+    assert.equal(config.providers[0]?.kind, 'fake')
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('gateway config rejects unallowlisted shared config env placeholders', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
+  try {
+    const configPath = join(tempRoot, 'open-cowork.config.json')
+    writeFileSync(configPath, JSON.stringify({
+      allowedEnvPlaceholders: [],
+      gateway: {
+        cloud: {
+          baseUrl: 'https://cowork.acme.example',
+          serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
+        },
+        providers: [{
+          kind: 'fake',
+          channelBindingId: 'fake-binding',
+        }],
+      },
+    }))
+
+    assert.throws(() => loadGatewayConfig({
+      OPEN_COWORK_CONFIG_PATH: configPath,
+      ACME_GATEWAY_SERVICE_TOKEN: 'service-token',
+    }), /ACME_GATEWAY_SERVICE_TOKEN is not allowlisted/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })

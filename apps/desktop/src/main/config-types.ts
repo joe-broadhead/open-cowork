@@ -4,6 +4,7 @@ import type {
   BrandingConfig,
   CloudProjectSourceInput,
   CredentialField,
+  GatewayDeploymentConfig,
   ModelInfoSnapshot,
   ProviderModelDescriptor,
   PublicBrandingConfig,
@@ -440,6 +441,7 @@ export type OpenCoworkConfig = {
   }
   cloud: CloudConfig
   cloudDesktop: CloudDesktopConfig
+  gateway: GatewayDeploymentConfig
   // Optional translation + locale overlay. Downstream forks set
   // `i18n.locale` to e.g. "de-DE" so Intl.NumberFormat / Intl.DateTimeFormat
   // produce locale-appropriate output, and `i18n.strings` to a
@@ -594,6 +596,30 @@ const DEFAULT_CLOUD_DESKTOP: CloudDesktopConfig = {
   cacheEncryptionFallback: 'metadata-only',
 }
 
+const DEFAULT_GATEWAY_CONFIG: GatewayDeploymentConfig = {
+  branding: DEFAULT_CLOUD_PUBLIC_BRANDING,
+  cloud: {
+    allowInsecureHttp: false,
+  },
+  server: {
+    host: '127.0.0.1',
+    port: 8790,
+    publicBaseUrl: null,
+    adminToken: null,
+  },
+  mode: 'self-host',
+  logging: {
+    level: 'info',
+  },
+  metrics: {
+    enabled: false,
+  },
+  diagnostics: {
+    enabled: false,
+  },
+  providers: [],
+}
+
 export const DEFAULT_CONFIG: OpenCoworkConfig = {
   allowedEnvPlaceholders: [],
   branding: {
@@ -694,4 +720,5 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     },
   },
   cloudDesktop: DEFAULT_CLOUD_DESKTOP,
+  gateway: DEFAULT_GATEWAY_CONFIG,
 }
