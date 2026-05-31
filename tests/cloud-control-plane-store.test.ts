@@ -435,6 +435,11 @@ test('cloud control plane fences status, runtime binding, and event writes by wo
 
 test('cloud control plane reaps expired session leases with bounded retries', async () => {
   const store = seededStore()
+  const firstLeaseStart = new Date('2030-01-01T00:00:00.000Z')
+  const firstLeaseExpired = new Date('2030-01-01T00:00:02.000Z')
+  const secondLeaseStart = new Date('2030-01-01T00:00:03.000Z')
+  const secondLeaseExpired = new Date('2030-01-01T00:00:05.000Z')
+
   store.enqueueSessionCommand({
     commandId: 'cmd-retry',
     tenantId: 'tenant-1',
@@ -444,22 +449,20 @@ test('cloud control plane reaps expired session leases with bounded retries', as
     payload: { text: 'retry me' },
   })
 
-  const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date(), 20)
+  const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', firstLeaseStart, 1_000)
   assert.ok(firstLease)
-  assert.equal(store.claimNextSessionCommand(firstLease)?.attemptCount, 1)
-  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(store.claimNextSessionCommand(firstLease, firstLeaseStart)?.attemptCount, 1)
 
-  const retried = store.reapExpiredSessionLeases({ maxCommandAttempts: 2 })
+  const retried = store.reapExpiredSessionLeases({ maxCommandAttempts: 2, now: firstLeaseExpired })
   assert.equal(retried.length, 1)
   assert.equal(retried[0]?.action, 'retried')
   assert.deepEqual(retried[0]?.retriedCommandIds, ['cmd-retry'])
 
-  const secondLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-b', new Date(), 20)
+  const secondLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-b', secondLeaseStart, 1_000)
   assert.ok(secondLease)
-  assert.equal(store.claimNextSessionCommand(secondLease)?.attemptCount, 2)
-  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(store.claimNextSessionCommand(secondLease, secondLeaseStart)?.attemptCount, 2)
 
-  const failed = store.reapExpiredSessionLeases({ maxCommandAttempts: 2 })
+  const failed = store.reapExpiredSessionLeases({ maxCommandAttempts: 2, now: secondLeaseExpired })
   assert.equal(failed.length, 1)
   assert.equal(failed[0]?.action, 'failed')
   assert.deepEqual(failed[0]?.failedCommandIds, ['cmd-retry'])

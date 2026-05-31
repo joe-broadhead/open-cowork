@@ -143,6 +143,7 @@ if (packageJson.scripts?.['deploy:private-beta:validate'] !== 'node scripts/vali
 }
 
 const hosted = readJson('deploy/private-beta/hosted-byok.config.example.json')
+if (hosted.contractVersion !== 1) throw new Error('hosted private beta config must declare contractVersion 1')
 if (hosted.cloud?.auth?.signupMode !== 'invite') throw new Error('hosted private beta config must use invite signup mode')
 if (hosted.cloud?.billing?.provider !== 'stub') throw new Error('hosted private beta config must keep billing stubbed')
 if (hosted.cloudDesktop?.requireManagedOrg !== true) throw new Error('hosted private beta config must require a managed org')
@@ -151,6 +152,7 @@ if (hosted.gateway?.metrics?.enabled !== true) throw new Error('hosted private b
 if (!hosted.gateway?.server?.adminToken) throw new Error('hosted private beta config must require gateway admin token')
 
 const selfHost = readJson('deploy/private-beta/self-host-oss.config.example.json')
+if (selfHost.contractVersion !== 1) throw new Error('self-host config must declare contractVersion 1')
 if (!['none', 'stub'].includes(selfHost.cloud?.billing?.provider)) {
   throw new Error('self-host config must keep billing none or stub')
 }

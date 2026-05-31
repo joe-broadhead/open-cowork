@@ -5,6 +5,11 @@
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
+    "contractVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of the supported downstream distribution contract. Version 1 covers Desktop, Cloud, and Gateway configuration surfaces."
+    },
     "allowedEnvPlaceholders": {
       "type": "array",
       "items": { "type": "string" }
@@ -251,7 +256,7 @@
       }
     }
   },
-  "required": ["allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
+  "required": ["contractVersion", "allowedEnvPlaceholders", "branding", "auth", "providers", "tools", "skills", "mcps", "agents", "permissions"],
   "$defs": {
     "httpsOrLocalhostUrl": {
       "type": "string",

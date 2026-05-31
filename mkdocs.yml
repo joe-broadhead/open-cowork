@@ -116,6 +116,7 @@ nav:
       - Cloud Web Workbench: cloud-web-workbench.md
       - Gateway Provider Readiness: gateway-provider-readiness.md
       - Downstream Customization: downstream.md
+      - Downstream Contract: downstream-contract.md
       - OpenCode SDK Boundary: opencode-sdk-v2-boundary.md
       - Development Environment: development-environment.md
       - Performance: performance.md

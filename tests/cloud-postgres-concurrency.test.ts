@@ -647,6 +647,11 @@ test('real Postgres cloud store reaps expired session leases with bounded retrie
   skip: POSTGRES_SKIP,
 }, async () => {
   await withPostgresStore(async (store, ids) => {
+    const firstLeaseStart = new Date('2030-01-01T00:00:00.000Z')
+    const firstLeaseExpired = new Date('2030-01-01T00:00:02.000Z')
+    const secondLeaseStart = new Date('2030-01-01T00:00:03.000Z')
+    const secondLeaseExpired = new Date('2030-01-01T00:00:05.000Z')
+
     await store.enqueueSessionCommand({
       commandId: `${ids.tenantId}-reap-cmd`,
       tenantId: ids.tenantId,
@@ -655,22 +660,20 @@ test('real Postgres cloud store reaps expired session leases with bounded retrie
       kind: 'prompt',
       payload: { text: 'retry this command' },
     })
-    const firstLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-a', new Date(), 20)
+    const firstLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-a', firstLeaseStart, 1_000)
     assert.ok(firstLease)
-    assert.equal((await store.claimNextSessionCommand(firstLease))?.attemptCount, 1)
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    assert.equal((await store.claimNextSessionCommand(firstLease, firstLeaseStart))?.attemptCount, 1)
 
-    const retried = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2 }))
+    const retried = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2, now: firstLeaseExpired }))
       .find((record) => record.tenantId === ids.tenantId && record.sessionId === ids.sessionId)
     assert.equal(retried?.action, 'retried')
     assert.deepEqual(retried?.retriedCommandIds, [`${ids.tenantId}-reap-cmd`])
 
-    const secondLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-b', new Date(), 20)
+    const secondLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-b', secondLeaseStart, 1_000)
     assert.ok(secondLease)
-    assert.equal((await store.claimNextSessionCommand(secondLease))?.attemptCount, 2)
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    assert.equal((await store.claimNextSessionCommand(secondLease, secondLeaseStart))?.attemptCount, 2)
 
-    const failed = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2 }))
+    const failed = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2, now: secondLeaseExpired }))
       .find((record) => record.tenantId === ids.tenantId && record.sessionId === ids.sessionId)
     assert.equal(failed?.action, 'failed')
     assert.deepEqual(failed?.failedCommandIds, [`${ids.tenantId}-reap-cmd`])

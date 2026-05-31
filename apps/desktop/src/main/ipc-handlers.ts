@@ -146,6 +146,7 @@ export function setupIpcHandlers(
   const destructiveConfirmations = createDestructiveConfirmationManager()
   const workspaceGateway = createWorkspaceGateway({
     cloudDesktop: getAppConfig().cloudDesktop,
+    cloudLoginBrandName: getAppConfig().branding.name,
   })
   const capabilityToolMethodCache = new Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>()
   const approvedSkillImportDirectories = new Map<string, string>()

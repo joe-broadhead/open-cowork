@@ -84,6 +84,7 @@ export type WorkspaceGatewayOptions = {
   cloudAdapterFactory?: (connection: CloudWorkspaceConnectionRecord, accessToken?: string | null) => CloudWorkspaceSessionAdapter
   cloudLogin?: (connection: CloudWorkspaceConnectionRecord) => Promise<CloudWorkspaceLoginResult>
   cloudRefresh?: (connection: CloudWorkspaceConnectionRecord, refreshToken: string) => Promise<CloudWorkspaceLoginResult>
+  cloudLoginBrandName?: string
   cloudReconnectBaseMs?: number
   cloudReconnectMaxMs?: number
   cloudReconnectMaxAttempts?: number
@@ -265,7 +266,9 @@ export class WorkspaceGateway {
       cacheMode: this.cloudDesktopConfig.cacheMode,
       cacheEncryptionFallback: this.cloudDesktopConfig.cacheEncryptionFallback,
     }))
-    const authenticator = createCloudWorkspaceDesktopAuthenticator()
+    const authenticator = createCloudWorkspaceDesktopAuthenticator({
+      brandName: options.cloudLoginBrandName || DEFAULT_CONFIG.branding.name,
+    })
     this.cloudLogin = options.cloudLogin || ((connection) => authenticator.login(connection))
     this.cloudRefresh = options.cloudRefresh || ((connection, refreshToken) => authenticator.refresh(connection, refreshToken))
     this.cloudReconnectBaseMs = Math.max(0, options.cloudReconnectBaseMs ?? 500)

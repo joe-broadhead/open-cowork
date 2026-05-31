@@ -2788,9 +2788,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     })
   }
 
-  async claimNextSessionCommand(lease: WorkerLeaseRecord) {
+  async claimNextSessionCommand(lease: WorkerLeaseRecord, now = new Date()) {
     return this.withTransaction(async (client) => {
-      await this.assertCurrentLease(lease, client)
+      await this.assertCurrentLease(lease, client, now.getTime())
       const selected = await this.maybeOne(
         `SELECT * FROM cloud_session_commands
          WHERE tenant_id = $1
@@ -2804,7 +2804,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          ORDER BY created_sequence
          FOR UPDATE SKIP LOCKED
          LIMIT 1`,
-        [lease.tenantId, lease.sessionId, lease.leaseToken, new Date().toISOString()],
+        [lease.tenantId, lease.sessionId, lease.leaseToken, now.toISOString()],
         client,
       )
       if (!selected) return null
@@ -4185,9 +4185,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return commandFromRow(row)
   }
 
-  private async assertCurrentLease(lease: WorkerLeaseRecord, executor: PgExecutor) {
+  private async assertCurrentLease(lease: WorkerLeaseRecord, executor: PgExecutor, nowMs = Date.now()) {
     const current = await this.getLease(lease.tenantId, lease.sessionId, executor, true)
-    if (!current || current.leaseToken !== lease.leaseToken || current.leaseExpiresAt <= Date.now()) {
+    if (!current || current.leaseToken !== lease.leaseToken || current.leaseExpiresAt <= nowMs) {
       throw new Error('Worker lease is stale.')
     }
     return current

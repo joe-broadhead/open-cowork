@@ -71,9 +71,13 @@ test('cloud workspace desktop authenticator performs OIDC PKCE loopback login', 
       const state = parsed.searchParams.get('state')
       assert.ok(redirectUri)
       assert.ok(state)
-      await fetch(`${redirectUri}?code=code-1&state=${state}`)
+      const callbackResponse = await fetch(`${redirectUri}?code=code-1&state=${state}`)
+      const callbackHtml = await callbackResponse.text()
+      assert.match(callbackHtml, /Acme &lt;Cowork&gt; Cloud login complete/)
+      assert.match(callbackHtml, /You can return to Acme &lt;Cowork&gt;\./)
     },
     callbackTimeoutMs: 2000,
+    brandName: 'Acme <Cowork>',
   })
 
   const result = await authenticator.login({

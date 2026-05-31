@@ -260,12 +260,16 @@ test('cloud and gateway OCI builds keep generated artifacts out of Docker contex
 test('downstream extension docs map extension points to owning modules', () => {
   for (const phrase of [
     'Extension Points And Ownership',
+    'Downstream Contract',
     'Gateway providers',
     'Deployment recipes',
     'Billing adapters',
     'Object-store adapters',
     'Secret adapters',
     'Worker pool modes',
+    'Runtime profiles and policy packs',
+    'Cloud Web feature modules and admin panels',
+    'BYOK validation and injection hooks',
     'Cloud event and projection contract',
     'Do not patch core execution code',
   ]) {

@@ -3,10 +3,14 @@
 Open Cowork is configured through `open-cowork.config.json`.
 
 The file is validated against `open-cowork.config.schema.json` at runtime.
+Full resolved configs must also declare `contractVersion: 1`, the current
+versioned downstream distribution contract. Partial overlays may omit it
+because they merge over the built-in default.
 
 ## Top-level sections
 
 The default upstream config is organized into:
+- `contractVersion`
 - `allowedEnvPlaceholders`
 - `branding`
 - `auth`
