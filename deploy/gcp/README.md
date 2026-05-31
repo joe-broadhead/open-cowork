@@ -9,6 +9,24 @@ domains, image tags, and environment overlays in a private deployment repo or a
 local scratch directory. Store secret values in GCP Secret Manager or KMS, not
 in git.
 
+## Deployment Repository Strategy
+
+Use three separate working areas when proving a GCP deployment:
+
+| Area | Purpose |
+| --- | --- |
+| Public `open-cowork` repo | Reference manifests, placeholder docs, redacted evidence templates, and validators. |
+| Tmp/local deployment repo | Copied values files, generated manifests, raw `gcloud` output, and one-off smoke evidence during experiments. |
+| Private/downstream repo | Real project ids, service accounts, domains, image digests, OIDC apps, prices, customer data, launch evidence, and private operator runbooks. |
+
+Only generalized template fixes, portable scripts, docs, and redacted evidence
+summaries should flow back to `open-cowork`. Do not paste raw provider output
+into public issues or PRs. If you need evidence that can be shared publicly,
+run the GCP scripts with `OPEN_COWORK_GCP_REDACT_OUTPUT=true` and start from
+`smoke/evidence.template.json`.
+The tmp/local deployment repo is a private scratch area, not a source of
+public evidence until its outputs have been redacted and generalized.
+
 ## Recommended Topology
 
 | Component | GCP service | Notes |
@@ -52,7 +70,9 @@ Optional APIs:
 Run a read-only preflight from the repo root:
 
 ```bash
-OPEN_COWORK_GCP_REGION=us-central1 pnpm deploy:gcp:preflight
+OPEN_COWORK_GCP_REGION=us-central1 \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
+pnpm deploy:gcp:preflight
 ```
 
 The preflight checks the active `gcloud` account/project, configured region,
@@ -60,7 +80,9 @@ required APIs, and presence of the reference files. Set
 `OPEN_COWORK_GCP_REQUIRE_KMS=true` to also require Cloud KMS. Set
 `OPEN_COWORK_GCP_REQUIRE_CLOUD_RUN=true` or
 `OPEN_COWORK_GCP_CLOUD_RUN_SERVICE=SERVICE` to also require Cloud Run. It does
-not create or modify cloud resources.
+not create or modify cloud resources. Omit `OPEN_COWORK_GCP_REDACT_OUTPUT`
+inside a private deployment repo when operators need exact project/account
+diagnostics.
 
 ## Required IAM
 
@@ -175,10 +197,20 @@ they must not be injected as process env vars.
     ```bash
     OPEN_COWORK_GCP_PROJECT=PROJECT \
     OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+    OPEN_COWORK_GCP_SQL_INSTANCE=INSTANCE \
     OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
     OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+    OPEN_COWORK_GCP_REDACT_OUTPUT=true \
     pnpm deploy:gcp:smoke
     ```
+
+    The GCP infra smoke runs Cloud Web smoke, Cloud Storage
+    upload/download/delete, Secret Manager resolution without printing the
+    secret value, and Cloud SQL restore-readiness checks for automated backups
+    and PITR. Set `OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE=true` only for early
+    pre-database surface checks; production and launch gates should provide
+    `OPEN_COWORK_GCP_SQL_INSTANCE`. Set `OPEN_COWORK_GCP_ALLOW_NO_PITR=true`
+    only for a documented non-production exception.
 
 13. Run the Desktop cloud-sync smoke with an admin-scoped token so the script
     can issue and revoke an ephemeral Desktop token. Keep tokens in the shell
@@ -331,9 +363,9 @@ Rollback order:
 ## Validation Checklist
 
 - `pnpm deploy:validate`
-- `OPEN_COWORK_GCP_REGION=... pnpm deploy:gcp:preflight`
+- `OPEN_COWORK_GCP_REGION=... OPEN_COWORK_GCP_REDACT_OUTPUT=true pnpm deploy:gcp:preflight`
 - `OPEN_COWORK_SMOKE_CLOUD_URL=https://... pnpm deploy:smoke -- --skip-gateway`
-- `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... pnpm deploy:gcp:smoke`
+- `OPEN_COWORK_GCP_PROJECT=... OPEN_COWORK_GCP_BUCKET=... OPEN_COWORK_GCP_SQL_INSTANCE=... OPEN_COWORK_GCP_REDACT_OUTPUT=true pnpm deploy:gcp:smoke`
 - `OPEN_COWORK_DESKTOP_SMOKE_CLOUD_URL=https://... OPEN_COWORK_DESKTOP_SMOKE_ADMIN_TOKEN=... pnpm deploy:desktop:smoke`
 - `OPEN_COWORK_GATEWAY_SMOKE_CLOUD_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_GATEWAY_URL=https://... OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN=... pnpm deploy:gateway:smoke`
 - `OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://... OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true pnpm deploy:continuation:smoke`

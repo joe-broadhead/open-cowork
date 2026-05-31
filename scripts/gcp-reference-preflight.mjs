@@ -33,6 +33,7 @@ const requiredFiles = [
   'deploy/gcp/gke/managed-certificate.example.yaml',
   'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
   'deploy/gcp/smoke/README.md',
+  'deploy/gcp/smoke/evidence.template.json',
 ]
 
 const args = parseArgs(process.argv.slice(2))
@@ -61,6 +62,48 @@ function argOrEnv(argName, envName) {
 function truthyArgOrEnv(argName, envName) {
   const value = argOrEnv(argName, envName).trim().toLowerCase()
   return value === '1' || value === 'true' || value === 'yes'
+}
+
+function redactGcpEvidence(value, key = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactGcpEvidence(item, key))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redactGcpEvidence(entryValue, entryKey),
+      ])
+    )
+  }
+  if (typeof value !== 'string') return value
+
+  const normalizedKey = key.toLowerCase()
+  if (normalizedKey.includes('project')) return 'PROJECT'
+  if (normalizedKey.includes('account')) return 'ACCOUNT'
+  if (normalizedKey.includes('region')) return 'REGION'
+  if (normalizedKey.includes('servicename')) return 'SERVICE'
+  if (normalizedKey === 'url' || normalizedKey.includes('url')) return 'https://cowork.example.com'
+  return value
+}
+
+function redactGcpText(text) {
+  return text
+    .replace(/--project\s+\S+/g, '--project PROJECT')
+    .replace(/projects\/[^/\s]+/g, 'projects/PROJECT')
+    .replace(/\bproject\s+[^:\s,]+/gi, 'project PROJECT')
+    .replace(/--region\s+\S+/g, '--region REGION')
+    .replace(/services describe\s+\S+/g, 'services describe SERVICE')
+    .replace(/\bservice\s+\S+\s+did not/gi, 'service SERVICE did not')
+    .replace(/https:\/\/[^\s)]+/g, 'https://cowork.example.com')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'ACCOUNT')
+}
+
+function formatError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return truthyArgOrEnv('redacted', 'OPEN_COWORK_GCP_REDACT_OUTPUT')
+    ? redactGcpText(message)
+    : message
 }
 
 function runGcloud(args, options = {}) {
@@ -170,7 +213,7 @@ function main() {
     cloudRunServiceName,
   )
 
-  process.stdout.write(`${JSON.stringify({
+  const report = {
     ok: true,
     project,
     region,
@@ -179,12 +222,16 @@ function main() {
     optionalApis,
     referenceFiles: files,
     cloudRun,
-  }, null, 2)}\n`)
+  }
+  const output = truthyArgOrEnv('redacted', 'OPEN_COWORK_GCP_REDACT_OUTPUT')
+    ? { redacted: true, ...redactGcpEvidence(report) }
+    : { redacted: false, ...report }
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
 }
 
 try {
   main()
 } catch (error) {
-  process.stderr.write(`[gcp-preflight] ${error instanceof Error ? error.message : String(error)}\n`)
+  process.stderr.write(`[gcp-preflight] ${formatError(error)}\n`)
   process.exit(1)
 }

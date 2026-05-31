@@ -28,7 +28,9 @@ function argOrEnv(argName, envName) {
 }
 
 function boolArg(argName, envName) {
-  return args.has(argName) || process.env[envName] === 'true'
+  if (args.has(argName)) return true
+  const value = (process.env[envName] || '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
 }
 
 function run(command, argv, options = {}) {
@@ -67,6 +69,52 @@ function parseGcpSecretRef(ref) {
     secret: match[2],
     version: match[3],
   }
+}
+
+function redactGcpEvidence(value, key = '') {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactGcpEvidence(item, key))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redactGcpEvidence(entryValue, entryKey),
+      ])
+    )
+  }
+  if (typeof value !== 'string') return value
+
+  const normalizedKey = key.toLowerCase()
+  if (normalizedKey.includes('project')) return 'PROJECT'
+  if (normalizedKey.includes('bucket')) return 'OPEN_COWORK_BUCKET'
+  if (normalizedKey.includes('secret')) return 'SECRET_NAME'
+  if (normalizedKey.includes('version')) return 'VERSION'
+  if (normalizedKey.includes('sqlinstance')) return 'INSTANCE'
+  if (normalizedKey === 'key') return 'open-cowork-smoke/smoke-PLACEHOLDER.txt'
+  if (normalizedKey === 'cloudurl' || normalizedKey.includes('url')) return 'https://cowork.example.com'
+  return value
+}
+
+function redactGcpText(text) {
+  return text
+    .replace(/--project\s+\S+/g, '--project PROJECT')
+    .replace(/projects\/[^/\s]+/g, 'projects/PROJECT')
+    .replace(/\bproject\s+[^:\s,]+/gi, 'project PROJECT')
+    .replace(/gs:\/\/[^/\s]+/g, 'gs://OPEN_COWORK_BUCKET')
+    .replace(/\bbucket\s+[^:\s,]+/gi, 'bucket OPEN_COWORK_BUCKET')
+    .replace(/instances describe\s+\S+/g, 'instances describe INSTANCE')
+    .replace(/\bCloud SQL instance\s+\S+/g, 'Cloud SQL instance INSTANCE')
+    .replace(/--secret\s+\S+/g, '--secret SECRET_NAME')
+    .replace(/https:\/\/[^\s)]+/g, 'https://cowork.example.com')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'ACCOUNT')
+}
+
+function formatError(error) {
+  const message = error instanceof Error ? error.message : String(error)
+  return boolArg('redacted', 'OPEN_COWORK_GCP_REDACT_OUTPUT')
+    ? redactGcpText(message)
+    : message
 }
 
 function runCloudSmoke() {
@@ -143,6 +191,36 @@ function runSecretSmoke(project) {
   }
 }
 
+function runRestoreReadinessSmoke(project) {
+  if (boolArg('skip-restore-smoke', 'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE')) return null
+  const sqlInstance = argOrEnv('sql-instance', 'OPEN_COWORK_GCP_SQL_INSTANCE')
+  if (!sqlInstance) {
+    throw new Error('Set OPEN_COWORK_GCP_SQL_INSTANCE or pass --sql-instance for restore-readiness smoke. Set OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE=true only for pre-database surface checks.')
+  }
+  const raw = run('gcloud', [
+    'sql',
+    'instances',
+    'describe',
+    sqlInstance,
+    ...projectArgs(project),
+    '--format=json(settings.backupConfiguration.enabled,settings.backupConfiguration.pointInTimeRecoveryEnabled)',
+  ])
+  const parsed = raw ? JSON.parse(raw) : {}
+  const backupConfiguration = parsed?.settings?.backupConfiguration || {}
+  if (backupConfiguration.enabled !== true) {
+    throw new Error(`Cloud SQL instance ${sqlInstance} must have automated backups enabled before production smoke passes.`)
+  }
+  const pointInTimeRecoveryEnabled = backupConfiguration.pointInTimeRecoveryEnabled === true
+  if (!pointInTimeRecoveryEnabled && !boolArg('allow-no-pitr', 'OPEN_COWORK_GCP_ALLOW_NO_PITR')) {
+    throw new Error(`Cloud SQL instance ${sqlInstance} must have point-in-time recovery enabled, or set OPEN_COWORK_GCP_ALLOW_NO_PITR=true for a non-production exception.`)
+  }
+  return {
+    sqlInstance,
+    backupsEnabled: true,
+    pointInTimeRecoveryEnabled,
+  }
+}
+
 function main() {
   requireGcloud()
   const project = argOrEnv('project', 'OPEN_COWORK_GCP_PROJECT')
@@ -154,13 +232,18 @@ function main() {
     cloud: runCloudSmoke(),
     objectStore: runGcsSmoke(project),
     secretManager: runSecretSmoke(project),
+    restoreReadiness: runRestoreReadinessSmoke(project),
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, project, results }, null, 2)}\n`)
+  const report = { ok: true, project, results }
+  const output = boolArg('redacted', 'OPEN_COWORK_GCP_REDACT_OUTPUT')
+    ? { redacted: true, ...redactGcpEvidence(report) }
+    : { redacted: false, ...report }
+  process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
 }
 
 try {
   main()
 } catch (error) {
-  process.stderr.write(`[gcp-smoke] ${error instanceof Error ? error.message : String(error)}\n`)
+  process.stderr.write(`[gcp-smoke] ${formatError(error)}\n`)
   process.exit(1)
 }

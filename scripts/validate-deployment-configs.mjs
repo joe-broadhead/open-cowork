@@ -454,6 +454,7 @@ function validateDocs() {
     'deploy/observability/grafana-open-cowork-overview.json',
     'deploy/observability/managed-worker-slo-template.json',
     'deploy/gcp/README.md',
+    'deploy/gcp/smoke/evidence.template.json',
     'deploy/aws/README.md',
     'deploy/azure/README.md',
     'deploy/digitalocean/README.md',
@@ -473,6 +474,13 @@ function validateDocs() {
     'deploy/managed-workers/helm-values.worker-pool.yaml.example',
     'deploy/managed-workers/worker-release-evidence.template.md',
     'deploy/managed-workers/worker-restore-drill.template.md',
+    'deploy/gcp/README.md',
+    'deploy/gcp/gke/values.gke.yaml.example',
+    'deploy/gcp/gke/external-secret.example.yaml',
+    'deploy/gcp/gke/managed-certificate.example.yaml',
+    'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
+    'deploy/gcp/smoke/README.md',
+    'deploy/gcp/smoke/evidence.template.json',
     'deploy/observability/managed-worker-slo-template.json',
     'deploy/private-beta/hosted-byok.config.example.json',
     'deploy/private-beta/self-host-oss.config.example.json',
@@ -667,6 +675,10 @@ function validateDocs() {
   const deployReadme = read('deploy/README.md')
   for (const phrase of [
     'Provider Recipes',
+    'Deployment Repository Strategy',
+    'tmp/local deployment repo',
+    'Private/downstream deployment repo',
+    'redacted evidence',
     'deploy/kubernetes/',
     'VPS/local Compose',
     'cloud.publicBranding',
@@ -677,6 +689,9 @@ function validateDocs() {
     'OPEN_COWORK_CONFIG_PATH',
     'cloud.billing.provider',
     'OPEN_COWORK_CLOUD_IMAGE',
+    'OPEN_COWORK_GCP_REDACT_OUTPUT=true',
+    'OPEN_COWORK_GCP_SQL_INSTANCE',
+    'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE',
     'image.tag=latest',
     'HPA or KEDA',
     'PodDisruptionBudgets',
@@ -959,6 +974,7 @@ function validateGcpReference() {
     'deploy/gcp/gke/managed-certificate.example.yaml',
     'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
     'deploy/gcp/smoke/README.md',
+    'deploy/gcp/smoke/evidence.template.json',
     'scripts/gcp-reference-preflight.mjs',
     'scripts/gcp-reference-smoke.mjs',
     'scripts/desktop-cloud-sync-smoke.mjs',
@@ -969,6 +985,7 @@ function validateGcpReference() {
     if (!existsSync(path)) {
       throw new Error(`${path} is required for the GCP reference deployment`)
     }
+    assertPublicTemplateSafe(path)
   }
 
   const gcpReadme = read('deploy/gcp/README.md')
@@ -979,6 +996,14 @@ function validateGcpReference() {
     'Secret Manager',
     'iamcredentials.googleapis.com',
     'OPEN_COWORK_GCP_REGION',
+    'Deployment Repository Strategy',
+    'tmp/local deployment repo',
+    'Private/downstream repo',
+    'redacted evidence',
+    'OPEN_COWORK_GCP_REDACT_OUTPUT=true',
+    'OPEN_COWORK_GCP_SQL_INSTANCE',
+    'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE',
+    'OPEN_COWORK_GCP_ALLOW_NO_PITR',
     'pnpm deploy:gcp:preflight',
     'pnpm deploy:gcp:smoke',
     'pnpm deploy:desktop:smoke',
@@ -1046,6 +1071,61 @@ function validateGcpReference() {
   ]) {
     if (!cloudRun.includes(phrase)) {
       throw new Error(`deploy/gcp/cloud-run/all-in-one.service.yaml.example must include ${phrase}`)
+    }
+  }
+
+  const gcpSmokeDocs = read('deploy/gcp/smoke/README.md')
+  for (const phrase of [
+    'evidence.template.json',
+    'OPEN_COWORK_GCP_REDACT_OUTPUT=true',
+    'OPEN_COWORK_GCP_SQL_INSTANCE',
+    'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE',
+    'point-in-time recovery',
+  ]) {
+    if (!gcpSmokeDocs.includes(phrase)) {
+      throw new Error(`deploy/gcp/smoke/README.md must include ${phrase}`)
+    }
+  }
+
+  const gcpEvidence = read('deploy/gcp/smoke/evidence.template.json')
+  for (const phrase of [
+    '"redacted": true',
+    '"project": "PROJECT"',
+    '"region": "REGION"',
+    '"activeAccount": "ACCOUNT"',
+    '"bucket": "OPEN_COWORK_BUCKET"',
+    '"sqlInstance": "INSTANCE"',
+    '"pointInTimeRecoveryEnabled": true',
+    'PRIVATE_DEPLOYMENT_REPO',
+  ]) {
+    if (!gcpEvidence.includes(phrase)) {
+      throw new Error(`deploy/gcp/smoke/evidence.template.json must include ${phrase}`)
+    }
+  }
+
+  const preflight = read('scripts/gcp-reference-preflight.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_GCP_REDACT_OUTPUT',
+    'redactGcpEvidence',
+    'redactGcpText',
+  ]) {
+    if (!preflight.includes(phrase)) {
+      throw new Error(`scripts/gcp-reference-preflight.mjs must include ${phrase}`)
+    }
+  }
+
+  const gcpSmoke = read('scripts/gcp-reference-smoke.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_GCP_REDACT_OUTPUT',
+    'redactGcpEvidence',
+    'redactGcpText',
+    'OPEN_COWORK_GCP_SQL_INSTANCE',
+    'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE',
+    'OPEN_COWORK_GCP_ALLOW_NO_PITR',
+    'pointInTimeRecoveryEnabled',
+  ]) {
+    if (!gcpSmoke.includes(phrase)) {
+      throw new Error(`scripts/gcp-reference-smoke.mjs must include ${phrase}`)
     }
   }
 
