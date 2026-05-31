@@ -3643,9 +3643,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
     const retryRun = Array.from(this.workflowRuns.values())
       .filter((run) => (
-        run.triggerType === 'schedule'
-        && run.status === 'queued'
-        && run.sessionId === null
+        this.workflows.get(key(run.tenantId, run.workflowId))?.record.status === 'running'
+        &&
+        (
+          (run.status === 'queued' && run.sessionId === null)
+          || (run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId))
+        )
         && run.claimToken === null
       ))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))[0]
@@ -3660,6 +3663,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       workflow.record.status = 'running'
       workflow.record.latestRunId = retryRun.id
       workflow.record.latestRunStatus = retryRun.status
+      workflow.record.latestRunSessionId = retryRun.sessionId
       workflow.record.updatedAt = claimedAt
       return {
         workflow: clone(workflow.record),
@@ -3722,7 +3726,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const reaped: ReapedWorkflowClaimRecord[] = []
     for (const run of this.workflowRuns.values()) {
       if (!run.claimToken || !run.claimExpiresAt || Date.parse(run.claimExpiresAt) > now.getTime()) continue
-      if (run.status !== 'queued' || run.sessionId) continue
+      if (
+        !(run.status === 'queued' && run.sessionId === null)
+        && !(run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId))
+      ) continue
       const workflow = this.workflows.get(key(run.tenantId, run.workflowId))
       if (!workflow) continue
       const claimToken = run.claimToken
@@ -3747,9 +3754,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         run.claimToken = null
         run.claimExpiresAt = null
         run.lastErrorCode = 'claim_expired'
-        run.lastErrorSummary = 'Workflow run claim expired before session attachment.'
+        run.lastErrorSummary = run.sessionId
+          ? 'Workflow run claim expired before command enqueue.'
+          : 'Workflow run claim expired before session attachment.'
         workflow.record.status = 'running'
-        workflow.record.latestRunStatus = 'queued'
+        workflow.record.latestRunStatus = run.status
+        workflow.record.latestRunSessionId = run.sessionId
       }
       workflow.record.latestRunId = run.id
       workflow.record.updatedAt = nowIsoValue
@@ -3770,9 +3780,18 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
     const run = this.workflowRuns.get(key(input.tenantId, input.runId))
     if (!run || run.workflowId !== input.workflowId) return null
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      throw new Error('Workflow run is not attachable.')
+    }
+    if (run.status !== 'queued' && !(run.status === 'running' && run.sessionId === input.sessionId)) {
+      throw new Error('Workflow run is not attachable.')
+    }
+    if (run.sessionId && run.sessionId !== input.sessionId) throw new Error('Workflow run is already attached to another session.')
     if (run.claimToken) {
       if (run.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
       if (run.claimExpiresAt && Date.parse(run.claimExpiresAt) <= Date.now()) throw new Error('Workflow run claim is stale.')
+    } else if (input.claimToken) {
+      throw new Error('Workflow run claim is stale.')
     }
     const startedAt = nowIso(input.startedAt)
     run.sessionId = input.sessionId
@@ -4095,6 +4114,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const command = session.commands.find((entry) => entry.commandId === commandId)
     if (!command) throw new Error(`Unknown command ${commandId}.`)
     return command
+  }
+
+  private sessionHasCommands(tenantId: string, sessionId: string) {
+    const session = this.sessions.get(key(tenantId, sessionId))
+    return Boolean(session?.commands.length)
   }
 
   private assertUniqueThreadTagName(tenantId: string, tagId: string, name: string) {

@@ -19,7 +19,7 @@ export type CloudWorkflowServiceDelegate = {
     triggerType?: WorkflowTriggerType
     triggerPayload?: Record<string, unknown> | null
   }): Promise<CloudWorkflowStartResult>
-  claimAndStartDueWorkflow(now?: Date): Promise<CloudWorkflowStartResult | null>
+  claimAndStartDueWorkflow(now?: Date, claimedBy?: string | null): Promise<CloudWorkflowStartResult | null>
   runWorkflowWebhook(input: CloudWorkflowWebhookInput): Promise<CloudWorkflowStartResult>
 }
 
@@ -39,7 +39,7 @@ export class CloudWorkflowService {
   run(principal: CloudPrincipal, workflowId: string, input: { triggerType?: WorkflowTriggerType, triggerPayload?: Record<string, unknown> | null }) {
     return this.delegate.runWorkflow(principal, workflowId, input)
   }
-  claimAndStartDue(now?: Date) { return this.delegate.claimAndStartDueWorkflow(now) }
+  claimAndStartDue(now?: Date, claimedBy?: string | null) { return this.delegate.claimAndStartDueWorkflow(now, claimedBy) }
   runWebhook(input: CloudWorkflowWebhookInput) {
     return this.delegate.runWorkflowWebhook(input)
   }

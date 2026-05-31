@@ -2483,6 +2483,7 @@ export class CloudSessionService {
       runId: this.ids.randomUUID(),
       triggerType,
       triggerPayload: input.triggerPayload || null,
+      claimedBy: `workflow-api:${principal.userId}`,
     })
     return this.startWorkflowRun(workflow, run)
   }
@@ -2537,6 +2538,7 @@ export class CloudSessionService {
         runId: this.ids.randomUUID(),
         triggerType: 'webhook',
         triggerPayload: input.payload,
+        claimedBy: `workflow-webhook:${workflow.id}`,
       })
       const started = await this.startWorkflowRun(workflow, run)
       await replayClaim.accept()
@@ -3671,6 +3673,7 @@ export class CloudSessionService {
     const session = await this.createCloudSessionRecord({
       tenantId: workflow.tenantId,
       userId: workflow.userId,
+      sessionId: run.sessionId || undefined,
       profileName: this.policy.profileName,
       title: `Run ${workflow.title}`,
     })
@@ -3682,7 +3685,7 @@ export class CloudSessionService {
       claimToken: run.claimToken,
     })
     const command = await this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
+      commandId: this.workflowPromptCommandId(workflow, run),
       tenantId: workflow.tenantId,
       userId: workflow.userId,
       sessionId: session.sessionId,
@@ -3703,6 +3706,10 @@ export class CloudSessionService {
       sessionId: session.sessionId,
       command,
     }
+  }
+
+  private workflowPromptCommandId(workflow: CloudWorkflowRecord, run: CloudWorkflowRunRecord) {
+    return `workflow:${workflow.tenantId}:${workflow.id}:${run.id}:prompt`
   }
 
   private workflowSummaryFromRuntimeEvents(events: CloudRuntimeEvent[]) {
