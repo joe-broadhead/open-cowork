@@ -321,7 +321,17 @@ export class WorkspaceGateway {
 
   activate(event: WorkspaceEventLike, workspaceIdInput: string): WorkspaceInfo {
     const workspace = this.getWorkspace(workspaceIdInput)
-    this.activeBySender.set(senderKey(event), workspace.id)
+    const sender = senderKey(event)
+    const previousWorkspaceId = this.activeBySender.get(sender)
+    this.activeBySender.set(sender, workspace.id)
+    if (
+      previousWorkspaceId
+      && previousWorkspaceId !== workspace.id
+      && previousWorkspaceId !== LOCAL_WORKSPACE_ID
+      && !this.hasActiveSenderForWorkspace(previousWorkspaceId)
+    ) {
+      this.closeCloudSubscriptionsForWorkspace(previousWorkspaceId)
+    }
     return this.toInfo(workspace, true)
   }
 
@@ -1299,6 +1309,13 @@ export class WorkspaceGateway {
       try { subscription.close() } catch { /* best effort */ }
       this.cloudWorkspaceSubscriptions.delete(key)
     }
+  }
+
+  private hasActiveSenderForWorkspace(workspaceId: string) {
+    for (const activeWorkspaceId of this.activeBySender.values()) {
+      if (activeWorkspaceId === workspaceId) return true
+    }
+    return false
   }
 
   private async readCloudItemsSetting<T extends { name: string }>(

@@ -118,6 +118,9 @@ export type CloudWorkspaceAdapterOptions = {
   cacheEncryptionFallback?: CloudWorkspaceCacheEncryptionFallback
 }
 
+const CLOUD_SYNC_VIEW_CONCURRENCY = 8
+const CLOUD_SYNC_ARTIFACT_CONCURRENCY = 4
+
 function toSessionInfo(record: SessionRecord): SessionInfo {
   return {
     id: record.sessionId,
@@ -151,10 +154,35 @@ export function cloudWorkspaceCacheKey(connection: CloudWorkspaceConnectionRecor
   ].join('|')
 }
 
+async function settleWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  task: (item: T, index: number) => Promise<void>,
+): Promise<PromiseSettledResult<void>[]> {
+  const results: PromiseSettledResult<void>[] = new Array(items.length)
+  let nextIndex = 0
+  const workerCount = Math.min(Math.max(1, concurrency), items.length)
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex
+      nextIndex += 1
+      try {
+        await task(items[index], index)
+        results[index] = { status: 'fulfilled', value: undefined }
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason }
+      }
+    }
+  }))
+  return results
+}
+
 export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   private readonly transport: CloudTransportAdapter
   private readonly connection: CloudWorkspaceConnectionRecord
   private readonly cache: CloudWorkspaceCache | null
+  private readonly inFlightSessionViews = new Map<string, Promise<SessionView>>()
+  private readonly inFlightArtifactLists = new Map<string, Promise<SessionArtifact[]>>()
 
   constructor(options: CloudWorkspaceAdapterOptions) {
     this.connection = options.connection
@@ -247,9 +275,24 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   }
 
   async getSessionView(sessionId: string): Promise<SessionView> {
+    const inFlight = this.inFlightSessionViews.get(sessionId)
+    if (inFlight) return inFlight
+    const fetch = this.fetchSessionView(sessionId)
+      .finally(() => {
+        if (this.inFlightSessionViews.get(sessionId) === fetch) {
+          this.inFlightSessionViews.delete(sessionId)
+        }
+      })
+    this.inFlightSessionViews.set(sessionId, fetch)
+    return fetch
+  }
+
+  private async fetchSessionView(sessionId: string): Promise<SessionView> {
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
       const view = cloudSessionViewToSessionView(await this.transport.getSession(sessionId))
+      const cached = this.cache?.getSessionView(cacheKey, sessionId)
+      if (cached && cached.revision > view.revision) return cached
       this.cache?.upsertSessionView(cacheKey, sessionId, view)
       return view
     } catch (error) {
@@ -395,6 +438,20 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
 
   async listArtifacts(sessionId: string): Promise<SessionArtifact[]> {
     if (!this.transport.listArtifacts) throw new Error('Cloud artifacts are not supported by this workspace.')
+    const inFlight = this.inFlightArtifactLists.get(sessionId)
+    if (inFlight) return inFlight
+    const fetch = this.fetchArtifactList(sessionId)
+      .finally(() => {
+        if (this.inFlightArtifactLists.get(sessionId) === fetch) {
+          this.inFlightArtifactLists.delete(sessionId)
+        }
+      })
+    this.inFlightArtifactLists.set(sessionId, fetch)
+    return fetch
+  }
+
+  private async fetchArtifactList(sessionId: string): Promise<SessionArtifact[]> {
+    if (!this.transport.listArtifacts) throw new Error('Cloud artifacts are not supported by this workspace.')
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     try {
       const artifacts = await this.transport.listArtifacts(sessionId)
@@ -490,9 +547,13 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
 
   async sync(): Promise<void> {
     const sessions = await this.listSessions()
-    await Promise.allSettled(sessions.map((session) => this.getSessionView(session.id)))
+    await settleWithConcurrency(sessions, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
+      await this.getSessionView(session.id)
+    })
     if (this.transport.listArtifacts) {
-      await Promise.allSettled(sessions.map((session) => this.listArtifacts(session.id)))
+      await settleWithConcurrency(sessions, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+        await this.listArtifacts(session.id)
+      })
     }
     if (this.transport.listWorkflows) {
       await this.listWorkflows().catch(() => undefined)

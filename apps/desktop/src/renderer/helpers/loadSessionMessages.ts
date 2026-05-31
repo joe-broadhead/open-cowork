@@ -1,5 +1,6 @@
 import { useSessionStore } from '../stores/session'
 import { t } from './i18n'
+import { normalizeWorkspaceId } from '../stores/session-workspace-keys'
 
 function describeSessionLoadError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -29,15 +30,20 @@ let activateToken = 0
 /**
  * Switch to a session and hydrate it from history on first load.
  */
-export async function switchToSession(sessionId: string, options?: { force?: boolean }) {
+export async function switchToSession(sessionId: string, options?: { force?: boolean; workspaceId?: string }) {
   const store = useSessionStore.getState()
+  const requestedWorkspaceId = normalizeWorkspaceId(options?.workspaceId || store.activeWorkspaceId)
   store.setCurrentSession(sessionId)
   const myToken = ++activateToken
 
   try {
-    const view = await window.coworkApi.session.activate(sessionId, options)
+    const view = await window.coworkApi.session.activate(sessionId, {
+      ...options,
+      workspaceId: requestedWorkspaceId,
+    })
     if (myToken !== activateToken) return
-    store.setSessionView(sessionId, view)
+    if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) !== requestedWorkspaceId) return
+    store.setSessionView(sessionId, view, requestedWorkspaceId)
   } catch (err) {
     if (myToken !== activateToken) return
     reportSessionLoadError(sessionId, err)
