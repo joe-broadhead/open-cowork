@@ -3629,6 +3629,160 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
   }
 })
 
+test('cloud workflow webhooks enqueue managed worker execution without web auto-processing', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    autoProcessCommands: false,
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        webhooks: true,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const createResponse = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Webhook managed worker',
+        instructions: 'Run later from worker.',
+        agentName: 'data-analyst',
+        triggers: [{
+          id: 'webhook-1',
+          type: 'webhook',
+          enabled: true,
+          webhookSecret: 'cloud-webhook-secret',
+        }],
+      }),
+    })
+    assert.equal(createResponse.status, 201)
+    const workflowId = String(asRecord((await readJson(createResponse)).workflow).id)
+    const rawBody = JSON.stringify({ source: 'test-webhook' })
+    const timestamp = new Date().toISOString()
+    const signature = signWorkflowWebhookPayload('cloud-webhook-secret', rawBody, timestamp)
+
+    const accepted = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-timestamp': timestamp,
+        'x-open-cowork-signature': signature,
+      },
+      body: rawBody,
+    })
+    assert.equal(accepted.status, 202)
+    const acceptedBody = await readJson(accepted)
+    assert.equal(acceptedBody.ok, true)
+    assert.equal(acceptedBody.processed, 0)
+    assert.equal(fixture.runtime.prompts.length, 0)
+
+    const sessionId = String(acceptedBody.sessionId)
+    const queuedWorkflow = asRecord((await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}`))).workflow)
+    assert.equal(queuedWorkflow.latestRunStatus, 'running')
+    assert.equal(queuedWorkflow.latestRunSessionId, sessionId)
+
+    assert.equal(await fixture.worker.processAllSessionCommands(), 1)
+    assert.equal(fixture.runtime.prompts.length, 1)
+    assert.equal(fixture.runtime.prompts[0]?.parts[0]?.type === 'text'
+      ? fixture.runtime.prompts[0].parts[0].text
+      : null, 'Run later from worker.')
+
+    const completedWorkflow = asRecord((await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}`))).workflow)
+    assert.equal(completedWorkflow.latestRunStatus, 'completed')
+    assert.equal(completedWorkflow.latestRunSummary, 'echo: Run later from worker.')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud workflow recovery enqueues missing commands on attached runs without duplicating sessions', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  fixture.store.ensureUser({ tenantId: 'tenant-1', userId: 'user-1', email: 'user@example.test', role: 'owner' })
+  const workflow = fixture.store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-attached-recovery',
+    draft: {
+      title: 'Attached recovery',
+      instructions: 'Recover the missing command.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  fixture.store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'workflow-stranded-session',
+    opencodeSessionId: '',
+    profileName: 'full',
+    title: 'Run Attached recovery',
+    createdAt: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  const run = fixture.store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: workflow.id,
+    runId: 'workflow-attached-recovery-run',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T09:00:00.001Z'),
+  })
+  assert.ok(run.claimToken)
+  fixture.store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: workflow.id,
+    runId: run.id,
+    sessionId: 'workflow-stranded-session',
+    claimToken: run.claimToken,
+    startedAt: new Date('2030-01-01T09:00:00.002Z'),
+  })
+
+  const started = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T09:00:00.003Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(started?.run.id, run.id)
+  assert.equal(started?.sessionId, 'workflow-stranded-session')
+  assert.equal(started?.command.commandId, `workflow:tenant-1:${workflow.id}:${run.id}:prompt`)
+  assert.equal(fixture.runtime.prompts.length, 0)
+
+  assert.equal(await fixture.worker.processAllSessionCommands(), 1)
+  assert.equal(fixture.runtime.prompts.length, 1)
+  assert.equal(fixture.runtime.prompts[0]?.sessionId, 'oc-session-1')
+  assert.equal(fixture.runtime.prompts[0]?.parts[0]?.type === 'text'
+    ? fixture.runtime.prompts[0].parts[0].text
+    : null, 'Recover the missing command.')
+
+  const detail = await fixture.service.getWorkflow({
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'user-1',
+    accountId: 'user-1',
+    email: 'user@example.test',
+    role: 'owner',
+    authSource: 'local',
+  }, workflow.id)
+  assert.equal(detail?.latestRunStatus, 'completed')
+  assert.equal(detail?.latestRunSessionId, 'workflow-stranded-session')
+
+  const second = await fixture.service.claimAndStartDueWorkflow(
+    new Date('2030-01-01T09:00:00.004Z'),
+    'scheduler-recovery',
+  )
+  assert.equal(second, null)
+})
+
 test('cloud HTTP rejects workflow APIs when the cloud profile disables them', async () => {
   const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   const fixture = createFixture({

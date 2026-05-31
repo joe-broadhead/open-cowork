@@ -1202,6 +1202,77 @@ test('cloud control plane persists workflow runs and finalizes workflow state du
   assert.equal(store.listWorkflowRuns('tenant-1', 'workflow-1')[0]?.id, 'run-1')
 })
 
+test('cloud control plane fences workflow finalization by active worker lease', () => {
+  const store = seededStore()
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-fenced-finalize',
+    draft: {
+      title: 'Fenced workflow',
+      instructions: 'Finalize once.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-fenced-finalize',
+    runId: 'run-fenced-finalize',
+    triggerType: 'manual',
+  })
+  store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-fenced-finalize',
+    runId: 'run-fenced-finalize',
+    sessionId: 'session-1',
+  })
+  const staleLease = store.claimSessionLease(
+    'tenant-1',
+    'session-1',
+    'worker-stale',
+    new Date('2030-01-01T09:00:00.000Z'),
+    1,
+  )
+  assert.ok(staleLease)
+  const currentLease = store.claimSessionLease(
+    'tenant-1',
+    'session-1',
+    'worker-current',
+    new Date('2030-01-01T09:00:00.002Z'),
+    30_000,
+  )
+  assert.ok(currentLease)
+
+  assert.throws(() => store.completeWorkflowRun({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-fenced-finalize',
+    runId: 'run-fenced-finalize',
+    summary: 'stale result',
+    nextStatus: 'active',
+    nextRunAt: null,
+    leaseToken: staleLease.leaseToken,
+  }), /stale/)
+  assert.equal(store.getWorkflowRun('tenant-1', 'run-fenced-finalize')?.status, 'running')
+
+  const completed = store.completeWorkflowRun({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-fenced-finalize',
+    runId: 'run-fenced-finalize',
+    summary: 'current result',
+    nextStatus: 'active',
+    nextRunAt: null,
+    leaseToken: currentLease.leaseToken,
+  })
+  assert.equal(completed?.status, 'completed')
+  assert.equal(completed?.summary, 'current result')
+})
+
 test('cloud control plane atomically claims a due scheduled workflow run once', () => {
   const store = seededStore()
   store.createWorkflow({
@@ -1319,4 +1390,122 @@ test('cloud control plane reaps and retries expired scheduled workflow claims', 
   assert.equal(failed[0]?.action, 'failed')
   assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-retry')?.status, 'failed')
   assert.equal(store.getWorkflowRun('tenant-1', 'workflow-run-retry')?.status, 'failed')
+})
+
+test('cloud control plane recovers expired webhook workflow start claims', () => {
+  const store = seededStore()
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-webhook-retry',
+    draft: {
+      title: 'Webhook workflow',
+      instructions: 'Run from webhook.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{
+        id: 'webhook-1',
+        type: 'webhook',
+        enabled: true,
+        webhookSecret: 'secret',
+      }],
+    },
+  })
+
+  const first = store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-webhook-retry',
+    runId: 'webhook-run-retry',
+    triggerType: 'webhook',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-webhook:workflow-webhook-retry',
+    leaseTtlMs: 1,
+    createdAt: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  assert.equal(first.triggerType, 'webhook')
+  assert.ok(first.claimToken)
+
+  const retried = store.reapExpiredWorkflowClaims({
+    maxAttempts: 2,
+    now: new Date('2030-01-01T09:00:00.002Z'),
+  })
+  assert.equal(retried.length, 1)
+  assert.equal(retried[0]?.action, 'retried')
+
+  const second = store.claimDueWorkflowRun({
+    runId: 'unused-webhook-run',
+    claimedBy: 'scheduler-recovery',
+    now: new Date('2030-01-01T09:00:00.003Z'),
+  })
+  assert.equal(second?.run.id, 'webhook-run-retry')
+  assert.equal(second?.run.triggerType, 'webhook')
+  assert.equal(second?.run.attemptCount, 2)
+  assert.notEqual(second?.run.claimToken, first.claimToken)
+})
+
+test('cloud control plane recovers workflow starts stranded after session attachment', () => {
+  const store = seededStore()
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-attached-retry',
+    draft: {
+      title: 'Attached retry workflow',
+      instructions: 'Recover command enqueue.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+
+  const first = store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-attached-retry',
+    runId: 'attached-run-retry',
+    triggerType: 'manual',
+    triggerPayload: { source: 'test' },
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 30_000,
+    createdAt: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  assert.ok(first.claimToken)
+
+  store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-attached-retry',
+    runId: 'attached-run-retry',
+    sessionId: 'session-1',
+    claimToken: first.claimToken,
+    startedAt: new Date('2030-01-01T09:00:00.001Z'),
+  })
+  assert.equal(store.getWorkflowRun('tenant-1', 'attached-run-retry')?.claimToken, null)
+
+  const claimed = store.claimDueWorkflowRun({
+    runId: 'unused-attached-run',
+    claimedBy: 'scheduler-recovery',
+    leaseTtlMs: 1,
+    now: new Date('2030-01-01T09:00:00.002Z'),
+  })
+  assert.equal(claimed?.run.id, 'attached-run-retry')
+  assert.equal(claimed?.run.status, 'running')
+  assert.equal(claimed?.run.sessionId, 'session-1')
+  assert.equal(claimed?.run.attemptCount, 2)
+  assert.ok(claimed?.run.claimToken)
+
+  const retried = store.reapExpiredWorkflowClaims({
+    maxAttempts: 3,
+    now: new Date('2030-01-01T09:00:00.004Z'),
+  })
+  assert.equal(retried.length, 1)
+  assert.equal(retried[0]?.action, 'retried')
+  assert.equal(store.getWorkflowRun('tenant-1', 'attached-run-retry')?.claimToken, null)
+  assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-attached-retry')?.latestRunStatus, 'running')
 })

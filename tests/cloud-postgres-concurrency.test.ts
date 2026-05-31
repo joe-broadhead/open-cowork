@@ -710,6 +710,215 @@ test('real Postgres cloud store retries and fails expired workflow start claims'
   })
 })
 
+test('real Postgres cloud store fences workflow finalization by active worker lease', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const workflowId = `${ids.tenantId}-workflow-fenced-finalize`
+    const runId = `${ids.tenantId}-run-fenced-finalize`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: 'Fenced workflow',
+        instructions: 'Finalize once.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })
+    await store.createWorkflowRun({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      runId,
+      triggerType: 'manual',
+    })
+    await store.attachWorkflowRunSession({
+      tenantId: ids.tenantId,
+      workflowId,
+      runId,
+      sessionId: ids.sessionId,
+    })
+    const staleLease = await store.claimSessionLease(
+      ids.tenantId,
+      ids.sessionId,
+      'pg-worker-stale',
+      new Date('2030-01-01T09:00:00.000Z'),
+      1,
+    )
+    assert.ok(staleLease)
+    const currentLease = await store.claimSessionLease(
+      ids.tenantId,
+      ids.sessionId,
+      'pg-worker-current',
+      new Date('2030-01-01T09:00:00.002Z'),
+      30_000,
+    )
+    assert.ok(currentLease)
+
+    await assert.rejects(
+      () => store.completeWorkflowRun({
+        tenantId: ids.tenantId,
+        workflowId,
+        runId,
+        summary: 'stale result',
+        nextStatus: 'active',
+        nextRunAt: null,
+        leaseToken: staleLease.leaseToken,
+      }),
+      /stale/,
+    )
+    assert.equal((await store.getWorkflowRun(ids.tenantId, runId))?.status, 'running')
+
+    const completed = await store.completeWorkflowRun({
+      tenantId: ids.tenantId,
+      workflowId,
+      runId,
+      summary: 'current result',
+      nextStatus: 'active',
+      nextRunAt: null,
+      leaseToken: currentLease.leaseToken,
+    })
+    assert.equal(completed?.status, 'completed')
+    assert.equal(completed?.summary, 'current result')
+  })
+})
+
+test('real Postgres cloud store recovers expired webhook workflow start claims', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const workflowId = `${ids.tenantId}-webhook-workflow-claim-retry`
+    const retryRunId = `${ids.tenantId}-webhook-workflow-retry-run`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: 'Webhook claim retry',
+        instructions: 'Retry failed webhook starts.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{
+          id: 'webhook-1',
+          type: 'webhook',
+          enabled: true,
+          webhookSecret: 'secret',
+        }],
+      },
+    })
+    const first = await store.createWorkflowRun({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      runId: retryRunId,
+      triggerType: 'webhook',
+      triggerPayload: { source: 'test' },
+      claimedBy: `workflow-webhook:${workflowId}`,
+      leaseTtlMs: 1,
+      createdAt: new Date('2030-01-01T09:00:00.000Z'),
+    })
+    assert.ok(first.claimToken)
+
+    const retried = (await store.reapExpiredWorkflowClaims({
+      maxAttempts: 2,
+      now: new Date('2030-01-01T09:00:00.002Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === retryRunId)
+    assert.equal(retried?.action, 'retried')
+
+    let second: Awaited<ReturnType<typeof store.claimDueWorkflowRun>> = null
+    for (let attempt = 0; attempt < 5 && !second; attempt += 1) {
+      const candidate = await store.claimDueWorkflowRun({
+        runId: `${ids.tenantId}-unused-webhook-run-${attempt}`,
+        claimedBy: 'scheduler-recovery',
+        now: new Date('2030-01-01T09:00:00.003Z'),
+      })
+      if (candidate?.run.id === retryRunId) second = candidate
+    }
+    assert.equal(second?.run.id, retryRunId)
+    assert.equal(second?.run.triggerType, 'webhook')
+    assert.equal(second?.run.attemptCount, 2)
+    assert.notEqual(second?.run.claimToken, first.claimToken)
+  })
+})
+
+test('real Postgres cloud store recovers workflow starts stranded after session attachment', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const workflowId = `${ids.tenantId}-attached-workflow-claim-retry`
+    const retryRunId = `${ids.tenantId}-attached-workflow-retry-run`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: 'Attached claim retry',
+        instructions: 'Retry command enqueue after session attach.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })
+    const first = await store.createWorkflowRun({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      runId: retryRunId,
+      triggerType: 'manual',
+      triggerPayload: { source: 'test' },
+      claimedBy: `workflow-api:${ids.userId}`,
+      leaseTtlMs: 30_000,
+      createdAt: new Date('2030-01-01T09:00:00.000Z'),
+    })
+    assert.ok(first.claimToken)
+    await store.attachWorkflowRunSession({
+      tenantId: ids.tenantId,
+      workflowId,
+      runId: retryRunId,
+      sessionId: ids.sessionId,
+      claimToken: first.claimToken,
+      startedAt: new Date('2030-01-01T09:00:00.001Z'),
+    })
+    assert.equal((await store.getWorkflowRun(ids.tenantId, retryRunId))?.claimToken, null)
+
+    let claimed: Awaited<ReturnType<typeof store.claimDueWorkflowRun>> = null
+    for (let attempt = 0; attempt < 5 && !claimed; attempt += 1) {
+      const candidate = await store.claimDueWorkflowRun({
+        runId: `${ids.tenantId}-unused-attached-run-${attempt}`,
+        claimedBy: 'scheduler-recovery',
+        leaseTtlMs: 1,
+        now: new Date('2030-01-01T09:00:00.002Z'),
+      })
+      if (candidate?.run.id === retryRunId) claimed = candidate
+    }
+    assert.equal(claimed?.run.id, retryRunId)
+    assert.equal(claimed?.run.status, 'running')
+    assert.equal(claimed?.run.sessionId, ids.sessionId)
+    assert.equal(claimed?.run.attemptCount, 2)
+    assert.ok(claimed?.run.claimToken)
+
+    const retried = (await store.reapExpiredWorkflowClaims({
+      maxAttempts: 3,
+      now: new Date('2030-01-01T09:00:00.004Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === retryRunId)
+    assert.equal(retried?.action, 'retried')
+    assert.equal((await store.getWorkflowRun(ids.tenantId, retryRunId))?.claimToken, null)
+    assert.equal((await store.getWorkflowForTenant(ids.tenantId, workflowId))?.latestRunStatus, 'running')
+  })
+})
+
 test('real Postgres webhook replay claims are atomic across public replicas', {
   skip: POSTGRES_SKIP,
 }, async () => {

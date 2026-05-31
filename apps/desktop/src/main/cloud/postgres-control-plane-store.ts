@@ -3177,10 +3177,20 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          JOIN cloud_workflows workflows
            ON workflows.tenant_id = runs.tenant_id
           AND workflows.workflow_id = runs.workflow_id
-         WHERE runs.trigger_type = 'schedule'
-           AND runs.status = 'queued'
-           AND runs.session_id IS NULL
-           AND runs.claim_token IS NULL
+         WHERE runs.claim_token IS NULL
+           AND (
+             (runs.status = 'queued' AND runs.session_id IS NULL)
+             OR (
+               runs.status = 'running'
+               AND runs.session_id IS NOT NULL
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM cloud_session_commands commands
+                 WHERE commands.tenant_id = runs.tenant_id
+                   AND commands.session_id = runs.session_id
+               )
+             )
+           )
            AND workflows.status = 'running'
          ORDER BY runs.created_at ASC, runs.run_id
          FOR UPDATE OF runs, workflows SKIP LOCKED
@@ -3192,6 +3202,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         const runId = String(retryRow.run_id)
         const tenantId = String(retryRow.tenant_id)
         const workflowId = String(retryRow.workflow_id)
+        const retryStatus = String(retryRow.status)
+        const retrySessionId = retryRow.session_id ? String(retryRow.session_id) : null
         const claimToken = createWorkClaimToken(tenantId, runId, claimedBy)
         const updatedRun = await client.query(
           `UPDATE cloud_workflow_runs
@@ -3209,11 +3221,12 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           `UPDATE cloud_workflows
            SET status = 'running',
                latest_run_id = $3,
-               latest_run_status = 'queued',
-               updated_at = $4
+               latest_run_status = $4,
+               latest_run_session_id = $5,
+               updated_at = $6
            WHERE tenant_id = $1 AND workflow_id = $2
            RETURNING *`,
-          [tenantId, workflowId, runId, claimedAt],
+          [tenantId, workflowId, runId, retryStatus, retrySessionId, claimedAt],
         )
         return {
           workflow: workflowFromRow(updatedWorkflow.rows[0]),
@@ -3289,8 +3302,19 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          WHERE claim_token IS NOT NULL
            AND claim_expires_at IS NOT NULL
            AND claim_expires_at <= $1
-           AND status = 'queued'
-           AND session_id IS NULL
+           AND (
+             (status = 'queued' AND session_id IS NULL)
+             OR (
+               status = 'running'
+               AND session_id IS NOT NULL
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM cloud_session_commands commands
+                 WHERE commands.tenant_id = cloud_workflow_runs.tenant_id
+                   AND commands.session_id = cloud_workflow_runs.session_id
+               )
+             )
+           )
          ORDER BY claim_expires_at ASC, tenant_id, workflow_id, run_id
          FOR UPDATE SKIP LOCKED`,
         [nowIsoValue],
@@ -3337,18 +3361,26 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
                  claim_token = NULL,
                  claim_expires_at = NULL,
                  last_error_code = 'claim_expired',
-                 last_error_summary = 'Workflow run claim expired before session attachment.'
+                 last_error_summary = $4
              WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3`,
-            [run.tenantId, run.workflowId, run.id],
+            [
+              run.tenantId,
+              run.workflowId,
+              run.id,
+              run.sessionId
+                ? 'Workflow run claim expired before command enqueue.'
+                : 'Workflow run claim expired before session attachment.',
+            ],
           )
           await client.query(
             `UPDATE cloud_workflows
              SET status = 'running',
                  latest_run_id = $3,
-                 latest_run_status = 'queued',
-                 updated_at = $4
+                 latest_run_status = $4,
+                 latest_run_session_id = $5,
+                 updated_at = $6
              WHERE tenant_id = $1 AND workflow_id = $2`,
-            [run.tenantId, run.workflowId, run.id, nowIsoValue],
+            [run.tenantId, run.workflowId, run.id, run.status, run.sessionId, nowIsoValue],
           )
         }
         reaped.push({
