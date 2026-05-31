@@ -13,10 +13,7 @@ export function cloudWebsiteClientBindingsScript() {
   });
   qs('#refresh').addEventListener('click', () => refreshDashboard().catch((error) => setStatus(error.message, 'error')));
   qs('#refresh-threads').addEventListener('click', () => loadSessions({ keepSelection: true }).catch((error) => setStatus(error.message, 'error')));
-  qs('#thread-load-more').addEventListener('click', () => {
-    state.threadLimit += ${CLOUD_WEB_THREAD_PAGE_SIZE};
-    renderThreadList();
-  });
+  qs('#thread-load-more').addEventListener('click', () => loadMoreSessions().catch((error) => setStatus(error.message, 'error')));
   qs('#new-thread-shortcut').addEventListener('click', () => {
     setRoute('threads', true);
     qs('#session-form input[name="profileName"]')?.focus();

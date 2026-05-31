@@ -117,11 +117,11 @@ test('cloud web browser renders 10k session lists with bounded DOM work', async 
 
     const filterStart = performance.now()
     const query = harness.document.querySelector('#thread-query') as HTMLInputElement
-    query.value = 'Cloud thread 9999'
+    query.value = 'Cloud thread 399'
     query.dispatchEvent(new harness.window.Event('input', { bubbles: true }))
     await waitFor(() => {
       assert.equal(harness.document.querySelector('#thread-count')?.textContent, '1')
-      assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 9999/)
+      assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 399/)
     })
     budget('browser filter update with 10k sessions', performance.now() - filterStart, 1500)
 

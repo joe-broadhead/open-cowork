@@ -18,6 +18,15 @@ const state = {
   diagnostics: null,
   diagnosticsError: null,
   sessions: [],
+  sessionList: {
+    nextCursor: null,
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    lastSyncedAt: null,
+    totalEstimate: null,
+    error: null,
+  },
   sessionViews: {},
   selectedSessionId: null,
   runtimeActions: {},
@@ -239,6 +248,15 @@ function renderSignedOut() {
   state.workspace = null;
   state.principal = null;
   state.sessions = [];
+  state.sessionList = {
+    nextCursor: null,
+    hasMore: false,
+    isLoading: false,
+    isLoadingMore: false,
+    lastSyncedAt: null,
+    totalEstimate: null,
+    error: null,
+  };
   state.sessionViews = {};
   state.selectedSessionId = null;
   state.runtimeActions = {};

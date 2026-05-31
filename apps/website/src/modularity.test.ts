@@ -33,6 +33,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'client/data-script.ts',
     'client/gateway-script.ts',
     'client/ops-script.ts',
+    'client/session-pagination-script.ts',
     'client/surfaces-script.ts',
     'client/workbench-script.ts',
     'html-utils.ts',

@@ -422,7 +422,12 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'POST' && request.pathname === '/api/project-sources/snapshots') {
       return jsonResponse({ projectSource: { kind: 'snapshot', snapshotId: 'snapshot-1', title: 'Browser upload' } })
     }
-    if (request.method === 'GET' && request.pathname === '/api/sessions') return jsonResponse({ sessions })
+    if (request.method === 'GET' && request.pathname === '/api/sessions') {
+      const params = new URL(request.path, 'https://cloud.example.test').searchParams, limit = Math.min(Math.max(Math.floor(Number(params.get('limit') || sessions.length)) || sessions.length, 1), 500)
+      const offset = params.get('cursor')?.startsWith('offset:') ? Number(params.get('cursor')?.slice('offset:'.length)) : 0
+      const nextOffset = offset + limit, page = sessions.slice(offset, nextOffset)
+      return jsonResponse({ sessions: page, nextCursor: nextOffset < sessions.length ? `offset:${nextOffset}` : null, totalEstimate: sessions.length })
+    }
     if (request.method === 'POST' && request.pathname === '/api/sessions') {
       const session = makeSession(1000 + sessions.length)
       session.sessionId = `created-${sessions.length + 1}`
@@ -591,5 +596,4 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
   }
   return harness
 }
-
 export { CLOUD_WEB_CLIENT_ENDPOINTS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE }

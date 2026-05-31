@@ -397,19 +397,31 @@ function renderThreadList() {
   removeChildren(list);
   if (count) count.textContent = String(sessions.length);
   if (limitStatus) {
-    limitStatus.textContent = sessions.length
-      ? 'Showing ' + visible.length + ' of ' + sessions.length
-      : 'No threads match the current filters';
+    const estimate = state.sessionList.totalEstimate ? ' of about ' + state.sessionList.totalEstimate + ' total' : '';
+    const more = state.sessionList.hasMore ? ' More are available.' : '';
+    if (state.sessionList.isLoading && !state.sessions.length) limitStatus.textContent = 'Loading cloud threads';
+    else if (state.sessionList.error && !state.sessions.length) limitStatus.textContent = state.sessionList.error;
+    else {
+      limitStatus.textContent = sessions.length
+        ? 'Showing ' + visible.length + ' of ' + sessions.length + ' loaded' + estimate + '.' + more
+        : 'No loaded threads match the current filters' + (state.sessionList.hasMore ? '; load more to search older threads' : '');
+    }
   }
   if (loadMore) {
-    loadMore.hidden = visible.length >= sessions.length;
-    loadMore.disabled = visible.length >= sessions.length;
+    const canLoadLocal = visible.length < sessions.length;
+    const canLoadRemote = state.sessionList.hasMore;
+    loadMore.hidden = !canLoadLocal && !canLoadRemote;
+    loadMore.disabled = state.sessionList.isLoading || state.sessionList.isLoadingMore || (!canLoadLocal && !canLoadRemote);
+    loadMore.textContent = state.sessionList.isLoadingMore ? 'Loading...' : canLoadRemote && !canLoadLocal ? 'Load more from cloud' : 'Load more';
   }
   if (!sessions.length) {
     const row = document.createElement('div');
     row.className = 'table-row empty-row';
     row.setAttribute('role', 'row');
-    ['No cloud threads loaded.', '-', '-', '-'].forEach((value) => {
+    const emptyMessage = state.sessionList.isLoading
+      ? 'Loading cloud threads.'
+      : state.sessionList.error || (state.sessionList.hasMore ? 'No loaded cloud threads match current filters.' : 'No cloud threads loaded.');
+    [emptyMessage, '-', '-', '-'].forEach((value) => {
       const cell = document.createElement('span');
       cell.setAttribute('role', 'cell');
       cell.textContent = value;
@@ -706,26 +718,8 @@ function openWorkspaceEvents(afterSequence = 0) {
     const payload = readSseEvent(event);
     if (payload?.sequence) state.workspaceEvents.cursor = Math.max(state.workspaceEvents.cursor, payload.sequence);
     if (payload?.type === 'snapshot.required') state.workspaceEvents.cursor = 0;
-    loadSessions({ keepSelection: true }).catch((error) => setStatus(error.message, 'error'));
+    loadSessions({ keepSelection: true, preserveLoadedPages: true }).catch((error) => setStatus(error.message, 'error'));
   });
-}
-
-async function loadSessions(options = {}) {
-  const sessions = await api(endpoint('sessions', '/api/sessions')).then((body) => body.sessions || []);
-  state.sessions = Array.isArray(sessions) ? sessions : [];
-  if (state.selectedSessionId && !state.sessions.some((session) => session.sessionId === state.selectedSessionId)) {
-    state.selectedSessionId = null;
-    closeEventSource(state.sessionEvents);
-  }
-  if ((!options.keepSelection || !state.selectedSessionId) && state.sessions[0]) {
-    state.selectedSessionId = state.sessions[0].sessionId;
-  }
-  if (state.selectedSessionId && !state.sessionViews[state.selectedSessionId]) {
-    await loadSessionView(state.selectedSessionId, { render: false });
-  }
-  renderThreadList();
-  renderChat();
-  renderArtifacts();
 }
 
 async function loadSessionView(sessionId, options = {}) {

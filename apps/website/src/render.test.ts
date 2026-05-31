@@ -87,6 +87,8 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
   for (const route of CLOUD_WEB_ROUTES) {
     assert.match(doc, new RegExp('`' + route.id + '`'), `Cloud Web Workbench docs list ${route.id}`)
   }
+  assert.doesNotMatch(doc, /backend cursoring is deferred until the sessions API exposes cursors/)
+  assert.match(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'threads')?.pagination || '', /cursor pages/)
 })
 
 test('cloud website bootstrap exposes typed client endpoint metadata', () => {
@@ -102,6 +104,15 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
     csrfToken: null,
     selectedSessionId: null,
     sessions: [],
+    sessionList: {
+      nextCursor: null,
+      hasMore: false,
+      isLoading: false,
+      isLoadingMore: false,
+      lastSyncedAt: null,
+      totalEstimate: null,
+      error: null,
+    },
     sessionViews: {},
     runtimeActions: {},
     artifactPanel: {
