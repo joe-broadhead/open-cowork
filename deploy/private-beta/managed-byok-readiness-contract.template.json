@@ -184,7 +184,7 @@
     ],
     "requiredValidationCommands": [
       "pnpm deploy:private-beta:validate",
-      "pnpm deploy:validate",
+      "pnpm deploy:validate -- --require-tools",
       "pnpm deploy:launch:validate",
       "pnpm ops:validate",
       "pnpm test",

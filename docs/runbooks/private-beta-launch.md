@@ -166,8 +166,8 @@ pnpm deploy:smoke
 pnpm deploy:desktop:smoke
 pnpm deploy:gateway:smoke
 pnpm deploy:continuation:smoke
-pnpm deploy:load
-pnpm deploy:soak
+pnpm deploy:load:strict
+pnpm deploy:soak:strict
 ```
 
 Attach the generated load/soak reports and final Web/Desktop/Gateway smoke

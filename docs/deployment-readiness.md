@@ -359,9 +359,8 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
 OPEN_COWORK_LOAD_PROFILE=private-beta \
-pnpm deploy:load
+pnpm deploy:load:strict
 ```
 
 Run the long soak gate after the load gate is green:
@@ -375,9 +374,8 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
 OPEN_COWORK_LOAD_PROFILE=private-beta \
-pnpm deploy:soak
+pnpm deploy:soak:strict
 ```
 
 The harness writes JSON and Markdown reports under

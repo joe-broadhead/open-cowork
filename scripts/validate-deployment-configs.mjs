@@ -1287,8 +1287,120 @@ function assertNoProviderHostedUrls(path, contents) {
   }
 }
 
+function validateReleaseSupplyChain() {
+  const releaseWorkflow = read('.github/workflows/release.yml')
+
+  for (const phrase of [
+    '| `cloud-gates` | CI |',
+    'OpenCode portability proof',
+    'Docker/Compose smoke',
+    'Helm validation',
+  ]) {
+    assertIncludes('docs/branch-protection.md', phrase)
+  }
+
+  for (const phrase of [
+    'pnpm test:cloud-web',
+    'pnpm test:cloud-continuation',
+    'pnpm deploy:validate -- --require-tools',
+    'pnpm deploy:launch:validate',
+    'pnpm deploy:private-beta:validate',
+    'pnpm ops:validate',
+    'sigstore/cosign-installer',
+    'anchore/sbom-action',
+    'anchore/scan-action',
+    'release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}',
+    'docker buildx imagetools create',
+    '--prefer-index=false',
+    'Publish final OCI release tags',
+    'severity-cutoff: high',
+    'cosign sign --yes',
+    'cosign verify',
+    'actions/attest-build-provenance',
+    'subject-name:',
+    'subject-digest:',
+    'push-to-registry: true',
+    'actions/attest@',
+    'sbom-path:',
+    'release-oci-supply-chain',
+    'dist-artifacts/release-oci-supply-chain/*',
+    'open-cowork-cloud.image.sbom.cdx.json',
+    'open-cowork-gateway.image.scan.grype.json',
+  ]) {
+    assertIncludes('.github/workflows/release.yml', phrase)
+  }
+
+  const scanIndex = releaseWorkflow.indexOf('name: Scan cloud image vulnerabilities')
+  const attestIndex = releaseWorkflow.indexOf('name: Attest cloud image provenance')
+  const finalTagIndex = releaseWorkflow.indexOf('name: Publish final OCI release tags')
+  if (scanIndex < 0 || attestIndex < 0 || finalTagIndex < 0 || finalTagIndex < attestIndex || finalTagIndex < scanIndex) {
+    throw new Error('release workflow must publish final OCI tags only after image scan and attestation steps')
+  }
+  if (releaseWorkflow.includes('docker push "${image}:${GITHUB_REF_NAME}"')) {
+    throw new Error('release workflow must not push final OCI release tags before supply-chain evidence succeeds')
+  }
+  const publishIndex = releaseWorkflow.indexOf('name: Publish GitHub Release')
+  if (publishIndex < 0 || !releaseWorkflow.slice(publishIndex).includes('dist-artifacts/release-oci-supply-chain/*')) {
+    throw new Error('release workflow must upload OCI supply-chain evidence files to the GitHub Release')
+  }
+
+  for (const phrase of [
+    'Cloud Web Workbench browser readiness gates',
+    'Desktop Web Gateway continuation gates',
+    'Deployment and launch readiness gates',
+    'Generate cloud image SBOM',
+    'Scan cloud image vulnerabilities',
+    'Sign OCI image digests',
+    'Attest cloud image provenance',
+    'Attest cloud image SBOM',
+    'Verify OCI supply-chain release artifacts',
+  ]) {
+    assertIncludes('.github/workflows/release.yml', phrase)
+  }
+
+  const packageJson = parseJson('package.json')
+  if (!packageJson.scripts?.['deploy:load:strict']?.includes('--strict')) {
+    throw new Error('package.json deploy:load:strict must run with --strict')
+  }
+  if (!packageJson.scripts?.['deploy:soak:strict']?.includes('--strict')) {
+    throw new Error('package.json deploy:soak:strict must run with --strict')
+  }
+
+  for (const phrase of [
+    'pnpm test:cloud-web',
+    'pnpm test:cloud-continuation',
+    'pnpm deploy:validate -- --require-tools',
+    'pnpm deploy:load:strict',
+    'pnpm deploy:soak:strict',
+    'GHCR Cloud and Gateway images have immutable digest metadata',
+    'Cosign',
+    'image SBOMs',
+    'image vulnerability scan JSON',
+    'open-cowork-cloud.image.json',
+    'open-cowork-gateway.image.scan.grype.json',
+    'final tags',
+  ]) {
+    assertIncludes('docs/release-checklist.md', phrase)
+  }
+
+  for (const phrase of [
+    'Verify Cloud and Gateway images',
+    'digestRef',
+    'cosign verify',
+    'gh attestation verify "oci://${digest_ref}"',
+    '--predicate-type https://cyclonedx.org/bom',
+    'open-cowork-cloud.image.sbom.cdx.json',
+    'open-cowork-gateway.image.scan.grype.json',
+    'final `vX.Y.Z` image tags are published only after',
+    'workflow threshold',
+  ]) {
+    assertIncludes('docs/packaging-and-releases.md', phrase)
+  }
+}
+
 validateCompose()
 validateHelm()
 validateDocs()
 validateGcpReference()
+validateReleaseSupplyChain()
 log('deployment configuration validation passed')

@@ -18,7 +18,7 @@ concurrency:
 jobs:
   release-preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     permissions:
       contents: read
     steps:
@@ -102,6 +102,12 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Cloud Web Workbench browser readiness gates
+        run: pnpm test:cloud-web
+
+      - name: Desktop Web Gateway continuation gates
+        run: pnpm test:cloud-continuation
+
       - name: Renderer component tests
         run: pnpm test:renderer
 
@@ -110,6 +116,64 @@ jobs:
 
       - name: Strict docs build
         run: pnpm docs:build
+
+      - name: Validate cloud Compose files
+        run: |
+          docker compose -f docker-compose.cloud.yml config --quiet
+          docker compose -f docker-compose.cloud.split.yml config --quiet
+          OPEN_COWORK_GATEWAY_ADMIN_TOKEN=release-gateway-admin-token docker compose -f docker-compose.cloud-gateway.yml config --quiet
+
+      - name: Install Helm
+        run: |
+          HELM_VERSION=3.18.6
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          sha256sum -c "helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          tar -xzf "helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          sudo install linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+
+      - name: Validate Helm charts
+        run: |
+          helm dependency build helm/open-cowork-cloud
+          helm lint helm/open-cowork-cloud \
+            --set cloud.auth.mode=oidc \
+            --set cloud.auth.oidcIssuerUrl=https://issuer.example.com \
+            --set cloud.auth.oidcClientId=open-cowork-cloud-release
+          helm template open-cowork-cloud helm/open-cowork-cloud \
+            --set image.repository=example.com/open-cowork-cloud \
+            --set image.tag="${GITHUB_REF_NAME}" \
+            --set cloud.auth.mode=oidc \
+            --set cloud.auth.oidcIssuerUrl=https://issuer.example.com \
+            --set cloud.auth.oidcClientId=open-cowork-cloud-release \
+            --set cloud.controlPlaneUrl='postgres://postgres:postgres@postgres:5432/open_cowork_cloud_release' \
+            --set cloud.secretKey='release-secret-key' \
+            --set cloud.cookieSecret='release-cookie-secret' \
+            --set cloud.objectStore.kind=s3 \
+            --set cloud.objectStore.bucket=open-cowork-cloud-release \
+            > /tmp/open-cowork-cloud-release-rendered.yaml
+          test -s /tmp/open-cowork-cloud-release-rendered.yaml
+          helm lint helm/open-cowork-gateway \
+            --set gateway.cloudBaseUrl=https://cloud.example.com \
+            --set gateway.serviceToken=release-gateway-token \
+            --set gateway.adminToken=release-gateway-admin-token \
+            --set gateway.telegram.botToken=release-telegram-token
+          helm template open-cowork-gateway helm/open-cowork-gateway \
+            --set image.repository=example.com/open-cowork-gateway \
+            --set image.tag="${GITHUB_REF_NAME}" \
+            --set gateway.cloudBaseUrl=https://cloud.example.com \
+            --set gateway.serviceToken=release-gateway-token \
+            --set gateway.adminToken=release-gateway-admin-token \
+            --set gateway.telegram.botToken=release-telegram-token \
+            > /tmp/open-cowork-gateway-release-rendered.yaml
+          test -s /tmp/open-cowork-gateway-release-rendered.yaml
+
+      - name: Deployment and launch readiness gates
+        run: |
+          pnpm deploy:validate -- --require-tools
+          pnpm deploy:launch:validate
+          pnpm deploy:private-beta:validate
+          pnpm ops:validate
 
       - name: Whitespace check
         run: git diff --check
@@ -372,6 +436,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+      attestations: write
+      id-token: write
+    outputs:
+      cloud-image: ${{ steps.cloud-meta.outputs.image }}
+      cloud-digest: ${{ steps.cloud-meta.outputs.digest }}
+      gateway-image: ${{ steps.gateway-meta.outputs.image }}
+      gateway-digest: ${{ steps.gateway-meta.outputs.digest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -380,35 +451,205 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
-      - name: Build and publish cloud OCI image
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Build and publish cloud OCI staging image
+        id: cloud-meta
         run: |
           version="${GITHUB_REF_NAME#v}"
+          short_sha="${GITHUB_SHA::12}"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/open-cowork-cloud"
+          staging_tag="${image}:release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
           docker build -f docker/open-cowork-cloud/Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --label "org.opencontainers.image.version=${version}" \
-            -t "${image}:${GITHUB_REF_NAME}" \
-            -t "${image}:${version}" \
+            -t "${staging_tag}" \
             .
-          docker push "${image}:${GITHUB_REF_NAME}"
-          docker push "${image}:${version}"
+          push_output="$(docker push "${staging_tag}")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | awk '/digest: sha256:/ { for (i = 1; i <= NF; i += 1) if ($i == "digest:") print $(i + 1) }' | tail -1)"
+          if [ -z "$digest" ]; then
+            digest="$(docker buildx imagetools inspect "${staging_tag}" --format '{{.Manifest.Digest}}')"
+          fi
+          test -n "$digest"
+          mkdir -p dist-oci
+          cat > dist-oci/open-cowork-cloud.image.json <<EOF
+          {
+            "image": "${image}",
+            "tag": "${image}:${GITHUB_REF_NAME}",
+            "versionTag": "${image}:${version}",
+            "stagingTag": "${staging_tag}",
+            "digest": "${digest}",
+            "digestRef": "${image}@${digest}",
+            "source": "https://github.com/${GITHUB_REPOSITORY}",
+            "revision": "${GITHUB_SHA}",
+            "workflow": "${GITHUB_WORKFLOW}",
+            "runId": "${GITHUB_RUN_ID}"
+          }
+          EOF
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "digest_ref=${image}@${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish gateway OCI image
+      - name: Build and publish gateway OCI staging image
+        id: gateway-meta
         run: |
           version="${GITHUB_REF_NAME#v}"
+          short_sha="${GITHUB_SHA::12}"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           image="ghcr.io/${owner}/open-cowork-gateway"
+          staging_tag="${image}:release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
           docker build -f docker/open-cowork-gateway/Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
             --label "org.opencontainers.image.version=${version}" \
-            -t "${image}:${GITHUB_REF_NAME}" \
-            -t "${image}:${version}" \
+            -t "${staging_tag}" \
             .
-          docker push "${image}:${GITHUB_REF_NAME}"
-          docker push "${image}:${version}"
+          push_output="$(docker push "${staging_tag}")"
+          printf '%s\n' "$push_output"
+          digest="$(printf '%s\n' "$push_output" | awk '/digest: sha256:/ { for (i = 1; i <= NF; i += 1) if ($i == "digest:") print $(i + 1) }' | tail -1)"
+          if [ -z "$digest" ]; then
+            digest="$(docker buildx imagetools inspect "${staging_tag}" --format '{{.Manifest.Digest}}')"
+          fi
+          test -n "$digest"
+          mkdir -p dist-oci
+          cat > dist-oci/open-cowork-gateway.image.json <<EOF
+          {
+            "image": "${image}",
+            "tag": "${image}:${GITHUB_REF_NAME}",
+            "versionTag": "${image}:${version}",
+            "stagingTag": "${staging_tag}",
+            "digest": "${digest}",
+            "digestRef": "${image}@${digest}",
+            "source": "https://github.com/${GITHUB_REPOSITORY}",
+            "revision": "${GITHUB_SHA}",
+            "workflow": "${GITHUB_WORKFLOW}",
+            "runId": "${GITHUB_RUN_ID}"
+          }
+          EOF
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "digest_ref=${image}@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate cloud image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.cloud-meta.outputs.digest_ref }}
+          format: cyclonedx-json
+          output-file: dist-oci/open-cowork-cloud.image.sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate gateway image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.gateway-meta.outputs.digest_ref }}
+          format: cyclonedx-json
+          output-file: dist-oci/open-cowork-gateway.image.sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Scan cloud image vulnerabilities
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ${{ steps.cloud-meta.outputs.digest_ref }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: json
+          output-file: dist-oci/open-cowork-cloud.image.scan.grype.json
+
+      - name: Scan gateway image vulnerabilities
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ${{ steps.gateway-meta.outputs.digest_ref }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: json
+          output-file: dist-oci/open-cowork-gateway.image.scan.grype.json
+
+      - name: Sign OCI image digests
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes "${{ steps.cloud-meta.outputs.digest_ref }}"
+          cosign sign --yes "${{ steps.gateway-meta.outputs.digest_ref }}"
+          identity="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}$"
+          cosign verify "${{ steps.cloud-meta.outputs.digest_ref }}" \
+            --certificate-identity-regexp "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            > dist-oci/open-cowork-cloud.image.cosign-verify.json
+          cosign verify "${{ steps.gateway-meta.outputs.digest_ref }}" \
+            --certificate-identity-regexp "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            > dist-oci/open-cowork-gateway.image.cosign-verify.json
+
+      - name: Attest cloud image provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ steps.cloud-meta.outputs.image }}
+          subject-digest: ${{ steps.cloud-meta.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest gateway image provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ steps.gateway-meta.outputs.image }}
+          subject-digest: ${{ steps.gateway-meta.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest cloud image SBOM
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ${{ steps.cloud-meta.outputs.image }}
+          subject-digest: ${{ steps.cloud-meta.outputs.digest }}
+          sbom-path: dist-oci/open-cowork-cloud.image.sbom.cdx.json
+          push-to-registry: true
+
+      - name: Attest gateway image SBOM
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+        with:
+          subject-name: ${{ steps.gateway-meta.outputs.image }}
+          subject-digest: ${{ steps.gateway-meta.outputs.digest }}
+          sbom-path: dist-oci/open-cowork-gateway.image.sbom.cdx.json
+          push-to-registry: true
+
+      - name: Publish final OCI release tags
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools create --prefer-index=false \
+            -t "${{ steps.cloud-meta.outputs.image }}:${GITHUB_REF_NAME}" \
+            -t "${{ steps.cloud-meta.outputs.image }}:${version}" \
+            "${{ steps.cloud-meta.outputs.digest_ref }}"
+          docker buildx imagetools create --prefer-index=false \
+            -t "${{ steps.gateway-meta.outputs.image }}:${GITHUB_REF_NAME}" \
+            -t "${{ steps.gateway-meta.outputs.image }}:${version}" \
+            "${{ steps.gateway-meta.outputs.digest_ref }}"
+
+      - name: Verify OCI supply-chain evidence
+        run: |
+          cloud_tag_digest="$(docker buildx imagetools inspect "${{ steps.cloud-meta.outputs.image }}:${GITHUB_REF_NAME}" --format '{{.Manifest.Digest}}')"
+          gateway_tag_digest="$(docker buildx imagetools inspect "${{ steps.gateway-meta.outputs.image }}:${GITHUB_REF_NAME}" --format '{{.Manifest.Digest}}')"
+          test "$cloud_tag_digest" = "${{ steps.cloud-meta.outputs.digest }}"
+          test "$gateway_tag_digest" = "${{ steps.gateway-meta.outputs.digest }}"
+          jq empty dist-oci/open-cowork-cloud.image.json
+          jq empty dist-oci/open-cowork-gateway.image.json
+          jq empty dist-oci/open-cowork-cloud.image.sbom.cdx.json
+          jq empty dist-oci/open-cowork-gateway.image.sbom.cdx.json
+          jq empty dist-oci/open-cowork-cloud.image.scan.grype.json
+          jq empty dist-oci/open-cowork-gateway.image.scan.grype.json
+          jq empty dist-oci/open-cowork-cloud.image.cosign-verify.json
+          jq empty dist-oci/open-cowork-gateway.image.cosign-verify.json
+
+      - name: Upload OCI supply-chain artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-oci-supply-chain
+          if-no-files-found: error
+          retention-days: 14
+          path: dist-oci/*
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v') && needs.release-policy.result == 'success'
@@ -449,6 +690,20 @@ jobs:
         run: |
           cd dist-artifacts
           find . -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+
+      - name: Verify OCI supply-chain release artifacts
+        run: |
+          test -d dist-artifacts/release-oci-supply-chain
+          for component in open-cowork-cloud open-cowork-gateway; do
+            test -s "dist-artifacts/release-oci-supply-chain/${component}.image.json"
+            test -s "dist-artifacts/release-oci-supply-chain/${component}.image.sbom.cdx.json"
+            test -s "dist-artifacts/release-oci-supply-chain/${component}.image.scan.grype.json"
+            test -s "dist-artifacts/release-oci-supply-chain/${component}.image.cosign-verify.json"
+            jq empty "dist-artifacts/release-oci-supply-chain/${component}.image.json"
+            jq empty "dist-artifacts/release-oci-supply-chain/${component}.image.sbom.cdx.json"
+            jq empty "dist-artifacts/release-oci-supply-chain/${component}.image.scan.grype.json"
+            jq empty "dist-artifacts/release-oci-supply-chain/${component}.image.cosign-verify.json"
+          done
 
       # SBOMs are enterprise table stakes for supply-chain review. We
       # check out the source at the tag, then generate both CycloneDX
@@ -550,6 +805,7 @@ jobs:
             dist-artifacts/THIRD_PARTY_LICENSES.tar.gz
             dist-artifacts/sbom.cdx.json
             dist-artifacts/sbom.spdx.json
+            dist-artifacts/release-oci-supply-chain/*
 
       - name: Attest detached checksum signature
         if: hashFiles('dist-artifacts/SHA256SUMS.txt.asc') != ''
@@ -577,3 +833,4 @@ jobs:
             dist-artifacts/THIRD_PARTY_LICENSES.tar.gz
             dist-artifacts/sbom.cdx.json
             dist-artifacts/sbom.spdx.json
+            dist-artifacts/release-oci-supply-chain/*

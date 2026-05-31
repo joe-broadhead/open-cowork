@@ -126,8 +126,7 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
-pnpm deploy:load
+pnpm deploy:load:strict
 ```
 
 The harness checks:
@@ -158,8 +157,7 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
-pnpm deploy:soak
+pnpm deploy:soak:strict
 ```
 
 The soak run is intended to reveal:
