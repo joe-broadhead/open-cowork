@@ -54,7 +54,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     .filter((provider) => provider.enabled)
     .map((provider): ProviderRegistration => ({
       config: provider,
-      provider: createProvider(provider),
+      provider: createProvider(provider, config),
       started: false,
       healthy: false,
       lastError: null,
@@ -148,19 +148,20 @@ function providerHealthError(provider: ChannelProvider) {
   return provider.health ? provider.health().error || null : null
 }
 
-function createProvider(config: GatewayProviderConfig): ChannelProvider {
+function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): ChannelProvider {
   if (config.kind === 'fake') return new FakeChannelProvider()
 
   if (config.kind === 'webhook') {
     return new WebhookProvider({
       deliveryUrl: requiredSetting(config, 'deliveryUrl'),
       sharedSecret: config.credentials.sharedSecret,
-      maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes),
+      maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
+      deliveryTimeoutMs: gateway.timeouts.webhookDeliveryMs,
     })
   }
 
   if (isBridgeWebhookProviderKind(config.kind)) {
-    const bridgeConfig = bridgeProviderConfig(config)
+    const bridgeConfig = bridgeProviderConfig(config, gateway)
     if (config.kind === 'discord') return new DiscordProvider(bridgeConfig)
     if (config.kind === 'whatsapp') return new WhatsAppProvider(bridgeConfig)
     return new SignalProvider(bridgeConfig)
@@ -188,6 +189,7 @@ function createProvider(config: GatewayProviderConfig): ChannelProvider {
       botToken: requiredCredential(config, 'botToken'),
       signingSecret: requiredCredential(config, 'signingSecret'),
       apiBaseUrl: settingString(config, 'apiBaseUrl') || undefined,
+      requestTimeoutMs: gateway.timeouts.webhookDeliveryMs,
     })
   }
 
@@ -195,12 +197,14 @@ function createProvider(config: GatewayProviderConfig): ChannelProvider {
     return new EmailProvider({
       from: requiredSetting(config, 'from'),
       inboundSecret: requiredCredential(config, 'inboundSecret'),
+      maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
       smtp: {
         host: requiredSetting(config, 'smtpHost'),
         port: optionalNumber(config.settings.smtpPort) || optionalNumberString(config.settings.smtpPort),
         secure: readBoolean(config.settings.smtpSecure, false),
         username: settingString(config, 'smtpUsername') || undefined,
         password: config.credentials.smtpPassword || undefined,
+        timeoutMs: gateway.timeouts.smtpMs,
       },
     })
   }
@@ -214,11 +218,12 @@ function isBridgeWebhookProviderKind(kind: GatewayProviderConfig['kind']): kind 
   return kind === 'discord' || kind === 'whatsapp' || kind === 'signal'
 }
 
-function bridgeProviderConfig(config: GatewayProviderConfig) {
+function bridgeProviderConfig(config: GatewayProviderConfig, gateway: GatewayConfig) {
   return {
     deliveryUrl: requiredSetting(config, 'deliveryUrl'),
     sharedSecret: requiredCredential(config, 'sharedSecret'),
-    maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes),
+    maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
+    deliveryTimeoutMs: gateway.timeouts.webhookDeliveryMs,
   }
 }
 

@@ -14,7 +14,7 @@ import {
   type SessionCommandRecord,
 } from '@open-cowork/cloud-client'
 
-import type { GatewayConfig } from './config.js'
+import type { GatewayCloudConnectionConfig } from './config.js'
 
 export type CloudGateway = {
   resolveIdentity(input: {
@@ -109,7 +109,7 @@ export type CloudGateway = {
   deadLetterDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
 }
 
-export function createCloudGateway(config: GatewayConfig, adapter = createCloudAdapter(config)): CloudGateway {
+export function createCloudGateway(connection: GatewayCloudConnectionConfig, adapter = createCloudAdapter(connection)): CloudGateway {
   return {
     async resolveIdentity(input) {
       assertMethod(adapter.resolveChannelIdentity, 'resolveChannelIdentity')
@@ -155,7 +155,7 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
       return adapter.readArtifactAttachment(sessionId, filePathOrArtifactId)
     },
     artifactUrl(sessionId, artifactId) {
-      return `${normalizeBaseUrl(config.cloud.baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`
+      return `${normalizeBaseUrl(connection.baseUrl)}/api/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`
     },
     subscribeSessionEvents(input) {
       return adapter.subscribeSessionEvents(input.sessionId, {
@@ -191,11 +191,12 @@ export function createCloudGateway(config: GatewayConfig, adapter = createCloudA
   }
 }
 
-function createCloudAdapter(config: GatewayConfig): CloudTransportAdapter {
+function createCloudAdapter(connection: GatewayCloudConnectionConfig): CloudTransportAdapter {
   return createHttpSseCloudTransportAdapter({
-    baseUrl: config.cloud.baseUrl,
+    baseUrl: connection.baseUrl,
+    requestTimeoutMs: connection.requestTimeoutMs,
     headers: {
-      authorization: `Bearer ${config.cloud.serviceToken}`,
+      authorization: `Bearer ${connection.serviceToken}`,
     },
   })
 }

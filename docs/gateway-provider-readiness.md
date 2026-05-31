@@ -20,12 +20,12 @@ this page, the matrix, and actual provider capabilities stay aligned.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `telegram` | Tier 1 | Launch | polling, webhook | Bot token; webhook secret when webhook mode is enabled | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-telegram/src/telegram-provider.test.ts`, `packages/gateway-provider-telegram/src/telegram-retry.test.ts`, `apps/gateway/src/daemon.test.ts` |
 | `slack` | Tier 1 | Launch | webhook | Bot token and Slack signing secret | Inline buttons plus token fallback | Upload/download | `packages/gateway-provider-slack/src/slack-provider.test.ts`, `apps/gateway/src/daemon.test.ts` |
-| `email` | Tier 1 | Launch | webhook | Inbound shared secret; SMTP credentials where required | Token fallback | Inbound uploads; outbound artifact links | `packages/gateway-provider-email/src/email-provider.test.ts`, `apps/gateway/src/event-renderer.test.ts` |
-| `webhook` | Tier 2 | Utility | webhook | HMAC/timestamp shared secret for ingress and signed delivery | Inline buttons if bridge supports them; token fallback otherwise | Inline inbound files; outbound links | `packages/gateway-provider-webhook/src/webhook-provider.test.ts`, `apps/gateway/src/daemon.test.ts` |
+| `email` | Tier 1 | Launch | webhook | Inbound shared secret; SMTP credentials where required | Token fallback | Inbound uploads capped by Gateway request-body limit; outbound artifact links | `packages/gateway-provider-email/src/email-provider.test.ts`, `apps/gateway/src/event-renderer.test.ts` |
+| `webhook` | Tier 2 | Utility | webhook | HMAC/timestamp shared secret for ingress and outbound delivery | Inline buttons if bridge supports them; token fallback otherwise | Inline inbound files capped by Gateway request-body limit; outbound links | `packages/gateway-provider-webhook/src/webhook-provider.test.ts`, `apps/gateway/src/daemon.test.ts` |
 | `cli` | Tier 2 | Utility | stdio | Trusted local process boundary; no public HTTP ingress | Token fallback | Inbound metadata; outbound links | `packages/gateway-provider-cli/src/cli-provider.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
-| `discord` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Upload/download through bridge | `packages/gateway-provider-discord/src/discord-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
-| `whatsapp` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Upload/download through bridge | `packages/gateway-provider-whatsapp/src/whatsapp-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
-| `signal` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Token fallback | Upload/download through bridge | `packages/gateway-provider-signal/src/signal-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
+| `discord` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-discord/src/discord-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
+| `whatsapp` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-whatsapp/src/whatsapp-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
+| `signal` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-signal/src/signal-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
 | `fake` | Tier demo | Demo only | local fake webhook | Explicit `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true`; loopback by default | Inline buttons plus token fallback | In-memory test files | `packages/gateway-testing/src/fake-channel.test.ts`, `apps/gateway/src/daemon.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
 
 ## Tier Policy
@@ -64,6 +64,8 @@ the demo override.
 
 - Public webhook providers must fail closed without signing/HMAC/shared-secret
   verification.
+- Generic webhook outbound delivery is signed with timestamped HMAC headers by
+  default; legacy shared-secret headers are local compatibility only.
 - Gateway service-token authority is separate from inbound actor authority.
   Cloud resolves the channel actor and enforces approval authority.
 - Diagnostics, logs, provider health, delivery summaries, and metrics must not

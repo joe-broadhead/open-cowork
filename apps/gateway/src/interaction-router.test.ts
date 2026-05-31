@@ -4,7 +4,22 @@ import assert from 'node:assert/strict'
 import { FakeChannelProvider } from '@open-cowork/gateway-testing'
 
 import type { CloudGateway } from '../dist/index.js'
-import { createGatewayMetrics, resolveGatewayConfig, routeGatewayInteraction } from '../dist/index.js'
+import { createGatewayMetrics, resolveGatewayConfig as resolveGatewayConfigBase, routeGatewayInteraction } from '../dist/index.js'
+
+const cloudEnv = {
+  OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+  OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+}
+
+function resolveGatewayConfig(
+  raw: Parameters<typeof resolveGatewayConfigBase>[0] = {},
+  env: Parameters<typeof resolveGatewayConfigBase>[1] = {},
+) {
+  return resolveGatewayConfigBase(raw, {
+    ...cloudEnv,
+    ...env,
+  })
+}
 
 test('interaction router resolves channel button tokens through cloud and acknowledges provider callback', async () => {
   const provider = new FakeChannelProvider()
@@ -19,6 +34,9 @@ test('interaction router resolves channel button tokens through cloud and acknow
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       id: 'fake',
@@ -89,6 +107,9 @@ test('interaction router resolves deny, answer, and reject fallback commands thr
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
     },
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       id: 'fake',
       kind: 'fake',
@@ -142,6 +163,9 @@ test('interaction router ignores ordinary channel messages', async () => {
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       id: 'fake',

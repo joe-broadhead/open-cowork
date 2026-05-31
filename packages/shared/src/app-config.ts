@@ -172,6 +172,8 @@ export interface GatewayDeploymentConfig {
     port?: number
     publicBaseUrl?: string | null
     adminToken?: string | null
+    allowLoopbackOperatorBypass?: boolean
+    maxRequestBodyBytes?: number
   }
   mode?: GatewayDeploymentMode
   logging?: {
@@ -182,6 +184,12 @@ export interface GatewayDeploymentConfig {
   }
   diagnostics?: {
     enabled?: boolean
+  }
+  timeouts?: {
+    cloudRequestMs?: number
+    webhookDeliveryMs?: number
+    smtpMs?: number
+    shutdownDrainMs?: number
   }
   providers?: GatewayDeploymentProviderConfig[]
 }

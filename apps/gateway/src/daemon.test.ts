@@ -7,8 +7,23 @@ import {
   createGatewayHttpServer,
   createGatewayProviderRegistry,
   createGatewayRuntime,
-  resolveGatewayConfig,
+  resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+
+const cloudEnv = {
+  OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+  OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+}
+
+function resolveGatewayConfig(
+  raw: Parameters<typeof resolveGatewayConfigBase>[0] = {},
+  env: Parameters<typeof resolveGatewayConfigBase>[1] = {},
+) {
+  return resolveGatewayConfigBase(raw, {
+    ...cloudEnv,
+    ...env,
+  })
+}
 
 test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake webhook', async () => {
   const prompted: string[] = []
@@ -83,6 +98,9 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     async ackDelivery() { return null },
   }
   const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       id: 'fake',
       kind: 'fake',
@@ -100,6 +118,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-1234567890',
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
   })
   const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
   await runtime.start()
@@ -116,14 +135,15 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     assert.equal(ready.ok, true)
     assert.equal((ready.branding as { productName: string }).productName, 'Open Cowork Cloud')
 
-    const metrics = await fetch(`${url}/metrics`)
+    const adminHeaders = { authorization: 'Bearer admin-token' }
+    const metrics = await fetch(`${url}/metrics`, { headers: adminHeaders })
     assert.equal(metrics.status, 200)
     const metricsText = await metrics.text()
     assert.match(metricsText, /open_cowork_gateway_providers 1/)
     assert.match(metricsText, /open_cowork_gateway_session_streams 0/)
     assert.match(metricsText, /open_cowork_gateway_webhook_requests_total 0/)
 
-    const diagnostics = await readJson(await fetch(`${url}/diagnostics`))
+    const diagnostics = await readJson(await fetch(`${url}/diagnostics`, { headers: adminHeaders }))
     assert.equal((diagnostics.config as { cloud: { serviceToken: string } }).cloud.serviceToken, 'serv...[redacted]...7890')
     const diagnosticProvider = ((diagnostics.config as { providers: Array<{
       credentials: Record<string, string>
@@ -164,6 +184,7 @@ test('gateway diagnostics redact provider health errors', async () => {
     }],
   }, {
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: 'true',
   })
   const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
   await runtime.start()
@@ -204,6 +225,7 @@ test('gateway diagnostics are disabled by default in managed mode', async () => 
     }],
   }, {
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
   })
   const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
   await runtime.start()
@@ -224,6 +246,9 @@ test('gateway provider registry wires fake, first-party, bridge, and CLI provide
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       id: 'fake',
@@ -373,6 +398,7 @@ test('gateway daemon accepts signed Slack webhook verification payloads', async 
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
   })
   const cloud = {
     subscribeDeliveries() { return { close() {} } },
@@ -462,6 +488,7 @@ test('gateway webhooks fail closed without leaking provider auth errors', async 
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
   })
   const cloud = {
     subscribeDeliveries() { return { close() {} } },
@@ -545,6 +572,7 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
     OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
   })
   const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
   await runtime.start()
@@ -643,6 +671,9 @@ test('gateway runtime retries transient deliveries and marks permanent failures 
     },
   } as CloudGateway
   const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       id: 'fake',
       kind: 'fake',
@@ -698,6 +729,9 @@ test('gateway runtime drains in-flight deliveries before provider shutdown', asy
     },
   } as CloudGateway
   const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       id: 'fake',
       kind: 'fake',

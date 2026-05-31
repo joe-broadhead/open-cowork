@@ -8,21 +8,50 @@ import {
   loadGatewayConfig,
   redactGatewayConfig,
   redactGatewayEnv,
-  resolveGatewayConfig,
+  resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+
+const cloudEnv = {
+  OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+  OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+}
+
+const operatorEnv = {
+  ...cloudEnv,
+  OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+}
+
+function resolveGatewayConfig(
+  raw: Parameters<typeof resolveGatewayConfigBase>[0] = {},
+  env: Parameters<typeof resolveGatewayConfigBase>[1] = {},
+) {
+  return resolveGatewayConfigBase(raw, {
+    ...cloudEnv,
+    ...env,
+  })
+}
 
 test('gateway config requires providers unless the local fake provider is explicitly enabled', () => {
   assert.throws(() => resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test/',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'ocgw_secret_token',
     OPEN_COWORK_GATEWAY_PORT: '0',
   }), /At least one gateway provider/)
+
+  assert.throws(() => resolveGatewayConfig({}, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test/',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'ocgw_secret_token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
+  }), /operator endpoints require/)
 
   const config = resolveGatewayConfig({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test/',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'ocgw_secret_token',
     OPEN_COWORK_GATEWAY_PORT: '0',
     OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
+    OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: 'true',
   })
 
   assert.equal(config.cloud.baseUrl, 'https://cloud.example.test')
@@ -31,6 +60,7 @@ test('gateway config requires providers unless the local fake provider is explic
   assert.equal(config.server.host, '127.0.0.1')
   assert.equal(config.server.port, 0)
   assert.equal(config.server.adminToken, null)
+  assert.equal(config.server.allowLoopbackOperatorBypass, true)
   assert.equal(config.mode, 'self-host')
   assert.deepEqual(config.providers.map((provider) => ({
     id: provider.id,
@@ -50,6 +80,9 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
       serviceToken: 'service-token-1234567890',
     },
     mode: 'managed',
+    server: {
+      adminToken: 'admin-token',
+    },
     logging: {
       level: 'debug',
     },
@@ -71,6 +104,8 @@ test('gateway config loads explicit provider credentials and redacts secrets', (
         workspacePath: '/Users/alice/acme-private',
       },
     }],
+  }, {
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-1234567890',
   })
 
   assert.equal(config.mode, 'managed')
@@ -98,6 +133,9 @@ test('gateway config resolves public branding from config and env JSON', () => {
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       kind: 'fake',
@@ -129,6 +167,9 @@ test('gateway config ignores unsafe public branding URLs', () => {
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       kind: 'fake',
@@ -167,6 +208,9 @@ test('gateway diagnostics default to self-host only unless explicitly enabled', 
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
     },
+    server: {
+      adminToken: 'admin-token',
+    },
     mode: 'managed',
     providers: [{
       kind: 'fake',
@@ -179,6 +223,9 @@ test('gateway diagnostics default to self-host only unless explicitly enabled', 
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     mode: 'managed',
     diagnostics: {
@@ -193,7 +240,7 @@ test('gateway diagnostics default to self-host only unless explicitly enabled', 
 })
 
 test('gateway config rejects missing cloud auth and unsupported providers', () => {
-  assert.throws(() => resolveGatewayConfig({}, {
+  assert.throws(() => resolveGatewayConfigBase({}, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
   }), /serviceToken|SERVICE_TOKEN/)
 
@@ -213,10 +260,15 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       baseUrl: 'http://cloud.example.test',
       serviceToken: 'service-token',
     },
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       kind: 'fake',
       channelBindingId: 'fake-binding',
     }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'http://cloud.example.test',
   }), /HTTPS|ALLOW_INSECURE_HTTP/)
 
   assert.equal(resolveGatewayConfig({
@@ -225,10 +277,16 @@ test('gateway config rejects missing cloud auth and unsupported providers', () =
       serviceToken: 'service-token',
       allowInsecureHttp: true,
     },
+    server: {
+      adminToken: 'admin-token',
+    },
     providers: [{
       kind: 'fake',
       channelBindingId: 'fake-binding',
     }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'http://cloud.example.test',
+    OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: 'true',
   }).cloud.baseUrl, 'http://cloud.example.test')
 })
 
@@ -237,6 +295,9 @@ test('gateway config accepts signed bridge providers without cloud control-plane
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       id: 'whatsapp-prod',
@@ -284,6 +345,9 @@ test('gateway config fails closed for incomplete bridge providers', () => {
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
   }
 
@@ -398,12 +462,30 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       channelBindingId: 'telegram',
       credentials: { botToken: 'telegram-token' },
     }],
-  }), /public deployments require OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
+  }), /operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
 
   assert.throws(() => resolveGatewayConfig({
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'replace-with-random-admin-token',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /admin token is still a placeholder/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       kind: 'webhook',
@@ -416,6 +498,9 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       kind: 'whatsapp',
@@ -442,9 +527,9 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
 
 test('gateway config inherits public URL for Telegram webhook mode', () => {
   const inherited = resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
-    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
@@ -453,9 +538,9 @@ test('gateway config inherits public URL for Telegram webhook mode', () => {
   assert.equal(inherited.providers[0]?.settings.publicBaseUrl, 'https://gateway.example.test')
 
   const providerSpecific = resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
-    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
     OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL: 'https://telegram-gateway.example.test',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
@@ -467,27 +552,27 @@ test('gateway config inherits public URL for Telegram webhook mode', () => {
 
 test('gateway config fails closed for unsafe Telegram webhook setup', () => {
   assert.throws(() => resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
-    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_PUBLIC_URL: 'https://gateway.example.test',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
   }), /webhookSecret/)
 
   assert.throws(() => resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
-    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
     OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
   }), /publicBaseUrl|PUBLIC_URL/)
 
   assert.throws(() => resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
-    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_PUBLIC_URL: 'http://gateway.example.test',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_MODE: 'webhook',
@@ -497,6 +582,7 @@ test('gateway config fails closed for unsafe Telegram webhook setup', () => {
 
 test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI providers from env together', () => {
   const config = resolveGatewayConfig({}, {
+    ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
@@ -509,8 +595,10 @@ test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI prov
     OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT: '587',
     OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME: 'agent@example.test',
     OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD: 'smtp-password',
+    OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES: '2097152',
     OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: 'https://bridge.example.test/out',
     OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET: 'webhook-secret',
+    OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES: '2097152',
     OPEN_COWORK_GATEWAY_DISCORD_DELIVERY_URL: 'https://bridge.example.test/discord',
     OPEN_COWORK_GATEWAY_DISCORD_SHARED_SECRET: 'discord-secret',
     OPEN_COWORK_GATEWAY_WHATSAPP_DELIVERY_URL: 'https://bridge.example.test/whatsapp',
@@ -559,6 +647,8 @@ test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI prov
   }])
   assert.equal(config.providers.find((provider) => provider.kind === 'slack')?.externalWorkspaceId, 'T123')
   assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.smtpHost, 'smtp.example.test')
+  assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.maxAttachmentBytes, '2097152')
+  assert.equal(config.providers.find((provider) => provider.kind === 'webhook')?.settings.maxAttachmentBytes, '2097152')
   assert.equal(config.providers.find((provider) => provider.kind === 'discord')?.credentials.sharedSecret, 'discord-secret')
 })
 
@@ -568,7 +658,6 @@ test('gateway config loads the shared open-cowork config gateway section with al
     const configPath = join(tempRoot, 'open-cowork.config.json')
     writeFileSync(configPath, JSON.stringify({
       allowedEnvPlaceholders: [
-        'ACME_GATEWAY_SERVICE_TOKEN',
         'ACME_TELEGRAM_BOT_TOKEN',
         'ACME_TELEGRAM_WEBHOOK_SECRET',
       ],
@@ -579,8 +668,8 @@ test('gateway config loads the shared open-cowork config gateway section with al
           supportUrl: 'https://support.acme.example/cowork',
         },
         cloud: {
-          baseUrl: 'https://cowork.acme.example',
-          serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
+          baseUrl: 'https://ignored-file-cloud.example',
+          serviceToken: 'ignored-file-service-token',
         },
         server: {
           host: '127.0.0.1',
@@ -603,15 +692,17 @@ test('gateway config loads the shared open-cowork config gateway section with al
     }))
 
     const config = loadGatewayConfig({
+      ...operatorEnv,
       OPEN_COWORK_CONFIG_PATH: configPath,
-      ACME_GATEWAY_SERVICE_TOKEN: 'service-token-from-central-config',
+      OPEN_COWORK_CLOUD_BASE_URL: 'https://cowork.acme.example',
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-from-env',
       ACME_TELEGRAM_BOT_TOKEN: 'telegram-token-from-central-config',
       ACME_TELEGRAM_WEBHOOK_SECRET: 'telegram-secret-from-central-config',
     })
 
     assert.equal(config.branding.productName, 'Acme Cowork')
     assert.equal(config.cloud.baseUrl, 'https://cowork.acme.example')
-    assert.equal(config.cloud.serviceToken, 'service-token-from-central-config')
+    assert.equal(config.cloud.serviceToken, 'service-token-from-env')
     assert.equal(config.providers[0]?.id, 'acme-telegram')
     assert.equal(config.providers[0]?.credentials.botToken, 'telegram-token-from-central-config')
   } finally {
@@ -628,6 +719,11 @@ test('gateway config overlays provider env credentials onto shared provider bind
         cloud: {
           baseUrl: 'https://cowork.acme.example',
           serviceToken: 'service-token-from-shared-config',
+          allowInsecureHttp: true,
+        },
+        timeouts: {
+          cloudRequestMs: 100,
+          webhookDeliveryMs: 1234,
         },
         providers: [{
           id: 'acme-telegram',
@@ -642,7 +738,11 @@ test('gateway config overlays provider env credentials onto shared provider bind
     }))
 
     const config = loadGatewayConfig({
+      ...operatorEnv,
       OPEN_COWORK_CONFIG_PATH: configPath,
+      OPEN_COWORK_CLOUD_BASE_URL: 'https://cowork.acme.example',
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-from-env',
+      OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS: '45000',
       OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token-from-env',
       OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-secret-from-env',
     })
@@ -654,6 +754,9 @@ test('gateway config overlays provider env credentials onto shared provider bind
     assert.equal(config.providers[0]?.credentials.webhookSecret, 'telegram-secret-from-env')
     assert.equal(config.providers[0]?.settings.mode, 'webhook')
     assert.equal(config.providers[0]?.settings.publicBaseUrl, 'https://cowork-gateway.acme.example')
+    assert.equal(config.cloud.allowInsecureHttp, false)
+    assert.equal(config.timeouts.cloudRequestMs, 45_000)
+    assert.equal(config.timeouts.webhookDeliveryMs, 1234)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
@@ -690,13 +793,16 @@ test('gateway config lets explicit config path override config directory gateway
     }))
 
     const config = loadGatewayConfig({
+      ...operatorEnv,
       OPEN_COWORK_CONFIG_DIR: dirRoot,
       OPEN_COWORK_CONFIG_PATH: pathConfig,
+      OPEN_COWORK_CLOUD_BASE_URL: 'https://env.acme.example',
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-from-env',
       OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
     })
 
     assert.equal(config.branding.productName, 'Explicit Cowork')
-    assert.equal(config.cloud.baseUrl, 'https://explicit.acme.example')
+    assert.equal(config.cloud.baseUrl, 'https://env.acme.example')
     assert.equal(config.providers[0]?.channelBindingId, 'explicit-fake')
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -709,14 +815,14 @@ test('gateway config discovers JSONC shared config files from config directories
     const configPath = join(tempRoot, 'config.jsonc')
     writeFileSync(configPath, `{
       // downstream config can use comments and trailing commas
-      "allowedEnvPlaceholders": ["ACME_GATEWAY_SERVICE_TOKEN"],
+      "allowedEnvPlaceholders": [],
       "gateway": {
         "branding": {
           "productName": "JSONC Cowork",
         },
         "cloud": {
           "baseUrl": "https://cowork.acme.example",
-          "serviceToken": "{env:ACME_GATEWAY_SERVICE_TOKEN}",
+          "serviceToken": "ignored-file-service-token",
         },
         "providers": [{
           "kind": "fake",
@@ -726,13 +832,15 @@ test('gateway config discovers JSONC shared config files from config directories
     }`)
 
     const config = loadGatewayConfig({
+      ...operatorEnv,
       OPEN_COWORK_CONFIG_DIR: tempRoot,
-      ACME_GATEWAY_SERVICE_TOKEN: 'service-token-from-jsonc-config',
+      OPEN_COWORK_CLOUD_BASE_URL: 'https://cowork.acme.example',
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token-from-env',
       OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
     })
 
     assert.equal(config.branding.productName, 'JSONC Cowork')
-    assert.equal(config.cloud.serviceToken, 'service-token-from-jsonc-config')
+    assert.equal(config.cloud.serviceToken, 'service-token-from-env')
     assert.equal(config.providers[0]?.kind, 'fake')
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
@@ -748,19 +856,23 @@ test('gateway config rejects unallowlisted shared config env placeholders', () =
       gateway: {
         cloud: {
           baseUrl: 'https://cowork.acme.example',
-          serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
         },
         providers: [{
           kind: 'fake',
           channelBindingId: 'fake-binding',
+          credentials: {
+            botToken: '{env:ACME_TELEGRAM_BOT_TOKEN}',
+          },
         }],
       },
     }))
 
     assert.throws(() => loadGatewayConfig({
       OPEN_COWORK_CONFIG_PATH: configPath,
-      ACME_GATEWAY_SERVICE_TOKEN: 'service-token',
-    }), /ACME_GATEWAY_SERVICE_TOKEN is not allowlisted/)
+      OPEN_COWORK_CLOUD_BASE_URL: 'https://cowork.acme.example',
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+      ACME_TELEGRAM_BOT_TOKEN: 'telegram-token',
+    }), /ACME_TELEGRAM_BOT_TOKEN is not allowlisted/)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

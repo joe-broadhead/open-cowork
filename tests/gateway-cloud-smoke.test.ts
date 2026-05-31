@@ -10,7 +10,7 @@ import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-serve
 import type { CloudRuntimeAdapter, CloudRuntimeEvent, CloudRuntimePromptPart } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
-import { createCloudGateway, createGatewayDaemon, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -217,12 +217,13 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       }),
     })).status, 200)
 
-    const gatewayConfig = resolveGatewayConfig({
-      cloud: {
-        baseUrl: cloudUrl,
-        serviceToken: issued.plaintext,
-      },
+    const gatewayEnv = {
+      OPEN_COWORK_CLOUD_BASE_URL: cloudUrl,
+      OPEN_COWORK_GATEWAY_SERVICE_TOKEN: issued.plaintext,
+    }
+    const _gatewayConfig = resolveGatewayConfig({
       server: {
+        adminToken: 'gateway-cloud-smoke-admin-token',
         port: 0,
       },
       providers: [{
@@ -230,8 +231,8 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
         kind: 'fake',
         channelBindingId: 'fake-binding',
       }],
-    })
-    const cloudGateway = createCloudGateway(gatewayConfig)
+    }, gatewayEnv)
+    const cloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
     const identity = await cloudGateway.resolveIdentity({
       provider: 'cli',
       externalUserId: 'user-1',
@@ -350,12 +351,9 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       status: 'sent',
     }))?.status, 'sent')
 
-    const gateway = createGatewayDaemon(resolveGatewayConfig({
-      cloud: {
-        baseUrl: cloudUrl,
-        serviceToken: issued.plaintext,
-      },
+    const daemonGatewayConfig = resolveGatewayConfig({
       server: {
+        adminToken: 'gateway-cloud-smoke-admin-token',
         port: 0,
       },
       providers: [{
@@ -363,7 +361,8 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
         kind: 'fake',
         channelBindingId: 'fake-binding',
       }],
-    }))
+    }, gatewayEnv)
+    const gateway = createGatewayDaemon(daemonGatewayConfig, createCloudGateway(resolveGatewayCloudConnection(gatewayEnv)))
     const promptsBeforeDaemon = runtime.prompts.length
     const gatewayUrl = await gateway.start()
     const fakeProvider = gateway.runtime.providers.get('fake')?.provider as {

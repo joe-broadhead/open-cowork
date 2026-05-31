@@ -404,6 +404,11 @@ real self-hosted gateway:
    `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`,
    `OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN`, or
    `OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET`.
+6. Set `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` for metrics, diagnostics, readiness
+   provider inventory, and delivery backlog controls. Only local loopback demos
+   should use `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true`.
+   Compose references require this value explicitly and the gateway rejects
+   placeholder tokens such as `change-me-*` or `replace-with-*`.
 
 Provider requirements:
 
@@ -416,7 +421,8 @@ Provider requirements:
   preserves `In-Reply-To` / `References` thread IDs and uses command-token
   approval fallback rather than inline buttons.
 - **Webhook** requires a shared secret for public ingress and outbound bridge
-  signing.
+  signing. Outbound bridge delivery is signed with timestamped HMAC headers by
+  default; receivers should verify the raw body and reject stale timestamps.
 
 For local demos the cloud compose file uses `auth.mode=none` and explicit
 insecure overrides. Public deployments must use OIDC or a trusted identity
@@ -427,9 +433,10 @@ Gateway health endpoints:
 - `GET /health` reports process liveness.
 - `GET /ready` reports provider readiness.
 - `GET /metrics` exposes Prometheus metrics when enabled. Public binds require
-  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`.
+  `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; local loopback bypass must be explicit.
 - `GET /diagnostics` returns redacted gateway config, provider state, and
-  counters for support. Public binds require the same admin token.
+  counters for support. It requires the same admin token unless explicit local
+  loopback bypass is enabled.
 - `GET /deliveries` lists recent delivery backlog rows for operators.
 - `POST /deliveries/:id/retry` schedules a failed/dead delivery for retry.
 - `POST /deliveries/:id/dead-letter` marks a poison delivery as dead. These
@@ -439,6 +446,10 @@ The gateway image is separate from the cloud image because it owns channel
 secrets, long-polling or webhook connections, and a different scaling profile.
 It does not import the OpenCode SDK and does not own control-plane Postgres
 state.
+Gateway stream state is process-local today, so run one replica per
+channel-binding shard. The Helm chart fails closed for `replicaCount > 1`
+unless `gateway.experimentalDistributedOwnership=true` is set explicitly for an
+experimental deployment.
 
 For Kubernetes, use the provider-neutral Helm chart as the scalable starting
 point:
@@ -467,15 +478,16 @@ Install the gateway chart next to cloud when you want channel access:
 helm upgrade --install open-cowork-gateway helm/open-cowork-gateway \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-gateway \
   --set gateway.cloudBaseUrl='https://cowork.example.com' \
-  --set gateway.serviceToken='replace-with-secret-manager-value'
+  --set gateway.serviceToken='replace-with-secret-manager-value' \
+  --set gateway.adminToken='replace-with-operator-token'
 ```
 
 For production, set `gateway.existingSecret` and inject
-`OPEN_COWORK_GATEWAY_SERVICE_TOKEN`, `OPEN_COWORK_GATEWAY_PROVIDERS`, and
-provider-specific credentials through External Secrets, sealed secrets, or the
-platform secret manager. The cloud chart also exposes the gateway as an
-optional dependency under `gateway.enabled=true` for installations that prefer
-one parent release.
+`OPEN_COWORK_GATEWAY_SERVICE_TOKEN`, `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`,
+`OPEN_COWORK_GATEWAY_PROVIDERS`, and provider-specific credentials through
+External Secrets, sealed secrets, or the platform secret manager. The cloud
+chart also exposes the gateway as an optional dependency under
+`gateway.enabled=true` for installations that prefer one parent release.
 
 The chart fails closed when `cloud.auth.mode=none` is used without
 `cloud.allowInsecureAuth=true`. Keep that override for local demos only; use
@@ -489,6 +501,9 @@ headers from untrusted callers.
 The gateway chart also fails closed unless at least one provider is configured
 through `gateway.providersJson`, Telegram, Slack, email, generic webhook
 settings, or an existing secret.
+It also fails closed when `replicaCount > 1` without
+`gateway.experimentalDistributedOwnership=true`, when operator auth is missing,
+or when generic webhook ingress is configured without a shared secret.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
@@ -694,10 +709,16 @@ Gateway variables:
 | --- | --- |
 | `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
 | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
-| `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required when `/metrics` or `/diagnostics` are enabled on a public bind. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
+| `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required for operator endpoints in shared/public deployments. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
+| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Do not enable behind a reverse proxy. |
 | `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public gateway URL for channel webhook registration. |
+| `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` | Maximum inbound webhook/body size. Bridge/email file limits default to this cap. |
+| `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` | Deadline for cloud HTTP API calls made by the gateway. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS` | Deadline for outbound bridge/webhook delivery and Slack API calls. |
+| `OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS` | Deadline for SMTP connection/read/write operations. |
+| `OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS` | Maximum time to drain in-flight deliveries before provider shutdown. |
 | `OPEN_COWORK_GATEWAY_MODE` | `self-host` or `managed`; affects diagnostics and deployment labeling. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON` | JSON object matching the public branding contract; Helm renders this from `gateway.branding`. |
 | `OPEN_COWORK_GATEWAY_BRAND_NAME` / `OPEN_COWORK_GATEWAY_BRAND_SHORT_NAME` | Simple env overrides for gateway health/readiness and setup metadata. |
@@ -712,11 +733,23 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET` | Required Slack signing secret for webhook verification. |
 | `OPEN_COWORK_GATEWAY_SLACK_CHANNEL_BINDING_ID` / `OPEN_COWORK_GATEWAY_SLACK_TEAM_ID` | Cloud channel binding id and Slack team/workspace id. |
 | `OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET` | Required shared secret for inbound email webhook delivery. |
+| `OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES` | Optional email attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
 | `OPEN_COWORK_GATEWAY_EMAIL_FROM` / `OPEN_COWORK_GATEWAY_EMAIL_ADDRESS` | Outbound sender and inbound address shown in channel binding setup. |
 | `OPEN_COWORK_GATEWAY_EMAIL_SMTP_HOST` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE` | SMTP transport settings for email replies. |
 | `OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME` / `OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD` | Optional SMTP auth credentials. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL` | Outbound URL for the generic webhook provider. |
-| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress HMAC signatures and outbound bridge authentication. Inbound generic webhook requests include `x-open-cowork-gateway-webhook-timestamp` and `x-open-cowork-gateway-webhook-signature` over the raw body. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES` | Optional generic webhook attachment cap; defaults to `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`. |
+| `OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET` | Required shared secret for generic webhook ingress HMAC signatures and outbound bridge authentication. Inbound and outbound generic webhook requests include `x-open-cowork-gateway-webhook-timestamp` and `x-open-cowork-gateway-webhook-signature` over the raw body. |
+
+Gateway config JSON from `OPEN_COWORK_CONFIG_PATH`,
+`OPEN_COWORK_CONFIG_DIR`, `OPEN_COWORK_DOWNSTREAM_ROOT`,
+`OPEN_COWORK_GATEWAY_CONFIG`, or `OPEN_COWORK_GATEWAY_CONFIG_JSON` is
+intentionally not trusted for the cloud endpoint, service token, or
+cloud-client timeout/insecure-HTTP policy. Set `OPEN_COWORK_CLOUD_BASE_URL`,
+`OPEN_COWORK_GATEWAY_SERVICE_TOKEN`,
+`OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS`, and
+`OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` through env or your deployment secret
+manager instead.
 
 Hosted/public deployments should keep abuse controls enabled. The defaults are
 conservative and can be tuned per deployment; set an individual numeric quota

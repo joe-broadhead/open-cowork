@@ -37,6 +37,11 @@ node scripts/gateway-appliance-setup.mjs \
 docker compose --env-file .env.gateway -f docker-compose.gateway-remote.yml up -d --build
 ```
 
+The remote compose file refuses to render without
+`OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; replace the generated/example value with a
+random operator token before exposing `/ready`, `/metrics`, `/diagnostics`, or
+delivery controls.
+
 Local all-in-one mode runs Cloud, Postgres, MinIO, and Gateway together:
 
 ```bash
@@ -75,7 +80,9 @@ pnpm deploy:continuation:smoke
 ```
 
 For local all-in-one smoke checks, use localhost URLs and keep
-`OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true` loopback-only.
+`OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true` loopback-only. Operator routes
+still require `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` unless you explicitly set the
+local-only `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true`.
 
 ## Files
 
@@ -96,6 +103,12 @@ requires:
 - `OPEN_COWORK_GATEWAY_TELEGRAM_MODE=webhook`
 - `OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET`
 - `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`
+- `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` sized for expected provider
+  uploads, with email/webhook max attachment envs kept at or below that value
+
+Generic webhook/bridge delivery uses timestamped HMAC signatures by default;
+receivers should validate `x-open-cowork-gateway-webhook-timestamp` and
+`x-open-cowork-gateway-webhook-signature` over the raw request body.
 
 Rotate the Cloud service token and bot token if any env file, shell history, or
 process dump is exposed.

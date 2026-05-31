@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import type { CloudTransportAdapter } from '@open-cowork/cloud-client'
 
-import { createCloudGateway, resolveGatewayConfig } from '../dist/index.js'
+import { createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../dist/index.js'
 
 test('cloud gateway wraps all required channel and session operations', async () => {
   const calls: string[] = []
@@ -77,11 +77,14 @@ test('cloud gateway wraps all required channel and session operations', async ()
       return { deliveryId }
     },
   } as Partial<CloudTransportAdapter> as CloudTransportAdapter
-  const gateway = createCloudGateway(resolveGatewayConfig({}, {
+  const gatewayEnv = {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
     OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER: 'true',
-  }), adapter)
+  }
+  resolveGatewayConfig({}, gatewayEnv)
+  const gateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv), adapter)
 
   await gateway.resolveIdentity({ provider: 'telegram', externalUserId: 'user-1' })
   await gateway.bindSession({ channelBindingId: 'channel-1', provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })

@@ -40,9 +40,8 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
   assert.match(redactedBundle, /\[REDACTED_HOME\]/)
 
   const gatewayConfig = resolveGatewayConfig({
-    cloud: {
-      baseUrl: 'https://cloud.example.test',
-      serviceToken: gatewayToken,
+    server: {
+      adminToken: 'distribution-redaction-admin-token',
     },
     providers: [{
       id: 'telegram',
@@ -56,6 +55,9 @@ test('cloud and gateway distribution diagnostics redact secrets, signed URLs, an
         localPath: '/Users/alice/acme-private-project',
       },
     }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: gatewayToken,
   })
   const gatewayDiagnostics = JSON.stringify(redactGatewayConfig(gatewayConfig))
   assert.equal(gatewayDiagnostics.includes(gatewayToken), false)

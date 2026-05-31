@@ -39,7 +39,7 @@ import {
   LOCAL_WORKSPACE_ID,
   createWorkspaceGateway,
 } from '../apps/desktop/src/main/workspace-gateway.ts'
-import { createCloudGateway, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
 type ContinuationFixture = Awaited<ReturnType<typeof createContinuationFixture>>
 
@@ -399,12 +399,13 @@ async function createContinuationFixture() {
     transport: clientFor(desktopToken),
     cache,
   })
-  const gateway = createCloudGateway(resolveGatewayConfig({
-    cloud: {
-      baseUrl,
-      serviceToken: gatewayToken,
-    },
+  const gatewayEnv = {
+    OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: gatewayToken,
+  }
+  resolveGatewayConfig({
     server: {
+      adminToken: 'continuation-gateway-admin-token',
       port: 0,
     },
     providers: [{
@@ -412,7 +413,8 @@ async function createContinuationFixture() {
       kind: 'fake',
       channelBindingId: 'cli-binding',
     }],
-  }))
+  }, gatewayEnv)
+  const gateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
 
   return {
     account,

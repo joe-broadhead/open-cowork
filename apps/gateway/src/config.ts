@@ -21,6 +21,8 @@ export type GatewayConfig = {
     port: number
     publicBaseUrl: string | null
     adminToken: string | null
+    allowLoopbackOperatorBypass: boolean
+    maxRequestBodyBytes: number
   }
   mode: GatewayMode
   logging: {
@@ -32,7 +34,17 @@ export type GatewayConfig = {
   diagnostics: {
     enabled: boolean
   }
+  timeouts: {
+    cloudRequestMs: number
+    webhookDeliveryMs: number
+    smtpMs: number
+    shutdownDrainMs: number
+  }
   providers: GatewayProviderConfig[]
+}
+
+export type GatewayCloudConnectionConfig = GatewayConfig['cloud'] & {
+  requestTimeoutMs: number
 }
 
 export type GatewayProviderConfig = {
@@ -53,6 +65,14 @@ export type GatewayEnv = Record<string, string | undefined>
 
 const defaultHost = '127.0.0.1'
 const defaultPort = 8787
+const defaultMaxRequestBodyBytes = 1024 * 1024
+const maxAllowedRequestBodyBytes = 64 * 1024 * 1024
+const defaultTimeouts = {
+  cloudRequestMs: 30_000,
+  webhookDeliveryMs: 15_000,
+  smtpMs: 30_000,
+  shutdownDrainMs: 10_000,
+}
 const defaultGatewayBranding: PublicBrandingConfig = {
   productName: 'Open Cowork Cloud',
   shortName: 'OC',
@@ -89,26 +109,31 @@ export function loadGatewayConfig(env: GatewayEnv = process.env): GatewayConfig 
 }
 
 export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv = {}): GatewayConfig {
-  const cloudBaseUrl = readString(env.OPEN_COWORK_CLOUD_BASE_URL) || readString(raw.cloud?.baseUrl)
-  const serviceToken = readString(env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN) || readString(raw.cloud?.serviceToken)
-  const allowInsecureHttp = readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP, raw.cloud?.allowInsecureHttp ?? false)
+  const cloud = resolveGatewayCloudConnection(env)
   const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
   const serverHost = readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost
   const serverPublicBaseUrl = readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl)
-  if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL or cloud.baseUrl is required.')
-  if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN or cloud.serviceToken is required.')
+  const serverMaxRequestBodyBytes = readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES ?? raw.server?.maxRequestBodyBytes, defaultMaxRequestBodyBytes, 1024, maxAllowedRequestBodyBytes)
+  const timeouts = {
+    cloudRequestMs: cloud.requestTimeoutMs,
+    webhookDeliveryMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS ?? raw.timeouts?.webhookDeliveryMs, defaultTimeouts.webhookDeliveryMs, 100, 120_000),
+    smtpMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS ?? raw.timeouts?.smtpMs, defaultTimeouts.smtpMs, 100, 120_000),
+    shutdownDrainMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS ?? raw.timeouts?.shutdownDrainMs, defaultTimeouts.shutdownDrainMs, 100, 120_000),
+  }
   const config: GatewayConfig = {
     branding: resolveGatewayBranding(raw.branding, env),
     cloud: {
-      baseUrl: normalizeBaseUrl(cloudBaseUrl, allowInsecureHttp),
-      serviceToken,
-      allowInsecureHttp,
+      baseUrl: cloud.baseUrl,
+      serviceToken: cloud.serviceToken,
+      allowInsecureHttp: cloud.allowInsecureHttp,
     },
     server: {
       host: serverHost,
       port: readPort(env.OPEN_COWORK_GATEWAY_PORT ?? raw.server?.port, defaultPort),
       publicBaseUrl: serverPublicBaseUrl,
       adminToken: readNullableString(env.OPEN_COWORK_GATEWAY_ADMIN_TOKEN) ?? readNullableString(raw.server?.adminToken),
+      allowLoopbackOperatorBypass: readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS, raw.server?.allowLoopbackOperatorBypass ?? false),
+      maxRequestBodyBytes: serverMaxRequestBodyBytes,
     },
     mode,
     logging: {
@@ -120,12 +145,27 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     diagnostics: {
       enabled: readBoolean(env.OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED, raw.diagnostics?.enabled ?? mode === 'self-host'),
     },
-    providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl),
+    timeouts,
+    providers: normalizeProviders(raw.providers, env, serverPublicBaseUrl, serverMaxRequestBodyBytes),
   }
   assertGatewayConfigSafe(config, {
     allowPublicFakeProvider: readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER, false),
   })
   return config
+}
+
+export function resolveGatewayCloudConnection(env: GatewayEnv = process.env): GatewayCloudConnectionConfig {
+  const cloudBaseUrl = readString(env.OPEN_COWORK_CLOUD_BASE_URL)
+  const serviceToken = readString(env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN)
+  const allowInsecureHttp = readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP, false)
+  if (!cloudBaseUrl) throw new Error('OPEN_COWORK_CLOUD_BASE_URL is required.')
+  if (!serviceToken) throw new Error('OPEN_COWORK_GATEWAY_SERVICE_TOKEN is required.')
+  return {
+    baseUrl: normalizeBaseUrl(cloudBaseUrl, allowInsecureHttp),
+    serviceToken,
+    allowInsecureHttp,
+    requestTimeoutMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS, defaultTimeouts.cloudRequestMs, 100, 120_000),
+  }
 }
 
 export function redactGatewayConfig(config: GatewayConfig): Record<string, unknown> {
@@ -162,7 +202,7 @@ function readRawConfig(env: GatewayEnv): GatewayRawConfig {
   const central = readCentralGatewayConfig(env)
   const configPath = readString(env.OPEN_COWORK_GATEWAY_CONFIG)
   const fromGatewayFile = configPath
-    ? parseGatewayConfigFile(readFileSync(configPath, 'utf8'), configPath)
+    ? omitFileBackedCloudConnection(parseGatewayConfigFile(readFileSync(configPath, 'utf8'), configPath))
     : {}
   const json = readString(env.OPEN_COWORK_GATEWAY_CONFIG_JSON)
   const fromJson = json
@@ -206,9 +246,23 @@ function parseOpenCoworkConfig(value: string, source: string, env: GatewayEnv): 
   const allowed = new Set(Array.isArray(parsed.allowedEnvPlaceholders)
     ? parsed.allowedEnvPlaceholders.filter((entry): entry is string => typeof entry === 'string')
     : [])
+  const gateway = omitFileBackedCloudConnection(parsed.gateway)
   return resolveGatewayEnvPlaceholders({
-    gateway: parsed.gateway,
+    gateway,
   }, allowed, env, source) as { gateway?: GatewayRawConfig }
+}
+
+function omitFileBackedCloudConnection(value: unknown): GatewayRawConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const config = { ...(value as GatewayRawConfig) }
+  if (config.cloud) {
+    const cloud = { ...config.cloud }
+    delete cloud.baseUrl
+    delete cloud.serviceToken
+    delete cloud.allowInsecureHttp
+    config.cloud = Object.keys(cloud).length > 0 ? cloud : undefined
+  }
+  return config
 }
 
 function parseGatewayConfigJson(value: string, source: string): GatewayRawConfig {
@@ -372,13 +426,13 @@ function resolveGatewayBranding(raw: GatewayRawConfig['branding'], env: GatewayE
   }
 }
 
-function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv, gatewayPublicBaseUrl?: string | null): GatewayProviderConfig[] {
+function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: GatewayEnv, gatewayPublicBaseUrl: string | null | undefined, maxRequestBodyBytes: number): GatewayProviderConfig[] {
   const envProviders = readProvidersFromEnv(env, gatewayPublicBaseUrl)
   const providers = rawProviders?.length
     ? mergeProviderOverrides(rawProviders, envProviders)
     : envProviders
   const normalized = providers?.length
-    ? providers.map((provider, index) => normalizeProvider(provider, index, gatewayPublicBaseUrl))
+    ? providers.map((provider, index) => normalizeProvider(provider, index, gatewayPublicBaseUrl, maxRequestBodyBytes))
     : readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false)
       ? [defaultFakeProvider(env)]
       : []
@@ -500,6 +554,7 @@ function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | n
         smtpPort: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_PORT) || undefined,
         smtpSecure: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_SECURE) || undefined,
         smtpUsername: readString(env.OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME) || undefined,
+        maxAttachmentBytes: readString(env.OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES) || undefined,
       }),
     })
   }
@@ -515,6 +570,7 @@ function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | n
       }),
       settings: {
         deliveryUrl: webhookDeliveryUrl,
+        maxAttachmentBytes: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES) || undefined,
       },
     })
   }
@@ -560,7 +616,7 @@ function defaultFakeProvider(env: GatewayEnv): GatewayProviderConfig {
   }, 0)
 }
 
-function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: GatewayProviderKind }, index: number, gatewayPublicBaseUrl?: string | null): GatewayProviderConfig {
+function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: GatewayProviderKind }, index: number, gatewayPublicBaseUrl?: string | null, maxRequestBody = defaultMaxRequestBodyBytes): GatewayProviderConfig {
   const kind = readProviderKind(raw.kind)
   const id = readString(raw.id) || `${kind}-${index + 1}`
   const channelBindingId = readString(raw.channelBindingId)
@@ -574,6 +630,12 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
   })
   if (kind === 'webhook' && !credentials.sharedSecret) {
     throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated webhook ingress.`)
+  }
+  const hasMaxAttachmentBytes = settings.maxAttachmentBytes !== undefined
+    && settings.maxAttachmentBytes !== null
+    && settings.maxAttachmentBytes !== ''
+  if ((kind === 'webhook' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal' || kind === 'email') && !hasMaxAttachmentBytes) {
+    settings.maxAttachmentBytes = maxRequestBody
   }
   if (kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
     if (!credentials.sharedSecret) throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated ${kind} bridge ingress.`)
@@ -670,6 +732,16 @@ function assertHttpsPublicUrl(value: string, label: string) {
 function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFakeProvider: boolean }) {
   const publicBind = isPublicBindHost(config.server.host)
   const publicExposure = publicBind || isPublicBaseUrl(config.server.publicBaseUrl)
+  const loopbackOperatorBypass = config.server.allowLoopbackOperatorBypass && isLoopbackHost(config.server.host) && config.mode === 'self-host'
+  if (config.server.allowLoopbackOperatorBypass && !loopbackOperatorBypass) {
+    throw new Error('OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS is only allowed for self-host gateways bound to loopback.')
+  }
+  if (!config.server.adminToken && !loopbackOperatorBypass) {
+    throw new Error('Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN. For local loopback development only, set OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true explicitly.')
+  }
+  if (config.server.adminToken && isPlaceholderSecret(config.server.adminToken)) {
+    throw new Error('Gateway operator admin token is still a placeholder. Set OPEN_COWORK_GATEWAY_ADMIN_TOKEN to a generated secret before startup.')
+  }
   if (publicExposure && !config.server.adminToken) {
     throw new Error('Gateway public deployments require OPEN_COWORK_GATEWAY_ADMIN_TOKEN for metrics, diagnostics, and delivery operations.')
   }
@@ -688,6 +760,10 @@ function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
 
+function isPlaceholderSecret(value: string) {
+  return /^(change-me|replace-with|example-|demo-)/i.test(value.trim())
+}
+
 function readNullableString(value: unknown) {
   const text = readString(value)
   return text || null
@@ -697,6 +773,14 @@ function readPort(value: unknown, fallback: number) {
   const parsed = typeof value === 'number' ? value : Number(readString(value))
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) return fallback
   return parsed
+}
+
+function readBoundedInteger(value: unknown, fallback: number, min: number, max: number) {
+  const text = readString(value)
+  if (typeof value !== 'number' && !text) return fallback
+  const parsed = typeof value === 'number' ? value : Number(text)
+  if (!Number.isInteger(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
 }
 
 function readMode(value: unknown): GatewayMode | null {

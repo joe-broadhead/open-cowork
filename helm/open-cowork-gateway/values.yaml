@@ -20,7 +20,15 @@ gateway:
   port: 8790
   publicUrl: ""
   adminToken: ""
+  allowLoopbackOperatorBypass: false
+  maxRequestBodyBytes: 1048576
+  experimentalDistributedOwnership: false
   logLevel: info
+  timeouts:
+    cloudRequestMs: 30000
+    webhookDeliveryMs: 15000
+    smtpMs: 30000
+    shutdownDrainMs: 10000
   branding:
     productName: Open Cowork Cloud
     shortName: OC
@@ -55,6 +63,7 @@ gateway:
   email:
     inboundSecret: ""
     channelBindingId: email
+    maxAttachmentBytes: 1048576
     from: ""
     address: ""
     domain: ""
@@ -67,6 +76,7 @@ gateway:
     deliveryUrl: ""
     sharedSecret: ""
     channelBindingId: webhook
+    maxAttachmentBytes: 1048576
 
 replicaCount: 1
 
