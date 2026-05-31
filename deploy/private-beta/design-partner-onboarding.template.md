@@ -16,6 +16,14 @@ channel secrets, or support rosters.
 - Support owner:
 - Date:
 
+## Onboarding State
+
+- Status: `{not_started|invite_sent|auth_required|org_ready|byok_pending_validation|byok_active|desktop_ready|gateway_ready|billing_blocked|quota_blocked|support_review|ready|blocked|offboarded}`
+- Reason code:
+- User-facing message:
+- Operator note:
+- Last status change:
+
 ## Required Ten-Step Flow
 
 1. **Create or invite org owner**
@@ -96,7 +104,19 @@ local file contents are absent from:
 - [ ] Unsupported provider blocks execution with a clear policy message.
 - [ ] Missing BYOK state blocks execution with a clear setup message.
 - [ ] Quota pressure returns clear 429/402 responses without spawning workers.
+- [ ] Billing entitlement blocks return a machine-readable reason code.
+- [ ] Revoked/expired token states return a machine-readable reason code.
 - [ ] Cloud outage leaves local Desktop workspace usable.
+
+## Support Bundle Proof
+
+- [ ] Bundle contains app/build metadata, surface, workspace kind, redacted ids,
+      status, reason code, sanitized error summaries, and operational counters.
+- [ ] Bundle excludes raw BYOK, OAuth, Desktop, Gateway, API, cookie, internal,
+      operator, MCP, channel, database, and signed object-store secrets.
+- [ ] Bundle excludes full chat transcript bodies, local file contents,
+      unredacted home-directory paths, and customer identifiers in public
+      evidence.
 
 ## Final Onboarding Decision
 

@@ -65,6 +65,43 @@ Do not request:
    issues.
 7. Record outcome, mitigation, owner, and follow-up test.
 
+## Support Bundle Contract
+
+Support bundles should follow the public contract in
+[Managed BYOK SaaS Boundary](managed-byok-saas-boundary.md). They may include
+app/build metadata, surface, workspace kind, redacted org/session/workflow/run/
+artifact/request/delivery ids, status and reason code, sanitized error
+summaries, timing/retry/reconnect/queue/projection/quota summaries, BYOK status
+metadata, billing entitlement verdicts, and Gateway delivery counts.
+
+They must not include raw BYOK keys, OAuth tokens, Desktop or Gateway tokens,
+API tokens, cookie/internal/operator tokens, MCP secrets, channel bot tokens,
+signing secrets, database URLs, signed object-store URLs, full chat transcript
+bodies unless explicitly attached by the user, local file contents, unredacted
+home-directory paths, or customer identifiers in public evidence.
+
+## Onboarding Status And Reason Codes
+
+Support, Cloud Web, Desktop, Gateway, and private operations should use the same
+machine-readable status and reason-code taxonomy. The canonical list is in
+`deploy/private-beta/managed-byok-readiness-contract.template.json`; common
+examples are:
+
+- `auth.invite_required`
+- `auth.membership_missing`
+- `auth.token_expired`
+- `auth.token_revoked`
+- `byok.key_missing`
+- `byok.validation_failed`
+- `billing.subscription_inactive`
+- `quota.worker_limit_exceeded`
+- `gateway.identity_not_allowed`
+- `support.diagnostics_redaction_required`
+
+Do not replace these with provider-specific or customer-specific text in public
+artifacts. User-facing messages may be friendlier, but retain the code in logs,
+diagnostics, audit exports, and support records.
+
 ## BYOK Issue Handling
 
 For user/provider key issues:

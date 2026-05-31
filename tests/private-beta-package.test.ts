@@ -19,6 +19,7 @@ test('private beta launch package documents managed and self-host promises', () 
     'Hosted BYOK Setup Flow',
     'OSS Self-Host Equivalent',
     'Managed Vs Self-Host Responsibilities',
+    'Public/Private Boundary',
     'Security Posture',
     'Known Private Beta Constraints',
     'Open Cowork does not resell model tokens',
@@ -50,9 +51,76 @@ test('private beta launch package documents managed and self-host promises', () 
     'Channel Identity Misbinding',
     'Customer Offboarding',
     'Never attach raw secrets',
+    'Support Bundle Contract',
+    'Onboarding Status And Reason Codes',
+    'support.diagnostics_redaction_required',
   ]) {
     assert.match(support, new RegExp(phrase))
   }
+
+  const boundary = readRepoFile('docs/runbooks/managed-byok-saas-boundary.md')
+  for (const phrase of [
+    'Public/Private Boundary',
+    'Onboarding Status Contract',
+    'Billing And Entitlement Boundary',
+    'BYOK Boundary',
+    'Support Bundle Contract',
+    'Launch Package Rules',
+    'billing.subscription_inactive',
+    'gateway.signature_required',
+    'support.diagnostics_redaction_required',
+    'cloud.billing.provider=none',
+  ]) {
+    assert.match(boundary, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+})
+
+test('managed BYOK readiness contract encodes public-private and support boundaries', () => {
+  const contract = readJson('deploy/private-beta/managed-byok-readiness-contract.template.json')
+  assert.equal(contract.contractVersion, 1)
+  assert.equal(contract.purpose, 'managed-byok-saas-readiness-contract')
+  assert.equal(contract.scope, 'public-template-only')
+  assert.ok(contract.publicPrivateBoundary.publicRepoAllowed.includes('self-host documentation and billing-free deployment paths'))
+  assert.ok(contract.publicPrivateBoundary.privateOpsOnly.includes('customer names, emails, org slugs, channel identifiers, support tickets, onboarding records, or launch evidence'))
+  assert.ok(contract.publicPrivateBoundary.privateOpsOnly.includes('production support rosters, on-call schedules, incident channels, and escalation phone numbers'))
+  assert.ok(contract.publicPrivateBoundary.forbiddenPublicPatterns.includes('real Stripe price, product, account, customer, or subscription ids'))
+  for (const status of [
+    'not_started',
+    'invite_sent',
+    'auth_required',
+    'org_ready',
+    'byok_pending_validation',
+    'byok_active',
+    'desktop_ready',
+    'gateway_ready',
+    'billing_blocked',
+    'quota_blocked',
+    'support_review',
+    'ready',
+    'blocked',
+    'offboarded',
+  ]) {
+    assert.ok(contract.onboardingContract.statuses.includes(status), status)
+  }
+  for (const reasonCode of [
+    'auth.invite_required',
+    'auth.token_revoked',
+    'byok.validation_failed',
+    'billing.subscription_inactive',
+    'quota.worker_limit_exceeded',
+    'gateway.signature_required',
+    'support.diagnostics_redaction_required',
+  ]) {
+    assert.ok(contract.onboardingContract.reasonCodes.includes(reasonCode), reasonCode)
+  }
+  assert.deepEqual(contract.billingEntitlementContract.selfHostAllowedProviders, ['none', 'stub'])
+  assert.equal(contract.byokSecurityContract.plaintextReadbackAllowed, false)
+  assert.equal(contract.byokSecurityContract.workerRevealOnly, true)
+  assert.equal(contract.byokSecurityContract.runtimeInjection, 'provider-options-only')
+  assert.ok(contract.supportBundleContract.forbiddenFields.includes('raw BYOK keys'))
+  assert.ok(contract.supportBundleContract.forbiddenFields.includes('Desktop, Gateway, API, cookie, internal, or operator tokens'))
+  assert.ok(contract.launchPackageContract.requiredPublicArtifacts.includes('docs/runbooks/managed-byok-saas-boundary.md'))
+  assert.ok(contract.launchPackageContract.requiredValidationCommands.includes('pnpm deploy:private-beta:validate'))
 })
 
 test('private beta launch profile template captures launch decisions and evidence gates', () => {
@@ -110,6 +178,7 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
   const onboarding = readRepoFile('deploy/private-beta/design-partner-onboarding.template.md')
   for (const phrase of [
     'Required Ten-Step Flow',
+    'Onboarding State',
     'Create or invite org owner',
     'Verify org membership and role',
     'Configure BYOK provider key through write-only endpoint',
@@ -123,6 +192,8 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
     'Token Lifecycle Proof',
     'Secret Redaction Proof',
     'Blocking Behavior Proof',
+    'Support Bundle Proof',
+    'billing_blocked',
   ]) {
     assert.match(onboarding, new RegExp(phrase))
   }
@@ -135,10 +206,13 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
     'Load And Soak Summary',
     'Failover And Restore Summary',
     'Security Boundary Checklist',
+    'Public/Private Boundary Evidence',
     'Known Risks And Mitigations',
     'Decision',
     'BYOK plaintext absent',
     'Gateway is a channel client and delivery adapter',
+    'managed-byok-readiness-contract.template.json',
+    'Onboarding failures preserve machine-readable status and reason codes',
   ]) {
     assert.match(report, new RegExp(phrase))
   }

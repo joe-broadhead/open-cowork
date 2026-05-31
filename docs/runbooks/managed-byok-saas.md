@@ -19,6 +19,22 @@ gateway channel bindings.
 - Billing, IdP, object store, secret manager, and gateway provider choices stay
   behind adapters.
 
+## Public/Private Boundary
+
+The upstream repository must stay safe for OSS self-hosters and downstream
+managed SaaS operators. Keep provider-neutral code, placeholder configs,
+redaction rules, and validation templates here. Keep real project ids, real
+domains, customer data, live prices, secret refs that identify production
+tenants, raw diagnostics, support rosters, and launch evidence in private
+operations.
+
+The full public/private split, onboarding status and reason-code contract,
+support bundle contract, and launch package rules live in
+[Managed BYOK SaaS Boundary](managed-byok-saas-boundary.md). The
+machine-readable contract is
+`deploy/private-beta/managed-byok-readiness-contract.template.json` and is
+validated by `pnpm deploy:private-beta:validate`.
+
 ## Org Signup Mode
 
 Choose one org signup mode per environment:

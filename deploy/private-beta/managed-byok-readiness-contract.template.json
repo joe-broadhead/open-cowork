@@ -1,0 +1,197 @@
+{
+  "contractVersion": 1,
+  "purpose": "managed-byok-saas-readiness-contract",
+  "scope": "public-template-only",
+  "publicPrivateBoundary": {
+    "publicRepoAllowed": [
+      "provider-neutral billing adapter interfaces",
+      "stub billing adapter and local validators",
+      "Stripe adapter code without live account ids, prices, webhook secrets, or customer data",
+      "BYOK status APIs, secret-store interfaces, and worker-role runtime injection code",
+      "placeholder deployment configs and launch checklist templates",
+      "self-host documentation and billing-free deployment paths",
+      "support and diagnostics redaction contracts",
+      "security, privacy, and disclosure documentation"
+    ],
+    "privateOpsOnly": [
+      "real cloud project ids, account ids, subscription ids, and regions tied to a managed service",
+      "real managed SaaS domains before intentional public launch",
+      "real plan packaging, prices, coupon ids, Stripe product ids, or Stripe price ids before intentional public launch",
+      "customer names, emails, org slugs, channel identifiers, support tickets, onboarding records, or launch evidence",
+      "production secret refs when they reveal provider, account, customer, tenant, or environment identity",
+      "production support rosters, on-call schedules, incident channels, and escalation phone numbers",
+      "raw diagnostics bundles, logs, database exports, object-store listings, or audit exports from managed customers"
+    ],
+    "publicAfterLaunchOnly": [
+      "published pricing table",
+      "public SaaS marketing domain",
+      "public support mailbox or disclosure alias",
+      "public status page URL"
+    ],
+    "forbiddenPublicPatterns": [
+      "provider API keys",
+      "OAuth refresh or access tokens",
+      "Desktop or Gateway API tokens",
+      "channel bot tokens or signing secrets",
+      "database URLs",
+      "signed object-store URLs",
+      "private key blocks",
+      "real Stripe price, product, account, customer, or subscription ids"
+    ]
+  },
+  "onboardingContract": {
+    "statuses": [
+      "not_started",
+      "invite_sent",
+      "auth_required",
+      "org_ready",
+      "byok_pending_validation",
+      "byok_active",
+      "desktop_ready",
+      "gateway_ready",
+      "billing_blocked",
+      "quota_blocked",
+      "support_review",
+      "ready",
+      "blocked",
+      "offboarded"
+    ],
+    "reasonCodes": [
+      "auth.invite_required",
+      "auth.membership_missing",
+      "auth.role_insufficient",
+      "auth.token_expired",
+      "auth.token_revoked",
+      "byok.key_missing",
+      "byok.provider_disabled",
+      "byok.validation_failed",
+      "byok.unsupported_provider",
+      "billing.subscription_required",
+      "billing.subscription_inactive",
+      "quota.prompt_limit_exceeded",
+      "quota.worker_limit_exceeded",
+      "gateway.channel_not_bound",
+      "gateway.identity_not_allowed",
+      "gateway.signature_required",
+      "desktop.managed_org_required",
+      "support.diagnostics_redaction_required"
+    ],
+    "requiredFlow": [
+      "create_or_invite_org_owner",
+      "verify_membership_and_role",
+      "configure_byok_write_only",
+      "validate_provider_or_audited_override",
+      "issue_desktop_connection",
+      "issue_gateway_service_token_and_binding",
+      "verify_cloud_web_admin_surface",
+      "run_first_thread_from_web",
+      "continue_same_thread_from_desktop",
+      "continue_or_notify_through_gateway"
+    ]
+  },
+  "billingEntitlementContract": {
+    "selfHostAllowedProviders": [
+      "none",
+      "stub"
+    ],
+    "managedPrivateBetaAllowedProviders": [
+      "stub",
+      "manual"
+    ],
+    "requiredGates": [
+      "subscription state overlays runtime policy",
+      "past_due, canceled, disabled, and inactive states block new paid execution",
+      "expensive managed work is blocked before worker spawn or lease claim where possible",
+      "read/export and offboarding paths remain available unless abuse policy requires suspension",
+      "billing webhook ingress requires provider signature verification and replay protection",
+      "self-host mode must not require Stripe or any commercial billing adapter"
+    ],
+    "machineReadablePolicyCodes": [
+      "billing.subscription_required",
+      "billing.subscription_inactive",
+      "billing.provider_unavailable",
+      "quota.prompt_limit_exceeded",
+      "quota.worker_limit_exceeded",
+      "quota.gateway_delivery_limit_exceeded"
+    ]
+  },
+  "byokSecurityContract": {
+    "plaintextReadbackAllowed": false,
+    "workerRevealOnly": true,
+    "runtimeInjection": "provider-options-only",
+    "requiredRedactionSurfaces": [
+      "HTTP read payloads",
+      "audit exports",
+      "logs",
+      "diagnostics bundles",
+      "launch reports",
+      "renderer state",
+      "Desktop cloud cache",
+      "Gateway logs",
+      "SSE events",
+      "billing payloads"
+    ],
+    "statusOnlyFields": [
+      "provider",
+      "last4",
+      "fingerprint",
+      "status",
+      "health",
+      "lastValidatedAt",
+      "validationSource"
+    ]
+  },
+  "supportBundleContract": {
+    "allowedFields": [
+      "app version, build id, commit, and feature flags",
+      "surface and workspace kind",
+      "redacted org id, session id, workflow id, run id, artifact id, request id, and delivery id",
+      "status and reason code",
+      "sanitized error summaries",
+      "timing, retry, reconnect, queue depth, projection lag, quota, and worker heartbeat summaries",
+      "BYOK provider id and status metadata without plaintext",
+      "billing plan key, subscription status, and entitlement verdict without provider customer data",
+      "gateway provider kind, delivery status, and dead-letter counts without channel secrets"
+    ],
+    "forbiddenFields": [
+      "raw BYOK keys",
+      "OAuth refresh or access tokens",
+      "Desktop, Gateway, API, cookie, internal, or operator tokens",
+      "MCP secrets",
+      "channel bot tokens or signing secrets",
+      "database URLs",
+      "signed object-store URLs",
+      "full chat transcript bodies unless explicitly attached by the user",
+      "local file contents",
+      "unredacted local home-directory paths",
+      "customer names, emails, phone numbers, or channel handles in public evidence"
+    ],
+    "retentionDefault": "private operations evidence only; keep public repo templates generic"
+  },
+  "launchPackageContract": {
+    "requiredPublicArtifacts": [
+      "docs/runbooks/managed-byok-saas.md",
+      "docs/runbooks/managed-byok-saas-boundary.md",
+      "docs/runbooks/private-beta-launch.md",
+      "docs/runbooks/private-beta-support.md",
+      "deploy/private-beta/managed-byok-readiness-contract.template.json",
+      "deploy/private-beta/hosted-byok.config.example.json",
+      "deploy/private-beta/self-host-oss.config.example.json",
+      "deploy/private-beta/private-beta-plans.json",
+      "deploy/private-beta/private-beta-launch-profile.template.json",
+      "deploy/private-beta/design-partner-onboarding.template.md",
+      "deploy/private-beta/go-no-go-report.template.md"
+    ],
+    "requiredValidationCommands": [
+      "pnpm deploy:private-beta:validate",
+      "pnpm deploy:validate",
+      "pnpm deploy:launch:validate",
+      "pnpm ops:validate",
+      "pnpm test",
+      "pnpm typecheck",
+      "pnpm lint",
+      "pnpm docs:build",
+      "git diff --check"
+    ]
+  }
+}

@@ -79,6 +79,19 @@ The public repo keeps the evidence shape only.
 - [ ] Tokens are show-once, scoped, expiring by default, and revocable.
 - [ ] No real project ids, customer names, domains, prices, provider keys,
       billing ids, or cloud account ids are copied into public repo artifacts.
+- [ ] Public/private boundary was checked against
+      `deploy/private-beta/managed-byok-readiness-contract.template.json`.
+- [ ] Support bundle sample follows the allowed/forbidden diagnostics contract.
+- [ ] Onboarding failures preserve machine-readable status and reason codes.
+
+## Public/Private Boundary Evidence
+
+- Public template validation:
+- Private ops evidence location:
+- Redaction reviewer:
+- Public repo scanner result:
+- Support bundle redaction proof:
+- Onboarding status/reason-code sample:
 
 ## Known Risks And Mitigations
 

@@ -135,6 +135,7 @@ nav:
       - Backup and Restore: runbooks/backup-restore.md
       - Restore Drill Report: runbooks/restore-drill-report.md
       - Managed BYOK SaaS: runbooks/managed-byok-saas.md
+      - Managed BYOK Boundary: runbooks/managed-byok-saas-boundary.md
       - Branch Protection: branch-protection.md
       - Packaging and Releases: packaging-and-releases.md
       - Release Checklist: release-checklist.md

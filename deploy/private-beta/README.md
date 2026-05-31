@@ -15,6 +15,9 @@ Files:
 - `private-beta-launch-profile.template.json`: launch-profile template covering
   entitlements, allowed provider policy, gateway availability, support owners,
   RPO/RTO, required launch evidence, and go/no-go placeholders.
+- `managed-byok-readiness-contract.template.json`: machine-readable
+  public/private boundary, onboarding status/reason-code, billing, BYOK,
+  diagnostics, and validation contract.
 - `design-partner-onboarding.template.md`: repeatable 10-step onboarding
   evidence template for invite, BYOK, Desktop, Web, Gateway, token lifecycle,
   and redaction proof.
@@ -26,6 +29,9 @@ These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as
 `env:OPEN_COWORK_CLOUD_DATABASE_URL`, and placeholder plan keys. Do not replace
 them with real provider project ids or customer values in the repository.
+The public/private split is defined in
+`docs/runbooks/managed-byok-saas-boundary.md` and enforced by
+`managed-byok-readiness-contract.template.json`.
 
 ## Hosted Managed BYOK
 
