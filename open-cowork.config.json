@@ -13,7 +13,7 @@
     "mode": "none"
   },
   "providers": {
-    "available": ["openrouter", "openai"],
+    "available": ["openrouter", "openai", "github-copilot"],
     "descriptors": {
       "openrouter": {
         "runtime": "builtin",
@@ -62,6 +62,14 @@
             "env": "OPENAI_API_KEY"
           }
         ],
+        "models": []
+      },
+      "github-copilot": {
+        "runtime": "builtin",
+        "runtimeActivation": "config",
+        "name": "GitHub Copilot",
+        "description": "Use GitHub Copilot through OpenCode's native Copilot login flow. No Copilot token is entered in Open Cowork.",
+        "credentials": [],
         "models": []
       }
     },

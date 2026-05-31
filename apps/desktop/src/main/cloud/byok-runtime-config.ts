@@ -78,7 +78,7 @@ async function resolveProviderPolicy(input: {
   const allowedProviderIds = input.policy?.allowedProviderIds
     ? new Set(input.policy.allowedProviderIds.map((id) => id.trim().toLowerCase()).filter(Boolean))
     : null
-  if (allowedProviderIds?.size && !allowedProviderIds.has(input.providerId.trim().toLowerCase())) {
+  if (allowedProviderIds && !allowedProviderIds.has(input.providerId.trim().toLowerCase())) {
     return { allowed: false, code: 'provider_not_allowed' as const }
   }
   const entitlement = await input.policy?.checkEntitlement?.({

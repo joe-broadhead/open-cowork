@@ -79,9 +79,9 @@ instead of Cowork's generated in-app config.
 
 ### Default providers
 
-The upstream build ships with **OpenRouter** as the default provider, plus a
-direct **OpenAI Codex** entry for users who prefer provider-native credentials
-or ChatGPT Plus/Pro login.
+The upstream build ships with **OpenRouter** as the default provider, plus
+direct **OpenAI Codex** and **GitHub Copilot** entries for users who prefer
+OpenCode-native provider login.
 
 OpenRouter routes requests to many model backends (DeepSeek, Anthropic,
 OpenAI, others) through a single credential. The upstream default model is the
@@ -106,10 +106,18 @@ choose OpenAI before the runtime has started, type the model id you want to
 start with; once the runtime is connected, Settings -> Models shows the live
 provider catalog from OpenCode.
 
-The same mechanism works for downstream builds that enable another
-OpenCode-native provider, such as GitHub Copilot: declare the provider in
-config, keep `models: []` when you want OpenCode's catalog, and use the
-OpenCode login card if that provider exposes OAuth/auth methods.
+GitHub Copilot uses OpenCode's native Copilot auth flow. Open Cowork does not
+ask for, store, or broker a Copilot token. Select GitHub Copilot in Settings
+-> Models and use the OpenCode login card; Open Cowork saves the provider
+choice and restarts the managed runtime as needed so OpenCode can expose its
+Copilot catalog and login prompts. If you use GitHub Enterprise, OpenCode may
+ask for the enterprise URL as part of that provider-owned flow.
+
+The same mechanism works for downstream builds that enable another dormant
+OpenCode-native provider: declare the provider in config, keep `models: []`
+when you want OpenCode's catalog, set `runtimeActivation: "config"` only when
+the pinned OpenCode runtime requires a minimal provider config entry, and use
+the OpenCode login card if that provider exposes OAuth/auth methods.
 
 API keys typed into Open Cowork are stored in the app's local settings
 (encrypted via Electron's `safeStorage` when the OS supports it) and are never
@@ -117,8 +125,8 @@ written to the config file or to `process.env`.
 
 ### Using a different provider
 
-If you want a different provider (Anthropic direct, GitHub Copilot, a local
-gateway, an internal proxy), you have two paths:
+If you want a different provider (Anthropic direct, a local gateway, an
+internal proxy), you have two paths:
 
 - **Add a custom provider** by editing `open-cowork.config.json` — see
   [Configuration](configuration.md#providers).

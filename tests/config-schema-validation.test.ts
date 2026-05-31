@@ -549,3 +549,12 @@ test('provider dynamic catalogs require https URLs and valid SHA-256 pins', () =
   }
   assert.doesNotThrow(() => validateResolvedConfig(config, 'provider catalog config'))
 })
+
+test('provider descriptors validate runtime activation modes', () => {
+  const config = cloneConfig()
+  config.providers.descriptors['github-copilot'].runtimeActivation = 'config'
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'provider runtime activation config'))
+
+  config.providers.descriptors['github-copilot'].runtimeActivation = 'always'
+  assert.throws(() => validateResolvedConfig(config, 'provider runtime activation config'), /providers/)
+})

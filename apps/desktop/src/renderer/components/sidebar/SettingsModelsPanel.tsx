@@ -102,6 +102,14 @@ export function ModelsPanel({
     effectiveSmallModel: mainModelId || null,
   })
 
+  const persistBeforeProviderAuth = async () => {
+    const persisted = await onPersistSettings()
+    if (!persisted) return false
+    if (!provider || provider.models.length > 0 || mainModelId.trim()) return true
+    const status = await window.coworkApi.runtime.restart()
+    return status.ready
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {config.auth.enabled ? (
@@ -171,7 +179,7 @@ export function ModelsPanel({
             providerId={provider.id}
             providerName={provider.name}
             connected={provider.connected}
-            onBeforeAuthorize={onPersistSettings}
+            onBeforeAuthorize={persistBeforeProviderAuth}
             onAuthUpdated={async () => {
               const nextConfig = await window.coworkApi.app.config()
               onConfigRefreshed(nextConfig)

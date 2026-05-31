@@ -30,6 +30,21 @@ function reportSetupLoadError(error: unknown, scope: string) {
   }
 }
 
+async function resolveRuntimeProviderDefaultModel(providerId: string | null) {
+  if (!providerId) return ''
+  const providers = await window.coworkApi.provider.list()
+  const provider = providers.find((entry) => entry.id === providerId || entry.name === providerId)
+  const defaultModel = provider?.defaultModel?.trim()
+  if (defaultModel) {
+    const prefix = `${providerId}/`
+    return defaultModel.startsWith(prefix) ? defaultModel.slice(prefix.length) : defaultModel
+  }
+  const models = provider?.models && typeof provider.models === 'object'
+    ? Object.keys(provider.models)
+    : []
+  return models[0] || ''
+}
+
 export function SetupScreen({
   brandName,
   email,
@@ -75,9 +90,14 @@ export function SetupScreen({
         ? settings.selectedProviderId
         : settings.effectiveProviderId || defaultProviderId
       const initialProvider = providers.find((provider) => provider.id === initialProviderId) || null
+      const savedEffectiveModel = settings.effectiveProviderId === initialProviderId ? settings.effectiveModel : null
       const initialModelId = initialProvider?.models.some((model) => model.id === settings.selectedModelId)
         ? settings.selectedModelId || ''
-        : settings.effectiveModel || initialProvider?.defaultModel || defaultModelId || initialProvider?.models[0]?.id || ''
+        : savedEffectiveModel
+          || initialProvider?.defaultModel
+          || (initialProviderId === defaultProviderId ? defaultModelId : '')
+          || initialProvider?.models[0]?.id
+          || ''
       const initialCredentials = initialProviderId
         ? await window.coworkApi.settings.getProviderCredentials(initialProviderId)
         : {}
@@ -107,9 +127,14 @@ export function SetupScreen({
   useEffect(() => {
     if (!selectedProvider) return
     if (!modelId) {
-      setModelId(selectedProvider.defaultModel || selectedProvider.models[0]?.id || defaultModelId || '')
+      setModelId(
+        selectedProvider.defaultModel
+        || selectedProvider.models[0]?.id
+        || (selectedProvider.id === defaultProviderId ? defaultModelId : '')
+        || '',
+      )
     }
-  }, [selectedProvider, modelId, defaultModelId])
+  }, [selectedProvider, modelId, defaultModelId, defaultProviderId])
 
   useEffect(() => {
     if (!providerId || loadedCredentialProviders.has(providerId)) return
@@ -238,7 +263,9 @@ export function SetupScreen({
                 disabled={!providerId || saving}
                 onBeforeAuthorize={async () => persistSelectionAndRestart(undefined, { allowMissingModel: true })}
                 onAuthUpdated={async () => {
-                  const authModelId = selectedProvider.defaultModel || modelId
+                  const authModelId = selectedProvider.defaultModel
+                    || await resolveRuntimeProviderDefaultModel(providerId)
+                    || modelId
                   setModelId(authModelId)
                 }}
               />

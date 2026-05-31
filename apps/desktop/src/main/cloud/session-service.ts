@@ -3855,7 +3855,7 @@ export class CloudSessionService {
     const allowedProviderIds = this.byokPolicy.allowedProviderIds
       ? new Set(this.byokPolicy.allowedProviderIds.map((id) => id.trim().toLowerCase()).filter(Boolean))
       : null
-    if (allowedProviderIds?.size && !allowedProviderIds.has(providerId)) {
+    if (allowedProviderIds && !allowedProviderIds.has(providerId)) {
       throw new CloudServiceError(403, `Provider "${providerId}" is not enabled for BYOK in this cloud profile.`)
     }
     await this.assertBillingAllowed({

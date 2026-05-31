@@ -1057,6 +1057,10 @@
           "type": "string",
           "enum": ["builtin", "custom"]
         },
+        "runtimeActivation": {
+          "type": "string",
+          "enum": ["implicit", "config"]
+        },
         "name": { "type": "string" },
         "description": { "type": "string" },
         "defaultModel": { "type": "string" },

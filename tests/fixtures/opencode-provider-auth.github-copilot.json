@@ -1,0 +1,74 @@
+{
+  "source": "Pinned OpenCode 1.15.12 runtime discovery",
+  "discoveryCommand": "OPENCODE_CONFIG_CONTENT='{\"provider\":{\"github-copilot\":{\"name\":\"GitHub Copilot\"}},\"model\":\"github-copilot\"}' opencode serve --hostname=127.0.0.1 --port=0; curl /provider/auth; curl /provider",
+  "providerId": "github-copilot",
+  "activation": {
+    "required": true,
+    "runtimeConfig": {
+      "provider": {
+        "github-copilot": {
+          "name": "GitHub Copilot"
+        }
+      },
+      "model": "github-copilot"
+    }
+  },
+  "authMethods": [
+    {
+      "type": "oauth",
+      "label": "Login with GitHub Copilot",
+      "prompts": [
+        {
+          "type": "select",
+          "key": "deploymentType",
+          "message": "Select GitHub deployment type",
+          "options": [
+            {
+              "label": "GitHub.com",
+              "value": "github.com",
+              "hint": "Public"
+            },
+            {
+              "label": "GitHub Enterprise",
+              "value": "enterprise",
+              "hint": "Data residency or self-hosted"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "key": "enterpriseUrl",
+          "message": "Enter your GitHub Enterprise URL or domain",
+          "placeholder": "company.ghe.com or https://company.ghe.com",
+          "when": {
+            "key": "deploymentType",
+            "op": "eq",
+            "value": "enterprise"
+          }
+        }
+      ]
+    }
+  ],
+  "models": {
+    "source": "runtime-owned",
+    "hardcodedInOpenCowork": false,
+    "defaultModel": "claude-sonnet-4.6",
+    "discoveredCount": 21,
+    "sampleIds": [
+      "gpt-5-mini",
+      "gpt-4o",
+      "gpt-5.2",
+      "claude-sonnet-4.6",
+      "gpt-5.4",
+      "gemini-3-flash-preview",
+      "gpt-5.5",
+      "claude-opus-4.5"
+    ]
+  },
+  "secretBoundary": {
+    "opencodeOwnsAuth": true,
+    "openCoworkCredentials": [],
+    "rendererReceivesTokens": false,
+    "cloudByokDefault": "blocked"
+  }
+}

@@ -18,12 +18,14 @@ import {
   resolveCloudInternalToken,
   resolveCloudOidcClientSecret,
   resolveCloudPublicBranding,
+  listConfiguredByokProviderIds,
   signHeaderCloudAuthRequest,
   shouldRunCloudScheduler,
   shouldRunCloudWeb,
   shouldRunCloudWorker,
   startCloudApp,
 } from '../apps/desktop/src/main/cloud/app.ts'
+import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
 import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
@@ -112,6 +114,22 @@ class FakeRuntime implements CloudRuntimeAdapter {
     this.closed = true
   }
 }
+
+test('cloud BYOK defaults include only provider descriptors with secret credentials', () => {
+  const appConfig = getAppConfig()
+  const providerIds = new Set(listConfiguredByokProviderIds(appConfig) || [])
+
+  assert.equal(providerIds.has('openrouter'), true)
+  assert.equal(providerIds.has('openai'), true)
+  assert.equal(providerIds.has('github-copilot'), false)
+  assert.deepEqual(listConfiguredByokProviderIds({
+    ...appConfig,
+    providers: {
+      ...appConfig.providers,
+      available: ['github-copilot'],
+    },
+  }), [])
+})
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text()) as Record<string, unknown>

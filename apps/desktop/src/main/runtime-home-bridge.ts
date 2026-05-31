@@ -5,7 +5,7 @@ import { getRuntimeHomeDir } from './runtime-paths.ts'
 
 // Keep OpenCode's HOME sandbox self-contained while still exposing the
 // standard developer-tool config that runtime-invoked commands expect.
-// Deliberately omit any OpenCode / Claude / agent compatibility roots.
+// Deliberately omit any OpenCode / Claude / Copilot / agent compatibility roots.
 const DEFAULT_TOOLING_BRIDGE_ENTRIES = [
   '.gitconfig',
   '.gitignore',
@@ -23,11 +23,14 @@ const DEFAULT_TOOLING_BRIDGE_ENTRIES = [
   '.kube',
   '.config/git',
   '.config/gh',
-  '.config/gh-copilot',
   '.config/gcloud',
   '.config/npm',
   '.config/yarn',
   '.config/pnpm',
+] as const
+
+const SENSITIVE_UNBRIDGED_ENTRIES = [
+  '.config/gh-copilot',
 ] as const
 
 export function getRuntimeHomeToolingBridgeEntries() {
@@ -81,6 +84,10 @@ export function syncRuntimeHomeToolingBridge(options?: {
   const realHome = options?.realHome || homedir()
   const entries = options?.entries || getRuntimeHomeToolingBridgeEntries()
   const enabled = options?.enabled !== false
+
+  for (const relativePath of SENSITIVE_UNBRIDGED_ENTRIES) {
+    removeLinkedTargetIfPresent(join(runtimeHome, relativePath), join(realHome, relativePath))
+  }
 
   for (const relativePath of entries) {
     const source = join(realHome, relativePath)

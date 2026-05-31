@@ -142,6 +142,7 @@ export type ConfiguredModelInfo = {
 
 export type ConfiguredProviderDescriptor = {
   runtime?: 'builtin' | 'custom'
+  runtimeActivation?: 'implicit' | 'config'
   name: string
   description: string
   defaultModel?: string
