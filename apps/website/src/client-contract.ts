@@ -1,5 +1,6 @@
 import type { PublicBrandingConfig } from '@open-cowork/shared'
 import type { CloudWebRoute, CloudWebRouteId } from './app-shell.ts'
+import type { CloudWebRouteApiMatrixEntry } from './route-api-matrix.ts'
 
 export type CloudWebEndpointId =
   | 'authMe'
@@ -13,6 +14,8 @@ export type CloudWebEndpointId =
   | 'usageEvents'
   | 'usageSummary'
   | 'diagnostics'
+  | 'runtimeStatus'
+  | 'workerHeartbeats'
   | 'sessions'
   | 'sessionView'
   | 'sessionEvents'
@@ -38,6 +41,9 @@ export type CloudWebEndpointId =
   | 'adminMemberInvite'
   | 'adminMemberUpdate'
   | 'adminAudit'
+  | 'adminWorkerPools'
+  | 'adminWorkers'
+  | 'adminWorkerHeartbeats'
   | 'channelDeliveries'
   | 'channelDeliveryRetry'
   | 'channelDeliveryDeadLetter'
@@ -57,6 +63,7 @@ export type CloudWebClientBootstrap = {
   routes: CloudWebRoute[]
   defaultRoute: string
   api: CloudWebEndpoint[]
+  routeMatrix: CloudWebRouteApiMatrixEntry[]
   sessionEventTypes: string[]
 }
 
@@ -92,11 +99,15 @@ export type CloudWebClientStateContract = {
   usageSummary: unknown | null
   deliveries: unknown[]
   diagnostics: unknown | null
+  diagnosticsError: string | null
   admin: {
     policy: unknown | null
     members: unknown[]
+    workerPools: unknown[]
+    workers: unknown[]
     auditEvents: unknown[]
     error: string | null
+    workerError: string | null
   }
   selectedWorkflowId: string | null
   workspaceEvents: {
@@ -195,6 +206,18 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'diagnostics',
     method: 'GET',
     path: '/api/diagnostics',
+    csrf: false,
+  },
+  {
+    id: 'runtimeStatus',
+    method: 'GET',
+    path: '/api/runtime/status',
+    csrf: false,
+  },
+  {
+    id: 'workerHeartbeats',
+    method: 'GET',
+    path: '/api/workers/heartbeats',
     csrf: false,
   },
   {
@@ -345,6 +368,24 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'adminAudit',
     method: 'GET',
     path: '/api/admin/audit?limit=100',
+    csrf: false,
+  },
+  {
+    id: 'adminWorkerPools',
+    method: 'GET',
+    path: '/api/admin/worker-pools?limit=100',
+    csrf: false,
+  },
+  {
+    id: 'adminWorkers',
+    method: 'GET',
+    path: '/api/admin/workers?limit=100',
+    csrf: false,
+  },
+  {
+    id: 'adminWorkerHeartbeats',
+    method: 'GET',
+    path: '/api/admin/workers/:workerId/heartbeats?limit=50',
     csrf: false,
   },
 ]

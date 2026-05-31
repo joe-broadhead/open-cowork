@@ -198,6 +198,16 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     deliveries: [
       { deliveryId: 'delivery-1', provider: 'telegram', channelBindingId: 'binding-1', status: 'failed', eventType: 'session.completed', attemptCount: 1, lastError: '[redacted]', nextAttemptAt: iso(3) },
     ],
+    workerPools: [
+      { poolId: 'pool-1', name: 'Primary worker pool', mode: 'self_hosted', status: 'active', region: 'test-region', maxWorkers: 3, maxConcurrentWork: 6, updatedAt: iso(4) },
+    ],
+    workers: [
+      { workerId: 'worker-1', poolId: 'pool-1', displayName: 'Worker one', status: 'active', version: 'test', currentLoad: 1, lastHeartbeatAt: iso(5), lastErrorCode: null, lastErrorSummary: null },
+      { workerId: 'worker-2', poolId: 'pool-1', displayName: 'Worker two', status: 'paused', version: 'test', currentLoad: 0, lastHeartbeatAt: null, lastErrorCode: null, lastErrorSummary: null },
+    ],
+    workerHeartbeats: [
+      { workerId: 'worker-1', poolId: 'pool-1', version: 'test', currentLoad: 1, activeWorkIds: ['session-1'], receivedAt: iso(5) },
+    ],
     workflows: [
       { id: 'workflow-1', title: 'Daily review', instructions: 'Review changed work.', agentName: 'build', status: 'active', latestRunStatus: 'completed', triggers: [{ type: 'manual', enabled: true }], updatedAt: iso(5) },
     ],
@@ -336,6 +346,13 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     if (request.method === 'GET' && request.pathname === '/api/admin/audit') {
       return jsonResponse({ events: [{ eventId: 'audit-1', eventType: 'byok.updated', actorType: 'user', actorId: 'user-1', targetType: 'byok', targetId: 'anthropic', metadata: { token: '[redacted]' }, createdAt: iso(8) }] })
+    }
+    if (request.method === 'GET' && request.pathname === '/api/admin/worker-pools') return jsonResponse({ pools: state.workerPools })
+    if (request.method === 'GET' && request.pathname === '/api/admin/workers') return jsonResponse({ workers: state.workers })
+    const workerHeartbeatsMatch = request.pathname.match(/^\/api\/admin\/workers\/([^/]+)\/heartbeats$/)
+    if (request.method === 'GET' && workerHeartbeatsMatch) {
+      const workerId = decodeURIComponent(workerHeartbeatsMatch[1])
+      return jsonResponse({ heartbeats: state.workerHeartbeats.filter((heartbeat: any) => heartbeat.workerId === workerId) })
     }
     if (request.method === 'GET' && request.pathname === '/api/channels/agents') return jsonResponse({ agents: state.agents })
     if (request.method === 'POST' && request.pathname === '/api/channels/agents') {

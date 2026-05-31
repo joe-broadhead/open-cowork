@@ -5,6 +5,7 @@ import { DEFAULT_WEBSITE_PUBLIC_BRANDING, brandLinksMarkup, brandLogoMarkup, res
 import { cloudWebsiteClientScript } from './client-script.ts'
 import { escapeHtml, jsonScript } from './html-utils.ts'
 import { cloudWebsiteStyles } from './styles.ts'
+import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
 export { cloudWebsiteClientScript } from './client-script.ts'
@@ -49,6 +50,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     routes: CLOUD_WEB_ROUTES,
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
     api: CLOUD_WEB_CLIENT_ENDPOINTS,
+    routeMatrix: CLOUD_WEB_ROUTE_API_MATRIX,
     sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
@@ -438,6 +440,12 @@ ${cloudWebsiteStyles(branding)}
               <h3>Runtime and gateway</h3>
               <div class="list" id="admin-runtime-policy">
                 <p class="empty">Runtime policy loads after sign-in.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Worker health</h3>
+              <div class="list" id="admin-worker-summary">
+                <p class="empty">Worker summaries load after sign-in.</p>
               </div>
             </div>
           </div>

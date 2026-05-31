@@ -152,7 +152,8 @@ function renderDiagnostics() {
   if (!diagnostics) {
     const empty = document.createElement('p');
     empty.className = 'empty';
-    empty.textContent = adminLocked() ? 'Diagnostics require admin or operator privileges.' : 'Diagnostics have not been requested.';
+    empty.textContent = state.diagnosticsError
+      || (adminLocked() ? 'Diagnostics require admin or operator privileges.' : 'Diagnostics have not been requested.');
     health.appendChild(empty);
     return;
   }

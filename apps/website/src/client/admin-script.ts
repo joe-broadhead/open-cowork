@@ -118,6 +118,7 @@ function renderAdminPolicy() {
   const features = qs('#admin-policy-features');
   const project = qs('#admin-project-policy');
   const runtime = qs('#admin-runtime-policy');
+  const workerSummary = qs('#admin-worker-summary');
   const policy = state.admin.policy;
   if (overview) {
     removeChildren(overview);
@@ -216,6 +217,56 @@ function renderAdminPolicy() {
       row.appendChild(strong);
       row.appendChild(span);
       runtime.appendChild(row);
+    }
+  }
+  if (workerSummary) {
+    removeChildren(workerSummary);
+    if (state.admin.workerError) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = state.admin.workerError;
+      workerSummary.appendChild(empty);
+    }
+    const pools = normalizeList(state.admin.workerPools);
+    const workers = normalizeList(state.admin.workers);
+    const activeWorkers = workers.filter((worker) => worker.status === 'active').length;
+    const totalLoad = workers.reduce((total, worker) => total + tokenNumber(worker.currentLoad), 0);
+    const summary = document.createElement('div');
+    summary.className = 'row compact';
+    const strong = document.createElement('strong');
+    strong.textContent = 'Org worker capacity';
+    const span = document.createElement('span');
+    span.textContent = pools.length + ' pool(s), ' + activeWorkers + ' active worker(s), load ' + totalLoad;
+    summary.appendChild(strong);
+    summary.appendChild(span);
+    workerSummary.appendChild(summary);
+    if (!pools.length && !workers.length && !state.admin.workerError) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No worker pools loaded.';
+      workerSummary.appendChild(empty);
+    }
+    for (const pool of pools.slice(0, 4)) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const label = document.createElement('strong');
+      label.textContent = pool.name || pool.poolId;
+      const meta = document.createElement('span');
+      meta.textContent = [pool.mode, pool.status, pool.region].filter(Boolean).join(' - ') || 'pool';
+      row.appendChild(label);
+      row.appendChild(meta);
+      workerSummary.appendChild(row);
+    }
+    for (const worker of workers.slice(0, 6)) {
+      const row = document.createElement('div');
+      row.className = 'row compact';
+      const label = document.createElement('strong');
+      label.textContent = worker.displayName || worker.workerId;
+      const meta = document.createElement('span');
+      meta.textContent = (worker.status || 'unknown') + ' - load ' + tokenNumber(worker.currentLoad) + ' - heartbeat ' + formatDate(worker.lastHeartbeatAt);
+      row.appendChild(label);
+      row.appendChild(meta);
+      workerSummary.appendChild(row);
     }
   }
 }

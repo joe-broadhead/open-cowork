@@ -136,6 +136,10 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
 
     assert.match(harness.document.querySelector('#billing-summary')?.textContent || '', /active/)
     assert.match(harness.document.querySelector('#usage-quota-list')?.textContent || '', /Prompts\/hour/)
+    assert.match(harness.document.querySelector('#admin-worker-summary')?.textContent || '', /Primary worker pool/)
+    assert.match(harness.document.querySelector('#admin-worker-summary')?.textContent || '', /Worker one/)
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/admin/worker-pools?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/admin/workers?limit=100'))
 
     harness.clickText('#diagnostics button', 'Prepare bundle')
     await waitFor(() => assert.match(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /secrets-redacted/))

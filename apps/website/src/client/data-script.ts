@@ -64,8 +64,11 @@ async function loadAdminSurfaces() {
     state.admin = {
       policy,
       members: [],
+      workerPools: [],
+      workers: [],
       auditEvents: [],
       error: adminError,
+      workerError: adminError,
     };
     renderAdminPolicy();
     renderMembers();
@@ -73,7 +76,11 @@ async function loadAdminSurfaces() {
     renderByok();
     return;
   }
-  const [policy, members, auditEvents] = await Promise.all([
+  let workerError = null;
+  const setWorkerError = (error) => {
+    if (error && !workerError) workerError = error;
+  };
+  const [policy, members, auditEvents, workerPools, workers] = await Promise.all([
     optionalSurfaceLoad(
       () => api(endpoint('adminPolicy', '/api/admin/policy')).then((body) => body.policy || null),
       null,
@@ -89,11 +96,24 @@ async function loadAdminSurfaces() {
       [],
       setAdminError,
     ),
+    optionalSurfaceLoad(
+      () => api(endpoint('adminWorkerPools', '/api/admin/worker-pools?limit=100')).then((body) => body.pools || []),
+      [],
+      setWorkerError,
+    ),
+    optionalSurfaceLoad(
+      () => api(endpoint('adminWorkers', '/api/admin/workers?limit=100')).then((body) => body.workers || []),
+      [],
+      setWorkerError,
+    ),
   ]);
   state.admin.policy = policy;
   state.admin.members = normalizeList(members);
+  state.admin.workerPools = normalizeList(workerPools);
+  state.admin.workers = normalizeList(workers);
   state.admin.auditEvents = normalizeList(auditEvents);
   state.admin.error = adminError;
+  state.admin.workerError = workerError;
   renderMembers();
   renderAdminPolicy();
   renderAudit();
@@ -113,10 +133,12 @@ async function loadGatewayOps() {
 }
 
 async function loadDiagnostics() {
+  state.diagnosticsError = null;
   state.diagnostics = await optionalSurfaceLoad(
     () => api(endpoint('diagnostics', '/api/diagnostics')),
     null,
     (error) => {
+      state.diagnosticsError = error;
       if (error) setStatus(error, 'error');
     },
   );

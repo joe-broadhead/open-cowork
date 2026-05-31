@@ -16,6 +16,7 @@ const state = {
   usageSummary: null,
   deliveries: [],
   diagnostics: null,
+  diagnosticsError: null,
   sessions: [],
   sessionViews: {},
   selectedSessionId: null,
@@ -62,8 +63,11 @@ const state = {
   admin: {
     policy: null,
     members: [],
+    workerPools: [],
+    workers: [],
     auditEvents: [],
     error: null,
+    workerError: null,
   },
   memberFilter: '',
   auditFilter: '',
@@ -258,11 +262,15 @@ function renderSignedOut() {
   state.usageSummary = null;
   state.deliveries = [];
   state.diagnostics = null;
+  state.diagnosticsError = null;
   state.admin = {
     policy: null,
     members: [],
+    workerPools: [],
+    workers: [],
     auditEvents: [],
     error: null,
+    workerError: null,
   };
   state.memberFilter = '';
   state.auditFilter = '';

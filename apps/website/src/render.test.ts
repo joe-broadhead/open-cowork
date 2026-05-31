@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } from './app-shell.ts'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { CLOUD_WEB_ROUTES, CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientStateContract } from './client-contract.ts'
+import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { cloudWebsiteClientScript, cloudWebsiteHtml } from './render.ts'
 import { canManageOrg } from './roles.ts'
 import {
@@ -60,10 +63,37 @@ test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(findCloudWebRoute('usage')?.requiresAdmin, false)
 })
 
+test('cloud website route/API matrix covers every route and real endpoint id', () => {
+  const routes = new Map(CLOUD_WEB_ROUTES.map((route) => [route.id, route]))
+  const endpoints = new Set(CLOUD_WEB_CLIENT_ENDPOINTS.map((endpoint) => endpoint.id))
+  assert.deepEqual(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId).sort(), CLOUD_WEB_ROUTES.map((route) => route.id).sort())
+  for (const entry of CLOUD_WEB_ROUTE_API_MATRIX) {
+    const route = routes.get(entry.routeId)
+    assert.ok(route, `route exists for matrix entry ${entry.routeId}`)
+    assert.equal(entry.surface, route.surface)
+    assert.ok(entry.endpointIds.length > 0, `${entry.routeId} lists backing endpoint ids`)
+    assert.ok(entry.states.loading && entry.states.empty && entry.states.error, `${entry.routeId} defines loading/empty/error states`)
+    assert.ok(entry.disabledBehavior, `${entry.routeId} defines disabled behavior`)
+    assert.ok(entry.pagination, `${entry.routeId} defines pagination/cursor behavior`)
+    assert.ok(entry.redaction, `${entry.routeId} defines redaction behavior`)
+    assert.ok(entry.tests.length > 0, `${entry.routeId} lists test coverage`)
+    for (const endpointId of entry.endpointIds) {
+      assert.ok(endpoints.has(endpointId), `${entry.routeId} references known endpoint ${endpointId}`)
+    }
+  }
+
+  const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
+  assert.match(doc, /Route\/API Matrix/)
+  for (const route of CLOUD_WEB_ROUTES) {
+    assert.match(doc, new RegExp('`' + route.id + '`'), `Cloud Web Workbench docs list ${route.id}`)
+  }
+})
+
 test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'config')?.path, '/api/config')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workspace')?.path, '/api/workspace')
   assert.match(html, /"api":/)
+  assert.match(html, /"routeMatrix":/)
   assert.match(cloudWebsiteClientScript(), /endpoint\(id, fallback\)/)
   const stateContract: CloudWebClientStateContract = {
     authStatus: 'loading',
@@ -94,11 +124,15 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
     usageSummary: null,
     deliveries: [],
     diagnostics: null,
+    diagnosticsError: null,
     admin: {
       policy: null,
       members: [],
+      workerPools: [],
+      workers: [],
       auditEvents: [],
       error: null,
+      workerError: null,
     },
     selectedWorkflowId: null,
     workspaceEvents: {
@@ -130,8 +164,13 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberInvite')?.method, 'POST')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberUpdate')?.path, '/api/admin/members/:accountId/update')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminAudit')?.path, '/api/admin/audit?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminWorkerPools')?.path, '/api/admin/worker-pools?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminWorkers')?.path, '/api/admin/workers?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminWorkerHeartbeats')?.path, '/api/admin/workers/:workerId/heartbeats?limit=50')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'usageSummary')?.path, '/api/usage/summary?limit=100')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'diagnostics')?.path, '/api/diagnostics')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'runtimeStatus')?.path, '/api/runtime/status')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workerHeartbeats')?.path, '/api/workers/heartbeats')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveries')?.path, '/api/channels/deliveries?limit=50')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryRetry')?.path, '/api/channels/deliveries/:deliveryId/retry')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryDeadLetter')?.path, '/api/channels/deliveries/:deliveryId/dead-letter')
@@ -147,6 +186,7 @@ test('cloud website keeps existing admin dashboard surfaces available', () => {
   assert.match(html, /Recent totals/)
   assert.match(html, /id="billing-plan-select"/)
   assert.match(html, /id="diagnostics-health"/)
+  assert.match(html, /id="admin-worker-summary"/)
   assert.match(html, /Billing/)
   assert.match(html, /Usage/)
 })
@@ -267,6 +307,7 @@ test('cloud website binds actions through the client script', () => {
   assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
   assert.match(cloudWebsiteClientScript(), /renderMembers/)
   assert.match(cloudWebsiteClientScript(), /renderAdminPolicy/)
+  assert.match(cloudWebsiteClientScript(), /adminWorkerPools/)
   assert.match(cloudWebsiteClientScript(), /renderAudit/)
   assert.match(cloudWebsiteClientScript(), /inviteMember/)
   assert.match(cloudWebsiteClientScript(), /updateMember/)
