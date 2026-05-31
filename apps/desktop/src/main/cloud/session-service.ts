@@ -599,7 +599,19 @@ function toWorkflowSummary(record: CloudWorkflowRecord) {
 }
 
 function toWorkflowRun(record: CloudWorkflowRunRecord): WorkflowRun {
-  const { tenantId: _tenantId, userId: _userId, ...run } = record
+  const {
+    tenantId: _tenantId,
+    userId: _userId,
+    claimedBy: _claimedBy,
+    claimToken: _claimToken,
+    claimExpiresAt: _claimExpiresAt,
+    attemptCount: _attemptCount,
+    idempotencyKey: _idempotencyKey,
+    checkpointVersion: _checkpointVersion,
+    lastErrorCode: _lastErrorCode,
+    lastErrorSummary: _lastErrorSummary,
+    ...run
+  } = record
   return run
 }
 
@@ -2475,10 +2487,11 @@ export class CloudSessionService {
     return this.startWorkflowRun(workflow, run)
   }
 
-  async claimAndStartDueWorkflow(now = new Date()): Promise<CloudWorkflowStartResult | null> {
+  async claimAndStartDueWorkflow(now = new Date(), claimedBy?: string | null): Promise<CloudWorkflowStartResult | null> {
     this.assertWorkflowsEnabled()
     const claimed = await this.store.claimDueWorkflowRun({
       runId: this.ids.randomUUID(),
+      claimedBy,
       now,
     })
     if (!claimed) return null
@@ -3193,7 +3206,7 @@ export class CloudSessionService {
         payload: { commandId: command.commandId, message },
         leaseToken: lease.leaseToken,
       })
-      await this.failWorkflowRunForSession(command.tenantId, command.sessionId, message)
+      await this.failWorkflowRunForSession(command.tenantId, command.sessionId, message, lease.leaseToken)
       await this.store.failSessionCommand(lease, command.commandId, message)
       throw error
     }
@@ -3237,6 +3250,7 @@ export class CloudSessionService {
       tenantId: input.tenantId,
       sessionId: input.sessionId,
       status,
+      leaseToken: input.leaseToken,
     })
     return this.appendProjectedEvent({
       tenantId: input.tenantId,
@@ -3255,6 +3269,7 @@ export class CloudSessionService {
       tenantId: command.tenantId,
       sessionId: command.sessionId,
       status: 'running',
+      leaseToken: lease.leaseToken,
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
@@ -3281,6 +3296,7 @@ export class CloudSessionService {
       command.tenantId,
       command.sessionId,
       this.workflowSummaryFromRuntimeEvents(result?.events || []),
+      lease.leaseToken,
     )
   }
 
@@ -3296,6 +3312,7 @@ export class CloudSessionService {
       tenantId: command.tenantId,
       sessionId: command.sessionId,
       status: 'idle',
+      leaseToken: lease.leaseToken,
     })
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
@@ -3559,6 +3576,7 @@ export class CloudSessionService {
       sessionId: session.sessionId,
       opencodeSessionId: runtimeSession.id,
       title: session.title || runtimeSession.title,
+      leaseToken: lease.leaseToken,
       updatedAt: new Date(runtimeSession.updatedAt),
     })
     await this.appendProjectedEvent({
@@ -3661,6 +3679,7 @@ export class CloudSessionService {
       workflowId: workflow.id,
       runId: run.id,
       sessionId: session.sessionId,
+      claimToken: run.claimToken,
     })
     const command = await this.store.enqueueSessionCommand({
       commandId: this.ids.randomUUID(),
@@ -3695,7 +3714,12 @@ export class CloudSessionService {
     return content ? content.slice(0, 500) : null
   }
 
-  private async completeWorkflowRunForSession(tenantId: string, sessionId: string, summary: string | null) {
+  private async completeWorkflowRunForSession(
+    tenantId: string,
+    sessionId: string,
+    summary: string | null,
+    leaseToken?: string | null,
+  ) {
     const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
     if (!run || workflowRunTerminal(run.status)) return
     const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
@@ -3709,6 +3733,7 @@ export class CloudSessionService {
       summary,
       nextStatus,
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
+      leaseToken,
       finishedAt: now,
     })
     await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {
@@ -3721,7 +3746,12 @@ export class CloudSessionService {
     })
   }
 
-  private async failWorkflowRunForSession(tenantId: string, sessionId: string, error: string) {
+  private async failWorkflowRunForSession(
+    tenantId: string,
+    sessionId: string,
+    error: string,
+    leaseToken?: string | null,
+  ) {
     const run = await this.store.getWorkflowRunBySession(tenantId, sessionId)
     if (!run || workflowRunTerminal(run.status)) return
     const workflow = await this.store.getWorkflowForTenant(tenantId, run.workflowId)
@@ -3735,6 +3765,7 @@ export class CloudSessionService {
       error,
       nextStatus,
       nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
+      leaseToken,
       finishedAt: now,
     })
     await this.enqueueWorkflowChannelDeliveries(tenantId, sessionId, {

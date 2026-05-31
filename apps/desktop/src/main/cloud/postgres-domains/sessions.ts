@@ -91,6 +91,10 @@ export function commandFromRow(row: QueryRow): SessionCommandRecord {
     status: String(row.status) as ControlPlaneCommandStatus,
     claimedBy: stringOrNull(row.claimed_by),
     claimedLeaseToken: stringOrNull(row.claimed_lease_token),
+    attemptCount: numberValue(row.attempt_count),
+    availableAt: row.available_at ? iso(row.available_at) : null,
+    lastErrorCode: stringOrNull(row.last_error_code),
+    lastErrorSummary: stringOrNull(row.last_error_summary),
     ackedAt: row.acked_at ? iso(row.acked_at) : null,
     error: stringOrNull(row.error),
   }

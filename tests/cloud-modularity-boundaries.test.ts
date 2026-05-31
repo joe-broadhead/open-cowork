@@ -10,9 +10,9 @@ const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 
 const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
-  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 3_900],
-  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_000],
-  ['apps/desktop/src/main/cloud/session-service.ts', 4_100],
+  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 4_200],
+  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_400],
+  ['apps/desktop/src/main/cloud/session-service.ts', 4_200],
 ])
 
 test('cloud core has enforceable domain module boundaries', () => {

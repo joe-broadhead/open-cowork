@@ -36,6 +36,7 @@
         { "expr": "max(open_cowork_cloud_command_oldest_age_ms)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_lease_claims_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_lease_renewals_total[5m])) by (status)" },
+        { "expr": "sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_stale_owner_rejections_total[5m]))" }
       ]
     },
@@ -44,6 +45,7 @@
       "title": "Scheduler claims and failures",
       "targets": [
         { "expr": "sum(rate(open_cowork_cloud_scheduler_claims_total[5m]))" },
+        { "expr": "sum(rate(open_cowork_cloud_scheduler_expired_claims_reaped_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_scheduler_failures_total[5m]))" }
       ]
     },

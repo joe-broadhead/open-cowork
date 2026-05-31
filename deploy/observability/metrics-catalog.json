@@ -51,6 +51,12 @@
       "description": "Successful worker lease renewals."
     },
     {
+      "name": "open_cowork_cloud_worker_expired_leases_reaped_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Expired session worker leases recovered by the managed-work reaper."
+    },
+    {
       "name": "open_cowork_cloud_worker_stale_owner_rejections_total",
       "type": "counter",
       "owner": "cloud-worker",
@@ -67,6 +73,12 @@
       "type": "counter",
       "owner": "cloud-scheduler",
       "description": "Due workflow claims by scheduler."
+    },
+    {
+      "name": "open_cowork_cloud_scheduler_expired_claims_reaped_total",
+      "type": "counter",
+      "owner": "cloud-scheduler",
+      "description": "Expired queued workflow start claims recovered by the scheduler reaper."
     },
     {
       "name": "open_cowork_cloud_scheduler_failures_total",

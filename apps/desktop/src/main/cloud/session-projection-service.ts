@@ -89,6 +89,7 @@ export class CloudSessionProjectionService {
       sessionId: input.sessionId,
       type: input.type,
       payload: input.payload || {},
+      leaseToken: input.leaseToken,
       createdAt: input.createdAt,
     })
     const session = await this.store.getSessionForTenant(input.tenantId, input.sessionId)

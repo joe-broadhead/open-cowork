@@ -31,8 +31,17 @@ export class CloudScheduler {
       activeSessionIds,
       now,
     })
+    const reaped = await this.store.reapExpiredWorkflowClaims({ now })
+    if (reaped.length > 0) {
+      await recordCloudSchedulerMetric(this.observability, {
+        name: 'open_cowork_cloud_scheduler_expired_claims_reaped_total',
+        value: reaped.length,
+        schedulerId: this.schedulerId,
+        status: 'ok',
+      })
+    }
     while (true) {
-      const started = await this.service.claimAndStartDueWorkflow(now)
+      const started = await this.service.claimAndStartDueWorkflow(now, this.schedulerId)
       if (!started) break
       claimed += 1
       activeSessionIds.push(started.sessionId)

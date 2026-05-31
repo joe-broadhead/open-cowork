@@ -55,5 +55,13 @@ export function workflowRunFromRow(row: QueryRow): CloudWorkflowRunRecord {
     createdAt: iso(row.created_at),
     startedAt: isoOrNull(row.started_at),
     finishedAt: isoOrNull(row.finished_at),
+    claimedBy: stringOrNull(row.claimed_by),
+    claimToken: stringOrNull(row.claim_token),
+    claimExpiresAt: isoOrNull(row.claim_expires_at),
+    attemptCount: row.attempt_count === undefined ? 0 : Number(row.attempt_count),
+    idempotencyKey: stringOrNull(row.idempotency_key),
+    checkpointVersion: row.checkpoint_version === undefined ? 0 : Number(row.checkpoint_version),
+    lastErrorCode: stringOrNull(row.last_error_code),
+    lastErrorSummary: stringOrNull(row.last_error_summary),
   }
 }

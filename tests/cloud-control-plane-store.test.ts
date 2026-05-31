@@ -291,7 +291,7 @@ test('cloud control plane fences projection writes by worker lease token', () =>
     'tenant-1',
     'session-1',
     'worker-a',
-    new Date('2026-01-01T00:00:00.000Z'),
+    new Date('2030-01-01T00:00:00.000Z'),
     1000,
   )
   assert.ok(firstLease)
@@ -307,7 +307,7 @@ test('cloud control plane fences projection writes by worker lease token', () =>
     'tenant-1',
     'session-1',
     'worker-b',
-    new Date('2026-01-01T00:00:02.000Z'),
+    new Date('2030-01-01T00:00:02.000Z'),
     1000,
   )
   assert.ok(secondLease)
@@ -379,6 +379,93 @@ test('cloud control plane commands are idempotent and owned by the current lease
   assert.equal(store.ackSessionCommand(takeoverLease, 'cmd-2').status, 'acked')
 })
 
+test('cloud control plane fences status, runtime binding, and event writes by worker lease token', () => {
+  const store = seededStore()
+  const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date(), 1)
+  assert.ok(firstLease)
+  const secondLease = store.claimSessionLease(
+    'tenant-1',
+    'session-1',
+    'worker-b',
+    new Date(Date.now() + 2),
+    30_000,
+  )
+  assert.ok(secondLease)
+
+  assert.throws(() => store.updateSessionStatus({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    status: 'running',
+    leaseToken: firstLease.leaseToken,
+  }), /stale/)
+  assert.throws(() => store.bindSessionRuntime({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    opencodeSessionId: 'oc-stale',
+    leaseToken: firstLease.leaseToken,
+  }), /stale/)
+  assert.throws(() => store.appendSessionEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    type: 'assistant.message',
+    payload: { messageId: 'm-stale', content: 'stale' },
+    leaseToken: firstLease.leaseToken,
+  }), /stale/)
+
+  assert.equal(store.updateSessionStatus({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    status: 'running',
+    leaseToken: secondLease.leaseToken,
+  }).status, 'running')
+  assert.equal(store.bindSessionRuntime({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    opencodeSessionId: 'oc-current',
+    leaseToken: secondLease.leaseToken,
+  }).opencodeSessionId, 'oc-current')
+  assert.equal(store.appendSessionEvent({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    type: 'assistant.message',
+    payload: { messageId: 'm-current', content: 'current' },
+    leaseToken: secondLease.leaseToken,
+  }).sequence, 1)
+})
+
+test('cloud control plane reaps expired session leases with bounded retries', async () => {
+  const store = seededStore()
+  store.enqueueSessionCommand({
+    commandId: 'cmd-retry',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+    payload: { text: 'retry me' },
+  })
+
+  const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date(), 20)
+  assert.ok(firstLease)
+  assert.equal(store.claimNextSessionCommand(firstLease)?.attemptCount, 1)
+  await new Promise((resolve) => setTimeout(resolve, 30))
+
+  const retried = store.reapExpiredSessionLeases({ maxCommandAttempts: 2 })
+  assert.equal(retried.length, 1)
+  assert.equal(retried[0]?.action, 'retried')
+  assert.deepEqual(retried[0]?.retriedCommandIds, ['cmd-retry'])
+
+  const secondLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-b', new Date(), 20)
+  assert.ok(secondLease)
+  assert.equal(store.claimNextSessionCommand(secondLease)?.attemptCount, 2)
+  await new Promise((resolve) => setTimeout(resolve, 30))
+
+  const failed = store.reapExpiredSessionLeases({ maxCommandAttempts: 2 })
+  assert.equal(failed.length, 1)
+  assert.equal(failed[0]?.action, 'failed')
+  assert.deepEqual(failed[0]?.failedCommandIds, ['cmd-retry'])
+  assert.equal(store.getSessionForTenant('tenant-1', 'session-1')?.status, 'errored')
+})
+
 test('cloud control plane claims only runnable sessions for workers', () => {
   const store = seededStore()
   store.createSession({
@@ -423,7 +510,7 @@ test('cloud control plane claims only runnable sessions for workers', () => {
   const first = store.claimRunnableSessions({
     workerId: 'worker-a',
     limit: 1,
-    now: new Date('2026-01-01T00:00:00.000Z'),
+    now: new Date('2030-01-01T00:00:00.000Z'),
     ttlMs: 1_000,
   })
   assert.equal(first.pendingSessionCount, 2)
@@ -432,7 +519,7 @@ test('cloud control plane claims only runnable sessions for workers', () => {
   const second = store.claimRunnableSessions({
     workerId: 'worker-b',
     limit: 10,
-    now: new Date('2026-01-01T00:00:00.000Z'),
+    now: new Date('2030-01-01T00:00:00.000Z'),
     ttlMs: 1_000,
   })
   assert.equal(second.pendingSessionCount, 1)
@@ -443,7 +530,7 @@ test('cloud control plane claims only runnable sessions for workers', () => {
   const reclaimed = store.claimRunnableSessions({
     workerId: 'worker-c',
     limit: 10,
-    now: new Date('2026-01-01T00:00:02.000Z'),
+    now: new Date('2030-01-01T00:00:02.000Z'),
     ttlMs: 1_000,
   })
   assert.equal(reclaimed.leases.some((lease) => lease.sessionId === 'session-1'), true)
@@ -1160,4 +1247,76 @@ test('cloud control plane atomically claims a due scheduled workflow run once', 
     now: new Date('2026-01-01T09:00:00.000Z'),
   })
   assert.equal(second, null)
+})
+
+test('cloud control plane reaps and retries expired scheduled workflow claims', () => {
+  const store = seededStore()
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-retry',
+    draft: {
+      title: 'Retry workflow',
+      instructions: 'Run retry work.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{
+        id: 'schedule-1',
+        type: 'schedule',
+        enabled: true,
+        schedule: {
+          type: 'daily',
+          timezone: 'UTC',
+          runAtHour: 9,
+          runAtMinute: 0,
+        },
+      }],
+    },
+    nextRunAt: '2030-01-01T09:00:00.000Z',
+  })
+
+  const first = store.claimDueWorkflowRun({
+    runId: 'workflow-run-retry',
+    claimedBy: 'scheduler-a',
+    leaseTtlMs: 1,
+    now: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  assert.ok(first?.run.claimToken)
+  const firstToken = first.run.claimToken
+
+  const retried = store.reapExpiredWorkflowClaims({
+    maxAttempts: 2,
+    now: new Date('2030-01-01T09:00:00.002Z'),
+  })
+  assert.equal(retried.length, 1)
+  assert.equal(retried[0]?.action, 'retried')
+
+  const second = store.claimDueWorkflowRun({
+    runId: 'unused-new-run',
+    claimedBy: 'scheduler-b',
+    leaseTtlMs: 1,
+    now: new Date('2030-01-01T09:00:00.003Z'),
+  })
+  assert.equal(second?.run.id, 'workflow-run-retry')
+  assert.equal(second?.run.attemptCount, 2)
+  assert.notEqual(second?.run.claimToken, firstToken)
+  assert.throws(() => store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-retry',
+    runId: 'workflow-run-retry',
+    sessionId: 'session-1',
+    claimToken: firstToken,
+  }), /stale/)
+
+  const failed = store.reapExpiredWorkflowClaims({
+    maxAttempts: 2,
+    now: new Date('2030-01-01T09:00:00.005Z'),
+  })
+  assert.equal(failed.length, 1)
+  assert.equal(failed[0]?.action, 'failed')
+  assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-retry')?.status, 'failed')
+  assert.equal(store.getWorkflowRun('tenant-1', 'workflow-run-retry')?.status, 'failed')
 })

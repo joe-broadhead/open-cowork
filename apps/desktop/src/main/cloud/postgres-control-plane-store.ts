@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import {
   ControlPlaneQuotaExceededError,
@@ -63,6 +64,10 @@ import type {
   RecordByokSecretValidationInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
+  ReapExpiredSessionLeasesInput,
+  ReapedSessionLeaseRecord,
+  ReapExpiredWorkflowClaimsInput,
+  ReapedWorkflowClaimRecord,
   RevokeApiTokenInput,
   RevokeManagedWorkerCredentialInput,
   ResolvedManagedWorkerCredentialRecord,
@@ -186,6 +191,14 @@ function stableJson(value: unknown): string {
       .join(',')}}`
   }
   return JSON.stringify(value)
+}
+
+function stableId(prefix: string, ...parts: string[]) {
+  return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
+}
+
+function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
+  return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
 }
 
 function workspaceOperationFromType(type: string) {
@@ -2165,10 +2178,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             AND leases.session_id = commands.session_id
            WHERE commands.target_lease_token IS NULL
              AND commands.status IN ('pending', 'running')
+             AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
              AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
            GROUP BY commands.tenant_id, commands.session_id
          ) runnable`,
-        [nowMs],
+        [nowMs, now.toISOString()],
         client,
       )
       const selected = await client.query(
@@ -2182,16 +2196,17 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
             AND leases.session_id = commands.session_id
            WHERE commands.target_lease_token IS NULL
              AND commands.status IN ('pending', 'running')
+             AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
              AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
            GROUP BY commands.tenant_id, commands.session_id
            ORDER BY first_sequence, commands.tenant_id, commands.session_id
-           LIMIT $2
+           LIMIT $3
          ) runnable
            ON runnable.tenant_id = sessions.tenant_id
           AND runnable.session_id = sessions.session_id
          ORDER BY runnable.first_sequence, sessions.tenant_id, sessions.session_id
          FOR UPDATE OF sessions SKIP LOCKED`,
-        [nowMs, limit],
+        [nowMs, now.toISOString(), limit],
       )
       const leases = []
       for (const row of selected.rows) {
@@ -2248,27 +2263,31 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     sessionId: string
     opencodeSessionId: string
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }) {
-    const updatedAt = nowIso(input.updatedAt)
-    const result = await this.pool.query(
-      `UPDATE cloud_sessions
-       SET opencode_session_id = $3,
-           title = CASE WHEN $4::boolean THEN $5 ELSE title END,
-           updated_at = $6
-       WHERE tenant_id = $1 AND session_id = $2
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.sessionId,
-        input.opencodeSessionId,
-        input.title !== undefined,
-        input.title ?? null,
-        updatedAt,
-      ],
-    )
-    if (!result.rows[0]) throw new Error(`Unknown session ${input.sessionId}.`)
-    return sessionFromRow(result.rows[0])
+    return this.withTransaction(async (client) => {
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
+      const updatedAt = nowIso(input.updatedAt)
+      const result = await client.query(
+        `UPDATE cloud_sessions
+         SET opencode_session_id = $3,
+             title = CASE WHEN $4::boolean THEN $5 ELSE title END,
+             updated_at = $6
+         WHERE tenant_id = $1 AND session_id = $2
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.sessionId,
+          input.opencodeSessionId,
+          input.title !== undefined,
+          input.title ?? null,
+          updatedAt,
+        ],
+      )
+      if (!result.rows[0]) throw new Error(`Unknown session ${input.sessionId}.`)
+      return sessionFromRow(result.rows[0])
+    })
   }
 
   async updateSessionStatus(input: {
@@ -2276,27 +2295,31 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     sessionId: string
     status: ControlPlaneSessionStatus
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }) {
-    const updatedAt = nowIso(input.updatedAt)
-    const result = await this.pool.query(
-      `UPDATE cloud_sessions
-       SET status = $3,
-           title = CASE WHEN $4::boolean THEN $5 ELSE title END,
-           updated_at = $6
-       WHERE tenant_id = $1 AND session_id = $2
-       RETURNING *`,
-      [
-        input.tenantId,
-        input.sessionId,
-        input.status,
-        input.title !== undefined,
-        input.title ?? null,
-        updatedAt,
-      ],
-    )
-    if (!result.rows[0]) throw new Error(`Unknown session ${input.sessionId}.`)
-    return sessionFromRow(result.rows[0])
+    return this.withTransaction(async (client) => {
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
+      const updatedAt = nowIso(input.updatedAt)
+      const result = await client.query(
+        `UPDATE cloud_sessions
+         SET status = $3,
+             title = CASE WHEN $4::boolean THEN $5 ELSE title END,
+             updated_at = $6
+         WHERE tenant_id = $1 AND session_id = $2
+         RETURNING *`,
+        [
+          input.tenantId,
+          input.sessionId,
+          input.status,
+          input.title !== undefined,
+          input.title ?? null,
+          updatedAt,
+        ],
+      )
+      if (!result.rows[0]) throw new Error(`Unknown session ${input.sessionId}.`)
+      return sessionFromRow(result.rows[0])
+    })
   }
 
   async appendSessionEvent(input: {
@@ -2305,10 +2328,12 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     eventId?: string
     type: string
     payload?: Record<string, unknown>
+    leaseToken?: string | null
     createdAt?: Date
   }) {
     return this.withTransaction(async (client) => {
       await this.requireSession(input.tenantId, input.sessionId, client, true)
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
       const payload = input.payload || {}
       if (input.eventId) {
         const existing = await this.findEvent(input.tenantId, input.sessionId, input.eventId, client)
@@ -2451,6 +2476,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }) {
     return this.withTransaction(async (client) => {
       await this.requireSession(input.tenantId, input.sessionId, client, true)
+      await this.assertLeaseTokenIfPresent(input.tenantId, input.sessionId, input.leaseToken, client)
       const lease = await this.getLease(input.tenantId, input.sessionId, client, true)
       if (lease && lease.leaseToken !== (input.leaseToken ?? null)) {
         throw new Error('Projection write used a stale worker lease.')
@@ -2623,6 +2649,124 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     })
   }
 
+  async reapExpiredSessionLeases(input: ReapExpiredSessionLeasesInput = {}): Promise<ReapedSessionLeaseRecord[]> {
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const nowIsoValue = now.toISOString()
+    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    return this.withTransaction(async (client) => {
+      const expired = await client.query(
+        `SELECT *
+         FROM cloud_worker_leases
+         WHERE lease_expires_at_ms <= $1
+         ORDER BY lease_expires_at_ms ASC, tenant_id, session_id
+         FOR UPDATE SKIP LOCKED`,
+        [nowMs],
+      )
+      const reaped: ReapedSessionLeaseRecord[] = []
+      for (const row of expired.rows) {
+        const lease = leaseFromRow(row)
+        const commands = await client.query(
+          `SELECT *
+           FROM cloud_session_commands
+           WHERE tenant_id = $1
+             AND session_id = $2
+             AND status = 'running'
+             AND claimed_lease_token = $3
+           ORDER BY created_sequence
+           FOR UPDATE`,
+          [lease.tenantId, lease.sessionId, lease.leaseToken],
+        )
+        const retriedCommandIds: string[] = []
+        const failedCommandIds: string[] = []
+        for (const commandRow of commands.rows) {
+          const command = commandFromRow(commandRow)
+          if (command.attemptCount >= maxAttempts) {
+            const summary = 'Worker lease expired after the maximum retry attempts.'
+            await client.query(
+              `UPDATE cloud_session_commands
+               SET status = 'failed',
+                   error = $2,
+                   last_error_code = 'lease_expired_max_attempts',
+                   last_error_summary = $2
+               WHERE command_id = $1`,
+              [command.commandId, summary],
+            )
+            failedCommandIds.push(command.commandId)
+          } else {
+            await client.query(
+              `UPDATE cloud_session_commands
+               SET status = 'pending',
+                   claimed_by = NULL,
+                   claimed_lease_token = NULL,
+                   available_at = $2,
+                   error = NULL,
+                   last_error_code = 'lease_expired',
+                   last_error_summary = 'Worker lease expired before command completion.'
+               WHERE command_id = $1`,
+              [command.commandId, nowIsoValue],
+            )
+            retriedCommandIds.push(command.commandId)
+          }
+        }
+        await client.query(
+          `DELETE FROM cloud_worker_leases
+           WHERE tenant_id = $1 AND session_id = $2 AND lease_token = $3`,
+          [lease.tenantId, lease.sessionId, lease.leaseToken],
+        )
+        const action: ReapedSessionLeaseRecord['action'] = failedCommandIds.length > 0 && retriedCommandIds.length === 0
+          ? 'failed'
+          : retriedCommandIds.length > 0
+            ? 'retried'
+            : 'released'
+        await client.query(
+          `UPDATE cloud_sessions
+           SET status = $3, updated_at = $4
+           WHERE tenant_id = $1 AND session_id = $2`,
+          [
+            lease.tenantId,
+            lease.sessionId,
+            action === 'failed' ? 'errored' : 'idle',
+            nowIsoValue,
+          ],
+        )
+        const org = await this.maybeOne(
+          `SELECT org_id FROM cloud_orgs WHERE tenant_id = $1 OR org_id = $1 LIMIT 1`,
+          [lease.tenantId],
+          client,
+        )
+        if (org) {
+          await this.recordAuditEventWithExecutor(client, {
+            orgId: String(org.org_id),
+            actorType: 'system',
+            actorId: 'managed-work-reaper',
+            eventType: 'managed_work.session_lease_reaped',
+            targetType: 'session',
+            targetId: lease.sessionId,
+            metadata: {
+              action,
+              leasedBy: lease.leasedBy,
+              retriedCommandIds,
+              failedCommandIds,
+            },
+            createdAt: now,
+          })
+        }
+        reaped.push({
+          tenantId: lease.tenantId,
+          sessionId: lease.sessionId,
+          leaseToken: lease.leaseToken,
+          leasedBy: lease.leasedBy,
+          action,
+          retriedCommandIds,
+          failedCommandIds,
+          reapedAt: nowIsoValue,
+        })
+      }
+      return reaped
+    })
+  }
+
   async enqueueSessionCommand(input: {
     commandId: string
     tenantId: string
@@ -2694,19 +2838,27 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
          WHERE tenant_id = $1
            AND session_id = $2
            AND (
-             (status = 'pending' AND (target_lease_token IS NULL OR target_lease_token = $3))
+             (status = 'pending'
+                AND (available_at IS NULL OR available_at <= $4)
+                AND (target_lease_token IS NULL OR target_lease_token = $3))
              OR (status = 'running' AND claimed_lease_token <> $3 AND target_lease_token IS NULL)
            )
          ORDER BY created_sequence
          FOR UPDATE SKIP LOCKED
          LIMIT 1`,
-        [lease.tenantId, lease.sessionId, lease.leaseToken],
+        [lease.tenantId, lease.sessionId, lease.leaseToken, new Date().toISOString()],
         client,
       )
       if (!selected) return null
       const result = await client.query(
         `UPDATE cloud_session_commands
-         SET status = 'running', claimed_by = $2, claimed_lease_token = $3
+         SET status = 'running',
+             claimed_by = $2,
+             claimed_lease_token = $3,
+             attempt_count = attempt_count + 1,
+             available_at = NULL,
+             last_error_code = NULL,
+             last_error_summary = NULL
          WHERE command_id = $1
          RETURNING *`,
         [String(selected.command_id), lease.leasedBy, lease.leaseToken],
@@ -2725,7 +2877,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       }
       const result = await client.query(
         `UPDATE cloud_session_commands
-         SET status = 'acked', acked_at = $2, error = NULL
+         SET status = 'acked',
+             acked_at = $2,
+             error = NULL,
+             last_error_code = NULL,
+             last_error_summary = NULL
          WHERE command_id = $1
          RETURNING *`,
         [commandId, now.toISOString()],
@@ -2743,10 +2899,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       }
       const result = await client.query(
         `UPDATE cloud_session_commands
-         SET status = 'failed', error = $2
+         SET status = 'failed',
+             error = $2,
+             last_error_code = 'execution_failed',
+             last_error_summary = $3
          WHERE command_id = $1
          RETURNING *`,
-        [commandId, error],
+        [commandId, error, redactOperationalText(error, 512, 'Command error')],
       )
       return commandFromRow(result.rows[0])
     })
@@ -2961,12 +3120,21 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       if (existing) return workflowRunFromRow(existing)
       this.assertWorkflowRunnable(workflow)
       const createdAt = nowIso(input.createdAt)
+      const claimedBy = input.claimedBy?.trim() || null
+      const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
+      const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
+      const claimExpiresAt = claimToken ? new Date(new Date(createdAt).getTime() + leaseTtlMs).toISOString() : null
       const result = await client.query(
         `INSERT INTO cloud_workflow_runs (
           tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
-          trigger_payload, status, title, summary, error, created_at, started_at, finished_at
+          trigger_payload, status, title, summary, error, created_at, started_at, finished_at,
+          claimed_by, claim_token, claim_expires_at, attempt_count, idempotency_key,
+          checkpoint_version, last_error_code, last_error_summary
          )
-         VALUES ($1, $2, $3, $4, NULL, $5, $6::jsonb, 'queued', $7, NULL, NULL, $8, NULL, NULL)
+         VALUES (
+          $1, $2, $3, $4, NULL, $5, $6::jsonb, 'queued', $7, NULL, NULL, $8, NULL, NULL,
+          $9, $10, $11, $12, NULL, 0, NULL, NULL
+         )
          RETURNING *`,
         [
           input.tenantId,
@@ -2977,6 +3145,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           input.triggerPayload ? JSON.stringify(input.triggerPayload) : null,
           `Run ${workflow.title}`,
           createdAt,
+          claimedBy,
+          claimToken,
+          claimExpiresAt,
+          claimToken ? 1 : 0,
         ],
       )
       await client.query(
@@ -2996,6 +3168,58 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     return this.withTransaction(async (client) => {
       const now = input.now || new Date()
       const claimedAt = now.toISOString()
+      const claimedBy = input.claimedBy?.trim() || 'scheduler'
+      const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
+      const claimExpiresAt = new Date(now.getTime() + leaseTtlMs).toISOString()
+      const retryRow = await this.maybeOne(
+        `SELECT runs.*, workflows.tenant_id AS workflow_tenant_id
+         FROM cloud_workflow_runs runs
+         JOIN cloud_workflows workflows
+           ON workflows.tenant_id = runs.tenant_id
+          AND workflows.workflow_id = runs.workflow_id
+         WHERE runs.trigger_type = 'schedule'
+           AND runs.status = 'queued'
+           AND runs.session_id IS NULL
+           AND runs.claim_token IS NULL
+           AND workflows.status = 'running'
+         ORDER BY runs.created_at ASC, runs.run_id
+         FOR UPDATE OF runs, workflows SKIP LOCKED
+         LIMIT 1`,
+        [],
+        client,
+      )
+      if (retryRow) {
+        const runId = String(retryRow.run_id)
+        const tenantId = String(retryRow.tenant_id)
+        const workflowId = String(retryRow.workflow_id)
+        const claimToken = createWorkClaimToken(tenantId, runId, claimedBy)
+        const updatedRun = await client.query(
+          `UPDATE cloud_workflow_runs
+           SET claimed_by = $4,
+               claim_token = $5,
+               claim_expires_at = $6,
+               attempt_count = attempt_count + 1,
+               last_error_code = NULL,
+               last_error_summary = NULL
+           WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
+           RETURNING *`,
+          [tenantId, workflowId, runId, claimedBy, claimToken, claimExpiresAt],
+        )
+        const updatedWorkflow = await client.query(
+          `UPDATE cloud_workflows
+           SET status = 'running',
+               latest_run_id = $3,
+               latest_run_status = 'queued',
+               updated_at = $4
+           WHERE tenant_id = $1 AND workflow_id = $2
+           RETURNING *`,
+          [tenantId, workflowId, runId, claimedAt],
+        )
+        return {
+          workflow: workflowFromRow(updatedWorkflow.rows[0]),
+          run: workflowRunFromRow(updatedRun.rows[0]),
+        }
+      }
       const row = await this.maybeOne(
         `SELECT * FROM cloud_workflows
          WHERE status = 'active'
@@ -3009,14 +3233,18 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       )
       if (!row) return null
       const workflow = workflowFromRow(row)
+      const claimToken = createWorkClaimToken(workflow.tenantId, input.runId, claimedBy)
       const result = await client.query(
         `INSERT INTO cloud_workflow_runs (
           tenant_id, run_id, workflow_id, user_id, session_id, trigger_type,
-          trigger_payload, status, title, summary, error, created_at, started_at, finished_at
+          trigger_payload, status, title, summary, error, created_at, started_at, finished_at,
+          claimed_by, claim_token, claim_expires_at, attempt_count, idempotency_key,
+          checkpoint_version, last_error_code, last_error_summary
          )
          VALUES (
           $1, $2, $3, $4, NULL, 'schedule',
-          $5::jsonb, 'queued', $6, NULL, NULL, $7, NULL, NULL
+          $5::jsonb, 'queued', $6, NULL, NULL, $7, NULL, NULL,
+          $8, $9, $10, 1, $11, 0, NULL, NULL
          )
          RETURNING *`,
         [
@@ -3027,6 +3255,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
           JSON.stringify({ source: 'schedule', scheduledFor: workflow.nextRunAt }),
           `Run ${workflow.title}`,
           claimedAt,
+          claimedBy,
+          claimToken,
+          claimExpiresAt,
+          `schedule:${workflow.id}:${workflow.nextRunAt}`,
         ],
       )
       const updatedWorkflow = await client.query(
@@ -3046,15 +3278,120 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     })
   }
 
+  async reapExpiredWorkflowClaims(input: ReapExpiredWorkflowClaimsInput = {}): Promise<ReapedWorkflowClaimRecord[]> {
+    const now = input.now || new Date()
+    const nowIsoValue = now.toISOString()
+    const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
+    return this.withTransaction(async (client) => {
+      const expired = await client.query(
+        `SELECT *
+         FROM cloud_workflow_runs
+         WHERE claim_token IS NOT NULL
+           AND claim_expires_at IS NOT NULL
+           AND claim_expires_at <= $1
+           AND status = 'queued'
+           AND session_id IS NULL
+         ORDER BY claim_expires_at ASC, tenant_id, workflow_id, run_id
+         FOR UPDATE SKIP LOCKED`,
+        [nowIsoValue],
+      )
+      const reaped: ReapedWorkflowClaimRecord[] = []
+      for (const row of expired.rows) {
+        const run = workflowRunFromRow(row)
+        await this.requireWorkflow(run.tenantId, run.workflowId, client, true)
+        const claimToken = run.claimToken
+        if (!claimToken) continue
+        const claimedBy = run.claimedBy || 'unknown'
+        const action: ReapedWorkflowClaimRecord['action'] = run.attemptCount >= maxAttempts ? 'failed' : 'retried'
+        if (action === 'failed') {
+          const summary = 'Workflow run claim expired after the maximum retry attempts.'
+          await client.query(
+            `UPDATE cloud_workflow_runs
+             SET status = 'failed',
+                 summary = $4,
+                 error = $4,
+                 finished_at = $5,
+                 claimed_by = NULL,
+                 claim_token = NULL,
+                 claim_expires_at = NULL,
+                 last_error_code = 'claim_expired_max_attempts',
+                 last_error_summary = $4
+             WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3`,
+            [run.tenantId, run.workflowId, run.id, summary, nowIsoValue],
+          )
+          await client.query(
+            `UPDATE cloud_workflows
+             SET status = 'failed',
+                 latest_run_id = $3,
+                 latest_run_status = 'failed',
+                 latest_run_summary = $4,
+                 next_run_at = NULL,
+                 updated_at = $5
+             WHERE tenant_id = $1 AND workflow_id = $2`,
+            [run.tenantId, run.workflowId, run.id, summary, nowIsoValue],
+          )
+        } else {
+          await client.query(
+            `UPDATE cloud_workflow_runs
+             SET claimed_by = NULL,
+                 claim_token = NULL,
+                 claim_expires_at = NULL,
+                 last_error_code = 'claim_expired',
+                 last_error_summary = 'Workflow run claim expired before session attachment.'
+             WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3`,
+            [run.tenantId, run.workflowId, run.id],
+          )
+          await client.query(
+            `UPDATE cloud_workflows
+             SET status = 'running',
+                 latest_run_id = $3,
+                 latest_run_status = 'queued',
+                 updated_at = $4
+             WHERE tenant_id = $1 AND workflow_id = $2`,
+            [run.tenantId, run.workflowId, run.id, nowIsoValue],
+          )
+        }
+        reaped.push({
+          tenantId: run.tenantId,
+          workflowId: run.workflowId,
+          runId: run.id,
+          claimToken,
+          claimedBy,
+          action,
+          reapedAt: nowIsoValue,
+        })
+      }
+      return reaped
+    })
+  }
+
   async attachWorkflowRunSession(input: AttachWorkflowRunSessionInput) {
     return this.withTransaction(async (client) => {
       await this.requireWorkflow(input.tenantId, input.workflowId, client, true)
+      const runRow = await this.maybeOne(
+        `SELECT * FROM cloud_workflow_runs
+         WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
+         FOR UPDATE`,
+        [input.tenantId, input.workflowId, input.runId],
+        client,
+      )
+      if (!runRow) return null
+      const current = workflowRunFromRow(runRow)
+      if (current.claimToken) {
+        if (current.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
+        if (current.claimExpiresAt && Date.parse(current.claimExpiresAt) <= Date.now()) {
+          throw new Error('Workflow run claim is stale.')
+        }
+      }
       const startedAt = nowIso(input.startedAt)
       const result = await client.query(
         `UPDATE cloud_workflow_runs
          SET session_id = $4,
              status = 'running',
-             started_at = COALESCE(started_at, $5)
+             started_at = COALESCE(started_at, $5),
+             claimed_by = NULL,
+             claim_token = NULL,
+             claim_expires_at = NULL
          WHERE tenant_id = $1 AND workflow_id = $2 AND run_id = $3
          RETURNING *`,
         [input.tenantId, input.workflowId, input.runId, input.sessionId, startedAt],
@@ -3084,6 +3421,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       error: null,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
+      leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
     })
   }
@@ -3098,6 +3436,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       error: input.error,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
+      leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
     })
   }
@@ -3729,6 +4068,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     error: string | null
     nextStatus: WorkflowStatus
     nextRunAt: string | null
+    leaseToken?: string | null
     finishedAt?: Date
   }): Promise<CloudWorkflowRunRecord | null> {
     return this.withTransaction(async (client) => {
@@ -3744,6 +4084,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       const current = workflowRunFromRow(runRow)
       if (current.status === 'completed' || current.status === 'failed' || current.status === 'cancelled') {
         return current
+      }
+      if (input.leaseToken !== undefined) {
+        if (!current.sessionId) throw new Error('Workflow run has no execution session to fence.')
+        await this.assertLeaseTokenIfPresent(input.tenantId, current.sessionId, input.leaseToken, client)
       }
       const finishedAt = nowIso(input.finishedAt)
       const result = await client.query(
@@ -3834,10 +4178,23 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   private async assertCurrentLease(lease: WorkerLeaseRecord, executor: PgExecutor) {
     const current = await this.getLease(lease.tenantId, lease.sessionId, executor, true)
-    if (!current || current.leaseToken !== lease.leaseToken) {
+    if (!current || current.leaseToken !== lease.leaseToken || current.leaseExpiresAt <= Date.now()) {
       throw new Error('Worker lease is stale.')
     }
     return current
+  }
+
+  private async assertLeaseTokenIfPresent(
+    tenantId: string,
+    sessionId: string,
+    leaseToken: string | null | undefined,
+    executor: PgExecutor,
+  ) {
+    if (leaseToken === undefined) return
+    const current = await this.getLease(tenantId, sessionId, executor, true)
+    if (!current || current.leaseToken !== leaseToken || current.leaseExpiresAt <= Date.now()) {
+      throw new Error('Worker lease is stale.')
+    }
   }
 
   private async getLease(

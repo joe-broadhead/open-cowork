@@ -865,11 +865,12 @@ test('cloud worker reclaims stale running commands after worker lease expiry', a
       'tenant-a',
       sessionId,
       'worker-a-crashed',
-      new Date('2026-01-01T00:00:00.000Z'),
-      1,
+      new Date(),
+      20,
     )
     assert.ok(staleLease)
     assert.equal(store.claimNextSessionCommand(staleLease)?.commandId, commandId)
+    await new Promise((resolve) => setTimeout(resolve, 30))
 
     assert.equal(await replacementWorker.worker?.processAllSessionCommands(), 1)
     assert.equal(runtime.prompts.length, 1)
@@ -1144,7 +1145,7 @@ test('cloud scheduler role claims due workflows for workers without owning runti
     tenantId: 'tenant-a',
     userId: 'user-a',
     workflowId: 'workflow-scheduled',
-    nextRunAt: '2026-01-01T09:00:00.000Z',
+    nextRunAt: '2030-01-01T09:00:00.000Z',
     draft: {
       title: 'Scheduled workflow',
       instructions: 'Run from the scheduler.',
@@ -1197,7 +1198,7 @@ test('cloud scheduler role claims due workflows for workers without owning runti
     assert.notEqual(scheduler.scheduler, null)
     assert.equal(worker.scheduler, null)
 
-    const claimed = await scheduler.scheduler?.processDueWorkflows(new Date('2026-01-01T09:00:00.000Z'))
+    const claimed = await scheduler.scheduler?.processDueWorkflows(new Date('2030-01-01T09:00:00.000Z'))
     assert.equal(claimed, 1)
     assert.equal(runtime.prompts.length, 0)
 

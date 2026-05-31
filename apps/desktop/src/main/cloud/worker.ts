@@ -55,7 +55,8 @@ export class CloudWorker {
       if (!command) break
       const startedAt = Date.now()
       try {
-        await this.service.executeCommand(lease, command)
+        const commandLease = lease
+        lease = await this.executeWithLeaseRenewal(commandLease, () => this.service.executeCommand(commandLease, command))
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_commands_processed_total',
           workerId: this.workerId,
@@ -92,6 +93,15 @@ export class CloudWorker {
     const startedAt = Date.now()
     let processed = 0
     let pendingSessionCount = 0
+    const reaped = await this.store.reapExpiredSessionLeases({ now: new Date() })
+    if (reaped.length > 0) {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_expired_leases_reaped_total',
+        value: reaped.length,
+        workerId: this.workerId,
+        status: 'ok',
+      })
+    }
     while (true) {
       const claimStartedAt = Date.now()
       const claims = await this.store.claimRunnableSessions({
@@ -235,6 +245,47 @@ export class CloudWorker {
       })
     }
     return claimed
+  }
+
+  private async executeWithLeaseRenewal<T>(lease: WorkerLeaseRecord, work: () => Promise<T>): Promise<WorkerLeaseRecord> {
+    let current = lease
+    let renewing = false
+    const intervalMs = Math.max(1_000, Math.floor(this.leaseTtlMs / 3))
+    const timer = setInterval(() => {
+      if (renewing) return
+      renewing = true
+      void Promise.resolve(this.store.renewSessionLease(current, new Date(), this.leaseTtlMs))
+        .then((renewed) => {
+          current = renewed
+          this.leases.set(this.leaseKey(renewed.tenantId, renewed.sessionId), renewed)
+          return recordCloudWorkerMetric(this.observability, {
+            name: 'open_cowork_cloud_worker_lease_renewals_total',
+            workerId: this.workerId,
+            tenantId: renewed.tenantId,
+            sessionId: renewed.sessionId,
+            status: 'ok',
+          })
+        })
+        .catch((error: unknown) => {
+          void error
+          void recordCloudWorkerMetric(this.observability, {
+            name: 'open_cowork_cloud_worker_lease_renewals_total',
+            workerId: this.workerId,
+            tenantId: lease.tenantId,
+            sessionId: lease.sessionId,
+            status: 'failed',
+          })
+        })
+        .finally(() => {
+          renewing = false
+        })
+    }, intervalMs)
+    try {
+      await work()
+      return current
+    } finally {
+      clearInterval(timer)
+    }
   }
 
   private leaseKey(tenantId: string, sessionId: string) {

@@ -679,8 +679,10 @@ test('operations observability assets define metrics, dashboards, alerts, and re
     'open_cowork_cloud_command_oldest_age_ms',
     'open_cowork_cloud_worker_lease_claims_total',
     'open_cowork_cloud_worker_lease_renewals_total',
+    'open_cowork_cloud_worker_expired_leases_reaped_total',
     'open_cowork_cloud_worker_stale_owner_rejections_total',
     'open_cowork_cloud_scheduler_claims_total',
+    'open_cowork_cloud_scheduler_expired_claims_reaped_total',
     'open_cowork_cloud_projection_lag_events',
     'open_cowork_cloud_sse_connections',
     'open_cowork_cloud_quota_rejections_total',
@@ -702,6 +704,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   for (const alert of [
     'OpenCoworkCloudHighHttpErrorRate',
     'OpenCoworkWorkerBacklogGrowing',
+    'OpenCoworkWorkerLeaseRecoverySpike',
     'OpenCoworkSchedulerStalled',
     'OpenCoworkProjectionLag',
     'OpenCoworkAuthFailuresSpike',

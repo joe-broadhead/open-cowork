@@ -96,6 +96,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '006_billing_subscriptions',
         '007_scale_foundation',
         '008_managed_workers',
+        '009_managed_work_claims',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
@@ -186,7 +187,7 @@ test('real Postgres cloud store serializes worker leases and fences stale projec
   skip: POSTGRES_SKIP,
 }, async () => {
   await withPostgresStore(async (store, ids) => {
-    const now = new Date('2026-01-01T00:00:00.000Z')
+    const now = new Date('2030-01-01T00:00:00.000Z')
     const claims = await Promise.all(Array.from({ length: 8 }, (_, index) => (
       store.claimSessionLease(ids.tenantId, ids.sessionId, `worker-${index}`, now, 30_000)
     )))
@@ -207,7 +208,7 @@ test('real Postgres cloud store serializes worker leases and fences stale projec
       ids.tenantId,
       ids.sessionId,
       'worker-after-expiry',
-      new Date('2026-01-01T00:00:31.000Z'),
+      new Date('2030-01-01T00:00:31.000Z'),
       30_000,
     )
     assert.ok(secondLease)
@@ -383,7 +384,7 @@ test('real Postgres cloud store keeps session commands idempotent and lease-fenc
       ids.tenantId,
       ids.sessionId,
       'worker-command-owner',
-      new Date('2026-01-01T00:00:00.000Z'),
+      new Date('2030-01-01T00:00:00.000Z'),
       30_000,
     )
     assert.ok(lease)
@@ -423,7 +424,7 @@ test('real Postgres cloud store keeps session commands idempotent and lease-fenc
       ids.tenantId,
       ids.sessionId,
       'worker-command-takeover',
-      new Date('2026-01-01T00:00:31.000Z'),
+      new Date('2030-01-01T00:00:31.000Z'),
       30_000,
     )
     assert.ok(takeoverLease)
@@ -436,6 +437,41 @@ test('real Postgres cloud store keeps session commands idempotent and lease-fenc
     assert.equal(reclaimed?.commandId, `${ids.tenantId}-cmd`)
     assert.equal(reclaimed?.claimedLeaseToken, takeoverLease.leaseToken)
     assert.equal((await store.ackSessionCommand(takeoverLease, `${ids.tenantId}-cmd`)).status, 'acked')
+  })
+})
+
+test('real Postgres cloud store reaps expired session leases with bounded retries', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    await store.enqueueSessionCommand({
+      commandId: `${ids.tenantId}-reap-cmd`,
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: ids.sessionId,
+      kind: 'prompt',
+      payload: { text: 'retry this command' },
+    })
+    const firstLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-a', new Date(), 20)
+    assert.ok(firstLease)
+    assert.equal((await store.claimNextSessionCommand(firstLease))?.attemptCount, 1)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const retried = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2 }))
+      .find((record) => record.tenantId === ids.tenantId && record.sessionId === ids.sessionId)
+    assert.equal(retried?.action, 'retried')
+    assert.deepEqual(retried?.retriedCommandIds, [`${ids.tenantId}-reap-cmd`])
+
+    const secondLease = await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-reap-b', new Date(), 20)
+    assert.ok(secondLease)
+    assert.equal((await store.claimNextSessionCommand(secondLease))?.attemptCount, 2)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const failed = (await store.reapExpiredSessionLeases({ maxCommandAttempts: 2 }))
+      .find((record) => record.tenantId === ids.tenantId && record.sessionId === ids.sessionId)
+    assert.equal(failed?.action, 'failed')
+    assert.deepEqual(failed?.failedCommandIds, [`${ids.tenantId}-reap-cmd`])
+    assert.equal((await store.getSessionForTenant(ids.tenantId, ids.sessionId))?.status, 'errored')
   })
 })
 
@@ -590,6 +626,87 @@ test('real Postgres cloud store atomically claims one due scheduled workflow acr
     assert.equal(claimed[0]?.run.status, 'queued')
     assert.equal((await store.listWorkflowRuns(ids.tenantId, workflowId)).length, 1)
     assert.equal((await store.getWorkflowForTenant(ids.tenantId, workflowId))?.status, 'running')
+  })
+})
+
+test('real Postgres cloud store retries and fails expired workflow start claims', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const workflowId = `${ids.tenantId}-workflow-claim-retry`
+    const retryRunId = `${ids.tenantId}-workflow-retry-run`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: 'Workflow claim retry',
+        instructions: 'Retry failed scheduler starts.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{
+          id: 'schedule-1',
+          type: 'schedule',
+          enabled: true,
+          schedule: {
+            type: 'daily',
+            timezone: 'UTC',
+            runAtHour: 9,
+            runAtMinute: 0,
+          },
+        }],
+      },
+      nextRunAt: '2030-01-01T09:00:00.000Z',
+    })
+    const first = await store.claimDueWorkflowRun({
+      runId: retryRunId,
+      claimedBy: 'scheduler-a',
+      leaseTtlMs: 1,
+      now: new Date('2030-01-01T09:00:00.000Z'),
+    })
+    assert.ok(first?.run.claimToken)
+    const firstToken = first.run.claimToken
+
+    const retried = (await store.reapExpiredWorkflowClaims({
+      maxAttempts: 2,
+      now: new Date('2030-01-01T09:00:00.002Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === retryRunId)
+    assert.equal(retried?.action, 'retried')
+
+    let second: Awaited<ReturnType<typeof store.claimDueWorkflowRun>> = null
+    for (let attempt = 0; attempt < 5 && !second; attempt += 1) {
+      const candidate = await store.claimDueWorkflowRun({
+        runId: `${ids.tenantId}-unused-run-${attempt}`,
+        claimedBy: 'scheduler-b',
+        leaseTtlMs: 1,
+        now: new Date('2030-01-01T09:00:00.003Z'),
+      })
+      if (candidate?.run.id === retryRunId) second = candidate
+    }
+    assert.equal(second?.run.id, retryRunId)
+    assert.equal(second?.run.attemptCount, 2)
+    assert.notEqual(second?.run.claimToken, firstToken)
+    await assert.rejects(
+      () => store.attachWorkflowRunSession({
+        tenantId: ids.tenantId,
+        workflowId,
+        runId: retryRunId,
+        sessionId: ids.sessionId,
+        claimToken: firstToken,
+      }),
+      /stale/,
+    )
+
+    const failed = (await store.reapExpiredWorkflowClaims({
+      maxAttempts: 2,
+      now: new Date('2030-01-01T09:00:00.005Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === retryRunId)
+    assert.equal(failed?.action, 'failed')
+    assert.equal((await store.getWorkflowForTenant(ids.tenantId, workflowId))?.status, 'failed')
+    assert.equal((await store.getWorkflowRun(ids.tenantId, retryRunId))?.status, 'failed')
   })
 })
 
