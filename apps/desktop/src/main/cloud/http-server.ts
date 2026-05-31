@@ -37,6 +37,7 @@ import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
+import type { CloudReadinessReport } from './readiness.ts'
 import type {
   ApiTokenScope,
   ChannelProviderId,
@@ -99,6 +100,7 @@ export type CloudHttpServerOptions = {
   ssePollMs?: number
   sseReplayHub?: CloudSseReplayHub
   trustProxyHeaders?: boolean
+  readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
 }
 
 export class CloudHttpError extends Error {
@@ -1758,12 +1760,25 @@ export class CloudHttpServer {
         return
       }
 
-      if (url.pathname === '/healthz') {
+      if (url.pathname === '/livez' || url.pathname === '/healthz') {
         writeJson(res, 200, {
           ok: true,
           role: this.options.policy.role,
           profileName: this.options.policy.profileName,
         }, requestOptions.corsOrigin)
+        return
+      }
+
+      if (url.pathname === '/readyz') {
+        const readiness = this.options.readiness
+          ? await this.options.readiness()
+          : {
+              ok: true,
+              role: this.options.policy.role,
+              profileName: this.options.policy.profileName,
+              checks: [],
+            } satisfies CloudReadinessReport
+        writeJson(res, readiness.ok ? 200 : 503, readiness, requestOptions.corsOrigin)
         return
       }
 

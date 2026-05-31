@@ -25,7 +25,7 @@ import {
   recordCloudWorkerMetric,
   type CloudObservabilityAdapter,
 } from './observability.ts'
-import { createObjectStoreForCloud, type ObjectStoreAdapter } from './object-store.ts'
+import { createObjectStoreForCloud, resolveCloudObjectStoreConfig, type ObjectStoreAdapter } from './object-store.ts'
 import {
   createByokSecretStore,
   type ByokSecretStore,
@@ -39,6 +39,7 @@ import {
 import { createCloudPathProvider, createCloudSessionPathProvider, type PathProvider } from './path-provider.ts'
 import { createPostgresControlPlaneStore } from './postgres-control-plane-store.ts'
 import { createCloudProjectSourceService } from './project-source-service.ts'
+import { createCloudReadinessCheck } from './readiness.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
 import { createCloudSecretAdapterFromEnv, resolveCloudSecretRef, type SecretAdapter } from './secret-adapter.ts'
@@ -59,6 +60,7 @@ import type { WorkflowWebhookSecurityStore } from '../workflow/workflow-webhook-
 type Env = Record<string, string | undefined>
 
 const ALLOW_INSECURE_CLOUD_AUTH_ENV = 'OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH'
+export type CloudDeploymentTier = 'local' | 'self_host_beta' | 'private_beta' | 'public_production'
 const DEFAULT_HEADER_AUTH_SIGNATURE_AGE_MS = 5 * 60 * 1000
 const HEADER_AUTH_SIGNED_HEADERS = [
   'x-open-cowork-tenant-id',
@@ -208,6 +210,14 @@ function parseSignupMode(value: string | null | undefined) {
   if (value === 'disabled') return 'disabled'
   if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
   return null
+}
+
+export function parseCloudDeploymentTier(value: string | null | undefined): CloudDeploymentTier {
+  if (!value) return 'local'
+  if (value === 'local' || value === 'self_host_beta' || value === 'private_beta' || value === 'public_production') {
+    return value
+  }
+  throw new Error(`Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER "${value}". Expected local, self_host_beta, private_beta, or public_production.`)
 }
 
 function inferSignupMode(input: {
@@ -426,6 +436,7 @@ export function shouldRunCloudScheduler(role: CloudRuntimePolicy['role']) {
 export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
   const workerPollMs = parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_WORKER_POLL_MS'), 1000)
   return {
+    deploymentTier: parseCloudDeploymentTier(envValue(env, 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')),
     root: resolve(envValue(env, 'OPEN_COWORK_CLOUD_ROOT') || DEFAULT_CLOUD_ROOT),
     hostname: envValue(env, 'HOST') || envValue(env, 'OPEN_COWORK_CLOUD_HOST') || '0.0.0.0',
     port: parsePort(envValue(env, 'PORT') || envValue(env, 'OPEN_COWORK_CLOUD_PORT'), 8787),
@@ -876,6 +887,75 @@ export function assertCloudAuthDeploymentSafe(input: {
   }
 }
 
+function secretRefIsManaged(ref: string | null | undefined) {
+  const value = ref?.trim()
+  return Boolean(
+    value
+    && (
+      value.startsWith('gcp-sm://')
+      || value.startsWith('aws-sm://')
+      || value.startsWith('azure-kv://')
+      || value.startsWith('https://')
+    ),
+  )
+}
+
+function hasProductionSecretMaterial(env: Env, keyName: string, refName: string, configRef?: string | null) {
+  const key = envValue(env, keyName)
+  if (key && key.length >= 32) return true
+  const ref = envValue(env, refName) || configRef
+  if (secretRefIsManaged(ref)) return true
+  const envRefValue = resolveEnvRef(ref || undefined, env)
+  return Boolean(envRefValue && envRefValue.length >= 32)
+}
+
+export function assertCloudProductionDeploymentSafe(input: {
+  tier: CloudDeploymentTier
+  role: CloudRuntimePolicy['role']
+  config: OpenCoworkConfig
+  auth: CloudAuthConfig
+  env: Env
+  checkpointsEnabled: boolean
+  autoProcessCommands: boolean
+}) {
+  if (input.tier !== 'public_production') return
+
+  if (input.role === 'all-in-one') {
+    throw new Error('OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production requires split cloud roles. Run separate web, worker, and scheduler deployments instead of all-in-one.')
+  }
+
+  const controlPlaneUrl = resolveCloudControlPlaneUrl(input.config, input.env)
+  if (!controlPlaneUrl) {
+    throw new Error('Public production cloud deployments require durable Postgres control-plane storage. Set OPEN_COWORK_CLOUD_CONTROL_PLANE_URL or an equivalent urlRef.')
+  }
+
+  const objectStore = resolveCloudObjectStoreConfig(input.config, input.env)
+  if (objectStore.kind === 'filesystem' || objectStore.kind === 'unavailable' || !objectStore.bucket) {
+    throw new Error('Public production cloud deployments require durable provider-backed object storage with a bucket/container. Filesystem object storage is local/self-host-beta only.')
+  }
+
+  if (!hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_SECRET_KEY', 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')) {
+    throw new Error('Public production cloud deployments require OPEN_COWORK_CLOUD_SECRET_KEY with at least 32 characters or a managed OPEN_COWORK_CLOUD_SECRET_KEY_REF.')
+  }
+
+  if (shouldRunCloudWeb(input.role)) {
+    if (!hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET', 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF', input.config.cloud.auth.cookieSecretRef)) {
+      throw new Error('Public production cloud web deployments require OPEN_COWORK_CLOUD_COOKIE_SECRET with at least 32 characters or a managed OPEN_COWORK_CLOUD_COOKIE_SECRET_REF.')
+    }
+    if (input.autoProcessCommands) {
+      throw new Error('Public production cloud web deployments must not process commands inline. Set OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS=false and run worker roles separately.')
+    }
+  }
+
+  if (shouldRunCloudWorker(input.role) && !input.checkpointsEnabled) {
+    throw new Error('Public production cloud worker deployments require OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true for runtime/workspace recovery.')
+  }
+
+  if (input.auth.mode === 'none') {
+    throw new Error('Public production cloud deployments require authenticated access. Set OPEN_COWORK_CLOUD_AUTH_MODE=oidc or header.')
+  }
+}
+
 async function routeRuntimeEvent(
   store: ControlPlaneStore,
   worker: CloudWorker,
@@ -1040,6 +1120,15 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
     cookieSecure: envOptions.cookieSecure,
     env,
+  })
+  assertCloudProductionDeploymentSafe({
+    tier: envOptions.deploymentTier,
+    role: policy.role,
+    config,
+    auth: authConfig,
+    env,
+    checkpointsEnabled: envOptions.checkpointsEnabled,
+    autoProcessCommands: envOptions.autoProcessCommands,
   })
   const resolvedAuthConfig = {
     ...config,
@@ -1272,6 +1361,15 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
         strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
         trustProxyHeaders: envOptions.trustProxyHeaders,
+        readiness: createCloudReadinessCheck({
+          policy,
+          store,
+          objectStore,
+          secretAdapter,
+          billingConfig,
+          billingAdapter,
+          requireSchemaMigrations: envOptions.deploymentTier === 'public_production',
+        }),
       })
     : null
   const url = server

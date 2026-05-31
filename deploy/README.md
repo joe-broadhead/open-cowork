@@ -24,6 +24,13 @@ Use these invariants across every provider:
   credentials in the provider secret manager.
 - Keep Cloud Run/App Platform/all-in-one deployments for demos or focused
   pilots unless the platform gives workers predictable long-running CPU.
+- Use `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production` only for split-role
+  public deployments with Postgres, provider-backed object storage,
+  production-strength secret/cookie material, enabled auth, non-inline web
+  command handling, and worker checkpoints. Local/self-host beta tiers remain
+  available for demos and internal evaluation.
+- Wire Kubernetes probes to cloud `/livez` for liveness and `/readyz` for
+  dependency readiness; `/healthz` is backward-compatible liveness only.
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
   replicas beyond one, and store checkpoints in a shared object store.
 - Keep billing optional for self-hosted OSS deployments. Use no billing

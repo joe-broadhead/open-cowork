@@ -53,7 +53,7 @@ test('launch readiness harness produces strict load report against cloud and gat
   let sessionCounter = 0
   const cloud = await listen(async (req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
-    if (url.pathname === '/healthz') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/healthz' || url.pathname === '/livez') return writeJson(res, 200, { ok: true })
     if (url.pathname === '/') {
       res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' })
       res.end('<!doctype html><title>Open Cowork Cloud</title>')
@@ -264,6 +264,7 @@ test('launch readiness plan supports the local self-host beta tier', async () =>
     assert.equal(parsed.mode, 'plan')
     assert.equal(parsed.profileName, 'local-self-host-beta')
     assert.ok(parsed.operations.includes('cloud-health'))
+    assert.ok(parsed.operations.includes('cloud-liveness'))
     assert.ok(parsed.operations.includes('gateway-health'))
     const plan = readFileSync(parsed.planPath, 'utf8')
     assert.match(plan, /local-self-host-beta/)

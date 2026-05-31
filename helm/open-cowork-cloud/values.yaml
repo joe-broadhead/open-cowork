@@ -20,6 +20,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 cloud:
+  deploymentTier: local
   profile: full
   configPath: ""
   configDir: ""

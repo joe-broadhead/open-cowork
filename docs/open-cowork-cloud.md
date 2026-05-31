@@ -858,7 +858,11 @@ browser is not the only protection.
 
 ## Operational Checks
 
-- `GET /healthz` reports process liveness and the active cloud role/profile.
+- `GET /livez` reports process liveness and the active cloud role/profile.
+- `GET /readyz` reports dependency readiness for the control plane, object
+  store, secret adapter, and billing adapter. Kubernetes readiness probes should
+  use this route.
+- `GET /healthz` remains available as a backward-compatible liveness route.
 - `GET /api/runtime/status` reports the active role/profile, whether this
   process can execute runtime commands, and whether commands are handled inline
   or by durable worker polling.

@@ -156,6 +156,9 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires provider-backed object storage')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /livez')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /readyz')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.objectStore.kind=filesystem is local/demo-only')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.objectStore.bucket')
@@ -170,6 +173,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'deploymentTier: local')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'shutdownGraceMs: 300000')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'terminationGracePeriodSeconds: 300')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'maxUnavailable: 0')
@@ -177,6 +181,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'terminationGracePeriodSeconds')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.terminationGracePeriodSeconds must be >= 30')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')
@@ -1024,6 +1029,7 @@ function validateGcpReference() {
   for (const phrase of [
     'REGION-docker.pkg.dev/PROJECT/open-cowork/open-cowork-cloud',
     'existingSecret: open-cowork-cloud-secrets',
+    'deploymentTier: public_production',
     'mode: oidc',
     'publicUrl: https://cowork.example.com',
     'trustProxyHeaders: true',
@@ -1031,6 +1037,9 @@ function validateGcpReference() {
     'enabled: true',
     'replicas: 2',
     'checkpointsEnabled: true',
+    'topologySpreadConstraints:',
+    'topology.kubernetes.io/zone',
+    'podDisruptionBudget:',
     'serviceAccount:',
     'iam.gke.io/gcp-service-account',
     'cloud.google.com/neg',

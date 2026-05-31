@@ -149,6 +149,22 @@ provider control plane.
 - Downstream branding smoke checks should load the workbench with the deployed
   product name, logo URL, theme tokens, and managed connection labels.
 
+### Deployment Tiers
+
+- Set `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=local` for laptop demos and
+  throwaway all-in-one experiments.
+- Set `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=self_host_beta` or `private_beta` for
+  downstream pilots where the operator understands the remaining launch
+  evidence gaps.
+- Set `OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production` only for split-role
+  public deployments. This tier fails startup unless the control plane is
+  durable Postgres, object storage is provider-backed, secret/cookie material is
+  production-strength or resolved from a managed secret ref, auth is enabled,
+  web does not process commands inline, and workers have checkpoints enabled.
+- Use `/livez` for process liveness and `/readyz` for dependency readiness.
+  `/healthz` remains backward-compatible, but Kubernetes readiness probes should
+  not use it for public production.
+
 ### Worker/Scheduler Scaling
 
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
@@ -449,7 +465,7 @@ OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
 pnpm deploy:smoke
 ```
 
-The smoke script validates cloud `/healthz`, the Cloud Web Workbench at `GET /`,
+The smoke script validates cloud `/healthz`/`/livez`, the Cloud Web Workbench at `GET /`,
 workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
 gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
 runtime/heartbeat/metrics endpoints and gateway metrics when tokens are

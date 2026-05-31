@@ -227,6 +227,14 @@ function createOperationPlan(options) {
       run: () => requestJson(options.cloudUrl, operationsByName.get('cloud-health'), ''),
     })
     operations.push({
+      name: 'cloud-liveness',
+      category: 'read',
+      target: 'cloud',
+      path: '/livez',
+      acceptedStatus: [200],
+      run: () => requestJson(options.cloudUrl, operationsByName.get('cloud-liveness'), ''),
+    })
+    operations.push({
       name: 'cloud-web-workbench',
       category: 'read',
       target: 'cloud',

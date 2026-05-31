@@ -7,10 +7,12 @@ import { tmpdir } from 'node:os'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import {
+  assertCloudProductionDeploymentSafe,
   assertCloudAuthDeploymentSafe,
   createControlPlaneStoreForCloud,
   createHeaderCloudAuthResolver,
   createCloudAuthResolverForConfig,
+  parseCloudDeploymentTier,
   resolveCloudAuthConfig,
   resolveCloudControlPlaneUrl,
   resolveCloudBootstrapOptionsFromEnv,
@@ -27,8 +29,9 @@ import {
 } from '../apps/desktop/src/main/cloud/app.ts'
 import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
-import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
+import { createInMemoryObjectStore, createUnavailableObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+import { createUnavailableSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEventListener,
@@ -180,7 +183,9 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
     OPEN_COWORK_CLOUD_COOKIE_SECURE: 'false',
     OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
+    OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
   }), {
+    deploymentTier: 'private_beta',
     root: '/tmp/open-cowork-cloud',
     hostname: '127.0.0.1',
     port: 9999,
@@ -205,6 +210,9 @@ test('cloud bootstrap parses env options and role helpers', () => {
   assert.equal(shouldRunCloudScheduler('scheduler'), true)
   assert.equal(shouldRunCloudScheduler('web'), false)
   assert.equal(shouldRunCloudScheduler('worker'), false)
+  assert.equal(parseCloudDeploymentTier(null), 'local')
+  assert.equal(parseCloudDeploymentTier('public_production'), 'public_production')
+  assert.throws(() => parseCloudDeploymentTier('ga'), /Invalid OPEN_COWORK_CLOUD_DEPLOYMENT_TIER/)
 })
 
 test('cloud public branding resolves from config and env JSON', () => {
@@ -550,6 +558,67 @@ test('cloud public header and OIDC auth require spoofing-resistant deployment se
     corsOrigin: 'http://app.example.test',
     env: {},
   }), /CORS_ORIGIN.*HTTPS/)
+})
+
+test('public production deployment guard fails closed without durable dependencies', () => {
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: DEFAULT_CONFIG,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: {},
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }), /durable Postgres/)
+
+  const productionConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      storage: {
+        controlPlane: { kind: 'postgres' as const },
+        objectStore: {
+          kind: 'gcs' as const,
+          bucket: 'open-cowork-test-bucket',
+        },
+      },
+    },
+  }
+  const productionEnv = {
+    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_SECRET_KEY: 'x'.repeat(32),
+    OPEN_COWORK_CLOUD_COOKIE_SECRET: 'y'.repeat(32),
+  }
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'all-in-one',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: productionEnv,
+    checkpointsEnabled: true,
+    autoProcessCommands: false,
+  }), /split cloud roles/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'worker',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: productionEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }), /CHECKPOINTS_ENABLED=true/)
+
+  assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: productionEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }))
 })
 
 test('cloud control plane local adapter remains default without a postgres URL', async () => {
@@ -1363,6 +1432,63 @@ test('cloud app wires OIDC auth mode instead of header demo auth', async () => {
     })
     assert.equal(response.status, 401)
     assert.match(await response.text(), /bearer authorization/i)
+  } finally {
+    await app.close()
+  }
+})
+
+test('cloud app exposes separate liveness and dependency readiness endpoints', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'open-cowork-readyz-'))
+  const runtime = new FakeRuntime()
+  const app = await startCloudApp({
+    runtime,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_ROOT: root,
+      OPEN_COWORK_CLOUD_SECRET_KEY: 'z'.repeat(32),
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  try {
+    const live = await readJson(await fetch(`${app.url}/livez`))
+    assert.equal(live.ok, true)
+
+    const response = await fetch(`${app.url}/readyz`)
+    const ready = await readJson(response)
+    assert.equal(response.status, 200)
+    assert.equal(ready.ok, true)
+    const checks = asArray(ready.checks)
+    assert.equal(checks.some((entry) => asRecord(entry).name === 'control_plane'), true)
+    assert.equal(checks.some((entry) => asRecord(entry).name === 'object_store'), true)
+    assert.equal(checks.some((entry) => asRecord(entry).name === 'secret_adapter'), true)
+  } finally {
+    await app.close()
+  }
+})
+
+test('cloud readiness fails closed when required object storage or secret adapter checks fail', async () => {
+  const runtime = new FakeRuntime()
+  const app = await startCloudApp({
+    runtime,
+    objectStore: createUnavailableObjectStore('test object store unavailable'),
+    secretAdapter: createUnavailableSecretAdapter('test secret adapter unavailable'),
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+
+  try {
+    const response = await fetch(`${app.url}/readyz`)
+    const ready = await readJson(response)
+    assert.equal(response.status, 503)
+    assert.equal(ready.ok, false)
+    const checks = asArray(ready.checks).map(asRecord)
+    assert.equal(checks.some((entry) => entry.name === 'object_store' && entry.status === 'error'), true)
+    assert.equal(checks.some((entry) => entry.name === 'secret_adapter' && entry.status === 'error'), true)
   } finally {
     await app.close()
   }

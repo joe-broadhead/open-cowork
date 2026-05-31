@@ -4,6 +4,29 @@
 {{- if eq $.Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
+{{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if eq $.Values.cloud.auth.mode "none" }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.auth.mode=oidc or header." }}
+{{- end }}
+{{- if and (not $.Values.cloud.controlPlaneUrl) (not $.Values.cloud.existingSecret) }}
+{{- fail "cloud.deploymentTier=public_production requires durable Postgres control plane credentials via cloud.controlPlaneUrl or cloud.existingSecret." }}
+{{- end }}
+{{- if eq $.Values.cloud.objectStore.kind "filesystem" }}
+{{- fail "cloud.deploymentTier=public_production requires provider-backed object storage; cloud.objectStore.kind=filesystem is local/self-host-beta only." }}
+{{- end }}
+{{- if not $.Values.cloud.objectStore.bucket }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.objectStore.bucket." }}
+{{- end }}
+{{- if and (not $.Values.cloud.secretKey) (not $.Values.cloud.secretKeyRef) (not $.Values.cloud.existingSecret) }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.secretKey, cloud.secretKeyRef, or cloud.existingSecret." }}
+{{- end }}
+{{- if and $.Values.roles.web.enabled (not $.Values.cloud.cookieSecret) (not $.Values.cloud.cookieSecretRef) (not $.Values.cloud.existingSecret) }}
+{{- fail "cloud.deploymentTier=public_production web role requires cloud.cookieSecret, cloud.cookieSecretRef, or cloud.existingSecret." }}
+{{- end }}
+{{- if and $.Values.roles.worker.enabled (not $.Values.cloud.checkpoints.enabled) }}
+{{- fail "cloud.deploymentTier=public_production worker role requires cloud.checkpoints.enabled=true." }}
+{{- end }}
+{{- end }}
 {{- range $roleName, $role := .Values.roles }}
 {{- if $role.enabled }}
 {{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "oidc") (or (not $.Values.cloud.auth.oidcIssuerUrl) (not $.Values.cloud.auth.oidcClientId)) }}
@@ -113,11 +136,11 @@ spec:
               containerPort: {{ $role.port }}
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /livez
               port: http
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: http
           {{- end }}
           {{- with $role.resources }}
