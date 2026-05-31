@@ -509,3 +509,105 @@ test('cloud transport adapter authenticates SSE subscriptions with bearer header
   assert.equal(requests[0]?.init?.headers?.accept, 'text/event-stream')
   assert.equal(requests[0]?.init?.credentials, 'include')
 })
+
+test('cloud transport adapter applies request timeout and caller cancellation signals', async () => {
+  const timeoutTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    requestTimeoutMs: 10,
+    fetch: (_url, init) => new Promise((resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('request aborted by timeout')), { once: true })
+      setTimeout(() => resolve(jsonResponse({ role: 'web' })), 100)
+    }),
+  })
+
+  await assert.rejects(timeoutTransport.getConfig(), /request aborted by timeout/)
+
+  const controller = new AbortController()
+  const cancelledTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    signal: controller.signal,
+    fetch: (_url, init) => new Promise((resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('request aborted by caller')), { once: true })
+      setTimeout(() => resolve(jsonResponse({ role: 'web' })), 100)
+    }),
+  })
+  const request = cancelledTransport.getConfig()
+  controller.abort()
+  await assert.rejects(request, /request aborted by caller/)
+})
+
+test('cloud transport adapter closes EventSource SSE subscriptions on caller cancellation', () => {
+  const controller = new AbortController()
+  const errors: unknown[] = []
+  const instances: Array<{
+    closed: boolean
+    onerror: ((event: unknown) => void) | null
+  }> = []
+  const EventSourceImpl: CloudTransportEventSource = class {
+    closed = false
+    onmessage = null
+    onerror: ((event: unknown) => void) | null = null
+    constructor() {
+      instances.push(this)
+    }
+    close() {
+      this.closed = true
+    }
+    addEventListener() {}
+  }
+  const transport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    eventSource: EventSourceImpl,
+    signal: controller.signal,
+  })
+
+  transport.subscribeSessionEvents('session-1', {
+    onEvent() {},
+    onError(error) {
+      errors.push(error)
+    },
+  })
+  controller.abort()
+  instances[0]?.onerror?.(new Error('closed stream'))
+
+  assert.equal(instances[0]?.closed, true)
+  assert.deepEqual(errors, [])
+})
+
+test('cloud transport adapter aborts fetch SSE subscriptions on caller cancellation without surfacing errors', async () => {
+  const controller = new AbortController()
+  const errors: unknown[] = []
+  const aborts: string[] = []
+  const fetcher: CloudTransportFetch = async (_url, init) => new Promise((resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => {
+      aborts.push('aborted')
+      reject(new Error('fetch SSE aborted'))
+    }, { once: true })
+    setTimeout(() => resolve({
+      ok: true,
+      status: 200,
+      async text() {
+        return ''
+      },
+      body: new ReadableStream<Uint8Array>(),
+    }), 100)
+  })
+  const transport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    fetch: fetcher,
+    signal: controller.signal,
+    headers: { authorization: 'Bearer cloud-token' },
+  })
+
+  transport.subscribeWorkspaceEvents({
+    onEvent() {},
+    onError(error) {
+      errors.push(error)
+    },
+  })
+  controller.abort()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.deepEqual(aborts, ['aborted'])
+  assert.deepEqual(errors, [])
+})

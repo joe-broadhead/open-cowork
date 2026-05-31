@@ -114,6 +114,7 @@ nav:
       - Architecture: architecture.md
       - Product Contract: product-contract.md
       - Cloud Web Workbench: cloud-web-workbench.md
+      - Cloud Client SDK: cloud-client.md
       - Gateway Provider Readiness: gateway-provider-readiness.md
       - Downstream Customization: downstream.md
       - Downstream Contract: downstream-contract.md

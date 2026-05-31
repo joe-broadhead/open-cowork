@@ -11,6 +11,7 @@ import {
   createNodeOpencodeCloudRuntimeAdapter,
   subscribeToOpencodeCloudRuntimeEvents,
   translateOpencodeRuntimeEvent,
+  translateOpencodeRuntimeEventWithDiagnostics,
 } from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
 
 function writeExecutable(root: string, name: string, source: string) {
@@ -88,7 +89,7 @@ test('cloud OpenCode event translator maps SDK message, status, idle, and error 
 })
 
 test('cloud OpenCode event translator ignores user text echoes', () => {
-  assert.deepEqual(translateOpencodeRuntimeEvent({
+  const raw = {
     payload: {
       type: 'message.part.updated.1',
       data: {
@@ -102,7 +103,37 @@ test('cloud OpenCode event translator ignores user text echoes', () => {
         },
       },
     },
-  }), [])
+  }
+  assert.deepEqual(translateOpencodeRuntimeEvent(raw), [])
+  assert.deepEqual(translateOpencodeRuntimeEventWithDiagnostics(raw).dropped, {
+    sdkEventType: 'message.part.updated',
+    reason: 'no-projected-events',
+  })
+})
+
+test('cloud OpenCode event translator reports unknown and invalid SDK events', () => {
+  assert.deepEqual(translateOpencodeRuntimeEventWithDiagnostics({
+    payload: {
+      type: 'sdk.future.event',
+      properties: { sessionID: 'session-1' },
+    },
+  }), {
+    events: [],
+    dropped: {
+      sdkEventType: 'sdk.future.event',
+      reason: 'unknown-event-type',
+    },
+  })
+
+  assert.deepEqual(translateOpencodeRuntimeEventWithDiagnostics({
+    payload: { data: { sessionID: 'session-1' } },
+  }), {
+    events: [],
+    dropped: {
+      sdkEventType: null,
+      reason: 'invalid-envelope',
+    },
+  })
 })
 
 test('cloud OpenCode event translator preserves projection-critical runtime events', () => {
@@ -211,6 +242,7 @@ test('cloud OpenCode event translator preserves projection-critical runtime even
 test('cloud OpenCode runtime subscription translates stream events and reports failures', async () => {
   const delivered: unknown[] = []
   const errors: unknown[] = []
+  const dropped: unknown[] = []
   const client = {
     event: {
       async subscribe() {
@@ -230,6 +262,14 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
                 },
               },
             }
+            yield {
+              payload: {
+                type: 'sdk.future.event',
+                properties: {
+                  sessionID: 'session-1',
+                },
+              },
+            }
           })(),
         }
       },
@@ -239,10 +279,13 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
   subscribeToOpencodeCloudRuntimeEvents(
     client,
     (event) => delivered.push(event),
-    { onError: (error) => errors.push(error) },
+    {
+      onError: (error) => errors.push(error),
+      onDroppedEvent: (event) => dropped.push(event),
+    },
   )
 
-  for (let attempt = 0; delivered.length === 0 && attempt < 20; attempt += 1) {
+  for (let attempt = 0; (delivered.length === 0 || dropped.length === 0) && attempt < 20; attempt += 1) {
     await delay(10)
   }
 
@@ -254,7 +297,32 @@ test('cloud OpenCode runtime subscription translates stream events and reports f
       content: 'streamed answer',
     },
   }])
+  assert.deepEqual(dropped, [{
+    sdkEventType: 'sdk.future.event',
+    reason: 'unknown-event-type',
+  }])
   assert.deepEqual(errors, [])
+})
+
+test('cloud OpenCode runtime subscription does not subscribe after caller cancellation', () => {
+  const controller = new AbortController()
+  controller.abort()
+  let subscribed = false
+  const unsubscribe = subscribeToOpencodeCloudRuntimeEvents(
+    {
+      event: {
+        async subscribe() {
+          subscribed = true
+          return { stream: [] }
+        },
+      },
+    },
+    () => undefined,
+    { signal: controller.signal },
+  )
+
+  unsubscribe()
+  assert.equal(subscribed, false)
 })
 
 test('cloud Node OpenCode runtime adapter starts with managed env and client auth', async () => {

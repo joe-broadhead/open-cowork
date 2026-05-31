@@ -1389,6 +1389,18 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           error,
           { event_type: event.type },
         ))
+      }, {
+        onDroppedEvent(event) {
+          void observability?.metric({
+            name: 'open_cowork_cloud_opencode_events_dropped_total',
+            value: 1,
+            unit: '1',
+            attributes: {
+              sdk_event_type: event.sdkEventType || 'unknown',
+              reason: event.reason,
+            },
+          })
+        },
       })
     : null
   const stopWorkerLoop = worker
