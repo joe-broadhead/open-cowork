@@ -519,6 +519,7 @@ export type CloudTransportAdapterOptions = {
   credentials?: 'include'
   headers?: Record<string, string>
   requestTimeoutMs?: number
+  signal?: AbortSignal
 }
 
 export type CloudTransportSubscription = {
@@ -940,20 +941,32 @@ function subscribeEventSource(
     credentials?: 'include'
     onEvent: (event: CloudTransportWorkspaceEvent) => void
     onError?: (error: unknown) => void
+    signal?: AbortSignal
   },
 ) {
   const source = new EventSourceImpl(url, {
     withCredentials: input.credentials === 'include',
   })
+  let closed = false
   const onEvent = (event: { data: string }) => {
     const parsed = JSON.parse(event.data) as CloudTransportWorkspaceEvent
     input.onEvent(parsed)
   }
   source.onmessage = onEvent
   for (const type of CLOUD_SESSION_EVENT_TYPES) source.addEventListener(type, onEvent)
-  source.onerror = (error) => input.onError?.(error)
+  source.onerror = (error) => {
+    if (!closed) input.onError?.(error)
+  }
+  const abort = () => {
+    closed = true
+    source.close()
+  }
+  if (input.signal?.aborted) abort()
+  else input.signal?.addEventListener('abort', abort, { once: true })
   return {
     close() {
+      closed = true
+      input.signal?.removeEventListener('abort', abort)
       source.close()
     },
   }
@@ -967,10 +980,14 @@ function subscribeFetchSse(
     credentials?: 'include'
     onEvent: (event: CloudTransportWorkspaceEvent) => void
     onError?: (error: unknown) => void
+    signal?: AbortSignal
   },
 ) {
   const controller = new AbortController()
   let closed = false
+  const detachAbortSignal = attachAbortSignal(controller, input.signal, () => {
+    closed = true
+  })
 
   const dispatch = (dataLines: string[]) => {
     if (dataLines.length === 0) return
@@ -979,60 +996,64 @@ function subscribeFetchSse(
   }
 
   void (async () => {
-    const response = await fetcher(url, {
-      method: 'GET',
-      headers: {
-        ...(input.headers || {}),
-        accept: 'text/event-stream',
-      },
-      credentials: input.credentials,
-      signal: controller.signal,
-    })
-    if (!response.ok) {
-      throw new Error(`Cloud transport SSE subscription failed with HTTP ${response.status}: ${url}`)
-    }
-    if (!response.body) {
-      throw new Error('Cloud transport SSE response did not include a readable stream.')
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffered = ''
-    let dataLines: string[] = []
-
-    const processLine = (rawLine: string) => {
-      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-      if (line === '') {
-        dispatch(dataLines)
-        dataLines = []
-        return
-      }
-      if (line.startsWith(':')) return
-      const delimiter = line.indexOf(':')
-      const field = delimiter === -1 ? line : line.slice(0, delimiter)
-      const value = delimiter === -1
-        ? ''
-        : line.slice(delimiter + 1).replace(/^ /, '')
-      if (field === 'data') dataLines.push(value)
-    }
-
     try {
-      while (!closed) {
-        const chunk = await reader.read()
-        if (chunk.done) break
-        buffered += decoder.decode(chunk.value, { stream: true })
-        let newlineIndex = buffered.indexOf('\n')
-        while (newlineIndex >= 0) {
-          processLine(buffered.slice(0, newlineIndex))
-          buffered = buffered.slice(newlineIndex + 1)
-          newlineIndex = buffered.indexOf('\n')
-        }
+      const response = await fetcher(url, {
+        method: 'GET',
+        headers: {
+          ...(input.headers || {}),
+          accept: 'text/event-stream',
+        },
+        credentials: input.credentials,
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        throw new Error(`Cloud transport SSE subscription failed with HTTP ${response.status}: ${url}`)
       }
-      buffered += decoder.decode()
-      if (buffered) processLine(buffered)
-      dispatch(dataLines)
+      if (!response.body) {
+        throw new Error('Cloud transport SSE response did not include a readable stream.')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffered = ''
+      let dataLines: string[] = []
+
+      const processLine = (rawLine: string) => {
+        const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+        if (line === '') {
+          dispatch(dataLines)
+          dataLines = []
+          return
+        }
+        if (line.startsWith(':')) return
+        const delimiter = line.indexOf(':')
+        const field = delimiter === -1 ? line : line.slice(0, delimiter)
+        const value = delimiter === -1
+          ? ''
+          : line.slice(delimiter + 1).replace(/^ /, '')
+        if (field === 'data') dataLines.push(value)
+      }
+
+      try {
+        while (!closed) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          buffered += decoder.decode(chunk.value, { stream: true })
+          let newlineIndex = buffered.indexOf('\n')
+          while (newlineIndex >= 0) {
+            processLine(buffered.slice(0, newlineIndex))
+            buffered = buffered.slice(newlineIndex + 1)
+            newlineIndex = buffered.indexOf('\n')
+          }
+        }
+        buffered += decoder.decode()
+        if (buffered) processLine(buffered)
+        dispatch(dataLines)
+      } finally {
+        reader.releaseLock()
+      }
     } finally {
-      reader.releaseLock()
+      detachAbortSignal()
     }
   })().catch((error) => {
     if (!closed) input.onError?.(error)
@@ -1041,6 +1062,7 @@ function subscribeFetchSse(
   return {
     close() {
       closed = true
+      detachAbortSignal()
       controller.abort()
     },
   }
@@ -1075,6 +1097,24 @@ function cloudApiRequestUrl(baseUrl: string, path: string) {
     throw new Error('Cloud transport path must target an API route.')
   }
   return `${baseUrl}${path}`
+}
+
+function attachAbortSignal(
+  controller: AbortController,
+  signal: AbortSignal | null | undefined,
+  onAbort?: () => void,
+) {
+  if (!signal) return () => undefined
+  const abort = () => {
+    onAbort?.()
+    controller.abort(signal.reason)
+  }
+  if (signal.aborted) {
+    abort()
+    return () => undefined
+  }
+  signal.addEventListener('abort', abort, { once: true })
+  return () => signal.removeEventListener('abort', abort)
 }
 
 async function parseJson<T>(response: Awaited<ReturnType<CloudTransportFetch>>, url: string): Promise<T> {
@@ -1114,6 +1154,7 @@ export function createHttpSseCloudTransportAdapter(
     }
     const requestUrl = cloudApiRequestUrl(baseUrl, path)
     const controller = new AbortController()
+    const detachAbortSignal = attachAbortSignal(controller, options.signal)
     const timeout = requestTimeoutMs > 0
       ? setTimeout(() => controller.abort(), requestTimeoutMs)
       : null
@@ -1131,6 +1172,7 @@ export function createHttpSseCloudTransportAdapter(
       return parseJson<T>(response, path)
     } finally {
       if (timeout) clearTimeout(timeout)
+      detachAbortSignal()
     }
   }
 
@@ -1605,6 +1647,7 @@ export function createHttpSseCloudTransportAdapter(
         return subscribeFetchSse(fetcher, url, {
           headers,
           credentials: options.credentials,
+          signal: options.signal,
           onEvent,
           onError: input.onError,
         })
@@ -1613,6 +1656,7 @@ export function createHttpSseCloudTransportAdapter(
       if (!EventSourceImpl) throw new Error('EventSource is not available for cloud delivery subscriptions.')
       return subscribeEventSource(EventSourceImpl, url, {
         credentials: options.credentials,
+        signal: options.signal,
         onEvent,
         onError: input.onError,
       })
@@ -1628,6 +1672,7 @@ export function createHttpSseCloudTransportAdapter(
         return subscribeFetchSse(fetcher, workspaceEventUrl(baseUrl, input.afterSequence), {
           headers,
           credentials: options.credentials,
+          signal: options.signal,
           onEvent: input.onEvent,
           onError: input.onError,
         })
@@ -1636,6 +1681,7 @@ export function createHttpSseCloudTransportAdapter(
       if (!EventSourceImpl) throw new Error('EventSource is not available for cloud transport subscriptions.')
       return subscribeEventSource(EventSourceImpl, workspaceEventUrl(baseUrl, input.afterSequence), {
         credentials: options.credentials,
+        signal: options.signal,
         onEvent: input.onEvent,
         onError: input.onError,
       })
@@ -1645,6 +1691,7 @@ export function createHttpSseCloudTransportAdapter(
         return subscribeFetchSse(fetcher, eventUrl(baseUrl, sessionId, input.afterSequence), {
           headers,
           credentials: options.credentials,
+          signal: options.signal,
           onEvent: input.onEvent,
           onError: input.onError,
         })
@@ -1653,6 +1700,7 @@ export function createHttpSseCloudTransportAdapter(
       if (!EventSourceImpl) throw new Error('EventSource is not available for cloud transport subscriptions.')
       return subscribeEventSource(EventSourceImpl, eventUrl(baseUrl, sessionId, input.afterSequence), {
         credentials: options.credentials,
+        signal: options.signal,
         onEvent: input.onEvent,
         onError: input.onError,
       })

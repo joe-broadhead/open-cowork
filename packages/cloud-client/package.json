@@ -1,7 +1,7 @@
 {
   "name": "@open-cowork/cloud-client",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "description": "Typed Open Cowork Cloud HTTP and SSE client",
   "author": "Joe Broadhead",
   "license": "MIT",
@@ -13,9 +13,77 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./adapter": {
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js"
+    },
+    "./domains/artifacts": {
+      "types": "./dist/domains/artifacts.d.ts",
+      "import": "./dist/domains/artifacts.js"
+    },
+    "./domains/billing": {
+      "types": "./dist/domains/billing.d.ts",
+      "import": "./dist/domains/billing.js"
+    },
+    "./domains/byok": {
+      "types": "./dist/domains/byok.d.ts",
+      "import": "./dist/domains/byok.js"
+    },
+    "./domains/capabilities": {
+      "types": "./dist/domains/capabilities.d.ts",
+      "import": "./dist/domains/capabilities.js"
+    },
+    "./domains/channels": {
+      "types": "./dist/domains/channels.d.ts",
+      "import": "./dist/domains/channels.js"
+    },
+    "./domains/config": {
+      "types": "./dist/domains/config.d.ts",
+      "import": "./dist/domains/config.js"
+    },
+    "./domains/identity": {
+      "types": "./dist/domains/identity.d.ts",
+      "import": "./dist/domains/identity.js"
+    },
+    "./domains/sessions": {
+      "types": "./dist/domains/sessions.d.ts",
+      "import": "./dist/domains/sessions.js"
+    },
+    "./domains/settings": {
+      "types": "./dist/domains/settings.d.ts",
+      "import": "./dist/domains/settings.js"
+    },
+    "./domains/threads": {
+      "types": "./dist/domains/threads.d.ts",
+      "import": "./dist/domains/threads.js"
+    },
+    "./domains/transport": {
+      "types": "./dist/domains/transport.d.ts",
+      "import": "./dist/domains/transport.js"
+    },
+    "./domains/workflows": {
+      "types": "./dist/domains/workflows.d.ts",
+      "import": "./dist/domains/workflows.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/cloud-client build && node test/public-import-smoke.mjs"
   },
   "dependencies": {
     "@open-cowork/shared": "workspace:*"

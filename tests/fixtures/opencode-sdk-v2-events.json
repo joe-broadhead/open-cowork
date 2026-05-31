@@ -1,0 +1,266 @@
+{
+  "sdkEvents": [
+    {
+      "name": "assistant-text",
+      "expectedTypes": ["assistant.message"],
+      "raw": {
+        "payload": {
+          "type": "message.part.updated",
+          "data": {
+            "sessionID": "session-1",
+            "messageID": "assistant-message-1",
+            "role": "assistant",
+            "part": {
+              "id": "part-1",
+              "type": "text",
+              "text": "normalized assistant text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tool-completed",
+      "expectedTypes": ["tool.call"],
+      "raw": {
+        "payload": {
+          "type": "message.part.updated",
+          "data": {
+            "sessionID": "session-1",
+            "part": {
+              "id": "part-2",
+              "callID": "tool-call-1",
+              "type": "tool",
+              "tool": "bash",
+              "state": {
+                "input": { "command": "pnpm test" },
+                "status": "completed",
+                "output": "ok"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "permission-requested",
+      "expectedTypes": ["permission.requested"],
+      "raw": {
+        "payload": {
+          "type": "permission.asked",
+          "properties": {
+            "sessionID": "session-1",
+            "permission": {
+              "id": "permission-1",
+              "tool": "bash",
+              "input": { "command": "pnpm test" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "question-asked",
+      "expectedTypes": ["question.asked"],
+      "raw": {
+        "payload": {
+          "type": "question.asked",
+          "properties": {
+            "sessionID": "session-1",
+            "id": "question-1",
+            "questions": [
+              {
+                "header": "Scope",
+                "question": "Run all checks?",
+                "options": [
+                  { "label": "Yes", "description": "Run the full suite" }
+                ]
+              }
+            ],
+            "tool": { "messageID": "assistant-message-1", "callID": "tool-call-1" }
+          }
+        }
+      }
+    },
+    {
+      "name": "todos-updated",
+      "expectedTypes": ["todos.updated"],
+      "raw": {
+        "payload": {
+          "type": "todo.updated",
+          "properties": {
+            "sessionID": "session-1",
+            "todos": [
+              {
+                "id": "todo-1",
+                "content": "Harden SDK boundary",
+                "status": "in_progress",
+                "priority": "high"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "status-idle",
+      "expectedTypes": ["session.status"],
+      "raw": {
+        "payload": {
+          "type": "session.status",
+          "properties": {
+            "sessionID": "session-1",
+            "status": { "type": "idle" }
+          }
+        }
+      }
+    },
+    {
+      "name": "step-cost",
+      "expectedTypes": ["cost.updated"],
+      "raw": {
+        "payload": {
+          "type": "message.part.updated",
+          "data": {
+            "sessionID": "session-1",
+            "messageID": "assistant-message-1",
+            "part": {
+              "id": "step-1",
+              "type": "step-finish",
+              "cost": 0.42,
+              "tokens": {
+                "input": 10,
+                "output": 20,
+                "reasoning": 3,
+                "cache": { "read": 4, "write": 5 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "runtime-error",
+      "expectedTypes": ["runtime.error"],
+      "raw": {
+        "payload": {
+          "type": "session.error",
+          "properties": {
+            "sessionID": "session-1",
+            "error": { "message": "provider failed" }
+          }
+        }
+      }
+    }
+  ],
+  "resolutionEvents": [
+    {
+      "name": "permission-resolved",
+      "expectedTypes": ["permission.resolved"],
+      "raw": {
+        "payload": {
+          "type": "permission.resolved",
+          "properties": {
+            "sessionID": "session-1",
+            "permission": { "id": "permission-1" }
+          }
+        }
+      }
+    },
+    {
+      "name": "question-resolved",
+      "expectedTypes": ["question.resolved"],
+      "raw": {
+        "payload": {
+          "type": "question.resolved",
+          "properties": {
+            "sessionID": "session-1",
+            "id": "question-1"
+          }
+        }
+      }
+    }
+  ],
+  "dropEvents": [
+    {
+      "name": "user-text-echo",
+      "expectedDropped": {
+        "sdkEventType": "message.part.updated",
+        "reason": "no-projected-events"
+      },
+      "raw": {
+        "payload": {
+          "type": "message.part.updated",
+          "data": {
+            "sessionID": "session-1",
+            "messageID": "user-message-1",
+            "role": "user",
+            "part": {
+              "id": "user-part-1",
+              "type": "text",
+              "text": "user echo"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown-sdk-event",
+      "expectedDropped": {
+        "sdkEventType": "mcp.unrecognized",
+        "reason": "unknown-event-type"
+      },
+      "raw": {
+        "payload": {
+          "type": "mcp.unrecognized",
+          "properties": {
+            "sessionID": "session-1"
+          }
+        }
+      }
+    },
+    {
+      "name": "invalid-envelope",
+      "expectedDropped": {
+        "sdkEventType": null,
+        "reason": "invalid-envelope"
+      },
+      "raw": {
+        "payload": {
+          "data": {
+            "sessionID": "session-1"
+          }
+        }
+      }
+    }
+  ],
+  "directCloudEvents": [
+    {
+      "name": "task-run",
+      "event": {
+        "type": "task.run",
+        "payload": {
+          "taskRunId": "task-1",
+          "title": "Delegated release check",
+          "agent": "reviewer",
+          "status": "running",
+          "sourceSessionId": "child-session-1"
+        }
+      }
+    },
+    {
+      "name": "artifact-created",
+      "event": {
+        "type": "artifact.created",
+        "payload": {
+          "artifactId": "artifact-1",
+          "filename": "report.md",
+          "mime": "text/markdown",
+          "toolId": "tool-call-1",
+          "toolName": "write",
+          "taskRunId": "task-1"
+        }
+      }
+    }
+  ]
+}

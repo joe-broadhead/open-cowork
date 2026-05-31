@@ -23,8 +23,10 @@ import type { PathProvider } from './path-provider.ts'
 import {
   createSdkCloudRuntimeAdapter,
   type CloudRuntimeAdapter,
+  type CloudRuntimeDroppedEvent,
   type CloudRuntimeEvent,
   type CloudRuntimeEventListener,
+  type CloudRuntimeSubscribeOptions,
 } from './runtime-adapter.ts'
 
 type EventCapableClient = {
@@ -54,6 +56,11 @@ export type NodeOpencodeCloudRuntimeOptions = {
   opencodeBinPath?: string | null
   enableNativeWebSearch?: boolean
   onUnexpectedExit?: (event: ManagedOpencodeServerUnexpectedExit) => void
+}
+
+export type OpencodeRuntimeEventTranslation = {
+  events: CloudRuntimeEvent[]
+  dropped: CloudRuntimeDroppedEvent | null
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -307,12 +314,8 @@ function eventFromSessionStatus(properties: Record<string, unknown>): CloudRunti
   }]
 }
 
-export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[] {
-  const event = normalizeRuntimeEventEnvelope(raw)
-  if (!event) return []
-  const properties = event.properties || {}
-
-  switch (event.type) {
+function knownOpencodeRuntimeEvents(eventType: string, properties: Record<string, unknown>): CloudRuntimeEvent[] | null {
+  switch (eventType) {
     case 'message.part.updated':
       return eventFromMessagePartUpdated(properties)
     case 'message.updated':
@@ -352,16 +355,54 @@ export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[]
     case 'todos.updated':
       return eventsFromTodosUpdated(properties)
     default:
-      return []
+      return null
   }
+}
+
+export function translateOpencodeRuntimeEventWithDiagnostics(raw: unknown): OpencodeRuntimeEventTranslation {
+  const event = normalizeRuntimeEventEnvelope(raw)
+  if (!event) {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: null,
+        reason: 'invalid-envelope',
+      },
+    }
+  }
+  const properties = event.properties || {}
+  const translated = knownOpencodeRuntimeEvents(event.type, properties)
+  if (!translated) {
+    return {
+      events: [],
+      dropped: {
+        sdkEventType: event.type,
+        reason: 'unknown-event-type',
+      },
+    }
+  }
+  return {
+    events: translated,
+    dropped: translated.length === 0
+      ? {
+          sdkEventType: event.type,
+          reason: 'no-projected-events',
+        }
+      : null,
+  }
+}
+
+export function translateOpencodeRuntimeEvent(raw: unknown): CloudRuntimeEvent[] {
+  return translateOpencodeRuntimeEventWithDiagnostics(raw).events
 }
 
 export function subscribeToOpencodeCloudRuntimeEvents(
   client: EventCapableClient,
   listener: CloudRuntimeEventListener,
-  options: { signal?: AbortSignal, onError?: (error: unknown) => void } = {},
+  options: CloudRuntimeSubscribeOptions = {},
 ) {
   if (!client.event?.subscribe) return () => undefined
+  if (options.signal?.aborted) return () => undefined
   const controller = new AbortController()
   const abort = () => controller.abort()
   options.signal?.addEventListener('abort', abort, { once: true })
@@ -370,7 +411,10 @@ export function subscribeToOpencodeCloudRuntimeEvents(
     try {
       const result = await client.event!.subscribe({}, { signal: controller.signal })
       for await (const raw of result.stream) {
-        for (const event of translateOpencodeRuntimeEvent(raw)) {
+        if (controller.signal.aborted) break
+        const translation = translateOpencodeRuntimeEventWithDiagnostics(raw)
+        if (translation.dropped) options.onDroppedEvent?.(translation.dropped)
+        for (const event of translation.events) {
           listener(event)
         }
       }

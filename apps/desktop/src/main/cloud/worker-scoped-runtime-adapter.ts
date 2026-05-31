@@ -11,6 +11,7 @@ import type { PathProvider } from './path-provider.ts'
 import { createCloudSessionPathProvider } from './path-provider.ts'
 import type {
   CloudRuntimeAdapter,
+  CloudRuntimeDroppedEvent,
   CloudRuntimeEvent,
   CloudRuntimeEventListener,
   CloudRuntimeExecutionContext,
@@ -51,6 +52,11 @@ type RuntimeEntry = {
   lastUsedAt: number
 }
 
+type RuntimeEventSubscription = {
+  onError?: (error: unknown) => void
+  onDroppedEvent?: (event: CloudRuntimeDroppedEvent) => void
+}
+
 const DEFAULT_MAX_RUNTIME_ENTRIES = 100
 const DEFAULT_RUNTIME_IDLE_TTL_MS = 30 * 60 * 1000
 
@@ -79,7 +85,7 @@ function mapRuntimeEventToCoworkSession(context: CloudRuntimeExecutionContext, e
 
 export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAdapterOptions): CloudRuntimeAdapter {
   const runtimes = new Map<string, RuntimeEntry>()
-  const listeners = new Map<CloudRuntimeEventListener, { onError?: (error: unknown) => void }>()
+  const listeners = new Map<CloudRuntimeEventListener, RuntimeEventSubscription>()
   const maxRuntimeEntries = Math.max(1, Math.floor(options.maxRuntimeEntries || DEFAULT_MAX_RUNTIME_ENTRIES))
   const runtimeIdleTtlMs = Math.max(1, Math.floor(options.runtimeIdleTtlMs || DEFAULT_RUNTIME_IDLE_TTL_MS))
 
@@ -95,6 +101,9 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       {
         onError(error) {
           for (const entry of listeners.values()) entry.onError?.(error)
+        },
+        onDroppedEvent(event) {
+          for (const entry of listeners.values()) entry.onDroppedEvent?.(event)
         },
       },
     )
@@ -257,15 +266,22 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       })
     },
     async subscribeEvents(listener, subscribeOptions) {
-      listeners.set(listener, { onError: subscribeOptions?.onError })
+      if (subscribeOptions?.signal?.aborted) return () => undefined
+      listeners.set(listener, {
+        onError: subscribeOptions?.onError,
+        onDroppedEvent: subscribeOptions?.onDroppedEvent,
+      })
+      const unsubscribeListener = () => {
+        subscribeOptions?.signal?.removeEventListener('abort', unsubscribeListener)
+        listeners.delete(listener)
+      }
+      subscribeOptions?.signal?.addEventListener('abort', unsubscribeListener, { once: true })
       for (const [key, entry] of runtimes.entries()) {
         if (entry.unsubscribe) continue
         const [tenantId, sessionId] = key.split('\0')
         entry.unsubscribe = await subscribeRuntimeEvents({ tenantId, sessionId }, entry.adapter)
       }
-      return () => {
-        listeners.delete(listener)
-      }
+      return unsubscribeListener
     },
     async close() {
       for (const [key, entry] of Array.from(runtimes.entries())) {

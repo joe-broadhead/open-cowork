@@ -19,6 +19,17 @@ export type CloudRuntimeEvent = {
 
 export type CloudRuntimeEventListener = (event: CloudRuntimeEvent) => void | Promise<void>
 
+export type CloudRuntimeDroppedEvent = {
+  sdkEventType: string | null
+  reason: 'invalid-envelope' | 'unknown-event-type' | 'no-projected-events'
+}
+
+export type CloudRuntimeSubscribeOptions = {
+  signal?: AbortSignal
+  onError?: (error: unknown) => void
+  onDroppedEvent?: (event: CloudRuntimeDroppedEvent) => void
+}
+
 export type CloudPromptResult = {
   events?: CloudRuntimeEvent[]
 }
@@ -44,7 +55,7 @@ export type CloudRuntimeAdapter = {
   respondToPermission?(input: { permissionId: string, allowed: boolean, context?: CloudRuntimeExecutionContext | null }): Promise<void>
   subscribeEvents?: (
     listener: CloudRuntimeEventListener,
-    options?: { signal?: AbortSignal, onError?: (error: unknown) => void },
+    options?: CloudRuntimeSubscribeOptions,
   ) => Promise<() => void> | (() => void)
   close?: () => Promise<void> | void
 }

@@ -7,13 +7,78 @@ test('cloud client package is standalone and desktop transport is a compatibilit
   const root = process.cwd()
   const packageJson = JSON.parse(readFileSync(join(root, 'packages/cloud-client/package.json'), 'utf8')) as {
     name?: string
+    private?: boolean
+    exports?: Record<string, unknown>
+    files?: string[]
+    sideEffects?: boolean
+    dependencies?: Record<string, string>
+  }
+  const sharedPackageJson = JSON.parse(readFileSync(join(root, 'packages/shared/package.json'), 'utf8')) as {
+    name?: string
+    private?: boolean
+    exports?: Record<string, unknown>
+    files?: string[]
+    sideEffects?: boolean
   }
   const clientSource = clientSources(join(root, 'packages/cloud-client/src')).join('\n')
   const desktopTransport = readFileSync(join(root, 'apps/desktop/src/main/cloud/transport-adapter.ts'), 'utf8')
+  const readme = readFileSync(join(root, 'packages/cloud-client/README.md'), 'utf8')
+  const docs = readFileSync(join(root, 'docs/cloud-client.md'), 'utf8')
 
   assert.equal(packageJson.name, '@open-cowork/cloud-client')
-  assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service/)
+  assert.equal(packageJson.private, false)
+  assert.equal(packageJson.sideEffects, false)
+  assert.deepEqual(packageJson.files, ['dist', 'README.md'])
+  const publicExports = [
+    '.',
+    './adapter',
+    './domains/artifacts',
+    './domains/billing',
+    './domains/byok',
+    './domains/capabilities',
+    './domains/channels',
+    './domains/config',
+    './domains/identity',
+    './domains/sessions',
+    './domains/settings',
+    './domains/threads',
+    './domains/transport',
+    './domains/workflows',
+    './package.json',
+  ].sort()
+  assert.deepEqual(Object.keys(packageJson.exports || {}).sort(), publicExports)
+  assert.equal(sharedPackageJson.name, '@open-cowork/shared')
+  assert.equal(sharedPackageJson.private, false)
+  assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './package.json'])
+  assert.deepEqual(sharedPackageJson.files, ['dist'])
+  assert.equal(sharedPackageJson.sideEffects, false)
+  for (const dependencyName of Object.keys(packageJson.dependencies || {})) {
+    if (!dependencyName.startsWith('@open-cowork/')) continue
+    const dependencyPackage = JSON.parse(readFileSync(join(root, `packages/${dependencyName.replace('@open-cowork/', '')}/package.json`), 'utf8')) as { private?: boolean }
+    assert.equal(dependencyPackage.private, false, `${dependencyName} must be publishable because cloud-client is public`)
+  }
+  assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service|@opencode-ai\/sdk/)
   assert.equal(desktopTransport.trim(), "export * from '../../../../../packages/cloud-client/src/index.ts'")
+  for (const document of [readme, docs]) {
+    assert.match(document, /supported public package|supported typed client/i)
+    assert.match(document, /pre-1\.0|SemVer|semver/i)
+    assert.match(document, /requestTimeoutMs/i)
+    assert.match(document, /signal/i)
+    assert.match(document, /does not retry automatically/i)
+  }
+})
+
+test('cloud API token policy is extracted from the monolithic session service', () => {
+  const root = process.cwd()
+  const policySource = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/api-token-policy.ts'), 'utf8')
+  const sessionService = readFileSync(join(root, 'apps/desktop/src/main/cloud/session-service.ts'), 'utf8')
+
+  assert.match(policySource, /export function normalizeApiTokenScopes/)
+  assert.match(policySource, /export function normalizeApiTokenExpiresAt/)
+  assert.match(policySource, /export function enforceApiTokenScopePolicy/)
+  assert.doesNotMatch(sessionService, /function normalizeApiTokenScopes/)
+  assert.doesNotMatch(sessionService, /function normalizeApiTokenExpiresAt/)
+  assert.doesNotMatch(sessionService, /function enforceApiTokenScopePolicy/)
 })
 
 function clientSources(directory: string): string[] {

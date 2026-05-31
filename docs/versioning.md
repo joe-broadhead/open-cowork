@@ -102,6 +102,10 @@ The following are treated as breaking and bump the major version:
 - **Preload API** — removing a method from `window.coworkApi`, or
   changing the shape of an existing method's parameters or return
   type.
+- **Published package API** — removing or renaming a public export from
+  `@open-cowork/cloud-client` or `@open-cowork/shared`, changing a
+  documented cloud-client domain entry point, or changing exported wire
+  types in a way that breaks downstream TypeScript consumers.
 - **IPC channels** — removing a handler, or changing the shape of
   the request / response payload for an existing channel.
 - **Branded data-directory layout** — changing where `sessions.json`

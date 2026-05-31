@@ -65,6 +65,16 @@
         "src/**/*.ts"
       ]
     },
+    "packages/cloud-client": {
+      "entry": [
+        "src/index.ts",
+        "test/public-import-smoke.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.mjs"
+      ]
+    },
     "mcps/charts": {
       "entry": [
         "src/index.ts"
