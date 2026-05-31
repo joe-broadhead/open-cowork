@@ -3409,11 +3409,20 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       )
       if (!runRow) return null
       const current = workflowRunFromRow(runRow)
+      if (current.status === 'completed' || current.status === 'failed' || current.status === 'cancelled') {
+        throw new Error('Workflow run is not attachable.')
+      }
+      if (current.status !== 'queued' && !(current.status === 'running' && current.sessionId === input.sessionId)) {
+        throw new Error('Workflow run is not attachable.')
+      }
+      if (current.sessionId && current.sessionId !== input.sessionId) throw new Error('Workflow run is already attached to another session.')
       if (current.claimToken) {
         if (current.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
         if (current.claimExpiresAt && Date.parse(current.claimExpiresAt) <= Date.now()) {
           throw new Error('Workflow run claim is stale.')
         }
+      } else if (input.claimToken) {
+        throw new Error('Workflow run claim is stale.')
       }
       const startedAt = nowIso(input.startedAt)
       const result = await client.query(

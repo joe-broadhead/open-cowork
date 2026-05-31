@@ -3780,9 +3780,18 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
     const run = this.workflowRuns.get(key(input.tenantId, input.runId))
     if (!run || run.workflowId !== input.workflowId) return null
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      throw new Error('Workflow run is not attachable.')
+    }
+    if (run.status !== 'queued' && !(run.status === 'running' && run.sessionId === input.sessionId)) {
+      throw new Error('Workflow run is not attachable.')
+    }
+    if (run.sessionId && run.sessionId !== input.sessionId) throw new Error('Workflow run is already attached to another session.')
     if (run.claimToken) {
       if (run.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
       if (run.claimExpiresAt && Date.parse(run.claimExpiresAt) <= Date.now()) throw new Error('Workflow run claim is stale.')
+    } else if (input.claimToken) {
+      throw new Error('Workflow run claim is stale.')
     }
     const startedAt = nowIso(input.startedAt)
     run.sessionId = input.sessionId

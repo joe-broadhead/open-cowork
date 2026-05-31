@@ -1447,6 +1447,93 @@ test('cloud control plane recovers expired webhook workflow start claims', () =>
   assert.notEqual(second?.run.claimToken, first.claimToken)
 })
 
+test('cloud control plane rejects stale workflow attaches after expired claims are cleared', () => {
+  const store = seededStore()
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-stale-attach',
+    draft: {
+      title: 'Stale attach workflow',
+      instructions: 'Do not attach stale starters.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  const first = store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-stale-attach',
+    runId: 'stale-attach-run',
+    triggerType: 'manual',
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 1,
+    createdAt: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  assert.ok(first.claimToken)
+  assert.equal(store.reapExpiredWorkflowClaims({
+    maxAttempts: 2,
+    now: new Date('2030-01-01T09:00:00.002Z'),
+  })[0]?.action, 'retried')
+  assert.equal(store.getWorkflowRun('tenant-1', 'stale-attach-run')?.claimToken, null)
+  assert.throws(() => store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-stale-attach',
+    runId: 'stale-attach-run',
+    sessionId: 'session-1',
+    claimToken: first.claimToken,
+  }), /stale/)
+
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-terminal-stale-attach',
+    draft: {
+      title: 'Terminal stale attach workflow',
+      instructions: 'Do not attach failed runs.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  const terminal = store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-terminal-stale-attach',
+    runId: 'terminal-stale-attach-run',
+    triggerType: 'manual',
+    claimedBy: 'workflow-api:user-1',
+    leaseTtlMs: 1,
+    createdAt: new Date('2030-01-01T09:00:00.000Z'),
+  })
+  assert.ok(terminal.claimToken)
+  assert.equal(store.reapExpiredWorkflowClaims({
+    maxAttempts: 1,
+    now: new Date('2030-01-01T09:00:00.002Z'),
+  }).find((record) => record.runId === 'terminal-stale-attach-run')?.action, 'failed')
+  assert.equal(store.getWorkflowRun('tenant-1', 'terminal-stale-attach-run')?.status, 'failed')
+  assert.throws(() => store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-terminal-stale-attach',
+    runId: 'terminal-stale-attach-run',
+    sessionId: 'session-1',
+    claimToken: terminal.claimToken,
+  }), /not attachable/)
+  assert.throws(() => store.attachWorkflowRunSession({
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-terminal-stale-attach',
+    runId: 'terminal-stale-attach-run',
+    sessionId: 'session-1',
+  }), /not attachable/)
+})
+
 test('cloud control plane recovers workflow starts stranded after session attachment', () => {
   const store = seededStore()
   store.createWorkflow({

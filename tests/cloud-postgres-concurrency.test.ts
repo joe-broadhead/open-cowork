@@ -850,6 +850,109 @@ test('real Postgres cloud store recovers expired webhook workflow start claims',
   })
 })
 
+test('real Postgres cloud store rejects stale workflow attaches after expired claims are cleared', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const workflowId = `${ids.tenantId}-workflow-stale-attach`
+    const runId = `${ids.tenantId}-stale-attach-run`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: 'Stale attach workflow',
+        instructions: 'Do not attach stale starters.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })
+    const first = await store.createWorkflowRun({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      runId,
+      triggerType: 'manual',
+      claimedBy: `workflow-api:${ids.userId}`,
+      leaseTtlMs: 1,
+      createdAt: new Date('2030-01-01T09:00:00.000Z'),
+    })
+    assert.ok(first.claimToken)
+    assert.equal((await store.reapExpiredWorkflowClaims({
+      maxAttempts: 2,
+      now: new Date('2030-01-01T09:00:00.002Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === runId)?.action, 'retried')
+    assert.equal((await store.getWorkflowRun(ids.tenantId, runId))?.claimToken, null)
+    await assert.rejects(
+      () => store.attachWorkflowRunSession({
+        tenantId: ids.tenantId,
+        workflowId,
+        runId,
+        sessionId: ids.sessionId,
+        claimToken: first.claimToken,
+      }),
+      /stale/,
+    )
+
+    const terminalWorkflowId = `${ids.tenantId}-workflow-terminal-stale-attach`
+    const terminalRunId = `${ids.tenantId}-terminal-stale-attach-run`
+    await store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId: terminalWorkflowId,
+      draft: {
+        title: 'Terminal stale attach workflow',
+        instructions: 'Do not attach failed runs.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })
+    const terminal = await store.createWorkflowRun({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId: terminalWorkflowId,
+      runId: terminalRunId,
+      triggerType: 'manual',
+      claimedBy: `workflow-api:${ids.userId}`,
+      leaseTtlMs: 1,
+      createdAt: new Date('2030-01-01T09:00:00.000Z'),
+    })
+    assert.ok(terminal.claimToken)
+    assert.equal((await store.reapExpiredWorkflowClaims({
+      maxAttempts: 1,
+      now: new Date('2030-01-01T09:00:00.002Z'),
+    })).find((record) => record.tenantId === ids.tenantId && record.runId === terminalRunId)?.action, 'failed')
+    assert.equal((await store.getWorkflowRun(ids.tenantId, terminalRunId))?.status, 'failed')
+    await assert.rejects(
+      () => store.attachWorkflowRunSession({
+        tenantId: ids.tenantId,
+        workflowId: terminalWorkflowId,
+        runId: terminalRunId,
+        sessionId: ids.sessionId,
+        claimToken: terminal.claimToken,
+      }),
+      /not attachable/,
+    )
+    await assert.rejects(
+      () => store.attachWorkflowRunSession({
+        tenantId: ids.tenantId,
+        workflowId: terminalWorkflowId,
+        runId: terminalRunId,
+        sessionId: ids.sessionId,
+      }),
+      /not attachable/,
+    )
+  })
+})
+
 test('real Postgres cloud store recovers workflow starts stranded after session attachment', {
   skip: POSTGRES_SKIP,
 }, async () => {
