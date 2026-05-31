@@ -277,14 +277,23 @@ The validator checks:
 
 ## Load, Soak, And Launch Gates
 
-Before private-beta or public-beta rollout, define the exact launch profile and
-run the load/soak harness in strict mode. The committed target profiles are in
-`deploy/load/launch-readiness-targets.json`:
+Before local/self-host beta, private-beta, or public-beta rollout, define the
+exact launch profile and run the load/soak harness in strict mode. The
+committed target profiles are in `deploy/load/launch-readiness-targets.json`,
+and the current accepted public launch tier is recorded in
+`deploy/load/launch-evidence-matrix.json`:
 
+- `local-self-host-beta` for OSS self-host and local reference deployments. This
+  is the only launch tier the public repo currently claims.
 - `private-beta` for design-partner and internal managed BYOK rollout.
 - `public-beta` for the first broader hosted BYOK rollout.
 - `enterprise-scale` for large downstream or managed org readiness after
   public-beta evidence is green.
+
+Do not use public templates alone to claim private hosted beta, public hosted
+beta, general availability, or enterprise-scale readiness. Those tiers need
+environment-specific private operations evidence for load, soak, failover,
+restore, security, support, and cost/SLO behavior.
 
 Generate the planned route matrix:
 

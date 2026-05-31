@@ -6,16 +6,20 @@ description: Load, soak, go/no-go, and release evidence gates for Open Cowork Cl
 # Launch Readiness Gates
 
 Use these gates before treating a deployed Open Cowork Cloud plus Gateway stack
-as ready for private beta, public beta, or managed BYOK SaaS rollout. The same
-workflow applies to GCP, AWS, Azure, DigitalOcean, Kubernetes, or a downstream
-internal platform: supply the deployed URLs and tokens at runtime; do not encode
-provider project values in the repository.
+as ready for local/self-host beta, private beta, public beta, general
+availability, or enterprise-scale rollout. The same workflow applies to GCP,
+AWS, Azure, DigitalOcean, Kubernetes, or a downstream internal platform: supply
+the deployed URLs and tokens at runtime; do not encode provider project values
+in the repository.
 
 ## Target Profiles
 
 Capacity targets live in
 `deploy/load/launch-readiness-targets.json`.
 
+- `local-self-host-beta`: OSS self-host and local reference deployment target.
+  This is the only launch tier currently accepted by the public evidence
+  matrix.
 - `private-beta`: design-partner and internal managed BYOK rollout.
 - `public-beta`: first public hosted BYOK rollout.
 - `enterprise-scale`: large organization readiness target for downstream or
@@ -36,6 +40,24 @@ Private and public beta are launch gates. `enterprise-scale` is the production
 growth gate: run it only after the lower profiles are green and the deployment
 has enough database, object-store, worker, and gateway capacity to absorb the
 larger thread, SSE, and command queues.
+
+## Current Accepted Tier
+
+The current public launch-evidence matrix lives at
+`deploy/load/launch-evidence-matrix.json`. It accepts only
+`local-self-host-beta` as a public product claim:
+
+- public Compose, Helm, GCP reference templates, validators, and CI gates are
+  coherent enough for OSS/deployer beta evaluation,
+- Cloud Web, Desktop cloud sync, and Gateway continuation have public smoke and
+  test coverage,
+- private hosted beta, public hosted beta, general availability, and
+  enterprise-scale readiness are not claimed from public templates alone.
+
+Higher hosted tiers require private operations evidence from the exact target
+environment: load/soak reports, restore drills, failover drills, BYOK provider
+validation, billing/entitlement evidence, support ownership, and cost/SLO
+notes. Store that evidence outside this public repository.
 
 ## Required Environment
 
@@ -173,6 +195,39 @@ If a required token, mutation mode, SSE mode, operator mode, or gateway route is
 skipped, the result is at best **conditional-go** and must not be treated as a
 managed public launch approval.
 
+## Evidence Categories
+
+The launch evidence matrix requires every accepted tier to cover:
+
+- load and soak behavior for Cloud sessions, SSE, workers, workflows, Gateway,
+  artifacts, admin pagination, quotas/entitlements, and BYOK denials,
+- failover and recovery for workers, scheduler, Gateway cursors, Cloud Web/API
+  restarts, object-store failures, and BYOK reveal failures,
+- backup and restore for Postgres records, events, projections, workflows,
+  Gateway bindings/deliveries, artifacts, snapshots/checkpoints, BYOK refs, and
+  audit events,
+- security boundaries for secret redaction, operator endpoint separation,
+  API-token TTL/scope/revocation, public webhook ingress, trusted-header auth,
+  CSP/browser boundaries, package import boundaries, and private-value scans,
+- release and packaging gates for Desktop, Cloud Web, Gateway, MCPs, docs,
+  deployment validators, SBOM/notices/license checks, private-value scanning,
+  script-contract tests, and reference deployment smoke evidence.
+
+## Findings Workflow
+
+Every failed launch-readiness check must have one disposition:
+
+- `immediate-fix`: fix it in the current scope when the failure is narrow and
+  safe,
+- `narrow-follow-up-issue`: open a focused issue with owner, reproduction,
+  evidence, launch tier, and blocking status,
+- `tier-scoped-out-of-scope`: explicitly record that the selected launch tier
+  does not claim the capability.
+
+Do not reopen broad completed roadmap phases for narrow findings. Do not claim a
+higher launch tier while a required category for that tier has missing,
+conditional, or private-only evidence.
+
 ## Validation
 
 Validate committed launch-readiness artifacts:
@@ -182,4 +237,5 @@ pnpm deploy:launch:validate
 ```
 
 This checks target profiles, harness coverage, required runbook wording, the
-report template, package scripts, and release-checklist links.
+launch evidence matrix, report template, package scripts, and release-checklist
+links.

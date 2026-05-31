@@ -5,11 +5,11 @@ description: Go/no-go report template for Open Cowork Cloud, Desktop sync, and G
 
 # Launch Readiness Report
 
-Use this report as the release evidence record for each private-beta,
-public-beta, or managed rollout candidate. Generated harness output should be
-attached from `.open-cowork-test/launch-readiness/` or copied into a downstream
-private operations repository with secrets and project-specific identifiers
-redacted.
+Use this report as the release evidence record for each local/self-host beta,
+private-beta, public-beta, or managed rollout candidate. Generated harness
+output should be attached from `.open-cowork-test/launch-readiness/` or copied
+into a downstream private operations repository with secrets and project-specific
+identifiers redacted.
 
 ## Release Candidate
 
@@ -18,13 +18,19 @@ redacted.
 - Gateway URL:
 - Image tags:
 - Helm/Compose/Terraform revision:
-- Target profile: `private-beta`, `public-beta`, or `enterprise-scale`
+- Target profile: `local-self-host-beta`, `private-beta`, `public-beta`, or
+  `enterprise-scale`
+- Accepted Launch Tier:
+  `{local-self-host-beta|private-beta|public-beta|general-availability|enterprise-scale}`
+- Evidence matrix: `deploy/load/launch-evidence-matrix.json`
 - Report owner:
 - Date:
 
 ## Go/No-Go
 
 - Decision: `go`, `conditional-go`, or `no-go`
+- Public claim allowed by this report:
+- Claims explicitly not made:
 - Decision owner:
 - Reviewers:
 - Conditions or blockers:
@@ -99,6 +105,18 @@ Record:
 - [ ] `pnpm deploy:continuation:smoke`
 - [ ] provider-specific smoke such as `pnpm deploy:gcp:smoke` where applicable
 
+## Failover And Recovery Evidence
+
+- worker crash during pending command:
+- worker crash after runtime event before projection write:
+- lease expiry and stale-owner write rejection:
+- scheduler restart with due workflow runs:
+- Gateway restart with delivery cursor resume:
+- Cloud Web/API restart with SSE reconnect:
+- object-store transient failure:
+- BYOK reveal failure:
+- database restore/readiness validation:
+
 ## Quota And Abuse Evidence
 
 - prompt/hour quota pressure result:
@@ -121,6 +139,17 @@ Record:
 - scheduler recovery smoke:
 - gateway delivery cursor recovery smoke:
 - redaction sample reviewed:
+
+## Security Boundary Evidence
+
+- no raw secrets in payloads/cache/logs/renderer/gateway/diagnostics/metrics:
+- operator endpoints separate from tenant user APIs:
+- API-token TTL/scope/revocation:
+- public webhook ingress fails closed:
+- trusted-header auth cannot imply admin without signed trusted proof:
+- CSP/browser client boundary:
+- OpenCode SDK/server-only import boundary:
+- public template private-value scan:
 
 ## Public Repo Evidence Boundary
 
@@ -150,6 +179,14 @@ back into public docs.
 - artifact size/rate limit before next retest:
 - unavailable provider/channel features:
 - operational caveats:
+
+## Findings Workflow
+
+For every failed, skipped, conditional, or stale item above, choose one:
+
+| Finding | Evidence | Disposition | Follow-up issue | Tier impact |
+| --- | --- | --- | --- | --- |
+| | | `immediate-fix` / `narrow-follow-up-issue` / `tier-scoped-out-of-scope` | | |
 
 ## Rollback And Support
 
