@@ -14,6 +14,9 @@ provider-specific rendering, approvals, questions, and delivery retries. Cloud
 owns tenancy, sessions, commands, projections, workflows, artifacts, and
 OpenCode execution.
 
+Provider tiers, capabilities, signing requirements, and test expectations are
+tracked in [Gateway Provider Readiness](gateway-provider-readiness.md).
+
 ## Supported Modes
 
 ### Remote Cloud
@@ -124,6 +127,15 @@ macOS and Mac mini:
 - Rotate Telegram bot tokens and Cloud service tokens after exposure.
 - Restrict inbound firewall rules to HTTPS and SSH management.
 - Keep env files out of git and command history.
+
+## Delivery Drain And Local State
+
+Gateway keeps Cloud as the authoritative store for channel bindings, cursors,
+deliveries, sessions, workflows, and audit events. The appliance does not need
+a local database for production state. On shutdown, Gateway closes new Cloud
+delivery subscriptions, drains in-flight delivery sends, acknowledges completed
+deliveries, then stops providers. A restart resumes from Cloud-owned cursors
+and delivery records.
 
 ## Upgrade And Rollback
 

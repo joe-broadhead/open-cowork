@@ -59,6 +59,12 @@ export {
   type GatewayProviderRegistry,
 } from './provider-registry.js'
 export {
+  findGatewayProviderReadiness,
+  GATEWAY_PROVIDER_READINESS_MATRIX,
+  type GatewayProviderReadinessEntry,
+  type GatewayProviderReadinessTier,
+} from './provider-readiness.js'
+export {
   createGatewaySessionStreamManager,
   type GatewaySessionStreamManager,
 } from './session-stream-manager.js'

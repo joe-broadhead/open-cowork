@@ -39,6 +39,7 @@ export function createGatewayRuntime(
   const metrics = createGatewayMetrics()
   const streams = createGatewaySessionStreamManager(cloud, metrics)
   const deliverySubscriptions: Array<{ close(): void }> = []
+  const inFlightDeliveries = new Set<Promise<void>>()
   let started = false
 
   const runtime: GatewayRuntime = {
@@ -53,7 +54,11 @@ export function createGatewayRuntime(
         deliverySubscriptions.push(cloud.subscribeDeliveries({
           claimedBy: `gateway:${config.mode}`,
           onDelivery: (delivery) => {
-            void handleDelivery(delivery, providers, cloud, metrics)
+            const task = handleDelivery(delivery, providers, cloud, metrics)
+              .finally(() => {
+                inFlightDeliveries.delete(task)
+              })
+            inFlightDeliveries.add(task)
           },
           onError: () => {
             metrics.cloudSubscriptionErrors += 1
@@ -63,8 +68,11 @@ export function createGatewayRuntime(
       }
     },
     async stop() {
-      streams.closeAll()
       for (const subscription of deliverySubscriptions.splice(0)) subscription.close()
+      streams.closeAll()
+      if (inFlightDeliveries.size > 0) {
+        await Promise.allSettled([...inFlightDeliveries])
+      }
       await providers.stop()
       started = false
     },

@@ -423,6 +423,7 @@ function validateDocs() {
     'docs/runbooks/restore-drill-report.md',
     'docs/runbooks/managed-byok-saas.md',
     'docs/gateway-appliance.md',
+    'docs/gateway-provider-readiness.md',
     'docs/runbooks/private-beta-launch.md',
     'docs/runbooks/private-beta-support.md',
     'deploy/gateway-appliance/README.md',
@@ -827,10 +828,33 @@ function validateDocs() {
     'docker-compose.gateway-remote.yml',
     'docker-compose.cloud-gateway.yml',
     'not an OpenCode runtime',
+    'Gateway Provider Readiness',
+    'Delivery Drain And Local State',
     'Upgrade And Rollback',
   ]) {
     if (!gatewayAppliance.includes(phrase)) {
       throw new Error(`docs/gateway-appliance.md must include ${phrase}`)
+    }
+  }
+
+  const gatewayProviderReadiness = read('docs/gateway-provider-readiness.md')
+  for (const phrase of [
+    'Provider Readiness Matrix',
+    '`telegram` | Tier 1',
+    '`slack` | Tier 1',
+    '`email` | Tier 1',
+    '`webhook` | Tier 2',
+    '`cli` | Tier 2',
+    '`discord` | Tier 3',
+    '`whatsapp` | Tier 3',
+    '`signal` | Tier 3',
+    '`fake` | Tier demo',
+    'apps/gateway/src/provider-readiness.ts',
+    'Public webhook providers must fail closed',
+    'pnpm deploy:gateway:smoke',
+  ]) {
+    if (!gatewayProviderReadiness.includes(phrase)) {
+      throw new Error(`docs/gateway-provider-readiness.md must include ${phrase}`)
     }
   }
 

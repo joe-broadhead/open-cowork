@@ -166,6 +166,8 @@ loopback by default. The Cloud + Gateway compose file runs a local all-in-one
 Cloud control plane, Postgres, MinIO, and Gateway on one host. See
 `docs/gateway-appliance.md` for VPS, Mac mini, Raspberry Pi, systemd, launchd,
 Telegram webhook, TLS, firewall, upgrade, and rollback guidance.
+Provider launch tiers and contract tests are tracked in
+`docs/gateway-provider-readiness.md`.
 
 Use the split-role reference when testing the scalable topology:
 
