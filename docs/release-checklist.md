@@ -24,6 +24,7 @@ Reference workflows in the repository root:
       with Docker and Helm installed; static fallback output is not release
       evidence.
 - [ ] `pnpm deploy:launch:validate`
+- [ ] `pnpm deploy:launch:evidence:validate`
 - [ ] `pnpm deploy:private-beta:validate`
 - [ ] `pnpm ops:validate`
 - [ ] perf baseline environment is intentional; refresh
@@ -98,6 +99,12 @@ Reference workflows in the repository root:
 - [ ] managed worker release evidence has been completed from
       `deploy/managed-workers/worker-release-evidence.template.md` in the
       private operations repo.
+- [ ] private-beta evidence has been completed from
+      `deploy/private-beta/launch-evidence-record.template.json`, validated
+      with `pnpm deploy:launch:evidence:validate -- --manifest <private-record>
+      --require-private-pass`, and summarized in
+      `deploy/private-beta/private-beta-go-no-go.public.md` without private
+      values.
 - [ ] worker images are pinned by release tag or digest; no deployment uses
       `latest`, mutable aliases, or public repo project/account/customer
       values.
@@ -116,6 +123,10 @@ Reference workflows in the repository root:
       Cloud/Gateway deployment.
 - [ ] `pnpm deploy:soak:strict` passed against the production-like
       Cloud/Gateway deployment.
+- [ ] `pnpm deploy:failover:drill` captured worker, scheduler, and Gateway
+      failover evidence or recorded explicit private operator hook evidence.
+      `pnpm deploy:failover:drill:dry-run` is only a local contract check and
+      is not launch evidence.
 - [ ] load and soak JSON/Markdown reports are attached to the release or
       downstream operations evidence.
 - [ ] `docs/runbooks/launch-readiness-report.md` has a completed Go/No-Go

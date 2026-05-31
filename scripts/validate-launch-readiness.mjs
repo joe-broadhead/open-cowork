@@ -41,6 +41,10 @@ const readinessDocPath = 'docs/deployment-readiness.md'
 const runbookPath = 'docs/runbooks/launch-readiness.md'
 const reportPath = 'docs/runbooks/launch-readiness-report.md'
 const releaseChecklistPath = 'docs/release-checklist.md'
+const evidenceRecordPath = 'deploy/private-beta/launch-evidence-record.template.json'
+const publicGoNoGoPath = 'deploy/private-beta/private-beta-go-no-go.public.md'
+const evidenceValidatorPath = 'scripts/validate-launch-evidence-manifest.mjs'
+const failoverDrillPath = 'scripts/launch-failover-drill.mjs'
 const packagePath = 'package.json'
 
 for (const path of [
@@ -51,9 +55,24 @@ for (const path of [
   runbookPath,
   reportPath,
   releaseChecklistPath,
+  evidenceRecordPath,
+  publicGoNoGoPath,
+  evidenceValidatorPath,
+  failoverDrillPath,
   packagePath,
 ]) {
   assertFile(path)
+}
+
+const packageJson = readJson(packagePath)
+
+function assertPackageScriptForCommand(command, label) {
+  const match = /^pnpm\s+([^\s]+)(?:\s|$)/.exec(command)
+  if (!match) return
+  const script = match[1]
+  if (typeof packageJson.scripts?.[script] !== 'string') {
+    throw new Error(`${label} references missing package script ${script}`)
+  }
 }
 
 const targets = readJson(targetsPath)
@@ -150,6 +169,53 @@ for (const category of [
   if (typeof record.passCondition !== 'string' || record.passCondition.length < 20) {
     throw new Error(`${category} must describe a concrete pass condition`)
   }
+  for (const artifact of record.publicArtifacts) assertFile(artifact)
+  for (const command of record.requiredCommands) assertPackageScriptForCommand(command, category)
+}
+
+const requiredPrivateBetaEvidenceIds = [
+  'deployedDesktopWebGatewayContinuation',
+  'deployedLoadTest',
+  'deployedSoakTest',
+  'workerFailover',
+  'schedulerReplicaFailover',
+  'postgresBackupRestore',
+  'objectStoreArtifactRoundTrip',
+  'secretAdapterResolution',
+  'byokRedactionNoPlaintext',
+  'gatewayDeliveryReplayDeadLetter',
+  'quotaRateLimitBehavior',
+  'billingEntitlementGating',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
+]
+if (evidenceMatrix.privateBetaEvidenceItems?.requiredStatusForGo !== 'private-pass') {
+  throw new Error(`${evidenceMatrixPath} must require private-pass before a private-beta go decision`)
+}
+if (typeof evidenceMatrix.privateBetaEvidenceItems?.storageRule !== 'string') {
+  throw new Error(`${evidenceMatrixPath} must document private beta evidence storage rules`)
+}
+const privateBetaItems = evidenceMatrix.privateBetaEvidenceItems?.items ?? {}
+for (const id of requiredPrivateBetaEvidenceIds) {
+  const record = privateBetaItems[id]
+  if (!record) throw new Error(`${evidenceMatrixPath} is missing private beta evidence item ${id}`)
+  if (record.requiredForPrivateBeta !== true) throw new Error(`${id} must be required for private beta`)
+  if (!Array.isArray(record.publicArtifacts) || record.publicArtifacts.length === 0) {
+    throw new Error(`${id} must list public evidence artifacts`)
+  }
+  for (const artifact of record.publicArtifacts) assertFile(artifact)
+  if (!Array.isArray(record.requiredCommands) || record.requiredCommands.length === 0) {
+    throw new Error(`${id} must list required evidence commands`)
+  }
+  for (const command of record.requiredCommands) assertPackageScriptForCommand(command, id)
+  if (typeof record.passCondition !== 'string' || record.passCondition.length < 30) {
+    throw new Error(`${id} must define a concrete pass condition`)
+  }
+}
+for (const id of Object.keys(privateBetaItems)) {
+  if (!requiredPrivateBetaEvidenceIds.includes(id)) {
+    throw new Error(`${evidenceMatrixPath} has unexpected private beta evidence item ${id}`)
+  }
 }
 
 for (const command of [
@@ -162,10 +228,12 @@ for (const command of [
   'pnpm deploy:gateway:smoke',
   'pnpm deploy:gcp:preflight',
   'pnpm deploy:gcp:smoke',
+  'pnpm deploy:failover:drill',
   'pnpm test',
   'pnpm docs:build',
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:launch:validate',
+  'pnpm deploy:launch:evidence:validate',
   'pnpm ops:validate',
   'git diff --check',
 ]) {
@@ -202,6 +270,10 @@ for (const phrase of [
   'script-contract tests',
   'narrow-follow-up-issue',
   'tier-scoped-out-of-scope',
+  'deployedDesktopWebGatewayContinuation',
+  'gatewayDeliveryReplayDeadLetter',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
 ]) {
   assertIncludes(evidenceMatrixPath, phrase)
 }
@@ -273,8 +345,25 @@ for (const phrase of [
   'Cost And Scaling Notes',
   'Final Smoke',
   'Findings Workflow',
+  'Launch Evidence Register',
+  'deploy/private-beta/launch-evidence-record.template.json',
+  'pnpm deploy:failover:drill',
 ]) {
   assertIncludes(reportPath, phrase)
+}
+
+for (const phrase of [
+  'Decision: `no-go`',
+  'Current public tier: `local-self-host-beta`',
+  'pending-private-evidence',
+  'deploy/private-beta/launch-evidence-record.template.json',
+  'deployedDesktopWebGatewayContinuation',
+  'gatewayDeliveryReplayDeadLetter',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
+  'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
+]) {
+  assertIncludes(publicGoNoGoPath, phrase)
 }
 
 for (const phrase of [
@@ -286,19 +375,22 @@ for (const phrase of [
   'pnpm deploy:load:strict',
   'pnpm deploy:soak',
   'pnpm deploy:soak:strict',
+  'pnpm deploy:failover:drill',
   'pnpm deploy:launch:validate',
+  'pnpm deploy:launch:evidence:validate',
 ]) {
   assertIncludes(releaseChecklistPath, phrase)
 }
 
-const packageJson = readJson(packagePath)
 for (const script of [
   'deploy:load:plan',
   'deploy:load',
   'deploy:load:strict',
   'deploy:soak',
   'deploy:soak:strict',
+  'deploy:failover:drill',
   'deploy:launch:validate',
+  'deploy:launch:evidence:validate',
 ]) {
   if (typeof packageJson.scripts?.[script] !== 'string') {
     throw new Error(`${packagePath} is missing ${script}`)

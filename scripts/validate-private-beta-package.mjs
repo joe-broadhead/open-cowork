@@ -59,8 +59,10 @@ const requiredFiles = [
   'deploy/private-beta/managed-byok-readiness-contract.template.json',
   'deploy/private-beta/private-beta-plans.json',
   'deploy/private-beta/private-beta-launch-profile.template.json',
+  'deploy/private-beta/launch-evidence-record.template.json',
   'deploy/private-beta/design-partner-onboarding.template.md',
   'deploy/private-beta/go-no-go-report.template.md',
+  'deploy/private-beta/private-beta-go-no-go.public.md',
   'mkdocs.yml',
   'package.json',
 ]
@@ -136,11 +138,14 @@ for (const phrase of [
   'managed-byok-readiness-contract.template.json',
   'private-beta-plans.json',
   'private-beta-launch-profile.template.json',
+  'launch-evidence-record.template.json',
   'design-partner-onboarding.template.md',
   'go-no-go-report.template.md',
+  'private-beta-go-no-go.public.md',
   'provider-neutral',
   'cloud.billing.provider=none',
   'pnpm deploy:private-beta:validate',
+  'pnpm deploy:launch:evidence:validate',
   'pnpm ops:validate',
 ]) {
   assertIncludes('deploy/private-beta/README.md', phrase)
@@ -165,6 +170,15 @@ for (const phrase of [
 const packageJson = readJson('package.json')
 if (packageJson.scripts?.['deploy:private-beta:validate'] !== 'node scripts/validate-private-beta-package.mjs') {
   throw new Error('package.json must expose deploy:private-beta:validate')
+}
+if (packageJson.scripts?.['deploy:launch:evidence:validate'] !== 'node scripts/validate-launch-evidence-manifest.mjs') {
+  throw new Error('package.json must expose deploy:launch:evidence:validate')
+}
+if (packageJson.scripts?.['deploy:failover:drill'] !== 'node scripts/launch-failover-drill.mjs') {
+  throw new Error('package.json must expose deploy:failover:drill')
+}
+if (packageJson.scripts?.['deploy:failover:drill:dry-run'] !== 'node scripts/launch-failover-drill.mjs --dry-run') {
+  throw new Error('package.json must expose deploy:failover:drill:dry-run')
 }
 
 const hosted = readJson('deploy/private-beta/hosted-byok.config.example.json')
@@ -275,12 +289,53 @@ for (const evidence of [
 for (const command of [
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:launch:validate',
+  'pnpm deploy:launch:evidence:validate',
   'pnpm ops:validate',
   'pnpm deploy:continuation:smoke',
   'pnpm deploy:load:strict',
   'pnpm deploy:soak:strict',
+  'pnpm deploy:failover:drill',
+  'pnpm deploy:gcp:preflight',
+  'pnpm deploy:gcp:smoke',
 ]) {
   assertArrayIncludes(profile?.requiredSmokeCommands, command, 'launchProfile.requiredSmokeCommands')
+}
+
+const launchEvidence = readJson('deploy/private-beta/launch-evidence-record.template.json')
+if (launchEvidence.schemaVersion !== 1) throw new Error('launch evidence record must declare schemaVersion 1')
+if (launchEvidence.purpose !== 'managed-byok-private-beta-launch-evidence-record-template') {
+  throw new Error('launch evidence record must declare its purpose')
+}
+if (launchEvidence.scope !== 'public-template-only') {
+  throw new Error('launch evidence record must remain a public-template-only artifact')
+}
+if (launchEvidence.targetTier !== 'private-beta') throw new Error('launch evidence record must target private-beta')
+if (launchEvidence.currentPublicTier !== 'local-self-host-beta') {
+  throw new Error('launch evidence record must keep current public tier local-self-host-beta')
+}
+if (!Array.isArray(launchEvidence.requiredEvidence)) {
+  throw new Error('launch evidence record must list requiredEvidence')
+}
+for (const evidence of [
+  'deployedDesktopWebGatewayContinuation',
+  'deployedLoadTest',
+  'deployedSoakTest',
+  'workerFailover',
+  'schedulerReplicaFailover',
+  'postgresBackupRestore',
+  'objectStoreArtifactRoundTrip',
+  'secretAdapterResolution',
+  'byokRedactionNoPlaintext',
+  'gatewayDeliveryReplayDeadLetter',
+  'quotaRateLimitBehavior',
+  'billingEntitlementGating',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
+]) {
+  const record = launchEvidence.requiredEvidence.find((entry) => entry.id === evidence)
+  if (!record) throw new Error(`launch evidence record must require ${evidence}`)
+  if (record.blockingForPrivateBeta !== true) throw new Error(`${evidence} must block private beta`)
+  if (record.status !== 'pending-private-evidence') throw new Error(`${evidence} must default to pending-private-evidence`)
 }
 
 const readinessContract = readJson('deploy/private-beta/managed-byok-readiness-contract.template.json')
@@ -415,8 +470,10 @@ for (const artifact of [
   'deploy/private-beta/self-host-oss.config.example.json',
   'deploy/private-beta/private-beta-plans.json',
   'deploy/private-beta/private-beta-launch-profile.template.json',
+  'deploy/private-beta/launch-evidence-record.template.json',
   'deploy/private-beta/design-partner-onboarding.template.md',
   'deploy/private-beta/go-no-go-report.template.md',
+  'deploy/private-beta/private-beta-go-no-go.public.md',
 ]) {
   assertArrayIncludes(readinessContract.launchPackageContract?.requiredPublicArtifacts, artifact, 'readiness.launch.requiredPublicArtifacts')
 }
@@ -424,6 +481,7 @@ for (const command of [
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:validate -- --require-tools',
   'pnpm deploy:launch:validate',
+  'pnpm deploy:launch:evidence:validate',
   'pnpm ops:validate',
   'pnpm test',
   'pnpm typecheck',
@@ -461,6 +519,7 @@ for (const phrase of [
   'Launch Profile And Environment',
   'Exact Commit And Release Artifact',
   'Validation Commands With Timestamps',
+  'Evidence Register',
   'Load And Soak Summary',
   'Failover And Restore Summary',
   'Security Boundary Checklist',
@@ -470,9 +529,23 @@ for (const phrase of [
   'BYOK plaintext absent',
   'Gateway is a channel client and delivery adapter',
   'managed-byok-readiness-contract.template.json',
+  'launch-evidence-record.template.json',
   'Onboarding failures preserve machine-readable status and reason codes',
 ]) {
   assertIncludes('deploy/private-beta/go-no-go-report.template.md', phrase)
+}
+
+for (const phrase of [
+  'Decision: `no-go`',
+  'Current public tier: `local-self-host-beta`',
+  'pending-private-evidence',
+  'deployedDesktopWebGatewayContinuation',
+  'gatewayDeliveryReplayDeadLetter',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
+  'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
+]) {
+  assertIncludes('deploy/private-beta/private-beta-go-no-go.public.md', phrase)
 }
 
 for (const path of [
@@ -484,8 +557,10 @@ for (const path of [
   'deploy/private-beta/managed-byok-readiness-contract.template.json',
   'deploy/private-beta/private-beta-plans.json',
   'deploy/private-beta/private-beta-launch-profile.template.json',
+  'deploy/private-beta/launch-evidence-record.template.json',
   'deploy/private-beta/design-partner-onboarding.template.md',
   'deploy/private-beta/go-no-go-report.template.md',
+  'deploy/private-beta/private-beta-go-no-go.public.md',
 ]) {
   for (const forbidden of [
     '/Users/joe',

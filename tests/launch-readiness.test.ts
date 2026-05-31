@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -245,6 +245,139 @@ test('launch evidence matrix states the current accepted tier and required gates
   assert.ok(matrix.evidenceCategories.securityBoundary.coveredSurfaces.includes('public webhook ingress fails closed'))
   assert.ok(matrix.evidenceCategories.releasePackaging.coveredSurfaces.includes('Desktop packaging smoke'))
   assert.ok(matrix.evidenceCategories.findingsWorkflow.allowedDispositions.includes('narrow-follow-up-issue'))
+  assert.equal(matrix.privateBetaEvidenceItems.requiredStatusForGo, 'private-pass')
+  for (const item of [
+    'deployedDesktopWebGatewayContinuation',
+    'deployedLoadTest',
+    'deployedSoakTest',
+    'workerFailover',
+    'schedulerReplicaFailover',
+    'postgresBackupRestore',
+    'objectStoreArtifactRoundTrip',
+    'secretAdapterResolution',
+    'byokRedactionNoPlaintext',
+    'gatewayDeliveryReplayDeadLetter',
+    'quotaRateLimitBehavior',
+    'billingEntitlementGating',
+    'supportIncidentOwnershipEscalation',
+    'costSloNotes',
+  ]) {
+    assert.equal(matrix.privateBetaEvidenceItems.items[item].requiredForPrivateBeta, true, item)
+    assert.ok(matrix.privateBetaEvidenceItems.items[item].publicArtifacts.length > 0, item)
+    assert.ok(matrix.privateBetaEvidenceItems.items[item].requiredCommands.length > 0, item)
+  }
+})
+
+test('launch evidence manifest validator accepts template and completed private record shape', async () => {
+  const { stdout } = await execFileAsync(process.execPath, [
+    'scripts/validate-launch-evidence-manifest.mjs',
+  ], { encoding: 'utf8' })
+  assert.match(stdout, /launch evidence manifest validated/)
+
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-launch-evidence-'))
+  try {
+    const manifest = readJsonFile('deploy/private-beta/launch-evidence-record.template.json')
+    for (const item of manifest.requiredEvidence) {
+      item.status = 'private-pass'
+      item.privateEvidenceRef = `private://evidence/${item.id}`
+      item.publicRedactedSummary = `Redacted private evidence summary for ${item.id}.`
+      item.checksum = `sha256:${'a'.repeat(64)}`
+      item.owner = 'private-ops-owner'
+    }
+    const completedPath = join(outputDir, 'completed-launch-evidence.json')
+    writeFileSync(completedPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    const completed = await execFileAsync(process.execPath, [
+      'scripts/validate-launch-evidence-manifest.mjs',
+      '--manifest',
+      completedPath,
+      '--require-private-pass',
+    ], { encoding: 'utf8' })
+    assert.match(completed.stdout, /launch evidence manifest validated/)
+
+    manifest.requiredEvidence[0].status = 'pending-private-evidence'
+    const invalidPath = join(outputDir, 'invalid-launch-evidence.json')
+    writeFileSync(invalidPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        'scripts/validate-launch-evidence-manifest.mjs',
+        '--manifest',
+        invalidPath,
+        '--require-private-pass',
+      ], { encoding: 'utf8' }),
+      /must be private-pass/,
+    )
+
+    manifest.requiredEvidence[0].status = 'private-pass'
+    manifest.requiredEvidence[0].publicRedactedSummary = 'This unsafe summary contains sk-privatevalue123.'
+    const unsafePath = join(outputDir, 'unsafe-launch-evidence.json')
+    writeFileSync(unsafePath, `${JSON.stringify(manifest, null, 2)}\n`)
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        'scripts/validate-launch-evidence-manifest.mjs',
+        '--manifest',
+        unsafePath,
+        '--require-private-pass',
+      ], { encoding: 'utf8' }),
+      /must not include private/,
+    )
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+test('launch failover drill emits redacted dry-run evidence without executing hooks', async () => {
+  const cloud = await listen((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/healthz') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/api/metrics') {
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
+      res.end('open_cowork_cloud_command_queue_depth_estimate 0\n')
+      return
+    }
+    return writeJson(res, 404, { error: 'not found' })
+  })
+  const gateway = await listen((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/ready') return writeJson(res, 200, { ok: true, status: 'ready' })
+    if (url.pathname === '/metrics') {
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
+      res.end('open_cowork_gateway_delivery_dead_letters_total 0\n')
+      return
+    }
+    return writeJson(res, 404, { error: 'not found' })
+  })
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-failover-drill-'))
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [
+      'scripts/launch-failover-drill.mjs',
+      '--dry-run',
+      '--cloud-url',
+      cloud.url,
+      '--gateway-url',
+      gateway.url,
+      '--worker-hook',
+      'exit 1',
+      '--scheduler-hook',
+      'exit 1',
+      '--gateway-hook',
+      'exit 1',
+      '--output-dir',
+      outputDir,
+    ], { encoding: 'utf8' })
+    const parsed = JSON.parse(stdout)
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.report.redacted, true)
+    assert.equal(parsed.report.result, 'dry-run')
+    assert.equal(parsed.report.targets.cloudUrl, 'http://REDACTED_HOST')
+    assert.equal(parsed.report.hooks[0].status, 'dry-run')
+    assert.ok(parsed.report.evidenceItems.includes('workerFailover'))
+    assert.ok(parsed.report.evidenceItems.includes('schedulerReplicaFailover'))
+    assert.ok(parsed.report.evidenceItems.includes('gatewayDeliveryReplayDeadLetter'))
+  } finally {
+    await new Promise<void>((resolve) => cloud.server.close(() => resolve()))
+    await new Promise<void>((resolve) => gateway.server.close(() => resolve()))
+    rmSync(outputDir, { recursive: true, force: true })
+  }
 })
 
 test('launch readiness plan supports the local self-host beta tier', async () => {

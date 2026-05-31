@@ -15,6 +15,9 @@ Files:
 - `private-beta-launch-profile.template.json`: launch-profile template covering
   entitlements, allowed provider policy, gateway availability, support owners,
   RPO/RTO, required launch evidence, and go/no-go placeholders.
+- `launch-evidence-record.template.json`: machine-readable evidence register
+  for deployed continuation, load, soak, failover, restore, BYOK redaction,
+  gateway replay, quota/billing gates, support ownership, and cost/SLO notes.
 - `managed-byok-readiness-contract.template.json`: machine-readable
   public/private boundary, onboarding status/reason-code, billing, BYOK,
   diagnostics, and validation contract.
@@ -24,6 +27,9 @@ Files:
 - `go-no-go-report.template.md`: final managed BYOK launch decision template
   for exact commit/artifacts, validation commands, load/soak, failover/restore,
   security boundaries, risks, and sign-off.
+- `private-beta-go-no-go.public.md`: current public-safe go/no-go summary. It
+  remains `no-go` for managed private beta until private evidence is attached
+  and redacted summaries are approved.
 
 These examples are provider-neutral. They use placeholder domains such as
 `cowork.example.com`, placeholder secret refs such as
@@ -50,6 +56,9 @@ The hosted path is for an operator-managed private beta:
 7. Store Gateway service tokens and channel credentials in platform secrets.
 8. Copy the onboarding, launch-profile, and go/no-go templates into a private
    operations tracker and fill them with real evidence there, not in this repo.
+9. Validate the private evidence record with
+   `pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass`
+   before changing the public decision summary.
 
 ## OSS Self-Host
 
@@ -66,6 +75,7 @@ Run:
 
 ```bash
 pnpm deploy:private-beta:validate
+pnpm deploy:launch:evidence:validate
 pnpm deploy:validate
 pnpm deploy:launch:validate
 pnpm ops:validate

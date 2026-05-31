@@ -85,18 +85,30 @@
       "byokProviderCallAfterWorkerRestart": true,
       "desktopWebGatewayContinuation": true,
       "tokenRevocationProof": true,
-      "diagnosticsRedactionProof": true
+      "diagnosticsRedactionProof": true,
+      "launchEvidenceRecord": true,
+      "schedulerReplicaFailover": true,
+      "secretAdapterResolution": true,
+      "byokRedactionNoPlaintext": true,
+      "quotaRateLimitBehavior": true,
+      "billingEntitlementGating": true,
+      "supportIncidentOwnershipEscalation": true,
+      "costSloNotes": true
     },
     "requiredSmokeCommands": [
       "pnpm deploy:private-beta:validate",
       "pnpm deploy:launch:validate",
+      "pnpm deploy:launch:evidence:validate",
       "pnpm ops:validate",
       "pnpm deploy:smoke",
       "pnpm deploy:desktop:smoke",
       "pnpm deploy:gateway:smoke",
       "pnpm deploy:continuation:smoke",
       "pnpm deploy:load:strict",
-      "pnpm deploy:soak:strict"
+      "pnpm deploy:soak:strict",
+      "pnpm deploy:failover:drill",
+      "pnpm deploy:gcp:preflight",
+      "pnpm deploy:gcp:smoke"
     ],
     "securityBoundaries": {
       "byokPlaintextReadApis": "forbidden",
