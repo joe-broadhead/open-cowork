@@ -1,5 +1,4 @@
 import type {
-  ChannelBindingRecord,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelIdentityRole,
@@ -11,7 +10,12 @@ import type {
   IssuedChannelInteractionRecord,
   SessionCommandRecord,
 } from '../control-plane-store.ts'
-import type { CloudPrincipal, CloudSessionView } from '../session-service.ts'
+import type {
+  CloudPrincipal,
+  CloudSessionView,
+  PublicChannelBindingRecord,
+  PublicChannelDeliveryRecord,
+} from '../session-service.ts'
 
 export type CloudChannelServiceDelegate = {
   listHeadlessAgents(principal: CloudPrincipal): Promise<HeadlessAgentRecord[]>
@@ -28,7 +32,7 @@ export type CloudChannelServiceDelegate = {
     status?: 'active' | 'disabled'
     managed?: boolean
   }): Promise<HeadlessAgentRecord | null>
-  listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<ChannelBindingRecord[]>
+  listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<PublicChannelBindingRecord[]>
   createChannelBinding(principal: CloudPrincipal, input: {
     bindingId?: string | null
     agentId: string
@@ -38,13 +42,13 @@ export type CloudChannelServiceDelegate = {
     status?: 'active' | 'disabled' | 'auth_required' | 'error'
     credentialRef?: string | null
     settings?: Record<string, unknown>
-  }): Promise<ChannelBindingRecord>
+  }): Promise<PublicChannelBindingRecord>
   updateChannelBinding(principal: CloudPrincipal, bindingId: string, input: {
     displayName?: string
     status?: 'active' | 'disabled' | 'auth_required' | 'error'
     credentialRef?: string | null
     settings?: Record<string, unknown>
-  }): Promise<ChannelBindingRecord | null>
+  }): Promise<PublicChannelBindingRecord | null>
   resolveChannelIdentity(principal: CloudPrincipal, input: {
     identityId?: string | null
     provider: ChannelProviderId
@@ -79,12 +83,12 @@ export type CloudChannelServiceDelegate = {
     command: SessionCommandRecord
     processed: number
   }>
-  createChannelDelivery(principal: CloudPrincipal, input: Record<string, unknown>): Promise<ChannelDeliveryRecord>
-  listChannelDeliveries(principal: CloudPrincipal, input?: Record<string, unknown>): Promise<ChannelDeliveryRecord[]>
-  retryChannelDelivery(principal: CloudPrincipal, deliveryId: string): Promise<ChannelDeliveryRecord | null>
-  deadLetterChannelDelivery(principal: CloudPrincipal, deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
+  createChannelDelivery(principal: CloudPrincipal, input: Record<string, unknown>): Promise<PublicChannelDeliveryRecord>
+  listChannelDeliveries(principal: CloudPrincipal, input?: Record<string, unknown>): Promise<PublicChannelDeliveryRecord[]>
+  retryChannelDelivery(principal: CloudPrincipal, deliveryId: string): Promise<PublicChannelDeliveryRecord | null>
+  deadLetterChannelDelivery(principal: CloudPrincipal, deliveryId: string, input?: { lastError?: string | null }): Promise<PublicChannelDeliveryRecord | null>
   claimNextChannelDelivery(input: { orgId: string, claimedBy: string, now?: Date, ttlMs?: number }): Promise<ChannelDeliveryRecord | null>
-  ackChannelDelivery(deliveryId: string, input: Record<string, unknown>): Promise<ChannelDeliveryRecord | null>
+  ackChannelDelivery(deliveryId: string, input: Record<string, unknown>): Promise<PublicChannelDeliveryRecord | null>
 }
 
 export class CloudChannelService {

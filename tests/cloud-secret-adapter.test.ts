@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 
 import {
   CLOUD_SECRET_ENVELOPE_PREFIX,
@@ -10,6 +11,7 @@ import {
   createPlaintextSecretAdapter,
   createUnavailableSecretAdapter,
   resolveCloudSecretRef,
+  validateCloudSecretKeyMaterial,
   type CloudSecretStoreHttpClient,
 } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 
@@ -20,6 +22,22 @@ test('cloud envelope secret adapter encrypts and decrypts with context binding',
   assert.equal(stored.startsWith(CLOUD_SECRET_ENVELOPE_PREFIX), true)
   assert.equal(adapter.reveal(stored, 'tenant-1:openai'), 'sk-test')
   assert.throws(() => adapter.reveal(stored, 'tenant-2:openai'))
+})
+
+test('cloud secret key validation rejects weak production envelope material', () => {
+  for (const weak of [
+    '',
+    'short-secret',
+    'change-me-for-local-dev-change-me',
+    'x'.repeat(32),
+    'abcd'.repeat(12),
+    '0123456789abcdefghijklmnopqrstuvwxyz',
+  ]) {
+    assert.equal(validateCloudSecretKeyMaterial(weak).valid, false, weak)
+  }
+
+  const strong = randomBytes(32).toString('base64url')
+  assert.equal(validateCloudSecretKeyMaterial(strong).valid, true)
 })
 
 test('cloud plaintext secret adapter keeps an explicit non-encrypted envelope', () => {
@@ -46,6 +64,23 @@ test('cloud secret adapter can load envelope key material from env refs', async 
 
   assert.equal(stored.startsWith(CLOUD_SECRET_ENVELOPE_PREFIX), true)
   assert.equal(adapter.reveal(stored, 'tenant-1'), 'sk-test')
+})
+
+test('cloud secret adapter rejects weak env or ref keys when production validation is required', async () => {
+  await assert.rejects(
+    () => createCloudSecretAdapterFromEnv({
+      OPEN_COWORK_CLOUD_SECRET_KEY: 'x'.repeat(32),
+    }, { requireStrongKeyMaterial: true }),
+    /too weak/,
+  )
+
+  await assert.rejects(
+    () => createCloudSecretAdapterFromEnv({
+      OPEN_COWORK_CLOUD_SECRET_KEY_REF: 'env:WEAK_REMOTE',
+      WEAK_REMOTE: 'change-me-for-local-dev-change-me',
+    }, { requireStrongKeyMaterial: true }),
+    /too weak/,
+  )
 })
 
 test('cloud secret refs resolve GCP Secret Manager payloads', async () => {

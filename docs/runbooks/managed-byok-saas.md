@@ -54,10 +54,17 @@ the environment is intentionally configured for open signup.
 
 ## Token TTL And Client Access
 
+- Runtime defaults are 90 days for `OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS`
+  and 365 days for `OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS`.
+- Hosted deployments should set shorter environment-specific TTLs and an
+  explicit `OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES` list.
 - Desktop API tokens should have a token TTL appropriate for user devices,
   usually 30 to 90 days.
 - Gateway service tokens should be shorter lived where operationally possible,
   usually 7 to 30 days, and scoped to the org/channel bindings they serve.
+- Supported API token scopes are `desktop`, `gateway`, `admin`, and `operator`
+  for normal client access. `worker-internal` is reserved for worker credential
+  flows and should not be enabled for dashboard-issued tokens.
 - One-time token plaintext is shown only at creation.
 - Revocation must block desktop/gateway clients immediately on the next API
   request or SSE reconnect.

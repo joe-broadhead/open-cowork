@@ -140,6 +140,7 @@ export async function buildCloudByokRuntimeConfig(input: CloudByokRuntimeConfigI
         orgId: context.tenantId,
         providerId,
         allowKmsRef: input.allowKmsRef,
+        purpose: 'runtime_config',
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

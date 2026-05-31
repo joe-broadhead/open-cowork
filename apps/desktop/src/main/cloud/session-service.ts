@@ -95,6 +95,12 @@ import {
 } from './project-source-service.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bus.ts'
 import {
+  publicChannelBinding,
+  publicChannelDelivery,
+  type PublicChannelBindingRecord,
+  type PublicChannelDeliveryRecord,
+} from './public-channel-records.ts'
+import {
   CloudSessionProjectionService,
   type AppendProjectedEventInput,
 } from './session-projection-service.ts'
@@ -299,6 +305,7 @@ export type CloudDiagnosticsBundle = {
 }
 
 export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'>
+export type { PublicChannelBindingRecord, PublicChannelDeliveryRecord } from './public-channel-records.ts'
 
 export type IssuedPublicApiTokenRecord = {
   token: PublicApiTokenRecord
@@ -339,6 +346,9 @@ export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
   signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
   allowedEmailDomains?: readonly string[]
+  apiTokenDefaultTtlMs?: number | null
+  apiTokenMaxTtlMs?: number | null
+  apiTokenAllowedScopes?: readonly string[] | null
 }
 
 export { CloudServiceError } from './cloud-service-error.ts'
@@ -396,6 +406,7 @@ const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 const DEFAULT_API_TOKEN_TTL_MS = 90 * DAY_MS
 const MAX_API_TOKEN_TTL_MS = 365 * DAY_MS
+const DEFAULT_API_TOKEN_ALLOWED_SCOPES = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'operator'])
 
 const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   enabled: false,
@@ -527,15 +538,41 @@ function normalizeApiTokenScopes(scopes: ApiTokenScope[] | undefined | null): Ap
   return normalized
 }
 
-function normalizeApiTokenExpiresAt(input: Date | null | undefined, now = new Date()) {
-  const expiresAt = input || new Date(now.getTime() + DEFAULT_API_TOKEN_TTL_MS)
+function positivePolicyMs(value: number | null | undefined, fallback: number) {
+  return Number.isFinite(value) && Number(value) > 0 ? Math.floor(Number(value)) : fallback
+}
+
+function normalizeApiTokenExpiresAt(input: Date | null | undefined, policy: CloudIdentityPolicy, now = new Date()) {
+  const defaultTtlMs = positivePolicyMs(policy.apiTokenDefaultTtlMs, DEFAULT_API_TOKEN_TTL_MS)
+  const maxTtlMs = positivePolicyMs(policy.apiTokenMaxTtlMs, MAX_API_TOKEN_TTL_MS)
+  if (defaultTtlMs > maxTtlMs) {
+    throw new CloudServiceError(500, 'API token default TTL cannot exceed the max TTL policy.')
+  }
+  const expiresAt = input || new Date(now.getTime() + defaultTtlMs)
   if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= now.getTime()) {
     throw new CloudServiceError(400, 'API token expiration must be in the future.')
   }
-  if (expiresAt.getTime() - now.getTime() > MAX_API_TOKEN_TTL_MS) {
-    throw new CloudServiceError(400, 'API token expiration cannot be more than 365 days in the future.')
+  if (expiresAt.getTime() - now.getTime() > maxTtlMs) {
+    throw new CloudServiceError(400, `API token expiration cannot be more than ${Math.floor(maxTtlMs / DAY_MS)} days in the future.`)
   }
   return expiresAt
+}
+
+function normalizeAllowedApiTokenScopePolicy(policy: CloudIdentityPolicy) {
+  const configured = policy.apiTokenAllowedScopes?.length
+    ? policy.apiTokenAllowedScopes
+    : [...DEFAULT_API_TOKEN_ALLOWED_SCOPES]
+  const normalized = normalizeApiTokenScopes(configured as ApiTokenScope[])
+  return new Set<ApiTokenScope>(normalized)
+}
+
+function enforceApiTokenScopePolicy(scopes: ApiTokenScope[], policy: CloudIdentityPolicy) {
+  const allowed = normalizeAllowedApiTokenScopePolicy(policy)
+  const denied = scopes.filter((scope) => !allowed.has(scope))
+  if (denied.length > 0) {
+    throw new CloudServiceError(403, `API token scope is disabled by cloud policy: ${denied.join(', ')}.`)
+  }
+  return scopes
 }
 
 function normalizeByokProviderIdForPolicy(value: string) {
@@ -803,6 +840,9 @@ export class CloudSessionService {
       name: principal.tenantName || principal.tenantId,
       orgId: principal.orgId,
     })
+    if (principal.authSource !== 'local' && org.status !== 'active') {
+      throw new CloudServiceError(403, 'Cloud org is not active.')
+    }
     const account = await this.store.createAccount({
       accountId: existingMembership?.account.accountId || principal.accountId || principal.userId,
       idpSubject: principal.userId,
@@ -1513,13 +1553,14 @@ export class CloudSessionService {
       profileName: input.profileName,
       status: input.status,
       managed: input.managed,
+      actor: this.auditActor(principal),
     })
   }
 
-  async listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<ChannelBindingRecord[]> {
+  async listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<PublicChannelBindingRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
-    return this.store.listChannelBindings(this.principalOrgId(principal), agentId)
+    return (await this.store.listChannelBindings(this.principalOrgId(principal), agentId)).map(publicChannelBinding)
   }
 
   async createChannelBinding(
@@ -1534,7 +1575,7 @@ export class CloudSessionService {
       settings?: Record<string, unknown>
       bindingId?: string | null
     },
-  ): Promise<ChannelBindingRecord> {
+  ): Promise<PublicChannelBindingRecord> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
     const orgId = this.principalOrgId(principal)
@@ -1550,7 +1591,7 @@ export class CloudSessionService {
       'maxGatewayChannelBindingsPerOrg',
     ))
     try {
-      return await this.store.createChannelBinding({
+      const binding = await this.store.createChannelBinding({
         bindingId: input.bindingId || this.ids.randomUUID(),
         orgId,
         agentId: input.agentId,
@@ -1567,6 +1608,7 @@ export class CloudSessionService {
           }
           : null,
       })
+      return publicChannelBinding(binding)
     } catch (error) {
       this.usageGovernance.translateQuotaError(error, 'Gateway channel binding quota exceeded.', 'quota.gateway_channel_bindings_exceeded')
     }
@@ -1581,21 +1623,23 @@ export class CloudSessionService {
       credentialRef?: string | null
       settings?: Record<string, unknown>
     },
-  ): Promise<ChannelBindingRecord | null> {
+  ): Promise<PublicChannelBindingRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
     await this.assertBillingAllowed({
       orgId: this.principalOrgId(principal),
       action: 'channel.manage',
     })
-    return this.store.updateChannelBinding({
+    const binding = await this.store.updateChannelBinding({
       orgId: this.principalOrgId(principal),
       bindingId,
       displayName: input.displayName,
       status: input.status,
       credentialRef: input.credentialRef,
       settings: input.settings,
+      actor: this.auditActor(principal),
     })
+    return binding ? publicChannelBinding(binding) : null
   }
 
   async resolveChannelIdentity(
@@ -2019,7 +2063,7 @@ export class CloudSessionService {
       nextAttemptAt?: Date | null
       deliveryId?: string | null
     },
-  ): Promise<ChannelDeliveryRecord> {
+  ): Promise<PublicChannelDeliveryRecord> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     const orgId = this.principalOrgId(principal)
@@ -2044,7 +2088,7 @@ export class CloudSessionService {
         throw new CloudServiceError(403, 'Channel delivery session binding does not belong to the selected channel binding.')
       }
     }
-    return this.store.createChannelDelivery({
+    const delivery = await this.store.createChannelDelivery({
       deliveryId: input.deliveryId || this.ids.randomUUID(),
       orgId,
       agentId: agent.agentId,
@@ -2057,6 +2101,7 @@ export class CloudSessionService {
       status: input.status,
       nextAttemptAt: input.nextAttemptAt || undefined,
     })
+    return publicChannelDelivery(delivery)
   }
 
   async listChannelDeliveries(
@@ -2066,45 +2111,47 @@ export class CloudSessionService {
       channelBindingId?: string | null
       limit?: number | null
     } = {},
-  ): Promise<ChannelDeliveryRecord[]> {
+  ): Promise<PublicChannelDeliveryRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
-    return this.store.listChannelDeliveries({
+    return (await this.store.listChannelDeliveries({
       orgId: this.principalOrgId(principal),
       status: input.status || null,
       channelBindingId: input.channelBindingId || null,
       limit: input.limit || null,
-    })
+    })).map(publicChannelDelivery)
   }
 
   async retryChannelDelivery(
     principal: CloudPrincipal,
     deliveryId: string,
-  ): Promise<ChannelDeliveryRecord | null> {
+  ): Promise<PublicChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
-    return this.store.ackChannelDelivery({
+    const delivery = await this.store.ackChannelDelivery({
       orgId: this.principalOrgId(principal),
       deliveryId,
       status: 'failed',
       lastError: null,
       nextAttemptAt: new Date(),
     })
+    return delivery ? publicChannelDelivery(delivery) : null
   }
 
   async deadLetterChannelDelivery(
     principal: CloudPrincipal,
     input: { deliveryId: string, lastError?: string | null },
-  ): Promise<ChannelDeliveryRecord | null> {
+  ): Promise<PublicChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
-    return this.store.ackChannelDelivery({
+    const delivery = await this.store.ackChannelDelivery({
       orgId: this.principalOrgId(principal),
       deliveryId: input.deliveryId,
       status: 'dead',
       lastError: input.lastError || 'Manually dead-lettered by gateway operator.',
       nextAttemptAt: null,
     })
+    return delivery ? publicChannelDelivery(delivery) : null
   }
 
   async claimNextChannelDelivery(
@@ -2161,10 +2208,10 @@ export class CloudSessionService {
       lastError?: string | null
       nextAttemptAt?: Date | null
     },
-  ): Promise<ChannelDeliveryRecord | null> {
+  ): Promise<PublicChannelDeliveryRecord | null> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
-    return this.store.ackChannelDelivery({
+    const delivery = await this.store.ackChannelDelivery({
       orgId: this.principalOrgId(principal),
       deliveryId: input.deliveryId,
       claimedBy: input.claimedBy,
@@ -2172,6 +2219,7 @@ export class CloudSessionService {
       lastError: input.lastError,
       nextAttemptAt: input.nextAttemptAt,
     })
+    return delivery ? publicChannelDelivery(delivery) : null
   }
 
   async listSettingMetadata(principal: CloudPrincipal) {
@@ -2794,12 +2842,13 @@ export class CloudSessionService {
   ): Promise<IssuedPublicApiTokenRecord> {
     await this.ensurePrincipal(principal)
     this.assertApiTokenAdmin(principal)
+    const scopes = enforceApiTokenScopePolicy(normalizeApiTokenScopes(input.scopes), this.identityPolicy)
     const issued = await this.store.issueApiToken({
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
       name: input.name,
-      scopes: normalizeApiTokenScopes(input.scopes),
-      expiresAt: normalizeApiTokenExpiresAt(input.expiresAt),
+      scopes,
+      expiresAt: normalizeApiTokenExpiresAt(input.expiresAt, this.identityPolicy),
       actor: {
         actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
         actorId: principal.tokenId || principal.userId,

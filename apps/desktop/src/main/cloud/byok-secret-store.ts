@@ -42,6 +42,8 @@ export type RevealByokSecretInput = {
   orgId: string
   providerId: string
   allowKmsRef?: boolean
+  purpose?: 'runtime_config' | 'validation' | 'operator' | string
+  actor?: AuditActorInput
 }
 
 export type ValidateByokSecretInput = {
@@ -422,7 +424,24 @@ export function createByokSecretStore(
       if (!secret.lastValidatedAt) {
         throw new Error(`BYOK secret for provider ${providerId} must be validated or explicitly operator-overridden before runtime use.`)
       }
-      return revealSecretRecord(secret, { ...input, providerId })
+      const plaintext = await revealSecretRecord(secret, { ...input, providerId })
+      await store.recordAuditEvent({
+        orgId: input.orgId,
+        accountId: input.actor?.accountId || secret.createdByAccountId,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || 'byok_secret.reveal',
+        eventType: 'byok_secret.revealed',
+        targetType: 'byok_secret',
+        targetId: secret.secretId,
+        metadata: {
+          providerId: secret.providerId,
+          credentialKind: secret.kmsRef ? 'kms_ref' : 'plaintext',
+          purpose: input.purpose || 'runtime_config',
+          last4: secret.last4,
+          keyFingerprint: secret.keyFingerprint,
+        },
+      })
+      return plaintext
     },
   }
 }

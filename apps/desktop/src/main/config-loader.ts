@@ -493,6 +493,9 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
       headerSecret: typeof source.auth?.headerSecret === 'string' && source.auth.headerSecret.trim()
         ? source.auth.headerSecret.trim()
         : undefined,
+      headerSecretRef: typeof source.auth?.headerSecretRef === 'string' && source.auth.headerSecretRef.trim()
+        ? source.auth.headerSecretRef.trim()
+        : undefined,
       headerAllowUnsigned: typeof source.auth?.headerAllowUnsigned === 'boolean'
         ? source.auth.headerAllowUnsigned
         : false,
@@ -503,6 +506,21 @@ function normalizeCloudConfig(raw: CloudConfig | undefined): CloudConfig {
         : source.auth?.mode === 'oidc'
           ? false
           : DEFAULT_CONFIG.cloud.auth.allowSelfServiceSignup,
+      apiTokens: {
+        ...DEFAULT_CONFIG.cloud.auth.apiTokens,
+        ...(source.auth?.apiTokens || {}),
+        defaultTtlMs: nullablePositiveNumber(
+          source.auth?.apiTokens?.defaultTtlMs,
+          DEFAULT_CONFIG.cloud.auth.apiTokens?.defaultTtlMs || 90 * 24 * 60 * 60 * 1000,
+        ) || DEFAULT_CONFIG.cloud.auth.apiTokens?.defaultTtlMs,
+        maxTtlMs: nullablePositiveNumber(
+          source.auth?.apiTokens?.maxTtlMs,
+          DEFAULT_CONFIG.cloud.auth.apiTokens?.maxTtlMs || 365 * 24 * 60 * 60 * 1000,
+        ) || DEFAULT_CONFIG.cloud.auth.apiTokens?.maxTtlMs,
+        allowedScopes: stringArray(source.auth?.apiTokens?.allowedScopes).length > 0
+          ? stringArray(source.auth?.apiTokens?.allowedScopes)
+          : DEFAULT_CONFIG.cloud.auth.apiTokens?.allowedScopes,
+      },
     },
     storage: {
       controlPlane: {

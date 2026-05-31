@@ -114,7 +114,8 @@ export type ChannelBindingRecord = {
   externalWorkspaceId: string | null
   displayName: string
   status: 'active' | 'disabled' | 'auth_required' | 'error'
-  credentialRef: string | null
+  credentialRefConfigured: boolean
+  credentialRefKind: 'env' | 'gcp-secret-manager' | 'aws-secrets-manager' | 'azure-key-vault' | 'secret-ref' | null
   settings: Record<string, unknown>
   createdAt: string
   updatedAt: string

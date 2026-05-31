@@ -495,7 +495,9 @@ The chart fails closed when `cloud.auth.mode=none` is used without
 Public `header` auth deployments must also set
 `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` or
 `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF`; the proxy must inject that value
-with the identity headers. Public OIDC deployments must set
+and sign the identity headers with `x-open-cowork-header-auth-timestamp` and
+`x-open-cowork-header-auth-signature`. Unsigned header auth is local/demo only.
+Public OIDC deployments must set
 `OPEN_COWORK_CLOUD_PUBLIC_URL` so redirect URIs never depend on forwarded
 headers from untrusted callers.
 The gateway chart also fails closed unless at least one provider is configured
@@ -512,9 +514,11 @@ pilots, but the chart rejects `roles.worker.persistence.enabled=true` with more
 than one worker replica because a shared ReadWriteOnce runtime volume is not a
 horizontal scaling model.
 
-For workers that write runtime/workspace checkpoints, provide either
-`OPEN_COWORK_CLOUD_SECRET_KEY` or `OPEN_COWORK_CLOUD_SECRET_KEY_REF`. The ref
-form can point at `env:NAME`, GCP Secret Manager
+For workers that write runtime/workspace checkpoints, provide
+`OPEN_COWORK_CLOUD_SECRET_KEY_REF` from a provider secret manager in hosted
+production. `OPEN_COWORK_CLOUD_SECRET_KEY` is accepted for local/self-host
+pilots but production startup rejects weak or demo key material. The ref form
+can point at `env:NAME`, GCP Secret Manager
 (`gcp-sm://projects/{project}/secrets/{secret}/versions/{version}`), AWS
 Secrets Manager (`aws-sm://{secret-id}?region={region}`), or Azure Key Vault
 (`azure-kv://{vault}/secrets/{secret}/{version}`).
@@ -669,7 +673,11 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_SIGNUP_MODE` | Optional explicit org signup mode: `disabled`, `invite`, `domain`, or `open`. `closed` remains a backward-compatible alias for `disabled`; `invite` permits admin-created invited memberships; `domain` uses `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS`; `disabled` allows only existing active memberships. |
 | `OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS` | Optional comma-separated email domain allowlist for OIDC identities. |
 | `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` / `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF` | Required for public `header` auth; trusted proxies must provide the same value in `x-open-cowork-header-auth-secret`. |
+| `OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED` | Local/demo escape hatch only. Public and `public_production` trusted-header deployments require signed headers. |
+| `OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS` | Maximum accepted trusted-header signature age. Defaults to five minutes. |
 | `OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP` | Explicitly allows first-login OIDC org membership creation. Keep disabled for invite-only managed deployments. |
+| `OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS` / `OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS` | Default and maximum TTLs for desktop/gateway API tokens. Defaults are 90 days and 365 days. |
+| `OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES` | Comma-separated API token scopes operators allow admins to mint. Defaults to `desktop,gateway,admin,operator`; `worker-internal` is reserved for managed worker credential flows. |
 | `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS` | Allows `x-forwarded-for` for rate-limit attribution only when the deployment is behind a trusted proxy. |
 | `OPEN_COWORK_CLOUD_SERVICE_NAME` | Service name included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_SERVICE_VERSION` | Optional version string included in structured logs and OTLP resource attributes. |

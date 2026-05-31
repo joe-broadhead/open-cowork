@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type {
   WorkflowDraft,
   WorkflowRun,
@@ -28,6 +28,8 @@ import type {
 } from './managed-worker-types.ts'
 import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
+import { redactAuditMetadata } from './audit-redaction.ts'
+import { generateChannelInteractionToken, generateCloudApiToken, hashChannelInteractionToken, hashCloudApiToken } from './control-plane-tokens.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -50,6 +52,7 @@ export type {
   UpdateManagedWorkerStatusInput,
 } from './managed-worker-types.ts'
 export { generateManagedWorkerCredential, hashManagedWorkerCredential } from './in-memory-domains/workers.ts'
+export { generateChannelInteractionToken, generateCloudApiToken, hashChannelInteractionToken, hashCloudApiToken } from './control-plane-tokens.ts'
 
 export type ControlPlaneRole = 'owner' | 'admin' | 'member'
 export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
@@ -770,6 +773,7 @@ export type UpdateHeadlessAgentInput = {
   status?: HeadlessAgentStatus
   managed?: boolean
   updatedAt?: Date
+  actor?: AuditActorInput
 }
 
 export type CreateChannelBindingInput = {
@@ -797,6 +801,7 @@ export type UpdateChannelBindingInput = {
   credentialRef?: string | null
   settings?: Record<string, unknown>
   updatedAt?: Date
+  actor?: AuditActorInput
 }
 
 export type UpsertChannelIdentityInput = {
@@ -1346,28 +1351,6 @@ function stableId(prefix: string, ...parts: string[]) {
   return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
 }
 
-export function hashCloudApiToken(plaintext: string) {
-  return `scrypt:${scryptSync(plaintext, 'open-cowork-cloud-api-token-hash-v1', 32).toString('base64url')}`
-}
-
-export function hashChannelInteractionToken(plaintext: string) {
-  return `scrypt:${scryptSync(plaintext, 'open-cowork-channel-interaction-token-v1', 32).toString('base64url')}`
-}
-
-export function generateCloudApiToken(input: { tokenId?: string, secret?: string } = {}) {
-  const tokenId = input.tokenId || `tok_${randomBytes(12).toString('base64url')}`
-  const secret = input.secret || randomBytes(32).toString('base64url')
-  return {
-    tokenId,
-    plaintext: `occ_${tokenId}_${secret}`,
-  }
-}
-
-export function generateChannelInteractionToken(input: { interactionId: string, secret?: string }) {
-  const secret = input.secret || randomBytes(24).toString('base64url')
-  return `occi_${input.interactionId}_${secret}`
-}
-
 function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
   return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
 }
@@ -1376,22 +1359,6 @@ function constantTimeStringEquals(left: string, right: string) {
   const leftBytes = Buffer.from(left)
   const rightBytes = Buffer.from(right)
   return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
-}
-
-function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
-  const redacted: Record<string, unknown> = {}
-  for (const [field, entry] of Object.entries(value || {})) {
-    if (/token|secret|key|password|credential/i.test(field)) {
-      redacted[field] = '[redacted]'
-    } else if (entry && typeof entry === 'object') {
-      redacted[field] = '[object]'
-    } else if (typeof entry === 'string') {
-      redacted[field] = entry.length > 256 ? `${entry.slice(0, 253)}...` : entry
-    } else {
-      redacted[field] = entry
-    }
-  }
-  return redacted
 }
 
 function stableJson(value: unknown): string {
@@ -2460,6 +2427,22 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     existing.status = input.status || existing.status
     existing.managed = input.managed === undefined ? existing.managed : input.managed
     existing.updatedAt = updatedAt
+    this.recordAuditEvent({
+      orgId: input.orgId,
+      accountId: input.actor?.accountId || null,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'headless_agent.updated',
+      targetType: 'headless_agent',
+      targetId: existing.agentId,
+      metadata: {
+        profileName: existing.profileName,
+        name: existing.name,
+        status: existing.status,
+        managed: existing.managed,
+      },
+      createdAt: input.updatedAt,
+    })
     return clone(existing)
   }
 
@@ -2532,6 +2515,23 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     existing.credentialRef = input.credentialRef === undefined ? existing.credentialRef : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref')
     existing.settings = input.settings === undefined ? existing.settings : normalizeRecord(input.settings, 'Channel binding settings')
     existing.updatedAt = nowIso(input.updatedAt)
+    this.recordAuditEvent({
+      orgId: input.orgId,
+      accountId: input.actor?.accountId || null,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'channel_binding.updated',
+      targetType: 'channel_binding',
+      targetId: existing.bindingId,
+      metadata: {
+        provider: existing.provider,
+        displayName: existing.displayName,
+        status: existing.status,
+        credentialRefConfigured: Boolean(existing.credentialRef),
+        settingsChanged: input.settings !== undefined,
+      },
+      createdAt: input.updatedAt,
+    })
     return clone(existing)
   }
 

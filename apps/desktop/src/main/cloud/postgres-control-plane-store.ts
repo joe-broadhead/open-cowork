@@ -9,6 +9,7 @@ import {
   decodeSessionPageCursor,
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
+import { redactAuditMetadata } from './audit-redaction.ts'
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
@@ -303,22 +304,6 @@ function normalizeByokProviderId(value: unknown) {
   return providerId
 }
 
-function redactAuditMetadata(value: Record<string, unknown> | undefined): Record<string, unknown> {
-  const redacted: Record<string, unknown> = {}
-  for (const [field, entry] of Object.entries(value || {})) {
-    if (/token|secret|key|password|credential/i.test(field)) {
-      redacted[field] = '[redacted]'
-    } else if (entry && typeof entry === 'object') {
-      redacted[field] = '[object]'
-    } else if (typeof entry === 'string') {
-      redacted[field] = entry.length > 256 ? `${entry.slice(0, 253)}...` : entry
-    } else {
-      redacted[field] = entry
-    }
-  }
-  return redacted
-}
-
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
   private readonly pool: PgPool
   private readonly ownsPool: boolean
@@ -423,7 +408,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
        ON CONFLICT (tenant_id) DO UPDATE
        SET name = COALESCE(NULLIF(EXCLUDED.name, ''), cloud_orgs.name),
            plan_key = COALESCE(EXCLUDED.plan_key, cloud_orgs.plan_key),
-           status = EXCLUDED.status,
+           status = cloud_orgs.status,
            updated_at = EXCLUDED.updated_at
        RETURNING *`,
       [input.orgId || input.tenantId, input.tenantId, input.name, input.planKey ?? null, input.status || 'active', now],
@@ -1308,29 +1293,49 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async updateHeadlessAgent(input: UpdateHeadlessAgentInput) {
-    const result = await this.pool.query(
-      `UPDATE headless_agents
-       SET profile_name = CASE WHEN $3::boolean THEN $4 ELSE profile_name END,
-           name = CASE WHEN $5::boolean THEN $6 ELSE name END,
-           status = COALESCE($7, status),
-           managed = CASE WHEN $8::boolean THEN $9 ELSE managed END,
-           updated_at = $10
-       WHERE org_id = $1 AND agent_id = $2
-       RETURNING *`,
-      [
-        input.orgId,
-        input.agentId,
-        input.profileName !== undefined,
-        input.profileName === undefined ? null : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
-        input.name !== undefined,
-        input.name === undefined ? null : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
-        input.status || null,
-        input.managed !== undefined,
-        input.managed ?? null,
-        nowIso(input.updatedAt),
-      ],
-    )
-    return result.rows[0] ? headlessAgentFromRow(result.rows[0]) : null
+    return this.withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE headless_agents
+         SET profile_name = CASE WHEN $3::boolean THEN $4 ELSE profile_name END,
+             name = CASE WHEN $5::boolean THEN $6 ELSE name END,
+             status = COALESCE($7, status),
+             managed = CASE WHEN $8::boolean THEN $9 ELSE managed END,
+             updated_at = $10
+         WHERE org_id = $1 AND agent_id = $2
+         RETURNING *`,
+        [
+          input.orgId,
+          input.agentId,
+          input.profileName !== undefined,
+          input.profileName === undefined ? null : normalizeText(input.profileName, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent profile'),
+          input.name !== undefined,
+          input.name === undefined ? null : normalizeText(input.name, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent name'),
+          input.status || null,
+          input.managed !== undefined,
+          input.managed ?? null,
+          nowIso(input.updatedAt),
+        ],
+      )
+      if (!result.rows[0]) return null
+      const agent = headlessAgentFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: input.orgId,
+        accountId: input.actor?.accountId || null,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'headless_agent.updated',
+        targetType: 'headless_agent',
+        targetId: agent.agentId,
+        metadata: {
+          profileName: agent.profileName,
+          name: agent.name,
+          status: agent.status,
+          managed: agent.managed,
+        },
+        createdAt: input.updatedAt,
+      })
+      return agent
+    })
   }
 
   async getHeadlessAgent(orgId: string, agentId: string) {
@@ -1415,29 +1420,50 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async updateChannelBinding(input: UpdateChannelBindingInput) {
-    const result = await this.pool.query(
-      `UPDATE cloud_channel_bindings
-       SET display_name = CASE WHEN $3::boolean THEN $4 ELSE display_name END,
-           status = COALESCE($5, status),
-           credential_ref = CASE WHEN $6::boolean THEN $7 ELSE credential_ref END,
-           settings = CASE WHEN $8::boolean THEN $9::jsonb ELSE settings END,
-           updated_at = $10
-       WHERE org_id = $1 AND binding_id = $2
-       RETURNING *`,
-      [
-        input.orgId,
-        input.bindingId,
-        input.displayName !== undefined,
-        input.displayName === undefined ? null : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
-        input.status || null,
-        input.credentialRef !== undefined,
-        input.credentialRef === undefined ? null : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
-        input.settings !== undefined,
-        input.settings === undefined ? null : JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
-        nowIso(input.updatedAt),
-      ],
-    )
-    return result.rows[0] ? channelBindingFromRow(result.rows[0]) : null
+    return this.withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE cloud_channel_bindings
+         SET display_name = CASE WHEN $3::boolean THEN $4 ELSE display_name END,
+             status = COALESCE($5, status),
+             credential_ref = CASE WHEN $6::boolean THEN $7 ELSE credential_ref END,
+             settings = CASE WHEN $8::boolean THEN $9::jsonb ELSE settings END,
+             updated_at = $10
+         WHERE org_id = $1 AND binding_id = $2
+         RETURNING *`,
+        [
+          input.orgId,
+          input.bindingId,
+          input.displayName !== undefined,
+          input.displayName === undefined ? null : normalizeText(input.displayName, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding name'),
+          input.status || null,
+          input.credentialRef !== undefined,
+          input.credentialRef === undefined ? null : normalizeNullableText(input.credentialRef, CHANNEL_TEXT_MAX_LENGTH, 'Credential ref'),
+          input.settings !== undefined,
+          input.settings === undefined ? null : JSON.stringify(normalizeRecord(input.settings, 'Channel binding settings')),
+          nowIso(input.updatedAt),
+        ],
+      )
+      if (!result.rows[0]) return null
+      const binding = channelBindingFromRow(result.rows[0])
+      await this.recordAuditEventWithExecutor(client, {
+        orgId: input.orgId,
+        accountId: input.actor?.accountId || null,
+        actorType: input.actor?.actorType || 'system',
+        actorId: input.actor?.actorId || null,
+        eventType: 'channel_binding.updated',
+        targetType: 'channel_binding',
+        targetId: binding.bindingId,
+        metadata: {
+          provider: binding.provider,
+          displayName: binding.displayName,
+          status: binding.status,
+          credentialRefConfigured: Boolean(binding.credentialRef),
+          settingsChanged: input.settings !== undefined,
+        },
+        createdAt: input.updatedAt,
+      })
+      return binding
+    })
   }
 
   async getChannelBinding(orgId: string, bindingId: string) {

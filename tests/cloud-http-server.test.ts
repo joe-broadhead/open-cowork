@@ -1762,6 +1762,49 @@ test('cloud HTTP API token issuance applies default and maximum expirations', as
   }
 })
 
+test('cloud HTTP API token issuance obeys configured TTL and scope policy', async () => {
+  const fixture = createFixture({
+    identityPolicy: {
+      allowSelfServiceSignup: true,
+      apiTokenDefaultTtlMs: 2 * 24 * 60 * 60 * 1000,
+      apiTokenMaxTtlMs: 3 * 24 * 60 * 60 * 1000,
+      apiTokenAllowedScopes: ['desktop'],
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const issued = await readJson(await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Desktop token', scopes: ['desktop'] }),
+    }))
+    const token = asRecord(issued.token)
+    const ttlMs = Date.parse(String(token.expiresAt)) - Date.now()
+    assert.equal(ttlMs > 24 * 60 * 60 * 1000, true)
+    assert.equal(ttlMs < 3 * 24 * 60 * 60 * 1000, true)
+
+    const disallowedScope = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Gateway token', scopes: ['gateway'] }),
+    })
+    assert.equal(disallowedScope.status, 403)
+
+    const tooLong = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Too long',
+        scopes: ['desktop'],
+        expiresAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+      }),
+    })
+    assert.equal(tooLong.status, 400)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP self-service mode requires an active invited membership when disabled', async () => {
   const principal = {
     tenantId: 'tenant-1',
@@ -2358,7 +2401,25 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(bindingResponse.status, 201)
     const channelBinding = asRecord((await readJson(bindingResponse)).binding)
-    assert.equal(channelBinding.credentialRef, 'secret/telegram')
+    assert.equal(channelBinding.credentialRef, undefined)
+    assert.equal(channelBinding.credentialRefConfigured, true)
+    assert.equal(channelBinding.credentialRefKind, 'secret-ref')
+
+    const updateBindingResponse = await fetch(`${baseUrl}/api/channels/bindings/telegram-binding`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        displayName: 'Telegram primary',
+        settings: { webhookSecret: 'channel-redaction-sentinel-1234567890abcdef' },
+      }),
+    })
+    assert.equal(updateBindingResponse.status, 200)
+    const updatedBinding = asRecord((await readJson(updateBindingResponse)).binding)
+    assert.equal(updatedBinding.credentialRef, undefined)
+    assert.equal(JSON.stringify(updatedBinding).includes('channel-redaction-sentinel'), false)
+    const bindingAudit = await store.listAuditEvents('tenant-1')
+    assert.equal(bindingAudit.some((event) => event.eventType === 'channel_binding.updated'), true)
+    assert.equal(JSON.stringify(bindingAudit).includes('channel-redaction-sentinel'), false)
 
     const tenant2Bindings = await readJson(await fetch(`${baseUrl}/api/channels/bindings`, { headers: tenant2Headers }))
     assert.deepEqual(asArray(tenant2Bindings.bindings), [])
@@ -2408,6 +2469,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(secondBindingResponse.status, 201)
     const secondChannelBinding = asRecord((await readJson(secondBindingResponse)).binding)
+    assert.equal(secondChannelBinding.credentialRef, undefined)
 
     store.ensureUser({ tenantId: 'tenant-1', userId: 'other-user', email: 'other@example.test' })
     store.createSession({

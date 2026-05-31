@@ -31,11 +31,24 @@ cloud:
   allowInsecurePublicAuth: false
   auth:
     mode: none
+    signupMode: ""
+    allowSelfServiceSignup: false
     oidcIssuerUrl: ""
     oidcClientId: ""
     oidcClientSecretRef: ""
     oidcCallbackPath: /auth/callback
     allowedEmailDomains: []
+    headerSecret: ""
+    headerSecretRef: ""
+    headerAllowUnsigned: false
+    headerMaxSignatureAgeMs: 300000
+    apiTokenDefaultTtlMs: 7776000000
+    apiTokenMaxTtlMs: 31536000000
+    apiTokenAllowedScopes:
+      - desktop
+      - gateway
+      - admin
+      - operator
   controlPlaneUrl: ""
   secretKey: ""
   secretKeyRef: ""

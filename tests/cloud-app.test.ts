@@ -40,6 +40,8 @@ import type {
 import { sessionCheckpointLatestKey } from '../apps/desktop/src/main/cloud/workspace-checkpoint-store.ts'
 
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
+const STRONG_CLOUD_SECRET = 'Pp4J9_kV2rTq8YzLmN6bHwC3sDxF7uAaG1eOiR5v'
+const STRONG_CLOUD_COOKIE_SECRET = 'Vs7Qm2_ZxHa93LpNuR4TwE8cYbK6jFoDiG1rS5el'
 
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
@@ -586,8 +588,9 @@ test('public production deployment guard fails closed without durable dependenci
   }
   const productionEnv = {
     OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
-    OPEN_COWORK_CLOUD_SECRET_KEY: 'x'.repeat(32),
-    OPEN_COWORK_CLOUD_COOKIE_SECRET: 'y'.repeat(32),
+    OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
+    OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
   }
 
   assert.throws(() => assertCloudProductionDeploymentSafe({
@@ -616,6 +619,81 @@ test('public production deployment guard fails closed without durable dependenci
     config: productionConfig,
     auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
     env: productionEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }))
+})
+
+test('public production deployment guard enforces strong secrets and web auth policy independent of bind host', () => {
+  const productionConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      storage: {
+        controlPlane: { kind: 'postgres' as const },
+        objectStore: {
+          kind: 'gcs' as const,
+          bucket: 'open-cowork-test-bucket',
+        },
+      },
+    },
+  }
+  const baseEnv = {
+    OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+    OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
+    OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
+    OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+  }
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: { ...baseEnv, OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: 'true' },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /ALLOW_INSECURE_AUTH/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: { ...baseEnv, OPEN_COWORK_CLOUD_SECRET_KEY: 'x'.repeat(32) },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
+  }), /too weak/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'oidc', issuerUrl: 'https://auth.example.test', clientId: 'open-cowork-cloud' },
+    env: baseEnv,
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }), /PUBLIC_URL/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'header', headerSecret: STRONG_CLOUD_SECRET, headerAllowUnsigned: true },
+    env: { ...baseEnv, OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }), /signed identity headers/)
+
+  assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'header', headerSecret: STRONG_CLOUD_SECRET },
+    env: { ...baseEnv, OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET },
     checkpointsEnabled: false,
     autoProcessCommands: false,
   }))

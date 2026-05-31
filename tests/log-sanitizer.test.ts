@@ -91,3 +91,22 @@ test('sanitizeLogMessage redacts cloud connection strings and keyed high-entropy
   assert.ok(!sanitized.includes('AKIAABCDEFGHIJKLMNOP'))
   assert.ok(!sanitized.includes('client_secret=abcdefghijklmnopqrstuvwxyz'))
 })
+
+test('sanitizeLogMessage redacts cloud secret refs and encrypted envelopes', () => {
+  const input = [
+    'ref gcp-sm://projects/PROJECT/secrets/open-cowork-secret/versions/latest',
+    'aws aws-sm://open-cowork/cloud-secret?region=us-east-1',
+    'azure azure-kv://vault/secrets/cloud-secret/v1',
+    'url https://vault.vault.azure.net/secrets/cloud-secret/v1',
+    'cipher enc:v1:abcdefghijklmnopqrstuvwxyz1234567890',
+  ].join(' ')
+  const sanitized = sanitizeLogMessage(input)
+
+  assert.equal(sanitized.includes('gcp-sm://'), false)
+  assert.equal(sanitized.includes('aws-sm://'), false)
+  assert.equal(sanitized.includes('azure-kv://'), false)
+  assert.equal(sanitized.includes('vault.azure.net/secrets'), false)
+  assert.equal(sanitized.includes('enc:v1:'), false)
+  assert.match(sanitized, /\[REDACTED_SECRET_REF\]/)
+  assert.match(sanitized, /\[REDACTED_SECRET\]/)
+})
