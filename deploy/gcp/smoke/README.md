@@ -4,11 +4,18 @@ Use these commands after a GCP rollout. They intentionally read configuration
 from environment variables so the same scripts work from a private deployment
 repo, CI, or a local operator shell.
 
+Keep raw evidence in a tmp/local or private/downstream deployment repo. The
+public `open-cowork` repo should only receive generalized template fixes and
+redacted evidence summaries. Use `OPEN_COWORK_GCP_REDACT_OUTPUT=true` before
+attaching preflight or smoke output to public issues, PRs, or docs, and use
+`evidence.template.json` as the public-safe shape.
+
 ## Read-Only Project Preflight
 
 ```bash
 OPEN_COWORK_GCP_PROJECT=PROJECT \
 OPEN_COWORK_GCP_REGION=us-central1 \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
 pnpm deploy:gcp:preflight
 ```
 
@@ -38,14 +45,20 @@ markers, `/api/config`, and `/api/workspace`.
 ```bash
 OPEN_COWORK_GCP_PROJECT=PROJECT \
 OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_SQL_INSTANCE=INSTANCE \
 OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
 OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
 pnpm deploy:gcp:smoke
 ```
 
 The GCP smoke runs the Cloud Web smoke, writes/reads/deletes a temporary object
-in Cloud Storage, and resolves a Secret Manager reference without printing the
-secret value.
+in Cloud Storage, resolves a Secret Manager reference without printing the
+secret value, and verifies Cloud SQL restore readiness through automated backup
+and point-in-time recovery checks. Set `OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE=true`
+only for pre-database or early surface checks that are not launch gates. Set
+`OPEN_COWORK_GCP_ALLOW_NO_PITR=true` only for a documented non-production
+exception.
 
 ## Desktop Cloud Sync Smoke
 

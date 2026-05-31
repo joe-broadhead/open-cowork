@@ -37,6 +37,24 @@ The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
 and can also be enabled as the cloud chart's optional gateway dependency.
 
+## Deployment Repository Strategy
+
+Keep public templates separate from real operator state:
+
+| Location | What belongs there | What must not be committed there |
+| --- | --- | --- |
+| Public `open-cowork` repo | Provider-neutral docs, placeholder templates, validation scripts, smoke scripts, redacted evidence templates, and generalized fixes. | Real project ids, account ids, private domains, customer names, prices, API tokens, database URLs, channel credentials, screenshots/logs with private values, or raw provider evidence. |
+| Tmp/local deployment repo | Generated manifests, copied Helm values, `gcloud`/provider outputs, short-lived smoke reports, and operator scratch files while proving a deployment. | Anything intended to be pushed to the public repo without redaction and generalization. |
+| Private/downstream deployment repo | SaaS-specific domains, cloud project ids, provider account ids, OIDC apps, image digests, secret refs, launch evidence, cost notes, customer data, private runbooks, and environment overlays. | Product source changes that should be shared back as reusable templates or provider-neutral fixes. |
+
+Copy back only source-neutral changes: improved placeholders, stricter
+validators, portable scripts, generic docs, and redacted evidence summaries.
+Never paste raw preflight/smoke JSON into public issues, PRs, or docs. Use
+`OPEN_COWORK_GCP_REDACT_OUTPUT=true` or the relevant provider redaction mode
+before attaching evidence outside the private deployment repo.
+The tmp/local deployment repo is disposable by design; assume every raw file in
+it is private until it has been redacted and generalized.
+
 ## Provider Recipes
 
 Each provider recipe is a deployment overlay for the same product topology. Do
@@ -278,7 +296,14 @@ GCP adds a provider-specific infra smoke:
 ```bash
 OPEN_COWORK_GCP_PROJECT=PROJECT \
 OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_SQL_INSTANCE=INSTANCE \
 OPEN_COWORK_GCP_SECRET_REF=gcp-sm://projects/PROJECT/secrets/open-cowork-cloud-secret-key/versions/latest \
 OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
 pnpm deploy:gcp:smoke
 ```
+
+The GCP infra smoke checks Cloud Web, Cloud Storage round-trip, Secret Manager
+resolution without printing the value, and Cloud SQL automated backup/PITR
+restore readiness. Set `OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE=true` only for
+pre-database or early surface checks that are not launch gates.

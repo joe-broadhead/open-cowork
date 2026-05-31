@@ -1,0 +1,66 @@
+{
+  "redacted": true,
+  "deploymentRepository": {
+    "publicSource": "open-cowork",
+    "workingRepo": "tmp/open-cowork-gcp-DEPLOYMENT",
+    "privateEvidenceRepo": "PRIVATE_DEPLOYMENT_REPO",
+    "copyBackRule": "Only generalized template fixes, validators, docs, and redacted summaries may be copied back to open-cowork."
+  },
+  "preflight": {
+    "ok": true,
+    "project": "PROJECT",
+    "region": "REGION",
+    "activeAccount": "ACCOUNT",
+    "requiredApis": [
+      "artifactregistry.googleapis.com",
+      "compute.googleapis.com",
+      "container.googleapis.com",
+      "iam.googleapis.com",
+      "iamcredentials.googleapis.com",
+      "logging.googleapis.com",
+      "monitoring.googleapis.com",
+      "secretmanager.googleapis.com",
+      "sqladmin.googleapis.com",
+      "storage.googleapis.com"
+    ],
+    "cloudRun": {
+      "serviceName": "SERVICE",
+      "url": "https://cowork.example.com"
+    }
+  },
+  "smoke": {
+    "ok": true,
+    "project": "PROJECT",
+    "results": {
+      "cloud": {
+        "cloudUrl": "https://cowork.example.com"
+      },
+      "objectStore": {
+        "bucket": "OPEN_COWORK_BUCKET",
+        "key": "open-cowork-smoke/smoke-PLACEHOLDER.txt"
+      },
+      "secretManager": {
+        "project": "PROJECT",
+        "secret": "SECRET_NAME",
+        "version": "VERSION",
+        "resolved": true
+      },
+      "restoreReadiness": {
+        "sqlInstance": "INSTANCE",
+        "backupsEnabled": true,
+        "pointInTimeRecoveryEnabled": true
+      }
+    }
+  },
+  "surfaceSmokes": {
+    "desktop": "PASS_OR_SKIPPED_WITH_REASON",
+    "gateway": "PASS_OR_SKIPPED_WITH_REASON",
+    "continuation": "PASS_OR_SKIPPED_WITH_REASON",
+    "load": "PASS_OR_SKIPPED_WITH_REASON",
+    "soak": "PASS_OR_SKIPPED_WITH_REASON"
+  },
+  "notes": [
+    "Do not replace placeholders with real project ids, account ids, domains, customer names, prices, tokens, signed URLs, or secret values in the public repo.",
+    "Store raw gcloud output, Cloud Monitoring evidence, costs, and operator notes in the tmp/local or private/downstream deployment repo."
+  ]
+}
