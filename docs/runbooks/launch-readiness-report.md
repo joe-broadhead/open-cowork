@@ -31,10 +31,36 @@ identifiers redacted.
 - Decision: `go`, `conditional-go`, or `no-go`
 - Public claim allowed by this report:
 - Claims explicitly not made:
+- Private evidence record:
+- Public-safe summary:
 - Decision owner:
 - Reviewers:
 - Conditions or blockers:
 - Follow-up issues:
+
+## Launch Evidence Register
+
+Every private-beta or higher decision must attach the machine-readable record
+from `deploy/private-beta/launch-evidence-record.template.json` in a private
+operations system. Copy back only the redacted summary, status, checksum, and
+follow-up issue id.
+
+| Evidence item | Status | Private evidence ref | Public redacted summary | Checksum | Follow-up |
+| --- | --- | --- | --- | --- | --- |
+| deployedDesktopWebGatewayContinuation | | | | | |
+| deployedLoadTest | | | | | |
+| deployedSoakTest | | | | | |
+| workerFailover | | | | | |
+| schedulerReplicaFailover | | | | | |
+| postgresBackupRestore | | | | | |
+| objectStoreArtifactRoundTrip | | | | | |
+| secretAdapterResolution | | | | | |
+| byokRedactionNoPlaintext | | | | | |
+| gatewayDeliveryReplayDeadLetter | | | | | |
+| quotaRateLimitBehavior | | | | | |
+| billingEntitlementGating | | | | | |
+| supportIncidentOwnershipEscalation | | | | | |
+| costSloNotes | | | | | |
 
 ## Load Test Report
 
@@ -46,8 +72,7 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
-pnpm deploy:load
+pnpm deploy:load:strict
 ```
 
 Summarize:
@@ -76,8 +101,7 @@ OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
 OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
-OPEN_COWORK_LOAD_STRICT=true \
-pnpm deploy:soak
+pnpm deploy:soak:strict
 ```
 
 Record:
@@ -103,6 +127,7 @@ Record:
 - [ ] `pnpm deploy:desktop:smoke`
 - [ ] `pnpm deploy:gateway:smoke`
 - [ ] `pnpm deploy:continuation:smoke`
+- [ ] `pnpm deploy:failover:drill`
 - [ ] provider-specific smoke such as `pnpm deploy:gcp:smoke` where applicable
 
 ## Failover And Recovery Evidence
@@ -116,6 +141,7 @@ Record:
 - object-store transient failure:
 - BYOK reveal failure:
 - database restore/readiness validation:
+- failover drill evidence:
 
 ## Quota And Abuse Evidence
 

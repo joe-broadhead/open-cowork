@@ -179,13 +179,16 @@
       "deploy/private-beta/self-host-oss.config.example.json",
       "deploy/private-beta/private-beta-plans.json",
       "deploy/private-beta/private-beta-launch-profile.template.json",
+      "deploy/private-beta/launch-evidence-record.template.json",
       "deploy/private-beta/design-partner-onboarding.template.md",
-      "deploy/private-beta/go-no-go-report.template.md"
+      "deploy/private-beta/go-no-go-report.template.md",
+      "deploy/private-beta/private-beta-go-no-go.public.md"
     ],
     "requiredValidationCommands": [
       "pnpm deploy:private-beta:validate",
       "pnpm deploy:validate -- --require-tools",
       "pnpm deploy:launch:validate",
+      "pnpm deploy:launch:evidence:validate",
       "pnpm ops:validate",
       "pnpm test",
       "pnpm typecheck",

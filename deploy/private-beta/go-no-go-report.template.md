@@ -32,13 +32,47 @@ The public repo keeps the evidence shape only.
 | --- | --- | --- | --- | --- |
 | `pnpm deploy:validate` | | | | |
 | `pnpm deploy:launch:validate` | | | | |
+| `pnpm deploy:launch:evidence:validate` | | | | |
 | `pnpm deploy:private-beta:validate` | | | | |
 | `pnpm ops:validate` | | | | |
+| `pnpm deploy:smoke` | | | | |
+| `pnpm deploy:desktop:smoke` | | | | |
+| `pnpm deploy:gateway:smoke` | | | | |
+| `pnpm deploy:continuation:smoke` | | | | |
+| `pnpm deploy:load:strict` | | | | |
+| `pnpm deploy:soak:strict` | | | | |
+| `pnpm deploy:failover:drill` | | | | |
+| `pnpm deploy:gcp:preflight` | | | | |
+| `pnpm deploy:gcp:smoke` | | | | |
 | `pnpm test:cloud-continuation` | | | | |
 | `pnpm test:cloud-web` | | | | |
 | BYOK security tests | | | | |
 | billing entitlement tests | | | | |
 | `git diff --check` | | | | |
+
+## Evidence Register
+
+Use `deploy/private-beta/launch-evidence-record.template.json` as the
+machine-readable private evidence record. A `go` decision is invalid unless
+every blocking item has a private evidence reference, redacted public summary,
+checksum or immutable artifact id, owner, and timestamp.
+
+| Evidence item | Status | Private evidence ref | Public redacted summary | Checksum | Owner |
+| --- | --- | --- | --- | --- | --- |
+| `deployedDesktopWebGatewayContinuation` | | | | | |
+| `deployedLoadTest` | | | | | |
+| `deployedSoakTest` | | | | | |
+| `workerFailover` | | | | | |
+| `schedulerReplicaFailover` | | | | | |
+| `postgresBackupRestore` | | | | | |
+| `objectStoreArtifactRoundTrip` | | | | | |
+| `secretAdapterResolution` | | | | | |
+| `byokRedactionNoPlaintext` | | | | | |
+| `gatewayDeliveryReplayDeadLetter` | | | | | |
+| `quotaRateLimitBehavior` | | | | | |
+| `billingEntitlementGating` | | | | | |
+| `supportIncidentOwnershipEscalation` | | | | | |
+| `costSloNotes` | | | | | |
 
 ## Load And Soak Summary
 

@@ -159,19 +159,67 @@ test('private beta launch profile template captures launch decisions and evidenc
     'desktopWebGatewayContinuation',
     'tokenRevocationProof',
     'diagnosticsRedactionProof',
+    'launchEvidenceRecord',
+    'schedulerReplicaFailover',
+    'secretAdapterResolution',
+    'byokRedactionNoPlaintext',
+    'quotaRateLimitBehavior',
+    'billingEntitlementGating',
+    'supportIncidentOwnershipEscalation',
+    'costSloNotes',
   ]) {
     assert.equal(template.profile.requiredEvidence[evidence], true)
   }
   for (const command of [
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:launch:validate',
+    'pnpm deploy:launch:evidence:validate',
     'pnpm ops:validate',
     'pnpm deploy:continuation:smoke',
     'pnpm deploy:load:strict',
     'pnpm deploy:soak:strict',
+    'pnpm deploy:failover:drill',
+    'pnpm deploy:gcp:preflight',
+    'pnpm deploy:gcp:smoke',
   ]) {
     assert.ok(template.profile.requiredSmokeCommands.includes(command))
   }
+})
+
+test('private beta launch evidence record and public go/no-go summary remain conservative', () => {
+  const record = readJson('deploy/private-beta/launch-evidence-record.template.json')
+  assert.equal(record.purpose, 'managed-byok-private-beta-launch-evidence-record-template')
+  assert.equal(record.scope, 'public-template-only')
+  assert.equal(record.targetTier, 'private-beta')
+  assert.equal(record.currentPublicTier, 'local-self-host-beta')
+  assert.ok(record.decisionRule.includes('private-pass'))
+  for (const item of [
+    'deployedDesktopWebGatewayContinuation',
+    'deployedLoadTest',
+    'deployedSoakTest',
+    'workerFailover',
+    'schedulerReplicaFailover',
+    'postgresBackupRestore',
+    'objectStoreArtifactRoundTrip',
+    'secretAdapterResolution',
+    'byokRedactionNoPlaintext',
+    'gatewayDeliveryReplayDeadLetter',
+    'quotaRateLimitBehavior',
+    'billingEntitlementGating',
+    'supportIncidentOwnershipEscalation',
+    'costSloNotes',
+  ]) {
+    const evidence = record.requiredEvidence.find((entry: { id: string }) => entry.id === item)
+    assert.ok(evidence, item)
+    assert.equal(evidence.blockingForPrivateBeta, true)
+    assert.equal(evidence.status, 'pending-private-evidence')
+  }
+
+  const publicSummary = readRepoFile('deploy/private-beta/private-beta-go-no-go.public.md')
+  assert.match(publicSummary, /Decision: `no-go`/)
+  assert.match(publicSummary, /Current public tier: `local-self-host-beta`/)
+  assert.match(publicSummary, /pending-private-evidence/)
+  assert.match(publicSummary, /deploy\/private-beta\/launch-evidence-record\.template\.json/)
 })
 
 test('private beta onboarding and go/no-go templates force complete evidence records', () => {
@@ -203,6 +251,7 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
     'Launch Profile And Environment',
     'Exact Commit And Release Artifact',
     'Validation Commands With Timestamps',
+    'Evidence Register',
     'Load And Soak Summary',
     'Failover And Restore Summary',
     'Security Boundary Checklist',
@@ -212,6 +261,7 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
     'BYOK plaintext absent',
     'Gateway is a channel client and delivery adapter',
     'managed-byok-readiness-contract.template.json',
+    'launch-evidence-record.template.json',
     'Onboarding failures preserve machine-readable status and reason codes',
   ]) {
     assert.match(report, new RegExp(phrase))
@@ -264,6 +314,8 @@ test('private beta plan placeholders do not commit prices or token resale assump
 test('private beta validator runs from the package script', () => {
   const packageJson = readJson('package.json')
   assert.equal(packageJson.scripts['deploy:private-beta:validate'], 'node scripts/validate-private-beta-package.mjs')
+  assert.equal(packageJson.scripts['deploy:launch:evidence:validate'], 'node scripts/validate-launch-evidence-manifest.mjs')
+  assert.equal(packageJson.scripts['deploy:failover:drill'], 'node scripts/launch-failover-drill.mjs')
   const output = execFileSync(process.execPath, ['scripts/validate-private-beta-package.mjs'], {
     cwd: process.cwd(),
     encoding: 'utf8',

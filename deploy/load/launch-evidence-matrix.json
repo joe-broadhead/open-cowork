@@ -97,6 +97,7 @@
       "publicArtifacts": [
         "scripts/cloud-continuation-smoke.mjs",
         "scripts/gateway-cloud-smoke.mjs",
+        "scripts/launch-failover-drill.mjs",
         "docs/runbooks/cloud-managed-operations.md",
         "docs/runbooks/launch-readiness-report.md",
         "deploy/managed-workers/worker-release-evidence.template.md"
@@ -104,6 +105,7 @@
       "requiredCommands": [
         "pnpm deploy:continuation:smoke",
         "pnpm deploy:gateway:smoke",
+        "pnpm deploy:failover:drill",
         "pnpm ops:validate"
       ],
       "coveredSurfaces": [
@@ -154,7 +156,8 @@
         "deploy/private-beta/managed-byok-readiness-contract.template.json",
         "tests/byok-boundary-regression.test.ts",
         "tests/cloud-http-server.test.ts",
-        "tests/cloud-module-boundaries.test.ts"
+        "tests/cloud-modularity-boundaries.test.ts",
+        "tests/opencode-sdk-boundary.test.ts"
       ],
       "requiredCommands": [
         "pnpm test",
@@ -182,7 +185,8 @@
         "docs/release-checklist.md",
         "scripts/validate-deployment-configs.mjs",
         "scripts/validate-private-beta-package.mjs",
-        "scripts/validate-launch-readiness.mjs"
+        "scripts/validate-launch-readiness.mjs",
+        "scripts/validate-launch-evidence-manifest.mjs"
       ],
       "requiredCommands": [
         "pnpm lint",
@@ -191,6 +195,7 @@
         "pnpm docs:build",
         "pnpm deploy:validate",
         "pnpm deploy:launch:validate",
+        "pnpm deploy:launch:evidence:validate",
         "pnpm deploy:private-beta:validate",
         "pnpm ops:validate",
         "git diff --check"
@@ -226,6 +231,192 @@
         "tier-scoped-out-of-scope"
       ],
       "passCondition": "Every failed launch gate is either fixed immediately, turned into a narrow issue with evidence/reproduction, or recorded as out-of-scope for the selected launch tier."
+    }
+  },
+  "privateBetaEvidenceItems": {
+    "requiredStatusForGo": "private-pass",
+    "publicStatusValues": [
+      "pending-private-evidence",
+      "redacted-summary-attached",
+      "not-applicable-with-rationale",
+      "failed"
+    ],
+    "storageRule": "Each private-beta go decision must link every required item to a private evidence record and include a public-safe redacted summary plus checksum. Public artifacts must never include raw logs, project ids, customer identifiers, domains, tokens, prices, signed URLs, or provider account ids.",
+    "items": {
+      "deployedDesktopWebGatewayContinuation": {
+        "requiredForPrivateBeta": true,
+        "category": "failoverRecovery",
+        "publicArtifacts": [
+          "scripts/cloud-continuation-smoke.mjs",
+          "deploy/private-beta/launch-evidence-record.template.json",
+          "deploy/private-beta/private-beta-go-no-go.public.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:continuation:smoke",
+          "pnpm test:cloud-continuation"
+        ],
+        "passCondition": "A deployed Cloud workspace can continue the same thread from Cloud Web, Desktop, and Gateway with ordered session events and no workspace bleed."
+      },
+      "deployedLoadTest": {
+        "requiredForPrivateBeta": true,
+        "category": "loadAndSoak",
+        "publicArtifacts": [
+          "scripts/launch-readiness.mjs",
+          "docs/runbooks/launch-readiness-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:load:strict"
+        ],
+        "passCondition": "Strict private-beta load run meets the target thresholds for Cloud Web, workers, scheduler, Gateway, artifacts, quotas, and BYOK paths."
+      },
+      "deployedSoakTest": {
+        "requiredForPrivateBeta": true,
+        "category": "loadAndSoak",
+        "publicArtifacts": [
+          "scripts/launch-readiness.mjs",
+          "docs/runbooks/launch-readiness-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:soak:strict"
+        ],
+        "passCondition": "Strict private-beta soak run remains within error, latency, reconnect, dead-letter, queue-depth, and resource-trend thresholds."
+      },
+      "workerFailover": {
+        "requiredForPrivateBeta": true,
+        "category": "failoverRecovery",
+        "publicArtifacts": [
+          "deploy/managed-workers/worker-release-evidence.template.md",
+          "docs/runbooks/cloud-managed-operations.md"
+        ],
+        "requiredCommands": [
+          "pnpm ops:validate"
+        ],
+        "passCondition": "A worker crash during pending command processing recovers through leases/checkpoints without stale-owner projection writes or lost terminal state."
+      },
+      "schedulerReplicaFailover": {
+        "requiredForPrivateBeta": true,
+        "category": "failoverRecovery",
+        "publicArtifacts": [
+          "docs/runbooks/cloud-managed-operations.md",
+          "docs/workflows.md"
+        ],
+        "requiredCommands": [
+          "pnpm ops:validate"
+        ],
+        "passCondition": "Due workflow claims remain single-fire across scheduler restart or replica failover and recovery records the winning run."
+      },
+      "postgresBackupRestore": {
+        "requiredForPrivateBeta": true,
+        "category": "backupRestore",
+        "publicArtifacts": [
+          "docs/runbooks/backup-restore.md",
+          "docs/runbooks/restore-drill-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm ops:validate",
+          "pnpm deploy:gcp:smoke"
+        ],
+        "passCondition": "A private restore drill proves sessions, events, projections, workflows, channel bindings, deliveries, audit records, and secret refs are recoverable."
+      },
+      "objectStoreArtifactRoundTrip": {
+        "requiredForPrivateBeta": true,
+        "category": "backupRestore",
+        "publicArtifacts": [
+          "deploy/gcp/smoke/evidence.template.json",
+          "docs/runbooks/backup-restore.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:gcp:smoke"
+        ],
+        "passCondition": "Artifact upload, object-store readback, restore-readiness, and post-restore download work without signed URLs or object keys leaking into public evidence."
+      },
+      "secretAdapterResolution": {
+        "requiredForPrivateBeta": true,
+        "category": "backupRestore",
+        "publicArtifacts": [
+          "deploy/gcp/smoke/evidence.template.json",
+          "docs/security-model.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:gcp:smoke"
+        ],
+        "passCondition": "The configured secret adapter or KMS reference resolves in the deployed environment while public evidence contains only placeholder secret refs."
+      },
+      "byokRedactionNoPlaintext": {
+        "requiredForPrivateBeta": true,
+        "category": "securityBoundary",
+        "publicArtifacts": [
+          "tests/byok-boundary-regression.test.ts",
+          "deploy/private-beta/managed-byok-readiness-contract.template.json"
+        ],
+        "requiredCommands": [
+          "pnpm test"
+        ],
+        "passCondition": "BYOK plaintext is absent from HTTP reads, SSE, renderer state, Desktop cache, Gateway logs, diagnostics, metrics, launch reports, and public templates."
+      },
+      "gatewayDeliveryReplayDeadLetter": {
+        "requiredForPrivateBeta": true,
+        "category": "failoverRecovery",
+        "publicArtifacts": [
+          "scripts/gateway-cloud-smoke.mjs",
+          "docs/runbooks/launch-readiness-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:gateway:smoke",
+          "pnpm deploy:failover:drill",
+          "pnpm deploy:load:strict"
+        ],
+        "passCondition": "Gateway restart resumes delivery cursors, transient failures retry, poison deliveries dead-letter with evidence, and later deliveries continue."
+      },
+      "quotaRateLimitBehavior": {
+        "requiredForPrivateBeta": true,
+        "category": "securityBoundary",
+        "publicArtifacts": [
+          "scripts/launch-readiness.mjs",
+          "docs/runbooks/launch-readiness-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:load:strict"
+        ],
+        "passCondition": "Prompt, worker, gateway, artifact, HTTP, and auth failure limits return clear 402/429-style outcomes without spawning unnecessary work."
+      },
+      "billingEntitlementGating": {
+        "requiredForPrivateBeta": true,
+        "category": "securityBoundary",
+        "publicArtifacts": [
+          "deploy/private-beta/private-beta-plans.json",
+          "deploy/private-beta/managed-byok-readiness-contract.template.json"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:private-beta:validate"
+        ],
+        "passCondition": "Stub/manual private-beta billing or entitlement state blocks gated mutations and worker starts before expensive execution when an org is inactive."
+      },
+      "supportIncidentOwnershipEscalation": {
+        "requiredForPrivateBeta": true,
+        "category": "findingsWorkflow",
+        "publicArtifacts": [
+          "docs/runbooks/private-beta-support.md",
+          "deploy/private-beta/go-no-go-report.template.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:private-beta:validate"
+        ],
+        "passCondition": "Support owner, incident channel, escalation path, diagnostics redaction reviewer, and issue-disposition workflow are assigned in private ops evidence."
+      },
+      "costSloNotes": {
+        "requiredForPrivateBeta": true,
+        "category": "findingsWorkflow",
+        "publicArtifacts": [
+          "docs/runbooks/launch-readiness-report.md",
+          "deploy/private-beta/go-no-go-report.template.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:load:strict",
+          "pnpm deploy:soak:strict"
+        ],
+        "passCondition": "Private evidence records observed capacity limits, p95 latency/error targets, cost notes, and known scale boundaries for the target tier."
+      }
     }
   }
 }

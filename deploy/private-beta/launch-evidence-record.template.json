@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "purpose": "managed-byok-private-beta-launch-evidence-record-template",
+  "scope": "public-template-only",
+  "targetTier": "private-beta",
+  "currentPublicTier": "local-self-host-beta",
+  "decisionRule": "A private-beta go decision requires every blocking item to have status private-pass in the private operations record, a redacted public summary, and a checksum or immutable evidence reference. This public template never records real cloud project ids, customer identifiers, domains, raw logs, prices, tokens, signed URLs, or provider account ids.",
+  "publicPrivateBoundary": {
+    "rawEvidenceStorage": "{private-ops-ticket-or-runbook-url}",
+    "publicSummaryStorage": "deploy/private-beta/private-beta-go-no-go.public.md",
+    "redactionReviewer": "{private-redaction-reviewer}",
+    "allowedPublicFields": [
+      "evidence item id",
+      "public-safe status",
+      "redacted summary",
+      "checksum of private artifact",
+      "command name without secret arguments",
+      "follow-up issue id"
+    ],
+    "forbiddenPublicFields": [
+      "raw provider keys or OAuth tokens",
+      "Desktop, Gateway, API, cookie, internal, or operator tokens",
+      "real cloud project ids, account ids, subscription ids, customer ids, or regions tied to a managed service",
+      "customer names, emails, org slugs, channel handles, support tickets, or onboarding records",
+      "raw logs, diagnostics bundles, database exports, object-store listings, screenshots, or cost exports",
+      "real domains, signed URLs, Stripe ids, provider account ids, or exact prices"
+    ]
+  },
+  "statusValues": [
+    "pending-private-evidence",
+    "private-pass",
+    "private-fail",
+    "not-applicable-with-rationale"
+  ],
+  "requiredEvidence": [
+    {
+      "id": "deployedDesktopWebGatewayContinuation",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:continuation:smoke",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "deployedLoadTest",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:load:strict",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "deployedSoakTest",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:soak:strict",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "workerFailover",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm ops:validate",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "schedulerReplicaFailover",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm ops:validate",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "postgresBackupRestore",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:gcp:smoke",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "objectStoreArtifactRoundTrip",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:gcp:smoke",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "secretAdapterResolution",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:gcp:smoke",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "byokRedactionNoPlaintext",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm test",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "gatewayDeliveryReplayDeadLetter",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:gateway:smoke",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "quotaRateLimitBehavior",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:load:strict",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "billingEntitlementGating",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:private-beta:validate",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "supportIncidentOwnershipEscalation",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:private-beta:validate",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "costSloNotes",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:soak:strict",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    }
+  ]
+}
