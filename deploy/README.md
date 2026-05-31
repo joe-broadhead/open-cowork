@@ -70,6 +70,13 @@ appliance path in `docs/gateway-appliance.md` plus the templates under
 `docker-compose.cloud-gateway.yml`. Both modes keep Gateway as a Cloud client,
 not an OpenCode runtime.
 
+For managed worker service-plane deployments, use the public-safe templates in
+`deploy/managed-workers/`. They cover self-hosted worker env files,
+managed-operator env shape, Helm worker-pool overlays, release evidence, drain
+and rollback proof, emergency revoke proof, and restore drill evidence. Copy
+them into a private deployment repo before adding real project ids, domains,
+account ids, customer values, credentials, prices, or launch evidence.
+
 ## Deployer Configuration
 
 Keep product policy in `open-cowork.config.json` and provider wiring in
@@ -165,6 +172,7 @@ infrastructure:
 | Runtime keys | BYOK status APIs plus worker-only plaintext reveal |
 | Gateway | Scoped service token and provider signing secrets |
 | Scaling | Split web/worker/scheduler roles and checkpoint-enabled workers |
+| Worker operations | Drain, rolling update, rollback, emergency revoke, and restore evidence from `deploy/managed-workers/` |
 | Observability | JSON logs, OTLP endpoint, metrics, and redaction policy |
 | Recovery | Postgres and object-store backup/restore process |
 
@@ -177,6 +185,10 @@ Reusable observability assets live under `deploy/observability/`:
 - `prometheus-alerts.yaml` defines launch-blocking alerts for user-impacting
   errors, backlog, projection lag, auth abuse, BYOK failures, and Gateway
   delivery failures.
+- `managed-worker-slo-template.json` defines the public-safe worker SLO shape
+  for heartbeat freshness, queue age, claim latency, command latency,
+  projection lag, checkpoints, BYOK reveal failures, stale leases, and Gateway
+  worker-related lag.
 
 See `docs/deployment-readiness.md` for the production checklist and
 `docs/runbooks/managed-byok-saas.md` for hosted BYOK operations. For a managed

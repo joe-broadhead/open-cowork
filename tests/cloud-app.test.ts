@@ -115,6 +115,27 @@ class FakeRuntime implements CloudRuntimeAdapter {
   }
 }
 
+class SlowPromptRuntime extends FakeRuntime {
+  private startedResolve!: () => void
+  private releaseResolve!: () => void
+  readonly started = new Promise<void>((resolve) => {
+    this.startedResolve = resolve
+  })
+  private readonly released = new Promise<void>((resolve) => {
+    this.releaseResolve = resolve
+  })
+
+  async promptSession(input: { sessionId: string, parts: CloudRuntimePromptPart[], agent: string }) {
+    this.startedResolve()
+    await this.released
+    return super.promptSession(input)
+  }
+
+  release() {
+    this.releaseResolve()
+  }
+}
+
 test('cloud BYOK defaults include only provider descriptors with secret credentials', () => {
   const appConfig = getAppConfig()
   const providerIds = new Set(listConfiguredByokProviderIds(appConfig) || [])
@@ -152,6 +173,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_PORT: '9999',
     OPEN_COWORK_CLOUD_WORKER_POLL_MS: '25',
     OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS: '40',
+    OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: '2500',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES: '42',
     OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS: '1234',
     OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: 'false',
@@ -164,6 +186,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     port: 9999,
     workerPollMs: 25,
     schedulerPollMs: 40,
+    shutdownGraceMs: 2500,
     runtimeCacheMaxEntries: 42,
     runtimeCacheIdleTtlMs: 1234,
     corsOrigin: null,
@@ -810,6 +833,80 @@ test('cloud web and worker roles hand off session runtime creation through the c
     assert.equal(asRecord(streamedMessages.at(-1)).content, 'subscription event')
   } finally {
     await worker.close()
+    await web.close()
+  }
+})
+
+test('cloud worker shutdown waits for an active command loop before closing runtime', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const runtime = new SlowPromptRuntime()
+  const web = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    store,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  })
+  const worker = await startCloudApp({
+    config: DEFAULT_CONFIG,
+    store,
+    runtime,
+    env: {
+      OPEN_COWORK_CLOUD_ROLE: 'worker',
+      OPEN_COWORK_CLOUD_PROFILE: 'full',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+      OPEN_COWORK_CLOUD_WORKER_ID: 'worker-drain',
+    },
+    workerPollMs: 1,
+    shutdownGraceMs: 1000,
+  })
+  let workerClosed = false
+
+  try {
+    const created = await readJson(await fetch(`${web.url}/api/sessions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-tenant-id': 'tenant-drain',
+        'x-open-cowork-user-id': 'user-drain',
+        'x-open-cowork-user-email': 'drain@example.test',
+      },
+      body: JSON.stringify({}),
+    }))
+    const coworkSessionId = String(asRecord(created.session).sessionId)
+
+    await fetch(`${web.url}/api/sessions/${coworkSessionId}/prompt`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-open-cowork-tenant-id': 'tenant-drain',
+        'x-open-cowork-user-id': 'user-drain',
+        'x-open-cowork-user-email': 'drain@example.test',
+      },
+      body: JSON.stringify({ text: 'close during active worker loop', agent: 'build' }),
+    })
+
+    await runtime.started
+    let closeReturned = false
+    const closePromise = worker.close().then(() => {
+      closeReturned = true
+      workerClosed = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    assert.equal(closeReturned, false)
+    assert.equal(runtime.closed, false)
+
+    runtime.release()
+    await closePromise
+    assert.equal(runtime.closed, true)
+    assert.equal(runtime.prompts.length, 1)
+  } finally {
+    runtime.release()
+    if (!workerClosed) await worker.close()
     await web.close()
   }
 })

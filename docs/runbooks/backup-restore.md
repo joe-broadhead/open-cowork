@@ -136,6 +136,10 @@ Each drill must record:
 Keep reports under `docs/runbooks/restore-drill-report.md` for the latest drill
 or a dated operations folder in downstream private repos. Do not include
 customer data, raw credentials, local paths, signed URLs, or provider keys.
+For managed worker service-plane drills, also use
+`deploy/managed-workers/worker-restore-drill.template.md` so worker recovery,
+checkpoint restore, workflow consistency, and BYOK secret-reference integrity
+are explicitly recorded.
 
 ## Recovery Boundaries
 

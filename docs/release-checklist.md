@@ -83,6 +83,20 @@ Reference workflows in the repository root:
 
 - [ ] `pnpm deploy:load:plan` has been reviewed for the selected
       `private-beta` or `public-beta` target profile.
+- [ ] managed worker release evidence has been completed from
+      `deploy/managed-workers/worker-release-evidence.template.md` in the
+      private operations repo.
+- [ ] worker images are pinned by release tag or digest; no deployment uses
+      `latest`, mutable aliases, or public repo project/account/customer
+      values.
+- [ ] worker drain, rolling update, rollback, and emergency revoke drills have
+      passing redacted evidence.
+- [ ] `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` and platform termination grace are
+      aligned for worker and scheduler roles.
+- [ ] the latest restore drill uses
+      `deploy/managed-workers/worker-restore-drill.template.md` and proves
+      checkpoints, artifacts, projections, workflows, BYOK refs, and worker
+      recovery.
 - [ ] for managed BYOK private beta, `pnpm deploy:private-beta:validate`
       passed and `docs/runbooks/private-beta-launch.md` has an owner,
       design-partner checklist, support path, and known limits.

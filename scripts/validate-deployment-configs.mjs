@@ -46,6 +46,10 @@ function read(path) {
   return readFileSync(path, 'utf8')
 }
 
+function parseJson(path) {
+  return JSON.parse(read(path))
+}
+
 function assertIncludes(path, text) {
   const contents = read(path)
   if (!contents.includes(text)) {
@@ -57,6 +61,24 @@ function assertNotIncludes(path, text) {
   const contents = read(path)
   if (contents.includes(text)) {
     throw new Error(`${path} must not include ${text}`)
+  }
+}
+
+function assertPublicTemplateSafe(path) {
+  const contents = read(path)
+  const forbiddenPatterns = [
+    /\bAKIA[0-9A-Z]{16}\b/,
+    /\bghp_[A-Za-z0-9_]{20,}\b/,
+    /\bsk-[A-Za-z0-9]{20,}\b/,
+    /\b\d{12}\b/,
+    /customer\s+(?:name|email|domain)\s*:/i,
+    /private\s+domain\s*:/i,
+    /BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY/,
+  ]
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(contents)) {
+      throw new Error(`${path} appears to contain private deployment or secret material matching ${pattern}`)
+    }
   }
 }
 
@@ -84,6 +106,9 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+  for (const file of composeFiles) {
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
+  }
   for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
     assertIncludes(file, 'OPEN_COWORK_CONFIG_PATH')
     assertIncludes(file, 'OPEN_COWORK_CONFIG_DIR')
@@ -140,9 +165,15 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', '$sharedConfig')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'configPath: ""')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'shutdownGraceMs: 300000')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'terminationGracePeriodSeconds: 300')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'maxUnavailable: 0')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'terminationGracePeriodSeconds')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.terminationGracePeriodSeconds must be >= 30')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'publicUrl: ""')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
@@ -404,10 +435,17 @@ function validateDocs() {
     'deploy/private-beta/private-beta-plans.json',
     'deploy/private-beta/hosted-byok.config.example.json',
     'deploy/private-beta/self-host-oss.config.example.json',
+    'deploy/managed-workers/README.md',
+    'deploy/managed-workers/self-host-worker.env.example',
+    'deploy/managed-workers/managed-operator-worker.env.template',
+    'deploy/managed-workers/helm-values.worker-pool.yaml.example',
+    'deploy/managed-workers/worker-release-evidence.template.md',
+    'deploy/managed-workers/worker-restore-drill.template.md',
     'deploy/README.md',
     'deploy/observability/metrics-catalog.json',
     'deploy/observability/prometheus-alerts.yaml',
     'deploy/observability/grafana-open-cowork-overview.json',
+    'deploy/observability/managed-worker-slo-template.json',
     'deploy/gcp/README.md',
     'deploy/aws/README.md',
     'deploy/azure/README.md',
@@ -419,6 +457,19 @@ function validateDocs() {
       throw new Error(`${path} is required`)
     }
   }
+  for (const path of [
+    'docs/managed-workers.md',
+    'docs/runbooks/cloud-managed-operations.md',
+    'deploy/managed-workers/README.md',
+    'deploy/managed-workers/self-host-worker.env.example',
+    'deploy/managed-workers/managed-operator-worker.env.template',
+    'deploy/managed-workers/helm-values.worker-pool.yaml.example',
+    'deploy/managed-workers/worker-release-evidence.template.md',
+    'deploy/managed-workers/worker-restore-drill.template.md',
+    'deploy/observability/managed-worker-slo-template.json',
+  ]) {
+    assertPublicTemplateSafe(path)
+  }
 
   const readiness = read('docs/deployment-readiness.md').toLowerCase()
   for (const phrase of [
@@ -429,6 +480,8 @@ function validateDocs() {
     'secret adapter/kms',
     'public url/https',
     'worker/scheduler scaling',
+    'deploy/managed-workers/',
+    'open_cowork_cloud_shutdown_grace_ms',
     'hpa or keda',
     'poddisruptionbudgets',
     'topology spread constraints',
@@ -515,6 +568,16 @@ function validateDocs() {
     'KMS Or Secret Adapter Errors',
     'OIDC Outage',
     'Gateway Provider Outage',
+    'Worker Registration',
+    'Worker Credential Rotation',
+    'Pause, Drain, Resume, And Retire',
+    'Rolling Worker Update',
+    'Emergency Revoke',
+    'Stuck Queue',
+    'Stale Lease Spike',
+    'Worker Crash Loop',
+    'Tenant Offboarding',
+    'Suspected Key Exposure',
     'Webhook Abuse',
     'BYOK Provider Key Failure',
   ]) {
@@ -551,6 +614,24 @@ function validateDocs() {
       }
     }
   }
+  const workerSlo = parseJson('deploy/observability/managed-worker-slo-template.json')
+  const workerSloIds = new Set((workerSlo.slos || []).map((slo) => slo.id))
+  for (const id of [
+    'worker-heartbeat-freshness',
+    'command-queue-age',
+    'claim-latency',
+    'command-latency',
+    'workflow-latency',
+    'projection-lag',
+    'checkpoint-failures',
+    'byok-reveal-failures',
+    'stale-lease-reclaims',
+    'gateway-worker-lag',
+  ]) {
+    if (!workerSloIds.has(id)) {
+      throw new Error(`deploy/observability/managed-worker-slo-template.json is missing ${id}`)
+    }
+  }
 
   const backupRestore = read('docs/runbooks/backup-restore.md')
   for (const phrase of ['pg_dump', 'pg_restore', 'aws s3 sync', 'gcloud storage rsync', 'az storage blob sync']) {
@@ -584,9 +665,80 @@ function validateDocs() {
     'PodDisruptionBudgets',
     'topology spread',
     'cloud.objectStore.kind',
+    'deploy/managed-workers/',
   ]) {
     if (!deployReadme.includes(phrase)) {
       throw new Error(`deploy/README.md must include ${phrase}`)
+    }
+  }
+
+  const managedWorkers = read('deploy/managed-workers/README.md')
+  for (const phrase of [
+    'Supported Modes',
+    '`self_hosted`',
+    '`saas_operated`',
+    '`customer_hosted`',
+    'Bootstrap Sequence',
+    'Update And Rollback Policy',
+    'Emergency revoke',
+    'Sizing Guidance',
+    'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS',
+    'pnpm ops:validate',
+  ]) {
+    if (!managedWorkers.includes(phrase)) {
+      throw new Error(`deploy/managed-workers/README.md must include ${phrase}`)
+    }
+  }
+
+  for (const path of [
+    'deploy/managed-workers/self-host-worker.env.example',
+    'deploy/managed-workers/managed-operator-worker.env.template',
+  ]) {
+    const template = read(path)
+    for (const phrase of [
+      'OPEN_COWORK_CLOUD_ROLE=worker',
+      'OPEN_COWORK_CLOUD_WORKER_ID',
+      'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS',
+      'OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED',
+    ]) {
+      if (!template.includes(phrase)) {
+        throw new Error(`${path} must include ${phrase}`)
+      }
+    }
+  }
+  const workerHelm = read('deploy/managed-workers/helm-values.worker-pool.yaml.example')
+  for (const phrase of [
+    'worker:',
+    'enabled: true',
+    'replicas: 2',
+    'shutdownGraceMs: 300000',
+    'terminationGracePeriodSeconds: 300',
+    'checkpointsEnabled: true',
+    'maxUnavailable: 0',
+    'maxSurge: 1',
+    'podDisruptionBudget:',
+    'topologySpreadConstraints:',
+  ]) {
+    if (!workerHelm.includes(phrase)) {
+      throw new Error(`deploy/managed-workers/helm-values.worker-pool.yaml.example must include ${phrase}`)
+    }
+  }
+
+  for (const path of [
+    'deploy/managed-workers/worker-release-evidence.template.md',
+    'deploy/managed-workers/worker-restore-drill.template.md',
+  ]) {
+    const template = read(path).toLowerCase()
+    for (const phrase of [
+      'do not',
+      'worker',
+      'checkpoint',
+      'byok',
+      'redact',
+    ]) {
+      if (!template.includes(phrase)) {
+        throw new Error(`${path} must include ${phrase}`)
+      }
     }
   }
 

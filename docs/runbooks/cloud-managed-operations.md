@@ -45,19 +45,141 @@ idempotent, so rollback does not require destructive database migration.
 If a release introduced a bad additive column or index, keep the column in
 place and ship a forward fix. Do not drop columns during incident rollback.
 
+For worker-only regressions, prefer rolling workers back first while keeping
+web reads available. Keep the scheduler active only if due workflow claims are
+healthy and worker capacity exists.
+
 ## Worker Drains
 
 Workers own OpenCode execution while a lease is active. To drain safely:
 
-1. Mark the deployment unavailable to the scheduler/HPA or set replicas down
-   gradually.
-2. Allow active leases to finish or expire.
-3. Confirm no stale owner writes are accepted by checking projection version
-   and lease-token error logs.
-4. Confirm checkpoint writes are enabled before moving active sessions across
+1. Mark the worker or worker pool `draining` through the admin API.
+2. Stop autoscaler scale-up for the pool so no replacement workers start
+   claiming work during the drain.
+3. Allow active leases to finish or checkpoint, then confirm worker
+   `currentLoad=0` and `activeWorkIds=[]`.
+4. Confirm no stale owner writes are accepted by checking projection version,
+   lease-token error logs, and
+   `open_cowork_cloud_worker_stale_owner_rejections_total`.
+5. Confirm checkpoint writes are enabled before moving active sessions across
    nodes.
 
 No database transaction should remain open while OpenCode is running.
+
+The worker process also waits for an active command loop to finish during
+shutdown until `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` elapses. Use that as a
+safety net only; drain before terminating pods or hosts.
+
+## Worker Registration
+
+Use this when bootstrapping a new worker pool.
+
+1. Create or update the worker pool with mode `self_hosted` or `saas_operated`.
+2. Set `maxWorkers`, `maxConcurrentWork`, region, and capability metadata.
+3. Register a worker in `pending` state.
+4. Issue a scoped expiring worker credential and store the one-time plaintext
+   only in the platform secret manager.
+5. Start the worker with a stable `OPEN_COWORK_CLOUD_WORKER_ID`, shared
+   Postgres control-plane URL, shared object store, checkpoints enabled, JSON
+   logs, and metrics.
+6. Verify heartbeat metadata is redacted and includes version, capabilities,
+   current load, and region/deployment label.
+7. Activate the worker and run a bounded smoke prompt.
+
+Do not start customer-hosted workers against a separate managed control plane
+in v1.
+
+## Worker Credential Rotation
+
+1. Issue a replacement credential with the same minimal scopes.
+2. Store the new credential in the secret manager.
+3. Restart or roll the affected worker after drain.
+4. Verify the worker heartbeats with the new credential.
+5. Revoke the old credential and confirm old-token heartbeat rejection.
+6. Check audit rows for issued, rotated, last-used, and revoked events.
+
+Never paste worker credentials into issue comments, chat, logs, diagnostics, or
+release reports.
+
+## Pause, Drain, Resume, And Retire
+
+- Pause: use when a pool should stop claiming and renewing work temporarily.
+  Existing work should be recovered by another active worker or allowed to
+  expire according to policy.
+- Drain: use before rollouts and planned host termination. Draining workers
+  renew current leases but should not claim new work.
+- Resume: use after rollout or dependency recovery. Confirm queue age and
+  claim latency before resuming every pool.
+- Retire: use after a worker has drained and will not return. Retired workers
+  are terminal and should not receive new credentials.
+
+## Rolling Worker Update
+
+1. Confirm release evidence: image digest/checksum/signature, compatibility
+   matrix, SBOM/notices, and config schema validation.
+2. Drain one pool or deployment group.
+3. Roll workers with `maxUnavailable=0`, `maxSurge=1`, and termination grace
+   greater than or equal to `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS`.
+4. Watch worker heartbeat age, queue age, claim latency, command latency,
+   checkpoint failures, BYOK reveal failures, stale-owner rejections, and dead
+   letters.
+5. Run one session prompt, one workflow run, and one checkpoint/artifact smoke.
+6. Resume the pool, then continue to the next pool.
+
+## Emergency Revoke
+
+Use this for suspected worker credential, image, host, runtime, BYOK, or
+object-store compromise.
+
+1. Revoke the worker credential immediately.
+2. Mark the worker `revoked`.
+3. Stop the host/pod/deployment.
+4. Preserve redacted heartbeat, audit, metric, and diagnostic evidence.
+5. Allow leases to expire or be reaped; do not hand-edit durable command or
+   workflow records.
+6. Start a known-good replacement worker and verify stale-owner writes from the
+   revoked worker are rejected.
+7. Rotate any potentially exposed object-store, channel, provider, or BYOK
+   access path according to the suspected blast radius.
+
+## Stuck Queue
+
+Use this when command queue depth or oldest queued age exceeds SLO.
+
+1. Check quota denials and billing/entitlement denials first; blocked work may
+   be intentional.
+2. Check active worker count, heartbeat age, current load, and worker pool
+   status.
+3. Check claim latency and lease denials.
+4. Check BYOK reveal failures, object-store failures, provider quota, and
+   runtime errors before scaling.
+5. If a command is retrying repeatedly, use dead-letter/abort controls rather
+   than direct database edits.
+6. Scale workers only when Postgres connections, object-store throughput, and
+   provider/model quota have headroom.
+
+## Stale Lease Spike
+
+Use this when stale-owner rejections or expired lease reaping spikes.
+
+1. Identify whether the spike followed a rollout, node eviction, object-store
+   outage, BYOK reveal outage, or provider outage.
+2. Confirm workers are using the expected version and checkpoint schema.
+3. Check `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` and platform termination grace.
+4. Pause autoscaling until the root cause is understood.
+5. Verify replacement workers restore from checkpoints and do not duplicate
+   output.
+
+## Worker Crash Loop
+
+1. Stop automatic scale-up for the pool.
+2. Check last heartbeat error code and redacted summary.
+3. Check startup config: control-plane URL, secret refs, object store, profile,
+   BYOK provider policy, and runtime cache paths.
+4. Run the worker image locally or in staging with the same non-secret config
+   shape.
+5. Roll back if the crash follows a release. Revoke the credential if the host
+   or image may be compromised.
 
 ## Gateway Backlog
 
@@ -72,6 +194,11 @@ Gateway delivery lag is operationally separate from cloud execution lag.
    retry with backoff.
 5. For bad provider credentials, rotate the channel secret and restart only the
    affected gateway deployment.
+
+If gateway lag is caused by worker backlog, do not scale Gateway first. Fix
+worker queue age, claim latency, BYOK reveal failures, provider quota, or
+object-store checkpoint errors, then let the Gateway delivery feed drain from
+durable cursors.
 
 ## Web Unavailable Or Erroring
 
@@ -234,6 +361,34 @@ renderer state.
   secret, then verify provider readiness.
 - Object-store keys: prefer workload identity or short-lived credentials; if a
   static key is used, update the secret and verify artifact read/write.
+
+## Tenant Offboarding
+
+1. Disable new session, workflow, Gateway, and worker claims for the org.
+2. Drain active workers and wait for active work to finish or checkpoint.
+3. Revoke org API tokens, worker credentials, gateway tokens, channel
+   credentials, and BYOK provider refs.
+4. Export or delete artifacts according to the org retention policy.
+5. Preserve audit records required by policy while redacting credentials and
+   user content from support bundles.
+6. Confirm no worker heartbeat, queued command, workflow run, or gateway
+   delivery remains active for the org.
+
+## Suspected Key Exposure
+
+Use this when a BYOK key, worker credential, gateway token, object-store key,
+cookie secret, OIDC secret, webhook secret, or billing secret may be exposed.
+
+1. Stop the affected ingress or worker pool if active misuse is possible.
+2. Revoke or rotate the exposed secret at the source of truth.
+3. Revoke dependent sessions/tokens where required, including worker
+   credentials and gateway service tokens.
+4. Search redacted logs and diagnostics for the secret fingerprint or last4;
+   do not paste the secret itself into tools.
+5. Re-run BYOK metadata, worker heartbeat, object-store read/write, webhook
+   signature, and gateway readiness smoke tests.
+6. Record a private incident report with ids, timestamps, and fingerprints
+   only. Do not commit incident evidence to the public repo.
 
 ## Diagnostics
 

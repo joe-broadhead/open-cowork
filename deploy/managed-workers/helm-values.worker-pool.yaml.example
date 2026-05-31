@@ -1,0 +1,126 @@
+# Provider-neutral worker-pool overlay for helm/open-cowork-cloud.
+# Replace placeholders in a private deployment repo. Do not commit real project
+# ids, account ids, domains, database URLs, credentials, prices, or customer
+# details to open-cowork.
+
+image:
+  repository: REGISTRY.example.com/open-cowork-cloud
+  tag: vX.Y.Z
+  digest: ""
+
+cloud:
+  profile: full
+  root: /data/open-cowork-cloud
+  shutdownGraceMs: 300000
+  auth:
+    mode: oidc
+    oidcIssuerUrl: https://issuer.example.com
+    oidcClientId: open-cowork-cloud
+  controlPlaneUrl: postgres://USER:PASSWORD@DATABASE_HOST:5432/open_cowork
+  secretKeyRef: env:OPEN_COWORK_CLOUD_SECRET_KEY
+  internalTokenRef: env:OPEN_COWORK_CLOUD_INTERNAL_TOKEN
+  cookieSecretRef: env:OPEN_COWORK_CLOUD_COOKIE_SECRET
+  publicUrl: https://cowork.example.com
+  observability:
+    serviceName: open-cowork-cloud
+    serviceVersion: vX.Y.Z
+    logFormat: json
+    otlpEndpoint: https://otel.example.com/v1/traces
+  checkpoints:
+    enabled: true
+  objectStore:
+    kind: gcs
+    bucket: OPEN_COWORK_BUCKET
+    region: REGION
+    prefix: workers/
+
+roles:
+  web:
+    enabled: true
+    replicas: 2
+    terminationGracePeriodSeconds: 60
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: open-cowork-cloud
+            app.kubernetes.io/component: web
+
+  worker:
+    enabled: true
+    replicas: 2
+    pollMs: 1000
+    checkpointsEnabled: true
+    terminationGracePeriodSeconds: 300
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: open-cowork-cloud
+            app.kubernetes.io/component: worker
+
+  scheduler:
+    enabled: true
+    replicas: 1
+    pollMs: 1000
+    terminationGracePeriodSeconds: 120
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: INGRESS_CLASS
+  hosts:
+    - host: cowork.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: open-cowork-cloud-tls
+      hosts:
+        - cowork.example.com

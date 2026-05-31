@@ -30,6 +30,11 @@ const backupRunbookPath = 'docs/runbooks/backup-restore.md'
 const drillReportPath = 'docs/runbooks/restore-drill-report.md'
 const launchRunbookPath = 'docs/runbooks/launch-readiness.md'
 const launchReportPath = 'docs/runbooks/launch-readiness-report.md'
+const managedWorkerDocsPath = 'docs/managed-workers.md'
+const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
+const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
+const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
+const managedWorkerSloTemplatePath = 'deploy/observability/managed-worker-slo-template.json'
 
 for (const path of [
   metricCatalogPath,
@@ -40,6 +45,11 @@ for (const path of [
   drillReportPath,
   launchRunbookPath,
   launchReportPath,
+  managedWorkerDocsPath,
+  managedWorkerDeployPath,
+  managedWorkerReleaseTemplatePath,
+  managedWorkerRestoreTemplatePath,
+  managedWorkerSloTemplatePath,
 ]) {
   assertFile(path)
 }
@@ -119,6 +129,16 @@ for (const phrase of [
   'KMS Or Secret Adapter Errors',
   'OIDC Outage',
   'Gateway Provider Outage',
+  'Worker Registration',
+  'Worker Credential Rotation',
+  'Pause, Drain, Resume, And Retire',
+  'Rolling Worker Update',
+  'Emergency Revoke',
+  'Stuck Queue',
+  'Stale Lease Spike',
+  'Worker Crash Loop',
+  'Tenant Offboarding',
+  'Suspected Key Exposure',
   'Webhook Abuse',
   'BYOK Provider Key Failure',
   'Diagnostics',
@@ -126,6 +146,69 @@ for (const phrase of [
 ]) {
   assertIncludes(operationsRunbookPath, phrase)
 }
+
+for (const phrase of [
+  'Phase 5 Operations Contract',
+  'deploy/managed-workers/',
+  'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS',
+  'Rolling Updates',
+  'Rollback And Emergency Revoke',
+  'SLO And Alert Template',
+  'Backup And Restore',
+]) {
+  assertIncludes(managedWorkerDocsPath, phrase)
+}
+
+for (const phrase of [
+  'Supported Modes',
+  'Bootstrap Sequence',
+  'Update And Rollback Policy',
+  'Emergency revoke',
+  'Sizing Guidance',
+  'Required Validation',
+]) {
+  assertIncludes(managedWorkerDeployPath, phrase)
+}
+
+for (const phrase of [
+  'Image provenance',
+  'Compatibility Decision',
+  'Drain And Rolling Update',
+  'Rollback Drill',
+  'Emergency Revoke Drill',
+  'Go/No-Go',
+]) {
+  assertIncludes(managedWorkerReleaseTemplatePath, phrase)
+}
+
+for (const phrase of [
+  'Postgres control-plane restore',
+  'Object-store artifacts/checkpoints',
+  'BYOK secret references',
+  'Worker recovery',
+  'Workflow consistency',
+  'Redaction',
+]) {
+  assertIncludes(managedWorkerRestoreTemplatePath, phrase)
+}
+
+const managedWorkerSlo = parseJson(managedWorkerSloTemplatePath)
+const managedWorkerSloIds = new Set((managedWorkerSlo.slos || []).map((slo) => slo.id))
+for (const id of [
+  'worker-heartbeat-freshness',
+  'command-queue-age',
+  'claim-latency',
+  'command-latency',
+  'workflow-latency',
+  'projection-lag',
+  'checkpoint-failures',
+  'byok-reveal-failures',
+  'stale-lease-reclaims',
+  'gateway-worker-lag',
+]) {
+  if (!managedWorkerSloIds.has(id)) throw new Error(`${managedWorkerSloTemplatePath} is missing ${id}`)
+}
+assertIncludes(managedWorkerSloTemplatePath, 'redactionRules')
 
 for (const phrase of [
   'pg_dump',
