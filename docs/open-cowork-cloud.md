@@ -834,7 +834,20 @@ blocks user-added cloud URLs. `cacheMode` controls the local cloud cache:
 When `cacheMode` is `full`, the desktop requires OS-backed encrypted storage or
 uses `cacheEncryptionFallback` to degrade to `metadata-only`, `disabled`, or
 fail startup. OAuth access and refresh tokens are stored in OS secure storage,
-not in the cloud cache.
+not in the cloud cache. The cache is keyed by cloud connection, tenant, user,
+profile, and workspace identity so two orgs cannot share cached projections or
+event cursors.
+
+Cloud workspace logout is an authentication boundary, not a data wipe. It
+removes the workspace access and refresh tokens, closes active cloud
+subscriptions, and leaves any existing cloud cache as a local read-only fallback
+until the user signs in again or removes the workspace. Removing a user-added
+cloud workspace is the wipe boundary: it removes the registry record,
+credentials, active subscriptions, and that workspace's cached metadata,
+cursors, artifact metadata, and encrypted projections. Managed preconfigured
+workspaces cannot be removed by the user; downstream builds that require a
+stronger wipe policy should configure `cacheMode: "disabled"` or expose an
+admin-managed cache clear flow.
 
 Every workspace-scoped API also has a typed support matrix exposed through
 `workspace.support()`. Cloud-only clients should use it to distinguish

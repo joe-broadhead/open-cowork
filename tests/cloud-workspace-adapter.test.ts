@@ -489,6 +489,24 @@ function failingTransport(): CloudTransportAdapter {
   }
 }
 
+function sessionRecord(sessionId: string) {
+  return {
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId,
+    opencodeSessionId: `opencode-${sessionId}`,
+    profileName: 'default',
+    status: 'idle' as const,
+    title: `Cloud ${sessionId}`,
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 test('cloud workspace adapter maps cloud records to desktop session contracts', async () => {
   const adapter = new CloudWorkspaceAdapter({
     connection: {
@@ -564,6 +582,139 @@ test('cloud workspace adapter maps cloud records to desktop session contracts', 
   assert.equal((await adapter.listSettings())[0]?.key, 'portable-settings')
   assert.equal((await adapter.getSetting('portable-settings'))?.value.selectedProviderId, 'anthropic')
   assert.equal((await adapter.setSetting('portable-settings', { selectedProviderId: 'openai' })).value.selectedProviderId, 'openai')
+})
+
+test('cloud workspace adapter bounds sync hydration concurrency', async () => {
+  const base = transport()
+  const sessions = Array.from({ length: 25 }, (_, index) => sessionRecord(`session-${index + 1}`))
+  let activeViews = 0
+  let maxViews = 0
+  let activeArtifacts = 0
+  let maxArtifacts = 0
+  let viewCalls = 0
+  let artifactCalls = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:test',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Test Cloud',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...base,
+      listSessions: async () => sessions,
+      getSession: async (sessionId) => {
+        viewCalls += 1
+        activeViews += 1
+        maxViews = Math.max(maxViews, activeViews)
+        await delay(2)
+        activeViews -= 1
+        return base.getSession(sessionId)
+      },
+      listArtifacts: async (sessionId) => {
+        artifactCalls += 1
+        activeArtifacts += 1
+        maxArtifacts = Math.max(maxArtifacts, activeArtifacts)
+        await delay(2)
+        activeArtifacts -= 1
+        return base.listArtifacts?.(sessionId) as ReturnType<NonNullable<CloudTransportAdapter['listArtifacts']>>
+      },
+    },
+  })
+
+  await adapter.sync()
+
+  assert.equal(viewCalls, sessions.length)
+  assert.equal(artifactCalls, sessions.length)
+  assert.ok(maxViews <= 8, `expected view concurrency <= 8, saw ${maxViews}`)
+  assert.ok(maxArtifacts <= 4, `expected artifact concurrency <= 4, saw ${maxArtifacts}`)
+})
+
+test('cloud workspace adapter coalesces concurrent session view refreshes', async () => {
+  const base = transport()
+  let calls = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection: {
+      id: 'cloud:test',
+      baseUrl: 'https://cloud.example.test',
+      label: 'Test Cloud',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+      lastSyncedAt: null,
+    },
+    cache: null,
+    transport: {
+      ...base,
+      getSession: async (sessionId) => {
+        calls += 1
+        await delay(5)
+        return base.getSession(sessionId)
+      },
+    },
+  })
+
+  const [first, second] = await Promise.all([
+    adapter.getSessionView('session-1'),
+    adapter.getSessionView('session-1'),
+  ])
+
+  assert.equal(calls, 1)
+  assert.equal(first.revision, 7)
+  assert.equal(second.revision, 7)
+})
+
+test('cloud workspace adapter does not overwrite newer cached projections with stale responses', async () => {
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-stale-view-')), 'cloud-workspace-cache.json'),
+    mode: 'full',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const connection = {
+    id: 'cloud:test',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Test Cloud',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+  }
+  const cacheKey = cloudWorkspaceCacheKey(connection)
+  const seed = new CloudWorkspaceAdapter({
+    connection,
+    transport: transport(),
+    cache: null,
+  })
+  const fresh = {
+    ...await seed.getSessionView('session-1'),
+    revision: 99,
+    lastEventAt: 99,
+    messages: [{
+      id: 'fresh-message',
+      role: 'assistant' as const,
+      content: 'newer cached projection',
+      createdAt: '2026-05-27T10:02:00.000Z',
+      order: 1,
+      segments: [{ id: 'fresh-message:text', type: 'text' as const, text: 'newer cached projection' }],
+    }],
+  }
+  cache.upsertSessionView(cacheKey, 'session-1', fresh)
+  const adapter = new CloudWorkspaceAdapter({
+    connection,
+    transport: transport(),
+    cache,
+  })
+
+  const view = await adapter.getSessionView('session-1')
+
+  assert.equal(view.revision, 99)
+  assert.equal(view.messages[0]?.content, 'newer cached projection')
+  assert.equal(cache.getSessionView(cacheKey, 'session-1')?.revision, 99)
 })
 
 test('cloud workspace adapter blocks local attachments in cloud prompts', async () => {

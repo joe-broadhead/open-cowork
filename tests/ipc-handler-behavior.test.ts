@@ -24,7 +24,7 @@ import { consumePendingPromptEcho } from '../apps/desktop/src/main/event-task-st
 import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
-import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
+import { LOCAL_WORKSPACE_ID, createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 
 function createBaseContext() {
@@ -414,6 +414,7 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
   const { context, handlers } = createBaseContext()
   const sentViews: unknown[] = []
   let subscribedEventHandler: ((event: any) => void) | null = null
+  let projectionFetches = 0
   const adapter: CloudWorkspaceSessionAdapter = {
     policy: async () => ({
       features: { sessions: true },
@@ -429,43 +430,46 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
       throw new Error('not used')
     },
     getSessionInfo: async () => null,
-    getSessionView: async () => ({
-      messages: [{
-        id: 'cloud-projected-message',
-        role: 'assistant',
-        segments: [{ id: 'segment-1', kind: 'text', text: 'from cloud projection' }],
-        attachments: [],
-        createdAt: 1,
-      }],
-      toolCalls: [],
-      taskRuns: [],
-      compactions: [],
-      pendingApprovals: [{
-        id: 'permission-1',
-        taskRunId: null,
-        tool: 'read',
-        description: 'Read file',
-        input: {},
-        sourceSessionId: 'cloud-session-1',
-      }],
-      pendingQuestions: [],
-      errors: [],
-      todos: [],
-      executionPlan: [],
-      sessionCost: 0,
-      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-      lastInputTokens: 0,
-      contextState: 'running',
-      compactionCount: 0,
-      lastCompactedAt: null,
-      activeAgent: null,
-      lastItemWasTool: false,
-      revision: 7,
-      lastEventAt: 42,
-      isGenerating: true,
-      isAwaitingPermission: true,
-      isAwaitingQuestion: false,
-    }),
+    getSessionView: async () => {
+      projectionFetches += 1
+      return {
+        messages: [{
+          id: 'cloud-projected-message',
+          role: 'assistant',
+          segments: [{ id: 'segment-1', kind: 'text', text: 'from cloud projection' }],
+          attachments: [],
+          createdAt: 1,
+        }],
+        toolCalls: [],
+        taskRuns: [],
+        compactions: [],
+        pendingApprovals: [{
+          id: 'permission-1',
+          taskRunId: null,
+          tool: 'read',
+          description: 'Read file',
+          input: {},
+          sourceSessionId: 'cloud-session-1',
+        }],
+        pendingQuestions: [],
+        errors: [],
+        todos: [],
+        executionPlan: [],
+        sessionCost: 0,
+        sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+        lastInputTokens: 0,
+        contextState: 'running',
+        compactionCount: 0,
+        lastCompactedAt: null,
+        activeAgent: null,
+        lastItemWasTool: false,
+        revision: 7,
+        lastEventAt: 42,
+        isGenerating: true,
+        isAwaitingPermission: true,
+        isAwaitingQuestion: false,
+      }
+    },
     promptSession: async () => {},
     abortSession: async () => {},
     subscribeSessionEvents: (_sessionId, input) => {
@@ -509,6 +513,7 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
   context.workspaceGateway.activate(invokeEvent, 'cloud:test')
   await handlers.get('session:activate')?.(invokeEvent, 'cloud-session-1')
   assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
+  projectionFetches = 0
 
   subscribedEventHandler({
     type: 'permission.requested',
@@ -520,15 +525,103 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
       description: 'Read file',
     },
   })
+  subscribedEventHandler({
+    type: 'session.status',
+    sessionId: 'cloud-session-1',
+    sequence: 43,
+    payload: { statusType: 'running' },
+  })
 
-  await new Promise((resolve) => setTimeout(resolve, 25))
+  await new Promise((resolve) => setTimeout(resolve, 80))
 
   assert.equal(sentViews.length, 1)
+  assert.equal(projectionFetches, 1)
   assert.deepEqual(sentViews[0], {
     sessionId: 'cloud-session-1',
     workspaceId: 'cloud:test',
     view: await adapter.getSessionView('cloud-session-1'),
   })
+
+  context.workspaceGateway.activate(invokeEvent, LOCAL_WORKSPACE_ID)
+  subscribedEventHandler({
+    type: 'assistant.message',
+    sessionId: 'cloud-session-1',
+    sequence: 44,
+    payload: { messageId: 'm2', content: 'inactive event' },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  assert.equal(sentViews.length, 1)
+})
+
+test('cloud projection refresh errors back off repeated full-view fetches', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  let subscribedEventHandler: ((event: any) => void) | null = null
+  let projectionFetches = 0
+  let failProjectionRefresh = false
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      projectionFetches += 1
+      if (failProjectionRefresh) throw new Error('temporary projection outage')
+      return emptySessionView({ revision: 1, lastEventAt: 1 })
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    subscribeSessionEvents: (_sessionId, input) => {
+      subscribedEventHandler = input.onEvent
+      return { close: () => {} }
+    },
+  }
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 203,
+      send: () => {},
+    },
+  } as any)
+  installCloudWorkspace(context, adapter)
+
+  registerSessionHandlers(context)
+  const invokeEvent = { sender: { id: 203 } }
+  context.workspaceGateway.activate(invokeEvent, 'cloud:test')
+  await handlers.get('session:activate')?.(invokeEvent, 'cloud-session-backoff')
+  assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
+  projectionFetches = 0
+  failProjectionRefresh = true
+
+  subscribedEventHandler({
+    type: 'permission.requested',
+    sessionId: 'cloud-session-backoff',
+    sequence: 10,
+    payload: { permissionId: 'permission-1', tool: 'read' },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 80))
+
+  assert.equal(projectionFetches, 1)
+  assert.equal(errors.some((entry) => entry.includes('temporary projection outage')), true)
+
+  subscribedEventHandler({
+    type: 'session.status',
+    sessionId: 'cloud-session-backoff',
+    sequence: 11,
+    payload: { statusType: 'running' },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 80))
+
+  assert.equal(projectionFetches, 1)
 })
 
 test('session:prompt rejects too many attachments before runtime dispatch', async () => {
@@ -1626,6 +1719,10 @@ test('settings handlers sync only portable settings for cloud workspaces', async
   })
 
   registerAppHandlers(context)
+  const cloudEvent = { sender: { id: 1 } } as never
+  context.workspaceGateway.activate(cloudEvent, 'cloud:test')
+  assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(cloudEvent, 'openrouter'), {})
+  assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(cloudEvent, 'github'), {})
 
   const current = await handlers.get('settings:get')?.({}, { workspaceId: 'cloud:test' })
   assert.equal(current.selectedProviderId, 'anthropic')

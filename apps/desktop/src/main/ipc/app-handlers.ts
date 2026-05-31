@@ -302,15 +302,17 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return buildCloudEffectiveSettings(base, setting?.value || {})
   })
 
-  context.ipcMain.handle('settings:get-provider-credentials', async (_event, providerId: unknown) => {
+  context.ipcMain.handle('settings:get-provider-credentials', async (event, providerId: unknown) => {
     // Scoped opt-in for provider credential editor surfaces. Avoid
     // returning every stored provider and integration secret to any
     // renderer code that only needs one credential bag.
+    if (!context.workspaceGateway.isLocalWorkspace(event, null)) return {}
     return getProviderCredentials(normalizeCredentialScopeId(providerId, 'Provider'))
   })
 
-  context.ipcMain.handle('settings:get-integration-credentials', async (_event, integrationId: unknown) => {
+  context.ipcMain.handle('settings:get-integration-credentials', async (event, integrationId: unknown) => {
     // Same scoped read for integration/MCP credential editors.
+    if (!context.workspaceGateway.isLocalWorkspace(event, null)) return {}
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 

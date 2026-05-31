@@ -5,7 +5,7 @@ import {
   type SessionChangeSummary,
   type SessionImportSelection,
 } from '@open-cowork/shared'
-import type { IpcMainInvokeEvent } from 'electron'
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from 'node:fs'
 import { getEffectiveSettings, getProviderCredentialValue } from '../settings.ts'
@@ -59,6 +59,138 @@ import {
   normalizeSessionId,
 } from './session-handler-validation.ts'
 
+const CLOUD_PROJECTION_REFRESH_DEBOUNCE_MS = 25
+const CLOUD_PROJECTION_REFRESH_BACKOFF_BASE_MS = 250
+const CLOUD_PROJECTION_REFRESH_BACKOFF_MAX_MS = 5_000
+
+type CloudProjectionRefreshState = {
+  timer: ReturnType<typeof setTimeout> | null
+  inFlight: boolean
+  latestSequence: number
+  publishedRevision: number
+  failedAttempts: number
+  nextAllowedAt: number
+}
+
+const cloudProjectionRefreshes = new Map<string, CloudProjectionRefreshState>()
+
+function cloudProjectionRefreshKey(workspaceId: string | null | undefined, sessionId: string) {
+  return `${workspaceId || 'local'}:${sessionId}`
+}
+
+function cloudWorkspaceIsStillActive(
+  context: IpcHandlerContext,
+  sourceEvent: IpcMainInvokeEvent | undefined,
+  workspaceId: string | null | undefined,
+) {
+  if (!sourceEvent || !workspaceId) return true
+  try {
+    return context.workspaceGateway.activeWorkspaceId(sourceEvent) === workspaceId
+  } catch {
+    return false
+  }
+}
+
+function queueCloudProjectionRefresh(input: {
+  context: IpcHandlerContext
+  win: BrowserWindow
+  sourceEvent?: IpcMainInvokeEvent
+  sessionId: string
+  workspaceId?: string | null
+  sequence: number
+}) {
+  const { context, win, sourceEvent, sessionId, workspaceId, sequence } = input
+  if (!cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)) return
+  const key = cloudProjectionRefreshKey(workspaceId, sessionId)
+  const state = cloudProjectionRefreshes.get(key) || {
+    timer: null,
+    inFlight: false,
+    latestSequence: 0,
+    publishedRevision: 0,
+    failedAttempts: 0,
+    nextAllowedAt: 0,
+  }
+  state.latestSequence = Math.max(state.latestSequence, sequence)
+  cloudProjectionRefreshes.set(key, state)
+  if (state.timer) clearTimeout(state.timer)
+  const delayMs = Math.max(CLOUD_PROJECTION_REFRESH_DEBOUNCE_MS, state.nextAllowedAt - Date.now())
+  state.timer = setTimeout(() => {
+    state.timer = null
+    void runQueuedCloudProjectionRefresh({
+      context,
+      win,
+      sourceEvent,
+      sessionId,
+      workspaceId,
+      key,
+      state,
+    })
+  }, delayMs)
+}
+
+async function runQueuedCloudProjectionRefresh(input: {
+  context: IpcHandlerContext
+  win: BrowserWindow
+  sourceEvent?: IpcMainInvokeEvent
+  sessionId: string
+  workspaceId?: string | null
+  key: string
+  state: CloudProjectionRefreshState
+}) {
+  const { context, win, sourceEvent, sessionId, workspaceId, key, state } = input
+  if (state.inFlight) return
+  if (win.isDestroyed()) {
+    cloudProjectionRefreshes.delete(key)
+    return
+  }
+  if (!cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)) {
+    cloudProjectionRefreshes.delete(key)
+    return
+  }
+  state.inFlight = true
+  const requestedSequence = state.latestSequence
+  try {
+    const view = await context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
+    if (
+      !win.isDestroyed()
+      && cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)
+      && view.revision >= state.publishedRevision
+    ) {
+      state.publishedRevision = view.revision
+      win.webContents.send('session:view', { sessionId, workspaceId: workspaceId || undefined, view })
+    }
+    state.failedAttempts = 0
+    state.nextAllowedAt = 0
+  } catch (error) {
+    state.failedAttempts = Math.min(state.failedAttempts + 1, 8)
+    const backoffMs = Math.min(
+      CLOUD_PROJECTION_REFRESH_BACKOFF_MAX_MS,
+      CLOUD_PROJECTION_REFRESH_BACKOFF_BASE_MS * 2 ** (state.failedAttempts - 1),
+    )
+    state.nextAllowedAt = Date.now() + backoffMs
+    context.logHandlerError(`cloud session:view ${shortSessionId(sessionId)}`, error)
+  } finally {
+    state.inFlight = false
+    if (state.latestSequence > requestedSequence) {
+      if (state.timer) clearTimeout(state.timer)
+      const delayMs = Math.max(CLOUD_PROJECTION_REFRESH_DEBOUNCE_MS, state.nextAllowedAt - Date.now())
+      state.timer = setTimeout(() => {
+        state.timer = null
+        void runQueuedCloudProjectionRefresh(input)
+      }, delayMs)
+    } else if (!state.timer) {
+      const deleteDelayMs = Math.max(0, state.nextAllowedAt - Date.now())
+      if (deleteDelayMs > 0) {
+        state.timer = setTimeout(() => {
+          if (cloudProjectionRefreshes.get(key) === state) cloudProjectionRefreshes.delete(key)
+        }, deleteDelayMs)
+      } else {
+        cloudProjectionRefreshes.delete(key)
+      }
+    }
+  }
+}
+
 type PromptAttachment = ReturnType<typeof normalizePromptAttachments>[number]
 type PromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
@@ -107,15 +239,19 @@ function dispatchCloudWorkspaceSessionEvent(
   if (!sessionId) return
   const win = context.getMainWindow()
   if (!win || win.isDestroyed()) return
+  if (!cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)) return
   const payload = event.payload || {}
   const eventAt = event.sequence || Date.now()
   let shouldRefreshCloudProjection = false
   const publishCloudProjection = () => {
-    void context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
-      .then((view) => {
-        if (!win.isDestroyed()) win.webContents.send('session:view', { sessionId, workspaceId: workspaceId || undefined, view })
-      })
-      .catch((error) => context.logHandlerError(`cloud session:view ${shortSessionId(sessionId)}`, error))
+    queueCloudProjectionRefresh({
+      context,
+      win,
+      sourceEvent,
+      sessionId,
+      workspaceId,
+      sequence: event.sequence || Date.now(),
+    })
   }
   const dispatchCloudRuntimeEvent = (runtimeEvent: Parameters<typeof dispatchRuntimeSessionEvent>[1]) => {
     dispatchRuntimeSessionEvent(win, {

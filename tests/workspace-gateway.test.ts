@@ -871,6 +871,110 @@ test('workspace gateway subscribes cloud workspace events once per sender', asyn
   assert.deepEqual(calls, ['subscribe:cached', 'subscribe:5', 'close', 'close'])
 })
 
+test('workspace gateway closes inactive cloud subscriptions on workspace switch', async () => {
+  const credentials = new FileCloudWorkspaceCredentialStore({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-workspace-switch-events-')), 'cloud-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  for (const workspaceId of ['cloud:one', 'cloud:two']) {
+    credentials.save({
+      workspaceId,
+      accessToken: 'cloud-access-token',
+      expiresAt: '2030-05-27T12:00:00.000Z',
+    })
+  }
+  const calls: string[] = []
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => ({
+      id: 'cloud-session-1',
+      title: 'Cloud session',
+      directory: null,
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }),
+    getSessionInfo: async () => null,
+    getSessionView: async () => ({
+      messages: [],
+      toolCalls: [],
+      taskRuns: [],
+      compactions: [],
+      pendingApprovals: [],
+      pendingQuestions: [],
+      errors: [],
+      todos: [],
+      executionPlan: [],
+      sessionCost: 0,
+      sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+      lastInputTokens: 0,
+      contextState: 'idle',
+      compactionCount: 0,
+      lastCompactedAt: null,
+      activeAgent: null,
+      lastItemWasTool: false,
+      revision: 0,
+      lastEventAt: 0,
+      isGenerating: false,
+      isAwaitingPermission: false,
+      isAwaitingQuestion: false,
+    }),
+    promptSession: async () => undefined,
+    abortSession: async () => undefined,
+    subscribeWorkspaceEvents: () => ({ close() { calls.push('close') } }),
+    subscribeSessionEvents: () => ({ close() { calls.push('session-close') } }),
+  }
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: credentials,
+    workspaces: [
+      {
+        id: 'cloud:one',
+        kind: 'cloud',
+        label: 'Cloud One',
+        status: 'online',
+        baseUrl: 'https://one.example.test',
+        lastSyncedAt: null,
+      },
+      {
+        id: 'cloud:two',
+        kind: 'cloud',
+        label: 'Cloud Two',
+        status: 'online',
+        baseUrl: 'https://two.example.test',
+        lastSyncedAt: null,
+      },
+    ],
+    cloudAdapterFactory: () => adapter,
+  })
+
+  gateway.activate(event(1), 'cloud:one')
+  await gateway.subscribeCloudWorkspaceEvents(event(1), {
+    workspaceId: 'cloud:one',
+    onEvent: () => {},
+  })
+  await gateway.subscribeCloudSessionEvents(event(1), 'same-session-id', {
+    workspaceId: 'cloud:one',
+    onEvent: () => {},
+  })
+  gateway.activate(event(2), 'cloud:one')
+  gateway.activate(event(1), 'cloud:two')
+
+  assert.deepEqual(calls, [])
+
+  gateway.activate(event(2), 'cloud:two')
+
+  assert.deepEqual(calls, ['session-close', 'close'])
+})
+
 test('workspace gateway drops failed cloud event subscriptions before retry', async () => {
   const credentials = new FileCloudWorkspaceCredentialStore({
     path: join(mkdtempSync(join(tmpdir(), 'open-cowork-workspace-event-retry-')), 'cloud-workspace-credentials.json'),
@@ -1003,9 +1107,11 @@ test('workspace gateway marks persisted cloud workspaces online when a usable to
     expiresAt: '2030-05-27T12:00:00.000Z',
   }, new Date('2026-05-27T10:00:00.000Z'))
   let adapterToken: string | null | undefined
+  const removedCacheWorkspaceIds: string[] = []
   const gateway = createWorkspaceGateway({
     cloudRegistry: registry,
     cloudCredentialStore: credentials,
+    cloudCache: recordingCloudCache(removedCacheWorkspaceIds),
     cloudAdapterFactory: (_connection, accessToken) => {
       adapterToken = accessToken
       return {
@@ -1064,6 +1170,7 @@ test('workspace gateway marks persisted cloud workspaces online when a usable to
   gateway.logout(event(1), persisted.id)
   assert.equal(credentials.get(persisted.id), null)
   assert.equal(gateway.list(event(1)).find((entry) => entry.id === persisted.id)?.status, 'auth_required')
+  assert.deepEqual(removedCacheWorkspaceIds, [])
 })
 
 test('workspace gateway login stores cloud tokens without exposing them in workspace info', async () => {
