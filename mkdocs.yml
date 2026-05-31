@@ -113,6 +113,7 @@ nav:
   - Build & Extend:
       - Architecture: architecture.md
       - Product Contract: product-contract.md
+      - Cloud Web Workbench: cloud-web-workbench.md
       - Downstream Customization: downstream.md
       - OpenCode SDK Boundary: opencode-sdk-v2-boundary.md
       - Development Environment: development-environment.md
