@@ -684,6 +684,59 @@ test('gateway runtime retries transient deliveries and marks permanent failures 
   }
 })
 
+test('gateway runtime drains in-flight deliveries before provider shutdown', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery(deliveryId: string, input: Record<string, unknown>) {
+      acks.push({ deliveryId, input })
+      return { deliveryId, ...input } as never
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+  const provider = runtime.providers.get('fake')?.provider
+  assert.ok(provider)
+  const originalSendText = provider.sendText.bind(provider)
+  let releaseSend: (() => void) | null = null
+  provider.sendText = async (...args) => {
+    await new Promise<void>((resolve) => {
+      releaseSend = resolve
+    })
+    return originalSendText(...args)
+  }
+
+  await runtime.start()
+  onDelivery?.(deliveryRecord({ deliveryId: 'delivery-drain', attemptCount: 1 }))
+  await waitFor(() => runtime.metrics.deliveriesReceived === 1)
+  let stopped = false
+  const stopPromise = runtime.stop().then(() => {
+    stopped = true
+  })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(stopped, false)
+  assert.equal(acks.length, 0)
+
+  releaseSend?.()
+  await stopPromise
+  assert.equal(stopped, true)
+  assert.equal(acks[0]?.deliveryId, 'delivery-drain')
+  assert.equal(acks[0]?.input.status, 'sent')
+})
+
 function deliveryRecord(overrides: Partial<{
   deliveryId: string
   attemptCount: number
