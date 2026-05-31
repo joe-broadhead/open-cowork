@@ -10,6 +10,7 @@ export type WorkflowControlPlaneStore = Pick<ControlPlaneStore,
   | 'listWorkflowRuns'
   | 'createWorkflowRun'
   | 'claimDueWorkflowRun'
+  | 'reapExpiredWorkflowClaims'
   | 'attachWorkflowRunSession'
   | 'completeWorkflowRun'
   | 'failWorkflowRun'

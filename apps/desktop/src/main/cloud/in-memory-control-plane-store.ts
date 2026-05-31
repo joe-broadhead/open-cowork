@@ -55,6 +55,7 @@ export type ControlPlaneSessionStatus = 'idle' | 'running' | 'closed' | 'errored
 export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
+export type WorkReaperAction = 'retried' | 'failed' | 'released'
 export type ChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
 export type HeadlessAgentStatus = 'active' | 'disabled'
 export type ChannelBindingStatus = 'active' | 'disabled' | 'auth_required' | 'error'
@@ -472,6 +473,37 @@ export type RunnableSessionClaimRecord = {
   pendingSessionCount: number
 }
 
+export type ReapExpiredSessionLeasesInput = {
+  now?: Date
+  maxCommandAttempts?: number | null
+}
+
+export type ReapedSessionLeaseRecord = {
+  tenantId: string
+  sessionId: string
+  leaseToken: string
+  leasedBy: string
+  action: WorkReaperAction
+  retriedCommandIds: string[]
+  failedCommandIds: string[]
+  reapedAt: string
+}
+
+export type ReapExpiredWorkflowClaimsInput = {
+  now?: Date
+  maxAttempts?: number | null
+}
+
+export type ReapedWorkflowClaimRecord = {
+  tenantId: string
+  workflowId: string
+  runId: string
+  claimToken: string
+  claimedBy: string
+  action: WorkReaperAction
+  reapedAt: string
+}
+
 export type SessionCommandRecord = {
   commandId: string
   tenantId: string
@@ -485,6 +517,10 @@ export type SessionCommandRecord = {
   status: ControlPlaneCommandStatus
   claimedBy: string | null
   claimedLeaseToken: string | null
+  attemptCount: number
+  availableAt: string | null
+  lastErrorCode: string | null
+  lastErrorSummary: string | null
   ackedAt: string | null
   error: string | null
 }
@@ -542,6 +578,14 @@ export type CloudWorkflowRecord = WorkflowSummary & {
 export type CloudWorkflowRunRecord = WorkflowRun & {
   tenantId: string
   userId: string
+  claimedBy: string | null
+  claimToken: string | null
+  claimExpiresAt: string | null
+  attemptCount: number
+  idempotencyKey: string | null
+  checkpointVersion: number
+  lastErrorCode: string | null
+  lastErrorSummary: string | null
 }
 
 export type ClaimedWorkflowRunRecord = {
@@ -899,6 +943,7 @@ export type AppendEventInput = {
   eventId?: string
   type: string
   payload?: Record<string, unknown>
+  leaseToken?: string | null
   createdAt?: Date
 }
 
@@ -952,6 +997,8 @@ export type CreateWorkflowRunInput = {
   runId: string
   triggerType: WorkflowTriggerType
   triggerPayload?: Record<string, unknown> | null
+  claimedBy?: string | null
+  leaseTtlMs?: number | null
   createdAt?: Date
 }
 
@@ -966,6 +1013,8 @@ export type UpdateWorkflowStatusInput = {
 
 export type ClaimDueWorkflowRunInput = {
   runId: string
+  claimedBy?: string | null
+  leaseTtlMs?: number | null
   now?: Date
 }
 
@@ -974,6 +1023,7 @@ export type AttachWorkflowRunSessionInput = {
   workflowId: string
   runId: string
   sessionId: string
+  claimToken?: string | null
   startedAt?: Date
 }
 
@@ -984,6 +1034,7 @@ export type CompleteWorkflowRunInput = {
   summary: string | null
   nextStatus: WorkflowStatus
   nextRunAt: string | null
+  leaseToken?: string | null
   finishedAt?: Date
 }
 
@@ -994,6 +1045,7 @@ export type FailWorkflowRunInput = {
   error: string
   nextStatus: WorkflowStatus
   nextRunAt: string | null
+  leaseToken?: string | null
   finishedAt?: Date
 }
 
@@ -1150,6 +1202,7 @@ export type ControlPlaneStore = {
     sessionId: string
     opencodeSessionId: string
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }): MaybePromise<SessionRecord>
   updateSessionStatus(input: {
@@ -1157,6 +1210,7 @@ export type ControlPlaneStore = {
     sessionId: string
     status: ControlPlaneSessionStatus
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }): MaybePromise<SessionRecord>
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
@@ -1180,6 +1234,7 @@ export type ControlPlaneStore = {
   releaseSessionLease(lease: WorkerLeaseRecord, now?: Date): MaybePromise<boolean>
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
+  reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
   claimNextSessionCommand(lease: WorkerLeaseRecord): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
@@ -1209,6 +1264,7 @@ export type ControlPlaneStore = {
   listWorkflowRuns(tenantId: string, workflowId: string, limit?: number): MaybePromise<CloudWorkflowRunRecord[]>
   createWorkflowRun(input: CreateWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord>
   claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): MaybePromise<ClaimedWorkflowRunRecord | null>
+  reapExpiredWorkflowClaims(input?: ReapExpiredWorkflowClaimsInput): MaybePromise<ReapedWorkflowClaimRecord[]>
   attachWorkflowRunSession(input: AttachWorkflowRunSessionInput): MaybePromise<CloudWorkflowRunRecord | null>
   completeWorkflowRun(input: CompleteWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord | null>
   failWorkflowRun(input: FailWorkflowRunInput): MaybePromise<CloudWorkflowRunRecord | null>
@@ -1315,6 +1371,10 @@ export function generateCloudApiToken(input: { tokenId?: string, secret?: string
 export function generateChannelInteractionToken(input: { interactionId: string, secret?: string }) {
   const secret = input.secret || randomBytes(24).toString('base64url')
   return `occi_${input.interactionId}_${secret}`
+}
+
+function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
+  return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
 }
 
 function constantTimeStringEquals(left: string, right: string) {
@@ -2963,6 +3023,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         const runnable = session.commands
           .filter((command) => command.targetLeaseToken === null)
           .filter((command) => command.status === 'pending' || command.status === 'running')
+          .filter((command) => !command.availableAt || Date.parse(command.availableAt) <= nowMs)
           .sort((a, b) => a.createdSequence - b.createdSequence)[0]
         return runnable ? { session, firstSequence: runnable.createdSequence } : null
       })
@@ -3001,9 +3062,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     sessionId: string
     opencodeSessionId: string
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }): SessionRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
+    this.assertLeaseTokenIfPresent(session, input.leaseToken)
     session.record.opencodeSessionId = input.opencodeSessionId
     if (input.title !== undefined) session.record.title = input.title
     session.record.updatedAt = nowIso(input.updatedAt)
@@ -3015,9 +3078,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     sessionId: string
     status: ControlPlaneSessionStatus
     title?: string | null
+    leaseToken?: string | null
     updatedAt?: Date
   }): SessionRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
+    this.assertLeaseTokenIfPresent(session, input.leaseToken)
     session.record.status = input.status
     if (input.title !== undefined) session.record.title = input.title
     session.record.updatedAt = nowIso(input.updatedAt)
@@ -3026,6 +3091,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   appendSessionEvent(input: AppendEventInput): SessionEventRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
+    this.assertLeaseTokenIfPresent(session, input.leaseToken)
     const payload = input.payload || {}
     const eventId = input.eventId || `${input.sessionId}:${session.nextEventSequence + 1}`
     const existing = session.events.find((event) => event.eventId === eventId)
@@ -3227,6 +3293,80 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(session.lease)
   }
 
+  reapExpiredSessionLeases(input: ReapExpiredSessionLeasesInput = {}): ReapedSessionLeaseRecord[] {
+    const now = input.now || new Date()
+    const nowMs = now.getTime()
+    const nowIsoValue = now.toISOString()
+    const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    const reaped: ReapedSessionLeaseRecord[] = []
+    for (const session of this.sessions.values()) {
+      const lease = session.lease
+      if (!lease || lease.leaseExpiresAt > nowMs) continue
+      const runningCommands = session.commands.filter((command) => (
+        command.status === 'running'
+        && command.claimedLeaseToken === lease.leaseToken
+      ))
+      const retriedCommandIds: string[] = []
+      const failedCommandIds: string[] = []
+      for (const command of runningCommands) {
+        if (command.attemptCount >= maxAttempts) {
+          command.status = 'failed'
+          command.error = 'Worker lease expired after the maximum retry attempts.'
+          command.lastErrorCode = 'lease_expired_max_attempts'
+          command.lastErrorSummary = command.error
+          failedCommandIds.push(command.commandId)
+        } else {
+          command.status = 'pending'
+          command.claimedBy = null
+          command.claimedLeaseToken = null
+          command.availableAt = nowIsoValue
+          command.error = null
+          command.lastErrorCode = 'lease_expired'
+          command.lastErrorSummary = 'Worker lease expired before command completion.'
+          retriedCommandIds.push(command.commandId)
+        }
+      }
+      session.lease = null
+      session.record.status = failedCommandIds.length > 0 && retriedCommandIds.length === 0 ? 'errored' : 'idle'
+      session.record.updatedAt = nowIsoValue
+      const action: WorkReaperAction = failedCommandIds.length > 0 && retriedCommandIds.length === 0
+        ? 'failed'
+        : retriedCommandIds.length > 0
+          ? 'retried'
+          : 'released'
+      const record: ReapedSessionLeaseRecord = {
+        tenantId: lease.tenantId,
+        sessionId: lease.sessionId,
+        leaseToken: lease.leaseToken,
+        leasedBy: lease.leasedBy,
+        action,
+        retriedCommandIds,
+        failedCommandIds,
+        reapedAt: nowIsoValue,
+      }
+      const orgId = this.orgsByTenant.get(lease.tenantId) || (this.orgs.has(lease.tenantId) ? lease.tenantId : null)
+      if (orgId) {
+        this.recordAuditEvent({
+          orgId,
+          actorType: 'system',
+          actorId: 'managed-work-reaper',
+          eventType: 'managed_work.session_lease_reaped',
+          targetType: 'session',
+          targetId: lease.sessionId,
+          metadata: {
+            action,
+            leasedBy: lease.leasedBy,
+            retriedCommandIds,
+            failedCommandIds,
+          },
+          createdAt: now,
+        })
+      }
+      reaped.push(record)
+    }
+    return reaped
+  }
+
   enqueueSessionCommand(input: EnqueueCommandInput): SessionCommandRecord {
     this.requireTenantUser(input.tenantId, input.userId)
     const session = this.requireSession(input.tenantId, input.sessionId)
@@ -3256,6 +3396,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       status: 'pending',
       claimedBy: null,
       claimedLeaseToken: null,
+      attemptCount: 0,
+      availableAt: null,
+      lastErrorCode: null,
+      lastErrorSummary: null,
       ackedAt: null,
       error: null,
     }
@@ -3268,6 +3412,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     this.assertCurrentLease(session, lease)
     const command = session.commands.find((entry) => (
       (entry.status === 'pending'
+        && (!entry.availableAt || Date.parse(entry.availableAt) <= Date.now())
         && (entry.targetLeaseToken === null || entry.targetLeaseToken === lease.leaseToken))
       || (entry.status === 'running'
         && entry.claimedLeaseToken !== lease.leaseToken
@@ -3277,6 +3422,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     command.status = 'running'
     command.claimedBy = lease.leasedBy
     command.claimedLeaseToken = lease.leaseToken
+    command.attemptCount += 1
+    command.lastErrorCode = null
+    command.lastErrorSummary = null
     return clone(command)
   }
 
@@ -3303,6 +3451,8 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
     command.status = 'failed'
     command.error = error
+    command.lastErrorCode = 'execution_failed'
+    command.lastErrorSummary = redactOperationalText(error, 512, 'Command error')
     return clone(command)
   }
 
@@ -3450,6 +3600,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const existing = this.workflowRuns.get(runKey)
     if (existing) return clone(existing)
     const createdAt = nowIso(input.createdAt)
+    const claimedBy = input.claimedBy?.trim() || null
+    const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
+    const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
     const run: CloudWorkflowRunRecord = {
       tenantId: input.tenantId,
       userId: input.userId,
@@ -3465,6 +3618,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt,
       startedAt: null,
       finishedAt: null,
+      claimedBy,
+      claimToken,
+      claimExpiresAt: claimToken ? new Date(new Date(createdAt).getTime() + leaseTtlMs).toISOString() : null,
+      attemptCount: claimToken ? 1 : 0,
+      idempotencyKey: null,
+      checkpointVersion: 0,
+      lastErrorCode: null,
+      lastErrorSummary: null,
     }
     workflow.runs.push(run)
     this.workflowRuns.set(runKey, run)
@@ -3478,6 +3639,33 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   claimDueWorkflowRun(input: ClaimDueWorkflowRunInput): ClaimedWorkflowRunRecord | null {
     const now = input.now || new Date()
     const claimedAt = now.toISOString()
+    const claimedBy = input.claimedBy?.trim() || 'scheduler'
+    const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
+    const retryRun = Array.from(this.workflowRuns.values())
+      .filter((run) => (
+        run.triggerType === 'schedule'
+        && run.status === 'queued'
+        && run.sessionId === null
+        && run.claimToken === null
+      ))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))[0]
+    if (retryRun) {
+      const workflow = this.requireWorkflow(retryRun.tenantId, retryRun.workflowId)
+      retryRun.claimedBy = claimedBy
+      retryRun.claimToken = createWorkClaimToken(retryRun.tenantId, retryRun.id, claimedBy)
+      retryRun.claimExpiresAt = new Date(now.getTime() + leaseTtlMs).toISOString()
+      retryRun.attemptCount += 1
+      retryRun.lastErrorCode = null
+      retryRun.lastErrorSummary = null
+      workflow.record.status = 'running'
+      workflow.record.latestRunId = retryRun.id
+      workflow.record.latestRunStatus = retryRun.status
+      workflow.record.updatedAt = claimedAt
+      return {
+        workflow: clone(workflow.record),
+        run: clone(retryRun),
+      }
+    }
     const workflow = Array.from(this.workflows.values())
       .filter((entry) => (
         entry.record.status === 'active'
@@ -3487,6 +3675,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => String(left.record.nextRunAt).localeCompare(String(right.record.nextRunAt)))[0]
     if (!workflow) return null
     const scheduledFor = workflow.record.nextRunAt
+    const claimToken = createWorkClaimToken(workflow.record.tenantId, input.runId, claimedBy)
     const run: CloudWorkflowRunRecord = {
       tenantId: workflow.record.tenantId,
       userId: workflow.record.userId,
@@ -3505,6 +3694,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: claimedAt,
       startedAt: null,
       finishedAt: null,
+      claimedBy,
+      claimToken,
+      claimExpiresAt: new Date(now.getTime() + leaseTtlMs).toISOString(),
+      attemptCount: 1,
+      idempotencyKey: `schedule:${workflow.record.id}:${scheduledFor}`,
+      checkpointVersion: 0,
+      lastErrorCode: null,
+      lastErrorSummary: null,
     }
     workflow.runs.push(run)
     this.workflowRuns.set(key(run.tenantId, run.id), run)
@@ -3518,14 +3715,72 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
   }
 
+  reapExpiredWorkflowClaims(input: ReapExpiredWorkflowClaimsInput = {}): ReapedWorkflowClaimRecord[] {
+    const now = input.now || new Date()
+    const nowIsoValue = now.toISOString()
+    const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
+    const reaped: ReapedWorkflowClaimRecord[] = []
+    for (const run of this.workflowRuns.values()) {
+      if (!run.claimToken || !run.claimExpiresAt || Date.parse(run.claimExpiresAt) > now.getTime()) continue
+      if (run.status !== 'queued' || run.sessionId) continue
+      const workflow = this.workflows.get(key(run.tenantId, run.workflowId))
+      if (!workflow) continue
+      const claimToken = run.claimToken
+      const claimedBy = run.claimedBy || 'unknown'
+      const action: WorkReaperAction = run.attemptCount >= maxAttempts ? 'failed' : 'retried'
+      if (action === 'failed') {
+        run.status = 'failed'
+        run.error = 'Workflow run claim expired after the maximum retry attempts.'
+        run.summary = run.error
+        run.finishedAt = nowIsoValue
+        run.lastErrorCode = 'claim_expired_max_attempts'
+        run.lastErrorSummary = run.error
+        run.claimedBy = null
+        run.claimToken = null
+        run.claimExpiresAt = null
+        workflow.record.status = 'failed'
+        workflow.record.latestRunStatus = 'failed'
+        workflow.record.latestRunSummary = run.error
+        workflow.record.nextRunAt = null
+      } else {
+        run.claimedBy = null
+        run.claimToken = null
+        run.claimExpiresAt = null
+        run.lastErrorCode = 'claim_expired'
+        run.lastErrorSummary = 'Workflow run claim expired before session attachment.'
+        workflow.record.status = 'running'
+        workflow.record.latestRunStatus = 'queued'
+      }
+      workflow.record.latestRunId = run.id
+      workflow.record.updatedAt = nowIsoValue
+      reaped.push({
+        tenantId: run.tenantId,
+        workflowId: run.workflowId,
+        runId: run.id,
+        claimToken,
+        claimedBy,
+        action,
+        reapedAt: nowIsoValue,
+      })
+    }
+    return reaped
+  }
+
   attachWorkflowRunSession(input: AttachWorkflowRunSessionInput): CloudWorkflowRunRecord | null {
     const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
     const run = this.workflowRuns.get(key(input.tenantId, input.runId))
     if (!run || run.workflowId !== input.workflowId) return null
+    if (run.claimToken) {
+      if (run.claimToken !== (input.claimToken ?? null)) throw new Error('Workflow run claim is stale.')
+      if (run.claimExpiresAt && Date.parse(run.claimExpiresAt) <= Date.now()) throw new Error('Workflow run claim is stale.')
+    }
     const startedAt = nowIso(input.startedAt)
     run.sessionId = input.sessionId
     run.status = 'running'
     run.startedAt ||= startedAt
+    run.claimedBy = null
+    run.claimToken = null
+    run.claimExpiresAt = null
     workflow.record.status = 'running'
     workflow.record.latestRunId = run.id
     workflow.record.latestRunStatus = run.status
@@ -3544,6 +3799,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       error: null,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
+      leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
     })
   }
@@ -3558,6 +3814,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       error: input.error,
       nextStatus: input.nextStatus,
       nextRunAt: input.nextRunAt,
+      leaseToken: input.leaseToken,
       finishedAt: input.finishedAt,
     })
   }
@@ -3801,12 +4058,18 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     error: string | null
     nextStatus: WorkflowStatus
     nextRunAt: string | null
+    leaseToken?: string | null
     finishedAt?: Date
   }) {
     const workflow = this.requireWorkflow(input.tenantId, input.workflowId)
     const run = this.workflowRuns.get(key(input.tenantId, input.runId))
     if (!run || run.workflowId !== input.workflowId) return null
     if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return clone(run)
+    if (input.leaseToken !== undefined) {
+      if (!run.sessionId) throw new Error('Workflow run has no execution session to fence.')
+      const session = this.requireSession(input.tenantId, run.sessionId)
+      this.assertLeaseTokenIfPresent(session, input.leaseToken)
+    }
     const finishedAt = nowIso(input.finishedAt)
     run.status = input.status
     run.summary = input.summary
@@ -3856,6 +4119,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
 
   private assertCurrentLease(session: SessionState, lease: WorkerLeaseRecord) {
     if (!session.lease || session.lease.leaseToken !== lease.leaseToken) {
+      throw new Error('Worker lease is stale.')
+    }
+    if (session.lease.leaseExpiresAt <= Date.now()) {
+      throw new Error('Worker lease is stale.')
+    }
+  }
+
+  private assertLeaseTokenIfPresent(session: SessionState, leaseToken: string | null | undefined) {
+    if (leaseToken === undefined) return
+    if (!session.lease || session.lease.leaseToken !== leaseToken || session.lease.leaseExpiresAt <= Date.now()) {
       throw new Error('Worker lease is stale.')
     }
   }

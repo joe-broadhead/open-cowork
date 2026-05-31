@@ -98,11 +98,14 @@ grows.
 2. Check worker heartbeats and active sessions in `GET /api/workers/heartbeats`.
 3. Check lease signals: `open_cowork_cloud_worker_lease_claims_total`,
    `open_cowork_cloud_worker_lease_renewals_total`, and
-   `open_cowork_cloud_worker_stale_owner_rejections_total`.
-4. Check BYOK reveal failures and provider errors before scaling workers.
-5. Scale workers horizontally only when Postgres connection pool and provider
+   `open_cowork_cloud_worker_expired_leases_reaped_total`.
+4. Check stale-owner signals:
+   `open_cowork_cloud_worker_stale_owner_rejections_total` should remain near
+   zero outside crash/failover drills.
+5. Check BYOK reveal failures and provider errors before scaling workers.
+6. Scale workers horizontally only when Postgres connection pool and provider
    quota have headroom.
-6. If one session is poisoning the queue, use session abort/retry controls
+7. If one session is poisoning the queue, use session abort/retry controls
    rather than direct database edits.
 
 ## Scheduler Stalled
@@ -113,10 +116,13 @@ alert threshold.
 1. Check scheduler heartbeat freshness.
 2. Check `open_cowork_cloud_scheduler_claims_total` and
    `open_cowork_cloud_scheduler_failures_total`.
-3. Confirm exactly one scheduler deployment group is active for the environment.
-4. Confirm database time and application time are not drifting.
-5. Restart scheduler only after checking logs for claim transaction failures.
-6. Verify one due workflow claim after restart and confirm no double-fire.
+3. Check `open_cowork_cloud_scheduler_expired_claims_reaped_total`; any
+   sustained increase means workflow start claims are expiring before session
+   attachment.
+4. Confirm exactly one scheduler deployment group is active for the environment.
+5. Confirm database time and application time are not drifting.
+6. Restart scheduler only after checking logs for claim transaction failures.
+7. Verify one due workflow claim after restart and confirm no double-fire.
 
 ## Postgres Connection Exhaustion
 

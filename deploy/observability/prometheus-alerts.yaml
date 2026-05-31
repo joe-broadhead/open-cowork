@@ -19,6 +19,15 @@ groups:
         annotations:
           summary: Worker command backlog is large or old.
           runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkWorkerLeaseRecoverySpike
+        expr: sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[10m])) > 0.5 or sum(rate(open_cowork_cloud_scheduler_expired_claims_reaped_total[10m])) > 0.5
+        for: 10m
+        labels:
+          severity: ticket
+          surface: worker
+        annotations:
+          summary: Managed-work expired lease or workflow claim recovery is elevated.
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
       - alert: OpenCoworkSchedulerStalled
         expr: absent(rate(open_cowork_cloud_scheduler_claims_total[30m])) and max(open_cowork_cloud_scheduler_loop_duration_ms) == 0
         for: 30m

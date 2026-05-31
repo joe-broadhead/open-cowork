@@ -151,12 +151,14 @@ Cloud source files should stay below 2,000 lines. Current documented
 exceptions have explicit budgets and are implementation backlogs, not target
 architecture:
 
-- `in-memory-control-plane-store.ts` (budget 3,900 lines): compatibility
-  implementation for the full domain store contract.
-- `postgres-control-plane-store.ts` (budget 4,000 lines): compatibility
+- `in-memory-control-plane-store.ts` (budget 4,200 lines): compatibility
+  implementation for the full domain store contract, including managed work
+  claim fencing until the store contract is split further.
+- `postgres-control-plane-store.ts` (budget 4,400 lines): compatibility
   implementation for the full Postgres-backed store plus webhook security
-  store. Domain row mappers belong in `postgres-domains/`.
-- `session-service.ts` (budget 4,100 lines): compatibility orchestration
+  store and managed work claim fencing. Domain row mappers belong in
+  `postgres-domains/`.
+- `session-service.ts` (budget 4,200 lines): compatibility orchestration
   facade around runtime execution, workflows, quotas, channel coordination,
   BYOK, billing, projection services, and the focused command payload service
   under `services/session-command-service.ts`.

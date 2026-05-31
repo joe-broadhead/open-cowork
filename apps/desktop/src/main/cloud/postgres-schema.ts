@@ -637,6 +637,39 @@ export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS = [
     ON cloud_managed_worker_heartbeats (org_id, received_at DESC)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_MIGRATION_ID = '009_managed_work_claims'
+
+export const CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS = [
+  `ALTER TABLE cloud_session_commands
+    ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE cloud_session_commands
+    ADD COLUMN IF NOT EXISTS available_at timestamptz`,
+  `ALTER TABLE cloud_session_commands
+    ADD COLUMN IF NOT EXISTS last_error_code text`,
+  `ALTER TABLE cloud_session_commands
+    ADD COLUMN IF NOT EXISTS last_error_summary text`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS claimed_by text`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS claim_token text`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS claim_expires_at timestamptz`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS idempotency_key text`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS checkpoint_version integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS last_error_code text`,
+  `ALTER TABLE cloud_workflow_runs
+    ADD COLUMN IF NOT EXISTS last_error_summary text`,
+  `CREATE INDEX IF NOT EXISTS cloud_session_commands_available_idx
+    ON cloud_session_commands (status, available_at, tenant_id, session_id, created_sequence)`,
+  `CREATE INDEX IF NOT EXISTS cloud_workflow_runs_claim_idx
+    ON cloud_workflow_runs (tenant_id, status, claim_expires_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -669,5 +702,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS,
   },
 ] as const
