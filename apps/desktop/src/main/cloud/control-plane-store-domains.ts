@@ -1,6 +1,7 @@
 import type { ControlPlaneStore } from './control-plane-store.ts'
 
 export type { IdentityControlPlaneStore, ApiTokenControlPlaneStore } from './control-plane-domains/identity.ts'
+export type { ManagedWorkersControlPlaneStore } from './control-plane-domains/workers.ts'
 export type { BillingControlPlaneStore, UsageControlPlaneStore, QuotaControlPlaneStore } from './control-plane-domains/billing.ts'
 export type { ByokControlPlaneStore } from './control-plane-domains/byok.ts'
 export type { ChannelControlPlaneStore } from './control-plane-domains/channels.ts'

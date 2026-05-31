@@ -12,6 +12,16 @@ export { CloudWorkflowService } from './workflow-service.ts'
 export type { CloudWorkflowServiceDelegate } from './workflow-service.ts'
 export { CloudProjectionService } from './projection-service.ts'
 export type { AppendProjectedEventInput } from './projection-service.ts'
+export { CloudManagedWorkerService } from './managed-worker-service.ts'
+export type {
+  CreateManagedWorkerPoolRequest,
+  IssuedPublicManagedWorkerCredentialRecord,
+  ListManagedWorkersRequest,
+  ManagedWorkerHeartbeatRequest,
+  PublicManagedWorkerCredentialRecord,
+  RegisterManagedWorkerRequest,
+  UpdateManagedWorkerPoolRequest,
+} from './managed-worker-service.ts'
 export {
   normalizePermissionPayload,
   normalizePromptPayload,

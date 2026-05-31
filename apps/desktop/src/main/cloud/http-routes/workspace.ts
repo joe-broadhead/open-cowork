@@ -1,5 +1,11 @@
 import type { CloudApiRouteInput } from './types.ts'
 
+function readNonNegativeInteger(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined
+}
+
 export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promise<boolean> {
   const { req, res, options, context, resource, itemId, action, tools } = input
 
@@ -39,6 +45,22 @@ export async function handleWorkspaceApiRoute(input: CloudApiRouteInput): Promis
   if (resource === 'workers' && itemId === 'heartbeats' && !action && req.method === 'GET') {
     tools.writeJson(res, 200, {
       heartbeats: await options.service.listWorkerHeartbeats(context.principal),
+    }, options.corsOrigin)
+    return true
+  }
+
+  if (resource === 'workers' && itemId && action === 'heartbeat' && req.method === 'POST') {
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    tools.writeJson(res, 200, {
+      heartbeat: await options.service.recordManagedWorkerHeartbeat(context.principal, itemId, {
+        version: tools.readString(body.version),
+        capabilities: tools.readRecord(body.capabilities) || undefined,
+        currentLoad: readNonNegativeInteger(body.currentLoad),
+        activeWorkIds: tools.readStringArray(body.activeWorkIds) || undefined,
+        lastErrorCode: tools.readString(body.lastErrorCode),
+        lastErrorSummary: tools.readString(body.lastErrorSummary),
+        heartbeatSequence: readNonNegativeInteger(body.heartbeatSequence) ?? null,
+      }),
     }, options.corsOrigin)
     return true
   }

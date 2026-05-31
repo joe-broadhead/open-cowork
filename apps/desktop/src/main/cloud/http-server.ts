@@ -17,6 +17,7 @@ import {
   principalHasDesktopApiAccess,
   principalHasGatewayAccess,
   routeAllowsGatewayOnlyToken,
+  routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
@@ -968,6 +969,12 @@ async function handleApiRequest(
   }
 
   if (!principalHasDesktopApiAccess(context.principal) && !routeAllowsGatewayOnlyToken({
+    resource,
+    action,
+    method: req.method,
+    sessionId,
+    artifactId,
+  }) && !routeAllowsWorkerCredential({
     resource,
     action,
     method: req.method,

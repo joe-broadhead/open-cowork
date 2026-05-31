@@ -50,6 +50,8 @@ import type {
   ControlPlaneStore,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
+  ManagedWorkerPoolStatus,
+  ManagedWorkerStatus,
   OrgMemberRecord,
   QuotaPolicyCode,
   SessionCommandRecord,
@@ -63,6 +65,7 @@ import type {
   UsageEventRecord,
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
+import { CloudServiceError } from './cloud-service-error.ts'
 import {
   BillingAdapterError,
   evaluateBillingEntitlement,
@@ -104,6 +107,14 @@ import {
   type QuestionRejectPayload,
   type QuestionReplyPayload,
 } from './services/session-command-service.ts'
+import {
+  CloudManagedWorkerService,
+  type CreateManagedWorkerPoolRequest,
+  type ListManagedWorkersRequest,
+  type ManagedWorkerHeartbeatRequest,
+  type RegisterManagedWorkerRequest,
+  type UpdateManagedWorkerPoolRequest,
+} from './services/managed-worker-service.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
 import {
   verifyWorkflowWebhookAuth,
@@ -121,9 +132,13 @@ export type CloudPrincipal = {
   orgId?: string
   accountId?: string
   role?: 'owner' | 'admin' | 'member'
-  authSource?: 'user' | 'api_token' | 'local' | 'header'
+  authSource?: 'user' | 'api_token' | 'local' | 'header' | 'worker'
   tokenId?: string
   tokenScopes?: ApiTokenScope[]
+  workerId?: string
+  workerPoolId?: string
+  workerCredentialId?: string
+  workerScopes?: string[]
 }
 
 export type CloudWorkspaceOverview = {
@@ -325,23 +340,7 @@ export type CloudIdentityPolicy = {
   allowedEmailDomains?: readonly string[]
 }
 
-export class CloudServiceError extends Error {
-  readonly status: number
-  readonly publicMessage: string
-  readonly policyCode: string | null
-  readonly retryAfterMs: number | null
-
-  constructor(status: number, message: string, details: {
-    policyCode?: string | null
-    retryAfterMs?: number | null
-  } = {}) {
-    super(message)
-    this.status = status
-    this.publicMessage = message
-    this.policyCode = details.policyCode || null
-    this.retryAfterMs = details.retryAfterMs || null
-  }
-}
+export { CloudServiceError } from './cloud-service-error.ts'
 
 export type { CloudSessionMessage, CloudSessionProjectionView }
 
@@ -653,6 +652,7 @@ export class CloudSessionService {
   private readonly billingAdapter: BillingAdapter | null
   private readonly identityPolicy: CloudIdentityPolicy
   private readonly projectSources: CloudProjectSourceService | null
+  private readonly managedWorkerService: CloudManagedWorkerService
 
   constructor(
     store: ControlPlaneStore,
@@ -683,6 +683,7 @@ export class CloudSessionService {
     this.billingAdapter = billingAdapter
     this.identityPolicy = identityPolicy
     this.projectSources = projectSources
+    this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
   }
 
   get eventBus() {
@@ -1106,6 +1107,58 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     this.assertOrgAdmin(principal)
     return this.store.listAuditEvents(this.principalOrgId(principal), input.limit || 100)
+  }
+
+  createManagedWorkerPool(principal: CloudPrincipal, input: CreateManagedWorkerPoolRequest) {
+    return this.managedWorkerService.createPool(principal, input)
+  }
+
+  updateManagedWorkerPool(principal: CloudPrincipal, poolId: string, input: UpdateManagedWorkerPoolRequest) {
+    return this.managedWorkerService.updatePool(principal, poolId, input)
+  }
+
+  listManagedWorkerPools(principal: CloudPrincipal, input: { status?: ManagedWorkerPoolStatus | null, limit?: number | null } = {}) {
+    return this.managedWorkerService.listPools(principal, input)
+  }
+
+  registerManagedWorker(principal: CloudPrincipal, input: RegisterManagedWorkerRequest) {
+    return this.managedWorkerService.registerWorker(principal, input)
+  }
+
+  listManagedWorkers(principal: CloudPrincipal, input: ListManagedWorkersRequest = {}) {
+    return this.managedWorkerService.listWorkers(principal, input)
+  }
+
+  getManagedWorker(principal: CloudPrincipal, workerId: string) {
+    return this.managedWorkerService.getWorker(principal, workerId)
+  }
+
+  updateManagedWorkerLifecycle(principal: CloudPrincipal, workerId: string, status: ManagedWorkerStatus, input: { reason?: string | null } = {}) {
+    return this.managedWorkerService.updateWorkerLifecycle(principal, workerId, status, input)
+  }
+
+  issueManagedWorkerCredential(principal: CloudPrincipal, workerId: string, input: { scopes?: string[] | null, expiresAt?: Date | null } = {}) {
+    return this.managedWorkerService.issueCredential(principal, workerId, input)
+  }
+
+  listManagedWorkerCredentials(principal: CloudPrincipal, workerId: string) {
+    return this.managedWorkerService.listCredentials(principal, workerId)
+  }
+
+  rotateManagedWorkerCredential(principal: CloudPrincipal, workerId: string, credentialId: string, input: { expiresAt?: Date | null } = {}) {
+    return this.managedWorkerService.rotateCredential(principal, workerId, credentialId, input)
+  }
+
+  revokeManagedWorkerCredential(principal: CloudPrincipal, workerId: string, credentialId: string) {
+    return this.managedWorkerService.revokeCredential(principal, workerId, credentialId)
+  }
+
+  recordManagedWorkerHeartbeat(principal: CloudPrincipal, workerId: string, input: ManagedWorkerHeartbeatRequest = {}) {
+    return this.managedWorkerService.recordHeartbeat(principal, workerId, input)
+  }
+
+  listManagedWorkerHeartbeats(principal: CloudPrincipal, input: { workerId?: string | null, limit?: number | null } = {}) {
+    return this.managedWorkerService.listHeartbeats(principal, input)
   }
 
   async createSession(principal: CloudPrincipal, input: {
@@ -3840,6 +3893,10 @@ export class CloudSessionService {
       'maxActiveWorkersPerOrg',
     ))
     return limit ? { orgId: org.orgId, limit } : null
+  }
+
+  private auditActor(principal: CloudPrincipal) {
+    return importAuditActor(principal)
   }
 
   private byokAuditActor(principal: CloudPrincipal) {

@@ -95,6 +95,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '005_usage_quotas_rate_limits',
         '006_billing_subscriptions',
         '007_scale_foundation',
+        '008_managed_workers',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))

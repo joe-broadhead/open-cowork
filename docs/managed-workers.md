@@ -171,6 +171,40 @@ Worker credentials are:
 The worker principal contains `workerId`, `poolId`, tenant scope, credential
 id, scopes, expiry, and status. It does not inherit user/admin authority.
 
+### Phase 1 Control Plane Surface
+
+Phase 1 implements worker identity and lifecycle only. It intentionally does
+not implement work claiming or execution routing.
+
+Admin-managed endpoints:
+
+- `GET /api/admin/worker-pools`
+- `POST /api/admin/worker-pools`
+- `POST /api/admin/worker-pools/{poolId}/update`
+- `GET /api/admin/workers`
+- `POST /api/admin/workers`
+- `GET /api/admin/workers/{workerId}`
+- `POST /api/admin/workers/{workerId}/activate`
+- `POST /api/admin/workers/{workerId}/pause`
+- `POST /api/admin/workers/{workerId}/resume`
+- `POST /api/admin/workers/{workerId}/drain`
+- `POST /api/admin/workers/{workerId}/retire`
+- `POST /api/admin/workers/{workerId}/revoke`
+- `GET /api/admin/workers/{workerId}/credentials`
+- `POST /api/admin/workers/{workerId}/credentials`
+- `POST /api/admin/workers/{workerId}/credentials/{credentialId}/rotate`
+- `POST /api/admin/workers/{workerId}/credentials/{credentialId}/revoke`
+- `GET /api/admin/workers/{workerId}/heartbeats`
+
+Worker self endpoint:
+
+- `POST /api/workers/{workerId}/heartbeat`
+
+Worker credentials authenticate only the worker self endpoint. They cannot call
+tenant admin APIs, Desktop APIs, Gateway APIs, BYOK APIs, billing APIs, or
+work-claim APIs. Raw worker credential values are returned once at issuance and
+are never returned by list/detail APIs.
+
 ## Lease And Fencing Contract
 
 Every claimable work unit must carry or reference:

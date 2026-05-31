@@ -562,6 +562,81 @@ export const CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS = [
     ON cloud_worker_leases (tenant_id, session_id, lease_expires_at_ms)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_MIGRATION_ID = '008_managed_workers'
+
+export const CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_worker_pools (
+    pool_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text REFERENCES cloud_tenants(tenant_id) ON DELETE CASCADE,
+    name text NOT NULL,
+    mode text NOT NULL,
+    status text NOT NULL,
+    region text,
+    capabilities jsonb NOT NULL,
+    max_workers integer,
+    max_concurrent_work integer,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_worker_pools_org_idx
+    ON cloud_worker_pools (org_id, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_managed_workers (
+    worker_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text REFERENCES cloud_tenants(tenant_id) ON DELETE CASCADE,
+    pool_id text NOT NULL REFERENCES cloud_worker_pools(pool_id) ON DELETE CASCADE,
+    display_name text NOT NULL,
+    status text NOT NULL,
+    version text,
+    capabilities jsonb NOT NULL,
+    last_heartbeat_at timestamptz,
+    last_error_code text,
+    last_error_summary text,
+    current_load integer NOT NULL DEFAULT 0,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    revoked_at timestamptz
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_managed_workers_org_pool_idx
+    ON cloud_managed_workers (org_id, pool_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_managed_workers_org_status_idx
+    ON cloud_managed_workers (org_id, status, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_worker_credentials (
+    credential_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    worker_id text NOT NULL REFERENCES cloud_managed_workers(worker_id) ON DELETE CASCADE,
+    pool_id text NOT NULL REFERENCES cloud_worker_pools(pool_id) ON DELETE CASCADE,
+    token_hash text UNIQUE NOT NULL,
+    scopes jsonb NOT NULL,
+    last4 text NOT NULL,
+    expires_at timestamptz NOT NULL,
+    revoked_at timestamptz,
+    last_used_at timestamptz,
+    rotated_from_credential_id text REFERENCES cloud_worker_credentials(credential_id) ON DELETE SET NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_worker_credentials_worker_idx
+    ON cloud_worker_credentials (org_id, worker_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS cloud_managed_worker_heartbeats (
+    worker_id text PRIMARY KEY REFERENCES cloud_managed_workers(worker_id) ON DELETE CASCADE,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    tenant_id text REFERENCES cloud_tenants(tenant_id) ON DELETE CASCADE,
+    pool_id text NOT NULL REFERENCES cloud_worker_pools(pool_id) ON DELETE CASCADE,
+    version text,
+    capabilities jsonb NOT NULL,
+    current_load integer NOT NULL,
+    active_work_ids jsonb NOT NULL,
+    last_error_code text,
+    last_error_summary text,
+    heartbeat_sequence bigint,
+    received_at timestamptz NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_managed_worker_heartbeats_org_idx
+    ON cloud_managed_worker_heartbeats (org_id, received_at DESC)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -590,5 +665,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_SCALE_FOUNDATION_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_MANAGED_WORKERS_STATEMENTS,
   },
 ] as const

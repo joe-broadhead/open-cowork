@@ -683,6 +683,105 @@ test('cloud control plane resolves org accounts memberships, tokens, and audit e
   assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'api_token.created'), true)
 })
 
+test('cloud control plane manages worker lifecycle credentials and heartbeats', () => {
+  const store = seededStore()
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'org-1', name: 'Acme' })
+
+  assert.throws(
+    () => store.createManagedWorkerPool({
+      orgId: org.orgId,
+      name: 'External pool',
+      mode: 'customer_hosted',
+    }),
+    /not supported in v1/,
+  )
+
+  const pool = store.createManagedWorkerPool({
+    poolId: 'pool-1',
+    orgId: org.orgId,
+    name: 'Internal pool',
+    mode: 'self_hosted',
+    maxWorkers: 3,
+    maxConcurrentWork: 6,
+    actor: { actorType: 'user', actorId: 'user-1', accountId: 'user-1' },
+  })
+  assert.equal(pool.status, 'active')
+  assert.equal(store.listManagedWorkerPools(org.orgId)[0]?.poolId, 'pool-1')
+
+  const worker = store.registerManagedWorker({
+    workerId: 'worker-1',
+    orgId: org.orgId,
+    poolId: pool.poolId,
+    displayName: 'Worker one',
+  })
+  assert.equal(worker.status, 'pending')
+  assert.throws(
+    () => store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'draining' }),
+    /Invalid managed worker transition/,
+  )
+  assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'active' })?.status, 'active')
+  assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'paused' })?.status, 'paused')
+  assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'active' })?.status, 'active')
+
+  assert.throws(
+    () => store.issueManagedWorkerCredential({
+      orgId: org.orgId,
+      workerId: worker.workerId,
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      expiresAt: new Date('2026-01-01T00:00:00.000Z'),
+    }),
+    /expiration must be in the future/,
+  )
+
+  const issued = store.issueManagedWorkerCredential({
+    orgId: org.orgId,
+    workerId: worker.workerId,
+    secret: 'managed-worker-secret',
+  })
+  assert.match(issued.plaintext, /^ocw_/)
+  assert.equal(store.listManagedWorkerCredentials(org.orgId, worker.workerId)[0]?.tokenHash.includes(issued.plaintext), false)
+  assert.equal(store.findManagedWorkerCredentialByPlaintext(issued.plaintext)?.worker.workerId, worker.workerId)
+
+  const heartbeat = store.recordManagedWorkerHeartbeat({
+    orgId: org.orgId,
+    workerId: worker.workerId,
+    credentialId: issued.credential.credentialId,
+    version: '1.0.0',
+    currentLoad: 2,
+    activeWorkIds: ['run-1', 'run-1'],
+    lastErrorSummary: 'token=secret should redact',
+    heartbeatSequence: 7,
+  })
+  assert.deepEqual(heartbeat.activeWorkIds, ['run-1'])
+  assert.equal(heartbeat.currentLoad, 2)
+  assert.equal(JSON.stringify(heartbeat).includes('secret'), false)
+
+  const revokedCredential = store.revokeManagedWorkerCredential({
+    orgId: org.orgId,
+    workerId: worker.workerId,
+    credentialId: issued.credential.credentialId,
+  })
+  assert.equal(revokedCredential?.revokedAt !== null, true)
+  assert.equal(store.findManagedWorkerCredentialByPlaintext(issued.plaintext), null)
+  const heartbeatRejectionAudit = store.listAuditEvents(org.orgId, 20)
+  assert.equal(heartbeatRejectionAudit.some((event) => (
+    event.eventType === 'managed_worker_heartbeat.rejected'
+    && event.metadata.reason === 'credential_revoked'
+  )), true)
+  assert.equal(JSON.stringify(heartbeatRejectionAudit).includes(issued.plaintext), false)
+  assert.throws(
+    () => store.recordManagedWorkerHeartbeat({
+      orgId: org.orgId,
+      workerId: worker.workerId,
+      credentialId: issued.credential.credentialId,
+    }),
+    /revoked/,
+  )
+
+  assert.equal(store.updateManagedWorkerStatus({ orgId: org.orgId, workerId: worker.workerId, status: 'revoked' })?.status, 'revoked')
+  assert.equal(store.listAuditEvents(org.orgId).some((event) => event.eventType === 'managed_worker.revoked'), true)
+})
+
 test('cloud control plane stores headless channel bindings, interactions, cursors, and deliveries', () => {
   const store = seededStore()
   const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })

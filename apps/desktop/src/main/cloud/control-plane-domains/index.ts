@@ -1,4 +1,5 @@
 export type { IdentityControlPlaneStore, ApiTokenControlPlaneStore } from './identity.ts'
+export type { ManagedWorkersControlPlaneStore } from './workers.ts'
 export type { BillingControlPlaneStore, UsageControlPlaneStore, QuotaControlPlaneStore } from './billing.ts'
 export type { ByokControlPlaneStore } from './byok.ts'
 export type { ChannelControlPlaneStore } from './channels.ts'
