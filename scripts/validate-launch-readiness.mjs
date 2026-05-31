@@ -155,7 +155,9 @@ for (const category of [
 for (const command of [
   'pnpm deploy:load:plan',
   'pnpm deploy:load',
+  'pnpm deploy:load:strict',
   'pnpm deploy:soak',
+  'pnpm deploy:soak:strict',
   'pnpm deploy:continuation:smoke',
   'pnpm deploy:gateway:smoke',
   'pnpm deploy:gcp:preflight',
@@ -281,7 +283,9 @@ for (const phrase of [
   'launch-evidence-matrix.json',
   'pnpm deploy:load:plan',
   'pnpm deploy:load',
+  'pnpm deploy:load:strict',
   'pnpm deploy:soak',
+  'pnpm deploy:soak:strict',
   'pnpm deploy:launch:validate',
 ]) {
   assertIncludes(releaseChecklistPath, phrase)
@@ -291,12 +295,20 @@ const packageJson = readJson(packagePath)
 for (const script of [
   'deploy:load:plan',
   'deploy:load',
+  'deploy:load:strict',
   'deploy:soak',
+  'deploy:soak:strict',
   'deploy:launch:validate',
 ]) {
   if (typeof packageJson.scripts?.[script] !== 'string') {
     throw new Error(`${packagePath} is missing ${script}`)
   }
+}
+if (!packageJson.scripts?.['deploy:load:strict']?.includes('--strict')) {
+  throw new Error(`${packagePath} deploy:load:strict must run launch readiness with --strict`)
+}
+if (!packageJson.scripts?.['deploy:soak:strict']?.includes('--strict')) {
+  throw new Error(`${packagePath} deploy:soak:strict must run launch readiness with --strict`)
 }
 
 log('launch readiness artifacts validated')

@@ -75,8 +75,8 @@
       ],
       "requiredCommands": [
         "pnpm deploy:load:plan",
-        "pnpm deploy:load",
-        "pnpm deploy:soak"
+        "pnpm deploy:load:strict",
+        "pnpm deploy:soak:strict"
       ],
       "coveredSurfaces": [
         "cloud session create/list/prompt/event replay",

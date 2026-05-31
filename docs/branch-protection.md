@@ -12,6 +12,7 @@ checks:
 | Check | Workflow | Purpose |
 | --- | --- | --- |
 | `validate` | CI | Lint, audit, tests, typecheck, performance gate, and full build. |
+| `cloud-gates` | CI | OpenCode portability proof, Postgres cloud concurrency, Docker/Compose smoke, Helm validation, deployment validators, launch validators, and operations validators. |
 | `macos-build` | CI | macOS packaging and packaged-app smoke validation. |
 | `linux-package` | CI | Linux packaging and packaged-app smoke validation. |
 | `docs` | CI | Strict MkDocs build for every PR. |

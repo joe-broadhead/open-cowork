@@ -88,8 +88,8 @@ for (const phrase of [
   'cloud.billing.provider=none',
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:continuation:smoke',
-  'pnpm deploy:load',
-  'pnpm deploy:soak',
+  'pnpm deploy:load:strict',
+  'pnpm deploy:soak:strict',
 ]) {
   assertIncludes('docs/runbooks/private-beta-launch.md', phrase)
 }
@@ -277,8 +277,8 @@ for (const command of [
   'pnpm deploy:launch:validate',
   'pnpm ops:validate',
   'pnpm deploy:continuation:smoke',
-  'pnpm deploy:load',
-  'pnpm deploy:soak',
+  'pnpm deploy:load:strict',
+  'pnpm deploy:soak:strict',
 ]) {
   assertArrayIncludes(profile?.requiredSmokeCommands, command, 'launchProfile.requiredSmokeCommands')
 }
@@ -422,7 +422,7 @@ for (const artifact of [
 }
 for (const command of [
   'pnpm deploy:private-beta:validate',
-  'pnpm deploy:validate',
+  'pnpm deploy:validate -- --require-tools',
   'pnpm deploy:launch:validate',
   'pnpm ops:validate',
   'pnpm test',

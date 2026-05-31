@@ -63,7 +63,16 @@ The repository includes:
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
+  - reruns Cloud Web, Desktop/Web/Gateway continuation, Docker/Compose,
+    Helm, deployment, launch, private-beta, and ops readiness gates before
+    publishing a tag
   - creates GitHub Releases automatically for version tags
+  - publishes Cloud and Gateway images to GHCR using immutable release tags
+    and captures their registry digests
+  - generates Cloud/Gateway image SBOMs and vulnerability scan reports
+  - signs Cloud/Gateway image digests with keyless Cosign
+  - publishes registry provenance and SBOM attestations for Cloud/Gateway
+    image subjects
   - publishes `SHA256SUMS.txt`
   - publishes `latest-mac.yml` only for signed/notarized macOS release
     artifacts, so unsigned preview builds stay on the manual update path
@@ -93,6 +102,60 @@ gh attestation verify ./Open-Cowork-<version>-arm64.dmg --repo joe-broadhead/ope
 ```
 
 Replace the filename with the artifact you downloaded.
+
+## Verify Cloud and Gateway images
+
+Release images are published to GHCR as:
+
+```text
+ghcr.io/<owner>/open-cowork-cloud:<tag>
+ghcr.io/<owner>/open-cowork-gateway:<tag>
+```
+
+Every release also uploads image evidence files:
+
+```text
+open-cowork-cloud.image.json
+open-cowork-cloud.image.sbom.cdx.json
+open-cowork-cloud.image.scan.grype.json
+open-cowork-cloud.image.cosign-verify.json
+open-cowork-gateway.image.json
+open-cowork-gateway.image.sbom.cdx.json
+open-cowork-gateway.image.scan.grype.json
+open-cowork-gateway.image.cosign-verify.json
+```
+
+Pin deployments by the `digestRef` value from the matching
+`*.image.json` file, not by `latest` or another mutable tag.
+
+Verify a Cloud image signature with Cosign:
+
+```bash
+digest_ref="$(jq -r .digestRef open-cowork-cloud.image.json)"
+cosign verify "$digest_ref" \
+  --certificate-identity-regexp '^https://github.com/joe-broadhead/open-cowork/.github/workflows/release.yml@refs/tags/v[0-9].*$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Verify registry provenance and SBOM attestations with GitHub:
+
+```bash
+gh attestation verify "oci://${digest_ref}" \
+  --repo joe-broadhead/open-cowork \
+  --signer-workflow joe-broadhead/open-cowork/.github/workflows/release.yml
+
+gh attestation verify "oci://${digest_ref}" \
+  --repo joe-broadhead/open-cowork \
+  --signer-workflow joe-broadhead/open-cowork/.github/workflows/release.yml \
+  --predicate-type https://cyclonedx.org/bom
+```
+
+Repeat the same commands with `open-cowork-gateway.image.json` for the
+Gateway image. Treat the `*.image.scan.grype.json` files as release
+evidence: final `vX.Y.Z` image tags are published only after SBOM
+generation, vulnerability scanning, signing, and registry attestations
+complete, and a release must not publish if the image scan reaches the
+workflow threshold.
 
 Linux `.AppImage` and `.deb` artifacts are verified with
 `SHA256SUMS.txt`, GitHub build provenance, and `SHA256SUMS.txt.asc` when

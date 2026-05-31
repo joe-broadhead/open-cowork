@@ -167,8 +167,8 @@ test('private beta launch profile template captures launch decisions and evidenc
     'pnpm deploy:launch:validate',
     'pnpm ops:validate',
     'pnpm deploy:continuation:smoke',
-    'pnpm deploy:load',
-    'pnpm deploy:soak',
+    'pnpm deploy:load:strict',
+    'pnpm deploy:soak:strict',
   ]) {
     assert.ok(template.profile.requiredSmokeCommands.includes(command))
   }

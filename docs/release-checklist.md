@@ -14,10 +14,15 @@ Reference workflows in the repository root:
 ### Repository quality
 
 - [ ] `pnpm test`
+- [ ] `pnpm test:cloud-web`
+- [ ] `pnpm test:cloud-continuation`
 - [ ] `pnpm test:renderer`
 - [ ] `pnpm typecheck`
 - [ ] `pnpm lint`
 - [ ] `pnpm perf:check`
+- [ ] `pnpm deploy:validate -- --require-tools` has passed in an environment
+      with Docker and Helm installed; static fallback output is not release
+      evidence.
 - [ ] `pnpm deploy:launch:validate`
 - [ ] `pnpm deploy:private-beta:validate`
 - [ ] `pnpm ops:validate`
@@ -69,6 +74,9 @@ Reference workflows in the repository root:
 - [ ] the release repo or fork has the signing inputs expected by the release workflow (`MAC_CERTIFICATE_P12_BASE64`, `MAC_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`); a first `v*` tag intentionally fails without those inputs unless the unsigned preview override is enabled
 - [ ] Linux artifacts are either covered by a detached `SHA256SUMS.txt.asc` signature (`OPEN_COWORK_RELEASE_GPG_PRIVATE_KEY`, optional `OPEN_COWORK_RELEASE_GPG_PASSPHRASE`) or explicitly documented as unsigned `v0.x` artifacts verified through `SHA256SUMS.txt` plus GitHub provenance
 - [ ] release assets still include `SHA256SUMS.txt`, `SHA256SUMS.txt.asc` when checksum signing is configured, `THIRD_PARTY_NOTICES.md`, `THIRD_PARTY_LICENSES/`, SBOMs, and provenance attestation
+- [ ] GHCR Cloud and Gateway images have immutable digest metadata, Cosign
+      signatures, image SBOMs, image vulnerability scan JSON, and registry
+      provenance/SBOM attestations.
 - [ ] signed macOS releases include `latest-mac.yml`; unsigned preview releases do not include signed update feed metadata
 - [ ] packaged signed-update marker is schema version 2 and contains only `signedInstallEligible`, `feedConfigured`, `releaseSourceKind`, and `channel` metadata
 - [ ] downstream/private update release sources have no tokens, signed URL query strings, bucket credentials, or static headers in renderer IPC payloads, logs, diagnostics, or packaged marker files
@@ -104,9 +112,9 @@ Reference workflows in the repository root:
 - [ ] for managed BYOK private beta, `pnpm deploy:private-beta:validate`
       passed and `docs/runbooks/private-beta-launch.md` has an owner,
       design-partner checklist, support path, and known limits.
-- [ ] `pnpm deploy:load` passed in strict mode against the production-like
+- [ ] `pnpm deploy:load:strict` passed against the production-like
       Cloud/Gateway deployment.
-- [ ] `pnpm deploy:soak` passed in strict mode against the production-like
+- [ ] `pnpm deploy:soak:strict` passed against the production-like
       Cloud/Gateway deployment.
 - [ ] load and soak JSON/Markdown reports are attached to the release or
       downstream operations evidence.
@@ -134,8 +142,21 @@ git push origin vX.Y.Z
    - Linux deb artifacts
    - `SHA256SUMS.txt`
    - `SHA256SUMS.txt.asc` when checksum signing is configured
-4. Smoke-test at least one macOS build and one Linux build.
-5. For signed macOS releases, run a staging update check from version
+   - `sbom.cdx.json` and `sbom.spdx.json`
+   - `open-cowork-cloud.image.json`
+   - `open-cowork-cloud.image.sbom.cdx.json`
+   - `open-cowork-cloud.image.scan.grype.json`
+   - `open-cowork-cloud.image.cosign-verify.json`
+   - `open-cowork-gateway.image.json`
+   - `open-cowork-gateway.image.sbom.cdx.json`
+   - `open-cowork-gateway.image.scan.grype.json`
+   - `open-cowork-gateway.image.cosign-verify.json`
+4. Confirm Cloud and Gateway `vX.Y.Z` GHCR tags point at the
+   `digestRef` values in `open-cowork-*.image.json`; those final tags
+   must be created only after SBOM, scan, signing, and attestation steps
+   succeed.
+5. Smoke-test at least one macOS build and one Linux build.
+6. For signed macOS releases, run a staging update check from version
    `N` to `N+1`: install the previous signed build, open Settings, check
    for updates, download the new signed update, restart to install, and
    confirm the app relaunches on the new version. Do not perform this
@@ -146,6 +167,10 @@ git push origin vX.Y.Z
 - [ ] sanity-check downloads from the GitHub Release page
 - [ ] verify checksums against `SHA256SUMS.txt`
 - [ ] if `SHA256SUMS.txt.asc` is present, verify the detached signature before trusting the checksums
+- [ ] verify Cloud and Gateway image signatures with Cosign against the release
+      workflow identity and immutable digest refs from the `*.image.json` files.
+- [ ] verify Cloud and Gateway image provenance/SBOM attestations with
+      `gh attestation verify` against the same digest refs.
 - [ ] disable the `OPEN_COWORK_ALLOW_UNSIGNED_RELEASES` repository variable if it was enabled for an unsigned preview release
 - [ ] update any milestone or release tracking issue
 - [ ] document known caveats if signing/notarization is still pending

@@ -248,8 +248,8 @@ for (const phrase of [
   'OPEN_COWORK_LOAD_STRICT',
   'private-beta',
   'public-beta',
-  'pnpm deploy:load',
-  'pnpm deploy:soak',
+  'pnpm deploy:load:strict',
+  'pnpm deploy:soak:strict',
 ]) {
   assertIncludes(launchRunbookPath, phrase)
 }

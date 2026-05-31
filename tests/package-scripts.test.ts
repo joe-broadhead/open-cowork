@@ -212,5 +212,6 @@ test('ci and release workflows use canonical release gate scripts', () => {
     assert.match(releaseWorkflow, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must preserve ${evidence}`)
   }
 
-  assert.match(packagingDocs, /gh attestation verify/)
+  assert.match(packagingDocs, /gh attestation verify "oci:\/\/\$\{digest_ref\}"/)
+  assert.match(packagingDocs, /--predicate-type https:\/\/cyclonedx\.org\/bom/)
 })
