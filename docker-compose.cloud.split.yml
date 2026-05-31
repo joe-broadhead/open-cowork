@@ -26,6 +26,7 @@ services:
       OPEN_COWORK_CLOUD_PUBLIC_URL: http://localhost:8787
       OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
       OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: 30000
       OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: "false"
       OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork
       OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: minio
@@ -62,6 +63,7 @@ services:
       OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
       OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
       OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: 30000
       OPEN_COWORK_CLOUD_WORKER_ID: compose-worker-1
       OPEN_COWORK_CLOUD_WORKER_POLL_MS: 1000
       OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: "true"
@@ -99,6 +101,7 @@ services:
       OPEN_COWORK_CLOUD_SECRET_KEY: change-me-for-local-dev
       OPEN_COWORK_CLOUD_SERVICE_NAME: open-cowork-cloud
       OPEN_COWORK_CLOUD_LOG_FORMAT: json
+      OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: 30000
       OPEN_COWORK_CLOUD_SCHEDULER_ID: compose-scheduler-1
       OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS: 1000
       OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: postgres://open_cowork:open_cowork@postgres:5432/open_cowork

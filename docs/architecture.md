@@ -127,12 +127,12 @@ actions, cloud-safe actions, policy-disabled actions, offline cached state, and
 future/deferred surfaces before the renderer opens project pickers, exposes
 host-path diffs, enables custom content, or sends mutations.
 
-Future laptop-independent execution is specified as a managed worker service
-plane, not as a new runtime. Managed workers are registered cloud execution
-capacity that claim fenced work from the Cloud control plane, run OpenCode, and
-write durable events/projections/checkpoints back through the same contracts
-used by web, desktop cloud workspaces, and gateway clients. The architecture,
-lifecycle, lease, and threat model are defined in
+Laptop-independent execution is specified as a managed worker service plane,
+not as a new runtime. Managed workers are registered cloud execution capacity
+that claim fenced work from the Cloud control plane, run OpenCode, and write
+durable events/projections/checkpoints back through the same contracts used by
+web, desktop cloud workspaces, and gateway clients. The architecture,
+lifecycle, lease, threat model, and operations contract are defined in
 [Managed Worker Service Plane](managed-workers.md).
 
 ## Cloud Core Modularity

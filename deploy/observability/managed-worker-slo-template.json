@@ -1,0 +1,72 @@
+{
+  "name": "open-cowork-managed-worker-slo-template",
+  "description": "Provider-neutral SLO starter template for managed worker service-plane operations. Copy to a private operations repo before adding real targets or environment names.",
+  "environment": "private-beta",
+  "publicTemplate": true,
+  "slos": [
+    {
+      "id": "worker-heartbeat-freshness",
+      "objective": "Active worker heartbeat age remains below the environment target.",
+      "metric": "open_cowork_cloud_worker_heartbeat_age_ms",
+      "exampleTarget": "p95 < 60000ms"
+    },
+    {
+      "id": "command-queue-age",
+      "objective": "Queued cloud commands are claimed before user-visible backlog builds.",
+      "metric": "open_cowork_cloud_command_oldest_age_ms",
+      "exampleTarget": "p95 < 300000ms"
+    },
+    {
+      "id": "claim-latency",
+      "objective": "Workers claim eligible work quickly after it becomes runnable.",
+      "metric": "open_cowork_cloud_runnable_session_claim_duration_ms",
+      "exampleTarget": "p95 < 5000ms"
+    },
+    {
+      "id": "command-latency",
+      "objective": "Worker command execution completes within the plan-specific target.",
+      "metric": "open_cowork_cloud_worker_command_duration_ms",
+      "exampleTarget": "p95 < 600000ms"
+    },
+    {
+      "id": "workflow-latency",
+      "objective": "Due workflows start and finish without scheduler or worker backlog.",
+      "metric": "open_cowork_cloud_scheduler_claims_total",
+      "exampleTarget": "no missed due workflow window"
+    },
+    {
+      "id": "projection-lag",
+      "objective": "Session projections remain close to durable event sequence.",
+      "metric": "open_cowork_cloud_projection_lag_events",
+      "exampleTarget": "p95 < 25 events"
+    },
+    {
+      "id": "checkpoint-failures",
+      "objective": "Checkpoint restore/save failures remain rare and actionable.",
+      "metric": "open_cowork_object_store_errors_total",
+      "exampleTarget": "< 1 percent of worker commands"
+    },
+    {
+      "id": "byok-reveal-failures",
+      "objective": "BYOK reveal failures are visible without exposing plaintext.",
+      "metric": "open_cowork_cloud_byok_reveal_failures_total",
+      "exampleTarget": "zero sustained failures by org/provider"
+    },
+    {
+      "id": "stale-lease-reclaims",
+      "objective": "Lease reclaims happen during drills and incidents, not steady state.",
+      "metric": "open_cowork_cloud_worker_expired_leases_reaped_total",
+      "exampleTarget": "near zero outside failover drills"
+    },
+    {
+      "id": "gateway-worker-lag",
+      "objective": "Gateway delivery lag caused by worker backlog remains bounded.",
+      "metric": "open_cowork_gateway_delivery_retries_total",
+      "exampleTarget": "no sustained retry increase caused by worker queue age"
+    }
+  ],
+  "redactionRules": [
+    "Do not include provider keys, API tokens, cookies, signed URLs, channel secrets, local paths, raw prompt text, customer names, customer emails, private domains, project ids, account ids, or prices in public SLO reports.",
+    "Store environment-specific SLO targets and go/no-go evidence in a private operations repo."
+  ]
+}

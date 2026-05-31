@@ -153,6 +153,8 @@ provider control plane.
 
 - Enable `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED=true` before scaling worker
   replicas beyond one.
+- Set `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` and the platform termination grace
+  so active command loops can finish after a drain request.
 - Keep worker runtime roots ephemeral for horizontally scaled Kubernetes
   workers unless a single-worker persistent root is intentionally configured.
 - Run at least one scheduler. Multiple schedulers are safe when they use
@@ -166,11 +168,13 @@ provider control plane.
   distributed across nodes and zones.
 - Monitor worker heartbeat age, scheduler heartbeat age, command latency,
   projection lag, and lease reclaim counts.
-- Future managed worker pools must follow the
+- Managed worker pools must follow the
   [Managed Worker Service Plane](managed-workers.md) contract before they are
   exposed as production capacity: explicit worker identity, scoped expiring
   credentials, lifecycle state, durable work claims, lease-token fencing,
   checkpoint/artifact ownership, recovery rules, quotas, and operator runbooks.
+- Use the public templates under `deploy/managed-workers/` for self-hosted and
+  managed-worker pool deployment, release evidence, and restore drills.
 - The first supported managed-worker mode is control-plane-owned worker pools.
   Do not connect customer-hosted workers to a separate managed SaaS control
   plane until a separate trust review, update policy, and data-residency model

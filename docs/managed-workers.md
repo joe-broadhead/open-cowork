@@ -5,8 +5,8 @@ description: Architecture and threat model for laptop-independent Open Cowork ex
 
 # Managed Worker Service Plane
 
-The managed worker service plane is the future execution-capacity layer for
-cloud work that should continue without a user's desktop staying online. It
+The managed worker service plane is the execution-capacity layer for cloud work
+that should continue without a user's desktop staying online. It
 composes the existing Open Cowork Cloud control plane and the OpenCode runtime.
 It is not a second agent runtime, session store, scheduler, tool system, MCP
 host, or approval engine.
@@ -405,6 +405,135 @@ Workers declare:
 The control plane can reject, pause, or drain incompatible workers. Rolling
 updates use drain first, then revoke only for emergency response.
 
+## Phase 5 Operations Contract
+
+Production worker operations are template-based. Public repo artifacts define
+the safe shape; real provider values and customer evidence live in downstream
+private operations repositories.
+
+Supported deployment modes:
+
+- `self_hosted`: the same organization operates Cloud, workers, scheduler,
+  object storage, Postgres, and Gateway. Billing can be `none` or `stub`.
+- `saas_operated`: the managed Open Cowork operator runs Cloud and workers for
+  BYOK customers. Public templates define the evidence format; private repos
+  hold real project ids, domains, customer data, prices, and go/no-go reports.
+- `customer_hosted`: deferred from v1. Do not connect customer-hosted workers
+  to a separate managed SaaS control plane until a separate trust, update,
+  networking, liability, and data-residency review is complete.
+
+Required deployer artifacts:
+
+- config template for Cloud web, worker, scheduler, object store, secret
+  adapter, auth, observability, quotas, and billing mode
+- secret inventory with refs only, not plaintext
+- network requirements for private Postgres/object store/KMS and public Web
+  ingress
+- worker pool sizing guidance and queue/claim-based scaling policy
+- rolling update, drain, rollback, and emergency revoke workflow
+- SLO/alert template and dashboard mapping
+- backup/restore drill with Postgres and object-store consistency checks
+- release evidence template with image digest/checksum/signature and
+  compatibility decision
+
+The concrete public templates live under `deploy/managed-workers/`.
+
+### Deployment Modes
+
+| Mode | Required proof | Failure behavior |
+| --- | --- | --- |
+| Self-hosted internal pool | `pnpm deploy:validate`, `pnpm ops:validate`, one worker smoke, one restore rehearsal | keep reads available, scale worker to zero, recover through durable claims |
+| SaaS-operated pool | release evidence, SLO evidence, restore drill, support/on-call path, BYOK redaction proof | pause/drain affected pool, preserve tenant reads/exports, revoke compromised workers |
+| Customer-hosted pool | unsupported in v1 | fail closed in config/docs until trust review is done |
+
+### Rolling Updates
+
+Worker updates must preserve durable ownership:
+
+1. Set the worker or pool to `draining`.
+2. Wait for current load to reach zero or for approved active commands to
+   checkpoint.
+3. Confirm queue age, claim latency, BYOK reveal errors, object-store errors,
+   stale-owner rejections, and dead letters are within SLO.
+4. Roll the worker image by immutable digest or release tag with
+   `maxUnavailable=0`, `maxSurge=1`, and a termination grace at least as long
+   as `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS`.
+5. Confirm new heartbeats report the expected Open Cowork version, OpenCode
+   runtime version, service-plane protocol, event/projection contract, and
+   checkpoint schema.
+6. Resume the pool and run a bounded session prompt, workflow, checkpoint, and
+   Gateway-originated prompt smoke where applicable.
+
+The worker role waits for an active command loop to finish during process
+shutdown until the configured shutdown grace elapses. Operators should still
+drain before termination; the grace window is a last line of defense, not the
+primary rollout mechanism.
+
+### Rollback And Emergency Revoke
+
+Rollback is image-based. Additive schema changes stay in place and are fixed
+forward. Roll back workers first when OpenCode execution, BYOK injection,
+checkpointing, or provider/model execution regresses. Roll back web or
+scheduler only when their own route, projection, auth, or claim behavior is
+the failing surface.
+
+Emergency revoke is for suspected worker token, host, image, runtime, BYOK, or
+object-store compromise:
+
+1. Revoke the worker credential.
+2. Mark the worker `revoked`.
+3. Stop the worker host or deployment.
+4. Let existing leases expire or be reaped; do not hand-edit command/session
+   records.
+5. Start a replacement worker from a known-good image and verify stale-owner
+   writes are rejected.
+6. Preserve redacted audit events, heartbeat rejections, metrics, and
+   diagnostics for incident review.
+
+### SLO And Alert Template
+
+Operators should define concrete targets per environment. Public examples
+should remain generic:
+
+| Signal | Suggested private-beta starting point | Alert trigger |
+| --- | --- | --- |
+| Worker heartbeat age | p95 under 60s | no active worker heartbeat for 2 minutes |
+| Queue age | p95 under 5 minutes | oldest command over 10 minutes |
+| Claim latency | p95 under 5 seconds | p95 over 30 seconds |
+| Command latency | p95 under 10 minutes | p95 over 30 minutes |
+| Workflow latency | p95 under schedule interval + 10 minutes | due workflows do not start |
+| Projection lag | latest projection within 25 events | lag keeps growing |
+| Checkpoint failure rate | under 1 percent | sustained failures |
+| Object-store error rate | under 1 percent | any sustained write failure |
+| BYOK reveal failure rate | under 1 percent | sustained failures by org/provider |
+| Stale lease reclaim count | near zero outside drills | spike after release |
+| Dead-letter count | zero | any new dead letter |
+| Quota denial count | expected under load tests | unexpected spike |
+| Auth failure count | low and bounded | spike by IP/org/token |
+| Gateway delivery lag | p95 under 5 minutes | lag caused by worker backlog |
+
+Metrics, alert rules, and dashboard starter assets live in
+`deploy/observability/`; `managed-worker-slo-template.json` defines the
+public-safe SLO evidence shape. Run `pnpm ops:validate` when these artifacts
+change.
+
+### Backup And Restore
+
+The restore order is fixed:
+
+1. Scale workers, scheduler, and Gateway to zero.
+2. Restore Postgres control-plane records first.
+3. Restore object-store artifacts/checkpoints to the same point in time.
+4. Start web only and verify sessions, projections, workflows, BYOK metadata,
+   worker records, audit rows, metrics, and diagnostics.
+5. Start one worker and run a bounded smoke prompt with checkpoint save.
+6. Start scheduler and verify a due workflow claim without double-fire.
+7. Start Gateway and verify delivery cursors resume without duplicates.
+
+Restore reports must prove checkpoint/artifact metadata matches restored
+blobs, session projection replay/repair works, workflow run status is
+consistent, and BYOK secret refs remain valid without exporting plaintext.
+
 ## Threat Model
 
 | Threat | Boundary affected | Mitigation | Evidence required | Residual risk |
@@ -423,12 +552,18 @@ updates use drain first, then revoke only for emergency response.
 | Worker image/version compromise | release to worker host | signed/checksummed images, compatibility gate, revoke/drain rollback | release validator, version rejection tests | running compromised image can act within scoped worker privileges |
 | Customer-hosted worker trust ambiguity | managed control plane to external worker | deferred from v1, separate design required before enablement | explicit unsupported config tests/docs | customers needing this mode wait for later phase |
 
-## Phase 1 And 2 Readiness
+## Phase Readiness
 
-Phase 1 can implement worker identity/lifecycle once this document is accepted.
-It must not add work claiming.
+Phase 1 implemented worker identity/lifecycle. It does not by itself make work
+claiming safe.
 
-Phase 2 can implement claims/fencing/recovery once Phase 1 is merged. It is the
-correctness gate for every later integration: workflow execution, gateway
-execution, quotas, and operations are not production-grade until real Postgres
-concurrency tests prove the lease and fencing contract.
+Phase 2 implements claims/fencing/recovery and is the correctness gate for
+workflow execution, gateway execution, quotas, and operations. Real Postgres
+concurrency tests must stay green for every change to leases, claims, queues,
+workflow due-run claims, or stale-owner rejection.
+
+Phase 5 is complete only when public deployer templates, runbooks, SLO/alert
+templates, restore drill templates, release evidence templates, and validators
+prove the worker path can be deployed, drained, rolled forward, rolled back,
+emergency-revoked, and restored without committing private managed-SaaS values
+to the public repository.

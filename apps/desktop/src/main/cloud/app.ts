@@ -128,6 +128,7 @@ export type CloudAppOptions = {
   port?: number
   workerPollMs?: number
   schedulerPollMs?: number
+  shutdownGraceMs?: number
   runtimeCacheMaxEntries?: number
   runtimeCacheIdleTtlMs?: number
   corsOrigin?: string | null
@@ -430,6 +431,7 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     port: parsePort(envValue(env, 'PORT') || envValue(env, 'OPEN_COWORK_CLOUD_PORT'), 8787),
     workerPollMs,
     schedulerPollMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS'), workerPollMs),
+    shutdownGraceMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS'), 30_000),
     runtimeCacheMaxEntries: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_MAX_ENTRIES'), 100),
     runtimeCacheIdleTtlMs: parsePositiveInt(envValue(env, 'OPEN_COWORK_CLOUD_RUNTIME_CACHE_IDLE_TTL_MS'), 30 * 60 * 1000),
     corsOrigin: envValue(env, 'OPEN_COWORK_CLOUD_CORS_ORIGIN'),
@@ -920,12 +922,48 @@ async function recordLoopError(
   })
 }
 
-function startWorkerLoop(worker: CloudWorker, pollMs: number, observability: CloudObservabilityAdapter | null) {
+type LoopStopper = () => Promise<void>
+
+async function waitForLoopDrain(
+  loopName: 'worker' | 'scheduler',
+  current: Promise<void> | null,
+  graceMs: number,
+  observability: CloudObservabilityAdapter | null,
+) {
+  if (!current) return
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutMarker = Symbol('shutdown-timeout')
+  const result = await Promise.race([
+    current.then(() => null),
+    new Promise<symbol>((resolveTimeout) => {
+      timeout = setTimeout(() => resolveTimeout(timeoutMarker), graceMs)
+    }),
+  ])
+  if (timeout) clearTimeout(timeout)
+  if (result === timeoutMarker) {
+    await observability?.log({
+      level: 'warn',
+      name: `cloud.${loopName}.shutdown_timeout`,
+      message: `Cloud ${loopName} loop did not finish before shutdown grace elapsed.`,
+      attributes: { grace_ms: graceMs },
+    })
+  }
+}
+
+function startWorkerLoop(
+  worker: CloudWorker,
+  pollMs: number,
+  observability: CloudObservabilityAdapter | null,
+  shutdownGraceMs: number,
+): LoopStopper {
   let active = false
+  let stopping = false
+  let current: Promise<void> | null = null
   const timer = setInterval(() => {
-    if (active) return
+    if (active || stopping) return
     active = true
-    void worker.processAllSessionCommands()
+    current = worker.processAllSessionCommands()
+      .then(() => undefined)
       .catch(async (error) => {
         await recordCloudWorkerMetric(observability, {
           name: 'open_cowork_cloud_worker_loop_failures_total',
@@ -936,17 +974,30 @@ function startWorkerLoop(worker: CloudWorker, pollMs: number, observability: Clo
       })
       .finally(() => {
         active = false
+        current = null
       })
   }, pollMs)
-  return () => clearInterval(timer)
+  return async () => {
+    stopping = true
+    clearInterval(timer)
+    await waitForLoopDrain('worker', current, shutdownGraceMs, observability)
+  }
 }
 
-function startSchedulerLoop(scheduler: CloudScheduler, pollMs: number, observability: CloudObservabilityAdapter | null) {
+function startSchedulerLoop(
+  scheduler: CloudScheduler,
+  pollMs: number,
+  observability: CloudObservabilityAdapter | null,
+  shutdownGraceMs: number,
+): LoopStopper {
   let active = false
+  let stopping = false
+  let current: Promise<void> | null = null
   const timer = setInterval(() => {
-    if (active) return
+    if (active || stopping) return
     active = true
-    void scheduler.processDueWorkflows()
+    current = scheduler.processDueWorkflows()
+      .then(() => undefined)
       .catch(async (error) => {
         await recordCloudSchedulerMetric(observability, {
           name: 'open_cowork_cloud_scheduler_failures_total',
@@ -957,9 +1008,14 @@ function startSchedulerLoop(scheduler: CloudScheduler, pollMs: number, observabi
       })
       .finally(() => {
         active = false
+        current = null
       })
   }, pollMs)
-  return () => clearInterval(timer)
+  return async () => {
+    stopping = true
+    clearInterval(timer)
+    await waitForLoopDrain('scheduler', current, shutdownGraceMs, observability)
+  }
 }
 
 function isMissingCheckpointError(error: unknown) {
@@ -1177,10 +1233,20 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       })
     : null
   const stopWorkerLoop = worker
-    ? startWorkerLoop(worker, options.workerPollMs || envOptions.workerPollMs, observability)
+    ? startWorkerLoop(
+      worker,
+      options.workerPollMs || envOptions.workerPollMs,
+      observability,
+      options.shutdownGraceMs || envOptions.shutdownGraceMs,
+    )
     : null
   const stopSchedulerLoop = scheduler
-    ? startSchedulerLoop(scheduler, options.schedulerPollMs || envOptions.schedulerPollMs, observability)
+    ? startSchedulerLoop(
+      scheduler,
+      options.schedulerPollMs || envOptions.schedulerPollMs,
+      observability,
+      options.shutdownGraceMs || envOptions.shutdownGraceMs,
+    )
     : null
 
   const webhookSecurity = isWorkflowWebhookSecurityStore(store) ? store : undefined
@@ -1227,8 +1293,10 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     observability,
     url,
     async close() {
-      stopWorkerLoop?.()
-      stopSchedulerLoop?.()
+      await Promise.all([
+        stopWorkerLoop?.(),
+        stopSchedulerLoop?.(),
+      ])
       runtimeUnsubscribe?.()
       await server?.close()
       await observability?.close?.()

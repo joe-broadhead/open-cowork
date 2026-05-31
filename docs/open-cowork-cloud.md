@@ -28,13 +28,12 @@ enabled for your deployment. Multiple workers can claim fenced sessions, and
 checkpointing externalizes the proven OpenCode runtime/XDG and workspace
 portable set so a different worker can restore before resuming a session.
 
-The future managed worker service plane builds on the same split-role model.
-It adds explicit worker pools, worker identity, lifecycle controls, durable
-leases, fencing tokens, recovery rules, quotas, and operations runbooks for
-laptop-independent cloud execution. The Phase 0 architecture and threat model
-are in [Managed Worker Service Plane](managed-workers.md). Until those later
-implementation phases land, cloud workers remain the current split-role worker
-processes described on this page.
+The managed worker service plane builds on the same split-role model. It adds
+explicit worker pools, worker identity, lifecycle controls, durable leases,
+fencing tokens, recovery rules, quotas, and operations runbooks for
+laptop-independent cloud execution. The architecture, threat model, and
+operations contract are in [Managed Worker Service Plane](managed-workers.md);
+public deployment templates live under `deploy/managed-workers/`.
 
 ## Workspace sync contract
 
@@ -507,6 +506,9 @@ OTLP/logging, backups, and restore.
 Managed BYOK operators should also follow `runbooks/managed-byok-saas.md`.
 That runbook covers org signup mode, token TTLs, invite/domain controls,
 billing setup, BYOK validation, gateway operations, and incident response.
+Managed worker operators should use `deploy/managed-workers/` for worker pool
+environment templates, Helm overlays, release evidence, and restore drill
+templates.
 
 Run deployment manifest validation before rollout:
 
@@ -743,6 +745,7 @@ Role-specific knobs:
 | `OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS` | `all-in-one` | Process queued commands inline for local/demo use. |
 | `OPEN_COWORK_CLOUD_WORKER_ID` | `worker`, `all-in-one` | Stable worker identity for leases and heartbeats. |
 | `OPEN_COWORK_CLOUD_WORKER_POLL_MS` | `worker`, `all-in-one` | Durable command polling interval. |
+| `OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS` | `worker`, `scheduler`, `all-in-one` | Grace window used during process shutdown to let an active worker/scheduler loop finish after a drain or termination signal. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_ID` | `scheduler`, `all-in-one` | Stable scheduler identity for heartbeats. |
 | `OPEN_COWORK_CLOUD_SCHEDULER_POLL_MS` | `scheduler`, `all-in-one` | Workflow scheduler polling interval. |
 

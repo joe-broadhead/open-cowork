@@ -52,8 +52,13 @@ test('managed worker architecture doc covers the phase 0 contract', () => {
   assert.match(doc, /Open Cowork owns the service-plane composition/)
   assert.match(doc, /No database transaction may remain open while OpenCode runs\./)
   assert.match(doc, /provider keys enter OpenCode through runtime config provider options, never\s+ambient `process\.env`/)
-  assert.match(doc, /Phase 1 can implement worker identity\/lifecycle/)
-  assert.match(doc, /Phase 2 can implement claims\/fencing\/recovery/)
+  assert.match(doc, /Phase 1 implemented worker identity\/lifecycle/)
+  assert.match(doc, /Phase 2 implements claims\/fencing\/recovery/)
+  assert.match(doc, /Phase 5 Operations Contract/)
+  assert.match(doc, /OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS/)
+  assert.match(doc, /Rollback And Emergency Revoke/)
+  assert.match(doc, /SLO And Alert Template/)
+  assert.match(doc, /deploy\/managed-workers\//)
 
   for (const state of requiredLifecycleStates) {
     assert.match(doc, new RegExp(`\\\`${state}\\\``), `missing lifecycle state ${state}`)
@@ -82,6 +87,17 @@ test('managed worker docs are linked from core public docs and navigation', () =
 })
 
 test('managed worker public docs avoid private deployment evidence', () => {
+  const managedWorkerPaths = [
+    'docs/managed-workers.md',
+    'docs/runbooks/cloud-managed-operations.md',
+    'deploy/managed-workers/README.md',
+    'deploy/managed-workers/self-host-worker.env.example',
+    'deploy/managed-workers/managed-operator-worker.env.template',
+    'deploy/managed-workers/helm-values.worker-pool.yaml.example',
+    'deploy/managed-workers/worker-release-evidence.template.md',
+    'deploy/managed-workers/worker-restore-drill.template.md',
+    'deploy/observability/managed-worker-slo-template.json',
+  ]
   const forbiddenPatterns = [
     /\b[a-z][a-z0-9-]{4,}-[0-9]{6,}\b/i,
     /\bAKIA[0-9A-Z]{16}\b/,
@@ -92,9 +108,88 @@ test('managed worker public docs avoid private deployment evidence', () => {
     /private\s+domain\s*:/i,
   ]
 
-  for (const pattern of forbiddenPatterns) {
-    assert.doesNotMatch(doc, pattern)
+  for (const templatePath of managedWorkerPaths) {
+    const contents = readFileSync(join(root, templatePath), 'utf8')
+    for (const pattern of forbiddenPatterns) {
+      assert.doesNotMatch(contents, pattern, `${templatePath} must not contain private deployment values`)
+    }
   }
+})
+
+test('managed worker phase 5 deployment artifacts exist and cover operations', () => {
+  const deployReadme = readFileSync(join(root, 'deploy/managed-workers/README.md'), 'utf8')
+  const releaseTemplate = readFileSync(join(root, 'deploy/managed-workers/worker-release-evidence.template.md'), 'utf8')
+  const restoreTemplate = readFileSync(join(root, 'deploy/managed-workers/worker-restore-drill.template.md'), 'utf8')
+  const sloTemplate = readFileSync(join(root, 'deploy/observability/managed-worker-slo-template.json'), 'utf8')
+  const operations = readFileSync(join(root, 'docs/runbooks/cloud-managed-operations.md'), 'utf8')
+  const releaseChecklist = readFileSync(join(root, 'docs/release-checklist.md'), 'utf8')
+
+  for (const phrase of [
+    'Supported Modes',
+    '`self_hosted`',
+    '`saas_operated`',
+    '`customer_hosted`',
+    'Bootstrap Sequence',
+    'Update And Rollback Policy',
+    'Sizing Guidance',
+    'Required Validation',
+  ]) {
+    assert.match(deployReadme, new RegExp(escapeRegex(phrase)))
+  }
+
+  for (const phrase of [
+    'worker-heartbeat-freshness',
+    'command-queue-age',
+    'claim-latency',
+    'command-latency',
+    'workflow-latency',
+    'projection-lag',
+    'checkpoint-failures',
+    'byok-reveal-failures',
+    'stale-lease-reclaims',
+    'gateway-worker-lag',
+  ]) {
+    assert.match(sloTemplate, new RegExp(escapeRegex(phrase)))
+  }
+
+  for (const phrase of [
+    'Pre-Deploy Gates',
+    'Compatibility Decision',
+    'Drain And Rolling Update',
+    'Rollback Drill',
+    'Emergency Revoke Drill',
+    'Go/No-Go',
+  ]) {
+    assert.match(releaseTemplate, new RegExp(escapeRegex(phrase)))
+  }
+
+  for (const phrase of [
+    'Postgres control-plane restore',
+    'Object-store artifacts/checkpoints',
+    'BYOK secret references',
+    'Worker recovery',
+    'Workflow consistency',
+    'Redaction',
+  ]) {
+    assert.match(restoreTemplate, new RegExp(escapeRegex(phrase)))
+  }
+
+  for (const phrase of [
+    'Worker Registration',
+    'Worker Credential Rotation',
+    'Rolling Worker Update',
+    'Emergency Revoke',
+    'Stuck Queue',
+    'Stale Lease Spike',
+    'Worker Crash Loop',
+    'Tenant Offboarding',
+    'Suspected Key Exposure',
+  ]) {
+    assert.match(operations, new RegExp(escapeRegex(phrase)))
+  }
+
+  assert.match(releaseChecklist, /worker-release-evidence\.template\.md/)
+  assert.match(releaseChecklist, /worker-restore-drill\.template\.md/)
 })
 
 test('managed worker client and route boundaries do not import OpenCode SDK', () => {

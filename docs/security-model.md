@@ -260,8 +260,8 @@ forwarded to the gateway.
 
 ## Managed cloud worker boundary
 
-The managed worker service plane is a future cloud execution-capacity layer,
-not a new runtime. Workers claim tenant-scoped cloud work from durable control
+The managed worker service plane is a cloud execution-capacity layer, not a
+new runtime. Workers claim tenant-scoped cloud work from durable control
 plane records, run OpenCode, and write events, projections, checkpoints,
 artifacts, and workflow status back with lease-token fencing. Browser clients,
 Desktop cloud clients, and Gateway clients never receive worker credentials and
