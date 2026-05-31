@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-29.
+Last updated: 2026-05-31.
 
 Open Cowork is now planned and verified as a three-surface product over one
 OpenCode-backed control plane:
@@ -67,121 +67,127 @@ source product remains deployable without commercial lock-in.
 
 ## Strategic Roadmap
 
-The three-surface roadmap is tracked by
-[issue #448](https://github.com/joe-broadhead/open-cowork/issues/448). The child
-issues below are the source of truth for implementation scope and acceptance.
+The active launch roadmap is tracked by
+[issue #547](https://github.com/joe-broadhead/open-cowork/issues/547). The
+child issues below are the source of truth for remaining implementation scope
+and acceptance.
 
 ### Phase 1: Product Contract And UX Semantics
 
-Make the three-surface model explicit in docs, UI language, API support
-matrices, and tests.
+Make the three-surface model explicit in one canonical contract, shared status
+vocabulary, docs links, and regression tests.
 
-Tracked by #449.
+Tracked by [#548](https://github.com/joe-broadhead/open-cowork/issues/548).
 
 Acceptance:
 
-- Desktop, cloud, and gateway are described as coordinated surfaces over one
-  OpenCode-backed control plane.
+- [Product Contract](product-contract.md) defines Desktop Local, Desktop Cloud,
+  Cloud Web, Gateway Channel, and Admin/Operator behavior.
 - Workspace state is clearly scoped as local or cloud.
-- Local-only and cloud-safe actions are distinct in UI and docs.
+- Local-only and cloud-safe actions are distinct in UI, docs, and support
+  verdicts.
 - OpenCode/Open Cowork ownership boundaries are documented and tested.
 
-### Phase 2: Seamless Cloud Continuation
+### Phase 2: Cloud Web Workbench Completion
 
-Prove the flagship flow: start or continue a cloud thread from desktop, web,
-and gateway with live state, approvals, questions, tools, and artifacts intact.
+Complete Cloud Web as a production end-user and admin workbench, including
+browser quality and route/API evidence.
 
-Tracked by #456.
-
-Acceptance:
-
-- A desktop-created cloud thread is visible in web.
-- A gateway prompt continues the same cloud thread.
-- Permission/question events round-trip through the shared cloud event contract.
-- Desktop can restart and hydrate from durable cloud projections without
-  corrupting cached cursors.
-
-### Phase 3: Explicit Local-To-Cloud Import
-
-Add a safe, consent-driven import/copy flow for selected local session state and
-artifacts. No implicit upload.
-
-Tracked by #457.
+Tracked by [#549](https://github.com/joe-broadhead/open-cowork/issues/549).
 
 Acceptance:
 
-- The user must choose **Copy to Cloud** explicitly from a local thread.
-- The UI previews message, attachment, artifact, project-source, and excluded
-  counts before upload.
-- Local project source and host paths are excluded by default.
-- Import payload validation rejects raw local paths and secret-like values.
+- Cloud threads can be started and continued from Web, Desktop Cloud, and
+  Gateway where a channel is bound.
+- SessionView parity covers messages, tool traces, approvals, questions,
+  artifacts, todos, cost/status/errors, and reload hydration.
+- Admin surfaces cover members, policy, BYOK, quotas, workers, Gateway, audit,
+  usage, and diagnostics with role checks and redaction.
+- Browser E2E, accessibility, and performance gates pass.
 
-### Phase 4: Cloud Project Context
+### Phase 3: Gateway Appliance v1
 
-Make cloud coding useful by giving workers a safe project source: git checkout,
-uploaded workspace snapshot, or managed object-store workspace.
+Make Gateway a production-grade headless Cloud client for self-hosted and
+managed channel deployments.
 
-Tracked by #458.
+Tracked by [#550](https://github.com/joe-broadhead/open-cowork/issues/550).
 
 Acceptance:
 
-- Cloud thread creation can use a configured Git source or explicit uploaded
-  snapshot.
-- Snapshot inventory shows included/excluded files and size limits.
-- Workers restore project context through cloud-safe storage.
-- Local files are never uploaded implicitly.
+- Gateway can self-host on a VPS/internal host with scoped service-token auth.
+- Telegram, Slack, Email, Webhook, CLI, and later providers share one
+  capability-driven rendering model.
+- Approvals/questions work through inline controls where supported and
+  token/link fallback where not.
+- Gateway has no OpenCode SDK imports and no direct control-plane database
+  ownership.
 
-### Phase 5: Downstream And Managed Productization
+### Phase 4: Downstream Distribution Contract
 
-Unify branding/configuration across desktop, cloud, and gateway, then harden
-SaaS BYOK and self-host deployment recipes.
+Freeze the configuration, branding, packaging, and extension contracts that
+let organizations ship internal or managed distributions without source
+patches.
 
-Tracked by #459 and #463.
+Tracked by [#551](https://github.com/joe-broadhead/open-cowork/issues/551).
 
 Acceptance:
 
 - A downstream organization can configure product name, logo, cloud URL, auth,
-  profiles, tools, agents, MCPs, object store, secret adapter, quotas, and
-  gateway providers without source patches.
-- Docker Compose and Helm deployments cover cloud and gateway.
-- Cloud deployment references cover provider-neutral storage and secrets.
-- Managed BYOK SaaS flows expose key status only; raw keys never leave the
-  write path or worker runtime config boundary.
+  profiles, tools, agents, MCPs, object store, secret adapter, quotas, billing
+  mode, and Gateway providers without core source patches.
+- Public examples use placeholders only.
+- Extension docs map each seam to concrete modules and forbidden imports.
+- Validators catch private-value leakage and branding regressions.
 
-### Phase 6: Gateway Expansion
+### Phase 5: Reference Deployments
 
-Promote gateway from Telegram/webhook foundation to a real headless product with
-Slack and email first, then additional channels.
+Prove provider-neutral deployment with GCP first, while keeping real project
+values outside the public repo.
 
-Tracked by #460.
-
-Acceptance:
-
-- Gateway is a cloud client/channel adapter, not an OpenCode runtime owner.
-- Telegram, Slack, email, and webhook providers share one capability-driven
-  rendering model.
-- Approvals/questions work through inline controls where supported and token or
-  link fallback where not.
-- Gateway can self-host on a VPS with service-token auth and no direct
-  control-plane database ownership.
-
-### Phase 7: Production Refactor And Security Gates
-
-Reduce cloud core coupling, harden OpenCode SDK boundaries, and add global
-privacy/security/concurrency gates.
-
-Tracked by #461, #462, and #464.
+Tracked by [#552](https://github.com/joe-broadhead/open-cowork/issues/552).
 
 Acceptance:
 
-- Gateway and client packages have zero direct OpenCode SDK imports.
-- Only cloud worker/runtime code imports OpenCode SDK runtime surfaces.
-- Raw provider keys, OAuth refresh tokens, MCP secrets, local file contents, and
-  machine paths are absent from read APIs, renderer state, logs, diagnostics,
-  and gateway payloads.
-- Cloud control-plane domains are split behind service/store boundaries.
-- Postgres concurrency gates cover leases, commands, events, deliveries,
-  quotas, and scheduler claims.
+- GCP deploys from a clean tmp/private repo using public templates.
+- No real GCP project ids, account ids, private domains, customer names,
+  prices, or secrets are committed.
+- Cloud, Desktop connection, Gateway, worker, artifact, workflow, and restore
+  smoke checks have a shared contract.
+- AWS, Azure, DigitalOcean, Kubernetes, and VPS recipes stay adapter/config
+  differences only.
+
+### Phase 6: Managed BYOK SaaS Readiness
+
+Prepare the open-source/public pieces needed by a downstream managed BYOK SaaS
+repo without mixing private values into this repo.
+
+Tracked by [#553](https://github.com/joe-broadhead/open-cowork/issues/553).
+
+Acceptance:
+
+- Self-host deployments work with billing disabled or stubbed.
+- BYOK plaintext is never readable over HTTP and is revealed only in the
+  worker/runtime role as allowed.
+- Billing and entitlement gates block expensive managed execution before worker
+  spawn/claim where possible.
+- Public/private boundaries for onboarding, billing, support, evidence, and
+  private launch values are documented and validated.
+
+### Phase 7: Launch Evidence
+
+Back launch claims with repeatable load, soak, failover, restore, security,
+release, browser, Gateway, deployment, and private-value evidence.
+
+Tracked by [#554](https://github.com/joe-broadhead/open-cowork/issues/554).
+
+Acceptance:
+
+- Evidence states which launch tier is proven: local/self-host beta, private
+  hosted beta, public hosted beta, general availability, or enterprise-scale.
+- Release gates fail closed when a surface-specific check is missing.
+- Load/failover/restore/security findings create narrow follow-up issues.
+- Public evidence templates contain no real project ids, domains, customers,
+  prices, support rosters, or secrets.
 
 ## Core Product Loop
 

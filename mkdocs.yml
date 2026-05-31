@@ -112,6 +112,7 @@ nav:
       - Configuration: configuration.md
   - Build & Extend:
       - Architecture: architecture.md
+      - Product Contract: product-contract.md
       - Downstream Customization: downstream.md
       - OpenCode SDK Boundary: opencode-sdk-v2-boundary.md
       - Development Environment: development-environment.md

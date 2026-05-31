@@ -101,6 +101,11 @@ checklist live in [OpenCode SDK v2 Boundary](opencode-sdk-v2-boundary.md).
 
 ## Product surface contract
 
+The canonical contract for workspace ownership, surface support, sync rules,
+status/reason vocabulary, and downstream boundaries lives in
+[Product Contract](product-contract.md). This section summarizes the
+architectural boundary.
+
 Open Cowork exposes three product surfaces without changing the execution
 owner:
 
