@@ -77,6 +77,15 @@ export type CloudWebClientStateContract = {
   csrfToken: string | null
   selectedSessionId: string | null
   sessions: unknown[]
+  sessionList: {
+    nextCursor: string | null
+    hasMore: boolean
+    isLoading: boolean
+    isLoadingMore: boolean
+    lastSyncedAt: string | null
+    totalEstimate: number | null
+    error: string | null
+  }
   sessionViews: Record<string, unknown>
   runtimeActions: Record<string, boolean>
   artifactPanel: {

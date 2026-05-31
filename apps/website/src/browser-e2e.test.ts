@@ -73,6 +73,37 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
   }
 })
 
+test('cloud web browser pages cloud threads through backend cursors without losing loaded pages on SSE', async () => {
+  const harness = await createCloudWebBrowserHarness({
+    role: 'admin',
+    sessionCount: 1001,
+    hydratedViewCount: 1,
+  }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.querySelectorAll('#thread-list [role="row"]').length, 200))
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/sessions?limit=200'))
+
+    const loadMore = harness.document.querySelector('#thread-load-more') as HTMLButtonElement
+    for (const expected of [400, 600, 800, 1000]) {
+      loadMore.click()
+      await waitFor(() => assert.equal(harness.document.querySelectorAll('#thread-list [role="row"]').length, expected))
+    }
+    assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1000/)
+    assert.match(harness.document.querySelector('#thread-limit-status')?.textContent || '', /1000 of 1000 loaded of about 1001 total/)
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path.includes('cursor=offset%3A800')))
+
+    const workspaceSource = harness.eventSources.find((source) => source.url === '/api/events')
+    assert.ok(workspaceSource)
+    workspaceSource.emit('snapshot.required', { type: 'snapshot.required', sequence: 0 })
+    await waitFor(() => {
+      assert.equal(harness.document.querySelectorAll('#thread-list [role="row"]').length, 1000)
+      assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1000/)
+    })
+  } finally {
+    harness.close()
+  }
+})
+
 test('cloud web browser handles approvals, questions, artifacts, and workflow runs', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {

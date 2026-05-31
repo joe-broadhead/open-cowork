@@ -31,7 +31,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
       error: 'Policy, quota, billing, and project-source denials render through the global status.',
     },
     disabledBehavior: 'Create controls are disabled when chat is unavailable or the user is signed out.',
-    pagination: 'Browser page size is bounded by CLOUD_WEB_THREAD_PAGE_SIZE with Load more for local rendering; backend pagination is deferred until the sessions API exposes cursors.',
+    pagination: 'Browser page size is bounded by CLOUD_WEB_THREAD_PAGE_SIZE. Cloud Web consumes /api/sessions cursor pages with Load more, preserves loaded pages across workspace SSE refreshes, and only shows total estimates when the backend returns one.',
     redaction: 'Local host paths and local MCP process details are never accepted as cloud thread context.',
     tests: ['render.test.ts', 'browser-e2e.test.ts', 'performance.test.ts'],
   },
