@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { timingSafeEqual } from 'node:crypto'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
-import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText } from './config.js'
+import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText, resolveGatewayCloudConnection } from './config.js'
 import { createGatewayRuntime, type GatewayRuntime } from './gateway-runtime.js'
 import { renderPrometheusMetrics } from './metrics.js'
 
@@ -26,7 +26,7 @@ export type GatewayDaemon = {
   stop(): Promise<void>
 }
 
-export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway = createCloudGateway(config)): GatewayDaemon {
+export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway = createCloudGateway(resolveGatewayCloudConnection())): GatewayDaemon {
   const runtime = createGatewayRuntime(config, cloud)
   const http = createGatewayHttpServer(config, runtime, cloud)
 
@@ -197,7 +197,7 @@ async function handleRequest(
       writeJson(res, 503, { ok: false, error: 'Cloud delivery dead-letter is not available.' })
       return
     }
-    const body = await readRequestBody(req)
+    const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
     const payload = parseRequestBody(body.raw, req.headers['content-type'])
     const lastError = payload && typeof payload === 'object' && !Array.isArray(payload)
       ? stringField((payload as Record<string, unknown>).lastError)
@@ -210,7 +210,7 @@ async function handleRequest(
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
-    const body = await readRequestBody(req)
+    const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
     let payload: unknown
     try {
       payload = parseRequestBody(body.raw, req.headers['content-type'])
@@ -256,7 +256,7 @@ function providerStatus(runtime: GatewayRuntime) {
 }
 
 function isAdminRequest(config: GatewayConfig, req: IncomingMessage) {
-  if (!config.server.adminToken) return isLoopbackHost(config.server.host)
+  if (!config.server.adminToken) return config.server.allowLoopbackOperatorBypass && isLoopbackHost(config.server.host)
   const bearer = readBearer(req.headers.authorization)
   const header = firstHeader(req.headers['x-open-cowork-gateway-admin-token'])
   return constantTimeStringEqual(bearer || header, config.server.adminToken)

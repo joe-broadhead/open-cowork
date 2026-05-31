@@ -11,7 +11,7 @@ import {
   cloudWorkspaceCacheKey,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import { createGatewayDaemon, createCloudGateway, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createGatewayDaemon, createCloudGateway, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
 const args = parseArgs(process.argv.slice(2))
 const debugEnabled = process.env.OPEN_COWORK_CONTINUATION_SMOKE_DEBUG === 'true'
@@ -413,12 +413,12 @@ async function setupGateway({ baseUrl, token, adminClient, runId }) {
     metadata: { smoke: true },
   })
 
+  const gatewayEnv = {
+    OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: token,
+    OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: boolArg('allow-insecure-http', 'OPEN_COWORK_CONTINUATION_SMOKE_ALLOW_INSECURE_HTTP') ? 'true' : 'false',
+  }
   const config = resolveGatewayConfig({
-    cloud: {
-      baseUrl,
-      serviceToken: token,
-      allowInsecureHttp: boolArg('allow-insecure-http', 'OPEN_COWORK_CONTINUATION_SMOKE_ALLOW_INSECURE_HTTP'),
-    },
     server: {
       host: '127.0.0.1',
       port: 0,
@@ -430,8 +430,8 @@ async function setupGateway({ baseUrl, token, adminClient, runId }) {
       kind: 'fake',
       channelBindingId: bindingId,
     }],
-  })
-  const cloudGateway = createCloudGateway(config)
+  }, gatewayEnv)
+  const cloudGateway = createCloudGateway(resolveGatewayCloudConnection(gatewayEnv))
   const daemon = createGatewayDaemon(config, cloudGateway)
   const gatewayUrl = await daemon.start()
   const fakeProvider = daemon.runtime.providers.get('fake')?.provider

@@ -99,6 +99,15 @@ function staticComposeChecks() {
     assertIncludes(file, 'open-cowork-gateway:')
     assertIncludes(file, 'OPEN_COWORK_GATEWAY_HOST')
     assertIncludes(file, 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_ADMIN_TOKEN')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_ADMIN_TOKEN:?')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES')
+    assertIncludes(file, 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
   }
   assertIncludes('docker-compose.cloud.yml', 'minio:')
   assertIncludes('docker-compose.cloud.yml', 'OPEN_COWORK_CLOUD_IMAGE')
@@ -111,6 +120,15 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ADMIN_TOKEN')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ADMIN_TOKEN:?')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
   for (const file of composeFiles) {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
   }
@@ -143,8 +161,12 @@ function validateCompose() {
     return
   }
 
+  const composeEnv = {
+    ...process.env,
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: process.env.OPEN_COWORK_GATEWAY_ADMIN_TOKEN || 'validate-gateway-admin-token',
+  }
   for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
-    run('docker', ['compose', '-f', file, 'config', '--quiet'])
+    run('docker', ['compose', '-f', file, 'config', '--quiet'], { env: composeEnv })
   }
 }
 
@@ -167,7 +189,9 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled')
-  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required on public gateway binds')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway replicaCount > 1 is unsafe while stream/replay state is process-local')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.allowLoopbackOperatorBypass=true requires gateway.host=127.0.0.1 or localhost')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'image.tag=latest is not allowed')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'topologySpreadConstraints')
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
@@ -186,10 +210,21 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.terminationGracePeriodSeconds must be >= 30')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'publicUrl: ""')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'allowLoopbackOperatorBypass: false')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'maxRequestBodyBytes: 1048576')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'experimentalDistributedOwnership: false')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
 }
 
 function validateHelm() {
@@ -397,7 +432,26 @@ function validateHelm() {
         '--set',
         'gateway.metrics.enabled=true',
       ],
-      'gateway.adminToken or gateway.existingSecret is required on public gateway binds'
+      'gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-multi-gateway',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'replicaCount=2',
+      ],
+      'gateway replicaCount > 1 is unsafe while stream/replay state is process-local'
     )
     expectFailure(
       'helm',

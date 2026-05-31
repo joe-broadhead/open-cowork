@@ -176,6 +176,23 @@ provider control plane.
 - Run at least one scheduler. Multiple schedulers are safe when they use
   database claims.
 - For Kubernetes, add HPA or KEDA in the provider overlay that owns metrics.
+
+### Gateway Scaling And Operator Auth
+
+- Run one gateway replica per channel-binding shard until stream ownership and
+  cursors are externalized. The Helm chart rejects `replicaCount > 1` unless
+  `gateway.experimentalDistributedOwnership=true` is set deliberately.
+- Configure `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` for operator endpoints in every
+  shared or public deployment. The loopback bypass is explicit local-only:
+  `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true` and a loopback bind.
+- Keep `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` aligned with provider
+  advertised file limits. Generic bridge/email attachment limits default to the
+  same request-body cap.
+- Set bounded network deadlines:
+  `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS`,
+  `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS`,
+  `OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS`, and
+  `OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS`.
   HPA is appropriate for web CPU/memory or worker CPU/memory capacity; KEDA is
   appropriate for command queue depth, backlog age, or provider-native queue
   metrics.
@@ -217,8 +234,9 @@ provider control plane.
 - The fake provider is local/demo-only. Public demo exposure requires the
   deliberate `OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true` override and
   must not be used for production traffic.
-- Gateway metrics and diagnostics on `0.0.0.0` require an admin token or
-  private networking.
+- Gateway metrics, diagnostics, and delivery operator endpoints require an
+  admin token unless the process is explicitly running in local loopback bypass
+  mode.
 
 ### Trusted Header Auth
 

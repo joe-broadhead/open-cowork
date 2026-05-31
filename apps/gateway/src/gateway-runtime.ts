@@ -71,7 +71,7 @@ export function createGatewayRuntime(
       for (const subscription of deliverySubscriptions.splice(0)) subscription.close()
       streams.closeAll()
       if (inFlightDeliveries.size > 0) {
-        await Promise.allSettled([...inFlightDeliveries])
+        await settleWithin(Promise.allSettled([...inFlightDeliveries]), config.timeouts.shutdownDrainMs)
       }
       await providers.stop()
       started = false
@@ -87,6 +87,21 @@ export function createGatewayRuntime(
   }
 
   return runtime
+}
+
+async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => resolve(null), timeoutMs)
+        timeout.unref?.()
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 async function handleMessage(

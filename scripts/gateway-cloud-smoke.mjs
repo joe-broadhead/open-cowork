@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { createHttpSseCloudTransportAdapter } from '../packages/cloud-client/dist/index.js'
-import { createGatewayDaemon, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
 const args = parseArgs(process.argv.slice(2))
 const debugEnabled = process.env.OPEN_COWORK_GATEWAY_SMOKE_DEBUG === 'true'
@@ -400,12 +400,12 @@ async function setupCloudChannelState({ baseUrl, adminToken, adminClient, servic
 
 async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, adminClient, setup, timeoutMs, runId }) {
   const gatewayAdminToken = `gateway-admin-${runId}`
-  const gateway = createGatewayDaemon(resolveGatewayConfig({
-    cloud: {
-      baseUrl,
-      serviceToken,
-      allowInsecureHttp: boolArg('allow-insecure-http', 'OPEN_COWORK_GATEWAY_SMOKE_ALLOW_INSECURE_HTTP'),
-    },
+  const gatewayEnv = {
+    OPEN_COWORK_CLOUD_BASE_URL: baseUrl,
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: serviceToken,
+    OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP: boolArg('allow-insecure-http', 'OPEN_COWORK_GATEWAY_SMOKE_ALLOW_INSECURE_HTTP') ? 'true' : 'false',
+  }
+  const gatewayConfig = resolveGatewayConfig({
     server: {
       host: '127.0.0.1',
       port: 0,
@@ -419,7 +419,8 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       kind: 'fake',
       channelBindingId: setup.ids.bindingId,
     }],
-  }))
+  }, gatewayEnv)
+  const gateway = createGatewayDaemon(gatewayConfig, createCloudGateway(resolveGatewayCloudConnection(gatewayEnv)))
   const gatewayUrl = await gateway.start()
   const fakeProvider = gateway.runtime.providers.get('fake')?.provider
   if (!fakeProvider || !Array.isArray(fakeProvider.sent)) {

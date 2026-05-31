@@ -112,12 +112,16 @@ shared knobs downstream operators need:
 | --- | --- | --- |
 | Cloud Web/control plane | `cloud.publicBranding`, `cloud.auth`, `cloud.storage`, `cloud.features`, `cloud.profiles`, `cloud.projectSources`, `cloud.abuse`, `cloud.billing` | `OPEN_COWORK_CLOUD_*`, database/object-store/secret-manager refs, OIDC issuer/client settings |
 | Desktop cloud connection | `branding`, `cloudDesktop` | packaged `open-cowork.config.json`, managed system config, or downstream root |
-| Gateway | `gateway.branding`, `gateway.cloud`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | `OPEN_COWORK_GATEWAY_*`, channel secrets, service tokens, webhook URLs |
+| Gateway | `gateway.branding`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | `OPEN_COWORK_CLOUD_BASE_URL`, `OPEN_COWORK_GATEWAY_*`, channel secrets, service tokens, webhook URLs |
 
 Gateway reads the shared `gateway` section from `OPEN_COWORK_CONFIG_PATH`,
 `OPEN_COWORK_CONFIG_DIR`, or `OPEN_COWORK_DOWNSTREAM_ROOT`; gateway-specific
-config files and env vars override it. This keeps a branded internal build
-auditable without hardcoding provider values into product code.
+config files and env vars override it. Gateway config JSON is for branding,
+provider metadata, and process policy. Cloud URL, gateway service token,
+cloud-request timeout, and insecure-HTTP policy must come from env or
+deployment secrets so a mounted JSON file cannot redirect or shape the
+gateway's control-plane client. This keeps a branded internal build auditable
+without hardcoding provider values into product code.
 Compose files bind-mount those config file or directory paths into containers
 at the same path, so host-path overrides remain visible to Cloud and Gateway
 processes.

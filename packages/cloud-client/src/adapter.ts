@@ -517,6 +517,7 @@ export type CloudTransportAdapterOptions = {
   csrfToken?: string | null
   credentials?: 'include'
   headers?: Record<string, string>
+  requestTimeoutMs?: number
 }
 
 export type CloudTransportSubscription = {
@@ -1062,6 +1063,19 @@ function queryString(input: Record<string, unknown>) {
   return serialized ? `?${serialized}` : ''
 }
 
+function normalizeRequestTimeoutMs(value: number | null | undefined) {
+  if (value === undefined || value === null) return 30_000
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.min(120_000, Math.max(100, Math.floor(value)))
+}
+
+function cloudApiRequestUrl(baseUrl: string, path: string) {
+  if (!path.startsWith('/api/')) {
+    throw new Error('Cloud transport path must target an API route.')
+  }
+  return `${baseUrl}${path}`
+}
+
 async function parseJson<T>(response: Awaited<ReturnType<CloudTransportFetch>>, url: string): Promise<T> {
   const text = await response.text()
   const body = text ? JSON.parse(text) as T & ApiErrorPayload : {} as T & ApiErrorPayload
@@ -1079,6 +1093,7 @@ export function createHttpSseCloudTransportAdapter(
   const headers = {
     ...(options.headers || {}),
   }
+  const requestTimeoutMs = normalizeRequestTimeoutMs(options.requestTimeoutMs)
 
   async function request<T>(path: string, init: {
     method?: string
@@ -1096,15 +1111,26 @@ export function createHttpSseCloudTransportAdapter(
     if (method !== 'GET' && options.csrfToken) {
       nextHeaders['x-csrf-token'] = options.csrfToken
     }
-    // This transport intentionally sends authenticated cloud API payloads, including
-    // user-selected artifact uploads that callers validate and authorize upstream.
-    // codeql[js/file-access-to-http]
-    return parseJson<T>(await fetcher(`${baseUrl}${path}`, {
-      method,
-      headers: nextHeaders,
-      body,
-      credentials: options.credentials,
-    }), path)
+    const requestUrl = cloudApiRequestUrl(baseUrl, path)
+    const controller = new AbortController()
+    const timeout = requestTimeoutMs > 0
+      ? setTimeout(() => controller.abort(), requestTimeoutMs)
+      : null
+    try {
+      // This transport intentionally sends authenticated cloud API payloads, including
+      // user-selected artifact uploads that callers validate and authorize upstream.
+      // lgtm[js/file-access-to-http]
+      const response = await fetcher(requestUrl, {
+        method,
+        headers: nextHeaders,
+        body,
+        credentials: options.credentials,
+        signal: controller.signal,
+      })
+      return parseJson<T>(response, path)
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 
   return {

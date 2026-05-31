@@ -23,6 +23,8 @@ export interface WebhookProviderConfig {
   now?: () => Date;
   retryAttempts?: number;
   sleep?: (ms: number) => Promise<void>;
+  deliveryTimeoutMs?: number;
+  legacySharedSecretHeader?: boolean;
 }
 
 export interface WebhookIncomingPayload {
@@ -67,6 +69,7 @@ export interface WebhookIngressAuth {
 
 const maxWebhookAttachments = 20;
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
+const defaultDeliveryTimeoutMs = 15_000;
 const maxWebhookRetryAttempts = 5;
 const maxWebhookRetryDelayMs = 10_000;
 
@@ -87,9 +90,16 @@ export class WebhookProvider implements ChannelProvider {
       validateHeaderValue(config.sharedSecret, "Webhook shared secret");
     }
     this.id = config.providerId ?? "webhook";
-    this.capabilities = {
+    const configuredMaxAttachmentBytes = normalizeTimeoutOrByteLimit(config.maxAttachmentBytes);
+    const mergedCapabilities = {
       ...defaultWebhookCapabilities,
       ...config.capabilities
+    };
+    this.capabilities = {
+      ...mergedCapabilities,
+      maxFileBytes: configuredMaxAttachmentBytes
+        ? Math.min(mergedCapabilities.maxFileBytes ?? configuredMaxAttachmentBytes, configuredMaxAttachmentBytes)
+        : mergedCapabilities.maxFileBytes
     };
   }
 
@@ -198,27 +208,45 @@ export class WebhookProvider implements ChannelProvider {
     const normalizedPayload = normalizedTarget ? { ...payload, target: normalizedTarget } : payload;
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
     const deliveryId = randomUUID();
+    const body = JSON.stringify({ deliveryId, provider: this.id, ...normalizedPayload });
     const response = await withWebhookRetry(async () => {
-      const attempt = await fetchImpl(this.config.deliveryUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-open-cowork-gateway-delivery-id": deliveryId,
-          ...(this.config.sharedSecret ? { "x-open-cowork-gateway-webhook-secret": this.config.sharedSecret } : {})
-        },
-        body: JSON.stringify({ deliveryId, provider: this.id, ...normalizedPayload })
-      });
-      if (!attempt.ok) {
-        throw WebhookDeliveryError.fromResponse(attempt);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), normalizeDeliveryTimeoutMs(this.config.deliveryTimeoutMs));
+      const timestamp = String(Math.floor((this.config.now?.().getTime() ?? Date.now()) / 1000));
+      const signature = this.config.sharedSecret
+        ? signWebhookDeliveryPayload(body, this.config.sharedSecret, timestamp)
+        : null;
+      try {
+        const attempt = await fetchImpl(this.config.deliveryUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-open-cowork-gateway-delivery-id": deliveryId,
+            ...(signature ? {
+              "x-open-cowork-gateway-webhook-timestamp": timestamp,
+              "x-open-cowork-gateway-webhook-signature": signature
+            } : {}),
+            ...(this.config.legacySharedSecretHeader && this.config.sharedSecret
+              ? { "x-open-cowork-gateway-webhook-secret": this.config.sharedSecret }
+              : {})
+          },
+          body,
+          signal: controller.signal
+        });
+        if (!attempt.ok) {
+          throw WebhookDeliveryError.fromResponse(attempt);
+        }
+        return attempt;
+      } finally {
+        clearTimeout(timeout);
       }
-      return attempt;
     }, {
       attempts: this.config.retryAttempts,
       sleep: this.config.sleep
     });
-    const body = await responseJson(response);
+    const responseBody = await responseJson(response);
     const target = normalizedTarget;
-    const messageId = cleanOptionalString(body.messageId, "Webhook delivery response.messageId", 512) ?? randomUUID();
+    const messageId = cleanOptionalString(responseBody.messageId, "Webhook delivery response.messageId", 512) ?? randomUUID();
     return {
       provider: this.id,
       chatId: target?.chatId ?? "",
@@ -293,6 +321,10 @@ export const defaultWebhookCapabilities: ChannelCapabilities = {
 
 export function signWebhookIngressPayload(rawBody: string, sharedSecret: string, timestamp: string): string {
   return `v1=${createHmac("sha256", sharedSecret).update(`v1:${timestamp}:${rawBody}`).digest("hex")}`;
+}
+
+export function signWebhookDeliveryPayload(rawBody: string, sharedSecret: string, timestamp: string): string {
+  return signWebhookIngressPayload(rawBody, sharedSecret, timestamp);
 }
 
 export interface WebhookRetryOptions {
@@ -531,6 +563,26 @@ function validateAttachmentSizeLimit(sizeBytes: number, maxAttachmentBytes: numb
   if (sizeBytes > maxBytes) {
     throw new Error(`Webhook attachment exceeds max size of ${maxBytes} bytes`);
   }
+}
+
+function normalizeTimeoutOrByteLimit(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function normalizeDeliveryTimeoutMs(value: number | undefined): number {
+  if (value === undefined) {
+    return defaultDeliveryTimeoutMs;
+  }
+  if (!Number.isFinite(value) || value <= 0) {
+    return defaultDeliveryTimeoutMs;
+  }
+  return Math.min(120_000, Math.max(100, Math.floor(value)));
 }
 
 function validateInteractionToken(token: string, label: string): void {

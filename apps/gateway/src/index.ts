@@ -8,9 +8,11 @@ export {
 export {
   loadGatewayConfig,
   resolveGatewayConfig,
+  resolveGatewayCloudConnection,
   redactGatewayConfig,
   redactGatewayEnv,
   type GatewayConfig,
+  type GatewayCloudConnectionConfig,
   type GatewayProviderConfig,
 } from './config.js'
 export {

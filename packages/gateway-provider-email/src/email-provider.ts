@@ -19,6 +19,7 @@ export interface EmailProviderConfig {
   smtp?: SmtpEmailTransportConfig;
   transport?: EmailTransport;
   now?: () => Date;
+  maxAttachmentBytes?: number;
 }
 
 export interface SmtpEmailTransportConfig {
@@ -28,6 +29,7 @@ export interface SmtpEmailTransportConfig {
   username?: string;
   password?: string;
   localName?: string;
+  timeoutMs?: number;
 }
 
 export interface EmailMessage {
@@ -75,24 +77,26 @@ type EmailIncomingPayload = {
   }>;
 };
 
+const emailCapabilities: ChannelCapabilities = {
+  threads: true,
+  messageEditing: false,
+  inlineButtons: false,
+  fileUploads: true,
+  fileDownloads: false,
+  typingIndicator: false,
+  maxTextLength: 20_000,
+  preferredParseMode: "plain",
+  parseModes: ["plain"],
+  maxButtonsPerMessage: 0,
+  maxButtonRowsPerMessage: 0,
+  maxButtonTokenBytes: 0,
+  maxFileBytes: 15 * 1024 * 1024,
+  supportsEphemeralResponses: false
+};
+
 export class EmailProvider implements ChannelProvider {
   readonly id = "email" as const;
-  readonly capabilities: ChannelCapabilities = {
-    threads: true,
-    messageEditing: false,
-    inlineButtons: false,
-    fileUploads: true,
-    fileDownloads: false,
-    typingIndicator: false,
-    maxTextLength: 20_000,
-    preferredParseMode: "plain",
-    parseModes: ["plain"],
-    maxButtonsPerMessage: 0,
-    maxButtonRowsPerMessage: 0,
-    maxButtonTokenBytes: 0,
-    maxFileBytes: 15 * 1024 * 1024,
-    supportsEphemeralResponses: false
-  };
+  readonly capabilities: ChannelCapabilities;
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private readonly transport: EmailTransport;
@@ -100,6 +104,10 @@ export class EmailProvider implements ChannelProvider {
   constructor(private readonly config: EmailProviderConfig) {
     if (!emailAddress(config.from)) throw new Error("Email provider requires a valid from address.");
     if (!config.inboundSecret.trim()) throw new Error("Email inbound secret is required.");
+    this.capabilities = {
+      ...emailCapabilities,
+      maxFileBytes: Math.min(emailCapabilities.maxFileBytes!, normalizeAttachmentLimit(config.maxAttachmentBytes) ?? emailCapabilities.maxFileBytes!)
+    };
     this.transport = config.transport || new SmtpEmailTransport(config.smtp || missingSmtpConfig());
   }
 
@@ -114,7 +122,7 @@ export class EmailProvider implements ChannelProvider {
   async handleWebhookPayload(payload: unknown, auth: EmailWebhookAuth): Promise<void> {
     if (!this.handler) throw new Error("Email provider is not started.");
     this.assertWebhookAuthorized(auth);
-    const message = mapEmailPayload(payload, this.config.now?.() ?? new Date());
+    const message = mapEmailPayload(payload, this.config.now?.() ?? new Date(), this.capabilities.maxFileBytes);
     if (message) await this.handler(message);
   }
 
@@ -178,8 +186,9 @@ export class SmtpEmailTransport implements EmailTransport {
 
   async send(message: EmailMessage): Promise<{ messageId: string }> {
     const port = this.config.port || (this.config.secure ? 465 : 25);
-    const socket = await connectSocket(this.config.host, port, this.config.secure === true);
-    const client = new SmtpClient(socket);
+    const timeoutMs = normalizeSmtpTimeoutMs(this.config.timeoutMs);
+    const socket = await connectSocket(this.config.host, port, this.config.secure === true, timeoutMs);
+    const client = new SmtpClient(socket, timeoutMs);
     try {
       await client.expect(220);
       await client.command(`EHLO ${this.config.localName || "open-cowork-gateway"}`, 250);
@@ -200,7 +209,7 @@ export class SmtpEmailTransport implements EmailTransport {
   }
 }
 
-function mapEmailPayload(payload: unknown, now: Date): IncomingChannelMessage | null {
+function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number | undefined): IncomingChannelMessage | null {
   const input = objectRecord(payload) as EmailIncomingPayload;
   const from = emailAddress(input.from) || emailAddress(input.sender);
   if (!from) return null;
@@ -231,22 +240,29 @@ function mapEmailPayload(payload: unknown, now: Date): IncomingChannelMessage | 
     isCommand: text.trimStart().startsWith("/"),
     command: commandName(text),
     commandArgs: commandArgs(text),
-    attachments: emailAttachments(input.attachments),
+    attachments: emailAttachments(input.attachments, maxAttachmentBytes),
     interaction: undefined,
     receivedAt: now,
     raw: payload
   };
 }
 
-function emailAttachments(values: EmailIncomingPayload["attachments"]): ChannelAttachment[] {
+function emailAttachments(values: EmailIncomingPayload["attachments"], maxAttachmentBytes: number | undefined): ChannelAttachment[] {
   if (!Array.isArray(values)) return [];
   return values.map((attachment) => {
     const base64 = attachment.contentBase64 || attachment.bufferBase64 || "";
     const buffer = base64 ? Buffer.from(base64, "base64") : undefined;
+    const sizeBytes = attachment.sizeBytes || attachment.size || buffer?.byteLength;
+    if (sizeBytes !== undefined && maxAttachmentBytes !== undefined && sizeBytes > maxAttachmentBytes) {
+      throw new Error(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
+    }
+    if (buffer && maxAttachmentBytes !== undefined && buffer.byteLength > maxAttachmentBytes) {
+      throw new Error(`Email attachment exceeds maxFileBytes ${maxAttachmentBytes}.`);
+    }
     return {
       filename: attachment.filename || attachment.name || "attachment",
       mimeType: attachment.mimeType || attachment.contentType,
-      sizeBytes: attachment.sizeBytes || attachment.size || buffer?.byteLength,
+      sizeBytes,
       buffer
     };
   });
@@ -435,12 +451,36 @@ function missingSmtpConfig(): SmtpEmailTransportConfig {
   throw new Error("Email provider requires smtp config or an injected transport.");
 }
 
-function connectSocket(host: string, port: number, secure: boolean): Promise<Socket> {
+function connectSocket(host: string, port: number, secure: boolean, timeoutMs: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = secure ? createTlsConnection({ host, port }) : createConnection({ host, port });
-    socket.once("connect", () => resolve(socket));
-    socket.once("secureConnect", () => resolve(socket));
-    socket.once("error", reject);
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      reject(new Error("SMTP connection timed out."));
+    }, timeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off("error", onError);
+    };
+    const onConnect = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      socket.setTimeout(timeoutMs, () => socket.destroy(new Error("SMTP socket timed out.")));
+      resolve(socket);
+    };
+    const onError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    socket.once("connect", onConnect);
+    socket.once("secureConnect", onConnect);
+    socket.once("error", onError);
   });
 }
 
@@ -451,7 +491,7 @@ class SmtpClient {
     reject(error: Error): void;
   }> = [];
 
-  constructor(private readonly socket: Socket) {
+  constructor(private readonly socket: Socket, private readonly timeoutMs: number) {
     socket.setEncoding("utf8");
     socket.on("data", (chunk) => this.onData(String(chunk)));
     socket.on("error", (error) => {
@@ -489,7 +529,23 @@ class SmtpClient {
       return Promise.resolve(line);
     }
     return new Promise((resolve, reject) => {
-      this.waiters.push({ resolve, reject });
+      let waiter!: { resolve(line: string): void; reject(error: Error): void };
+      const timeout = setTimeout(() => {
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        reject(new Error("SMTP response timed out."));
+      }, this.timeoutMs);
+      waiter = {
+        resolve(line) {
+          clearTimeout(timeout);
+          resolve(line);
+        },
+        reject(error) {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      };
+      this.waiters.push(waiter);
     });
   }
 
@@ -503,6 +559,20 @@ class SmtpClient {
       this.waiters.shift()?.resolve(line);
     }
   }
+}
+
+function normalizeSmtpTimeoutMs(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return 30_000;
+  }
+  return Math.min(120_000, Math.max(100, Math.floor(value)));
+}
+
+function normalizeAttachmentLimit(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.floor(value);
 }
 
 function headerValue(headers: EmailWebhookAuth["headers"], name: string): string | null {

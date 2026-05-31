@@ -144,7 +144,7 @@ The public schema now covers the three product surfaces:
 |---|---|---|
 | Desktop | `branding`, `cloudDesktop` | App name, sidebar/home copy, managed cloud URLs, cache mode, and whether users may add their own cloud orgs. |
 | Cloud Web/control plane | `cloud.publicBranding`, `cloud.auth`, `cloud.storage`, `cloud.features`, `cloud.profiles`, `cloud.projectSources`, `cloud.abuse`, `cloud.billing` | Public dashboard name/logo/legal links, OIDC metadata, database/object-store/secret refs, profile allowlists, project-source policy, quotas, and self-host or managed billing mode. |
-| Gateway | `gateway.branding`, `gateway.cloud`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | Headless channel branding, cloud URL, service-token source, public gateway URL, provider bindings, and operator endpoints. |
+| Gateway | `gateway.branding`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | Headless channel branding, public gateway URL, provider bindings, and operator endpoints. Cloud URL and gateway service token belong in env or deployment secrets. |
 
 Use [Downstream Contract](downstream-contract.md) for the full field inventory
 and to distinguish runtime config, packaging-time config, infrastructure
@@ -154,10 +154,16 @@ Gateway can load the same central file as Desktop and Cloud through
 `OPEN_COWORK_CONFIG_PATH`, `OPEN_COWORK_CONFIG_DIR`, or
 `OPEN_COWORK_DOWNSTREAM_ROOT`. Gateway-specific env and
 `OPEN_COWORK_GATEWAY_CONFIG` / `OPEN_COWORK_GATEWAY_CONFIG_JSON` remain
-available as overrides. This lets an internal deployment keep `branding`,
+available as overrides. Gateway config JSON intentionally ignores
+`gateway.cloud.baseUrl`, `gateway.cloud.serviceToken`, and
+`gateway.cloud.allowInsecureHttp`, plus `gateway.timeouts.cloudRequestMs`; use
+`OPEN_COWORK_CLOUD_BASE_URL`, `OPEN_COWORK_GATEWAY_SERVICE_TOKEN`,
+`OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP`, and
+`OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` from your deployment secret
+manager instead. This lets an internal deployment keep `branding`,
 `cloud.publicBranding`, `cloudDesktop`, and `gateway.branding` in one audited
-file while Kubernetes, Compose, or a VPS process manager supplies secrets from
-the local secret manager.
+file while Kubernetes, Compose, or a VPS process manager supplies endpoint
+bindings and secrets from the local secret manager.
 
 Production safety rules are enforced in config validation:
 

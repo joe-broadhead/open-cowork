@@ -20,6 +20,7 @@ export interface SlackProviderConfig {
   fetch?: typeof globalThis.fetch;
   now?: () => Date;
   maxSignatureAgeMs?: number;
+  requestTimeoutMs?: number;
 }
 
 export interface SlackWebhookAuth {
@@ -49,6 +50,7 @@ type SlackApiResponse = {
 
 const defaultSlackApiBaseUrl = "https://slack.com/api";
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
+const defaultSlackRequestTimeoutMs = 15_000;
 
 export class SlackProvider implements ChannelProvider {
   readonly id = "slack" as const;
@@ -173,11 +175,11 @@ export class SlackProvider implements ChannelProvider {
   async downloadAttachment(attachment: ChannelAttachment): Promise<Uint8Array> {
     if (!attachment.providerFileId) throw new Error("Slack attachment is missing a private file URL.");
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
-    const response = await fetchImpl(attachment.providerFileId, {
+    const response = await fetchWithTimeout(fetchImpl, attachment.providerFileId, {
       headers: {
         authorization: `Bearer ${this.config.botToken}`
       }
-    });
+    }, this.config.requestTimeoutMs);
     if (!response.ok) throw new Error(`Slack file download failed: ${response.status}`);
     return new Uint8Array(await response.arrayBuffer());
   }
@@ -227,13 +229,33 @@ export class SlackProvider implements ChannelProvider {
 
   private async api(method: string, init: RequestInit): Promise<SlackApiResponse> {
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
-    const response = await fetchImpl(`${this.config.apiBaseUrl || defaultSlackApiBaseUrl}/${method}`, init);
+    const response = await fetchWithTimeout(fetchImpl, `${this.config.apiBaseUrl || defaultSlackApiBaseUrl}/${method}`, init, this.config.requestTimeoutMs);
     const json = await responseJson(response);
     if (!response.ok || json.ok === false) {
       throw new Error(`Slack API ${method} failed: ${json.error || response.status}`);
     }
     return json;
   }
+}
+
+async function fetchWithTimeout(fetchImpl: typeof globalThis.fetch, input: string, init: RequestInit, timeoutMs: number | undefined): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), normalizeRequestTimeoutMs(timeoutMs));
+  try {
+    return await fetchImpl(input, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeRequestTimeoutMs(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return defaultSlackRequestTimeoutMs;
+  }
+  return Math.min(120_000, Math.max(100, Math.floor(value)));
 }
 
 function mapSlackPayload(payload: Record<string, unknown>, now: Date): IncomingChannelMessage | null {

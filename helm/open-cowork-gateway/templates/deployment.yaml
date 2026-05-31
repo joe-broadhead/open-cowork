@@ -4,6 +4,9 @@
 {{- if eq .Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
+{{- if and (gt (int .Values.replicaCount) 1) (not .Values.gateway.experimentalDistributedOwnership) }}
+{{- fail "gateway replicaCount > 1 is unsafe while stream/replay state is process-local; run one replica per channel-binding shard or set gateway.experimentalDistributedOwnership=true for explicit experimental deployments." }}
+{{- end }}
 {{- $sharedConfig := or .Values.gateway.configPath .Values.gateway.configDir .Values.gateway.downstreamRoot }}
 {{- if and (not $sharedConfig) (not .Values.gateway.cloudBaseUrl) }}
 {{- fail "gateway.cloudBaseUrl is required." }}
@@ -17,8 +20,11 @@
 {{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
 {{- end }}
-{{- if and (eq .Values.gateway.host "0.0.0.0") (not $sharedConfig) (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) }}
-{{- fail "gateway.adminToken or gateway.existingSecret is required on public gateway binds." }}
+{{- if and (not $sharedConfig) (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) (not .Values.gateway.allowLoopbackOperatorBypass) }}
+{{- fail "gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints; gateway.allowLoopbackOperatorBypass=true is local loopback-only." }}
+{{- end }}
+{{- if and .Values.gateway.allowLoopbackOperatorBypass (ne .Values.gateway.host "127.0.0.1") (ne .Values.gateway.host "localhost") }}
+{{- fail "gateway.allowLoopbackOperatorBypass=true requires gateway.host=127.0.0.1 or localhost." }}
 {{- end }}
 {{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.webhook.sharedSecret or gateway.existingSecret is required when the generic webhook provider is enabled." }}

@@ -13,8 +13,14 @@ data:
   OPEN_COWORK_GATEWAY_HOST: {{ .Values.gateway.host | quote }}
   OPEN_COWORK_GATEWAY_PORT: {{ .Values.gateway.port | quote }}
   OPEN_COWORK_GATEWAY_PUBLIC_URL: {{ .Values.gateway.publicUrl | quote }}
+  OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: {{ .Values.gateway.allowLoopbackOperatorBypass | quote }}
+  OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES: {{ .Values.gateway.maxRequestBodyBytes | quote }}
   OPEN_COWORK_GATEWAY_MODE: {{ .Values.gateway.mode | quote }}
   OPEN_COWORK_GATEWAY_LOG_LEVEL: {{ .Values.gateway.logLevel | quote }}
+  OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS: {{ .Values.gateway.timeouts.cloudRequestMs | quote }}
+  OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS: {{ .Values.gateway.timeouts.webhookDeliveryMs | quote }}
+  OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS: {{ .Values.gateway.timeouts.smtpMs | quote }}
+  OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS: {{ .Values.gateway.timeouts.shutdownDrainMs | quote }}
   OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON: {{ .Values.gateway.branding | toJson | quote }}
   OPEN_COWORK_GATEWAY_METRICS_ENABLED: {{ .Values.gateway.metrics.enabled | quote }}
   OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: {{ .Values.gateway.diagnostics.enabled | quote }}
@@ -26,6 +32,7 @@ data:
   OPEN_COWORK_GATEWAY_SLACK_DEFAULT_CHANNEL_ID: {{ .Values.gateway.slack.defaultChannelId | quote }}
   OPEN_COWORK_GATEWAY_SLACK_API_BASE_URL: {{ .Values.gateway.slack.apiBaseUrl | quote }}
   OPEN_COWORK_GATEWAY_EMAIL_CHANNEL_BINDING_ID: {{ .Values.gateway.email.channelBindingId | quote }}
+  OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES: {{ .Values.gateway.email.maxAttachmentBytes | quote }}
   OPEN_COWORK_GATEWAY_EMAIL_FROM: {{ .Values.gateway.email.from | quote }}
   OPEN_COWORK_GATEWAY_EMAIL_ADDRESS: {{ .Values.gateway.email.address | quote }}
   OPEN_COWORK_GATEWAY_EMAIL_DOMAIN: {{ .Values.gateway.email.domain | quote }}
@@ -35,3 +42,4 @@ data:
   OPEN_COWORK_GATEWAY_EMAIL_SMTP_USERNAME: {{ .Values.gateway.email.smtpUsername | quote }}
   OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_URL: {{ .Values.gateway.webhook.deliveryUrl | quote }}
   OPEN_COWORK_GATEWAY_WEBHOOK_CHANNEL_BINDING_ID: {{ .Values.gateway.webhook.channelBindingId | quote }}
+  OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES: {{ .Values.gateway.webhook.maxAttachmentBytes | quote }}

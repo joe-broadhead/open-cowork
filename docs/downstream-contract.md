@@ -67,7 +67,7 @@ The version 1 contract covers these deployer-owned surfaces.
 | Billing mode | `cloud.billing` | `none` and `stub` for OSS self-host; managed adapters such as Stripe behind provider-neutral billing interfaces. |
 | Abuse and quotas | `cloud.abuse` | Rate limits, prompt limits, worker/session caps, artifact byte caps, gateway delivery caps. |
 | Gateway identity | `gateway.branding` | Channel-facing product name, legal/support links, dashboard labels. |
-| Gateway cloud binding | `gateway.cloud` | Cloud URL, service token placeholder/ref, insecure HTTP policy for loopback only. |
+| Gateway cloud binding | env/deployment secrets | `OPEN_COWORK_CLOUD_BASE_URL`, `OPEN_COWORK_GATEWAY_SERVICE_TOKEN`, `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS`, and loopback-only insecure HTTP policy. Runtime `gateway.cloud` JSON values and `gateway.timeouts.cloudRequestMs` are ignored by the gateway process. |
 | Gateway process | `gateway.server`, `gateway.metrics`, `gateway.diagnostics`, `gateway.logging` | Host/port, public base URL, operator token, metrics/diagnostics exposure, log level. |
 | Gateway channels | `gateway.providers` | Provider enablement, channel binding ids, credentials via env placeholders, provider settings. |
 | Updates and telemetry | `updates`, `telemetry` | Optional release source and downstream-owned telemetry endpoint. Upstream defaults to local/no remote telemetry. |

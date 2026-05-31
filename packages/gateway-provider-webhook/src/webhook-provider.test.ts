@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
 import {
   mapWebhookPayload,
+  signWebhookDeliveryPayload,
   signWebhookIngressPayload,
   validateWebhookButtons,
   WebhookProvider
@@ -198,16 +199,18 @@ describe("WebhookProvider", () => {
   });
 
   it("delivers outgoing gateway messages to the bridge endpoint", async () => {
-    const deliveries: Array<{ url: string; headers: Record<string, string>; body: unknown }> = [];
+    const deliveries: Array<{ url: string; headers: Record<string, string>; rawBody: string; body: unknown }> = [];
     const provider = new WebhookProvider({
       providerId: "whatsapp",
       deliveryUrl: "https://bridge.example.test/gateway",
       sharedSecret: "secret",
       fetch: async (input, init) => {
+        const rawBody = String(init?.body);
         deliveries.push({
           url: String(input),
           headers: Object.fromEntries(new Headers(init?.headers).entries()),
-          body: JSON.parse(String(init?.body))
+          rawBody,
+          body: JSON.parse(rawBody)
         });
         return new Response(JSON.stringify({ messageId: "bridge-message-id" }), {
           status: 200,
@@ -234,7 +237,8 @@ describe("WebhookProvider", () => {
         headers: expect.objectContaining({
           "content-type": "application/json",
           "x-open-cowork-gateway-delivery-id": expect.any(String),
-          "x-open-cowork-gateway-webhook-secret": "secret"
+          "x-open-cowork-gateway-webhook-signature": expect.any(String),
+          "x-open-cowork-gateway-webhook-timestamp": expect.any(String)
         }),
         body: expect.objectContaining({
           deliveryId: expect.any(String),
@@ -255,6 +259,14 @@ describe("WebhookProvider", () => {
     ]);
     expect((deliveries[0]?.body as { deliveryId?: string }).deliveryId).toBe(
       deliveries[0]?.headers["x-open-cowork-gateway-delivery-id"],
+    );
+    expect(deliveries[0]?.headers["x-open-cowork-gateway-webhook-secret"]).toBe(undefined);
+    expect(deliveries[0]?.headers["x-open-cowork-gateway-webhook-signature"]).toBe(
+      signWebhookDeliveryPayload(
+        deliveries[0]?.rawBody || "",
+        "secret",
+        deliveries[0]?.headers["x-open-cowork-gateway-webhook-timestamp"] || "",
+      ),
     );
   });
 

@@ -8,8 +8,23 @@ import type { ChannelCapabilities } from '@open-cowork/gateway-channel'
 import {
   createGatewayProviderRegistry,
   GATEWAY_PROVIDER_READINESS_MATRIX,
-  resolveGatewayConfig,
+  resolveGatewayConfig as resolveGatewayConfigBase,
 } from '../dist/index.js'
+
+const cloudEnv = {
+  OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+  OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+}
+
+function resolveGatewayConfig(
+  raw: Parameters<typeof resolveGatewayConfigBase>[0] = {},
+  env: Parameters<typeof resolveGatewayConfigBase>[1] = {},
+) {
+  return resolveGatewayConfigBase(raw, {
+    ...cloudEnv,
+    ...env,
+  })
+}
 
 const capabilityKeys: Array<keyof ChannelCapabilities> = [
   'threads',
@@ -64,6 +79,9 @@ test('gateway provider readiness matrix matches actual provider capabilities and
     cloud: {
       baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
     },
     providers: [{
       id: 'fake',
