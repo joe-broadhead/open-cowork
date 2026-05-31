@@ -28,6 +28,14 @@ enabled for your deployment. Multiple workers can claim fenced sessions, and
 checkpointing externalizes the proven OpenCode runtime/XDG and workspace
 portable set so a different worker can restore before resuming a session.
 
+The future managed worker service plane builds on the same split-role model.
+It adds explicit worker pools, worker identity, lifecycle controls, durable
+leases, fencing tokens, recovery rules, quotas, and operations runbooks for
+laptop-independent cloud execution. The Phase 0 architecture and threat model
+are in [Managed Worker Service Plane](managed-workers.md). Until those later
+implementation phases land, cloud workers remain the current split-role worker
+processes described on this page.
+
 ## Workspace sync contract
 
 Cloud is the source of truth only for cloud workspaces. A user can start a
