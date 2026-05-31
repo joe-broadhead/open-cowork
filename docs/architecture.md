@@ -167,6 +167,14 @@ New cloud domains should not be added to those exception files. Add a domain
 contract, service, route module, or client domain module first, then wire the
 legacy facade only where compatibility requires it.
 
+Additional guardrails keep new modules from growing into the next facade:
+Cloud HTTP route modules should stay under 500 lines, Cloud service modules
+under 450 lines, Cloud client domain barrels under 120 lines, and Gateway
+production source modules under 900 lines. Tests also enforce that client
+surfaces do not import server-only Cloud internals, that hot Cloud Postgres
+paths keep indexed/bounded query shapes, and that Desktop/Web/Gateway consume
+the shared Cloud event/projection contract.
+
 ## High-level layers
 
 Each layer maps to a small cluster of files. If you are making changes, start

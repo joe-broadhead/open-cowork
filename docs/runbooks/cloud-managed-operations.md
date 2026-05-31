@@ -217,9 +217,10 @@ or users cannot load the Cloud Web Workbench.
 ## Worker Backlog
 
 Use this when prompt latency rises, commands remain pending, or projection lag
-grows.
+grows. The queue-depth signal is a bounded estimate from worker scans; use it
+with oldest queued age and claim latency rather than as an exact backlog count.
 
-1. Check `open_cowork_cloud_command_queue_depth`,
+1. Check `open_cowork_cloud_command_queue_depth_estimate`,
    `open_cowork_cloud_command_oldest_age_ms`, and
    `open_cowork_cloud_worker_loop_duration_ms`.
 2. Check worker heartbeats and active sessions in `GET /api/workers/heartbeats`.

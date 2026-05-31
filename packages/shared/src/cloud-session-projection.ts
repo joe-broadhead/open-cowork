@@ -55,7 +55,7 @@ export type CloudResolvedQuestion = {
   resolvedAt: string
 }
 
-export const CLOUD_SESSION_EVENT_TYPES = [
+export const CLOUD_PROJECTED_SESSION_EVENT_TYPES = [
   'session.created',
   'session.imported',
   'session.project_source.bound',
@@ -74,11 +74,27 @@ export const CLOUD_SESSION_EVENT_TYPES = [
   'session.idle',
   'session.aborted',
   'runtime.error',
+] as const
+
+export const CLOUD_SESSION_EVENT_TYPES = [
+  ...CLOUD_PROJECTED_SESSION_EVENT_TYPES,
   'snapshot.required',
   'channel.delivery',
 ] as const
 
+export type CloudProjectedSessionEventType = typeof CLOUD_PROJECTED_SESSION_EVENT_TYPES[number]
 export type CloudSessionEventType = typeof CLOUD_SESSION_EVENT_TYPES[number]
+
+const CLOUD_PROJECTED_SESSION_EVENT_TYPE_SET = new Set<string>(CLOUD_PROJECTED_SESSION_EVENT_TYPES)
+const CLOUD_SESSION_EVENT_TYPE_SET = new Set<string>(CLOUD_SESSION_EVENT_TYPES)
+
+export function isCloudProjectedSessionEventType(value: string): value is CloudProjectedSessionEventType {
+  return CLOUD_PROJECTED_SESSION_EVENT_TYPE_SET.has(value)
+}
+
+export function isCloudSessionEventType(value: string): value is CloudSessionEventType {
+  return CLOUD_SESSION_EVENT_TYPE_SET.has(value)
+}
 
 export type CloudSessionProjectionView = {
   sessionId: string
@@ -882,10 +898,7 @@ export function reduceCloudSessionProjectionEvent(
       }
     }
     default:
-      return {
-        ...current,
-        updatedAt: eventTime,
-      }
+      return current
   }
 }
 

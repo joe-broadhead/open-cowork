@@ -275,22 +275,7 @@ export async function listPostgresRunnableSessions(
   const now = input.now || new Date()
   const nowMs = now.getTime()
   const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-  const countRow = await executor.query(
-    `SELECT count(*)::int AS count
-     FROM (
-       SELECT commands.tenant_id, commands.session_id
-       FROM cloud_session_commands commands
-       LEFT JOIN cloud_worker_leases leases
-         ON leases.tenant_id = commands.tenant_id
-        AND leases.session_id = commands.session_id
-       WHERE commands.target_lease_token IS NULL
-         AND commands.status IN ('pending', 'running')
-         AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
-         AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
-       GROUP BY commands.tenant_id, commands.session_id
-     ) runnable`,
-    [nowMs, now.toISOString()],
-  )
+  const boundedDepthLimit = limit + 1
   const selected = await executor.query(
     `SELECT commands.tenant_id, commands.session_id, min(commands.created_sequence) AS first_sequence
      FROM cloud_session_commands commands
@@ -304,13 +289,14 @@ export async function listPostgresRunnableSessions(
      GROUP BY commands.tenant_id, commands.session_id
      ORDER BY first_sequence, commands.tenant_id, commands.session_id
      LIMIT $3`,
-    [nowMs, now.toISOString(), limit],
+    [nowMs, now.toISOString(), boundedDepthLimit],
   )
+  const rows = selected.rows.slice(0, limit)
   return {
-    sessions: selected.rows.map((row) => ({
+    sessions: rows.map((row) => ({
       tenantId: String(row.tenant_id),
       sessionId: String(row.session_id),
     })),
-    pendingSessionCount: numberValue(countRow.rows[0]?.count),
+    pendingSessionCountEstimate: selected.rows.length > limit ? boundedDepthLimit : selected.rows.length,
   }
 }

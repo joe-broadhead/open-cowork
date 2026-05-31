@@ -147,7 +147,7 @@ export class CloudWorker {
   async processAllSessionCommands(): Promise<number> {
     const startedAt = Date.now()
     let processed = 0
-    let pendingSessionCount = 0
+    let pendingSessionCountEstimate = 0
     const reaped = await this.store.reapExpiredSessionLeases({ now: new Date() })
     if (reaped.length > 0) {
       await recordCloudWorkerMetric(this.observability, {
@@ -163,7 +163,7 @@ export class CloudWorker {
         limit: this.claimBatchSize,
         now: new Date(),
       })
-      pendingSessionCount = Math.max(pendingSessionCount, runnable.pendingSessionCount)
+      pendingSessionCountEstimate = Math.max(pendingSessionCountEstimate, runnable.pendingSessionCountEstimate)
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_session_claim_duration_ms',
         value: Date.now() - claimStartedAt,
@@ -193,8 +193,8 @@ export class CloudWorker {
       if (runnable.sessions.length < this.claimBatchSize || processedThisBatch === 0) break
     }
     await recordCloudWorkerMetric(this.observability, {
-      name: 'open_cowork_cloud_command_queue_depth',
-      value: pendingSessionCount,
+      name: 'open_cowork_cloud_command_queue_depth_estimate',
+      value: pendingSessionCountEstimate,
       workerId: this.workerId,
     })
     await recordCloudWorkerMetric(this.observability, {

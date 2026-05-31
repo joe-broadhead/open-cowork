@@ -1,4 +1,4 @@
-import type { CloudSessionEventType } from '@open-cowork/shared'
+import type { CloudProjectedSessionEventType } from '@open-cowork/shared'
 import { normalizeSessionInfo } from '../opencode-adapter.ts'
 
 export type CloudRuntimeSession = {
@@ -13,7 +13,7 @@ export type CloudRuntimePromptPart =
   | { type: 'file'; mime: string; url: string; filename?: string }
 
 export type CloudRuntimeEvent = {
-  type: CloudSessionEventType
+  type: CloudProjectedSessionEventType
   payload: Record<string, unknown>
 }
 

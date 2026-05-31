@@ -2157,23 +2157,6 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const ttlMs = input.ttlMs ?? 30_000
     const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     return this.withTransaction(async (client) => {
-      const countRow = await this.one(
-        `SELECT count(*)::int AS count
-         FROM (
-           SELECT commands.tenant_id, commands.session_id
-           FROM cloud_session_commands commands
-           LEFT JOIN cloud_worker_leases leases
-             ON leases.tenant_id = commands.tenant_id
-            AND leases.session_id = commands.session_id
-           WHERE commands.target_lease_token IS NULL
-             AND commands.status IN ('pending', 'running')
-             AND (commands.status <> 'pending' OR commands.available_at IS NULL OR commands.available_at <= $2)
-             AND (leases.lease_expires_at_ms IS NULL OR leases.lease_expires_at_ms <= $1)
-           GROUP BY commands.tenant_id, commands.session_id
-         ) runnable`,
-        [nowMs, now.toISOString()],
-        client,
-      )
       const selected = await client.query(
         `SELECT sessions.*, runnable.first_sequence
          FROM cloud_sessions sessions
@@ -2242,7 +2225,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       }
       return {
         leases,
-        pendingSessionCount: numberValue(countRow.count),
+        pendingSessionCountEstimate: selected.rows.length,
       }
     })
   }

@@ -125,7 +125,7 @@ function runControlPlaneDomainContracts(
         now: new Date('2026-01-01T00:00:00.000Z'),
         ttlMs: 30_000,
       })
-      assert.equal(runnableClaim.pendingSessionCount >= 1, true)
+      assert.equal(runnableClaim.pendingSessionCountEstimate >= 1, true)
       assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
 
       const workerPool = await store.createManagedWorkerPool({

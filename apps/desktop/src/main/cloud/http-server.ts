@@ -3,7 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net'
 import {
   emptySessionImportItemCounts,
+  isCloudSessionEventType,
   normalizeCloudProjectSource,
+  type CloudSessionEventType,
   type CloudProjectSourceInput,
   type PublicBrandingConfig,
   type SessionImportRequest,
@@ -126,6 +128,7 @@ type RouteContext = {
 }
 
 type SequencedSseEvent = { sequence: number }
+const CHANNEL_DELIVERY_SSE_EVENT_TYPE = 'channel.delivery' satisfies CloudSessionEventType
 
 type SseReplaySubscriber = {
   lastSequence: number
@@ -547,7 +550,7 @@ function writeSseEvent(res: ServerResponse, event: {
   entityId?: string
   operation?: string
   projectionVersion?: number
-  type: string
+  type: CloudSessionEventType
   eventId: string
   payload: Record<string, unknown>
   createdAt?: string
@@ -561,7 +564,7 @@ function writeChannelDeliverySseEvent(res: ServerResponse, delivery: unknown) {
   const record = readRecord(delivery) || {}
   const deliveryId = readString(record.deliveryId) || 'delivery'
   res.write(`id: ${deliveryId}\n`)
-  res.write('event: channel.delivery\n')
+  res.write(`event: ${CHANNEL_DELIVERY_SSE_EVENT_TYPE}\n`)
   res.write(`data: ${JSON.stringify({ delivery })}\n\n`)
 }
 
@@ -787,7 +790,12 @@ async function handleSse(
     payload: Record<string, unknown>
   }) => {
     if (event.sequence <= lastSequence) return
-    writeSseEvent(res, event)
+    if (!isCloudSessionEventType(event.type)) {
+      lastSequence = event.sequence
+      return
+    }
+    const type: CloudSessionEventType = event.type
+    writeSseEvent(res, { ...event, type })
     lastSequence = event.sequence
   }
   for (const event of await options.service.listEvents(context.principal, sessionId, afterSequence)) {
@@ -848,7 +856,12 @@ async function handleWorkspaceSse(
     createdAt?: string
   }) => {
     if (event.sequence <= lastSequence) return
-    writeSseEvent(res, event)
+    if (!isCloudSessionEventType(event.type)) {
+      lastSequence = event.sequence
+      return
+    }
+    const type: CloudSessionEventType = event.type
+    writeSseEvent(res, { ...event, type })
     lastSequence = event.sequence
   }
 

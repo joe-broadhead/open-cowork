@@ -7,6 +7,12 @@ const root = process.cwd()
 const cloudRoot = join(root, 'apps/desktop/src/main/cloud')
 const cloudClientRoot = join(root, 'packages/cloud-client/src')
 const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
+const downstreamDoc = readFileSync(join(root, 'docs/downstream.md'), 'utf8')
+const dockerIgnore = readFileSync(join(root, '.dockerignore'), 'utf8')
+const postgresSchema = readFileSync(join(cloudRoot, 'postgres-schema.ts'), 'utf8')
+const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
+const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
+const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
@@ -23,6 +29,7 @@ test('cloud core has enforceable domain module boundaries', () => {
     'channels.ts',
     'sessions.ts',
     'settings.ts',
+    'workers.ts',
     'workflows.ts',
     'thread-index.ts',
     'schema.ts',
@@ -49,6 +56,8 @@ test('cloud core has enforceable domain module boundaries', () => {
   }
 
   const expectedRoutes = [
+    'access-policy.ts',
+    'admin.ts',
     'api-tokens.ts',
     'billing.ts',
     'byok.ts',
@@ -73,6 +82,7 @@ test('cloud core has enforceable domain module boundaries', () => {
     'projection-service.ts',
     'managed-worker-service.ts',
     'session-command-service.ts',
+    'usage-governance-service.ts',
   ]
   for (const file of expectedServices) {
     assert.equal(existsSync(join(cloudRoot, 'services', file)), true, `${file} domain service is missing`)
@@ -129,6 +139,13 @@ test('large cloud source files are documented exceptions', () => {
   }
 })
 
+test('cloud route, service, and client modules stay within ownership budgets', () => {
+  assertSourceBudget('cloud HTTP route module', join(cloudRoot, 'http-routes'), 500)
+  assertSourceBudget('cloud service module', join(cloudRoot, 'services'), 450)
+  assertSourceBudget('cloud-client domain barrel', join(cloudClientRoot, 'domains'), 120)
+  assertSourceBudget('gateway production source module', join(root, 'apps/gateway/src'), 900)
+})
+
 test('postgres store delegates row mapping to domain modules', () => {
   const source = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
   assert.doesNotMatch(source, /function \w+FromRow\(/, 'Postgres row mappers belong in postgres-domains/*')
@@ -143,6 +160,7 @@ test('postgres store delegates row mapping to domain modules', () => {
     const lineCount = readFileSync(file, 'utf8').split('\n').length
     assert.ok(lineCount <= 250, `${relativePath} has ${lineCount} lines; Postgres domain mappers should stay narrow`)
   }
+  assertSourceBudget('Postgres store domain module', join(cloudRoot, 'postgres-store-domains'), 700)
 })
 
 test('session service delegates command payload parsing to command service module', () => {
@@ -166,6 +184,109 @@ test('cloud route and service modules stay behind store and runtime boundaries',
   }
 })
 
+test('client surfaces do not import server-only cloud internals', () => {
+  const checkedRoots = [
+    'apps/desktop/src/renderer',
+    'apps/gateway/src',
+    'apps/website/src',
+    'packages/cloud-client/src',
+  ]
+  const forbidden = [
+    /apps\/desktop\/src\/main\/cloud/,
+    /\.\.\/.*main\/cloud/,
+    /cloud\/postgres-/,
+    /postgres-control-plane-store/,
+    /control-plane-store/,
+    /session-service/,
+    /secret-adapter/,
+    /runtime-adapter/,
+    /@opencode-ai\/sdk/,
+  ]
+
+  for (const checkedRoot of checkedRoots) {
+    for (const file of productionSourceFiles(join(root, checkedRoot))) {
+      const relativePath = relative(root, file)
+      const source = readFileSync(file, 'utf8')
+      for (const pattern of forbidden) {
+        assert.doesNotMatch(source, pattern, `${relativePath} must not import server-only cloud internals matching ${pattern}`)
+      }
+    }
+  }
+})
+
+test('high-volume cloud tables keep indexed and bounded query shapes', () => {
+  assertIndexShape('cloud_sessions_user_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, updated_at DESC, session_id')
+  assertIndexShape('cloud_sessions_user_status_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, status, updated_at DESC, session_id')
+  assertIndexShape('cloud_sessions_user_profile_cursor_idx', 'cloud_sessions', 'tenant_id, user_id, profile_name, updated_at DESC, session_id')
+  assertIndexShape('cloud_session_events_sequence_idx', 'cloud_session_events', 'tenant_id, session_id, sequence')
+  assertIndexShape('cloud_workspace_events_sequence_idx', 'cloud_workspace_events', 'tenant_id, user_id, sequence')
+  assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
+  assertIndexShape('cloud_session_commands_runnable_idx', 'cloud_session_commands', 'status, target_lease_token, tenant_id, session_id, created_sequence', "WHERE status IN ('pending', 'running')")
+  assertIndexShape('cloud_worker_leases_expiry_idx', 'cloud_worker_leases', 'tenant_id, session_id, lease_expires_at_ms')
+  assertIndexShape('cloud_workflow_runs_claim_idx', 'cloud_workflow_runs', 'tenant_id, status, claim_expires_at')
+  assertIndexShape('cloud_channel_deliveries_claim_idx', 'cloud_channel_deliveries', 'org_id, status, next_attempt_at, created_at')
+  assertIndexShape('cloud_usage_events_org_created_idx', 'cloud_usage_events', 'org_id, created_at DESC')
+  assertIndexShape('cloud_worker_pools_org_idx', 'cloud_worker_pools', 'org_id, updated_at DESC')
+  assertIndexShape('cloud_managed_workers_org_status_idx', 'cloud_managed_workers', 'org_id, status, updated_at DESC')
+  assertIndexShape('cloud_managed_worker_heartbeats_org_idx', 'cloud_managed_worker_heartbeats', 'org_id, received_at DESC')
+
+  assert.match(postgresStore, /async listSessionsPage[\s\S]*LIMIT \$\$\{params\.length\}/)
+  assert.match(postgresQuotaDomain, /export async function listPostgresRunnableSessions[\s\S]*ORDER BY first_sequence[\s\S]*LIMIT \$3/)
+  assert.doesNotMatch(extractFunctionSource(postgresQuotaDomain, 'listPostgresRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
+  assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
+  assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
+  assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresStore, /async claimNextChannelDelivery[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresStore, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
+})
+
+test('cloud and gateway OCI builds keep generated artifacts out of Docker context', () => {
+  for (const pattern of [
+    'node_modules',
+    '**/node_modules',
+    'coverage',
+    '**/coverage',
+    'dist',
+    '**/dist',
+    'release',
+    '**/release',
+    'tmp',
+    '**/tmp',
+  ]) {
+    assert.match(dockerIgnore, new RegExp(`(^|\\n)${escapeRegex(pattern)}(\\n|$)`), `.dockerignore must exclude ${pattern}`)
+  }
+})
+
+test('downstream extension docs map extension points to owning modules', () => {
+  for (const phrase of [
+    'Extension Points And Ownership',
+    'Gateway providers',
+    'Deployment recipes',
+    'Billing adapters',
+    'Object-store adapters',
+    'Secret adapters',
+    'Worker pool modes',
+    'Cloud event and projection contract',
+    'Do not patch core execution code',
+  ]) {
+    assert.match(downstreamDoc, new RegExp(escapeRegex(phrase)), `docs/downstream.md must document ${phrase}`)
+  }
+})
+
+test('performance docs document cloud query guardrails', () => {
+  for (const phrase of [
+    'Cloud API query guardrails',
+    'cursor pagination',
+    '500 rows',
+    'FOR UPDATE SKIP LOCKED',
+    'claim loops',
+    'Postgres indexes',
+    '`query` search',
+  ]) {
+    assert.match(performanceDoc, new RegExp(escapeRegex(phrase)), `docs/performance.md must document ${phrase}`)
+  }
+})
+
 function sourceFiles(directory: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(directory)) {
@@ -176,4 +297,55 @@ function sourceFiles(directory: string): string[] {
     else if (path.endsWith('.ts')) files.push(path)
   }
   return files
+}
+
+function productionSourceFiles(directory: string): string[] {
+  const files: string[] = []
+  for (const entry of readdirSync(directory)) {
+    if (entry === 'dist' || entry === 'node_modules' || entry === 'coverage') continue
+    const path = join(directory, entry)
+    const stat = statSync(path)
+    if (stat.isDirectory()) files.push(...productionSourceFiles(path))
+    else if (
+      (path.endsWith('.ts') || path.endsWith('.tsx') || path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs'))
+      && !path.endsWith('.test.ts')
+      && !path.endsWith('.test.tsx')
+    ) {
+      files.push(path)
+    }
+  }
+  return files
+}
+
+function assertSourceBudget(label: string, directory: string, maxLines: number) {
+  for (const file of productionSourceFiles(directory)) {
+    const relativePath = relative(root, file)
+    const lineCount = readFileSync(file, 'utf8').split('\n').length
+    assert.ok(lineCount <= maxLines, `${label} ${relativePath} has ${lineCount} lines; budget is ${maxLines}`)
+  }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function assertIndexShape(indexName: string, tableName: string, columns: string, predicate?: string) {
+  const pattern = new RegExp(
+    `CREATE (?:UNIQUE )?INDEX IF NOT EXISTS ${escapeRegex(indexName)}\\s+ON ${escapeRegex(tableName)} \\(${escapeRegex(columns)}\\)${predicate ? `[\\s\\S]*${escapeRegex(predicate)}` : ''}`,
+  )
+  assert.match(postgresSchema, pattern, `${indexName} must keep its indexed table, column order, and predicate`)
+}
+
+function extractMethodSource(source: string, methodName: string) {
+  const start = source.indexOf(`async ${methodName}`)
+  assert.notEqual(start, -1, `${methodName} method is missing`)
+  const nextMethod = source.indexOf('\n  async ', start + 1)
+  return source.slice(start, nextMethod === -1 ? undefined : nextMethod)
+}
+
+function extractFunctionSource(source: string, functionName: string) {
+  const start = source.indexOf(`function ${functionName}`)
+  assert.notEqual(start, -1, `${functionName} function is missing`)
+  const nextFunction = source.indexOf('\nexport async function ', start + 1)
+  return source.slice(start, nextFunction === -1 ? undefined : nextFunction)
 }

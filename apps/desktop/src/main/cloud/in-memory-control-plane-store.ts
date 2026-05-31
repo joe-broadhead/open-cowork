@@ -440,10 +440,10 @@ export type ClaimRunnableSessionsInput = {
 }
 export type ListRunnableSessionsInput = { limit?: number | null, now?: Date }
 export type RunnableSessionRecord = { tenantId: string, sessionId: string }
-export type RunnableSessionListRecord = { sessions: RunnableSessionRecord[], pendingSessionCount: number }
+export type RunnableSessionListRecord = { sessions: RunnableSessionRecord[], pendingSessionCountEstimate: number }
 export type RunnableSessionClaimRecord = {
   leases: WorkerLeaseRecord[]
-  pendingSessionCount: number
+  pendingSessionCountEstimate: number
 }
 
 export type ReapExpiredSessionLeasesInput = {
@@ -3016,7 +3016,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         tenantId: candidate.session.record.tenantId,
         sessionId: candidate.session.record.sessionId,
       })),
-      pendingSessionCount: candidates.length,
+      pendingSessionCountEstimate: candidates.length,
     }
   }
 
@@ -3046,7 +3046,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     }
     return {
       leases,
-      pendingSessionCount: candidates.length,
+      pendingSessionCountEstimate: candidates.length,
     }
   }
 

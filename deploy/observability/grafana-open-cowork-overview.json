@@ -32,7 +32,7 @@
       "type": "timeseries",
       "title": "Worker backlog and leases",
       "targets": [
-        { "expr": "max(open_cowork_cloud_command_queue_depth)" },
+        { "expr": "max(open_cowork_cloud_command_queue_depth_estimate)" },
         { "expr": "max(open_cowork_cloud_command_oldest_age_ms)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_lease_claims_total[5m])) by (status)" },
         { "expr": "sum(rate(open_cowork_cloud_worker_lease_renewals_total[5m])) by (status)" },
