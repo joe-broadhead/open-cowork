@@ -172,13 +172,19 @@ export function buildConfiguredDescriptorProviderRuntimeConfig(
   const models = buildDescriptorModelRuntimeConfig(descriptor.models)
   const hasOptions = Object.keys(options).length > 0
 
-  // For OpenCode-native providers such as OpenAI, Anthropic, and
-  // downstream providers like GitHub Copilot, omit the provider override
-  // entirely unless Cowork actually has options, API-key credentials, or
-  // model overrides to contribute. Passing a name-only provider object
-  // shadows OpenCode's built-in provider metadata and can make the
-  // runtime choose the API-key auth path even after browser login.
-  if (!hasOptions && !models) return null
+  // Most OpenCode-native providers such as OpenAI should be omitted
+  // unless Cowork has options, API-key credentials, or model overrides to
+  // contribute. Passing a name-only provider object can shadow OpenCode's
+  // built-in metadata and make the runtime choose the API-key auth path
+  // even after browser login. Some dormant OpenCode-native providers,
+  // including GitHub Copilot in the pinned runtime, only appear after a
+  // minimal provider config entry exists; those descriptors opt into
+  // runtimeActivation: "config".
+  if (!hasOptions && !models) {
+    return descriptor.runtimeActivation === 'config'
+      ? { name: descriptor.name }
+      : null
+  }
 
   return {
     name: descriptor.name,

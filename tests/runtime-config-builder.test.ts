@@ -936,6 +936,7 @@ test('buildRuntimeConfig supports downstream OpenCode-native providers with runt
       descriptors: {
         'github-copilot': {
           runtime: 'builtin',
+          runtimeActivation: 'implicit',
           name: 'GitHub Copilot',
           description: 'Use GitHub Copilot through OpenCode.',
           credentials: [],
@@ -961,6 +962,60 @@ test('buildRuntimeConfig supports downstream OpenCode-native providers with runt
       runtimeConfig.provider?.['github-copilot'],
       undefined,
       'downstream OpenCode-native providers should keep OpenCode-owned auth/model metadata intact',
+    )
+  } finally {
+    saveSettings(originalSettings)
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('buildRuntimeConfig can activate dormant OpenCode-native providers without credentials', () => {
+  const tempRoot = testTempDir('opencowork-runtime-activated-provider-')
+  const configDir = join(tempRoot, 'downstream')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const originalSettings = loadSettings()
+
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.json'), JSON.stringify({
+    providers: {
+      available: ['github-copilot'],
+      defaultProvider: 'github-copilot',
+      defaultModel: null,
+      descriptors: {
+        'github-copilot': {
+          runtime: 'builtin',
+          runtimeActivation: 'config',
+          name: 'GitHub Copilot',
+          description: 'Use GitHub Copilot through OpenCode.',
+          credentials: [],
+          models: [],
+        },
+      },
+    },
+  }))
+
+  try {
+    process.env.OPEN_COWORK_CONFIG_DIR = configDir
+    clearConfigCaches()
+    saveSettings({
+      selectedProviderId: 'github-copilot',
+      selectedModelId: '',
+      providerCredentials: {},
+    })
+
+    const runtimeConfig = buildRuntimeConfig() as Record<string, any>
+    assert.equal(runtimeConfig.model, 'github-copilot')
+    assert.equal(runtimeConfig.small_model, 'github-copilot')
+    assert.deepEqual(runtimeConfig.provider?.['github-copilot'], {
+      name: 'GitHub Copilot',
+    })
+    assert.equal(
+      JSON.stringify(runtimeConfig).includes('apiKey'),
+      false,
+      'GitHub Copilot activation must not invent an API-key credential path',
     )
   } finally {
     saveSettings(originalSettings)

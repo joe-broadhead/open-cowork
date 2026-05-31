@@ -661,6 +661,14 @@ them through `/api/byok`; records remain `pending_validation` until a provider
 validator passes, or an org admin uses the audited override endpoint with a
 redacted reason.
 
+Credentialless OpenCode-native desktop providers, including GitHub Copilot, are
+not normal Cloud BYOK providers. The upstream managed BYOK path admits only
+provider descriptors with declared secret credential fields, so Copilot is
+blocked by default for cloud workers and gateway sessions unless a deployer adds
+an explicit cloud-safe profile and policy for it. Do not route Copilot OAuth or
+device-code tokens through gateway providers, renderer state, cache, logs, or
+BYOK payloads.
+
 Gateway variables:
 
 | Variable | Meaning |

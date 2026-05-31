@@ -383,6 +383,47 @@ same way — OpenRouter is just an example. Downstream distributions can
 keep `models[]` only (strict static behavior) or add a `dynamicCatalog`
 for discovery, without touching code.
 
+Some OpenCode-native providers are dormant until the runtime receives a
+minimal provider config entry. GitHub Copilot is one example in the pinned
+OpenCode runtime. Use `runtimeActivation: "config"` for those providers:
+
+```json
+{
+  "providers": {
+    "available": ["openrouter", "openai", "github-copilot"],
+    "descriptors": {
+      "github-copilot": {
+        "runtime": "builtin",
+        "runtimeActivation": "config",
+        "name": "GitHub Copilot",
+        "description": "Use GitHub Copilot through OpenCode's native Copilot login flow.",
+        "credentials": [],
+        "models": []
+      }
+    }
+  }
+}
+```
+
+`runtimeActivation: "config"` does not add a credential path. It only causes
+Open Cowork to pass `{ provider: { "github-copilot": { "name": "GitHub
+Copilot" } } }` into the managed OpenCode runtime so OpenCode can expose its
+own provider catalog and OAuth/device-code prompts. Leave the field unset for
+providers such as OpenAI where OpenCode already exposes auth methods without a
+name-only config entry; unnecessary activation can change how OpenCode chooses
+between browser login and API-key auth.
+
+Cloud deployments must treat Copilot separately from normal BYOK API-key
+providers. The upstream cloud BYOK path only admits providers with declared
+secret credentials, so the default managed BYOK profile does not broker user
+Copilot credentials. A deployer-managed Copilot account or other hosted model
+requires an explicit cloud profile and policy decision outside this local
+desktop provider connection.
+
+Config layers merge by provider id. If a downstream build inherits an upstream
+provider descriptor but does not want runtime activation, set
+`runtimeActivation: "implicit"` explicitly in that downstream descriptor.
+
 ### Model Price And Context Overrides
 
 Open Cowork reads model pricing and context windows from OpenCode's native

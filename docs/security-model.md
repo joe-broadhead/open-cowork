@@ -252,6 +252,11 @@ machine-local OpenCode install. Advanced users can enable native OpenCode
 auth sharing from Settings → Permissions; that opt-in links OpenCode's
 native `auth.json` into the managed runtime and requires a runtime restart
 before newly spawned OpenCode processes use the changed auth boundary.
+Credentialless OpenCode-native providers such as GitHub Copilot still follow
+this boundary: Open Cowork may activate the provider in runtime config, but
+OpenCode owns the login/device-code flow and token storage. Copilot tokens are
+not entered into Open Cowork settings, copied into cloud sync payloads, or
+forwarded to the gateway.
 
 ## Chart frame isolation
 

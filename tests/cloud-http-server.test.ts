@@ -937,6 +937,27 @@ test('cloud HTTP BYOK APIs enforce provider availability and org entitlement pol
   }
 })
 
+test('cloud HTTP BYOK APIs treat an empty provider allowlist as deny-all', async () => {
+  const fixture = createFixture({
+    byokPolicy: {
+      allowedProviderIds: [],
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/byok/anthropic`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: ['credential', 'empty', 'allowlist', '1234567890'].join('-') }),
+    })
+
+    assert.equal(response.status, 403)
+    assert.match(JSON.stringify(await readJson(response)), /not enabled/)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP BYOK override activates an unvalidated provider with audited reason', async () => {
   const rawKey = 'credential-http-override-1234567890'
   const fixture = createFixture({

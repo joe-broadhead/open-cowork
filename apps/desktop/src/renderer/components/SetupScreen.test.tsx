@@ -68,6 +68,18 @@ const providers: ProviderDescriptor[] = [
   },
 ]
 
+const providersWithCopilot: ProviderDescriptor[] = [
+  ...providers,
+  {
+    id: 'github-copilot',
+    name: 'GitHub Copilot',
+    description: 'OpenCode-native Copilot login',
+    connected: false,
+    credentials: [],
+    models: [],
+  },
+]
+
 function resetSessionStore() {
   useSessionStore.setState({
     sessions: [],
@@ -248,5 +260,82 @@ describe('SetupScreen', () => {
         openrouter: expect.objectContaining({ apiKey: 'sk-or-scoped' }),
       },
     }))
+  })
+
+  it('uses OpenCode runtime catalog defaults after credentialless provider auth', async () => {
+    const user = userEvent.setup()
+    const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({
+      ...updates,
+      effectiveProviderId: updates.selectedProviderId || 'github-copilot',
+      effectiveModel: updates.selectedModelId || null,
+    }))
+    const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      provider: {
+        authMethods: vi.fn(async () => ({
+          'github-copilot': [{ type: 'oauth', label: 'GitHub Copilot' }],
+        })),
+        authorize: vi.fn(async () => ({
+          url: 'https://github.com/login/device',
+          method: 'auto',
+          instructions: 'Enter code ABCD 1234 at https://github.com/login/device',
+        })),
+        callback: vi.fn(async () => true),
+        list: vi.fn(async () => [{
+          id: 'github-copilot',
+          name: 'GitHub Copilot',
+          connected: true,
+          defaultModel: 'gpt-5.4',
+          models: { 'gpt-5.4': {} },
+        }]),
+      },
+      settings: {
+        get: vi.fn(async () => settings({
+          selectedProviderId: 'github-copilot',
+          selectedModelId: null,
+          effectiveProviderId: 'github-copilot',
+          effectiveModel: null,
+        })),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set,
+      },
+      runtime: {
+        restart,
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providersWithCopilot}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Sign in with GitHub Copilot' }))
+
+    await waitFor(() => expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      selectedProviderId: 'github-copilot',
+      selectedModelId: '',
+      providerCredentials: {
+        'github-copilot': {},
+      },
+    })))
+    await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
+    await waitFor(() => expect(screen.getByPlaceholderText('Model ID')).toHaveValue('gpt-5.4'))
+
+    await user.click(screen.getByRole('button', { name: 'Get Started' }))
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
+    expect(set).toHaveBeenLastCalledWith(expect.objectContaining({
+      selectedProviderId: 'github-copilot',
+      selectedModelId: 'gpt-5.4',
+      providerCredentials: {
+        'github-copilot': {},
+      },
+    }))
+    expect(restart).toHaveBeenCalledTimes(2)
   })
 })

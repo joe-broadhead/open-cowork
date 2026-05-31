@@ -545,11 +545,19 @@ function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {
   })
 }
 
-function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
-  const providerIds = (config.providers.available || [])
+export function listConfiguredByokProviderIds(config: OpenCoworkConfig) {
+  const configuredProviderIds = (config.providers.available || [])
     .map((providerId) => providerId.trim().toLowerCase())
     .filter(Boolean)
-  return providerIds.length > 0 ? Array.from(new Set(providerIds)) : null
+  const providerIds = configuredProviderIds
+    .filter((providerId) => {
+      const descriptor = config.providers.descriptors?.[providerId]
+      const custom = config.providers.custom?.[providerId]
+      const credentials = descriptor?.credentials || custom?.credentials || []
+      return credentials.some((credential) => credential.secret)
+    })
+  if (providerIds.length > 0) return Array.from(new Set(providerIds))
+  return configuredProviderIds.length > 0 ? [] : null
 }
 
 function readHeader(req: IncomingMessage, name: string) {

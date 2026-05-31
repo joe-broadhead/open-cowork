@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -35,11 +35,32 @@ test('open core ships with built-in tools, skills, mcps, and agents configured b
   assert.equal(getConfiguredToolAskPatterns(tools.find((tool) => tool.id === 'clock')!).length, 0)
   assert.equal(tools.find((tool) => tool.id === 'clock')?.defaultAccess, true)
   const providers = getProviderDescriptors()
-  assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai')
+  assert.equal(providers.map((provider) => provider.id).join(','), 'openrouter,openai,github-copilot')
   assert.equal(providers.find((provider) => provider.id === 'openrouter')?.defaultModel, 'deepseek/deepseek-v4-flash:free')
+  const copilot = providers.find((provider) => provider.id === 'github-copilot')
+  assert.equal(copilot?.credentials.length, 0)
+  assert.equal(copilot?.models.length, 0)
   assert.equal(getAppConfig().permissions.bash, 'allow')
   assert.equal(getAppConfig().permissions.fileWrite, 'allow')
   assert.equal(getAppConfig().permissions.webSearch, true)
+})
+
+test('GitHub Copilot provider descriptor matches pinned OpenCode runtime discovery fixture', () => {
+  const fixture = JSON.parse(readFileSync('tests/fixtures/opencode-provider-auth.github-copilot.json', 'utf-8'))
+  const descriptor = getAppConfig().providers.descriptors?.['github-copilot']
+
+  assert.equal(fixture.providerId, 'github-copilot')
+  assert.equal(fixture.activation.required, true)
+  assert.equal(descriptor?.runtime, 'builtin')
+  assert.equal(descriptor?.runtimeActivation, 'config')
+  assert.deepEqual(descriptor?.credentials, [])
+  assert.deepEqual(descriptor?.models, [])
+  assert.equal(fixture.authMethods[0]?.type, 'oauth')
+  assert.equal(fixture.models.hardcodedInOpenCowork, false)
+  assert.equal(fixture.models.defaultModel, 'claude-sonnet-4.6')
+  assert.equal(fixture.models.discoveredCount > 0, true)
+  assert.equal(fixture.secretBoundary.openCoworkCredentials.length, 0)
+  assert.equal(fixture.secretBoundary.cloudByokDefault, 'blocked')
 })
 
 test('invalid config fails fast with a readable validation error', () => {
