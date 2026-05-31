@@ -7,6 +7,7 @@ image:
   pullPolicy: IfNotPresent
 
 cloud:
+  deploymentTier: public_production
   profile: full
   root: /data/open-cowork-cloud
   existingSecret: open-cowork-cloud-secrets
@@ -52,6 +53,16 @@ roles:
       limits:
         cpu: "1"
         memory: 1Gi
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: web
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
   worker:
     enabled: true
     replicas: 2
@@ -66,6 +77,16 @@ roles:
       limits:
         cpu: "4"
         memory: 8Gi
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: worker
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
   scheduler:
     enabled: true
     replicas: 1
@@ -77,6 +98,16 @@ roles:
       limits:
         cpu: 500m
         memory: 512Mi
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: scheduler
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
 
 service:
   type: ClusterIP

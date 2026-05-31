@@ -137,6 +137,7 @@ async function main() {
   const results = []
   if (!skipCloud) {
     results.push({ check: 'cloud health', url: `${cloudUrl}/healthz`, result: await checkJson(`${cloudUrl}/healthz`) })
+    results.push({ check: 'cloud liveness', url: `${cloudUrl}/livez`, result: await checkJson(`${cloudUrl}/livez`) })
     results.push({
       check: 'cloud web workbench',
       url: `${cloudUrl}/`,
