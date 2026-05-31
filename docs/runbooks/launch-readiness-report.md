@@ -127,7 +127,9 @@ Record:
 - [ ] `pnpm deploy:desktop:smoke`
 - [ ] `pnpm deploy:gateway:smoke`
 - [ ] `pnpm deploy:continuation:smoke`
-- [ ] `pnpm deploy:failover:drill`
+- [ ] `pnpm deploy:failover:drill` with Cloud/Gateway URLs, worker/scheduler/
+      gateway hooks, and hook execution enabled. Dry-run output is not launch
+      evidence.
 - [ ] provider-specific smoke such as `pnpm deploy:gcp:smoke` where applicable
 
 ## Failover And Recovery Evidence

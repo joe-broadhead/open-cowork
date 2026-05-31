@@ -361,6 +361,7 @@ for (const phrase of [
   'gatewayDeliveryReplayDeadLetter',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
 ]) {
   assertIncludes(publicGoNoGoPath, phrase)
 }

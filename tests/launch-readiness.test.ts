@@ -281,7 +281,7 @@ test('launch evidence manifest validator accepts template and completed private 
       item.status = 'private-pass'
       item.privateEvidenceRef = `private://evidence/${item.id}`
       item.publicRedactedSummary = `Redacted private evidence summary for ${item.id}.`
-      item.checksum = `sha256-${item.id}`
+      item.checksum = `sha256:${'a'.repeat(64)}`
       item.owner = 'private-ops-owner'
     }
     const completedPath = join(outputDir, 'completed-launch-evidence.json')
@@ -305,6 +305,20 @@ test('launch evidence manifest validator accepts template and completed private 
         '--require-private-pass',
       ], { encoding: 'utf8' }),
       /must be private-pass/,
+    )
+
+    manifest.requiredEvidence[0].status = 'private-pass'
+    manifest.requiredEvidence[0].publicRedactedSummary = 'This unsafe summary contains sk-privatevalue123.'
+    const unsafePath = join(outputDir, 'unsafe-launch-evidence.json')
+    writeFileSync(unsafePath, `${JSON.stringify(manifest, null, 2)}\n`)
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        'scripts/validate-launch-evidence-manifest.mjs',
+        '--manifest',
+        unsafePath,
+        '--require-private-pass',
+      ], { encoding: 'utf8' }),
+      /must not include private/,
     )
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
@@ -336,6 +350,7 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
   try {
     const { stdout } = await execFileAsync(process.execPath, [
       'scripts/launch-failover-drill.mjs',
+      '--dry-run',
       '--cloud-url',
       cloud.url,
       '--gateway-url',
@@ -352,6 +367,7 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
     const parsed = JSON.parse(stdout)
     assert.equal(parsed.ok, true)
     assert.equal(parsed.report.redacted, true)
+    assert.equal(parsed.report.result, 'dry-run')
     assert.equal(parsed.report.targets.cloudUrl, 'http://REDACTED_HOST')
     assert.equal(parsed.report.hooks[0].status, 'dry-run')
     assert.ok(parsed.report.evidenceItems.includes('workerFailover'))

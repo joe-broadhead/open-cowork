@@ -73,6 +73,7 @@
     "deploy:soak": "node scripts/launch-readiness.mjs --mode soak",
     "deploy:soak:strict": "node scripts/launch-readiness.mjs --mode soak --strict",
     "deploy:failover:drill": "node scripts/launch-failover-drill.mjs",
+    "deploy:failover:drill:dry-run": "node scripts/launch-failover-drill.mjs --dry-run",
     "deploy:launch:validate": "node scripts/validate-launch-readiness.mjs",
     "deploy:launch:evidence:validate": "node scripts/validate-launch-evidence-manifest.mjs",
     "deploy:private-beta:validate": "node scripts/validate-private-beta-package.mjs",

@@ -177,6 +177,9 @@ if (packageJson.scripts?.['deploy:launch:evidence:validate'] !== 'node scripts/v
 if (packageJson.scripts?.['deploy:failover:drill'] !== 'node scripts/launch-failover-drill.mjs') {
   throw new Error('package.json must expose deploy:failover:drill')
 }
+if (packageJson.scripts?.['deploy:failover:drill:dry-run'] !== 'node scripts/launch-failover-drill.mjs --dry-run') {
+  throw new Error('package.json must expose deploy:failover:drill:dry-run')
+}
 
 const hosted = readJson('deploy/private-beta/hosted-byok.config.example.json')
 if (hosted.contractVersion !== 1) throw new Error('hosted private beta config must declare contractVersion 1')
@@ -540,6 +543,7 @@ for (const phrase of [
   'gatewayDeliveryReplayDeadLetter',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
 ]) {
   assertIncludes('deploy/private-beta/private-beta-go-no-go.public.md', phrase)
 }

@@ -64,6 +64,8 @@ Run these before changing this public decision summary:
 
 ```bash
 pnpm deploy:launch:validate
+pnpm deploy:launch:evidence:validate
+pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass
 pnpm deploy:private-beta:validate
 pnpm ops:validate
 pnpm deploy:continuation:smoke

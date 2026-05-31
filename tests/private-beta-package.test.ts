@@ -220,6 +220,7 @@ test('private beta launch evidence record and public go/no-go summary remain con
   assert.match(publicSummary, /Current public tier: `local-self-host-beta`/)
   assert.match(publicSummary, /pending-private-evidence/)
   assert.match(publicSummary, /deploy\/private-beta\/launch-evidence-record\.template\.json/)
+  assert.match(publicSummary, /pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass/)
 })
 
 test('private beta onboarding and go/no-go templates force complete evidence records', () => {
@@ -316,6 +317,7 @@ test('private beta validator runs from the package script', () => {
   assert.equal(packageJson.scripts['deploy:private-beta:validate'], 'node scripts/validate-private-beta-package.mjs')
   assert.equal(packageJson.scripts['deploy:launch:evidence:validate'], 'node scripts/validate-launch-evidence-manifest.mjs')
   assert.equal(packageJson.scripts['deploy:failover:drill'], 'node scripts/launch-failover-drill.mjs')
+  assert.equal(packageJson.scripts['deploy:failover:drill:dry-run'], 'node scripts/launch-failover-drill.mjs --dry-run')
   const output = execFileSync(process.execPath, ['scripts/validate-private-beta-package.mjs'], {
     cwd: process.cwd(),
     encoding: 'utf8',

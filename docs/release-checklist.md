@@ -125,6 +125,8 @@ Reference workflows in the repository root:
       Cloud/Gateway deployment.
 - [ ] `pnpm deploy:failover:drill` captured worker, scheduler, and Gateway
       failover evidence or recorded explicit private operator hook evidence.
+      `pnpm deploy:failover:drill:dry-run` is only a local contract check and
+      is not launch evidence.
 - [ ] load and soak JSON/Markdown reports are attached to the release or
       downstream operations evidence.
 - [ ] `docs/runbooks/launch-readiness-report.md` has a completed Go/No-Go

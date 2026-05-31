@@ -14,6 +14,7 @@ function parseArgs(argv) {
     schedulerHook: process.env.OPEN_COWORK_FAILOVER_SCHEDULER_HOOK || '',
     gatewayHook: process.env.OPEN_COWORK_FAILOVER_GATEWAY_HOOK || '',
     executeHooks: process.env.OPEN_COWORK_FAILOVER_EXECUTE_HOOKS === 'true',
+    dryRun: process.env.OPEN_COWORK_FAILOVER_DRY_RUN === 'true',
     redacted: process.env.OPEN_COWORK_REDACT_OUTPUT !== 'false',
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -46,6 +47,8 @@ function parseArgs(argv) {
       index += 1
     } else if (arg === '--execute-hooks') {
       args.executeHooks = true
+    } else if (arg === '--dry-run') {
+      args.dryRun = true
     } else if (arg === '--unredacted') {
       args.redacted = false
     } else if (arg === '--help' || arg === '-h') {
@@ -74,8 +77,8 @@ function redactError(error, redacted) {
   return 'redacted-error'
 }
 
-async function probe(name, url, token, path, redacted) {
-  if (!url) return { name, status: 'skipped', reason: 'url-not-configured' }
+async function probe(name, url, token, path, redacted, dryRun) {
+  if (!url) return { name, status: dryRun ? 'skipped' : 'fail', reason: 'url-not-configured' }
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
   try {
@@ -92,9 +95,10 @@ async function probe(name, url, token, path, redacted) {
   }
 }
 
-function runHook(name, command, executeHooks, redacted) {
-  if (!command) return { name, status: 'skipped', reason: 'hook-not-configured' }
-  if (!executeHooks) return { name, status: 'dry-run', command: 'configured-but-not-executed' }
+function runHook(name, command, executeHooks, redacted, dryRun) {
+  if (!command) return { name, status: dryRun ? 'skipped' : 'fail', reason: 'hook-not-configured' }
+  if (dryRun) return { name, status: 'dry-run', command: 'configured-but-not-executed' }
+  if (!executeHooks) return { name, status: 'fail', reason: 'hook-execution-not-enabled' }
   try {
     const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh'
     const shellArgs = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-lc', command]
@@ -116,19 +120,19 @@ function runHook(name, command, executeHooks, redacted) {
 const args = parseArgs(process.argv.slice(2))
 const startedAt = new Date().toISOString()
 const preflight = [
-  await probe('cloud-health-before', args.cloudUrl, args.cloudToken, '/healthz', args.redacted),
-  await probe('gateway-ready-before', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted),
+  await probe('cloud-health-before', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
+  await probe('gateway-ready-before', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted, args.dryRun),
 ]
 const hooks = [
-  runHook('worker-failover-hook', args.workerHook, args.executeHooks, args.redacted),
-  runHook('scheduler-failover-hook', args.schedulerHook, args.executeHooks, args.redacted),
-  runHook('gateway-failover-hook', args.gatewayHook, args.executeHooks, args.redacted),
+  runHook('worker-failover-hook', args.workerHook, args.executeHooks, args.redacted, args.dryRun),
+  runHook('scheduler-failover-hook', args.schedulerHook, args.executeHooks, args.redacted, args.dryRun),
+  runHook('gateway-failover-hook', args.gatewayHook, args.executeHooks, args.redacted, args.dryRun),
 ]
 const postflight = [
-  await probe('cloud-health-after', args.cloudUrl, args.cloudToken, '/healthz', args.redacted),
-  await probe('cloud-metrics-after', args.cloudUrl, args.cloudToken, '/api/metrics', args.redacted),
-  await probe('gateway-ready-after', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted),
-  await probe('gateway-metrics-after', args.gatewayUrl, args.gatewayAdminToken, '/metrics', args.redacted),
+  await probe('cloud-health-after', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
+  await probe('cloud-metrics-after', args.cloudUrl, args.cloudToken, '/api/metrics', args.redacted, args.dryRun),
+  await probe('gateway-ready-after', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted, args.dryRun),
+  await probe('gateway-metrics-after', args.gatewayUrl, args.gatewayAdminToken, '/metrics', args.redacted, args.dryRun),
 ]
 const failed = [...preflight, ...hooks, ...postflight].filter((item) => item.status === 'fail')
 const report = {
@@ -137,8 +141,9 @@ const report = {
   redacted: args.redacted,
   startedAt,
   finishedAt: new Date().toISOString(),
-  result: failed.length === 0 ? 'pass-or-dry-run' : 'fail',
+  result: failed.length === 0 ? (args.dryRun ? 'dry-run' : 'pass') : 'fail',
   executeHooks: args.executeHooks,
+  dryRun: args.dryRun,
   targets: {
     cloudUrl: redactedUrl(args.cloudUrl, args.redacted),
     gatewayUrl: redactedUrl(args.gatewayUrl, args.redacted),
@@ -152,7 +157,8 @@ const report = {
   hooks,
   postflight,
   notes: [
-    'Hooks are not executed unless --execute-hooks or OPEN_COWORK_FAILOVER_EXECUTE_HOOKS=true is set.',
+    'Production failover evidence requires configured Cloud/Gateway URLs, configured worker/scheduler/gateway hooks, and --execute-hooks or OPEN_COWORK_FAILOVER_EXECUTE_HOOKS=true.',
+    'Use --dry-run only for local contract checks; dry-run output is not launch evidence.',
     'Store unredacted output in a private operations repository. Commit only redacted summaries or checksums to public artifacts.',
   ],
 }

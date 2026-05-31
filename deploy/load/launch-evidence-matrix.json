@@ -289,6 +289,7 @@
           "docs/runbooks/cloud-managed-operations.md"
         ],
         "requiredCommands": [
+          "pnpm deploy:failover:drill",
           "pnpm ops:validate"
         ],
         "passCondition": "A worker crash during pending command processing recovers through leases/checkpoints without stale-owner projection writes or lost terminal state."
@@ -301,6 +302,7 @@
           "docs/workflows.md"
         ],
         "requiredCommands": [
+          "pnpm deploy:failover:drill",
           "pnpm ops:validate"
         ],
         "passCondition": "Due workflow claims remain single-fire across scheduler restart or replica failover and recovery records the winning run."

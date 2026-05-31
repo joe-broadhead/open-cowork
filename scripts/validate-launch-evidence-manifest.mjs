@@ -65,9 +65,20 @@ function assertIncludes(path, text) {
 }
 
 function assertPublicSafe(path) {
-  const contents = read(path)
+  assertPublicSafeText(read(path), path)
+}
+
+function assertPublicSafeText(contents, label) {
   for (const marker of publicForbiddenMarkers) {
-    if (contents.includes(marker)) throw new Error(`${path} must not include private marker ${marker}`)
+    if (contents.includes(marker)) throw new Error(`${label} must not include private marker ${marker}`)
+  }
+  for (const pattern of [
+    /(?:sk|ghp|xoxb)-[A-Za-z0-9_-]{8,}/,
+    /\b(?:price|prod|acct|cus|sub)_[A-Za-z0-9_]{8,}/,
+    /postgres(?:ql)?:\/\//i,
+    /https?:\/\/(?!cowork\.example\.com\b|gateway\.example\.com\b|example\.com\b)[^\s)]+/i,
+  ]) {
+    if (pattern.test(contents)) throw new Error(`${label} must not include private-looking value ${pattern}`)
   }
 }
 
@@ -107,6 +118,13 @@ function isPlaceholder(value) {
 
 function assertCompletedValue(record, key, itemId) {
   if (isPlaceholder(record[key])) throw new Error(`${itemId}.${key} must be populated for private-pass evidence`)
+}
+
+function assertChecksum(value, itemId) {
+  if (typeof value !== 'string') throw new Error(`${itemId}.checksum must be a string`)
+  if (/^sha256:[a-f0-9]{64}$/i.test(value)) return
+  if (/^artifact:[A-Za-z0-9][A-Za-z0-9._:/-]{7,}$/.test(value)) return
+  throw new Error(`${itemId}.checksum must be sha256:<64 hex> or artifact:<immutable id>`)
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -185,6 +203,8 @@ for (const item of manifestItems) {
     assertCompletedValue(item, 'publicRedactedSummary', item.id)
     assertCompletedValue(item, 'checksum', item.id)
     assertCompletedValue(item, 'owner', item.id)
+    assertPublicSafeText(item.publicRedactedSummary, `${item.id}.publicRedactedSummary`)
+    assertChecksum(item.checksum, item.id)
   }
 }
 for (const id of requiredEvidenceIds) {
