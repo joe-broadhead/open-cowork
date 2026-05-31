@@ -1,6 +1,41 @@
 {
   "schemaVersion": 1,
   "profiles": {
+    "local-self-host-beta": {
+      "description": "OSS self-host and local reference deployment target. This proves the public templates, validators, local harnesses, and reference Compose/Helm paths are coherent; it is not a managed hosted SaaS claim.",
+      "durationMs": 120000,
+      "soakDurationMs": 1800000,
+      "concurrency": 4,
+      "requestRatePerSecond": 2,
+      "capacityTargets": {
+        "concurrentCloudUsers": 5,
+        "concurrentDesktopClients": 2,
+        "concurrentGatewayChannels": 1,
+        "concurrentSseStreams": 10,
+        "storedCloudThreads": 250,
+        "sessionCreatesPerMinute": 6,
+        "promptCommandsPerMinute": 12,
+        "activeWorkerSessions": 2,
+        "workflowRunsPerMinute": 2,
+        "gatewayInboundMessagesPerMinute": 12,
+        "gatewayOutboundDeliveriesPerMinute": 12,
+        "artifactUploadsPerMinute": 4,
+        "adminDashboardReadsPerMinute": 12
+      },
+      "thresholds": {
+        "maxOverallErrorRate": 0.02,
+        "maxOperationErrorRate": 0.05,
+        "p95ReadLatencyMs": 1200,
+        "p95MutationLatencyMs": 2500,
+        "p95GatewayLatencyMs": 1500,
+        "maxProjectionLagEvents": 50,
+        "maxCommandOldestAgeMs": 60000,
+        "maxUnexpectedQuotaRejections": 0,
+        "maxGatewayDeadLetters": 0,
+        "maxGatewayRetryRatePerMinute": 20,
+        "maxSseReconnectsPerMinute": 10
+      }
+    },
     "private-beta": {
       "description": "Initial managed BYOK private beta target for design partners and small internal teams.",
       "durationMs": 300000,

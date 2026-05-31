@@ -82,7 +82,11 @@ Reference workflows in the repository root:
 ### Managed cloud launch readiness
 
 - [ ] `pnpm deploy:load:plan` has been reviewed for the selected
-      `private-beta` or `public-beta` target profile.
+      `local-self-host-beta`, `private-beta`, or `public-beta` target profile.
+- [ ] `deploy/load/launch-evidence-matrix.json` states the exact accepted
+      launch tier through `acceptedPublicTier`; the public repo currently
+      claims only `local-self-host-beta` unless private operations evidence
+      explicitly upgrades the tier.
 - [ ] managed worker release evidence has been completed from
       `deploy/managed-workers/worker-release-evidence.template.md` in the
       private operations repo.
@@ -107,7 +111,8 @@ Reference workflows in the repository root:
 - [ ] load and soak JSON/Markdown reports are attached to the release or
       downstream operations evidence.
 - [ ] `docs/runbooks/launch-readiness-report.md` has a completed Go/No-Go
-      decision, Known limits, Cost and scaling notes, and Final smoke status.
+      decision, Accepted Launch Tier, Known limits, Cost and scaling notes,
+      Final smoke status, and Findings Workflow.
 - [ ] final Cloud Web/Desktop/Gateway smoke gates passed after the soak run.
 
 ## Tagged release

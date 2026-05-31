@@ -9,6 +9,10 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
+function readJsonFile(path: string) {
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
+
 function writeJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, {
     'content-type': 'application/json',
@@ -203,6 +207,68 @@ test('launch readiness harness produces strict load report against cloud and gat
   } finally {
     await new Promise<void>((resolve) => cloud.server.close(() => resolve()))
     await new Promise<void>((resolve) => gateway.server.close(() => resolve()))
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+test('launch evidence matrix states the current accepted tier and required gates', () => {
+  const targets = readJsonFile('deploy/load/launch-readiness-targets.json')
+  assert.ok(targets.profiles['local-self-host-beta'])
+  assert.ok(targets.profiles['private-beta'])
+  assert.ok(targets.profiles['public-beta'])
+  assert.ok(targets.profiles['enterprise-scale'])
+
+  const matrix = readJsonFile('deploy/load/launch-evidence-matrix.json')
+  assert.equal(matrix.schemaVersion, 1)
+  assert.equal(matrix.purpose, 'launch-evidence-tier-matrix')
+  assert.equal(matrix.acceptedPublicTier, 'local-self-host-beta')
+  assert.equal(matrix.tiers['local-self-host-beta'].claimStatus, 'accepted-public')
+  for (const tier of ['private-beta', 'public-beta', 'general-availability', 'enterprise-scale']) {
+    assert.notEqual(matrix.tiers[tier].claimStatus, 'accepted-public')
+  }
+  for (const category of [
+    'loadAndSoak',
+    'failoverRecovery',
+    'backupRestore',
+    'securityBoundary',
+    'releasePackaging',
+    'findingsWorkflow',
+  ]) {
+    assert.equal(matrix.evidenceCategories[category].requiredForAcceptedTier, true, category)
+    assert.ok(matrix.evidenceCategories[category].publicArtifacts.length > 0, category)
+    assert.ok(matrix.evidenceCategories[category].requiredCommands.length > 0, category)
+    assert.match(matrix.evidenceCategories[category].passCondition, /\w/)
+  }
+  assert.ok(matrix.evidenceCategories.loadAndSoak.coveredSurfaces.includes('SSE fanout and reconnect'))
+  assert.ok(matrix.evidenceCategories.failoverRecovery.coveredSurfaces.includes('Gateway restart with delivery cursor resume'))
+  assert.ok(matrix.evidenceCategories.backupRestore.coveredSurfaces.includes('BYOK secret references and reveal denial behavior'))
+  assert.ok(matrix.evidenceCategories.securityBoundary.coveredSurfaces.includes('public webhook ingress fails closed'))
+  assert.ok(matrix.evidenceCategories.releasePackaging.coveredSurfaces.includes('Desktop packaging smoke'))
+  assert.ok(matrix.evidenceCategories.findingsWorkflow.allowedDispositions.includes('narrow-follow-up-issue'))
+})
+
+test('launch readiness plan supports the local self-host beta tier', async () => {
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-launch-plan-'))
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [
+      'scripts/launch-readiness.mjs',
+      '--mode',
+      'plan',
+      '--profile',
+      'local-self-host-beta',
+      '--output-dir',
+      outputDir,
+    ], { encoding: 'utf8' })
+    const parsed = JSON.parse(stdout)
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.mode, 'plan')
+    assert.equal(parsed.profileName, 'local-self-host-beta')
+    assert.ok(parsed.operations.includes('cloud-health'))
+    assert.ok(parsed.operations.includes('gateway-health'))
+    const plan = readFileSync(parsed.planPath, 'utf8')
+    assert.match(plan, /local-self-host-beta/)
+    assert.match(plan, /OSS self-host and local reference deployment target/)
+  } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }
 })

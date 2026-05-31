@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "purpose": "launch-evidence-tier-matrix",
+  "acceptedPublicTier": "local-self-host-beta",
+  "publicProductClaim": "Open Cowork is launch-ready for local/self-host beta evaluation through public Compose, Helm, Cloud Web, Desktop sync, Gateway, BYOK-stub/manual, validators, and CI gates. This does not claim managed public SaaS, GA, or enterprise-scale readiness.",
+  "privateEvidenceBoundary": "The public repo stores evidence contracts, public-safe templates, validators, and redacted summaries only. Real customer evidence, managed SaaS domains, cloud project ids, prices, support rosters, raw logs, screenshots, metrics exports, cost data, and incident evidence stay in private operations repositories.",
+  "tiers": {
+    "local-self-host-beta": {
+      "claimStatus": "accepted-public",
+      "description": "Public OSS/deployer beta for local and self-host reference deployments.",
+      "acceptedClaims": [
+        "self-host deployers can use public Compose and Helm templates without private SaaS patches",
+        "launch-readiness, deployment, private-beta, and operations validators are repeatable",
+        "Cloud Web, Desktop cloud sync, and Gateway continuation are covered by public tests and smoke scripts",
+        "public templates are placeholder-only and private-value scanned"
+      ],
+      "notClaimed": [
+        "managed public SaaS production readiness",
+        "general availability",
+        "enterprise-scale capacity",
+        "environment-specific SLO or cost guarantees"
+      ]
+    },
+    "private-beta": {
+      "claimStatus": "requires-private-ops-evidence",
+      "description": "Design-partner hosted BYOK rollout. Claim only after private environment load, soak, restore, failover, and support evidence is attached outside this public repo.",
+      "blockedBy": [
+        "production-like load and soak evidence",
+        "restore drill evidence",
+        "BYOK provider validation evidence",
+        "support/on-call ownership evidence"
+      ]
+    },
+    "public-beta": {
+      "claimStatus": "not-claimed",
+      "description": "Public hosted BYOK rollout after private-beta evidence, billing, quotas, abuse controls, and support process are proven.",
+      "blockedBy": [
+        "private-beta go/no-go approval",
+        "self-serve billing and entitlement evidence",
+        "public abuse-rate controls",
+        "public support and status-page readiness"
+      ]
+    },
+    "general-availability": {
+      "claimStatus": "not-claimed",
+      "description": "Stable hosted product claim after public beta burn-in, release packaging, security, restore, and support evidence are proven.",
+      "blockedBy": [
+        "public-beta burn-in evidence",
+        "signed release/update evidence",
+        "incident response exercises",
+        "documented support commitments"
+      ]
+    },
+    "enterprise-scale": {
+      "claimStatus": "not-claimed",
+      "description": "Large-organization readiness after lower tiers pass and enterprise capacity/SLO evidence exists.",
+      "blockedBy": [
+        "enterprise-scale load and soak evidence",
+        "multi-org isolation evidence under scale",
+        "large restore drill evidence",
+        "enterprise admin/audit/export evidence"
+      ]
+    }
+  },
+  "evidenceCategories": {
+    "loadAndSoak": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "1. Load And Soak Evidence",
+      "publicArtifacts": [
+        "deploy/load/launch-readiness-targets.json",
+        "scripts/launch-readiness.mjs",
+        "docs/runbooks/launch-readiness.md",
+        "docs/runbooks/launch-readiness-report.md",
+        "tests/launch-readiness.test.ts"
+      ],
+      "requiredCommands": [
+        "pnpm deploy:load:plan",
+        "pnpm deploy:load",
+        "pnpm deploy:soak"
+      ],
+      "coveredSurfaces": [
+        "cloud session create/list/prompt/event replay",
+        "SSE fanout and reconnect",
+        "worker claim/retry/reaper paths",
+        "workflow due-run claims",
+        "Gateway delivery feed and render backpressure",
+        "artifact metadata/list/download paths",
+        "admin summary pagination",
+        "quota and entitlement denial paths",
+        "BYOK reveal failure and denial paths"
+      ],
+      "passCondition": "Plan generation is public-CI validated; environment-specific load and soak must be run in strict mode before claiming any hosted tier."
+    },
+    "failoverRecovery": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "2. Failover And Recovery Evidence",
+      "publicArtifacts": [
+        "scripts/cloud-continuation-smoke.mjs",
+        "scripts/gateway-cloud-smoke.mjs",
+        "docs/runbooks/cloud-managed-operations.md",
+        "docs/runbooks/launch-readiness-report.md",
+        "deploy/managed-workers/worker-release-evidence.template.md"
+      ],
+      "requiredCommands": [
+        "pnpm deploy:continuation:smoke",
+        "pnpm deploy:gateway:smoke",
+        "pnpm ops:validate"
+      ],
+      "coveredSurfaces": [
+        "worker crash during pending command",
+        "lease expiry and stale-owner write rejection",
+        "scheduler restart with due workflow runs",
+        "Gateway restart with delivery cursor resume",
+        "Cloud Web/API restart with SSE reconnect",
+        "object-store transient failure",
+        "BYOK reveal failure"
+      ],
+      "passCondition": "Public tests and templates cover recovery contracts; managed tiers require private drill evidence from the target environment."
+    },
+    "backupRestore": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "3. Backup And Restore Evidence",
+      "publicArtifacts": [
+        "docs/runbooks/backup-restore.md",
+        "docs/runbooks/restore-drill-report.md",
+        "deploy/managed-workers/worker-restore-drill.template.md",
+        "deploy/gcp/smoke/evidence.template.json"
+      ],
+      "requiredCommands": [
+        "pnpm ops:validate",
+        "pnpm deploy:gcp:preflight",
+        "pnpm deploy:gcp:smoke"
+      ],
+      "coveredSurfaces": [
+        "Postgres control-plane records",
+        "session events and projections",
+        "worker claims and terminal state",
+        "workflows and runs",
+        "Gateway channel bindings and deliveries",
+        "artifact metadata and object-store blobs",
+        "uploaded snapshots and checkpoints",
+        "BYOK secret references and reveal denial behavior",
+        "audit events"
+      ],
+      "passCondition": "Restore evidence templates and validators are public-safe; each real hosted environment must attach private restore-drill output."
+    },
+    "securityBoundary": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "4. Security Boundary Evidence",
+      "publicArtifacts": [
+        "docs/security-model.md",
+        "docs/privacy.md",
+        "docs/runbooks/managed-byok-saas-boundary.md",
+        "deploy/private-beta/managed-byok-readiness-contract.template.json",
+        "tests/byok-boundary-regression.test.ts",
+        "tests/cloud-http-server.test.ts",
+        "tests/cloud-module-boundaries.test.ts"
+      ],
+      "requiredCommands": [
+        "pnpm test",
+        "pnpm deploy:private-beta:validate",
+        "pnpm deploy:validate"
+      ],
+      "coveredSurfaces": [
+        "no raw secrets in payloads/cache/logs/renderer/gateway/diagnostics/metrics",
+        "operator endpoints separate from tenant user APIs",
+        "API token TTL/scope/revocation behavior",
+        "public webhook ingress fails closed",
+        "trusted-header auth cannot imply admin without explicit trusted proof",
+        "CSP and browser client boundaries",
+        "OpenCode SDK and server-only package import boundaries",
+        "public templates contain no private values"
+      ],
+      "passCondition": "Security boundaries must be enforced by tests, validators, and docs before any higher launch tier is claimed."
+    },
+    "releasePackaging": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "5. Release And Packaging Gates",
+      "publicArtifacts": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "docs/release-checklist.md",
+        "scripts/validate-deployment-configs.mjs",
+        "scripts/validate-private-beta-package.mjs",
+        "scripts/validate-launch-readiness.mjs"
+      ],
+      "requiredCommands": [
+        "pnpm lint",
+        "pnpm typecheck",
+        "pnpm test",
+        "pnpm docs:build",
+        "pnpm deploy:validate",
+        "pnpm deploy:launch:validate",
+        "pnpm deploy:private-beta:validate",
+        "pnpm ops:validate",
+        "git diff --check"
+      ],
+      "coveredSurfaces": [
+        "Desktop packaging smoke",
+        "Cloud Web build and browser smoke",
+        "Gateway image/package smoke",
+        "MCP package smoke",
+        "docs build",
+        "deployment validators",
+        "SBOM/notices/license checks",
+        "private-value scanning",
+        "script-contract tests",
+        "GCP/reference deployment smoke evidence"
+      ],
+      "passCondition": "CI and release checklists fail closed when a required surface-specific gate disappears."
+    },
+    "findingsWorkflow": {
+      "requiredForAcceptedTier": true,
+      "issue554BuildSection": "6. Findings Workflow",
+      "publicArtifacts": [
+        "docs/runbooks/launch-readiness.md",
+        "docs/runbooks/launch-readiness-report.md",
+        "docs/release-checklist.md"
+      ],
+      "requiredCommands": [
+        "pnpm deploy:launch:validate"
+      ],
+      "allowedDispositions": [
+        "immediate-fix",
+        "narrow-follow-up-issue",
+        "tier-scoped-out-of-scope"
+      ],
+      "passCondition": "Every failed launch gate is either fixed immediately, turned into a narrow issue with evidence/reproduction, or recorded as out-of-scope for the selected launch tier."
+    }
+  }
+}
