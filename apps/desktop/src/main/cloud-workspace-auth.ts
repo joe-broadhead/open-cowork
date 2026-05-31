@@ -40,6 +40,7 @@ export type CloudWorkspaceDesktopAuthenticatorOptions = {
   fetch?: CloudWorkspaceAuthFetch
   openExternal?: (url: string) => Promise<unknown> | unknown
   callbackTimeoutMs?: number
+  brandName?: string
 }
 
 type OidcDiscovery = {
@@ -49,6 +50,7 @@ type OidcDiscovery = {
 
 const DEFAULT_CALLBACK_TIMEOUT_MS = 5 * 60 * 1000
 const DEFAULT_SCOPE = 'openid email profile offline_access'
+const DEFAULT_BRAND_NAME = 'Open Cowork'
 
 function defaultFetch(): CloudWorkspaceAuthFetch {
   return (url, init) => globalThis.fetch(url, init as RequestInit) as Promise<CloudWorkspaceAuthResponse>
@@ -108,6 +110,19 @@ function tokenExpiresAt(record: Record<string, unknown>) {
   return new Date(Date.now() + ttlMs).toISOString()
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function callbackPage(title: string, body = '') {
+  return `<!doctype html><html><body><h2>${escapeHtml(title)}</h2>${body ? `<p>${escapeHtml(body)}</p>` : ''}</body></html>`
+}
+
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, '')
 }
@@ -119,7 +134,7 @@ async function closeServer(server: Server) {
   })
 }
 
-async function createLoopbackCallback(timeoutMs: number) {
+async function createLoopbackCallback(timeoutMs: number, brandName: string) {
   let resolveCallback: ((value: { code: string; state: string }) => void) | null = null
   let rejectCallback: ((error: Error) => void) | null = null
   const callbackPromise = new Promise<{ code: string; state: string }>((resolve, reject) => {
@@ -138,18 +153,18 @@ async function createLoopbackCallback(timeoutMs: number) {
     const state = url.searchParams.get('state')
     if (error) {
       res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' })
-      res.end('<html><body><h2>Open Cowork Cloud login failed</h2></body></html>')
+      res.end(callbackPage(`${brandName} Cloud login failed`))
       rejectCallback?.(new Error(`Cloud OIDC login failed: ${error}.`))
       return
     }
     if (!code || !state) {
       res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' })
-      res.end('<html><body><h2>Open Cowork Cloud login failed</h2></body></html>')
+      res.end(callbackPage(`${brandName} Cloud login failed`))
       rejectCallback?.(new Error('Cloud OIDC callback requires code and state.'))
       return
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
-    res.end('<html><body><h2>Open Cowork Cloud login complete</h2><p>You can return to Open Cowork.</p></body></html>')
+    res.end(callbackPage(`${brandName} Cloud login complete`, `You can return to ${brandName}.`))
     resolveCallback?.({ code, state })
   })
   await new Promise<void>((resolve, reject) => {
@@ -182,11 +197,13 @@ export class CloudWorkspaceDesktopAuthenticator {
   private readonly fetcher: CloudWorkspaceAuthFetch
   private readonly openExternal: (url: string) => Promise<unknown> | unknown
   private readonly callbackTimeoutMs: number
+  private readonly brandName: string
 
   constructor(options: CloudWorkspaceDesktopAuthenticatorOptions = {}) {
     this.fetcher = options.fetch || defaultFetch()
     this.openExternal = options.openExternal || defaultOpenExternal
     this.callbackTimeoutMs = options.callbackTimeoutMs || DEFAULT_CALLBACK_TIMEOUT_MS
+    this.brandName = options.brandName?.trim() || DEFAULT_BRAND_NAME
   }
 
   async login(connection: CloudWorkspaceConnectionRecord): Promise<CloudWorkspaceLoginResult> {
@@ -197,7 +214,7 @@ export class CloudWorkspaceDesktopAuthenticator {
     const state = base64Url(randomBytes(24))
     const nonce = base64Url(randomBytes(24))
     const verifier = base64Url(randomBytes(32))
-    const callback = await createLoopbackCallback(this.callbackTimeoutMs)
+    const callback = await createLoopbackCallback(this.callbackTimeoutMs, this.brandName)
     try {
       const authUrl = new URL(authorizationEndpoint)
       authUrl.searchParams.set('response_type', 'code')

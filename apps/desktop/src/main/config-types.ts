@@ -394,7 +394,10 @@ export type CloudConfig = {
   billing: CloudBillingConfig
 }
 
+export const OPEN_COWORK_CONFIG_CONTRACT_VERSION = 1
+
 export type OpenCoworkConfig = {
+  contractVersion: typeof OPEN_COWORK_CONFIG_CONTRACT_VERSION
   allowedEnvPlaceholders: string[]
   branding: BrandingConfig
   auth: {
@@ -645,6 +648,7 @@ const DEFAULT_GATEWAY_CONFIG: GatewayDeploymentConfig = {
 }
 
 export const DEFAULT_CONFIG: OpenCoworkConfig = {
+  contractVersion: OPEN_COWORK_CONFIG_CONTRACT_VERSION,
   allowedEnvPlaceholders: [],
   branding: {
     name: 'Cowork',

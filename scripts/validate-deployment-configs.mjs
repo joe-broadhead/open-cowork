@@ -70,7 +70,12 @@ function assertPublicTemplateSafe(path) {
     /\bAKIA[0-9A-Z]{16}\b/,
     /\bghp_[A-Za-z0-9_]{20,}\b/,
     /\bsk-[A-Za-z0-9]{20,}\b/,
+    /\bAIza[0-9A-Za-z_-]{20,}\b/,
+    /\b(?:price|prod|acct)_[0-9A-Za-z]{8,}\b/,
     /\b\d{12}\b/,
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i,
+    /gcp-sm:\/\/projects\/(?!PROJECT(?:\/|$))[a-z][a-z0-9-]{4,}[a-z0-9]\//i,
+    /[?&](?:X-Amz-Signature|X-Amz-Credential|X-Goog-Signature|X-Goog-Credential|AWSAccessKeyId|sig|signature)=/i,
     /customer\s+(?:name|email|domain)\s*:/i,
     /private\s+domain\s*:/i,
     /BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY/,
@@ -418,6 +423,7 @@ function validateHelm() {
 function validateDocs() {
   const requiredDocs = [
     'docs/deployment-readiness.md',
+    'docs/downstream-contract.md',
     'docs/runbooks/cloud-managed-operations.md',
     'docs/runbooks/backup-restore.md',
     'docs/runbooks/restore-drill-report.md',
@@ -468,6 +474,16 @@ function validateDocs() {
     'deploy/managed-workers/worker-release-evidence.template.md',
     'deploy/managed-workers/worker-restore-drill.template.md',
     'deploy/observability/managed-worker-slo-template.json',
+    'deploy/private-beta/hosted-byok.config.example.json',
+    'deploy/private-beta/self-host-oss.config.example.json',
+    'deploy/private-beta/private-beta-plans.json',
+    'deploy/private-beta/design-partner-onboarding.template.md',
+    'deploy/private-beta/go-no-go-report.template.md',
+    'deploy/private-beta/private-beta-launch-profile.template.json',
+    'examples/downstream/acme/README.md',
+    'examples/downstream/acme/open-cowork.config.json',
+    'examples/downstream/acme/cloud-values.yaml',
+    'examples/downstream/acme/gateway-values.yaml',
   ]) {
     assertPublicTemplateSafe(path)
   }
@@ -867,6 +883,8 @@ function validateDocs() {
 
   const downstream = read('docs/downstream.md')
   for (const phrase of [
+    'contractVersion: 1',
+    'Downstream Contract',
     'cloud.publicBranding',
     'cloudDesktop',
     'gateway.providers',
@@ -878,14 +896,41 @@ function validateDocs() {
     'PodDisruptionBudgets',
     'topology spread constraints',
     'billing-free path',
+    'Runtime profiles and policy packs',
+    'Cloud Web feature modules and admin panels',
+    'BYOK validation and injection hooks',
   ]) {
     if (!downstream.includes(phrase)) {
       throw new Error(`docs/downstream.md must include ${phrase}`)
     }
   }
 
+  const downstreamContract = read('docs/downstream-contract.md')
+  for (const phrase of [
+    'contractVersion',
+    'Version `1`',
+    'Runtime config',
+    'Packaging-time config',
+    'Infrastructure config',
+    'Private downstream config',
+    'Desktop shell',
+    'Cloud Web branding',
+    'Gateway channels',
+    'Runtime profiles and policy packs',
+    'Cloud Web modules and admin panels',
+    'BYOK provider validation/injection',
+    'Unsupported source-patch paths',
+    'Template Hygiene',
+    'latest',
+    'signed URL query strings',
+  ]) {
+    if (!downstreamContract.includes(phrase)) {
+      throw new Error(`docs/downstream-contract.md must include ${phrase}`)
+    }
+  }
+
   const acmeReadme = read('examples/downstream/acme/README.md')
-  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none']) {
+  for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'contractVersion: 1', 'docs/downstream-contract.md', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none']) {
     if (!acmeReadme.includes(phrase)) {
       throw new Error(`examples/downstream/acme/README.md must include ${phrase}`)
     }
@@ -893,6 +938,7 @@ function validateDocs() {
 
   const acmeConfig = read('examples/downstream/acme/open-cowork.config.json')
   for (const phrase of [
+    '"contractVersion": 1',
     '"gateway"',
     '"providers"',
     'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',

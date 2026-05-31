@@ -11,6 +11,9 @@ It includes:
 - `cloud-values.yaml`: Helm values for the Acme cloud control plane.
 - `gateway-values.yaml`: Helm values for the Acme headless gateway.
 
+The shared config declares `contractVersion: 1`, the current downstream
+distribution contract documented in `docs/downstream-contract.md`.
+
 The values pin images with an example release tag. Replace that tag with an
 immutable downstream release tag or digest in a private deployment repo; do not
 ship `latest`, `stable`, or another mutable registry alias.

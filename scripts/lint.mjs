@@ -48,6 +48,7 @@ const legacyNamingAllowlist = new Set([
   'docs/architecture.md',
   'docs/configuration.md',
   'docs/custom-mcps.md',
+  'docs/downstream-contract.md',
   'docs/downstream.md',
   'open-cowork.config.json',
   'scripts/desktop-dist.mjs',

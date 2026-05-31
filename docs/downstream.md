@@ -11,6 +11,10 @@ This page is the reference for that model.
 The workspace ownership, sync, status/reason, and non-sync guarantees that
 downstream builds must preserve are defined in
 [Product Contract](product-contract.md).
+The versioned downstream configuration, branding, packaging, template hygiene,
+and extension contract is defined in
+[Downstream Contract](downstream-contract.md). Current public config files use
+`contractVersion: 1`.
 
 ## Distribution modes
 
@@ -59,8 +63,9 @@ see `examples/downstream/acme/`.
 Everything downstream-customizable goes through two layers:
 
 1. **Configuration** — a JSON file validated against
-   `open-cowork.config.schema.json`. The app merges the bundled config with up
-   to three additional layers in a fixed order.
+   `open-cowork.config.schema.json` and the versioned
+   `contractVersion: 1` downstream contract. The app merges the bundled config
+   with up to three additional layers in a fixed order.
 2. **Content** — skill bundles (`skills/<name>/SKILL.md`) and MCP packages
    (`mcps/<name>/dist/index.js`) that the config can reference. The app
    resolves these from a stack of roots, with the downstream root winning over
@@ -141,6 +146,10 @@ The public schema now covers the three product surfaces:
 | Cloud Web/control plane | `cloud.publicBranding`, `cloud.auth`, `cloud.storage`, `cloud.features`, `cloud.profiles`, `cloud.projectSources`, `cloud.abuse`, `cloud.billing` | Public dashboard name/logo/legal links, OIDC metadata, database/object-store/secret refs, profile allowlists, project-source policy, quotas, and self-host or managed billing mode. |
 | Gateway | `gateway.branding`, `gateway.cloud`, `gateway.server`, `gateway.providers`, `gateway.metrics`, `gateway.diagnostics` | Headless channel branding, cloud URL, service-token source, public gateway URL, provider bindings, and operator endpoints. |
 
+Use [Downstream Contract](downstream-contract.md) for the full field inventory
+and to distinguish runtime config, packaging-time config, infrastructure
+config, and private downstream config.
+
 Gateway can load the same central file as Desktop and Cloud through
 `OPEN_COWORK_CONFIG_PATH`, `OPEN_COWORK_CONFIG_DIR`, or
 `OPEN_COWORK_DOWNSTREAM_ROOT`. Gateway-specific env and
@@ -216,6 +225,9 @@ projection, channel adapters, and deployment ergonomics.
 | Object-store adapters | `apps/desktop/src/main/cloud/object-store.ts`, deployment object-store config | Add storage providers behind the object-store interface. Artifact, upload, snapshot, and checkpoint callers should not branch on cloud provider names. |
 | Secret adapters | `apps/desktop/src/main/cloud/secret-adapter.ts`, BYOK secret store, config refs | Resolve or protect secrets behind refs. Raw provider keys, OAuth tokens, cookies, channel secrets, and signed URLs must never enter renderer state, cache, diagnostics, or public templates. |
 | Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts` | Add worker modes only after the trust model is documented. Customer-hosted workers remain deferred until a separate review covers updates, liability, networking, and data residency. |
+| Runtime profiles and policy packs | `cloud.profiles`, `cloud.runtime`, `cloud-config.ts`, `runtime-config-builder.ts` | Cloud profiles own feature flags and allowlists. Machine runtime config, arbitrary local stdio MCPs, and host project directories stay disabled unless explicitly reviewed and allowlisted. |
+| Cloud Web feature modules and admin panels | `apps/website/src`, `docs/cloud-web-workbench.md`, route/API matrix tests | Cloud Web is a cloud API client. It must not import server-only stores, runtime adapters, secret adapters, or provider-specific internals. |
+| BYOK validation and injection hooks | `byok-secret-store.ts`, `runtime-config-builder.ts`, `opencode-runtime-adapter.ts`, `cloud-config.ts` | Provider keys enter OpenCode through runtime config provider options. They never enter process env, logs, renderer state, diagnostics, cache, or read APIs. |
 | Cloud event and projection contract | `packages/shared/src/cloud-session-projection.ts`, `opencode-runtime-adapter.ts`, `session-projection-service.ts`, gateway renderers | Runtime translation happens once at the worker/runtime boundary. Desktop, Web, and Gateway consume canonical Cloud events/projections rather than raw SDK events. |
 
 Module changes should stay narrow:
@@ -330,6 +342,7 @@ provider, one internal MCP, and one internal skill would look like:
 
 ```jsonc
 {
+  "contractVersion": 1,
   "allowedEnvPlaceholders": ["ACME_GATEWAY_URL", "ACME_GATEWAY_KEY"],
   "branding": {
     "name": "Acme Cowork",

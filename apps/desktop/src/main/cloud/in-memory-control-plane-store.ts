@@ -1231,7 +1231,7 @@ export type ControlPlaneStore = {
   reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>
   assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): MaybePromise<void>
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
-  claimNextSessionCommand(lease: WorkerLeaseRecord): MaybePromise<SessionCommandRecord | null>
+  claimNextSessionCommand(lease: WorkerLeaseRecord, now?: Date): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
   failSessionCommand(lease: WorkerLeaseRecord, commandId: string, error: string): MaybePromise<SessionCommandRecord>
   recordWorkerHeartbeat(input: {
@@ -3445,12 +3445,13 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return clone(command)
   }
 
-  claimNextSessionCommand(lease: WorkerLeaseRecord): SessionCommandRecord | null {
+  claimNextSessionCommand(lease: WorkerLeaseRecord, now = new Date()): SessionCommandRecord | null {
     const session = this.requireSession(lease.tenantId, lease.sessionId)
-    this.assertCurrentLease(session, lease)
+    const nowMs = now.getTime()
+    this.assertCurrentLease(session, lease, nowMs)
     const command = session.commands.find((entry) => (
       (entry.status === 'pending'
-        && (!entry.availableAt || Date.parse(entry.availableAt) <= Date.now())
+        && (!entry.availableAt || Date.parse(entry.availableAt) <= nowMs)
         && (entry.targetLeaseToken === null || entry.targetLeaseToken === lease.leaseToken))
       || (entry.status === 'running'
         && entry.claimedLeaseToken !== lease.leaseToken
@@ -4181,11 +4182,8 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .map((tag) => clone(tag))
   }
 
-  private assertCurrentLease(session: SessionState, lease: WorkerLeaseRecord) {
-    if (!session.lease || session.lease.leaseToken !== lease.leaseToken) {
-      throw new Error('Worker lease is stale.')
-    }
-    if (session.lease.leaseExpiresAt <= Date.now()) {
+  private assertCurrentLease(session: SessionState, lease: WorkerLeaseRecord, nowMs = Date.now()) {
+    if (!session.lease || session.lease.leaseToken !== lease.leaseToken || session.lease.leaseExpiresAt <= nowMs) {
       throw new Error('Worker lease is stale.')
     }
   }

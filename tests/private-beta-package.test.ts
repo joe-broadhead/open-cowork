@@ -146,6 +146,7 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
 
 test('private beta examples keep hosted and OSS modes separate', () => {
   const hosted = readJson('deploy/private-beta/hosted-byok.config.example.json')
+  assert.equal(hosted.contractVersion, 1)
   assert.equal(hosted.cloud.auth.signupMode, 'invite')
   assert.equal(hosted.cloud.auth.allowSelfServiceSignup, false)
   assert.equal(hosted.cloud.billing.provider, 'stub')
@@ -157,6 +158,7 @@ test('private beta examples keep hosted and OSS modes separate', () => {
   assert.ok(hosted.gateway.server.adminToken)
 
   const selfHost = readJson('deploy/private-beta/self-host-oss.config.example.json')
+  assert.equal(selfHost.contractVersion, 1)
   assert.equal(selfHost.cloud.billing.provider, 'none')
   assert.equal(selfHost.cloudDesktop.allowUserAddedConnections, true)
   assert.equal(selfHost.cloudDesktop.requireManagedOrg, false)

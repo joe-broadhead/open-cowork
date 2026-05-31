@@ -171,6 +171,62 @@ test('config loader normalizes cloud defaults and focused profile overrides', ()
   }
 })
 
+test('config loader preserves every documented gateway provider kind', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-gateway-providers-'))
+  const configPath = join(tempRoot, 'open-cowork.config.json')
+  const previousOverride = process.env.OPEN_COWORK_CONFIG_PATH
+  const providerKinds = ['fake', 'telegram', 'slack', 'email', 'webhook', 'discord', 'whatsapp', 'signal', 'cli'] as const
+
+  writeFileSync(configPath, JSON.stringify({
+    gateway: {
+      server: {
+        host: '127.0.0.1',
+      },
+      providers: providerKinds.map((kind) => ({
+        kind,
+        channelBindingId: `${kind}-binding`,
+        credentials: kind === 'webhook'
+          ? { sharedSecret: `${kind}-secret` }
+          : kind === 'telegram'
+            ? { botToken: `${kind}-token`, webhookSecret: `${kind}-secret` }
+            : kind === 'slack'
+              ? { botToken: `${kind}-token`, signingSecret: `${kind}-secret` }
+              : kind === 'email'
+                ? { inboundSecret: `${kind}-secret` }
+                : kind === 'cli' || kind === 'fake'
+                  ? {}
+                  : { sharedSecret: `${kind}-secret` },
+        settings: kind === 'telegram'
+          ? { mode: 'polling' }
+          : kind === 'email'
+            ? { from: 'agent@example.test', smtpHost: 'smtp.example.test' }
+            : kind === 'cli' || kind === 'fake'
+              ? {}
+              : { deliveryUrl: `https://channels.example.test/${kind}` },
+      })),
+    },
+  }))
+
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+
+  try {
+    assert.doesNotThrow(() => assertConfigValid())
+    assert.deepEqual(
+      getAppConfig().gateway.providers.map((provider) => provider.kind).sort(),
+      [...providerKinds].sort(),
+    )
+  } finally {
+    if (previousOverride === undefined) {
+      delete process.env.OPEN_COWORK_CONFIG_PATH
+    } else {
+      process.env.OPEN_COWORK_CONFIG_PATH = previousOverride
+    }
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('config loader accepts select and radio credential metadata for bundled MCPs', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-config-mcp-credentials-'))
   const configPath = join(tempRoot, 'open-cowork.config.json')

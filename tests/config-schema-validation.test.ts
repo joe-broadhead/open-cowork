@@ -17,6 +17,18 @@ test('root open-cowork.config.json validates against the public schema', () => {
   assert.doesNotThrow(() => validateResolvedConfig(config, 'open-cowork.config.json'))
 })
 
+test('downstream contract version is required and fixed for this schema', () => {
+  const config = cloneConfig()
+  assert.equal(config.contractVersion, 1)
+
+  delete config.contractVersion
+  assert.throws(() => validateResolvedConfig(config, 'downstream config'), /contractVersion/)
+
+  const unsupported = cloneConfig()
+  unsupported.contractVersion = 2
+  assert.throws(() => validateResolvedConfig(unsupported, 'downstream config'), /contractVersion/)
+})
+
 test('branding sidebar and home overrides validate', () => {
   const config = cloneConfig()
   config.branding.sidebar = {

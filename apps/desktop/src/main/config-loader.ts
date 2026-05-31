@@ -66,7 +66,7 @@ const CLOUD_OBJECT_STORE_KINDS = new Set(['filesystem', 's3', 'gcs', 'azure-blob
 const PUBLIC_BRANDING_URL_KEYS = new Set(['logoUrl', 'supportUrl', 'privacyUrl', 'securityUrl', 'legalUrl'])
 const GATEWAY_MODES = new Set(['self-host', 'managed'])
 const GATEWAY_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error', 'silent'])
-const GATEWAY_PROVIDER_KINDS = new Set(['fake', 'telegram', 'slack', 'email', 'webhook'])
+const GATEWAY_PROVIDER_KINDS = new Set(['fake', 'telegram', 'slack', 'email', 'webhook', 'discord', 'whatsapp', 'signal', 'cli'])
 
 let configCache: OpenCoworkConfig | null = null
 let publicConfigCache: PublicAppConfig | null = null
