@@ -77,7 +77,7 @@ type CloudPrometheusMetricPoint = {
 }
 
 const DEFAULT_SERVICE_NAME = 'open-cowork-cloud'
-const SENSITIVE_FIELD = /(authorization|cookie|token|secret|password|credential|key)$/i
+const SENSITIVE_FIELD = /(authorization|cookie|token|secret|password|credential|key|ref|kmsref|ciphertext|envelope)$/i
 const MAX_STRING_LENGTH = 512
 const SIGNED_URL_QUERY_PATTERN = /\b(https?:\/\/[^\s"'<>?]+)\?[^"'<> \t\r\n]+/gi
 const LOCAL_PATH_PATTERNS = [
@@ -123,10 +123,13 @@ function redactCloudAttributeString(value: string) {
   let redacted = value.replace(SIGNED_URL_QUERY_PATTERN, '$1?[redacted]')
   redacted = redacted
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\b(?:token|secret|password|credential|api[_-]?key)=([^\s"'&]+)/gi, (match) => {
+    .replace(/\b(?:token|secret|password|credential|api[_-]?key|kms[_-]?ref|ciphertext)=([^\s"'&]+)/gi, (match) => {
       const [key] = match.split('=')
       return `${key}=[redacted]`
     })
+    .replace(/\b(?:enc|plain):v1:[A-Za-z0-9_-]+\b/g, '[redacted-secret]')
+    .replace(/\b(?:gcp-sm|aws-sm|azure-kv):\/\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
+    .replace(/\bhttps:\/\/[A-Za-z0-9.-]+\.vault\.azure\.net\/secrets\/[^\s"'<>]+/gi, '[redacted-secret-ref]')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-[redacted]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
   for (const pattern of LOCAL_PATH_PATTERNS) {

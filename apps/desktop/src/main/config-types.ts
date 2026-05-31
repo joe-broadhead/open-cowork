@@ -263,6 +263,7 @@ export type CloudAuthConfig = {
   mode: 'none' | 'header' | 'oidc'
   signupMode?: 'disabled' | 'closed' | 'invite' | 'domain' | 'open'
   headerSecret?: string
+  headerSecretRef?: string
   headerAllowUnsigned?: boolean
   headerMaxSignatureAgeMs?: number
   issuerUrl?: string
@@ -272,6 +273,11 @@ export type CloudAuthConfig = {
   cookieSecretRef?: string
   allowedEmailDomains?: string[]
   allowSelfServiceSignup?: boolean
+  apiTokens?: {
+    defaultTtlMs?: number
+    maxTtlMs?: number
+    allowedScopes?: string[]
+  }
 }
 
 export type CloudStorageConfig = {
@@ -701,6 +707,11 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
       mode: 'none',
       signupMode: 'open',
       allowSelfServiceSignup: true,
+      apiTokens: {
+        defaultTtlMs: 90 * 24 * 60 * 60 * 1000,
+        maxTtlMs: 365 * 24 * 60 * 60 * 1000,
+        allowedScopes: ['desktop', 'gateway', 'admin', 'operator'],
+      },
     },
     storage: {
       controlPlane: {

@@ -43,6 +43,9 @@ const TOKEN_PATTERNS = [
 
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
 const KEYED_SECRET_PATTERN = /\b([A-Za-z0-9_-]*(?:api[_-]?key|access[_-]?key|secret[_-]?access[_-]?key|token|secret|password|client[_-]?secret)[A-Za-z0-9_-]*)\s*[:=]\s*(['"]?)[A-Za-z0-9+/=_-]{32,}\2/gi
+const SECRET_REF_PATTERN = /\b(?:gcp-sm|aws-sm|azure-kv):\/\/[^\s"'<>]+/gi
+const AZURE_VAULT_SECRET_URL_PATTERN = /\bhttps:\/\/[A-Za-z0-9.-]+\.vault\.azure\.net\/secrets\/[^\s"'<>]+/gi
+const SECRET_ENVELOPE_PATTERN = /\b(?:enc|plain):v1:[A-Za-z0-9_-]+\b/g
 const SIGNED_URL_QUERY_PATTERN = /\b(https?:\/\/[^\s"'<>?]+)\?[^"'<> \t\r\n]+/gi
 
 // Home-directory-prefixed paths leak usernames and project-folder
@@ -80,6 +83,9 @@ export function sanitizeLogMessage(message: string) {
     sanitized = sanitized.replace(pattern, '[REDACTED_TOKEN]')
   }
   sanitized = sanitized.replace(KEYED_SECRET_PATTERN, (_match, key: string) => `${key}=[REDACTED_TOKEN]`)
+  sanitized = sanitized.replace(SECRET_ENVELOPE_PATTERN, '[REDACTED_SECRET]')
+  sanitized = sanitized.replace(SECRET_REF_PATTERN, '[REDACTED_SECRET_REF]')
+  sanitized = sanitized.replace(AZURE_VAULT_SECRET_URL_PATTERN, '[REDACTED_SECRET_REF]')
   sanitized = sanitized.replace(SIGNED_URL_QUERY_PATTERN, '$1?[REDACTED_QUERY]')
 
   sanitized = sanitized.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]')

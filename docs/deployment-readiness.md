@@ -105,10 +105,15 @@ provider control plane.
 
 - Store envelope keys, BYOK material, channel credentials, database URLs,
   object-store credentials, gateway service tokens, and billing secrets in a
-  provider secret manager or KMS-backed secret adapter.
+  provider secret manager. Use cloud-provider KMS encryption underneath those
+  secret-manager products or private deployment overlays until a first-class
+  KMS decrypt adapter is added.
 - Use `OPEN_COWORK_CLOUD_SECRET_KEY_REF` where possible:
   `gcp-sm://...`, `aws-sm://...`, `azure-kv://...`, or `env:...` for
   platform-injected secrets.
+- `public_production` rejects weak inline envelope keys; hosted deployments
+  should use managed refs or existing Kubernetes secrets rather than Helm
+  literal values.
 - BYOK plaintext is only revealed in the worker role and only long enough to
   build provider runtime config.
 

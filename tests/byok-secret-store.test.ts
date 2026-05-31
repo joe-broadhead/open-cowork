@@ -40,6 +40,11 @@ test('BYOK secret store encrypts keys, returns metadata only, rotates active rec
   const validatedFirst = await byok.validateActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' })
   assert.equal(validatedFirst?.status, 'active')
   assert.equal(await byok.revealActiveSecret({ orgId: 'tenant-1', providerId: 'anthropic' }), FIRST_KEY)
+  const revealAudit = await store.listAuditEvents('tenant-1')
+  const revealed = revealAudit.find((event) => event.eventType === 'byok_secret.revealed')
+  assert.equal(revealed?.targetType, 'byok_secret')
+  assert.equal(revealed?.metadata.providerId, 'anthropic')
+  assert.equal(JSON.stringify(revealed).includes(FIRST_KEY), false)
 
   const rawFirst = await store.getActiveByokSecret('tenant-1', 'anthropic')
   assert.ok(rawFirst?.ciphertext)

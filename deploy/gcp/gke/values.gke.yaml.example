@@ -13,11 +13,20 @@ cloud:
   existingSecret: open-cowork-cloud-secrets
   auth:
     mode: oidc
+    signupMode: domain
+    allowSelfServiceSignup: true
     oidcIssuerUrl: https://accounts.google.com
     oidcClientId: OIDC_CLIENT_ID
     oidcCallbackPath: /auth/callback
     allowedEmailDomains:
       - example.com
+    apiTokenDefaultTtlMs: 2592000000
+    apiTokenMaxTtlMs: 7776000000
+    apiTokenAllowedScopes:
+      - desktop
+      - gateway
+      - admin
+      - operator
   cookieSecure: true
   publicUrl: https://cowork.example.com
   trustProxyHeaders: true

@@ -131,6 +131,10 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
   for (const file of composeFiles) {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_SIGNUP_MODE')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES')
   }
   for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
     assertIncludes(file, 'OPEN_COWORK_CONFIG_PATH')
@@ -179,6 +183,9 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires provider-backed object storage')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.auth.signupMode')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production header auth requires cloud.auth.headerSecret')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'managed envelope key refs')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /livez')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /readyz')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true')
@@ -206,6 +213,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_DOWNSTREAM_ROOT')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_SIGNUP_MODE')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES')
+  assertIncludes('helm/open-cowork-cloud/templates/secret.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
+  assertIncludes('helm/open-cowork-cloud/templates/secret.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'terminationGracePeriodSeconds')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.terminationGracePeriodSeconds must be >= 30')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'configPath: ""')

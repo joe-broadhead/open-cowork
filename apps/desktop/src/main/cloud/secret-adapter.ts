@@ -12,6 +12,14 @@ export type SecretAdapter = {
   reveal: (stored: string, context?: string) => string
 }
 
+export type CloudSecretKeyValidation = {
+  valid: boolean
+  reason: string | null
+  byteLength: number
+  uniqueCharacters: number
+  entropyBitsPerCharacter: number
+}
+
 type SecretEnvelope = {
   alg: 'A256GCM'
   iv: string
@@ -56,6 +64,10 @@ export type ResolveCloudSecretRefOptions = {
   awsCredentialsProvider?: () => Promise<AwsSecretStoreCredentials | null> | AwsSecretStoreCredentials | null
 }
 
+export type CreateCloudSecretAdapterOptions = ResolveCloudSecretRefOptions & {
+  requireStrongKeyMaterial?: boolean
+}
+
 function base64urlEncode(input: Buffer | string) {
   return Buffer.from(input).toString('base64url')
 }
@@ -70,6 +82,57 @@ function base64Decode(input: string) {
 
 function deriveKey(keyMaterial: string | Buffer) {
   return createHash('sha256').update(keyMaterial).digest()
+}
+
+function shannonEntropyPerCharacter(value: string) {
+  if (!value) return 0
+  const counts = new Map<string, number>()
+  for (const character of value) counts.set(character, (counts.get(character) || 0) + 1)
+  let entropy = 0
+  for (const count of counts.values()) {
+    const probability = count / value.length
+    entropy -= probability * Math.log2(probability)
+  }
+  return entropy
+}
+
+export function validateCloudSecretKeyMaterial(keyMaterial: string | Buffer): CloudSecretKeyValidation {
+  const text = Buffer.isBuffer(keyMaterial) ? keyMaterial.toString('utf8') : keyMaterial
+  const trimmed = text.trim()
+  const byteLength = Buffer.byteLength(trimmed, 'utf8')
+  const uniqueCharacters = new Set([...trimmed]).size
+  const entropyBitsPerCharacter = shannonEntropyPerCharacter(trimmed)
+  const normalized = trimmed.toLowerCase()
+
+  let reason: string | null = null
+  if (byteLength < 32) {
+    reason = 'must be at least 32 bytes.'
+  } else if (/(change[-_\s]?me|local|demo|dev|example|test|password|secret|cookie)/i.test(trimmed)) {
+    reason = 'must not use demo, local, test, password, cookie, or obvious secret words.'
+  } else if (uniqueCharacters < 16) {
+    reason = 'must contain at least 16 unique characters.'
+  } else if (/^(.)\1+$/.test(trimmed) || /^([a-z0-9]{1,4})\1+$/i.test(trimmed)) {
+    reason = 'must not be repeated characters or short repeated patterns.'
+  } else if (/^(?:0123456789|abcdefghijklmnopqrstuvwxyz|zyxwvutsrqponmlkjihgfedcba)/.test(normalized)) {
+    reason = 'must not be a predictable sequence.'
+  } else if (entropyBitsPerCharacter < 3.5) {
+    reason = 'must have at least 3.5 bits of estimated entropy per character.'
+  }
+
+  return {
+    valid: !reason,
+    reason,
+    byteLength,
+    uniqueCharacters,
+    entropyBitsPerCharacter,
+  }
+}
+
+export function assertCloudSecretKeyMaterialStrong(keyMaterial: string | Buffer, label = 'Cloud secret key material') {
+  const validation = validateCloudSecretKeyMaterial(keyMaterial)
+  if (!validation.valid) {
+    throw new Error(`${label} is too weak for production: ${validation.reason}`)
+  }
 }
 
 function setAad(cipher: { setAAD: (buffer: Buffer) => void }, context: string | undefined) {
@@ -412,17 +475,26 @@ export function createEnvSecretAdapter(
 
 export async function createCloudSecretAdapterFromEnv(
   env: Record<string, string | undefined> = process.env,
-  options: ResolveCloudSecretRefOptions = {},
+  options: CreateCloudSecretAdapterOptions = {},
 ): Promise<SecretAdapter> {
   const keyMaterial = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
-  if (keyMaterial) return createEnvelopeSecretAdapter(keyMaterial)
+  if (keyMaterial) {
+    if (options.requireStrongKeyMaterial) {
+      assertCloudSecretKeyMaterialStrong(keyMaterial, 'OPEN_COWORK_CLOUD_SECRET_KEY')
+    }
+    return createEnvelopeSecretAdapter(keyMaterial)
+  }
 
   const ref = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')
   if (!ref) {
     return createUnavailableSecretAdapter('Secret storage is not configured; set OPEN_COWORK_CLOUD_SECRET_KEY or OPEN_COWORK_CLOUD_SECRET_KEY_REF.')
   }
-  return createEnvelopeSecretAdapter(await resolveCloudSecretRef(ref, {
+  const resolved = await resolveCloudSecretRef(ref, {
     ...options,
     env,
-  }))
+  })
+  if (options.requireStrongKeyMaterial) {
+    assertCloudSecretKeyMaterialStrong(resolved, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF')
+  }
+  return createEnvelopeSecretAdapter(resolved)
 }

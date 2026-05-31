@@ -42,7 +42,12 @@ import { createCloudProjectSourceService } from './project-source-service.ts'
 import { createCloudReadinessCheck } from './readiness.ts'
 import { createNodeOpencodeCloudRuntimeAdapter } from './opencode-runtime-adapter.ts'
 import type { CloudRuntimeAdapter, CloudRuntimeEvent } from './runtime-adapter.ts'
-import { createCloudSecretAdapterFromEnv, resolveCloudSecretRef, type SecretAdapter } from './secret-adapter.ts'
+import {
+  assertCloudSecretKeyMaterialStrong,
+  createCloudSecretAdapterFromEnv,
+  resolveCloudSecretRef,
+  type SecretAdapter,
+} from './secret-adapter.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
@@ -206,6 +211,10 @@ function parseCsv(value: string | null) {
   return value?.split(',').map((entry) => entry.trim()).filter(Boolean) || null
 }
 
+function parseCsvArray(value: string | null, fallback: string[] | undefined) {
+  return parseCsv(value) || fallback
+}
+
 function parseSignupMode(value: string | null | undefined) {
   if (value === 'disabled') return 'disabled'
   if (value === 'closed' || value === 'invite' || value === 'domain' || value === 'open') return value
@@ -259,7 +268,9 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     }),
     headerSecret: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
       || resolveEnvRef(envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || undefined, env)
+      || resolveEnvRef(config.cloud.auth.headerSecretRef, env)
       || config.cloud.auth.headerSecret,
+    headerSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF') || config.cloud.auth.headerSecretRef,
     headerAllowUnsigned: parseBoolean(
       envValue(env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED'),
       config.cloud.auth.headerAllowUnsigned || false,
@@ -275,6 +286,21 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
     cookieSecretRef: envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef,
     allowedEmailDomains,
     allowSelfServiceSignup,
+    apiTokens: {
+      ...(config.cloud.auth.apiTokens || {}),
+      defaultTtlMs: parsePositiveInt(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS'),
+        config.cloud.auth.apiTokens?.defaultTtlMs || 90 * 24 * 60 * 60 * 1000,
+      ),
+      maxTtlMs: parsePositiveInt(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS'),
+        config.cloud.auth.apiTokens?.maxTtlMs || 365 * 24 * 60 * 60 * 1000,
+      ),
+      allowedScopes: parseCsvArray(
+        envValue(env, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES'),
+        config.cloud.auth.apiTokens?.allowedScopes,
+      ),
+    },
   }
 }
 
@@ -902,11 +928,16 @@ function secretRefIsManaged(ref: string | null | undefined) {
 
 function hasProductionSecretMaterial(env: Env, keyName: string, refName: string, configRef?: string | null) {
   const key = envValue(env, keyName)
-  if (key && key.length >= 32) return true
+  if (key) {
+    assertCloudSecretKeyMaterialStrong(key, keyName)
+    return true
+  }
   const ref = envValue(env, refName) || configRef
   if (secretRefIsManaged(ref)) return true
   const envRefValue = resolveEnvRef(ref || undefined, env)
-  return Boolean(envRefValue && envRefValue.length >= 32)
+  if (!envRefValue) return false
+  assertCloudSecretKeyMaterialStrong(envRefValue, refName)
+  return true
 }
 
 export function assertCloudProductionDeploymentSafe(input: {
@@ -917,8 +948,14 @@ export function assertCloudProductionDeploymentSafe(input: {
   env: Env
   checkpointsEnabled: boolean
   autoProcessCommands: boolean
+  publicUrl?: string | null
+  cookieSecure?: boolean
 }) {
   if (input.tier !== 'public_production') return
+
+  if (parseBoolean(envValue(input.env, ALLOW_INSECURE_CLOUD_AUTH_ENV), false)) {
+    throw new Error(`${ALLOW_INSECURE_CLOUD_AUTH_ENV}=true is local/demo-only and cannot be used with OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production.`)
+  }
 
   if (input.role === 'all-in-one') {
     throw new Error('OPEN_COWORK_CLOUD_DEPLOYMENT_TIER=public_production requires split cloud roles. Run separate web, worker, and scheduler deployments instead of all-in-one.')
@@ -939,6 +976,12 @@ export function assertCloudProductionDeploymentSafe(input: {
   }
 
   if (shouldRunCloudWeb(input.role)) {
+    if (!envValue(input.env, 'OPEN_COWORK_CLOUD_SIGNUP_MODE')) {
+      throw new Error('Public production cloud web deployments require explicit OPEN_COWORK_CLOUD_SIGNUP_MODE so org auto-provisioning is intentional.')
+    }
+    if (input.cookieSecure === false) {
+      throw new Error('Public production cloud web deployments require Secure browser cookies.')
+    }
     if (!hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET', 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF', input.config.cloud.auth.cookieSecretRef)) {
       throw new Error('Public production cloud web deployments require OPEN_COWORK_CLOUD_COOKIE_SECRET with at least 32 characters or a managed OPEN_COWORK_CLOUD_COOKIE_SECRET_REF.')
     }
@@ -953,6 +996,26 @@ export function assertCloudProductionDeploymentSafe(input: {
 
   if (input.auth.mode === 'none') {
     throw new Error('Public production cloud deployments require authenticated access. Set OPEN_COWORK_CLOUD_AUTH_MODE=oidc or header.')
+  }
+
+  if (input.auth.mode === 'header') {
+    let hasHeaderSecret = hasProductionSecretMaterial(input.env, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET', 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF', input.config.cloud.auth.headerSecretRef)
+    if (!hasHeaderSecret && input.auth.headerSecret?.trim()) {
+      assertCloudSecretKeyMaterialStrong(input.auth.headerSecret, 'cloud.auth.headerSecret')
+      hasHeaderSecret = true
+    }
+    if (!hasHeaderSecret) {
+      throw new Error('Public production trusted-header deployments require a strong OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET or managed OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF.')
+    }
+  }
+  if (input.auth.mode === 'header' && input.auth.headerAllowUnsigned) {
+    throw new Error('Public production trusted-header deployments require signed identity headers.')
+  }
+  if (input.auth.mode === 'oidc') {
+    if (!input.publicUrl?.trim()) {
+      throw new Error('Public production OIDC deployments require OPEN_COWORK_CLOUD_PUBLIC_URL.')
+    }
+    assertPublicHttpsOrigin(input.publicUrl, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
   }
 }
 
@@ -1129,6 +1192,8 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
     env,
     checkpointsEnabled: envOptions.checkpointsEnabled,
     autoProcessCommands: envOptions.autoProcessCommands,
+    publicUrl: envOptions.publicUrl,
+    cookieSecure: envOptions.cookieSecure,
   })
   const resolvedAuthConfig = {
     ...config,
@@ -1144,7 +1209,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const paths = options.paths || createCloudPathProvider(envOptions.root)
   const store = options.store || await (options.storeFactory || createControlPlaneStoreForCloud)({ config, env })
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
-  const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env)
+  const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env, {
+    requireStrongKeyMaterial: envOptions.deploymentTier === 'public_production',
+  })
   const billingAdapter = Object.prototype.hasOwnProperty.call(options, 'billingAdapter')
     ? options.billingAdapter || null
     : await createBillingAdapterForCloud({ config: billingConfig, env })
@@ -1228,6 +1295,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       allowSelfServiceSignup: authConfig.allowSelfServiceSignup ?? authConfig.mode !== 'oidc',
       signupMode: authConfig.signupMode,
       allowedEmailDomains: authConfig.allowedEmailDomains || [],
+      apiTokenDefaultTtlMs: authConfig.apiTokens?.defaultTtlMs,
+      apiTokenMaxTtlMs: authConfig.apiTokens?.maxTtlMs,
+      apiTokenAllowedScopes: authConfig.apiTokens?.allowedScopes,
     },
     projectSources,
   )

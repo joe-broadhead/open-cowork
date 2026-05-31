@@ -14,10 +14,17 @@ data:
   OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS: {{ .Values.cloud.shutdownGraceMs | quote }}
   OPEN_COWORK_CLOUD_AUTH_MODE: {{ .Values.cloud.auth.mode | quote }}
   OPEN_COWORK_CLOUD_ALLOW_INSECURE_AUTH: {{ .Values.cloud.allowInsecureAuth | quote }}
+  OPEN_COWORK_CLOUD_SIGNUP_MODE: {{ .Values.cloud.auth.signupMode | quote }}
+  OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP: {{ .Values.cloud.auth.allowSelfServiceSignup | quote }}
   OPEN_COWORK_CLOUD_OIDC_ISSUER_URL: {{ .Values.cloud.auth.oidcIssuerUrl | quote }}
   OPEN_COWORK_CLOUD_OIDC_CLIENT_ID: {{ .Values.cloud.auth.oidcClientId | quote }}
   OPEN_COWORK_CLOUD_OIDC_CALLBACK_PATH: {{ .Values.cloud.auth.oidcCallbackPath | quote }}
   OPEN_COWORK_CLOUD_ALLOWED_EMAIL_DOMAINS: {{ join "," .Values.cloud.auth.allowedEmailDomains | quote }}
+  OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED: {{ .Values.cloud.auth.headerAllowUnsigned | quote }}
+  OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS: {{ .Values.cloud.auth.headerMaxSignatureAgeMs | quote }}
+  OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS: {{ .Values.cloud.auth.apiTokenDefaultTtlMs | quote }}
+  OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS: {{ .Values.cloud.auth.apiTokenMaxTtlMs | quote }}
+  OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES: {{ join "," .Values.cloud.auth.apiTokenAllowedScopes | quote }}
   OPEN_COWORK_CLOUD_COOKIE_SECURE: {{ .Values.cloud.cookieSecure | quote }}
   OPEN_COWORK_CLOUD_PUBLIC_URL: {{ .Values.cloud.publicUrl | quote }}
   OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS: {{ .Values.cloud.trustProxyHeaders | quote }}
