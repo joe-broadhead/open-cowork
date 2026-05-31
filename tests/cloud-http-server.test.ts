@@ -538,6 +538,146 @@ test('cloud HTTP server enforces prompt quotas before processing commands and ex
   }
 })
 
+test('cloud HTTP server blocks managed command queue depth before enqueueing extra work', async () => {
+  const fixture = createFixture({
+    autoProcessCommands: false,
+    abuse: testAbuseConfig({
+      maxQueuedCommandsPerOrg: 1,
+      maxPromptsPerHour: 100,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const first = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'first queued prompt' }),
+    })
+    assert.equal(first.status, 202)
+    assert.equal(fixture.runtime.prompts.length, 0)
+
+    const blocked = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'this prompt text must not be metered' }),
+    })
+    assert.equal(blocked.status, 429)
+    const body = await readJson(blocked)
+    assert.equal(asRecord(body.verdict).policyCode, 'quota.queued_commands_exceeded')
+    assert.equal(fixture.runtime.prompts.length, 0)
+
+    const usage = await readJson(await fetch(`${baseUrl}/api/usage/events?limit=50`))
+    const usageText = JSON.stringify(usage)
+    assert.equal(usageText.includes('first queued prompt'), false)
+    assert.equal(usageText.includes('this prompt text must not be metered'), false)
+    const events = asArray(usage.events).map(asRecord)
+    assert.equal(events.some((event) => event.eventType === 'work.queued'), true)
+    const summary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
+    const promptQuota = asArray(summary.quotas).map(asRecord).find((quota) => quota.quotaKey === 'prompts:hour')
+    assert.equal(promptQuota?.used, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server gates gateway-originated prompts separately from general prompts', async () => {
+  const fixture = createFixture({
+    autoProcessCommands: false,
+    abuse: testAbuseConfig({
+      maxPromptsPerHour: 100,
+      maxGatewayPromptsPerHour: 1,
+      maxQueuedCommandsPerOrg: 100,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  const headers = { 'content-type': 'application/json' }
+  try {
+    assert.equal((await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        agentId: 'agent-gateway-quota',
+        name: 'Gateway quota agent',
+        profileName: 'full',
+      }),
+    })).status, 201)
+    assert.equal((await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        bindingId: 'binding-gateway-quota',
+        agentId: 'agent-gateway-quota',
+        provider: 'telegram',
+        displayName: 'Telegram quota',
+        externalWorkspaceId: 'bot-quota',
+      }),
+    })).status, 201)
+    const identity = asRecord((await readJson(await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-quota',
+        externalUserId: 'tg-quota-user',
+        accountId: 'user-1',
+        role: 'member',
+        status: 'active',
+      }),
+    }))).identity)
+    const bound = await readJson(await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: 'binding-gateway-quota',
+        provider: 'telegram',
+        externalChatId: 'chat-quota',
+        externalThreadId: 'thread-quota',
+        title: 'Gateway quota thread',
+      }),
+    }))
+    const bindingId = String(asRecord(bound.binding).bindingId)
+
+    const first = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        bindingId,
+        text: 'first gateway prompt',
+      }),
+    })
+    assert.equal(first.status, 202)
+    const blocked = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        bindingId,
+        text: 'second gateway prompt',
+      }),
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'quota.gateway_prompts_per_hour_exceeded')
+    const summary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
+    const gatewayQuota = asArray(summary.quotas).map(asRecord).find((quota) => quota.quotaKey === 'gateway_prompts:hour')
+    assert.equal(gatewayQuota?.limit, 1)
+    assert.equal(gatewayQuota?.used, 1)
+    const promptQuota = asArray(summary.quotas).map(asRecord).find((quota) => quota.quotaKey === 'prompts:hour')
+    assert.equal(promptQuota?.used, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server blocks worker execution when worker-minute quota is exhausted', async () => {
   const fixture = createFixture({
     abuse: testAbuseConfig({
@@ -1902,6 +2042,7 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
         mode: 'self_hosted',
         capabilities: { profiles: ['default'] },
         maxWorkers: 2,
+        maxConcurrentWork: 1,
       }),
     })
     assert.equal(poolResponse.status, 201)
@@ -1925,6 +2066,27 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
     })
     assert.equal(workerResponse.status, 201)
     assert.equal(asRecord(asRecord(await readJson(workerResponse)).worker).status, 'pending')
+
+    const secondWorkerResponse = await fetch(`${baseUrl}/api/admin/workers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workerId: 'worker-2',
+        poolId: 'pool-1',
+        displayName: 'Worker two',
+      }),
+    })
+    assert.equal(secondWorkerResponse.status, 201)
+    const overCapacityWorker = await fetch(`${baseUrl}/api/admin/workers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workerId: 'worker-3',
+        poolId: 'pool-1',
+        displayName: 'Worker three',
+      }),
+    })
+    assert.equal(overCapacityWorker.status, 429)
 
     const invalidDrain = await fetch(`${baseUrl}/api/admin/workers/worker-1/drain`, { method: 'POST' })
     assert.equal(invalidDrain.status, 400)
@@ -1959,6 +2121,19 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
     })
     assert.equal(heartbeatResponse.status, 200)
     assert.equal(asRecord(asRecord(await readJson(heartbeatResponse)).heartbeat).currentLoad, 1)
+
+    const overCapacityHeartbeat = await fetch(`${baseUrl}/api/workers/worker-1/heartbeat`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${plaintext}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: '1.0.0',
+        currentLoad: 2,
+      }),
+    })
+    assert.equal(overCapacityHeartbeat.status, 429)
 
     const blockedAdmin = await fetch(`${baseUrl}/api/admin/worker-pools`, {
       headers: { authorization: `Bearer ${plaintext}` },
@@ -2091,6 +2266,12 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     name: 'Gateway token',
     scopes: ['gateway', 'admin'],
   })
+  const operatorIssued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Operator diagnostics token',
+    scopes: ['operator'],
+  })
   const gatewayOnlyIssued = store.issueApiToken({
     orgId: org.orgId,
     accountId: account.accountId,
@@ -2144,6 +2325,10 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   }
   const tenant2Headers = {
     authorization: `Bearer ${issuedTenant2.plaintext}`,
+    'content-type': 'application/json',
+  }
+  const operatorHeaders = {
+    authorization: `Bearer ${operatorIssued.plaintext}`,
     'content-type': 'application/json',
   }
   try {
@@ -2495,7 +2680,9 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(deadDelivery.status, 'dead')
     assert.equal(String(deadDelivery.lastError).includes(tokenLikeErrorText), false)
 
-    const diagnostics = await readJson(await fetch(`${baseUrl}/api/diagnostics`, { headers }))
+    const adminDiagnostics = await fetch(`${baseUrl}/api/diagnostics`, { headers })
+    assert.equal(adminDiagnostics.status, 403)
+    const diagnostics = await readJson(await fetch(`${baseUrl}/api/diagnostics`, { headers: operatorHeaders }))
     assert.equal(diagnostics.redaction, 'secrets-redacted')
     assert.equal(asRecord(asRecord(diagnostics.gateway).agents).total, 1)
     assert.equal(asRecord(asRecord(diagnostics.gateway).deliveriesByStatus).dead, 1)
@@ -2503,6 +2690,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(asRecord(diagnostics.gateway).deliverySampleLimit, 200)
     const diagnosticsText = JSON.stringify(diagnostics)
     assert.equal(diagnosticsText.includes(issued.plaintext), false)
+    assert.equal(diagnosticsText.includes(operatorIssued.plaintext), false)
     assert.equal(diagnosticsText.includes(gatewayOnlyIssued.plaintext), false)
     assert.equal(diagnosticsText.includes(tokenLikeErrorText), false)
     assert.equal(diagnosticsText.includes('secret/telegram'), false)
@@ -3471,6 +3659,138 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
     const listed = await readJson(await fetch(`${baseUrl}/api/workflows`))
     assert.equal(asArray(listed.workflows).length, 1)
     assert.equal(asArray(listed.runs).length, 1)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP gates managed workflow runs by concurrency and hourly quotas', async () => {
+  const createWorkflow = async (baseUrl: string, suffix: string) => {
+    const response = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: `Workflow quota ${suffix}`,
+        instructions: `Run quota workflow ${suffix}.`,
+        agentName: 'data-analyst',
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      }),
+    })
+    assert.equal(response.status, 201)
+    return String(asRecord((await readJson(response)).workflow).id)
+  }
+
+  const concurrentFixture = createFixture({
+    autoProcessCommands: false,
+    abuse: testAbuseConfig({
+      maxConcurrentWorkflowRunsPerOrg: 1,
+      maxWorkflowRunsPerHour: 100,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const concurrentBaseUrl = await concurrentFixture.server.listen()
+  try {
+    const firstWorkflowId = await createWorkflow(concurrentBaseUrl, 'concurrent-a')
+    const secondWorkflowId = await createWorkflow(concurrentBaseUrl, 'concurrent-b')
+    const firstRun = await fetch(`${concurrentBaseUrl}/api/workflows/${firstWorkflowId}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(firstRun.status, 202)
+    const blocked = await fetch(`${concurrentBaseUrl}/api/workflows/${secondWorkflowId}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'quota.concurrent_workflow_runs_exceeded')
+  } finally {
+    await concurrentFixture.server.close()
+  }
+
+  const hourlyFixture = createFixture({
+    autoProcessCommands: false,
+    abuse: testAbuseConfig({
+      maxConcurrentWorkflowRunsPerOrg: 100,
+      maxWorkflowRunsPerHour: 1,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const hourlyBaseUrl = await hourlyFixture.server.listen()
+  try {
+    const firstWorkflowId = await createWorkflow(hourlyBaseUrl, 'hourly-a')
+    const secondWorkflowId = await createWorkflow(hourlyBaseUrl, 'hourly-b')
+    const firstRun = await fetch(`${hourlyBaseUrl}/api/workflows/${firstWorkflowId}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(firstRun.status, 202)
+    const blocked = await fetch(`${hourlyBaseUrl}/api/workflows/${secondWorkflowId}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'quota.workflow_runs_per_hour_exceeded')
+    const summary = await readJson(await fetch(`${hourlyBaseUrl}/api/usage/summary?limit=50`))
+    const workflowQuota = asArray(summary.quotas).map(asRecord).find((quota) => quota.quotaKey === 'workflow_runs:hour')
+    assert.equal(workflowQuota?.limit, 1)
+    assert.equal(workflowQuota?.used, 1)
+  } finally {
+    await hourlyFixture.server.close()
+  }
+})
+
+test('cloud HTTP rejects workflow starts before creating runs when managed command queues are full', async () => {
+  const fixture = createFixture({
+    autoProcessCommands: false,
+    abuse: testAbuseConfig({
+      maxQueuedCommandsPerOrg: 1,
+      maxPromptsPerHour: 100,
+      maxWorkflowRunsPerHour: 100,
+      maxConcurrentWorkflowRunsPerOrg: 100,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const session = asRecord((await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))).session)
+    assert.equal((await fetch(`${baseUrl}/api/sessions/${session.sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'fill the managed command queue' }),
+    })).status, 202)
+
+    const workflowResponse = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Workflow queue full',
+        instructions: 'This text must not be enqueued while the queue is full.',
+        agentName: 'data-analyst',
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      }),
+    })
+    assert.equal(workflowResponse.status, 201)
+    const workflowId = String(asRecord((await readJson(workflowResponse)).workflow).id)
+    const blocked = await fetch(`${baseUrl}/api/workflows/${workflowId}/run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(asRecord((await readJson(blocked)).verdict).policyCode, 'quota.queued_commands_exceeded')
+
+    const workflow = asRecord((await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}`))).workflow)
+    assert.equal(asArray(workflow.runs).length, 0)
+    const usage = await readJson(await fetch(`${baseUrl}/api/usage/events?limit=50`))
+    assert.equal(JSON.stringify(usage).includes('This text must not be enqueued'), false)
   } finally {
     await fixture.server.close()
   }

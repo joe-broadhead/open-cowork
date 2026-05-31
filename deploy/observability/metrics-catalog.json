@@ -39,6 +39,18 @@
       "description": "Oldest pending command age. May be emitted by DB collector or dashboard SQL."
     },
     {
+      "name": "open_cowork_cloud_runnable_session_claim_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Duration of worker runnable-session claim scans in milliseconds."
+    },
+    {
+      "name": "open_cowork_cloud_runnable_sessions_claimed_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Runnable session leases claimed by workers, labeled by claim status."
+    },
+    {
       "name": "open_cowork_cloud_worker_lease_claims_total",
       "type": "counter",
       "owner": "cloud-worker",
@@ -67,6 +79,30 @@
       "type": "gauge",
       "owner": "cloud-worker",
       "description": "Worker command loop duration."
+    },
+    {
+      "name": "open_cowork_cloud_worker_loop_failures_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Worker loop failures before the next poll can retry."
+    },
+    {
+      "name": "open_cowork_cloud_worker_lease_denials_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Worker lease denials caused by entitlement, quota, or capacity checks."
+    },
+    {
+      "name": "open_cowork_cloud_worker_commands_processed_total",
+      "type": "counter",
+      "owner": "cloud-worker",
+      "description": "Worker command execution completions by status."
+    },
+    {
+      "name": "open_cowork_cloud_worker_command_duration_ms",
+      "type": "gauge",
+      "owner": "cloud-worker",
+      "description": "Worker command execution duration in milliseconds by status."
     },
     {
       "name": "open_cowork_cloud_scheduler_claims_total",

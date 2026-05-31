@@ -27,6 +27,7 @@ import type {
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
+  CommandQueueQuota,
   ConsumeUsageQuotaInput,
   CompleteWorkflowRunInput,
   ControlPlaneRole,
@@ -43,6 +44,7 @@ import type {
   CreateThreadSmartFilterInput,
   CreateThreadTagInput,
   DisableByokSecretInput,
+  EnqueueCommandInput,
   FailWorkflowRunInput,
   FindChannelInteractionInput,
   IssuedApiTokenRecord,
@@ -140,16 +142,14 @@ import { iso, jsonRecord, numberValue, type QueryResult, type QueryRow } from '.
 import { threadSmartFilterFromRow, threadTagFromRow } from './postgres-domains/thread-index.ts'
 import { webhookAuthFailureFromRow } from './postgres-domains/webhooks.ts'
 import { workflowFromRow, workflowRunFromRow } from './postgres-domains/workflows.ts'
+import { assertPostgresCommandEnqueueQuotas, assertPostgresCommandQueueQuota, assertPostgresConcurrentSessionQuota, assertPostgresWorkflowRunQuota, checkPostgresActiveWorkerQuota, listPostgresRunnableSessions } from './postgres-store-domains/quotas.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
 }
 type PgClient = PgExecutor & { release: () => void }
-type PgPool = PgExecutor & {
-  connect(): Promise<PgClient>
-  end(): Promise<void>
-}
+type PgPool = PgExecutor & { connect(): Promise<PgClient>; end(): Promise<void> }
 
 export type PostgresControlPlaneStoreOptions = {
   connectionString: string
@@ -323,6 +323,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly pool: PgPool
   private readonly ownsPool: boolean
   private readonly managedWorkers: PostgresManagedWorkersRepository
+  private readonly quotaDeps = {
+    lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
+    consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
+  }
 
   private constructor(pool: PgPool, ownsPool: boolean) {
     this.pool = pool
@@ -2017,29 +2021,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         client,
       )
       if (existing) return sessionFromRow(existing)
-      const maxConcurrentSessions = input.quota?.maxConcurrentSessionsPerOrg
-      if (maxConcurrentSessions && maxConcurrentSessions > 0) {
-        const orgId = input.quota?.orgId || input.tenantId
-        await this.lockQuota(client, orgId, 'concurrent_sessions')
-        const countRow = await this.one(
-          `SELECT count(*)::int AS count
-           FROM cloud_sessions
-           WHERE tenant_id = $1 AND status <> 'closed'`,
-          [input.tenantId],
-          client,
-        )
-        const activeSessions = numberValue(countRow.count)
-        if (activeSessions >= maxConcurrentSessions) {
-          throw new ControlPlaneQuotaExceededError({
-            message: 'Concurrent cloud session quota exceeded.',
-            policyCode: input.quota?.policyCode || 'quota.concurrent_sessions_exceeded',
-            retryAfterMs: 60_000,
-            limit: maxConcurrentSessions,
-            used: activeSessions,
-            resetAt: new Date(Date.now() + 60_000).toISOString(),
-          })
-        }
-      }
+      await assertPostgresConcurrentSessionQuota(client, { tenantId: input.tenantId, quota: input.quota, now: input.createdAt }, this.quotaDeps)
       const createdAt = nowIso(input.createdAt)
       const result = await client.query(
         `INSERT INTO cloud_sessions (
@@ -2155,6 +2137,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       `SELECT * FROM cloud_sessions ORDER BY updated_at DESC, tenant_id, session_id`,
     )
     return result.rows.map(sessionFromRow)
+  }
+
+  async listRunnableSessions(input: {
+    limit?: number | null
+    now?: Date
+  } = {}) {
+    return listPostgresRunnableSessions(this.pool, input)
   }
 
   async claimRunnableSessions(input: {
@@ -2539,24 +2528,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       const lease = await this.getLease(tenantId, sessionId, client, true)
       const nowMs = now.getTime()
       if (lease && lease.leaseExpiresAt > nowMs) return null
-      const maxActiveWorkers = quota?.maxActiveWorkersPerOrg
-      if (maxActiveWorkers && maxActiveWorkers > 0) {
-        const orgId = quota.orgId || tenantId
-        await this.lockQuota(client, orgId, 'active_workers')
-        const countRow = await this.one(
-          `SELECT count(*)::int AS count
-           FROM cloud_worker_leases leases
-           JOIN cloud_sessions sessions
-             ON sessions.tenant_id = leases.tenant_id
-            AND sessions.session_id = leases.session_id
-           WHERE sessions.tenant_id = $1
-             AND leases.lease_expires_at_ms > $2`,
-          [tenantId, nowMs],
-          client,
-        )
-        const activeWorkers = numberValue(countRow.count)
-        if (activeWorkers >= maxActiveWorkers) return null
-      }
+      if (!(await checkPostgresActiveWorkerQuota(client, { tenantId, quota, nowMs }, this.quotaDeps))) return null
       const attempt = numberValue(session.next_lease_attempt) + 1
       const leaseRecord: WorkerLeaseRecord = {
         tenantId,
@@ -2767,16 +2739,13 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     })
   }
 
-  async enqueueSessionCommand(input: {
-    commandId: string
-    tenantId: string
-    userId: string
-    sessionId: string
-    kind: SessionCommandRecord['kind']
-    payload?: Record<string, unknown>
-    targetLeaseToken?: string | null
-    createdAt?: Date
-  }) {
+  async assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }) {
+    await this.withTransaction(async (client) => {
+      await assertPostgresCommandQueueQuota(client, input, this.quotaDeps)
+    })
+  }
+
+  async enqueueSessionCommand(input: EnqueueCommandInput) {
     return this.withTransaction(async (client) => {
       await this.requireTenantUser(input.tenantId, input.userId, client)
       await this.requireSession(input.tenantId, input.sessionId, client, true)
@@ -2801,6 +2770,12 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         return command
       }
       const createdAt = nowIso(input.createdAt)
+      await assertPostgresCommandEnqueueQuotas(client, {
+        tenantId: input.tenantId,
+        queueQuota: input.quota,
+        usageQuotas: input.usageQuotas,
+        now: new Date(createdAt),
+      }, this.quotaDeps)
       const sequence = await this.incrementSessionCounter(
         client,
         input.tenantId,
@@ -3120,6 +3095,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       if (existing) return workflowRunFromRow(existing)
       this.assertWorkflowRunnable(workflow)
       const createdAt = nowIso(input.createdAt)
+      await assertPostgresWorkflowRunQuota(client, {
+        tenantId: input.tenantId,
+        quota: input.quota,
+        now: new Date(createdAt),
+      }, this.quotaDeps)
       const claimedBy = input.claimedBy?.trim() || null
       const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
       const leaseTtlMs = Math.max(1, Math.floor(input.leaseTtlMs ?? 30_000))
@@ -3246,6 +3226,11 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       )
       if (!row) return null
       const workflow = workflowFromRow(row)
+      await assertPostgresWorkflowRunQuota(client, {
+        tenantId: workflow.tenantId,
+        quota: input.quota,
+        now,
+      }, this.quotaDeps)
       const claimToken = createWorkClaimToken(workflow.tenantId, input.runId, claimedBy)
       const result = await client.query(
         `INSERT INTO cloud_workflow_runs (

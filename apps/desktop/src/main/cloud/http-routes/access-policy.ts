@@ -34,3 +34,12 @@ export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {
   if (!input.action || input.action === 'view' || input.action === 'events') return true
   return input.action === 'artifacts' && Boolean(input.artifactId)
 }
+
+export function routeAllowsOperationalToken(principal: CloudPrincipal, input: GatewayRouteAccessInput) {
+  if (principal.authSource !== 'api_token') return false
+  const operational = principal.tokenScopes?.includes('operator') || principal.tokenScopes?.includes('worker-internal')
+  if (!operational || input.method !== 'GET') return false
+  if (input.resource === 'metrics' || input.resource === 'diagnostics') return true
+  if (input.resource === 'workers' && input.sessionId === 'heartbeats' && !input.action) return true
+  return input.resource === 'runtime' && input.sessionId === 'status' && !input.action
+}

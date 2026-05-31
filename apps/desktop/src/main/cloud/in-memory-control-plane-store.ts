@@ -8,6 +8,7 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
+import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -26,6 +27,9 @@ import type {
   UpdateManagedWorkerStatusInput,
 } from './managed-worker-types.ts'
 import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
+import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
+export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
+export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
   CreateManagedWorkerPoolInput,
   IssueManagedWorkerCredentialInput,
@@ -69,23 +73,17 @@ export type ByokSecretStatus = 'pending_validation' | 'active' | 'disabled' | 'e
 export type UsageEventType =
   | 'session.created'
   | 'prompt.enqueued'
+  | 'work.queued'
+  | 'work.claimed'
+  | 'worker.execution_started'
+  | 'worker.execution_completed'
+  | 'worker.execution_failed'
   | 'worker.minute'
   | 'artifact.uploaded'
   | 'artifact.downloaded'
   | 'gateway.delivery.claimed'
 export type UsageUnit = 'count' | 'byte' | 'minute'
 export type BillingSubscriptionStatus = CloudSubscriptionStatus
-
-export type QuotaPolicyCode =
-  | 'quota.concurrent_sessions_exceeded'
-  | 'quota.active_workers_exceeded'
-  | 'quota.prompts_per_hour_exceeded'
-  | 'quota.worker_minutes_per_hour_exceeded'
-  | 'quota.gateway_deliveries_per_hour_exceeded'
-  | 'quota.gateway_channel_bindings_exceeded'
-  | 'quota.artifact_bytes_per_day_exceeded'
-  | 'rate_limit.http_exceeded'
-  | 'auth.backoff'
 
 export type UsageEventRecord = {
   eventId: string
@@ -151,33 +149,6 @@ export type CloudAuthBackoffRecord = {
   failureCount: number
   blockedUntilMs: number
   retryAfterMs: number
-}
-
-export class ControlPlaneQuotaExceededError extends Error {
-  readonly status = 429
-  readonly publicMessage: string
-  readonly policyCode: QuotaPolicyCode | string
-  readonly retryAfterMs: number
-  readonly limit: number
-  readonly used: number
-  readonly resetAt: string
-
-  constructor(input: {
-    message: string
-    policyCode: QuotaPolicyCode | string
-    retryAfterMs: number
-    limit: number
-    used: number
-    resetAt: string
-  }) {
-    super(input.message)
-    this.publicMessage = input.message
-    this.policyCode = input.policyCode
-    this.retryAfterMs = input.retryAfterMs
-    this.limit = input.limit
-    this.used = input.used
-    this.resetAt = input.resetAt
-  }
 }
 
 export type TenantRecord = {
@@ -467,7 +438,9 @@ export type ClaimRunnableSessionsInput = {
   now?: Date
   ttlMs?: number
 }
-
+export type ListRunnableSessionsInput = { limit?: number | null, now?: Date }
+export type RunnableSessionRecord = { tenantId: string, sessionId: string }
+export type RunnableSessionListRecord = { sessions: RunnableSessionRecord[], pendingSessionCount: number }
 export type RunnableSessionClaimRecord = {
   leases: WorkerLeaseRecord[]
   pendingSessionCount: number
@@ -970,6 +943,22 @@ export type WriteProjectionInput = {
   updatedAt?: Date
 }
 
+export type CommandQueueQuota = {
+  orgId?: string | null
+  maxQueuedCommandsPerOrg?: number | null
+  maxQueueAgeMs?: number | null
+  policyCode?: QuotaPolicyCode | string
+  queueAgePolicyCode?: QuotaPolicyCode | string
+}
+
+export type WorkflowRunQuota = {
+  orgId?: string | null
+  maxConcurrentWorkflowRunsPerOrg?: number | null
+  maxWorkflowRunsPerHour?: number | null
+  policyCode?: QuotaPolicyCode | string
+  workflowRunsPolicyCode?: QuotaPolicyCode | string
+}
+
 export type EnqueueCommandInput = {
   commandId: string
   tenantId: string
@@ -979,6 +968,8 @@ export type EnqueueCommandInput = {
   payload?: Record<string, unknown>
   targetLeaseToken?: string | null
   createdAt?: Date
+  quota?: CommandQueueQuota | null
+  usageQuotas?: ConsumeUsageQuotaInput[]
 }
 
 export type CreateWorkflowInput = {
@@ -1000,6 +991,7 @@ export type CreateWorkflowRunInput = {
   claimedBy?: string | null
   leaseTtlMs?: number | null
   createdAt?: Date
+  quota?: WorkflowRunQuota | null
 }
 
 export type UpdateWorkflowStatusInput = {
@@ -1016,6 +1008,7 @@ export type ClaimDueWorkflowRunInput = {
   claimedBy?: string | null
   leaseTtlMs?: number | null
   now?: Date
+  quota?: WorkflowRunQuota | null
 }
 
 export type AttachWorkflowRunSessionInput = {
@@ -1196,6 +1189,7 @@ export type ControlPlaneStore = {
   listSessions(tenantId: string, userId: string): MaybePromise<SessionRecord[]>
   listSessionsPage(input: ListSessionsPageInput): MaybePromise<ListSessionsPageRecord>
   listAllSessions(): MaybePromise<SessionRecord[]>
+  listRunnableSessions(input: ListRunnableSessionsInput): MaybePromise<RunnableSessionListRecord>
   claimRunnableSessions(input: ClaimRunnableSessionsInput): MaybePromise<RunnableSessionClaimRecord>
   bindSessionRuntime(input: {
     tenantId: string
@@ -1235,6 +1229,7 @@ export type ControlPlaneStore = {
   renewSessionLease(lease: WorkerLeaseRecord, now?: Date, ttlMs?: number): MaybePromise<WorkerLeaseRecord>
   checkpointSession(lease: WorkerLeaseRecord): MaybePromise<WorkerLeaseRecord>
   reapExpiredSessionLeases(input?: ReapExpiredSessionLeasesInput): MaybePromise<ReapedSessionLeaseRecord[]>
+  assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): MaybePromise<void>
   enqueueSessionCommand(input: EnqueueCommandInput): MaybePromise<SessionCommandRecord>
   claimNextSessionCommand(lease: WorkerLeaseRecord): MaybePromise<SessionCommandRecord | null>
   ackSessionCommand(lease: WorkerLeaseRecord, commandId: string, now?: Date): MaybePromise<SessionCommandRecord>
@@ -1512,17 +1507,6 @@ function quotaRetryAfterMs(nowMs: number, startedAtMs: number, windowMs: number)
   return Math.max(1, startedAtMs + windowMs - nowMs)
 }
 
-function quotaExceeded(input: {
-  message: string
-  policyCode: QuotaPolicyCode | string
-  retryAfterMs: number
-  limit: number
-  used: number
-  resetAt: string
-}): never {
-  throw new ControlPlaneQuotaExceededError(input)
-}
-
 function normalizeProvider(value: unknown): ChannelProviderId {
   const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
   if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
@@ -1612,6 +1596,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     hasTenant: (tenantId) => this.tenants.has(tenantId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
+  private readonly quotaDomain = new InMemoryQuotaDomain({
+    resolveOrgId: (tenantId) => this.orgsByTenant.get(tenantId) || tenantId,
+    sessions: () => this.sessions.values(),
+    workflowRuns: () => this.workflowRuns.values(),
+    consumeUsageQuota: (input) => this.consumeUsageQuota(input),
+  })
+
+  private orgIdForTenant(tenantId: string) {
+    return this.orgsByTenant.get(tenantId) || tenantId
+  }
 
   createTenant(input: { tenantId: string, name: string, createdAt?: Date }): TenantRecord {
     const existing = this.tenants.get(input.tenantId)
@@ -2905,8 +2899,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (existing) return clone(existing.record)
     const maxConcurrentSessions = input.quota?.maxConcurrentSessionsPerOrg
     if (maxConcurrentSessions && maxConcurrentSessions > 0) {
+      const orgId = input.quota?.orgId || this.orgIdForTenant(input.tenantId)
       const activeSessions = Array.from(this.sessions.values())
-        .filter((session) => session.record.tenantId === input.tenantId && session.record.status !== 'closed')
+        .filter((session) => this.orgIdForTenant(session.record.tenantId) === orgId && session.record.status !== 'closed')
         .length
       if (activeSessions >= maxConcurrentSessions) {
         quotaExceeded({
@@ -3012,27 +3007,25 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return Array.from(this.sessions.values()).map((session) => clone(session.record))
   }
 
+  listRunnableSessions(input: ListRunnableSessionsInput = {}): RunnableSessionListRecord {
+    const nowMs = (input.now || new Date()).getTime()
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
+    const candidates = this.runnableSessionCandidates(nowMs)
+    return {
+      sessions: candidates.slice(0, limit).map((candidate) => ({
+        tenantId: candidate.session.record.tenantId,
+        sessionId: candidate.session.record.sessionId,
+      })),
+      pendingSessionCount: candidates.length,
+    }
+  }
+
   claimRunnableSessions(input: ClaimRunnableSessionsInput): RunnableSessionClaimRecord {
     const now = input.now || new Date()
     const nowMs = now.getTime()
     const ttlMs = input.ttlMs ?? 30_000
     const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
-    const candidates = Array.from(this.sessions.values())
-      .map((session) => {
-        if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
-        const runnable = session.commands
-          .filter((command) => command.targetLeaseToken === null)
-          .filter((command) => command.status === 'pending' || command.status === 'running')
-          .filter((command) => !command.availableAt || Date.parse(command.availableAt) <= nowMs)
-          .sort((a, b) => a.createdSequence - b.createdSequence)[0]
-        return runnable ? { session, firstSequence: runnable.createdSequence } : null
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
-      .sort((a, b) => (
-        a.firstSequence - b.firstSequence
-        || a.session.record.tenantId.localeCompare(b.session.record.tenantId)
-        || a.session.record.sessionId.localeCompare(b.session.record.sessionId)
-      ))
+    const candidates = this.runnableSessionCandidates(nowMs)
 
     const leases: WorkerLeaseRecord[] = []
     for (const candidate of candidates.slice(0, limit)) {
@@ -3055,6 +3048,25 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       leases,
       pendingSessionCount: candidates.length,
     }
+  }
+
+  private runnableSessionCandidates(nowMs: number) {
+    return Array.from(this.sessions.values())
+      .map((session) => {
+        if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
+        const runnable = session.commands
+          .filter((command) => command.targetLeaseToken === null)
+          .filter((command) => command.status === 'pending' || command.status === 'running')
+          .filter((command) => !command.availableAt || Date.parse(command.availableAt) <= nowMs)
+          .sort((a, b) => a.createdSequence - b.createdSequence)[0]
+        return runnable ? { session, firstSequence: runnable.createdSequence } : null
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+      .sort((a, b) => (
+        a.firstSequence - b.firstSequence
+        || a.session.record.tenantId.localeCompare(b.session.record.tenantId)
+        || a.session.record.sessionId.localeCompare(b.session.record.sessionId)
+      ))
   }
 
   bindSessionRuntime(input: {
@@ -3238,8 +3250,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     if (session.lease && session.lease.leaseExpiresAt > nowMs) return null
     const maxActiveWorkers = quota?.maxActiveWorkersPerOrg
     if (maxActiveWorkers && maxActiveWorkers > 0) {
+      const orgId = quota?.orgId || this.orgIdForTenant(tenantId)
       const activeLeases = Array.from(this.sessions.values())
-        .filter((state) => state.record.tenantId === tenantId)
+        .filter((state) => this.orgIdForTenant(state.record.tenantId) === orgId)
         .filter((state) => state.lease && state.lease.leaseExpiresAt > nowMs)
         .length
       if (activeLeases >= maxActiveWorkers) {
@@ -3367,6 +3380,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     return reaped
   }
 
+  assertSessionCommandQueueQuota(input: { tenantId: string, quota?: CommandQueueQuota | null, now?: Date }): void {
+    this.quotaDomain.assertCommandQueueQuota(input)
+  }
+
   enqueueSessionCommand(input: EnqueueCommandInput): SessionCommandRecord {
     this.requireTenantUser(input.tenantId, input.userId)
     const session = this.requireSession(input.tenantId, input.sessionId)
@@ -3382,6 +3399,27 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         throw new Error(`Command id ${input.commandId} was reused with different content.`)
       }
       return clone(existing)
+    }
+    this.assertSessionCommandQueueQuota({ tenantId: input.tenantId, quota: input.quota, now: input.createdAt })
+    if (input.usageQuotas?.length) {
+      const countersSnapshot = new Map(this.usageCounters)
+      try {
+        for (const quota of input.usageQuotas) {
+          const result = this.consumeUsageQuota(quota)
+          if (!result.allowed) {
+            quotaExceeded({
+              message: publicQuotaMessage(result.policyCode),
+              policyCode: result.policyCode || 'quota.prompts_per_hour_exceeded',
+              retryAfterMs: result.retryAfterMs,
+              limit: result.limit,
+              used: result.used,
+              resetAt: result.resetAt,
+            })
+          }
+        }
+      } catch (error) {
+        this.usageCounters.clear(); for (const [counterKey, counter] of countersSnapshot) this.usageCounters.set(counterKey, counter); throw error
+      }
     }
     const command: SessionCommandRecord = {
       commandId: input.commandId,
@@ -3599,6 +3637,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const runKey = key(input.tenantId, input.runId)
     const existing = this.workflowRuns.get(runKey)
     if (existing) return clone(existing)
+    this.quotaDomain.assertWorkflowRunQuota({ tenantId: input.tenantId, quota: input.quota, now: input.createdAt })
     const createdAt = nowIso(input.createdAt)
     const claimedBy = input.claimedBy?.trim() || null
     const claimToken = claimedBy ? createWorkClaimToken(input.tenantId, input.runId, claimedBy) : null
@@ -3679,6 +3718,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .sort((left, right) => String(left.record.nextRunAt).localeCompare(String(right.record.nextRunAt)))[0]
     if (!workflow) return null
     const scheduledFor = workflow.record.nextRunAt
+    this.quotaDomain.assertWorkflowRunQuota({ tenantId: workflow.record.tenantId, quota: input.quota, now })
     const claimToken = createWorkClaimToken(workflow.record.tenantId, input.runId, claimedBy)
     const run: CloudWorkflowRunRecord = {
       tenantId: workflow.record.tenantId,

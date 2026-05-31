@@ -30,7 +30,6 @@ import {
   listCapabilitySkills,
   listCapabilityTools,
 } from '../capability-catalog.ts'
-import { ControlPlaneQuotaExceededError } from './control-plane-store.ts'
 import type {
   ApiTokenRecord,
   ApiTokenScope,
@@ -53,7 +52,6 @@ import type {
   ManagedWorkerPoolStatus,
   ManagedWorkerStatus,
   OrgMemberRecord,
-  QuotaPolicyCode,
   SessionCommandRecord,
   SessionEventRecord,
   SessionProjectionRecord,
@@ -66,6 +64,7 @@ import type {
   WorkerLeaseRecord,
 } from './control-plane-store.ts'
 import { CloudServiceError } from './cloud-service-error.ts'
+import { ControlPlaneQuotaExceededError } from './control-plane-errors.ts'
 import {
   BillingAdapterError,
   evaluateBillingEntitlement,
@@ -115,6 +114,7 @@ import {
   type RegisterManagedWorkerRequest,
   type UpdateManagedWorkerPoolRequest,
 } from './services/managed-worker-service.ts'
+import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
 import {
   verifyWorkflowWebhookAuth,
@@ -396,14 +396,16 @@ const DAY_MS = 24 * HOUR_MS
 const DEFAULT_API_TOKEN_TTL_MS = 90 * DAY_MS
 const MAX_API_TOKEN_TTL_MS = 365 * DAY_MS
 
-function windowStartMs(nowMs: number, windowMs: number) {
-  return Math.floor(nowMs / windowMs) * windowMs
-}
 const DISABLED_ABUSE_POLICY: CloudAbuseConfig = {
   enabled: false,
   maxConcurrentSessionsPerOrg: null,
+  maxConcurrentWorkflowRunsPerOrg: null,
   maxActiveWorkersPerOrg: null,
+  maxQueuedCommandsPerOrg: null,
+  maxQueueAgeMs: null,
   maxPromptsPerHour: null,
+  maxWorkflowRunsPerHour: null,
+  maxGatewayPromptsPerHour: null,
   maxWorkerMinutesPerHour: null,
   maxGatewayDeliveriesPerHour: null,
   maxGatewayChannelBindingsPerOrg: null,
@@ -557,13 +559,15 @@ function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
 
 function principalCanViewOperations(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'operator') || hasTokenScope(principal, 'worker-internal')
+  if (principal.authSource === 'api_token') {
+    return Boolean(principal.tokenScopes?.includes('operator') || principal.tokenScopes?.includes('worker-internal'))
+  }
   return false
 }
 
 function principalCanViewDiagnostics(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
+  if (principal.authSource === 'api_token') return Boolean(principal.tokenScopes?.includes('operator'))
   return false
 }
 
@@ -665,6 +669,7 @@ export class CloudSessionService {
   private readonly identityPolicy: CloudIdentityPolicy
   private readonly projectSources: CloudProjectSourceService | null
   private readonly managedWorkerService: CloudManagedWorkerService
+  private readonly usageGovernance: CloudUsageGovernanceService
 
   constructor(
     store: ControlPlaneStore,
@@ -696,6 +701,7 @@ export class CloudSessionService {
     this.identityPolicy = identityPolicy
     this.projectSources = projectSources
     this.managedWorkerService = new CloudManagedWorkerService(store, (principal) => this.ensurePrincipal(principal))
+    this.usageGovernance = new CloudUsageGovernanceService({ store, abuse, billingConfig })
   }
 
   get eventBus() {
@@ -755,81 +761,6 @@ export class CloudSessionService {
       type: 'session.project_source.bound',
       payload: { projectSource },
     })
-  }
-
-  private quotaLimit(value: number | null | undefined) {
-    if (!this.abuse.enabled) return null
-    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
-  }
-
-  private quotaError(message: string, policyCode: QuotaPolicyCode | string, retryAfterMs: number | null) {
-    return new CloudServiceError(429, message, { policyCode, retryAfterMs })
-  }
-
-  private translateQuotaError(error: unknown, fallbackMessage: string, fallbackPolicyCode: QuotaPolicyCode | string): never {
-    if (error instanceof ControlPlaneQuotaExceededError) {
-      throw this.quotaError(
-        error.publicMessage || fallbackMessage,
-        error.policyCode || fallbackPolicyCode,
-        error.retryAfterMs,
-      )
-    }
-    throw error
-  }
-
-  private async consumeQuota(input: {
-    orgId: string
-    quotaKey: string
-    limit: number | null | undefined
-    entitlementLimitKey?: 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
-    quantity?: number
-    windowMs: number
-    policyCode: QuotaPolicyCode
-    message: string
-  }) {
-    const limit = this.quotaLimit(await this.effectiveQuotaLimit(
-      input.orgId,
-      input.limit,
-      input.entitlementLimitKey,
-    ))
-    if (!limit) return null
-    const result = await this.store.consumeUsageQuota({
-      orgId: input.orgId,
-      quotaKey: input.quotaKey,
-      limit,
-      quantity: input.quantity,
-      windowMs: input.windowMs,
-      policyCode: input.policyCode,
-    })
-    if (!result.allowed) {
-      throw this.quotaError(input.message, input.policyCode, result.retryAfterMs)
-    }
-    return result
-  }
-
-  private async effectiveQuotaLimit(
-    orgId: string,
-    fallback: number | null | undefined,
-    key?: 'maxConcurrentSessionsPerOrg' | 'maxActiveWorkersPerOrg' | 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxGatewayChannelBindingsPerOrg' | 'maxArtifactBytesPerDay',
-  ) {
-    if (!key || !this.billingConfig || !isBillingConfigured(this.billingConfig)) return fallback
-    const subscription = await this.store.getBillingSubscription(orgId)
-    if (!subscription) return fallback
-    const entitlements = resolvedBillingEntitlements(this.billingConfig, subscription)
-    const value = entitlements[key]
-    return value === undefined ? fallback : value
-  }
-
-  private async recordUsage(input: {
-    orgId: string
-    accountId?: string | null
-    eventType: UsageEventRecord['eventType']
-    quantity?: number
-    unit?: UsageEventRecord['unit']
-    metadata?: Record<string, unknown>
-  }) {
-    if (!this.abuse.enabled) return null
-    return this.store.recordUsageEvent(input)
   }
 
   async ensurePrincipal(principal: CloudPrincipal) {
@@ -1612,7 +1543,7 @@ export class CloudSessionService {
     })
     const agent = await this.store.getHeadlessAgent(orgId, input.agentId)
     if (!agent) throw new CloudServiceError(404, 'Headless agent was not found.')
-    const bindingLimit = this.quotaLimit(await this.effectiveQuotaLimit(
+    const bindingLimit = this.usageGovernance.quotaLimit(await this.usageGovernance.effectiveQuotaLimit(
       orgId,
       this.abuse.maxGatewayChannelBindingsPerOrg,
       'maxGatewayChannelBindingsPerOrg',
@@ -1636,7 +1567,7 @@ export class CloudSessionService {
           : null,
       })
     } catch (error) {
-      this.translateQuotaError(error, 'Gateway channel binding quota exceeded.', 'quota.gateway_channel_bindings_exceeded')
+      this.usageGovernance.translateQuotaError(error, 'Gateway channel binding quota exceeded.', 'quota.gateway_channel_bindings_exceeded')
     }
   }
 
@@ -1890,8 +1821,43 @@ export class CloudSessionService {
       action: 'prompt.enqueue',
       profileName: session.profileName,
     })
+    const orgId = this.principalOrgId(principal)
+    const promptQuota = await this.usageGovernance.usageQuotaForOrg({
+      orgId,
+      quotaKey: 'prompts:hour',
+      limit: this.abuse.maxPromptsPerHour,
+      entitlementLimitKey: 'maxPromptsPerHour',
+      windowMs: HOUR_MS,
+      policyCode: 'quota.prompts_per_hour_exceeded',
+    })
+    const gatewayPromptQuota = await this.usageGovernance.usageQuotaForOrg({
+      orgId,
+      quotaKey: 'gateway_prompts:hour',
+      limit: this.abuse.maxGatewayPromptsPerHour,
+      entitlementLimitKey: 'maxGatewayPromptsPerHour',
+      windowMs: HOUR_MS,
+      policyCode: 'quota.gateway_prompts_per_hour_exceeded',
+    })
+    let command: SessionCommandRecord
+    try {
+      command = await this.store.enqueueSessionCommand({
+        commandId: this.ids.randomUUID(),
+        tenantId: principal.tenantId,
+        userId: session.userId,
+        sessionId: binding.sessionId,
+        kind: 'prompt',
+        payload: {
+          text: input.text,
+          agent: input.agent || 'build',
+        },
+        quota: await this.usageGovernance.commandQueueQuotaForOrg(orgId),
+        usageQuotas: [promptQuota, gatewayPromptQuota].filter((quota) => quota !== null),
+      })
+    } catch (error) {
+      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
+    }
     await this.store.recordAuditEvent({
-      orgId: this.principalOrgId(principal),
+      orgId,
       accountId: actor.accountId,
       actorType: 'api_token',
       actorId: principal.tokenId || principal.userId,
@@ -1900,28 +1866,22 @@ export class CloudSessionService {
       targetId: binding.sessionId,
       metadata: { identityId: actor.identityId, provider: actor.provider },
     })
-    await this.consumeQuota({
-      orgId: this.principalOrgId(principal),
-      quotaKey: 'prompts:hour',
-      limit: this.abuse.maxPromptsPerHour,
-      entitlementLimitKey: 'maxPromptsPerHour',
-      windowMs: HOUR_MS,
-      policyCode: 'quota.prompts_per_hour_exceeded',
-      message: 'Cloud prompt quota exceeded.',
-    })
-    const command = await this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
-      tenantId: principal.tenantId,
-      userId: session.userId,
-      sessionId: binding.sessionId,
-      kind: 'prompt',
-      payload: {
-        text: input.text,
-        agent: input.agent || 'build',
+    await this.usageGovernance.recordUsage({
+      orgId,
+      accountId: actor.accountId,
+      eventType: 'work.queued',
+      unit: 'count',
+      metadata: {
+        tenantId: principal.tenantId,
+        sessionId: binding.sessionId,
+        commandId: command.commandId,
+        commandKind: command.kind,
+        source: 'gateway',
+        provider: actor.provider,
       },
     })
-    await this.recordUsage({
-      orgId: this.principalOrgId(principal),
+    await this.usageGovernance.recordUsage({
+      orgId,
       accountId: actor.accountId,
       eventType: 'prompt.enqueued',
       unit: 'count',
@@ -2153,7 +2113,7 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     try {
-      const gatewayDeliveryLimit = await this.effectiveQuotaLimit(
+      const gatewayDeliveryLimit = await this.usageGovernance.effectiveQuotaLimit(
         this.principalOrgId(principal),
         this.abuse.maxGatewayDeliveriesPerHour,
         'maxGatewayDeliveriesPerHour',
@@ -2163,7 +2123,7 @@ export class CloudSessionService {
         claimedBy: input.claimedBy,
         ttlMs: input.ttlMs,
         now: input.now,
-        quota: this.quotaLimit(gatewayDeliveryLimit)
+        quota: this.usageGovernance.quotaLimit(gatewayDeliveryLimit)
           ? {
               quotaKey: 'gateway_deliveries:hour',
               limit: gatewayDeliveryLimit!,
@@ -2173,7 +2133,7 @@ export class CloudSessionService {
           : null,
       })
       if (delivery) {
-        await this.recordUsage({
+        await this.usageGovernance.recordUsage({
           orgId: this.principalOrgId(principal),
           accountId: principal.accountId || null,
           eventType: 'gateway.delivery.claimed',
@@ -2187,7 +2147,7 @@ export class CloudSessionService {
       }
       return delivery
     } catch (error) {
-      this.translateQuotaError(error, 'Gateway delivery quota exceeded.', 'quota.gateway_deliveries_per_hour_exceeded')
+      this.usageGovernance.translateQuotaError(error, 'Gateway delivery quota exceeded.', 'quota.gateway_deliveries_per_hour_exceeded')
     }
   }
 
@@ -2462,6 +2422,22 @@ export class CloudSessionService {
     return updated ? this.workflowDetail(updated) : null
   }
 
+  private async assertWorkflowExecutionStartAllowed(tenantId: string, orgId: string) {
+    await this.assertBillingAllowed({
+      orgId,
+      action: 'worker.execute',
+      profileName: this.policy.profileName,
+    })
+    try {
+      await this.store.assertSessionCommandQueueQuota({
+        tenantId,
+        quota: await this.usageGovernance.commandQueueQuotaForOrg(orgId),
+      })
+    } catch (error) {
+      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
+    }
+  }
+
   async runWorkflow(
     principal: CloudPrincipal,
     workflowId: string,
@@ -2476,25 +2452,40 @@ export class CloudSessionService {
     if (!workflow) throw new Error(`Unknown workflow ${workflowId}.`)
     const triggerType = input.triggerType || 'manual'
     if (!WORKFLOW_VALID_TRIGGER_TYPES.has(triggerType)) throw new Error('Workflow trigger type is invalid.')
-    const run = await this.store.createWorkflowRun({
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      workflowId,
-      runId: this.ids.randomUUID(),
-      triggerType,
-      triggerPayload: input.triggerPayload || null,
-      claimedBy: `workflow-api:${principal.userId}`,
-    })
+    const orgId = this.principalOrgId(principal)
+    await this.assertWorkflowExecutionStartAllowed(principal.tenantId, orgId)
+    let run: CloudWorkflowRunRecord
+    try {
+      run = await this.store.createWorkflowRun({
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+        workflowId,
+        runId: this.ids.randomUUID(),
+        triggerType,
+        triggerPayload: input.triggerPayload || null,
+        claimedBy: `workflow-api:${principal.userId}`,
+        quota: await this.usageGovernance.workflowRunQuotaForOrg(orgId),
+      })
+    } catch (error) {
+      this.usageGovernance.translateQuotaError(error, 'Cloud workflow run quota exceeded.', 'quota.workflow_runs_per_hour_exceeded')
+    }
     return this.startWorkflowRun(workflow, run)
   }
 
   async claimAndStartDueWorkflow(now = new Date(), claimedBy?: string | null): Promise<CloudWorkflowStartResult | null> {
     this.assertWorkflowsEnabled()
-    const claimed = await this.store.claimDueWorkflowRun({
-      runId: this.ids.randomUUID(),
-      claimedBy,
-      now,
-    })
+    let claimed: ClaimedWorkflowRunRecord | null
+    try {
+      claimed = await this.store.claimDueWorkflowRun({
+        runId: this.ids.randomUUID(),
+        claimedBy,
+        now,
+        quota: this.usageGovernance.workflowRunDefaultQuota(),
+      })
+    } catch (error) {
+      if (error instanceof ControlPlaneQuotaExceededError) return null
+      throw error
+    }
     if (!claimed) return null
     return this.startClaimedWorkflowRun(claimed)
   }
@@ -2531,15 +2522,23 @@ export class CloudSessionService {
     })
     if (!replayClaim) throw new WebhookHttpError(401, 'Workflow webhook authorization failed.')
     try {
-      const run = await this.store.createWorkflowRun({
-        tenantId: workflow.tenantId,
-        userId: workflow.userId,
-        workflowId: workflow.id,
-        runId: this.ids.randomUUID(),
-        triggerType: 'webhook',
-        triggerPayload: input.payload,
-        claimedBy: `workflow-webhook:${workflow.id}`,
-      })
+      const org = await this.store.ensureOrgForTenant({ tenantId: workflow.tenantId, name: workflow.tenantId })
+      await this.assertWorkflowExecutionStartAllowed(workflow.tenantId, org.orgId)
+      let run: CloudWorkflowRunRecord
+      try {
+        run = await this.store.createWorkflowRun({
+          tenantId: workflow.tenantId,
+          userId: workflow.userId,
+          workflowId: workflow.id,
+          runId: this.ids.randomUUID(),
+          triggerType: 'webhook',
+          triggerPayload: input.payload,
+          claimedBy: `workflow-webhook:${workflow.id}`,
+          quota: await this.usageGovernance.workflowRunQuotaForOrg(org.orgId),
+        })
+      } catch (error) {
+        this.usageGovernance.translateQuotaError(error, 'Cloud workflow run quota exceeded.', 'quota.workflow_runs_per_hour_exceeded')
+      }
       const started = await this.startWorkflowRun(workflow, run)
       await replayClaim.accept()
       return started
@@ -2574,7 +2573,7 @@ export class CloudSessionService {
       action: 'artifact.upload',
       profileName: this.policy.profileName,
     })
-    await this.consumeQuota({
+    await this.usageGovernance.consumeQuota({
       orgId: this.principalOrgId(principal),
       quotaKey: 'artifact_bytes:day',
       limit: this.abuse.maxArtifactBytesPerDay,
@@ -2587,7 +2586,7 @@ export class CloudSessionService {
   }
 
   async recordArtifactUploaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    await this.recordUsage({
+    await this.usageGovernance.recordUsage({
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
       eventType: 'artifact.uploaded',
@@ -2598,7 +2597,7 @@ export class CloudSessionService {
   }
 
   async recordArtifactDownloaded(principal: CloudPrincipal, sessionId: string, artifactId: string, bytes: number) {
-    await this.recordUsage({
+    await this.usageGovernance.recordUsage({
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
       eventType: 'artifact.downloaded',
@@ -2613,22 +2612,24 @@ export class CloudSessionService {
     sessionId: string
     workerId: string
     elapsedMs: number
+    reservedMinutes?: number
   }) {
     if (!this.abuse.enabled) return null
     const org = await this.store.ensureOrgForTenant({ tenantId: input.tenantId, name: input.tenantId })
     const minutes = Math.max(1, Math.ceil(input.elapsedMs / 60_000))
-    const workerMinuteLimit = this.quotaLimit(await this.effectiveQuotaLimit(
+    const unreservedMinutes = Math.max(0, minutes - Math.max(0, Math.floor(input.reservedMinutes || 0)))
+    const workerMinuteLimit = this.usageGovernance.quotaLimit(await this.usageGovernance.effectiveQuotaLimit(
       org.orgId,
       this.abuse.maxWorkerMinutesPerHour,
       'maxWorkerMinutesPerHour',
     ))
-    if (workerMinuteLimit) {
+    if (workerMinuteLimit && unreservedMinutes > 0) {
       const now = new Date()
       const quota = await this.store.consumeUsageQuota({
         orgId: org.orgId,
         quotaKey: 'worker_minutes:hour',
         limit: workerMinuteLimit,
-        quantity: minutes,
+        quantity: unreservedMinutes,
         windowMs: HOUR_MS,
         now,
         policyCode: 'quota.worker_minutes_per_hour_exceeded',
@@ -2659,6 +2660,28 @@ export class CloudSessionService {
     })
   }
 
+  async recordManagedWorkClaimed(input: {
+    tenantId: string
+    sessionId: string
+    workerId: string
+    leaseToken: string
+  }) {
+    return this.usageGovernance.recordManagedWorkClaimed(input)
+  }
+
+  async recordManagedExecutionEvent(input: {
+    tenantId: string
+    sessionId: string
+    workerId: string
+    commandId: string
+    commandKind: string
+    eventType: 'worker.execution_started' | 'worker.execution_completed' | 'worker.execution_failed'
+    elapsedMs?: number | null
+    errorCode?: string | null
+  }) {
+    return this.usageGovernance.recordManagedExecutionEvent(input)
+  }
+
   async listUsageEvents(principal: CloudPrincipal, limit?: number) {
     await this.ensurePrincipal(principal)
     return this.store.listUsageEvents(this.principalOrgId(principal), limit)
@@ -2666,109 +2689,13 @@ export class CloudSessionService {
 
   async getUsageSummary(principal: CloudPrincipal, limit = 100): Promise<CloudUsageSummary> {
     await this.ensurePrincipal(principal)
-    const orgId = this.principalOrgId(principal)
-    const now = Date.now()
-    const [events, counters] = await Promise.all([
-      this.store.listUsageEvents(orgId, limit),
-      this.store.listUsageQuotaCounters(orgId),
-    ])
-    const totals = new Map<string, CloudUsageTotalRecord>()
-    for (const event of events) {
-      const totalKey = `${event.eventType}\0${event.unit}`
-      const total = totals.get(totalKey) || {
-        eventType: event.eventType,
-        unit: event.unit,
-        quantity: 0,
-      }
-      total.quantity += event.quantity
-      totals.set(totalKey, total)
-    }
-    const counterByKey = new Map(counters.map((counter) => [counter.quotaKey, counter]))
-    const quotaInputs: Array<{
-      quotaKey: string
-      label: string
-      unit: CloudUsageQuotaWindowRecord['unit']
-      limit: number | null | undefined
-      entitlementLimitKey?: 'maxPromptsPerHour' | 'maxWorkerMinutesPerHour' | 'maxGatewayDeliveriesPerHour' | 'maxArtifactBytesPerDay'
-      windowMs: number
-      policyCode: string
-    }> = [
-      {
-        quotaKey: 'prompts:hour',
-        label: 'Prompts per hour',
-        unit: 'count',
-        limit: this.abuse.maxPromptsPerHour,
-        entitlementLimitKey: 'maxPromptsPerHour',
-        windowMs: HOUR_MS,
-        policyCode: 'quota.prompts_per_hour_exceeded',
-      },
-      {
-        quotaKey: 'gateway_deliveries:hour',
-        label: 'Gateway deliveries per hour',
-        unit: 'count',
-        limit: this.abuse.maxGatewayDeliveriesPerHour,
-        entitlementLimitKey: 'maxGatewayDeliveriesPerHour',
-        windowMs: HOUR_MS,
-        policyCode: 'quota.gateway_deliveries_per_hour_exceeded',
-      },
-      {
-        quotaKey: 'worker_minutes:hour',
-        label: 'Worker minutes per hour',
-        unit: 'minute',
-        limit: this.abuse.maxWorkerMinutesPerHour,
-        entitlementLimitKey: 'maxWorkerMinutesPerHour',
-        windowMs: HOUR_MS,
-        policyCode: 'quota.worker_minutes_per_hour_exceeded',
-      },
-      {
-        quotaKey: 'artifact_bytes:day',
-        label: 'Artifact bytes per day',
-        unit: 'byte',
-        limit: this.abuse.maxArtifactBytesPerDay,
-        entitlementLimitKey: 'maxArtifactBytesPerDay',
-        windowMs: DAY_MS,
-        policyCode: 'quota.artifact_bytes_per_day_exceeded',
-      },
-    ]
-    const quotas: CloudUsageQuotaWindowRecord[] = []
-    for (const input of quotaInputs) {
-      const rawLimit = await this.effectiveQuotaLimit(orgId, input.limit, input.entitlementLimitKey)
-      const effectiveLimit = this.quotaLimit(rawLimit)
-      const fallbackWindowStart = windowStartMs(now, input.windowMs)
-      const counter = counterByKey.get(input.quotaKey)
-      const counterWindowStart = counter?.windowStartedAtMs === fallbackWindowStart
-        ? counter.windowStartedAtMs
-        : fallbackWindowStart
-      const used = counter && counter.windowStartedAtMs === fallbackWindowStart ? counter.quantity : 0
-      quotas.push({
-        quotaKey: input.quotaKey,
-        label: input.label,
-        unit: input.unit,
-        enabled: Boolean(this.abuse.enabled && effectiveLimit),
-        limit: effectiveLimit,
-        used,
-        remaining: effectiveLimit ? Math.max(0, effectiveLimit - used) : null,
-        windowMs: input.windowMs,
-        windowStartedAt: new Date(counterWindowStart).toISOString(),
-        resetAt: new Date(counterWindowStart + input.windowMs).toISOString(),
-        policyCode: input.policyCode,
-      })
-    }
-    return {
-      enabled: this.abuse.enabled,
-      generatedAt: new Date(now).toISOString(),
-      totalsScope: 'recent_events',
-      eventSampleLimit: limit,
-      events,
-      totals: [...totals.values()].sort((left, right) => left.eventType.localeCompare(right.eventType) || left.unit.localeCompare(right.unit)),
-      quotas,
-    }
+    return this.usageGovernance.getUsageSummary(this.principalOrgId(principal), limit)
   }
 
   async getDiagnosticsBundle(principal: CloudPrincipal): Promise<CloudDiagnosticsBundle> {
     await this.ensurePrincipal(principal)
     if (!principalCanViewDiagnostics(principal)) {
-      throw new CloudServiceError(403, 'Cloud diagnostics require operator or admin-scoped API token privileges.')
+      throw new CloudServiceError(403, 'Cloud diagnostics require operator privileges.')
     }
     const orgId = this.principalOrgId(principal)
     const deliverySampleLimit = 200
@@ -3049,7 +2976,7 @@ export class CloudSessionService {
       policyCode: 'rate_limit.http_exceeded',
     })
     if (!result.allowed) {
-      throw this.quotaError('Too many cloud requests. Try again later.', 'rate_limit.http_exceeded', result.retryAfterMs)
+      throw this.usageGovernance.quotaError('Too many cloud requests. Try again later.', 'rate_limit.http_exceeded', result.retryAfterMs)
     }
     return result
   }
@@ -3058,7 +2985,7 @@ export class CloudSessionService {
     if (!this.abuse.enabled || !this.abuse.authBackoff.enabled) return null
     const result = await this.store.checkCloudAuthBackoff(input)
     if (!result.allowed) {
-      throw this.quotaError('Too many rejected cloud authentication attempts. Try again later.', 'auth.backoff', result.retryAfterMs)
+      throw this.usageGovernance.quotaError('Too many rejected cloud authentication attempts. Try again later.', 'auth.backoff', result.retryAfterMs)
     }
     return result
   }
@@ -3084,29 +3011,43 @@ export class CloudSessionService {
       action: 'prompt.enqueue',
       profileName: view.session.profileName,
     })
-    await this.consumeQuota({
-      orgId: this.principalOrgId(principal),
+    const orgId = this.principalOrgId(principal)
+    const promptQuota = await this.usageGovernance.usageQuotaForOrg({
+      orgId,
       quotaKey: 'prompts:hour',
       limit: this.abuse.maxPromptsPerHour,
       entitlementLimitKey: 'maxPromptsPerHour',
       windowMs: HOUR_MS,
       policyCode: 'quota.prompts_per_hour_exceeded',
-      message: 'Cloud prompt quota exceeded.',
     })
     const commandId = this.ids.randomUUID()
-    const command = await this.store.enqueueSessionCommand({
-      commandId,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-      sessionId,
-      kind: 'prompt',
-      payload: {
-        text: input.text,
-        agent: input.agent || 'build',
-      },
+    let command: SessionCommandRecord
+    try {
+      command = await this.store.enqueueSessionCommand({
+        commandId,
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+        sessionId,
+        kind: 'prompt',
+        payload: {
+          text: input.text,
+          agent: input.agent || 'build',
+        },
+        quota: await this.usageGovernance.commandQueueQuotaForOrg(orgId),
+        usageQuotas: [promptQuota].filter((quota) => quota !== null),
+      })
+    } catch (error) {
+      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
+    }
+    await this.usageGovernance.recordUsage({
+      orgId,
+      accountId: principal.accountId || principal.userId,
+      eventType: 'work.queued',
+      unit: 'count',
+      metadata: { tenantId: principal.tenantId, sessionId, commandId, commandKind: command.kind, source: 'api' },
     })
-    await this.recordUsage({
-      orgId: this.principalOrgId(principal),
+    await this.usageGovernance.recordUsage({
+      orgId,
       accountId: principal.accountId || principal.userId,
       eventType: 'prompt.enqueued',
       unit: 'count',
@@ -3443,7 +3384,7 @@ export class CloudSessionService {
     createdAt?: Date
   }) {
     try {
-      const concurrentSessionLimit = await this.effectiveQuotaLimit(
+      const concurrentSessionLimit = await this.usageGovernance.effectiveQuotaLimit(
         input.orgId || input.tenantId,
         this.abuse.maxConcurrentSessionsPerOrg,
         'maxConcurrentSessionsPerOrg',
@@ -3456,7 +3397,7 @@ export class CloudSessionService {
         profileName: input.profileName,
         title: input.title,
         createdAt: input.createdAt,
-        quota: this.quotaLimit(concurrentSessionLimit)
+        quota: this.usageGovernance.quotaLimit(concurrentSessionLimit)
           ? {
               orgId: input.orgId || input.tenantId,
               maxConcurrentSessionsPerOrg: concurrentSessionLimit,
@@ -3464,7 +3405,7 @@ export class CloudSessionService {
             }
           : null,
       })
-      await this.recordUsage({
+      await this.usageGovernance.recordUsage({
         orgId: input.orgId || input.tenantId,
         accountId: input.accountId || input.userId,
         eventType: 'session.created',
@@ -3473,7 +3414,7 @@ export class CloudSessionService {
       })
       return session
     } catch (error) {
-      this.translateQuotaError(error, 'Concurrent cloud session quota exceeded.', 'quota.concurrent_sessions_exceeded')
+      this.usageGovernance.translateQuotaError(error, 'Concurrent cloud session quota exceeded.', 'quota.concurrent_sessions_exceeded')
     }
   }
 
@@ -3507,7 +3448,7 @@ export class CloudSessionService {
       return this.requireSessionRecord(input.tenantId, input.sessionId)
     }
 
-    if (!input.deferRuntime && this.shouldCreateRuntimeSessionsEagerly() && !this.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
+    if (!input.deferRuntime && this.shouldCreateRuntimeSessionsEagerly() && !this.usageGovernance.quotaLimit(this.abuse.maxConcurrentSessionsPerOrg)) {
       const runtimeSession = await this.runtime.createSession({
         profileName: input.profileName,
         context: this.runtimeContext({
@@ -3662,14 +3603,34 @@ export class CloudSessionService {
     }
   }
 
-  private async startClaimedWorkflowRun(claimed: ClaimedWorkflowRunRecord): Promise<CloudWorkflowStartResult> {
-    return this.startWorkflowRun(claimed.workflow, claimed.run)
+  private async startClaimedWorkflowRun(claimed: ClaimedWorkflowRunRecord): Promise<CloudWorkflowStartResult | null> {
+    try {
+      return await this.startWorkflowRun(claimed.workflow, claimed.run)
+    } catch (error) {
+      if (error instanceof CloudServiceError && (error.status === 402 || error.status === 429)) {
+        const now = new Date()
+        const nextStatus = this.nextWorkflowStatusAfterRun(claimed.workflow)
+        await this.store.failWorkflowRun({
+          tenantId: claimed.workflow.tenantId,
+          workflowId: claimed.workflow.id,
+          runId: claimed.run.id,
+          error: error.message,
+          nextStatus,
+          nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(claimed.workflow.triggers, now) : null,
+          finishedAt: now,
+        })
+        return null
+      }
+      throw error
+    }
   }
 
   private async startWorkflowRun(
     workflow: CloudWorkflowRecord,
     run: CloudWorkflowRunRecord,
   ): Promise<CloudWorkflowStartResult> {
+    const org = await this.store.ensureOrgForTenant({ tenantId: workflow.tenantId, name: workflow.tenantId })
+    await this.assertWorkflowExecutionStartAllowed(workflow.tenantId, org.orgId)
     const session = await this.createCloudSessionRecord({
       tenantId: workflow.tenantId,
       userId: workflow.userId,
@@ -3684,15 +3645,49 @@ export class CloudSessionService {
       sessionId: session.sessionId,
       claimToken: run.claimToken,
     })
-    const command = await this.store.enqueueSessionCommand({
-      commandId: this.workflowPromptCommandId(workflow, run),
-      tenantId: workflow.tenantId,
-      userId: workflow.userId,
-      sessionId: session.sessionId,
-      kind: 'prompt',
-      payload: {
-        text: workflow.instructions,
-        agent: workflow.agentName,
+    let command: SessionCommandRecord
+    try {
+      command = await this.store.enqueueSessionCommand({
+        commandId: this.workflowPromptCommandId(workflow, run),
+        tenantId: workflow.tenantId,
+        userId: workflow.userId,
+        sessionId: session.sessionId,
+        kind: 'prompt',
+        payload: {
+          text: workflow.instructions,
+          agent: workflow.agentName,
+        },
+        quota: await this.usageGovernance.commandQueueQuotaForOrg(org.orgId),
+      })
+    } catch (error) {
+      if (error instanceof ControlPlaneQuotaExceededError) {
+        const now = new Date()
+        const nextStatus = this.nextWorkflowStatusAfterRun(workflow)
+        await this.store.failWorkflowRun({
+          tenantId: workflow.tenantId,
+          workflowId: workflow.id,
+          runId: run.id,
+          error: error.publicMessage || 'Cloud command queue is full.',
+          nextStatus,
+          nextRunAt: nextStatus === 'active' ? computeNextWorkflowRunAt(workflow.triggers, now) : null,
+          finishedAt: now,
+        })
+      }
+      this.usageGovernance.translateQuotaError(error, 'Cloud command queue is full.', 'quota.queued_commands_exceeded')
+    }
+    await this.usageGovernance.recordUsage({
+      orgId: org.orgId,
+      accountId: workflow.userId,
+      eventType: 'work.queued',
+      unit: 'count',
+      metadata: {
+        tenantId: workflow.tenantId,
+        sessionId: session.sessionId,
+        workflowId: workflow.id,
+        runId: run.id,
+        commandId: command.commandId,
+        commandKind: command.kind,
+        source: `workflow:${run.triggerType}`,
       },
     })
     const updatedWorkflow = await this.store.getWorkflowForTenant(workflow.tenantId, workflow.id)
@@ -3896,36 +3891,55 @@ export class CloudSessionService {
     }
   }
 
-  async assertWorkerExecutionAllowed(tenantId: string) {
+  async assertWorkerLeaseAllowed(tenantId: string) {
     const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
     await this.assertBillingAllowed({
       orgId: org.orgId,
       action: 'worker.execute',
       profileName: this.policy.profileName,
     })
-    const workerMinuteLimit = this.quotaLimit(await this.effectiveQuotaLimit(
+  }
+
+  async reserveWorkerExecutionCapacity(tenantId: string) {
+    const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
+    await this.assertBillingAllowed({
+      orgId: org.orgId,
+      action: 'worker.execute',
+      profileName: this.policy.profileName,
+    })
+    const workerMinuteLimit = this.usageGovernance.quotaLimit(await this.usageGovernance.effectiveQuotaLimit(
       org.orgId,
       this.abuse.maxWorkerMinutesPerHour,
       'maxWorkerMinutesPerHour',
     ))
     if (workerMinuteLimit) {
-      const now = Date.now()
-      const windowStart = windowStartMs(now, HOUR_MS)
-      const counter = (await this.store.listUsageQuotaCounters(org.orgId))
-        .find((entry) => entry.quotaKey === 'worker_minutes:hour' && entry.windowStartedAtMs === windowStart)
-      if ((counter?.quantity || 0) >= workerMinuteLimit) {
-        throw this.quotaError(
+      const now = new Date()
+      const result = await this.store.consumeUsageQuota({
+        orgId: org.orgId,
+        quotaKey: 'worker_minutes:hour',
+        limit: workerMinuteLimit,
+        quantity: 1,
+        windowMs: HOUR_MS,
+        now,
+        policyCode: 'quota.worker_minutes_per_hour_exceeded',
+      })
+      if (!result.allowed) {
+        throw this.usageGovernance.quotaError(
           'Cloud worker minute quota exceeded.',
           'quota.worker_minutes_per_hour_exceeded',
-          Math.max(0, windowStart + HOUR_MS - now),
+          result.retryAfterMs,
         )
       }
     }
   }
 
+  async assertWorkerExecutionAllowed(tenantId: string) {
+    await this.reserveWorkerExecutionCapacity(tenantId)
+  }
+
   async activeWorkerQuotaForTenant(tenantId: string) {
     const org = await this.store.ensureOrgForTenant({ tenantId, name: tenantId })
-    const limit = this.quotaLimit(await this.effectiveQuotaLimit(
+    const limit = this.usageGovernance.quotaLimit(await this.usageGovernance.effectiveQuotaLimit(
       org.orgId,
       this.abuse.maxActiveWorkersPerOrg,
       'maxActiveWorkersPerOrg',

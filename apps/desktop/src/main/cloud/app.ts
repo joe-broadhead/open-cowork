@@ -287,13 +287,33 @@ export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>,
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_SESSIONS_PER_ORG'),
       defaults.maxConcurrentSessionsPerOrg,
     ),
+    maxConcurrentWorkflowRunsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_CONCURRENT_WORKFLOW_RUNS_PER_ORG'),
+      defaults.maxConcurrentWorkflowRunsPerOrg,
+    ),
     maxActiveWorkersPerOrg: parseOptionalPositiveInt(
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_ACTIVE_WORKERS_PER_ORG'),
       defaults.maxActiveWorkersPerOrg,
     ),
+    maxQueuedCommandsPerOrg: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUED_COMMANDS_PER_ORG'),
+      defaults.maxQueuedCommandsPerOrg,
+    ),
+    maxQueueAgeMs: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_QUEUE_AGE_MS'),
+      defaults.maxQueueAgeMs,
+    ),
     maxPromptsPerHour: parseOptionalPositiveInt(
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_PROMPTS_PER_HOUR'),
       defaults.maxPromptsPerHour,
+    ),
+    maxWorkflowRunsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKFLOW_RUNS_PER_HOUR'),
+      defaults.maxWorkflowRunsPerHour,
+    ),
+    maxGatewayPromptsPerHour: parseOptionalPositiveInt(
+      envValue(env, 'OPEN_COWORK_CLOUD_MAX_GATEWAY_PROMPTS_PER_HOUR'),
+      defaults.maxGatewayPromptsPerHour,
     ),
     maxWorkerMinutesPerHour: parseOptionalPositiveInt(
       envValue(env, 'OPEN_COWORK_CLOUD_MAX_WORKER_MINUTES_PER_HOUR'),
