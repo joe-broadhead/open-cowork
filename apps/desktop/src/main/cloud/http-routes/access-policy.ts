@@ -17,10 +17,15 @@ export function principalHasGatewayAccess(principal: CloudPrincipal) {
 }
 
 export function principalHasDesktopApiAccess(principal: CloudPrincipal) {
+  if (principal.authSource === 'worker') return false
   if (principal.authSource === 'api_token') {
     return principal.tokenScopes?.includes('desktop') || principal.tokenScopes?.includes('admin') || false
   }
   return true
+}
+
+export function routeAllowsWorkerCredential(input: GatewayRouteAccessInput) {
+  return input.resource === 'workers' && Boolean(input.sessionId) && input.action === 'heartbeat'
 }
 
 export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {

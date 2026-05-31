@@ -41,6 +41,7 @@ test('cloud core has enforceable domain module boundaries', () => {
     'shared.ts',
     'thread-index.ts',
     'webhooks.ts',
+    'workers.ts',
     'workflows.ts',
   ]
   for (const file of expectedPostgresDomains) {
@@ -70,6 +71,7 @@ test('cloud core has enforceable domain module boundaries', () => {
     'channel-service.ts',
     'workflow-service.ts',
     'projection-service.ts',
+    'managed-worker-service.ts',
     'session-command-service.ts',
   ]
   for (const file of expectedServices) {
@@ -133,6 +135,7 @@ test('postgres store delegates row mapping to domain modules', () => {
   assert.match(source, /postgres-domains\/identity\.ts/)
   assert.match(source, /postgres-domains\/sessions\.ts/)
   assert.match(source, /postgres-domains\/channels\.ts/)
+  assert.match(source, /postgres-store-domains\/workers\.ts/)
   assert.match(source, /postgres-domains\/workflows\.ts/)
 
   for (const file of sourceFiles(join(cloudRoot, 'postgres-domains'))) {

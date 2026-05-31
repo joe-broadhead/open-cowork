@@ -46,16 +46,26 @@ import type {
   FindChannelInteractionInput,
   IssuedApiTokenRecord,
   IssuedChannelInteractionRecord,
+  IssuedManagedWorkerCredentialRecord,
   IssueApiTokenInput,
   ListSessionsPageInput,
+  ManagedWorkerCredentialRecord,
+  ManagedWorkerHeartbeatRecord,
+  ManagedWorkerPoolRecord,
+  ManagedWorkerPoolStatus,
+  ManagedWorkerRecord,
+  ManagedWorkerStatus,
   ListChannelDeliveriesInput,
   OrgMemberRecord,
   PrincipalMembershipRecord,
+  RecordManagedWorkerHeartbeatInput,
   RecordAuditEventInput,
   RecordByokSecretValidationInput,
   RecordCloudAuthFailureInput,
   RecordUsageEventInput,
   RevokeApiTokenInput,
+  RevokeManagedWorkerCredentialInput,
+  ResolvedManagedWorkerCredentialRecord,
   ResolveChannelInteractionInput,
   ResolveChannelInteractionWithCommandInput,
   SessionCommandRecord,
@@ -67,6 +77,8 @@ import type {
   UpdateChannelBindingInput,
   UpdateChannelCursorInput,
   UpdateHeadlessAgentInput,
+  UpdateManagedWorkerPoolInput,
+  UpdateManagedWorkerStatusInput,
   UpdateWorkflowStatusInput,
   UpdateThreadSmartFilterInput,
   UpdateThreadTagInput,
@@ -76,6 +88,9 @@ import type {
   WorkerLeaseRecord,
   WorkerRole,
   WorkspaceEventRecord,
+  CreateManagedWorkerPoolInput,
+  RegisterManagedWorkerInput,
+  IssueManagedWorkerCredentialInput,
 } from './control-plane-store.ts'
 import type {
   WorkflowWebhookReplayClaim,
@@ -120,6 +135,7 @@ import { iso, jsonRecord, numberValue, type QueryResult, type QueryRow } from '.
 import { threadSmartFilterFromRow, threadTagFromRow } from './postgres-domains/thread-index.ts'
 import { webhookAuthFailureFromRow } from './postgres-domains/webhooks.ts'
 import { workflowFromRow, workflowRunFromRow } from './postgres-domains/workflows.ts'
+import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -150,7 +166,6 @@ const CHANNEL_METADATA_MAX_BYTES = 16_384
 const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
 const BYOK_PROVIDER_ID_MAX_LENGTH = 64
 const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
-
 function loadPgPool(connectionString: string): PgPool {
   const pg = require('pg') as {
     Pool: new (options: { connectionString: string }) => PgPool
@@ -197,6 +212,7 @@ function redactOperationalText(value: unknown, maxLength: number, label: string)
     .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
     .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
     .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b(ocw_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
 }
 
@@ -293,10 +309,16 @@ function redactAuditMetadata(value: Record<string, unknown> | undefined): Record
 export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWebhookSecurityStore {
   private readonly pool: PgPool
   private readonly ownsPool: boolean
+  private readonly managedWorkers: PostgresManagedWorkersRepository
 
   private constructor(pool: PgPool, ownsPool: boolean) {
     this.pool = pool
     this.ownsPool = ownsPool
+    this.managedWorkers = new PostgresManagedWorkersRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
+      recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
   }
 
   static async connect(options: PostgresControlPlaneStoreOptions) {
@@ -676,6 +698,62 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       })
       return token
     })
+  }
+
+  async createManagedWorkerPool(input: CreateManagedWorkerPoolInput): Promise<ManagedWorkerPoolRecord> {
+    return this.managedWorkers.createPool(input)
+  }
+
+  async updateManagedWorkerPool(input: UpdateManagedWorkerPoolInput): Promise<ManagedWorkerPoolRecord | null> {
+    return this.managedWorkers.updatePool(input)
+  }
+
+  async getManagedWorkerPool(orgId: string, poolId: string) {
+    return this.managedWorkers.getPool(orgId, poolId)
+  }
+
+  async listManagedWorkerPools(orgId: string, input: { status?: ManagedWorkerPoolStatus | null, limit?: number | null } = {}) {
+    return this.managedWorkers.listPools(orgId, input)
+  }
+
+  async registerManagedWorker(input: RegisterManagedWorkerInput): Promise<ManagedWorkerRecord> {
+    return this.managedWorkers.registerWorker(input)
+  }
+
+  async updateManagedWorkerStatus(input: UpdateManagedWorkerStatusInput): Promise<ManagedWorkerRecord | null> {
+    return this.managedWorkers.updateWorkerStatus(input)
+  }
+
+  async getManagedWorker(orgId: string, workerId: string) {
+    return this.managedWorkers.getWorker(orgId, workerId)
+  }
+
+  async listManagedWorkers(orgId: string, input: { poolId?: string | null, status?: ManagedWorkerStatus | null, limit?: number | null } = {}) {
+    return this.managedWorkers.listWorkers(orgId, input)
+  }
+
+  async issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): Promise<IssuedManagedWorkerCredentialRecord> {
+    return this.managedWorkers.issueCredential(input)
+  }
+
+  async listManagedWorkerCredentials(orgId: string, workerId: string) {
+    return this.managedWorkers.listCredentials(orgId, workerId)
+  }
+
+  async findManagedWorkerCredentialByPlaintext(plaintext: string, now = new Date()): Promise<ResolvedManagedWorkerCredentialRecord | null> {
+    return this.managedWorkers.findCredentialByPlaintext(plaintext, now)
+  }
+
+  async revokeManagedWorkerCredential(input: RevokeManagedWorkerCredentialInput): Promise<ManagedWorkerCredentialRecord | null> {
+    return this.managedWorkers.revokeCredential(input)
+  }
+
+  async recordManagedWorkerHeartbeat(input: RecordManagedWorkerHeartbeatInput): Promise<ManagedWorkerHeartbeatRecord> {
+    return this.managedWorkers.recordHeartbeat(input)
+  }
+
+  async listManagedWorkerHeartbeats(orgId: string, input: { workerId?: string | null, limit?: number | null } = {}) {
+    return this.managedWorkers.listHeartbeats(orgId, input)
   }
 
   async recordAuditEvent(input: RecordAuditEventInput) {
@@ -3411,6 +3489,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async clear() {
+    await this.pool.query('DELETE FROM cloud_managed_worker_heartbeats')
+    await this.pool.query('DELETE FROM cloud_worker_credentials')
+    await this.pool.query('DELETE FROM cloud_managed_workers')
+    await this.pool.query('DELETE FROM cloud_worker_pools')
     await this.pool.query('DELETE FROM cloud_subscriptions')
     await this.pool.query('DELETE FROM cloud_auth_failures')
     await this.pool.query('DELETE FROM cloud_rate_limits')

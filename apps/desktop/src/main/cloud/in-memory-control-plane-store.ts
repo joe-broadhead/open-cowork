@@ -8,6 +8,44 @@ import type {
   WorkflowTriggerType,
 } from '@open-cowork/shared'
 import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
+import type {
+  CreateManagedWorkerPoolInput,
+  IssueManagedWorkerCredentialInput,
+  IssuedManagedWorkerCredentialRecord,
+  ManagedWorkerCredentialRecord,
+  ManagedWorkerHeartbeatRecord,
+  ManagedWorkerPoolRecord,
+  ManagedWorkerPoolStatus,
+  ManagedWorkerRecord,
+  ManagedWorkerStatus,
+  RecordManagedWorkerHeartbeatInput,
+  RegisterManagedWorkerInput,
+  ResolvedManagedWorkerCredentialRecord,
+  RevokeManagedWorkerCredentialInput,
+  UpdateManagedWorkerPoolInput,
+  UpdateManagedWorkerStatusInput,
+} from './managed-worker-types.ts'
+import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
+export type {
+  CreateManagedWorkerPoolInput,
+  IssueManagedWorkerCredentialInput,
+  IssuedManagedWorkerCredentialRecord,
+  ManagedWorkerCredentialRecord,
+  ManagedWorkerCredentialScope,
+  ManagedWorkerHeartbeatRecord,
+  ManagedWorkerPoolMode,
+  ManagedWorkerPoolRecord,
+  ManagedWorkerPoolStatus,
+  ManagedWorkerRecord,
+  ManagedWorkerStatus,
+  RecordManagedWorkerHeartbeatInput,
+  RegisterManagedWorkerInput,
+  ResolvedManagedWorkerCredentialRecord,
+  RevokeManagedWorkerCredentialInput,
+  UpdateManagedWorkerPoolInput,
+  UpdateManagedWorkerStatusInput,
+} from './managed-worker-types.ts'
+export { generateManagedWorkerCredential, hashManagedWorkerCredential } from './in-memory-domains/workers.ts'
 
 export type ControlPlaneRole = 'owner' | 'admin' | 'member'
 export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
@@ -1021,6 +1059,24 @@ export type ControlPlaneStore = {
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
   findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
+  createManagedWorkerPool(input: CreateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord>
+  updateManagedWorkerPool(input: UpdateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord | null>
+  getManagedWorkerPool(orgId: string, poolId: string): MaybePromise<ManagedWorkerPoolRecord | null>
+  listManagedWorkerPools(orgId: string, input?: { status?: ManagedWorkerPoolStatus | null, limit?: number | null }): MaybePromise<ManagedWorkerPoolRecord[]>
+  registerManagedWorker(input: RegisterManagedWorkerInput): MaybePromise<ManagedWorkerRecord>
+  updateManagedWorkerStatus(input: UpdateManagedWorkerStatusInput): MaybePromise<ManagedWorkerRecord | null>
+  getManagedWorker(orgId: string, workerId: string): MaybePromise<ManagedWorkerRecord | null>
+  listManagedWorkers(orgId: string, input?: {
+    poolId?: string | null
+    status?: ManagedWorkerStatus | null
+    limit?: number | null
+  }): MaybePromise<ManagedWorkerRecord[]>
+  issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): MaybePromise<IssuedManagedWorkerCredentialRecord>
+  listManagedWorkerCredentials(orgId: string, workerId: string): MaybePromise<ManagedWorkerCredentialRecord[]>
+  findManagedWorkerCredentialByPlaintext(plaintext: string, now?: Date): MaybePromise<ResolvedManagedWorkerCredentialRecord | null>
+  revokeManagedWorkerCredential(input: RevokeManagedWorkerCredentialInput): MaybePromise<ManagedWorkerCredentialRecord | null>
+  recordManagedWorkerHeartbeat(input: RecordManagedWorkerHeartbeatInput): MaybePromise<ManagedWorkerHeartbeatRecord>
+  listManagedWorkerHeartbeats(orgId: string, input?: { workerId?: string | null, limit?: number | null }): MaybePromise<ManagedWorkerHeartbeatRecord[]>
   recordAuditEvent(input: RecordAuditEventInput): MaybePromise<AuditEventRecord>
   listAuditEvents(orgId: string, limit?: number): MaybePromise<AuditEventRecord[]>
   consumeUsageQuota(input: ConsumeUsageQuotaInput): MaybePromise<QuotaConsumptionRecord>
@@ -1328,6 +1384,7 @@ function redactOperationalText(value: unknown, maxLength: number, label: string)
     .replace(/\b(gcp-sm|aws-sm|azure-kv|env):[^\s,)]+/gi, '$1:[redacted]')
     .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
     .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b(ocw_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
 }
 
@@ -1490,6 +1547,11 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly threadSmartFilters = new Map<string, ThreadSmartFilterRecord>()
   private readonly migrations = new Map<string, SchemaMigrationRecord>()
   private readonly workspaceEvents = new Map<string, { nextSequence: number, events: WorkspaceEventRecord[] }>()
+  private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
+    orgTenantId: (orgId) => this.orgs.get(orgId)?.tenantId || null,
+    hasTenant: (tenantId) => this.tenants.has(tenantId),
+    recordAuditEvent: (input) => this.recordAuditEvent(input),
+  })
 
   createTenant(input: { tenantId: string, name: string, createdAt?: Date }): TenantRecord {
     const existing = this.tenants.get(input.tenantId)
@@ -1764,6 +1826,62 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: input.revokedAt,
     })
     return clone(existing)
+  }
+
+  createManagedWorkerPool(input: CreateManagedWorkerPoolInput): ManagedWorkerPoolRecord {
+    return this.managedWorkersDomain.createPool(input)
+  }
+
+  updateManagedWorkerPool(input: UpdateManagedWorkerPoolInput): ManagedWorkerPoolRecord | null {
+    return this.managedWorkersDomain.updatePool(input)
+  }
+
+  getManagedWorkerPool(orgId: string, poolId: string): ManagedWorkerPoolRecord | null {
+    return this.managedWorkersDomain.getPool(orgId, poolId)
+  }
+
+  listManagedWorkerPools(orgId: string, input: { status?: ManagedWorkerPoolStatus | null, limit?: number | null } = {}): ManagedWorkerPoolRecord[] {
+    return this.managedWorkersDomain.listPools(orgId, input)
+  }
+
+  registerManagedWorker(input: RegisterManagedWorkerInput): ManagedWorkerRecord {
+    return this.managedWorkersDomain.registerWorker(input)
+  }
+
+  updateManagedWorkerStatus(input: UpdateManagedWorkerStatusInput): ManagedWorkerRecord | null {
+    return this.managedWorkersDomain.updateWorkerStatus(input)
+  }
+
+  getManagedWorker(orgId: string, workerId: string): ManagedWorkerRecord | null {
+    return this.managedWorkersDomain.getWorker(orgId, workerId)
+  }
+
+  listManagedWorkers(orgId: string, input: { poolId?: string | null, status?: ManagedWorkerStatus | null, limit?: number | null } = {}): ManagedWorkerRecord[] {
+    return this.managedWorkersDomain.listWorkers(orgId, input)
+  }
+
+  issueManagedWorkerCredential(input: IssueManagedWorkerCredentialInput): IssuedManagedWorkerCredentialRecord {
+    return this.managedWorkersDomain.issueCredential(input)
+  }
+
+  listManagedWorkerCredentials(orgId: string, workerId: string): ManagedWorkerCredentialRecord[] {
+    return this.managedWorkersDomain.listCredentials(orgId, workerId)
+  }
+
+  findManagedWorkerCredentialByPlaintext(plaintext: string, now = new Date()): ResolvedManagedWorkerCredentialRecord | null {
+    return this.managedWorkersDomain.findCredentialByPlaintext(plaintext, now)
+  }
+
+  revokeManagedWorkerCredential(input: RevokeManagedWorkerCredentialInput): ManagedWorkerCredentialRecord | null {
+    return this.managedWorkersDomain.revokeCredential(input)
+  }
+
+  recordManagedWorkerHeartbeat(input: RecordManagedWorkerHeartbeatInput): ManagedWorkerHeartbeatRecord {
+    return this.managedWorkersDomain.recordHeartbeat(input)
+  }
+
+  listManagedWorkerHeartbeats(orgId: string, input: { workerId?: string | null, limit?: number | null } = {}): ManagedWorkerHeartbeatRecord[] {
+    return this.managedWorkersDomain.listHeartbeats(orgId, input)
   }
 
   recordAuditEvent(input: RecordAuditEventInput): AuditEventRecord {

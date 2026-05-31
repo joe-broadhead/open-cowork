@@ -128,6 +128,66 @@ function runControlPlaneDomainContracts(
       assert.equal(runnableClaim.pendingSessionCount >= 1, true)
       assert.equal(runnableClaim.leases.some((lease) => lease.sessionId === sessionId), true)
 
+      const workerPool = await store.createManagedWorkerPool({
+        poolId: `${prefix}-pool`,
+        orgId: org.orgId,
+        tenantId,
+        name: 'Managed pool',
+        mode: 'self_hosted',
+        capabilities: { profiles: ['default'] },
+        actor: { actorType: 'user', actorId: accountId, accountId },
+      })
+      assert.equal(workerPool.status, 'active')
+      const managedWorker = await store.registerManagedWorker({
+        workerId: `${prefix}-managed-worker`,
+        orgId: org.orgId,
+        poolId: workerPool.poolId,
+        displayName: 'Managed worker',
+        capabilities: { runtime: 'opencode' },
+        actor: { actorType: 'user', actorId: accountId, accountId },
+      })
+      assert.equal(managedWorker.status, 'pending')
+      await store.updateManagedWorkerStatus({
+        orgId: org.orgId,
+        workerId: managedWorker.workerId,
+        status: 'active',
+        actor: { actorType: 'user', actorId: accountId, accountId },
+      })
+      const issuedWorkerCredential = await store.issueManagedWorkerCredential({
+        orgId: org.orgId,
+        workerId: managedWorker.workerId,
+        secret: `${prefix}-worker-secret`,
+        actor: { actorType: 'user', actorId: accountId, accountId },
+      })
+      assert.match(issuedWorkerCredential.plaintext, /^ocw_/)
+      assert.notEqual(issuedWorkerCredential.credential.tokenHash, issuedWorkerCredential.plaintext)
+      const resolvedWorkerCredential = await store.findManagedWorkerCredentialByPlaintext(issuedWorkerCredential.plaintext)
+      assert.equal(resolvedWorkerCredential?.worker.workerId, managedWorker.workerId)
+      const heartbeat = await store.recordManagedWorkerHeartbeat({
+        orgId: org.orgId,
+        workerId: managedWorker.workerId,
+        credentialId: issuedWorkerCredential.credential.credentialId,
+        version: 'test-version',
+        currentLoad: 1,
+        activeWorkIds: ['work-1', 'work-1'],
+      })
+      assert.deepEqual(heartbeat.activeWorkIds, ['work-1'])
+      assert.equal((await store.listManagedWorkerHeartbeats(org.orgId, { workerId: managedWorker.workerId })).length, 1)
+      const revokedWorkerCredential = await store.revokeManagedWorkerCredential({
+        orgId: org.orgId,
+        workerId: managedWorker.workerId,
+        credentialId: issuedWorkerCredential.credential.credentialId,
+        actor: { actorType: 'user', actorId: accountId, accountId },
+      })
+      assert.equal(revokedWorkerCredential?.revokedAt !== null, true)
+      assert.equal(await store.findManagedWorkerCredentialByPlaintext(issuedWorkerCredential.plaintext), null)
+      const heartbeatRejectionAudit = await store.listAuditEvents(org.orgId, 20)
+      assert.equal(heartbeatRejectionAudit.some((auditEvent) => (
+        auditEvent.eventType === 'managed_worker_heartbeat.rejected'
+        && auditEvent.metadata.reason === 'credential_revoked'
+      )), true)
+      assert.equal(JSON.stringify(heartbeatRejectionAudit).includes(issuedWorkerCredential.plaintext), false)
+
       await store.createHeadlessAgent({
         orgId: org.orgId,
         tenantId,

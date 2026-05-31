@@ -700,6 +700,30 @@ export function createApiTokenCloudAuthResolver(store: ControlPlaneStore): Cloud
   }
 }
 
+export function createManagedWorkerCloudAuthResolver(store: ControlPlaneStore): CloudAuthResolver {
+  return async (req) => {
+    const token = readBearerToken(req)
+    if (!token) throw new CloudHttpError(401, 'Managed worker authorization is required.')
+    if (!token.startsWith('ocw_')) throw new CloudHttpError(401, 'Managed worker authorization is required.')
+    const resolved = await store.findManagedWorkerCredentialByPlaintext(token)
+    if (!resolved) throw new CloudHttpError(401, 'Managed worker credential is invalid or expired.')
+    return {
+      tenantId: resolved.worker.tenantId || resolved.pool.tenantId || resolved.pool.orgId,
+      orgId: resolved.pool.orgId,
+      tenantName: resolved.pool.name,
+      userId: resolved.worker.workerId,
+      accountId: resolved.worker.workerId,
+      email: `${resolved.worker.workerId}@workers.open-cowork.local`,
+      role: 'member',
+      authSource: 'worker',
+      workerId: resolved.worker.workerId,
+      workerPoolId: resolved.pool.poolId,
+      workerCredentialId: resolved.credential.credentialId,
+      workerScopes: resolved.credential.scopes,
+    }
+  }
+}
+
 export function createCompositeCloudAuthResolver(...resolvers: CloudAuthResolver[]): CloudAuthResolver {
   return async (req) => {
     let lastError: unknown = null
@@ -1152,6 +1176,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         browserAuth,
         desktopAuth: createCloudDesktopAuthConfig(authConfig),
         auth: options.auth || createCompositeCloudAuthResolver(
+          createManagedWorkerCloudAuthResolver(store),
           createApiTokenCloudAuthResolver(store),
           createCloudAuthResolverForConfig(resolvedAuthConfig),
         ),

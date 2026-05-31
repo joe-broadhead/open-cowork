@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
-import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
+import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { createByokSecretStore, type ByokSecretStoreOptions } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
@@ -122,6 +122,7 @@ function createFixture(options: {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
   const worker = new CloudWorker(store, service, 'worker-1', 30_000, {}, options.abuse || null, options.observability || null)
+  const workerAuth = createManagedWorkerCloudAuthResolver(store)
   const server = createCloudHttpServer({
     service,
     artifacts,
@@ -135,16 +136,20 @@ function createFixture(options: {
       desktopAuth: options.desktopAuth,
       observability: options.observability,
       internalToken: options.internalToken,
-      auth: options.auth || (() => ({
-      tenantId: 'tenant-1',
-      tenantName: 'Tenant 1',
-      orgId: 'tenant-1',
-      userId: 'user-1',
-      accountId: 'user-1',
-      email: 'user@example.test',
-      role: 'owner',
-      authSource: 'local',
-    })),
+      auth: options.auth || (async (req) => {
+        const authorization = String(req.headers.authorization || '')
+        if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
+        return {
+          tenantId: 'tenant-1',
+          tenantName: 'Tenant 1',
+          orgId: 'tenant-1',
+          userId: 'user-1',
+          accountId: 'user-1',
+          email: 'user@example.test',
+          role: 'owner',
+          authSource: 'local',
+        }
+      }),
   })
   return { runtime, store, objectStore, policy, service, artifacts, worker, server }
 }
@@ -1877,6 +1882,111 @@ test('cloud HTTP admin APIs manage invited members and expose redacted audit', a
     assert.match(auditText, /membership\.updated/)
     assert.equal(auditText.includes('occ_'), false)
     assert.equal(auditText.includes('sk-'), false)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat auth', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    await readJson(await fetch(`${baseUrl}/api/workspace`))
+
+    const poolResponse = await fetch(`${baseUrl}/api/admin/worker-pools`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        poolId: 'pool-1',
+        name: 'Internal pool',
+        mode: 'self_hosted',
+        capabilities: { profiles: ['default'] },
+        maxWorkers: 2,
+      }),
+    })
+    assert.equal(poolResponse.status, 201)
+    assert.equal(asRecord(asRecord(await readJson(poolResponse)).pool).poolId, 'pool-1')
+
+    const unsupportedPool = await fetch(`${baseUrl}/api/admin/worker-pools`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'External pool', mode: 'customer_hosted' }),
+    })
+    assert.equal(unsupportedPool.status, 400)
+
+    const workerResponse = await fetch(`${baseUrl}/api/admin/workers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workerId: 'worker-1',
+        poolId: 'pool-1',
+        displayName: 'Worker one',
+      }),
+    })
+    assert.equal(workerResponse.status, 201)
+    assert.equal(asRecord(asRecord(await readJson(workerResponse)).worker).status, 'pending')
+
+    const invalidDrain = await fetch(`${baseUrl}/api/admin/workers/worker-1/drain`, { method: 'POST' })
+    assert.equal(invalidDrain.status, 400)
+
+    const active = await fetch(`${baseUrl}/api/admin/workers/worker-1/activate`, { method: 'POST' })
+    assert.equal(active.status, 200)
+    assert.equal(asRecord(asRecord(await readJson(active)).worker).status, 'active')
+
+    const credentialResponse = await fetch(`${baseUrl}/api/admin/workers/worker-1/credentials`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scopes: ['heartbeat'] }),
+    })
+    assert.equal(credentialResponse.status, 201)
+    const issued = asRecord(asRecord(await readJson(credentialResponse)).credential)
+    const credential = asRecord(issued.credential)
+    const plaintext = String(issued.plaintext)
+    assert.match(plaintext, /^ocw_/)
+    assert.equal(JSON.stringify(credential).includes('tokenHash'), false)
+
+    const heartbeatResponse = await fetch(`${baseUrl}/api/workers/worker-1/heartbeat`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${plaintext}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        version: '1.0.0',
+        currentLoad: 1,
+        activeWorkIds: ['cmd-1'],
+      }),
+    })
+    assert.equal(heartbeatResponse.status, 200)
+    assert.equal(asRecord(asRecord(await readJson(heartbeatResponse)).heartbeat).currentLoad, 1)
+
+    const blockedAdmin = await fetch(`${baseUrl}/api/admin/worker-pools`, {
+      headers: { authorization: `Bearer ${plaintext}` },
+    })
+    assert.equal(blockedAdmin.status, 403)
+
+    const listedHeartbeats = asArray((await readJson(await fetch(`${baseUrl}/api/admin/workers/worker-1/heartbeats`))).heartbeats)
+    assert.equal(listedHeartbeats.length, 1)
+
+    const revokeCredential = await fetch(`${baseUrl}/api/admin/workers/worker-1/credentials/${encodeURIComponent(String(credential.credentialId))}/revoke`, {
+      method: 'POST',
+    })
+    assert.equal(revokeCredential.status, 200)
+    const rejectedHeartbeat = await fetch(`${baseUrl}/api/workers/worker-1/heartbeat`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${plaintext}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ version: '1.0.1' }),
+    })
+    assert.equal(rejectedHeartbeat.status, 401)
+
+    const audit = asArray((await readJson(await fetch(`${baseUrl}/api/admin/audit?limit=100`))).events)
+    const auditText = JSON.stringify(audit)
+    assert.match(auditText, /managed_worker_pool\.created/)
+    assert.match(auditText, /managed_worker_credential\.revoked/)
+    assert.equal(auditText.includes(plaintext), false)
   } finally {
     await fixture.server.close()
   }

@@ -143,6 +143,7 @@ function redactSecretLikeText(value: string, exactSecrets: readonly string[] = [
   return redacted
     .replace(/\b(sk-[A-Za-z0-9._-]{6,})\b/g, '[redacted]')
     .replace(/\b(occ_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
+    .replace(/\b(ocw_[A-Za-z0-9._-]{8,})\b/g, '[redacted]')
     .replace(/\b([A-Za-z0-9_-]{32,})\b/g, '[redacted]')
 }
 
