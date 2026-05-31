@@ -1,6 +1,8 @@
 import {
+  isCloudProjectedSessionEventType,
   normalizeCloudSessionProjectionView,
   reduceCloudSessionProjectionEvent,
+  type CloudProjectedSessionEventType,
 } from '@open-cowork/shared'
 import type { SessionEventRecord } from './control-plane-store.ts'
 import type { ProjectionControlPlaneStore } from './control-plane-store-domains.ts'
@@ -9,7 +11,7 @@ import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bu
 export type AppendProjectedEventInput = {
   tenantId: string
   sessionId: string
-  type: string
+  type: CloudProjectedSessionEventType
   payload?: Record<string, unknown>
   leaseToken?: string | null
   createdAt?: Date
@@ -84,6 +86,9 @@ export class CloudSessionProjectionService {
   }
 
   async appendProjectedEvent(input: AppendProjectedEventInput) {
+    if (!isCloudProjectedSessionEventType(input.type)) {
+      throw new Error(`Unsupported cloud projection event type: ${input.type}`)
+    }
     const event = await this.store.appendSessionEvent({
       tenantId: input.tenantId,
       sessionId: input.sessionId,
@@ -145,6 +150,7 @@ export class CloudSessionProjectionService {
 
     let view = normalizeCloudSessionProjectionView(null, session)
     for (const event of events) {
+      if (!isCloudProjectedSessionEventType(event.type)) continue
       view = reduceCloudSessionProjectionEvent(session, view, event)
     }
 

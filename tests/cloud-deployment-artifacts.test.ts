@@ -687,7 +687,7 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   for (const metric of [
     'open_cowork_cloud_http_requests_total',
     'open_cowork_cloud_http_request_duration_ms',
-    'open_cowork_cloud_command_queue_depth',
+    'open_cowork_cloud_command_queue_depth_estimate',
     'open_cowork_cloud_command_oldest_age_ms',
     'open_cowork_cloud_worker_lease_claims_total',
     'open_cowork_cloud_worker_lease_renewals_total',

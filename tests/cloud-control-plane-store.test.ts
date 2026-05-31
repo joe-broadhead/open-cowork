@@ -513,7 +513,7 @@ test('cloud control plane claims only runnable sessions for workers', () => {
     now: new Date('2030-01-01T00:00:00.000Z'),
     ttlMs: 1_000,
   })
-  assert.equal(first.pendingSessionCount, 2)
+  assert.equal(first.pendingSessionCountEstimate, 2)
   assert.deepEqual(first.leases.map((lease) => lease.sessionId), ['session-1'])
 
   const second = store.claimRunnableSessions({
@@ -522,7 +522,7 @@ test('cloud control plane claims only runnable sessions for workers', () => {
     now: new Date('2030-01-01T00:00:00.000Z'),
     ttlMs: 1_000,
   })
-  assert.equal(second.pendingSessionCount, 1)
+  assert.equal(second.pendingSessionCountEstimate, 1)
   assert.deepEqual(second.leases.map((lease) => lease.sessionId), ['session-2'])
 
   const claimed = store.claimNextSessionCommand(first.leases[0]!)

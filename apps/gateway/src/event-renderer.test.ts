@@ -7,10 +7,15 @@ import {
   createConstrainedMessageFakeProvider,
   createFileCapableFakeProvider,
 } from '@open-cowork/gateway-testing'
+import {
+  CLOUD_SESSION_EVENT_TYPES,
+  isCloudSessionEventType,
+} from '@open-cowork/shared'
 
 import type { CloudGateway } from '../dist/index.js'
 import {
   createGatewaySessionRenderState,
+  GATEWAY_RENDERED_SESSION_EVENT_TYPES,
   renderGatewaySessionEvent,
 } from '../dist/index.js'
 
@@ -73,6 +78,22 @@ test('event renderer edits streaming assistant output for button-capable provide
     text: 'Hello',
     messageId: '1',
   }])
+})
+
+test('event renderer handles only canonical shared cloud session events', () => {
+  assert.deepEqual([...GATEWAY_RENDERED_SESSION_EVENT_TYPES].sort(), [
+    'artifact.created',
+    'assistant.message',
+    'permission.requested',
+    'question.asked',
+    'tool.call',
+  ])
+
+  for (const type of GATEWAY_RENDERED_SESSION_EVENT_TYPES) {
+    assert.equal(CLOUD_SESSION_EVENT_TYPES.includes(type), true)
+    assert.equal(isCloudSessionEventType(type), true, `${type} must stay in the shared cloud event contract`)
+  }
+  assert.equal(isCloudSessionEventType('permission.asked'), false, 'raw SDK events must not become gateway-rendered cloud events')
 })
 
 test('event renderer chunks buttonless assistant output and renders approval command fallback', async () => {

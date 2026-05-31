@@ -78,6 +78,38 @@ Chat subscribes to `session:patch` / `sessionUpdated` /
 assistant turn fires many patches) coalesce into
 one refresh; intermittent events refresh within a second.
 
+## Cloud API query guardrails
+
+Cloud control-plane APIs must stay cursor-paginated, indexed, and bounded.
+Routes should validate/authenticate/parse, then delegate to stores or services
+that own the exact query shape.
+
+Current production rules:
+
+- session list APIs use cursor pagination and clamp page size to 500 rows
+- unbounded tenant/user lists are compatibility helpers, not public scaling
+  APIs
+- session event replay and workspace event replay use monotonic sequence
+  cursors
+- worker claim loops, scheduler due-run claims, command claims, and gateway
+  delivery claims use bounded batches and `FOR UPDATE SKIP LOCKED`
+- Postgres indexes must match hot predicates for session cursors, event
+  replay, command availability/runnable scans, workflow claims, channel
+  deliveries, usage events, worker pools, managed workers, and heartbeats
+- claim loops scale from queue age, claim latency, and bounded backlog estimates
+  rather than CPU alone; hot claim paths must not run full-table counts just to
+  emit queue-depth metrics
+
+Text `query` search in cloud session lists is a beta convenience filter. It is
+bounded by tenant/user scope and page size, but it is not yet the large-org
+search path. Large searchable thread history belongs in the thread index and
+smart-filter surfaces, not in a full scan over every cloud session row.
+
+Static guardrails in `tests/cloud-modularity-boundaries.test.ts` assert the
+required Postgres index names and key SQL snippets. Real Postgres concurrency
+tests protect lease, claim, workflow, and stale-owner behavior where database
+semantics matter.
+
 ## Perf benchmark gate
 
 `scripts/perf-benchmark.ts` runs benchmarks that mirror the hot paths:

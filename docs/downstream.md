@@ -197,6 +197,33 @@ Downstream deployment recipes must also preserve these production contracts:
 - self-host OSS keeps a billing-free path with `cloud.billing.provider=none`
   or the stub provider
 
+## Extension Points And Ownership
+
+Downstream deployments should extend Open Cowork through the surface that owns
+the product concept. Do not patch core execution code to add deployer-specific
+behavior. OpenCode owns execution; Open Cowork owns composition, policy,
+projection, channel adapters, and deployment ergonomics.
+
+| Extension point | Owning modules | Contract |
+|---|---|---|
+| Gateway providers | `packages/gateway-provider-*`, `packages/gateway-channel`, `apps/gateway/src/provider-registry.ts` | Implement the provider contract and register capabilities. Gateway providers send/receive channel messages only; they do not spawn OpenCode, import Cloud stores, or own execution state. |
+| Deployment recipes | `deploy/`, `helm/`, `docker-compose*.yml`, `scripts/validate-deployment-configs.mjs` | Compose public templates from config/env refs. Keep real project ids, domains, account ids, customer values, prices, and secrets in private deployment repos. |
+| Billing adapters | `apps/desktop/src/main/cloud/billing-adapter.ts`, `stripe-billing-adapter.ts`, `stub-billing-adapter.ts` | Add provider-specific billing behind the adapter. Core entitlement and quota logic consumes provider-neutral subscription records. |
+| Object-store adapters | `apps/desktop/src/main/cloud/object-store.ts`, deployment object-store config | Add storage providers behind the object-store interface. Artifact, upload, snapshot, and checkpoint callers should not branch on cloud provider names. |
+| Secret adapters | `apps/desktop/src/main/cloud/secret-adapter.ts`, BYOK secret store, config refs | Resolve or protect secrets behind refs. Raw provider keys, OAuth tokens, cookies, channel secrets, and signed URLs must never enter renderer state, cache, diagnostics, or public templates. |
+| Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts` | Add worker modes only after the trust model is documented. Customer-hosted workers remain deferred until a separate review covers updates, liability, networking, and data residency. |
+| Cloud event and projection contract | `packages/shared/src/cloud-session-projection.ts`, `opencode-runtime-adapter.ts`, `session-projection-service.ts`, gateway renderers | Runtime translation happens once at the worker/runtime boundary. Desktop, Web, and Gateway consume canonical Cloud events/projections rather than raw SDK events. |
+
+Module changes should stay narrow:
+
+- route modules validate/auth/parse and delegate to services
+- services own orchestration and policy decisions
+- store/domain modules persist atomically and do not own channel or renderer
+  behavior
+- package-boundary tests guard against clients importing server-only Cloud
+  internals
+- source-size budgets are regressions gates, not targets to grow into
+
 ## Environment variables
 
 | Variable | Purpose | Default |

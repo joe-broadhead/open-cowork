@@ -589,7 +589,7 @@ function validateDocs() {
   const metricsCatalog = read('deploy/observability/metrics-catalog.json')
   for (const metric of [
     'open_cowork_cloud_http_requests_total',
-    'open_cowork_cloud_command_queue_depth',
+    'open_cowork_cloud_command_queue_depth_estimate',
     'open_cowork_cloud_worker_lease_claims_total',
     'open_cowork_cloud_scheduler_claims_total',
     'open_cowork_cloud_projection_lag_events',

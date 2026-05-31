@@ -209,7 +209,7 @@ test('cloud projection reducer covers durable runtime event state transitions', 
   assert.equal(view.status, 'idle')
 
   view = reduceCloudSessionProjectionEvent(session, view, event(16, 'unknown.event'))
-  assert.equal(view.updatedAt, '2026-05-28T10:16:00.000Z')
+  assert.equal(view.updatedAt, '2026-05-28T10:15:00.000Z')
 })
 
 test('cloud projection normalization filters malformed cached fields', () => {

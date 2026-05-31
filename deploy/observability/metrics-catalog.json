@@ -27,10 +27,10 @@
       "description": "Prompt command enqueue latency. Emit from prompt enqueue paths or derive from request/span data."
     },
     {
-      "name": "open_cowork_cloud_command_queue_depth",
+      "name": "open_cowork_cloud_command_queue_depth_estimate",
       "type": "gauge",
       "owner": "cloud-worker",
-      "description": "Sessions scanned by worker command loop; pair with DB queue-age queries for backlog."
+      "description": "Bounded runnable-session backlog estimate from the worker command loop. It is capped by the worker scan batch and should be paired with queue-age signals for scaling decisions."
     },
     {
       "name": "open_cowork_cloud_command_oldest_age_ms",

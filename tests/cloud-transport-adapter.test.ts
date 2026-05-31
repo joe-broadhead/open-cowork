@@ -6,6 +6,7 @@ import {
   type CloudTransportEventSource,
   type CloudTransportFetch,
 } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
+import { CLOUD_SESSION_EVENT_TYPES } from '../packages/shared/dist/cloud-session-projection.js'
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -401,10 +402,7 @@ test('cloud transport adapter builds Last-Event-ID compatible SSE URLs and subsc
   )
   assert.equal(instances[0]?.url, 'https://cloud.example.test/api/sessions/session%201/events?after=42')
   assert.equal(instances[0]?.init?.withCredentials, true)
-  assert.equal(instances[0]?.listeners.has('permission.requested'), true)
-  assert.equal(instances[0]?.listeners.has('question.asked'), true)
-  assert.equal(instances[0]?.listeners.has('tool.call'), true)
-  assert.equal(instances[0]?.listeners.has('artifact.created'), true)
+  assert.deepEqual([...instances[0]!.listeners.keys()].sort(), [...CLOUD_SESSION_EVENT_TYPES].sort())
   instances[0]?.listeners.get('assistant.message')?.({
     data: JSON.stringify({
       sequence: 43,
@@ -428,8 +426,7 @@ test('cloud transport adapter builds Last-Event-ID compatible SSE URLs and subsc
     onEvent: (event) => workspaceEvents.push(event),
   })
   assert.equal(instances[1]?.url, 'https://cloud.example.test/api/events?after=44')
-  assert.equal(instances[1]?.listeners.has('session.created'), true)
-  assert.equal(instances[1]?.listeners.has('snapshot.required'), true)
+  assert.deepEqual([...instances[1]!.listeners.keys()].sort(), [...CLOUD_SESSION_EVENT_TYPES].sort())
   instances[1]?.listeners.get('session.created')?.({
     data: JSON.stringify({
       sequence: 45,

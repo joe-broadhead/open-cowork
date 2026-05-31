@@ -59,7 +59,7 @@ const requiredMetrics = [
   'open_cowork_cloud_http_request_duration_ms',
   'open_cowork_cloud_session_create_duration_ms',
   'open_cowork_cloud_prompt_enqueue_duration_ms',
-  'open_cowork_cloud_command_queue_depth',
+  'open_cowork_cloud_command_queue_depth_estimate',
   'open_cowork_cloud_command_oldest_age_ms',
   'open_cowork_cloud_worker_lease_claims_total',
   'open_cowork_cloud_worker_lease_renewals_total',
@@ -87,7 +87,7 @@ const requiredMetrics = [
 
 const requiredAlertMetrics = [
   'open_cowork_cloud_http_requests_total',
-  'open_cowork_cloud_command_queue_depth',
+  'open_cowork_cloud_command_queue_depth_estimate',
   'open_cowork_cloud_command_oldest_age_ms',
   'open_cowork_cloud_worker_expired_leases_reaped_total',
   'open_cowork_cloud_scheduler_claims_total',

@@ -609,7 +609,7 @@ async function collectMetrics(options) {
     if (response?.ok) {
       const text = await response.text()
       for (const name of [
-        'open_cowork_cloud_command_queue_depth',
+        'open_cowork_cloud_command_queue_depth_estimate',
         'open_cowork_cloud_command_oldest_age_ms',
         'open_cowork_cloud_projection_lag_events',
         'open_cowork_cloud_sse_connections',

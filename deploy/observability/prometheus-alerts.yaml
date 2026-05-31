@@ -11,7 +11,7 @@ groups:
           summary: Open Cowork Cloud HTTP 5xx rate is above 5%.
           runbook: docs/runbooks/cloud-managed-operations.md#web-unavailable-or-erroring
       - alert: OpenCoworkWorkerBacklogGrowing
-        expr: max(open_cowork_cloud_command_queue_depth) > 100 or max(open_cowork_cloud_command_oldest_age_ms) > 300000
+        expr: max(open_cowork_cloud_command_queue_depth_estimate) > 100 or max(open_cowork_cloud_command_oldest_age_ms) > 300000
         for: 15m
         labels:
           severity: page

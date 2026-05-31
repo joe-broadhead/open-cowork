@@ -67,7 +67,7 @@ test('launch readiness harness produces strict load report against cloud and gat
     if (url.pathname === '/api/metrics') {
       res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
       res.end([
-        'open_cowork_cloud_command_queue_depth 0',
+        'open_cowork_cloud_command_queue_depth_estimate 0',
         'open_cowork_cloud_command_oldest_age_ms 0',
         'open_cowork_cloud_projection_lag_events 0',
         'open_cowork_cloud_sse_connections 1',

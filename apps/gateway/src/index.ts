@@ -29,6 +29,7 @@ export {
   type GatewayMetrics,
 } from './metrics.js'
 export {
+  GATEWAY_RENDERED_SESSION_EVENT_TYPES,
   renderGatewaySessionEvent,
 } from './event-renderer.js'
 export {

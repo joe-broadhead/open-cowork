@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import type {
   CapabilitySkill,
   CapabilityTool,
+  CloudProjectedSessionEventType,
   WorkflowDetail,
   WorkflowDraft,
   WorkflowListPayload,
@@ -2552,7 +2553,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     sessionId: string,
     input: {
-      type: string
+      type: CloudProjectedSessionEventType
       payload?: Record<string, unknown>
       createdAt?: Date
     },
@@ -3521,16 +3522,6 @@ export class CloudSessionService {
       title: session.title || runtimeSession.title,
       leaseToken: lease.leaseToken,
       updatedAt: new Date(runtimeSession.updatedAt),
-    })
-    await this.appendProjectedEvent({
-      tenantId: session.tenantId,
-      sessionId: session.sessionId,
-      type: 'session.runtime.bound',
-      payload: {
-        opencodeSessionId: runtimeSession.id,
-      },
-      leaseToken: lease.leaseToken,
-      createdAt: new Date(runtimeSession.updatedAt),
     })
     return runtimeSession.id
   }

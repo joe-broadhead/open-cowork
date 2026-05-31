@@ -7,6 +7,7 @@ import type {
   ChannelSessionBindingRecord,
   CloudTransportSessionEvent,
 } from '@open-cowork/cloud-client'
+import type { CloudSessionEventType } from '@open-cowork/shared'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import { renderArtifactCreated } from './render/artifact-renderer.js'
@@ -28,6 +29,14 @@ export type RenderGatewaySessionEventResult = {
   handled: boolean
   lastChatMessageId?: string | null
 }
+
+export const GATEWAY_RENDERED_SESSION_EVENT_TYPES = [
+  'assistant.message',
+  'tool.call',
+  'permission.requested',
+  'question.asked',
+  'artifact.created',
+] as const satisfies readonly CloudSessionEventType[]
 
 export async function renderGatewaySessionEvent(
   input: RenderGatewaySessionEventInput,
