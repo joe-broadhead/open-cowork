@@ -47,6 +47,7 @@ const requiredFiles = [
   'docs/runbooks/private-beta-launch.md',
   'docs/runbooks/private-beta-support.md',
   'docs/runbooks/managed-byok-saas.md',
+  'docs/runbooks/managed-byok-saas-boundary.md',
   'docs/runbooks/launch-readiness.md',
   'docs/deployment-readiness.md',
   'docs/security-model.md',
@@ -55,6 +56,7 @@ const requiredFiles = [
   'deploy/private-beta/README.md',
   'deploy/private-beta/hosted-byok.config.example.json',
   'deploy/private-beta/self-host-oss.config.example.json',
+  'deploy/private-beta/managed-byok-readiness-contract.template.json',
   'deploy/private-beta/private-beta-plans.json',
   'deploy/private-beta/private-beta-launch-profile.template.json',
   'deploy/private-beta/design-partner-onboarding.template.md',
@@ -75,6 +77,8 @@ for (const phrase of [
   'Open Cowork does not resell model tokens',
   'Desktop local workspaces stay local',
   'Gateway is a channel client and delivery adapter',
+  'Public/Private Boundary',
+  'managed-byok-readiness-contract.template.json',
   'create or invite org owner',
   'verify membership and role',
   'write-only endpoint',
@@ -103,13 +107,33 @@ for (const phrase of [
   'Channel Identity Misbinding',
   'Customer Offboarding',
   'Never attach raw secrets',
+  'Support Bundle Contract',
+  'Onboarding Status And Reason Codes',
+  'support.diagnostics_redaction_required',
 ]) {
   assertIncludes('docs/runbooks/private-beta-support.md', phrase)
 }
 
 for (const phrase of [
+  'Public/Private Boundary',
+  'Onboarding Status Contract',
+  'Billing And Entitlement Boundary',
+  'BYOK Boundary',
+  'Support Bundle Contract',
+  'Launch Package Rules',
+  'managed-byok-readiness-contract.template.json',
+  'billing.subscription_inactive',
+  'gateway.signature_required',
+  'support.diagnostics_redaction_required',
+  'cloud.billing.provider=none',
+]) {
+  assertIncludes('docs/runbooks/managed-byok-saas-boundary.md', phrase)
+}
+
+for (const phrase of [
   'hosted-byok.config.example.json',
   'self-host-oss.config.example.json',
+  'managed-byok-readiness-contract.template.json',
   'private-beta-plans.json',
   'private-beta-launch-profile.template.json',
   'design-partner-onboarding.template.md',
@@ -125,6 +149,7 @@ for (const phrase of [
 for (const phrase of [
   'Private Beta Launch',
   'Private Beta Support',
+  'Managed BYOK Boundary',
 ]) {
   assertIncludes('mkdocs.yml', phrase)
 }
@@ -258,8 +283,160 @@ for (const command of [
   assertArrayIncludes(profile?.requiredSmokeCommands, command, 'launchProfile.requiredSmokeCommands')
 }
 
+const readinessContract = readJson('deploy/private-beta/managed-byok-readiness-contract.template.json')
+if (readinessContract.contractVersion !== 1) throw new Error('managed BYOK readiness contract must declare contractVersion 1')
+if (readinessContract.purpose !== 'managed-byok-saas-readiness-contract') {
+  throw new Error('managed BYOK readiness contract must declare its purpose')
+}
+if (readinessContract.scope !== 'public-template-only') throw new Error('managed BYOK readiness contract must stay public-template-only')
+for (const entry of [
+  'provider-neutral billing adapter interfaces',
+  'stub billing adapter and local validators',
+  'BYOK status APIs, secret-store interfaces, and worker-role runtime injection code',
+  'self-host documentation and billing-free deployment paths',
+  'support and diagnostics redaction contracts',
+]) {
+  assertArrayIncludes(readinessContract.publicPrivateBoundary?.publicRepoAllowed, entry, 'readiness.publicRepoAllowed')
+}
+for (const entry of [
+  'real cloud project ids, account ids, subscription ids, and regions tied to a managed service',
+  'customer names, emails, org slugs, channel identifiers, support tickets, onboarding records, or launch evidence',
+  'production support rosters, on-call schedules, incident channels, and escalation phone numbers',
+  'raw diagnostics bundles, logs, database exports, object-store listings, or audit exports from managed customers',
+]) {
+  assertArrayIncludes(readinessContract.publicPrivateBoundary?.privateOpsOnly, entry, 'readiness.privateOpsOnly')
+}
+for (const pattern of [
+  'provider API keys',
+  'OAuth refresh or access tokens',
+  'Desktop or Gateway API tokens',
+  'database URLs',
+  'real Stripe price, product, account, customer, or subscription ids',
+]) {
+  assertArrayIncludes(readinessContract.publicPrivateBoundary?.forbiddenPublicPatterns, pattern, 'readiness.forbiddenPublicPatterns')
+}
+for (const status of [
+  'not_started',
+  'invite_sent',
+  'auth_required',
+  'org_ready',
+  'byok_pending_validation',
+  'byok_active',
+  'desktop_ready',
+  'gateway_ready',
+  'billing_blocked',
+  'quota_blocked',
+  'support_review',
+  'ready',
+  'blocked',
+  'offboarded',
+]) {
+  assertArrayIncludes(readinessContract.onboardingContract?.statuses, status, 'readiness.onboarding.statuses')
+}
+for (const code of [
+  'auth.invite_required',
+  'auth.membership_missing',
+  'auth.token_expired',
+  'auth.token_revoked',
+  'byok.key_missing',
+  'byok.validation_failed',
+  'billing.subscription_required',
+  'billing.subscription_inactive',
+  'quota.worker_limit_exceeded',
+  'gateway.identity_not_allowed',
+  'gateway.signature_required',
+  'desktop.managed_org_required',
+  'support.diagnostics_redaction_required',
+]) {
+  assertArrayIncludes(readinessContract.onboardingContract?.reasonCodes, code, 'readiness.onboarding.reasonCodes')
+}
+for (const step of [
+  'create_or_invite_org_owner',
+  'verify_membership_and_role',
+  'configure_byok_write_only',
+  'validate_provider_or_audited_override',
+  'issue_desktop_connection',
+  'issue_gateway_service_token_and_binding',
+  'verify_cloud_web_admin_surface',
+  'run_first_thread_from_web',
+  'continue_same_thread_from_desktop',
+  'continue_or_notify_through_gateway',
+]) {
+  assertArrayIncludes(readinessContract.onboardingContract?.requiredFlow, step, 'readiness.onboarding.requiredFlow')
+}
+for (const provider of ['none', 'stub']) {
+  assertArrayIncludes(readinessContract.billingEntitlementContract?.selfHostAllowedProviders, provider, 'readiness.selfHostAllowedProviders')
+}
+for (const gate of [
+  'subscription state overlays runtime policy',
+  'past_due, canceled, disabled, and inactive states block new paid execution',
+  'expensive managed work is blocked before worker spawn or lease claim where possible',
+  'billing webhook ingress requires provider signature verification and replay protection',
+  'self-host mode must not require Stripe or any commercial billing adapter',
+]) {
+  assertArrayIncludes(readinessContract.billingEntitlementContract?.requiredGates, gate, 'readiness.billing.requiredGates')
+}
+if (readinessContract.byokSecurityContract?.plaintextReadbackAllowed !== false) {
+  throw new Error('readiness BYOK contract must forbid plaintext readback')
+}
+if (readinessContract.byokSecurityContract?.workerRevealOnly !== true) {
+  throw new Error('readiness BYOK contract must require worker-only reveal')
+}
+if (readinessContract.byokSecurityContract?.runtimeInjection !== 'provider-options-only') {
+  throw new Error('readiness BYOK contract must require provider-options-only runtime injection')
+}
+for (const surface of [
+  'HTTP read payloads',
+  'diagnostics bundles',
+  'renderer state',
+  'Desktop cloud cache',
+  'Gateway logs',
+  'SSE events',
+]) {
+  assertArrayIncludes(readinessContract.byokSecurityContract?.requiredRedactionSurfaces, surface, 'readiness.byok.requiredRedactionSurfaces')
+}
+for (const field of [
+  'raw BYOK keys',
+  'OAuth refresh or access tokens',
+  'Desktop, Gateway, API, cookie, internal, or operator tokens',
+  'database URLs',
+  'signed object-store URLs',
+  'customer names, emails, phone numbers, or channel handles in public evidence',
+]) {
+  assertArrayIncludes(readinessContract.supportBundleContract?.forbiddenFields, field, 'readiness.support.forbiddenFields')
+}
+for (const artifact of [
+  'docs/runbooks/managed-byok-saas.md',
+  'docs/runbooks/managed-byok-saas-boundary.md',
+  'docs/runbooks/private-beta-launch.md',
+  'docs/runbooks/private-beta-support.md',
+  'deploy/private-beta/managed-byok-readiness-contract.template.json',
+  'deploy/private-beta/hosted-byok.config.example.json',
+  'deploy/private-beta/self-host-oss.config.example.json',
+  'deploy/private-beta/private-beta-plans.json',
+  'deploy/private-beta/private-beta-launch-profile.template.json',
+  'deploy/private-beta/design-partner-onboarding.template.md',
+  'deploy/private-beta/go-no-go-report.template.md',
+]) {
+  assertArrayIncludes(readinessContract.launchPackageContract?.requiredPublicArtifacts, artifact, 'readiness.launch.requiredPublicArtifacts')
+}
+for (const command of [
+  'pnpm deploy:private-beta:validate',
+  'pnpm deploy:validate',
+  'pnpm deploy:launch:validate',
+  'pnpm ops:validate',
+  'pnpm test',
+  'pnpm typecheck',
+  'pnpm lint',
+  'pnpm docs:build',
+  'git diff --check',
+]) {
+  assertArrayIncludes(readinessContract.launchPackageContract?.requiredValidationCommands, command, 'readiness.launch.requiredValidationCommands')
+}
+
 for (const phrase of [
   'Required Ten-Step Flow',
+  'Onboarding State',
   'Create or invite org owner',
   'Verify org membership and role',
   'Configure BYOK provider key through write-only endpoint',
@@ -273,6 +450,9 @@ for (const phrase of [
   'Token Lifecycle Proof',
   'Secret Redaction Proof',
   'Blocking Behavior Proof',
+  'Support Bundle Proof',
+  'billing_blocked',
+  'support_review',
 ]) {
   assertIncludes('deploy/private-beta/design-partner-onboarding.template.md', phrase)
 }
@@ -284,10 +464,13 @@ for (const phrase of [
   'Load And Soak Summary',
   'Failover And Restore Summary',
   'Security Boundary Checklist',
+  'Public/Private Boundary Evidence',
   'Known Risks And Mitigations',
   'Decision',
   'BYOK plaintext absent',
   'Gateway is a channel client and delivery adapter',
+  'managed-byok-readiness-contract.template.json',
+  'Onboarding failures preserve machine-readable status and reason codes',
 ]) {
   assertIncludes('deploy/private-beta/go-no-go-report.template.md', phrase)
 }
@@ -298,6 +481,7 @@ for (const path of [
   'deploy/private-beta/README.md',
   'deploy/private-beta/hosted-byok.config.example.json',
   'deploy/private-beta/self-host-oss.config.example.json',
+  'deploy/private-beta/managed-byok-readiness-contract.template.json',
   'deploy/private-beta/private-beta-plans.json',
   'deploy/private-beta/private-beta-launch-profile.template.json',
   'deploy/private-beta/design-partner-onboarding.template.md',
@@ -311,6 +495,14 @@ for (const path of [
     'ghp_',
     'xoxb-',
     'AIza',
+    'price_',
+    'prod_',
+    'acct_',
+    'cus_',
+    'sub_',
+    'OPEN_COWORK_CLOUD_DATABASE_URL=postgres://',
+    'OPEN_COWORK_CLOUD_COOKIE_SECRET=',
+    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN=',
   ]) {
     assertNotIncludes(path, forbidden)
   }

@@ -40,6 +40,9 @@ The public repository owns the reusable launch package:
 - `deploy/private-beta/private-beta-launch-profile.template.json` defines the
   generic launch profile, entitlements, provider policy, gateway availability,
   RPO/RTO, required evidence, and security-boundary placeholders.
+- `deploy/private-beta/managed-byok-readiness-contract.template.json` defines
+  the public/private boundary, onboarding statuses, reason codes, billing/BYOK
+  invariants, support bundle limits, and required validation commands.
 - `deploy/private-beta/design-partner-onboarding.template.md` defines the
   repeatable design-partner onboarding evidence checklist.
 - `deploy/private-beta/go-no-go-report.template.md` defines the final decision
@@ -48,6 +51,16 @@ The public repository owns the reusable launch package:
 Completed copies belong in a private operations repository or ticket system.
 Do not commit real org ids, project ids, customer names, domains, prices,
 provider keys, cloud account ids, token values, or launch evidence here.
+
+## Public/Private Boundary
+
+Use [Managed BYOK SaaS Boundary](managed-byok-saas-boundary.md) as the source
+of truth for what can live in the public repository. Public files may include
+provider-neutral code, placeholder configs, support redaction rules, launch
+templates, self-host docs, and validation scripts. Private operations must hold
+real customer records, production project/account ids, live prices, real
+domains before public launch, support rosters, incident channels, raw
+diagnostics, and completed launch evidence.
 
 Private beta excludes:
 
