@@ -121,9 +121,23 @@ export class CloudManagedWorkerService {
   ): Promise<ManagedWorkerRecord> {
     await this.ensurePrincipal(principal)
     this.assertWorkerAdmin(principal)
+    const orgId = principalOrgId(principal)
+    const pool = await this.store.getManagedWorkerPool(orgId, input.poolId)
+    if (!pool) throw new CloudServiceError(404, 'Managed worker pool was not found.')
+    const existing = input.workerId ? await this.store.getManagedWorker(orgId, input.workerId) : null
+    if (!existing && pool.maxWorkers && pool.maxWorkers > 0) {
+      const workers = await this.store.listManagedWorkers(orgId, { poolId: input.poolId, limit: pool.maxWorkers + 1 })
+      const activeWorkers = workers.filter((worker) => worker.status !== 'retired' && worker.status !== 'revoked').length
+      if (activeWorkers >= pool.maxWorkers) {
+        throw new CloudServiceError(429, 'Managed worker pool capacity exceeded.', {
+          policyCode: 'capacity_unavailable',
+          retryAfterMs: 60_000,
+        })
+      }
+    }
     return this.store.registerManagedWorker({
       ...input,
-      orgId: principalOrgId(principal),
+      orgId,
       actor: auditActor(principal),
     })
   }
@@ -251,8 +265,22 @@ export class CloudManagedWorkerService {
     if (!principalCanHeartbeatWorker(principal, workerId)) {
       throw new CloudServiceError(403, 'Managed worker heartbeat requires this worker credential.')
     }
+    const orgId = principalOrgId(principal)
+    const worker = await this.store.getManagedWorker(orgId, workerId)
+    if (!worker) throw new CloudServiceError(404, 'Managed worker was not found.')
+    const pool = await this.store.getManagedWorkerPool(orgId, worker.poolId)
+    if (pool?.maxConcurrentWork && pool.maxConcurrentWork > 0 && input.currentLoad !== undefined && input.currentLoad !== null) {
+      const workers = await this.store.listManagedWorkers(orgId, { poolId: worker.poolId, limit: 500 })
+      const poolLoad = workers.reduce((total, entry) => total + (entry.workerId === workerId ? 0 : entry.currentLoad), 0)
+      if (poolLoad + input.currentLoad > pool.maxConcurrentWork) {
+        throw new CloudServiceError(429, 'Managed worker pool work capacity exceeded.', {
+          policyCode: 'capacity_unavailable',
+          retryAfterMs: 30_000,
+        })
+      }
+    }
     return this.store.recordManagedWorkerHeartbeat({
-      orgId: principalOrgId(principal),
+      orgId,
       workerId,
       credentialId: principal.workerCredentialId || '',
       ...input,

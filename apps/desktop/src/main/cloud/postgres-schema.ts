@@ -259,7 +259,7 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
   `INSERT INTO cloud_orgs (org_id, tenant_id, name, plan_key, status, created_at, updated_at)
     SELECT tenant_id, tenant_id, name, NULL, 'active', created_at, created_at
     FROM cloud_tenants
-    ON CONFLICT (org_id) DO NOTHING`,
+    ON CONFLICT (tenant_id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS cloud_accounts (
     account_id text PRIMARY KEY,
     idp_subject text UNIQUE,
@@ -284,8 +284,9 @@ export const CLOUD_CONTROL_PLANE_ORG_IDENTITY_TOKENS_AUDIT_STATEMENTS = [
     PRIMARY KEY (org_id, account_id)
   )`,
   `INSERT INTO cloud_memberships (org_id, account_id, role, status, created_at, updated_at)
-    SELECT u.tenant_id, u.user_id, u.role, 'active', u.created_at, u.created_at
+    SELECT orgs.org_id, u.user_id, u.role, 'active', u.created_at, u.created_at
     FROM cloud_users u
+    JOIN cloud_orgs orgs ON orgs.tenant_id = u.tenant_id
     ON CONFLICT (org_id, account_id) DO NOTHING`,
   `CREATE TABLE IF NOT EXISTS cloud_api_tokens (
     token_id text PRIMARY KEY,

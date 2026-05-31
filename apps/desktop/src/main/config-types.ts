@@ -305,8 +305,13 @@ export type CloudAuthBackoffConfig = {
 export type CloudAbuseConfig = {
   enabled: boolean
   maxConcurrentSessionsPerOrg: number | null
+  maxConcurrentWorkflowRunsPerOrg: number | null
   maxActiveWorkersPerOrg: number | null
+  maxQueuedCommandsPerOrg: number | null
+  maxQueueAgeMs: number | null
   maxPromptsPerHour: number | null
+  maxWorkflowRunsPerHour: number | null
+  maxGatewayPromptsPerHour: number | null
   maxWorkerMinutesPerHour: number | null
   maxGatewayDeliveriesPerHour: number | null
   maxGatewayChannelBindingsPerOrg: number | null
@@ -324,8 +329,13 @@ export type CloudBillingEntitlements = {
   allowedProfiles?: string[] | null
   allowedProviders?: string[] | null
   maxConcurrentSessionsPerOrg?: number | null
+  maxConcurrentWorkflowRunsPerOrg?: number | null
   maxActiveWorkersPerOrg?: number | null
+  maxQueuedCommandsPerOrg?: number | null
+  maxQueueAgeMs?: number | null
   maxPromptsPerHour?: number | null
+  maxWorkflowRunsPerHour?: number | null
+  maxGatewayPromptsPerHour?: number | null
   maxWorkerMinutesPerHour?: number | null
   maxGatewayDeliveriesPerHour?: number | null
   maxGatewayChannelBindingsPerOrg?: number | null
@@ -521,8 +531,13 @@ const DEFAULT_CLOUD_PROJECT_SOURCES: CloudProjectSourcePolicyConfig = {
 const DEFAULT_CLOUD_ABUSE: CloudAbuseConfig = {
   enabled: true,
   maxConcurrentSessionsPerOrg: 100,
+  maxConcurrentWorkflowRunsPerOrg: 50,
   maxActiveWorkersPerOrg: 20,
+  maxQueuedCommandsPerOrg: 1000,
+  maxQueueAgeMs: 30 * 60 * 1000,
   maxPromptsPerHour: 600,
+  maxWorkflowRunsPerHour: 200,
+  maxGatewayPromptsPerHour: 300,
   maxWorkerMinutesPerHour: 1200,
   maxGatewayDeliveriesPerHour: 1000,
   maxGatewayChannelBindingsPerOrg: 25,

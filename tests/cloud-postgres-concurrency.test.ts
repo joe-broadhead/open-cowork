@@ -296,6 +296,209 @@ test('real Postgres cloud store enforces quota counters under concurrent request
       )
     )))
     assert.equal(leases.filter(Boolean).length, 1)
+
+    const commandAttempts = await Promise.all(Array.from({ length: 5 }, async (_, index) => {
+      try {
+        await store.enqueueSessionCommand({
+          commandId: `${ids.tenantId}-queue-cmd-${index}`,
+          tenantId: ids.tenantId,
+          userId: ids.userId,
+          sessionId: ids.sessionId,
+          kind: 'prompt',
+          payload: { text: `prompt ${index}` },
+          quota: {
+            orgId: ids.tenantId,
+            maxQueuedCommandsPerOrg: 2,
+            policyCode: 'quota.queued_commands_exceeded',
+          },
+        })
+        return 'queued'
+      } catch (error) {
+        assert.equal(error instanceof ControlPlaneQuotaExceededError, true)
+        assert.equal((error as ControlPlaneQuotaExceededError).policyCode, 'quota.queued_commands_exceeded')
+        return 'blocked'
+      }
+    }))
+    assert.equal(commandAttempts.filter((result) => result === 'queued').length, 2)
+    assert.equal(commandAttempts.filter((result) => result === 'blocked').length, 3)
+
+    const workflowIds = Array.from({ length: 5 }, (_, index) => `${ids.tenantId}-workflow-quota-${index}`)
+    await Promise.all(workflowIds.map((workflowId, index) => store.createWorkflow({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      workflowId,
+      draft: {
+        title: `Workflow quota ${index}`,
+        instructions: 'Respect workflow quotas.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })))
+    const createdWorkflowRuns: Array<{ workflowId: string; runId: string }> = []
+    const workflowAttempts = await Promise.all(Array.from({ length: 5 }, async (_, index) => {
+      const workflowId = workflowIds[index]
+      const runId = `${ids.tenantId}-workflow-quota-run-${index}`
+      try {
+        await store.createWorkflowRun({
+          tenantId: ids.tenantId,
+          userId: ids.userId,
+          workflowId,
+          runId,
+          triggerType: 'manual',
+          quota: {
+            orgId: ids.tenantId,
+            maxConcurrentWorkflowRunsPerOrg: 2,
+            maxWorkflowRunsPerHour: 20,
+          },
+        })
+        createdWorkflowRuns.push({ workflowId, runId })
+        return 'queued'
+      } catch (error) {
+        assert.equal(error instanceof ControlPlaneQuotaExceededError, true)
+        assert.equal((error as ControlPlaneQuotaExceededError).policyCode, 'quota.concurrent_workflow_runs_exceeded')
+        return 'blocked'
+      }
+    }))
+    assert.equal(workflowAttempts.filter((result) => result === 'queued').length, 2)
+    assert.equal(workflowAttempts.filter((result) => result === 'blocked').length, 3)
+    await Promise.all(createdWorkflowRuns.map(({ workflowId, runId }) => store.failWorkflowRun({
+      tenantId: ids.tenantId,
+      workflowId,
+      runId,
+      error: 'test cleanup',
+      nextStatus: 'active',
+      nextRunAt: null,
+    })))
+
+    const customTenantId = `${ids.tenantId}-custom-org-tenant`
+    const customOrgId = `${ids.tenantId}-custom-org`
+    const customUserId = `${ids.userId}-custom-org-user`
+    const customSessionId = `${ids.sessionId}-custom-org-session`
+    await store.createTenant({ tenantId: customTenantId, name: 'Custom org tenant' })
+    const rawPool = pgPool(POSTGRES_URL!)
+    try {
+      await rawPool.query(
+        `UPDATE cloud_orgs SET org_id = $1 WHERE tenant_id = $2`,
+        [customOrgId, customTenantId],
+      )
+    } finally {
+      await rawPool.end()
+    }
+    await store.ensureUser({
+      tenantId: customTenantId,
+      userId: customUserId,
+      email: `${customUserId}@example.test`,
+      role: 'owner',
+    })
+    await store.createSession({
+      tenantId: customTenantId,
+      userId: customUserId,
+      sessionId: customSessionId,
+      opencodeSessionId: `${customSessionId}-oc`,
+      profileName: 'full',
+    })
+    await store.enqueueSessionCommand({
+      commandId: `${customTenantId}-queue-cmd-1`,
+      tenantId: customTenantId,
+      userId: customUserId,
+      sessionId: customSessionId,
+      kind: 'prompt',
+      payload: { text: 'custom org queued prompt' },
+      quota: {
+        maxQueuedCommandsPerOrg: 1,
+        policyCode: 'quota.queued_commands_exceeded',
+      },
+    })
+    await assert.rejects(() => store.enqueueSessionCommand({
+      commandId: `${customTenantId}-queue-cmd-2`,
+      tenantId: customTenantId,
+      userId: customUserId,
+      sessionId: customSessionId,
+      kind: 'prompt',
+      payload: { text: 'custom org blocked prompt' },
+      quota: {
+        maxQueuedCommandsPerOrg: 1,
+        policyCode: 'quota.queued_commands_exceeded',
+      },
+    }), (error) => (
+      error instanceof ControlPlaneQuotaExceededError
+      && error.policyCode === 'quota.queued_commands_exceeded'
+    ))
+
+    const customWorkflowIds = ['a', 'b', 'c'].map((suffix) => `${customTenantId}-workflow-${suffix}`)
+    await Promise.all(customWorkflowIds.map((workflowId) => store.createWorkflow({
+      tenantId: customTenantId,
+      userId: customUserId,
+      workflowId,
+      draft: {
+        title: `Custom org workflow ${workflowId}`,
+        instructions: 'Respect custom org workflow quotas.',
+        agentName: 'data-analyst',
+        skillNames: [],
+        toolIds: [],
+        projectDirectory: null,
+        draftSessionId: null,
+        triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+      },
+    })))
+    await store.createWorkflowRun({
+      tenantId: customTenantId,
+      userId: customUserId,
+      workflowId: customWorkflowIds[0]!,
+      runId: `${customTenantId}-workflow-run-1`,
+      triggerType: 'manual',
+      quota: {
+        maxConcurrentWorkflowRunsPerOrg: 1,
+        maxWorkflowRunsPerHour: 10,
+      },
+    })
+    await assert.rejects(() => store.createWorkflowRun({
+      tenantId: customTenantId,
+      userId: customUserId,
+      workflowId: customWorkflowIds[1]!,
+      runId: `${customTenantId}-workflow-run-2`,
+      triggerType: 'manual',
+      quota: {
+        maxConcurrentWorkflowRunsPerOrg: 1,
+        maxWorkflowRunsPerHour: 10,
+      },
+    }), (error) => (
+      error instanceof ControlPlaneQuotaExceededError
+      && error.policyCode === 'quota.concurrent_workflow_runs_exceeded'
+    ))
+    await store.failWorkflowRun({
+      tenantId: customTenantId,
+      workflowId: customWorkflowIds[0]!,
+      runId: `${customTenantId}-workflow-run-1`,
+      error: 'custom org quota cleanup',
+      nextStatus: 'active',
+      nextRunAt: null,
+    })
+    await store.createWorkflowRun({
+      tenantId: customTenantId,
+      userId: customUserId,
+      workflowId: customWorkflowIds[2]!,
+      runId: `${customTenantId}-workflow-run-3`,
+      triggerType: 'manual',
+      quota: {
+        maxConcurrentWorkflowRunsPerOrg: 10,
+        maxWorkflowRunsPerHour: 10,
+      },
+    })
+    const customCounters = await store.listUsageQuotaCounters(customOrgId)
+    assert.equal(customCounters.some((counter) => counter.quotaKey === 'workflow_runs:hour'), true)
+    await store.failWorkflowRun({
+      tenantId: customTenantId,
+      workflowId: customWorkflowIds[2]!,
+      runId: `${customTenantId}-workflow-run-3`,
+      error: 'custom org quota cleanup',
+      nextStatus: 'active',
+      nextRunAt: null,
+    })
   })
 })
 

@@ -53,10 +53,37 @@ export class CloudWorker {
     while (true) {
       const command = await this.store.claimNextSessionCommand(lease)
       if (!command) break
+      try {
+        await this.service.reserveWorkerExecutionCapacity(tenantId)
+      } catch (error) {
+        if (this.isQuotaOrEntitlementDenial(error)) {
+          await this.recordLeaseDenial(tenantId, sessionId, error)
+          this.leases.delete(this.leaseKey(tenantId, sessionId))
+          return processed
+        }
+        throw error
+      }
       const startedAt = Date.now()
+      await this.service.recordManagedExecutionEvent({
+        tenantId,
+        sessionId,
+        workerId: this.workerId,
+        commandId: command.commandId,
+        commandKind: command.kind,
+        eventType: 'worker.execution_started',
+      })
       try {
         const commandLease = lease
         lease = await this.executeWithLeaseRenewal(commandLease, () => this.service.executeCommand(commandLease, command))
+        await this.service.recordManagedExecutionEvent({
+          tenantId,
+          sessionId,
+          workerId: this.workerId,
+          commandId: command.commandId,
+          commandKind: command.kind,
+          eventType: 'worker.execution_completed',
+          elapsedMs: Date.now() - startedAt,
+        })
         await recordCloudWorkerMetric(this.observability, {
           name: 'open_cowork_cloud_worker_commands_processed_total',
           workerId: this.workerId,
@@ -73,12 +100,40 @@ export class CloudWorker {
           sessionId,
           status: 'ok',
         })
+      } catch (error) {
+        await this.service.recordManagedExecutionEvent({
+          tenantId,
+          sessionId,
+          workerId: this.workerId,
+          commandId: command.commandId,
+          commandKind: command.kind,
+          eventType: 'worker.execution_failed',
+          elapsedMs: Date.now() - startedAt,
+          errorCode: error instanceof Error ? error.name || 'Error' : 'unknown',
+        })
+        await recordCloudWorkerMetric(this.observability, {
+          name: 'open_cowork_cloud_worker_commands_processed_total',
+          workerId: this.workerId,
+          tenantId,
+          sessionId,
+          status: 'error',
+        })
+        await recordCloudWorkerMetric(this.observability, {
+          name: 'open_cowork_cloud_worker_command_duration_ms',
+          value: Date.now() - startedAt,
+          workerId: this.workerId,
+          tenantId,
+          sessionId,
+          status: 'error',
+        })
+        throw error
       } finally {
         await this.service.recordWorkerMinutes({
           tenantId,
           sessionId,
           workerId: this.workerId,
           elapsedMs: Date.now() - startedAt,
+          reservedMinutes: 1,
         })
       }
       lease = await this.store.checkpointSession(lease)
@@ -104,33 +159,38 @@ export class CloudWorker {
     }
     while (true) {
       const claimStartedAt = Date.now()
-      const claims = await this.store.claimRunnableSessions({
-        workerId: this.workerId,
+      const runnable = await this.store.listRunnableSessions({
         limit: this.claimBatchSize,
         now: new Date(),
-        ttlMs: this.leaseTtlMs,
       })
-      pendingSessionCount = Math.max(pendingSessionCount, claims.pendingSessionCount)
+      pendingSessionCount = Math.max(pendingSessionCount, runnable.pendingSessionCount)
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_session_claim_duration_ms',
         value: Date.now() - claimStartedAt,
         workerId: this.workerId,
         status: 'ok',
       })
+      if (runnable.sessions.length === 0) {
+        await recordCloudWorkerMetric(this.observability, {
+          name: 'open_cowork_cloud_runnable_sessions_claimed_total',
+          value: 0,
+          workerId: this.workerId,
+          status: 'empty',
+        })
+        break
+      }
+      let processedThisBatch = 0
+      for (const session of runnable.sessions) {
+        processedThisBatch += await this.processSessionCommands(session.tenantId, session.sessionId)
+      }
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_runnable_sessions_claimed_total',
-        value: claims.leases.length,
+        value: processedThisBatch,
         workerId: this.workerId,
-        status: claims.leases.length > 0 ? 'claimed' : 'empty',
+        status: processedThisBatch > 0 ? 'claimed' : 'denied',
       })
-      if (claims.leases.length === 0) break
-      let processedThisBatch = 0
-      for (const lease of claims.leases) {
-        await this.store.releaseSessionLease(lease)
-        processedThisBatch += await this.processSessionCommands(lease.tenantId, lease.sessionId)
-      }
       processed += processedThisBatch
-      if (claims.leases.length < this.claimBatchSize || processedThisBatch === 0) break
+      if (runnable.sessions.length < this.claimBatchSize || processedThisBatch === 0) break
     }
     await recordCloudWorkerMetric(this.observability, {
       name: 'open_cowork_cloud_command_queue_depth',
@@ -170,19 +230,10 @@ export class CloudWorker {
   private async getOrClaimLease(tenantId: string, sessionId: string): Promise<WorkerLeaseRecord | null> {
     const leaseKey = this.leaseKey(tenantId, sessionId)
     try {
-      await this.service.assertWorkerExecutionAllowed(tenantId)
+      await this.service.assertWorkerLeaseAllowed(tenantId)
     } catch (error) {
-      const status = error && typeof error === 'object' && 'status' in error
-        ? (error as { status?: unknown }).status
-        : null
-      if (status === 402 || status === 429) {
-        await recordCloudWorkerMetric(this.observability, {
-          name: 'open_cowork_cloud_worker_lease_denials_total',
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
-          status: status === 402 ? 'entitlement_denied' : 'quota_denied',
-        })
+      if (this.isQuotaOrEntitlementDenial(error)) {
+        await this.recordLeaseDenial(tenantId, sessionId, error)
         return null
       }
       throw error
@@ -228,6 +279,12 @@ export class CloudWorker {
     )
     if (claimed) {
       this.leases.set(leaseKey, claimed)
+      await this.service.recordManagedWorkClaimed({
+        tenantId,
+        sessionId,
+        workerId: this.workerId,
+        leaseToken: claimed.leaseToken,
+      })
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_lease_claims_total',
         workerId: this.workerId,
@@ -245,6 +302,26 @@ export class CloudWorker {
       })
     }
     return claimed
+  }
+
+  private isQuotaOrEntitlementDenial(error: unknown) {
+    const status = error && typeof error === 'object' && 'status' in error
+      ? (error as { status?: unknown }).status
+      : null
+    return status === 402 || status === 429
+  }
+
+  private async recordLeaseDenial(tenantId: string, sessionId: string, error: unknown) {
+    const status = error && typeof error === 'object' && 'status' in error
+      ? (error as { status?: unknown }).status
+      : null
+    await recordCloudWorkerMetric(this.observability, {
+      name: 'open_cowork_cloud_worker_lease_denials_total',
+      workerId: this.workerId,
+      tenantId,
+      sessionId,
+      status: status === 402 ? 'entitlement_denied' : 'quota_denied',
+    })
   }
 
   private async executeWithLeaseRenewal<T>(lease: WorkerLeaseRecord, work: () => Promise<T>): Promise<WorkerLeaseRecord> {

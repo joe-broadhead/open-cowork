@@ -19,6 +19,24 @@ groups:
         annotations:
           summary: Worker command backlog is large or old.
           runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkWorkerClaimLatency
+        expr: max(open_cowork_cloud_runnable_session_claim_duration_ms) > 5000
+        for: 10m
+        labels:
+          severity: ticket
+          surface: worker
+        annotations:
+          summary: Worker runnable-session claim latency is elevated.
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
+      - alert: OpenCoworkWorkerExecutionFailures
+        expr: sum(rate(open_cowork_cloud_worker_commands_processed_total{status="error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          surface: worker
+        annotations:
+          summary: Managed worker command execution is failing.
+          runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
       - alert: OpenCoworkWorkerLeaseRecoverySpike
         expr: sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[10m])) > 0.5 or sum(rate(open_cowork_cloud_scheduler_expired_claims_reaped_total[10m])) > 0.5
         for: 10m

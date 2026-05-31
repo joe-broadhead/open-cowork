@@ -703,6 +703,151 @@ test('cloud control plane caps concurrent sessions and active workers', () => {
   assert.equal(secondLease, null)
 })
 
+test('cloud control plane caps managed command queues and workflow starts', () => {
+  const store = seededStore()
+
+  store.enqueueSessionCommand({
+    commandId: 'queued-command-1',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+    payload: { text: 'first prompt' },
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxQueuedCommandsPerOrg: 1,
+      policyCode: 'quota.queued_commands_exceeded',
+    },
+  })
+  assert.throws(() => store.enqueueSessionCommand({
+    commandId: 'queued-command-2',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+    payload: { text: 'second prompt' },
+    createdAt: new Date('2026-01-01T00:00:01.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxQueuedCommandsPerOrg: 1,
+      policyCode: 'quota.queued_commands_exceeded',
+    },
+  }), (error) => (
+    error instanceof ControlPlaneQuotaExceededError
+    && error.policyCode === 'quota.queued_commands_exceeded'
+  ))
+  assert.throws(() => store.enqueueSessionCommand({
+    commandId: 'queued-command-3',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+    payload: { text: 'third prompt' },
+    createdAt: new Date('2026-01-01T00:00:02.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxQueuedCommandsPerOrg: 10,
+      maxQueueAgeMs: 1,
+      queueAgePolicyCode: 'quota.queue_age_exceeded',
+    },
+  }), (error) => (
+    error instanceof ControlPlaneQuotaExceededError
+    && error.policyCode === 'quota.queue_age_exceeded'
+  ))
+
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota',
+    draft: {
+      title: 'Workflow quota',
+      instructions: 'Respect workflow quotas.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota',
+    runId: 'workflow-run-1',
+    triggerType: 'manual',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxConcurrentWorkflowRunsPerOrg: 1,
+      maxWorkflowRunsPerHour: 10,
+    },
+  })
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota-concurrent',
+    draft: {
+      title: 'Workflow concurrent quota',
+      instructions: 'Respect concurrent workflow quotas.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  assert.throws(() => store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota-concurrent',
+    runId: 'workflow-run-2',
+    triggerType: 'manual',
+    createdAt: new Date('2026-01-01T00:00:01.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxConcurrentWorkflowRunsPerOrg: 1,
+      maxWorkflowRunsPerHour: 10,
+    },
+  }), (error) => (
+    error instanceof ControlPlaneQuotaExceededError
+    && error.policyCode === 'quota.concurrent_workflow_runs_exceeded'
+  ))
+  store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota-hourly',
+    draft: {
+      title: 'Workflow hourly quota',
+      instructions: 'Respect hourly workflow quotas.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+  assert.throws(() => store.createWorkflowRun({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId: 'workflow-quota-hourly',
+    runId: 'workflow-run-3',
+    triggerType: 'manual',
+    createdAt: new Date('2026-01-01T00:00:02.000Z'),
+    quota: {
+      orgId: 'tenant-1',
+      maxConcurrentWorkflowRunsPerOrg: 10,
+      maxWorkflowRunsPerHour: 1,
+    },
+  }), (error) => (
+    error instanceof ControlPlaneQuotaExceededError
+    && error.policyCode === 'quota.workflow_runs_per_hour_exceeded'
+  ))
+})
+
 test('cloud control plane resolves org accounts memberships, tokens, and audit events', () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
