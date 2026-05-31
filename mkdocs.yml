@@ -120,6 +120,7 @@ nav:
       - Telemetry and Privacy: privacy.md
   - Operate:
       - Open Cowork Cloud: open-cowork-cloud.md
+      - Managed Workers: managed-workers.md
       - Gateway Appliance: gateway-appliance.md
       - Deployment Readiness: deployment-readiness.md
       - Launch Readiness Gates: runbooks/launch-readiness.md

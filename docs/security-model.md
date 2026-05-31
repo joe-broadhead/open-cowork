@@ -258,6 +258,28 @@ OpenCode owns the login/device-code flow and token storage. Copilot tokens are
 not entered into Open Cowork settings, copied into cloud sync payloads, or
 forwarded to the gateway.
 
+## Managed cloud worker boundary
+
+The managed worker service plane is a future cloud execution-capacity layer,
+not a new runtime. Workers claim tenant-scoped cloud work from durable control
+plane records, run OpenCode, and write events, projections, checkpoints,
+artifacts, and workflow status back with lease-token fencing. Browser clients,
+Desktop cloud clients, and Gateway clients never receive worker credentials and
+never talk to OpenCode directly for cloud execution.
+
+The first supported deployment mode is control-plane-owned worker pools: hosted
+BYOK operators run their own workers, and self-hosters run workers beside their
+own Cloud control plane. Customer-hosted workers connected to a separate
+managed SaaS control plane are intentionally deferred until a separate trust
+review exists.
+
+Worker credentials are scoped, expiring, hash-stored after issuance, rotatable,
+and revocable. BYOK plaintext reveal is worker-role-only and
+tenant/provider/session bounded. Provider keys enter OpenCode through runtime
+config provider options, not ambient process environment variables. The full
+lifecycle, lease/fencing contract, recovery behavior, and threat model live in
+[Managed Worker Service Plane](managed-workers.md).
+
 ## Chart frame isolation
 
 Chart rendering uses Vega, which compiles its specs with `new Function()`

@@ -166,6 +166,15 @@ provider control plane.
   distributed across nodes and zones.
 - Monitor worker heartbeat age, scheduler heartbeat age, command latency,
   projection lag, and lease reclaim counts.
+- Future managed worker pools must follow the
+  [Managed Worker Service Plane](managed-workers.md) contract before they are
+  exposed as production capacity: explicit worker identity, scoped expiring
+  credentials, lifecycle state, durable work claims, lease-token fencing,
+  checkpoint/artifact ownership, recovery rules, quotas, and operator runbooks.
+- The first supported managed-worker mode is control-plane-owned worker pools.
+  Do not connect customer-hosted workers to a separate managed SaaS control
+  plane until a separate trust review, update policy, and data-residency model
+  are implemented.
 
 ### Gateway Service Token
 
