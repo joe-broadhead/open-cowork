@@ -37,6 +37,10 @@ public deployment templates live under `deploy/managed-workers/`.
 
 ## Workspace sync contract
 
+The full cross-surface contract is documented in
+[Product Contract](product-contract.md). Cloud implements the cloud-workspace
+side of that contract.
+
 Cloud is the source of truth only for cloud workspaces. A user can start a
 cloud thread in desktop, continue it in the browser, and interact with the same
 thread through a gateway channel because all three clients read and write the

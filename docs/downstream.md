@@ -8,6 +8,10 @@ files.
 
 This page is the reference for that model.
 
+The workspace ownership, sync, status/reason, and non-sync guarantees that
+downstream builds must preserve are defined in
+[Product Contract](product-contract.md).
+
 ## Distribution modes
 
 Downstream operators should choose the product surface intentionally:
