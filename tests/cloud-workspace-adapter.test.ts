@@ -9,7 +9,7 @@ import {
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
 import type { CloudTransportAdapter } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
-import type { WorkflowRun, WorkflowStatus } from '@open-cowork/shared'
+import type { SessionView, WorkflowRun, WorkflowStatus } from '@open-cowork/shared'
 
 function workflowSummary(status: WorkflowStatus = 'active') {
   return {
@@ -503,6 +503,34 @@ function sessionRecord(sessionId: string) {
   }
 }
 
+function cachedView(sessionId: string, revision = 1): SessionView {
+  return {
+    messages: [],
+    toolCalls: [],
+    taskRuns: [],
+    compactions: [],
+    pendingApprovals: [],
+    pendingQuestions: [],
+    artifacts: [],
+    errors: [],
+    todos: [],
+    executionPlan: [],
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    lastInputTokens: 0,
+    contextState: 'idle',
+    compactionCount: 0,
+    lastCompactedAt: null,
+    activeAgent: null,
+    lastItemWasTool: false,
+    revision,
+    lastEventAt: revision,
+    isGenerating: false,
+    isAwaitingPermission: false,
+    isAwaitingQuestion: false,
+  }
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -631,6 +659,94 @@ test('cloud workspace adapter bounds sync hydration concurrency', async () => {
   assert.equal(artifactCalls, sessions.length)
   assert.ok(maxViews <= 8, `expected view concurrency <= 8, saw ${maxViews}`)
   assert.ok(maxArtifacts <= 4, `expected artifact concurrency <= 4, saw ${maxArtifacts}`)
+})
+
+test('cloud workspace adapter sync is page-aware and refreshes only changed cached sessions', async () => {
+  const base = transport()
+  const cache = new FileCloudWorkspaceCache({
+    path: join(mkdtempSync(join(tmpdir(), 'open-cowork-adapter-incremental-sync-')), 'cloud-workspace-cache.json'),
+    mode: 'full',
+    secretStorage: {
+      mode: 'plaintext',
+      encryptString: (plaintext) => Buffer.from(plaintext, 'utf-8'),
+      decryptString: (encrypted) => encrypted.toString('utf-8'),
+    },
+  })
+  const connection = {
+    id: 'cloud:test',
+    baseUrl: 'https://cloud.example.test',
+    label: 'Test Cloud',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    lastSyncedAt: null,
+  }
+  const cacheKey = cloudWorkspaceCacheKey(connection)
+  const remoteSessions = Array.from({ length: 125 }, (_, index) => sessionRecord(`session-${index + 1}`))
+  const cachedSessions = remoteSessions.map((record) => ({
+    id: record.sessionId,
+    title: record.title || undefined,
+    directory: null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    kind: 'interactive' as const,
+  }))
+  cache.upsertSessionList(cacheKey, cachedSessions)
+  for (const session of cachedSessions) {
+    cache.upsertSessionView(cacheKey, session.id, cachedView(session.id))
+    cache.upsertArtifactList(cacheKey, session.id, [{
+      id: `artifact-${session.id}`,
+      toolId: 'cloud-artifact',
+      toolName: 'cloud.artifact',
+      filePath: `cloud-artifact://${session.id}/result.txt`,
+      filename: 'result.txt',
+      order: 0,
+      source: 'cloud',
+      cloudArtifactId: `artifact-${session.id}`,
+      mime: 'text/plain',
+    }])
+  }
+  const updatedRemoteSessions = remoteSessions.map((session, index) => index < 3
+    ? { ...session, updatedAt: '2026-05-27T12:00:00.000Z' }
+    : session)
+  const cursors: Array<string | null | undefined> = []
+  let getSessionCount = 0
+  let artifactCount = 0
+  const adapter = new CloudWorkspaceAdapter({
+    connection,
+    cache,
+    transport: {
+      ...base,
+      listSessions: async () => {
+        throw new Error('sync should use paged session listing when available')
+      },
+      listSessionsPage: async (input = {}) => {
+        assert.equal(input.limit, 100)
+        cursors.push(input.cursor)
+        const start = input.cursor ? Number(input.cursor) : 0
+        const page = updatedRemoteSessions.slice(start, start + 100)
+        return {
+          sessions: page,
+          nextCursor: start + page.length < updatedRemoteSessions.length ? String(start + page.length) : null,
+          totalEstimate: updatedRemoteSessions.length,
+        }
+      },
+      getSession: async (sessionId) => {
+        getSessionCount += 1
+        return base.getSession(sessionId)
+      },
+      listArtifacts: async (sessionId) => {
+        artifactCount += 1
+        return base.listArtifacts?.(sessionId) as ReturnType<NonNullable<CloudTransportAdapter['listArtifacts']>>
+      },
+    },
+  })
+
+  await adapter.sync()
+
+  assert.deepEqual(cursors, [null, '100'])
+  assert.equal(getSessionCount, 3)
+  assert.equal(artifactCount, 3)
+  assert.equal(cache.listSessions(cacheKey)?.length, 125)
 })
 
 test('cloud workspace adapter coalesces concurrent session view refreshes', async () => {

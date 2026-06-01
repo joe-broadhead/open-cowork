@@ -144,7 +144,10 @@ export function SettingsPanel({
     const providerId = settings?.effectiveProviderId
     if (!providerId) return
     let cancelled = false
-    window.coworkApi.settings.getProviderCredentials(providerId).then((credentials) => {
+    window.coworkApi.settings.getProviderCredentials(providerId, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      purpose: 'credential_editor',
+    }).then((credentials) => {
       if (cancelled) return
       setSettings((current) => {
         if (!current || current.effectiveProviderId !== providerId) return current
@@ -235,7 +238,10 @@ export function SettingsPanel({
             ...savedSettings,
             providerCredentials: {
               ...savedSettings.providerCredentials,
-              [savedSettings.effectiveProviderId]: await window.coworkApi.settings.getProviderCredentials(savedSettings.effectiveProviderId),
+              [savedSettings.effectiveProviderId]: await window.coworkApi.settings.getProviderCredentials(savedSettings.effectiveProviderId, {
+                workspaceId: LOCAL_WORKSPACE_ID,
+                purpose: 'credential_editor',
+              }),
             },
           }
         } catch (error) {

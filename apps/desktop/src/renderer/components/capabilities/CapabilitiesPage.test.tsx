@@ -436,7 +436,10 @@ describe('CapabilitiesPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Chart MCP' })).toBeInTheDocument()
     expect(api.tool).toHaveBeenCalledWith('charts', { sessionId: 'session-1' })
-    expect(api.getIntegrationCredentials).toHaveBeenCalledWith('charts')
+    expect(api.getIntegrationCredentials).toHaveBeenCalledWith('charts', {
+      workspaceId: 'local',
+      purpose: 'credential_editor',
+    })
     expect(screen.getByText('mcp__charts__line')).toBeInTheDocument()
 
     const apiKeyInput = screen.getByLabelText(/Charts API key/)

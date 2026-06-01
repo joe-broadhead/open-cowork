@@ -182,7 +182,10 @@ export async function writeE2EWindowReadyProbe(
         if (!settings.effectiveProviderId || !settings.effectiveModel) return false;
         const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId);
         if (!provider) return false;
-        const providerCredentials = await api.settings.getProviderCredentials(provider.id);
+        const providerCredentials = await api.settings.getProviderCredentials(provider.id, {
+          workspaceId: 'local',
+          purpose: 'credential_editor',
+        });
         return provider.credentials.every((credential) => {
           if (credential.required === false) return true;
           const value = providerCredentials[credential.key];
