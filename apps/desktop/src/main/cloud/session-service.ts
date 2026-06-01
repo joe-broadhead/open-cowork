@@ -602,6 +602,26 @@ function importAuditActor(principal: CloudPrincipal): { actorType: 'user' | 'api
   }
 }
 
+function throwIfAborted(signal: AbortSignal | undefined) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  throw new Error(typeof reason === 'string' && reason.trim() ? reason : 'Cloud worker command execution was aborted.')
+}
+
+function runOnAbort(signal: AbortSignal | undefined, callback: () => Promise<void> | void) {
+  if (!signal) return () => undefined
+  const abort = () => {
+    void Promise.resolve(callback()).catch(() => undefined)
+  }
+  if (signal.aborted) {
+    abort()
+    return () => undefined
+  }
+  signal.addEventListener('abort', abort, { once: true })
+  return () => signal.removeEventListener('abort', abort)
+}
+
 export class CloudSessionService {
   private readonly store: ControlPlaneStore
   private readonly runtime: CloudRuntimeAdapter
@@ -3054,31 +3074,38 @@ export class CloudSessionService {
     })
   }
 
-  async executeCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord): Promise<void> {
+  async executeCommand(
+    lease: WorkerLeaseRecord,
+    command: SessionCommandRecord,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<void> {
     try {
+      throwIfAborted(options.signal)
       switch (command.kind) {
         case 'prompt':
-          await this.executePromptCommand(lease, command)
+          await this.executePromptCommand(lease, command, options.signal)
           break
         case 'abort':
-          await this.executeAbortCommand(lease, command)
+          await this.executeAbortCommand(lease, command, options.signal)
           break
         case 'question.reply':
-          await this.executeQuestionReplyCommand(lease, command)
+          await this.executeQuestionReplyCommand(lease, command, options.signal)
           break
         case 'question.reject':
-          await this.executeQuestionRejectCommand(lease, command)
+          await this.executeQuestionRejectCommand(lease, command, options.signal)
           break
         case 'permission.respond':
-          await this.executePermissionCommand(lease, command)
+          await this.executePermissionCommand(lease, command, options.signal)
           break
         default: {
           const unsupported: never = command.kind
           throw new Error(`Unsupported command kind ${String(unsupported)}.`)
         }
       }
+      throwIfAborted(options.signal)
       await this.store.ackSessionCommand(lease, command.commandId)
     } catch (error) {
+      if (options.signal?.aborted) throw error
       const message = error instanceof Error ? error.message : String(error)
       await this.appendProjectedEvent({
         tenantId: command.tenantId,
@@ -3142,10 +3169,13 @@ export class CloudSessionService {
     })
   }
 
-  private async executePromptCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+  private async executePromptCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
+    throwIfAborted(signal)
     const payload = normalizePromptPayload(command.payload)
     const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     const runtimeSessionId = await this.ensureRuntimeSessionBound(lease)
+    const context = this.runtimeContext(session)
+    throwIfAborted(signal)
     await this.store.updateSessionStatus({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
@@ -3164,12 +3194,24 @@ export class CloudSessionService {
       },
       leaseToken: lease.leaseToken,
     })
-    const result = await this.runtime.promptSession({
+    const stopAbortHandler = runOnAbort(signal, () => this.runtime.abortSession({
       sessionId: runtimeSessionId,
-      parts: promptParts(payload.text),
-      agent: payload.agent,
-      context: this.runtimeContext(session),
-    })
+      context,
+    }))
+    let result: Awaited<ReturnType<CloudRuntimeAdapter['promptSession']>>
+    try {
+      result = await this.runtime.promptSession({
+        sessionId: runtimeSessionId,
+        parts: promptParts(payload.text),
+        agent: payload.agent,
+        context,
+        messageId: command.commandId,
+        signal,
+      })
+    } finally {
+      stopAbortHandler()
+    }
+    throwIfAborted(signal)
     for (const event of result?.events || []) {
       await this.applyRuntimeEvent(lease, command.sessionId, event)
     }
@@ -3181,14 +3223,17 @@ export class CloudSessionService {
     )
   }
 
-  private async executeAbortCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+  private async executeAbortCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
+    throwIfAborted(signal)
     const session = await this.requireSessionRecord(command.tenantId, command.sessionId)
     if (session.opencodeSessionId) {
       await this.runtime.abortSession({
         sessionId: session.opencodeSessionId,
         context: this.runtimeContext(session),
+        signal,
       })
     }
+    throwIfAborted(signal)
     await this.store.updateSessionStatus({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
@@ -3206,7 +3251,8 @@ export class CloudSessionService {
     })
   }
 
-  private async executeQuestionReplyCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+  private async executeQuestionReplyCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
+    throwIfAborted(signal)
     const payload = normalizeQuestionReplyPayload(command.payload)
     if (!payload.requestId) throw new Error('Question reply requires a request id.')
     if (!this.runtime.replyToQuestion) throw new Error('OpenCode question replies are not available.')
@@ -3215,7 +3261,9 @@ export class CloudSessionService {
       requestId: payload.requestId,
       answers: payload.answers,
       context: this.runtimeContext(session),
+      signal,
     })
+    throwIfAborted(signal)
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
@@ -3229,7 +3277,8 @@ export class CloudSessionService {
     })
   }
 
-  private async executeQuestionRejectCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+  private async executeQuestionRejectCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
+    throwIfAborted(signal)
     const payload = normalizeQuestionRejectPayload(command.payload)
     if (!payload.requestId) throw new Error('Question rejection requires a request id.')
     if (!this.runtime.rejectQuestion) throw new Error('OpenCode question rejection is not available.')
@@ -3237,7 +3286,9 @@ export class CloudSessionService {
     await this.runtime.rejectQuestion({
       requestId: payload.requestId,
       context: this.runtimeContext(session),
+      signal,
     })
+    throwIfAborted(signal)
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
       sessionId: command.sessionId,
@@ -3251,7 +3302,8 @@ export class CloudSessionService {
     })
   }
 
-  private async executePermissionCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord) {
+  private async executePermissionCommand(lease: WorkerLeaseRecord, command: SessionCommandRecord, signal?: AbortSignal) {
+    throwIfAborted(signal)
     const payload = normalizePermissionPayload(command.payload)
     if (!payload.permissionId) throw new Error('Permission response requires a permission id.')
     if (!this.runtime.respondToPermission) throw new Error('OpenCode permission responses are not available.')
@@ -3264,7 +3316,9 @@ export class CloudSessionService {
       permissionId: payload.permissionId,
       allowed,
       context: this.runtimeContext(session),
+      signal,
     })
+    throwIfAborted(signal)
     await this.appendProjectedEvent({
       tenantId: command.tenantId,
       sessionId: command.sessionId,

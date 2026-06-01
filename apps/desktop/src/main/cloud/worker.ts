@@ -10,6 +10,13 @@ export type CloudWorkerCheckpointHooks = {
   saveAfterCommand?: (lease: WorkerLeaseRecord) => Promise<void>
 }
 
+export class CloudWorkerLeaseLostError extends Error {
+  constructor() {
+    super('Cloud worker lost its session lease during command execution.')
+    this.name = 'CloudWorkerLeaseLostError'
+  }
+}
+
 export class CloudWorker {
   private readonly claimBatchSize = 100
   private readonly leases = new Map<string, WorkerLeaseRecord>()
@@ -74,7 +81,7 @@ export class CloudWorker {
       })
       try {
         const commandLease = lease
-        lease = await this.executeWithLeaseRenewal(commandLease, () => this.service.executeCommand(commandLease, command))
+        lease = await this.executeWithLeaseRenewal(commandLease, (signal) => this.service.executeCommand(commandLease, command, { signal }))
         await this.service.recordManagedExecutionEvent({
           tenantId,
           sessionId,
@@ -243,13 +250,7 @@ export class CloudWorker {
       try {
         const renewed = await this.store.renewSessionLease(existing, new Date(), this.leaseTtlMs)
         this.leases.set(leaseKey, renewed)
-        await recordCloudWorkerMetric(this.observability, {
-          name: 'open_cowork_cloud_worker_lease_renewals_total',
-          workerId: this.workerId,
-          tenantId,
-          sessionId,
-          status: 'ok',
-        })
+        void this.recordRenewalMetric(tenantId, sessionId, 'ok')
         return renewed
       } catch {
         this.leases.delete(leaseKey)
@@ -324,41 +325,42 @@ export class CloudWorker {
     })
   }
 
-  private async executeWithLeaseRenewal<T>(lease: WorkerLeaseRecord, work: () => Promise<T>): Promise<WorkerLeaseRecord> {
+  private async executeWithLeaseRenewal<T>(lease: WorkerLeaseRecord, work: (signal: AbortSignal) => Promise<T>): Promise<WorkerLeaseRecord> {
     let current = lease
     let renewing = false
+    let leaseLostError: CloudWorkerLeaseLostError | null = null
+    const controller = new AbortController()
     const intervalMs = Math.max(1_000, Math.floor(this.leaseTtlMs / 3))
+    const markLeaseLost = () => {
+      if (leaseLostError) return
+      leaseLostError = new CloudWorkerLeaseLostError()
+      this.leases.delete(this.leaseKey(lease.tenantId, lease.sessionId))
+      controller.abort(leaseLostError)
+    }
     const timer = setInterval(() => {
+      if (controller.signal.aborted) return
       if (renewing) return
       renewing = true
-      void Promise.resolve(this.store.renewSessionLease(current, new Date(), this.leaseTtlMs))
+      void Promise.resolve()
+        .then(() => this.store.renewSessionLease(current, new Date(), this.leaseTtlMs))
         .then((renewed) => {
+          if (controller.signal.aborted) return
           current = renewed
           this.leases.set(this.leaseKey(renewed.tenantId, renewed.sessionId), renewed)
-          return recordCloudWorkerMetric(this.observability, {
-            name: 'open_cowork_cloud_worker_lease_renewals_total',
-            workerId: this.workerId,
-            tenantId: renewed.tenantId,
-            sessionId: renewed.sessionId,
-            status: 'ok',
-          })
+          void this.recordRenewalMetric(renewed.tenantId, renewed.sessionId, 'ok')
         })
         .catch((error: unknown) => {
           void error
-          void recordCloudWorkerMetric(this.observability, {
-            name: 'open_cowork_cloud_worker_lease_renewals_total',
-            workerId: this.workerId,
-            tenantId: lease.tenantId,
-            sessionId: lease.sessionId,
-            status: 'failed',
-          })
+          markLeaseLost()
+          void this.recordRenewalMetric(lease.tenantId, lease.sessionId, 'failed')
         })
         .finally(() => {
           renewing = false
         })
     }, intervalMs)
     try {
-      await work()
+      await work(controller.signal)
+      if (leaseLostError) throw leaseLostError
       return current
     } finally {
       clearInterval(timer)
@@ -367,5 +369,19 @@ export class CloudWorker {
 
   private leaseKey(tenantId: string, sessionId: string) {
     return `${tenantId}\0${sessionId}`
+  }
+
+  private async recordRenewalMetric(tenantId: string, sessionId: string, status: 'ok' | 'failed') {
+    try {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_lease_renewals_total',
+        workerId: this.workerId,
+        tenantId,
+        sessionId,
+        status,
+      })
+    } catch {
+      // Lease ownership is authoritative; telemetry failures must not change command execution.
+    }
   }
 }
