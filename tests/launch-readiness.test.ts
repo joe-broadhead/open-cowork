@@ -431,6 +431,67 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
   }
 })
 
+test('launch failover drill records operator hook evidence without executing shell text', async () => {
+  const cloud = await listen((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/healthz') return writeJson(res, 200, { ok: true })
+    if (url.pathname === '/api/metrics') {
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
+      res.end('open_cowork_cloud_command_queue_depth_estimate 0\n')
+      return
+    }
+    return writeJson(res, 404, { error: 'not found' })
+  })
+  const gateway = await listen((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1')
+    if (url.pathname === '/ready') return writeJson(res, 200, { ok: true, status: 'ready' })
+    if (url.pathname === '/metrics') {
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
+      res.end('open_cowork_gateway_delivery_dead_letters_total 0\n')
+      return
+    }
+    return writeJson(res, 404, { error: 'not found' })
+  })
+  const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-failover-drill-'))
+  try {
+    const markerPath = join(outputDir, 'hook-ran')
+    const hookText = `${process.execPath} -e "require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'ran')"`
+    const { stdout } = await execFileAsync(process.execPath, [
+      'scripts/launch-failover-drill.mjs',
+      '--execute-hooks',
+      '--cloud-url',
+      cloud.url,
+      '--gateway-url',
+      gateway.url,
+      '--worker-hook',
+      hookText,
+      '--scheduler-hook',
+      hookText,
+      '--gateway-hook',
+      hookText,
+      '--commit-sha',
+      evidenceCommitSha,
+      '--cloud-image-digest',
+      cloudImageDigest,
+      '--gateway-image-digest',
+      gatewayImageDigest,
+      '--output-dir',
+      outputDir,
+    ], { encoding: 'utf8' })
+    const parsed = JSON.parse(stdout)
+    assert.equal(parsed.ok, true)
+    assert.equal(parsed.report.result, 'pass')
+    assert.deepEqual(parsed.report.hooks.map((hook: { status: string }) => hook.status), ['pass', 'pass', 'pass'])
+    assert.equal(parsed.report.hooks[0].reason, 'operator-confirmed-private-hook-evidence')
+    assert.match(parsed.report.hooks[0].evidence, /hook-ran/)
+    assert.equal(readdirSync(outputDir).includes('hook-ran'), false)
+  } finally {
+    await new Promise<void>((resolve) => cloud.server.close(() => resolve()))
+    await new Promise<void>((resolve) => gateway.server.close(() => resolve()))
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
 test('launch readiness plan defaults to the local self-host beta tier', async () => {
   const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-launch-plan-'))
   try {

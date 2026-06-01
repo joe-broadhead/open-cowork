@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -136,7 +137,7 @@ function runGcsSmoke(project) {
   }
   const prefix = (argOrEnv('prefix', 'OPEN_COWORK_GCP_SMOKE_PREFIX') || 'open-cowork-smoke')
     .replace(/^\/+|\/+$/g, '')
-  const key = `${prefix}/smoke-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
+  const key = `${prefix}/smoke-${Date.now()}-${randomBytes(8).toString('hex')}.txt`
   const uri = `gs://${bucket}/${key}`
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gcp-smoke-'))
   const input = join(tempRoot, 'input.txt')

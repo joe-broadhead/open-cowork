@@ -64,7 +64,7 @@ function parseArgs(argv) {
     } else if (arg === '--unredacted') {
       args.redacted = false
     } else if (arg === '--help' || arg === '-h') {
-      process.stdout.write(`Usage: node scripts/launch-failover-drill.mjs [--cloud-url url] [--gateway-url url] [--worker-hook command] [--scheduler-hook command] [--gateway-hook command] [--execute-hooks] [--output-dir dir]\n`)
+      process.stdout.write(`Usage: node scripts/launch-failover-drill.mjs [--cloud-url url] [--gateway-url url] [--worker-hook evidence] [--scheduler-hook evidence] [--gateway-hook evidence] [--execute-hooks] [--output-dir dir]\n`)
       process.exit(0)
     } else {
       throw new Error(`Unknown argument: ${arg}`)
@@ -137,26 +137,14 @@ async function probe(name, url, token, path, redacted, dryRun) {
   }
 }
 
-function runHook(name, command, executeHooks, redacted, dryRun) {
-  if (!command) return { name, status: dryRun ? 'skipped' : 'fail', reason: 'hook-not-configured' }
-  if (dryRun) return { name, status: 'dry-run', command: 'configured-but-not-executed' }
-  if (!executeHooks) return { name, status: 'fail', reason: 'hook-execution-not-enabled' }
-  try {
-    const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh'
-    const shellArgs = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-lc', command]
-    execFileSync(shell, shellArgs, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120_000,
-    })
-    return { name, status: 'pass' }
-  } catch (error) {
-    return {
-      name,
-      status: 'fail',
-      error: redactError(error, redacted),
-    }
+function runHook(name, evidence, executeHooks, dryRun) {
+  if (!evidence) return { name, status: dryRun ? 'skipped' : 'fail', reason: 'hook-not-configured' }
+  const evidenceSummary = safeEvidenceText(evidence)
+  if (dryRun) return { name, status: 'dry-run', evidence: evidenceSummary, reason: 'configured-but-not-confirmed' }
+  if (!executeHooks) {
+    return { name, status: 'fail', evidence: evidenceSummary, reason: 'operator-hook-evidence-not-confirmed' }
   }
+  return { name, status: 'pass', evidence: evidenceSummary, reason: 'operator-confirmed-private-hook-evidence' }
 }
 
 const args = parseArgs(process.argv.slice(2))
@@ -167,9 +155,9 @@ const preflight = [
   await probe('gateway-ready-before', args.gatewayUrl, args.gatewayAdminToken, '/ready', args.redacted, args.dryRun),
 ]
 const hooks = [
-  runHook('worker-failover-hook', args.workerHook, args.executeHooks, args.redacted, args.dryRun),
-  runHook('scheduler-failover-hook', args.schedulerHook, args.executeHooks, args.redacted, args.dryRun),
-  runHook('gateway-failover-hook', args.gatewayHook, args.executeHooks, args.redacted, args.dryRun),
+  runHook('worker-failover-hook', args.workerHook, args.executeHooks, args.dryRun),
+  runHook('scheduler-failover-hook', args.schedulerHook, args.executeHooks, args.dryRun),
+  runHook('gateway-failover-hook', args.gatewayHook, args.executeHooks, args.dryRun),
 ]
 const postflight = [
   await probe('cloud-health-after', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
@@ -227,7 +215,7 @@ const report = {
   hooks,
   postflight,
   notes: [
-    'Production failover evidence requires configured Cloud/Gateway URLs, configured worker/scheduler/gateway hooks, and --execute-hooks or OPEN_COWORK_FAILOVER_EXECUTE_HOOKS=true.',
+    'Production failover evidence requires configured Cloud/Gateway URLs, private worker/scheduler/gateway operator hook evidence, and --execute-hooks or OPEN_COWORK_FAILOVER_EXECUTE_HOOKS=true to confirm that the private hooks were executed outside this public script.',
     'Use --dry-run only for local contract checks; dry-run output is not launch evidence.',
     'Store unredacted output in a private operations repository. Commit only redacted summaries or checksums to public artifacts.',
   ],
