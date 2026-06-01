@@ -187,6 +187,12 @@ test('workspace gateway marks local desktop-only capabilities as local supported
   assert.equal(supportStatus(support, 'localStdioMcps').status, 'supported')
   assert.equal(supportStatus(support, 'machineRuntimeConfig').status, 'supported')
   assert.equal(supportStatus(support, 'localFiles').verdict?.allowed, true)
+  assert.equal(supportStatus(support, 'coordination.projects').status, 'deferred')
+  assert.equal(supportStatus(support, 'coordination.tasks').status, 'deferred')
+  assert.equal(supportStatus(support, 'coordination.runs').status, 'supported')
+  assert.equal(supportStatus(support, 'coordination.schedules').status, 'supported')
+  assert.equal(supportStatus(support, 'coordination.watches').status, 'not_supported')
+  assert.equal(supportStatus(support, 'coordination.delegation').status, 'supported')
 })
 
 test('workspace gateway registers cloud connections without enabling unauthenticated execution', async () => {

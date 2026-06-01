@@ -113,6 +113,7 @@ nav:
   - Build & Extend:
       - Architecture: architecture.md
       - Product Contract: product-contract.md
+      - Coordination Model: coordination-model.md
       - Desktop Outbound Pairing: desktop-outbound-pairing.md
       - Cloud Web Workbench: cloud-web-workbench.md
       - Cloud Client SDK: cloud-client.md

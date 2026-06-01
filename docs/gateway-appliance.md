@@ -15,6 +15,13 @@ parsing, provider-specific rendering, approvals/questions UX, and delivery
 retries. Cloud owns tenancy, sessions, commands, projections, workflows,
 artifacts, and OpenCode execution.
 
+Cloud Channel Gateway participates in the shared
+[Coordination Model](coordination-model.md) only through Cloud-owned state:
+Cloud workflows create Runs, Cloud schedules are read by the Gateway for
+delivery context, channel delivery subscriptions are Watches, and channel
+approval/question interactions render Cloud-owned Questions and Permissions.
+It must not create Gateway-owned Projects, Tasks, or Delegations in this mode.
+
 Standalone Team Gateway is a separate product mode. It may own a private
 OpenCode runtime and Gateway Postgres, but it is implemented by
 `apps/standalone-gateway`, not by `apps/gateway`, and must not be enabled

@@ -1,6 +1,8 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import {
   WORKSPACE_SUPPORT_APIS,
+  coordinationCapabilityFromWorkspaceApi,
+  coordinationCapabilityStatus,
   workspaceApiSupportContextForAuthority,
 } from '@open-cowork/shared'
 import type {
@@ -628,13 +630,7 @@ export class WorkspaceGateway {
     if (workspace.kind === 'local') {
       return WORKSPACE_SUPPORT_APIS.map((api) => ({
         api,
-        status: 'supported',
-        verdict: { allowed: true, reason: null },
-        context: workspaceApiSupportContextForAuthority('desktop_local', {
-          surface: 'desktop_local',
-          onlineState: workspace.status,
-          status: 'supported',
-        }),
+        ...this.localSupportForApi(api, workspace.status),
       }))
     }
     if (workspace.kind === 'gateway') {
@@ -713,6 +709,12 @@ export class WorkspaceGateway {
       supportedIf('threads.smartFilters', feature('threadIndex'), 'Cloud thread index is disabled by this workspace policy.'),
       supportedIf('workflows.list', feature('workflows'), 'Cloud workflows are disabled by this workspace policy.'),
       supportedIf('workflows.run', feature('workflows'), 'Cloud workflows are disabled by this workspace policy.'),
+      cloudSupport('coordination.projects', 'deferred', 'Cloud project coordination is deferred until the shared coordination control plane is available.'),
+      cloudSupport('coordination.tasks', 'deferred', 'Cloud task coordination is deferred until the shared coordination control plane is available.'),
+      supportedIf('coordination.runs', feature('workflows'), 'Cloud coordination runs are disabled by this workspace policy.'),
+      supportedIf('coordination.schedules', feature('workflows'), 'Cloud schedules are disabled by this workspace policy.'),
+      cloudSupport('coordination.watches', 'deferred', 'Cloud watches are deferred until the shared coordination delivery model is available.'),
+      cloudSupport('coordination.delegation', 'deferred', 'Cloud delegation coordination is deferred until the shared coordination control plane is available.'),
       supportedIf('artifacts.list', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.upload', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.download', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
@@ -726,6 +728,43 @@ export class WorkspaceGateway {
       cloudSupport('localStdioMcps', 'not_supported', 'Cloud workspaces do not execute arbitrary local stdio MCPs.'),
       cloudSupport('machineRuntimeConfig', 'not_supported', 'Cloud workspaces do not use machine-native runtime config.'),
     ]
+  }
+
+  private localSupportForApi(api: string, workspaceStatus: WorkspaceStatus): Omit<WorkspaceApiSupport, 'api'> {
+    const capability = coordinationCapabilityFromWorkspaceApi(api)
+    const status = capability ? coordinationCapabilityStatus('desktop_local', capability) : 'supported'
+    const reason = this.localSupportReason(api, status)
+    return {
+      status,
+      verdict: {
+        allowed: status === 'supported' || status === 'read_only',
+        reason,
+        ...(reason ? { policyCode: status } : {}),
+      },
+      context: workspaceApiSupportContextForAuthority('desktop_local', {
+        surface: 'desktop_local',
+        onlineState: workspaceStatus,
+        status,
+        ...(reason
+          ? {
+              blockedReason: {
+                allowed: status === 'supported' || status === 'read_only',
+                reason,
+                policyCode: status,
+              },
+            }
+          : {}),
+      }),
+    }
+  }
+
+  private localSupportReason(api: string, status: WorkspaceApiSupportStatus): string | null {
+    if (status === 'supported' || status === 'read_only') return null
+    if (api === 'coordination.projects') return 'Desktop project coordination is deferred until the shared coordination surface is implemented.'
+    if (api === 'coordination.tasks') return 'Desktop task coordination is deferred until the shared coordination surface is implemented.'
+    if (api === 'coordination.watches') return 'Desktop Local does not support durable watch subscriptions.'
+    if (status === 'deferred') return 'This Desktop Local capability is deferred until its product surface is implemented.'
+    return 'This Desktop Local capability is not supported.'
   }
 
   private remoteSupportMatrix(input: {
@@ -793,6 +832,12 @@ export class WorkspaceGateway {
       remoteSupport('threads.smartFilters', 'deferred', input.deferredReason),
       remoteSupport('workflows.list', 'deferred', input.workflowReason),
       remoteSupport('workflows.run', 'deferred', input.workflowReason),
+      remoteSupport('coordination.projects', 'deferred', input.deferredReason),
+      remoteSupport('coordination.tasks', 'deferred', input.deferredReason),
+      remoteSupport('coordination.runs', 'deferred', input.deferredReason),
+      remoteSupport('coordination.schedules', 'deferred', input.workflowReason),
+      remoteSupport('coordination.watches', 'deferred', input.deferredReason),
+      remoteSupport('coordination.delegation', 'deferred', input.deferredReason),
       remoteSupport('artifacts.list', 'deferred', input.artifactReason, {
         artifactBody: input.authority === 'gateway_standalone' ? 'gateway_artifact_store' : 'redacted_metadata_only',
         artifactReveal: 'none',

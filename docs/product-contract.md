@@ -269,6 +269,45 @@ Artifact ownership follows the workspace:
 Cloud artifact metadata may sync. Artifact bodies are fetched only after an
 explicit user or channel action.
 
+## Coordination Model
+
+The shared coordination vocabulary is defined in
+[Coordination Model](coordination-model.md) and typed in
+`packages/shared/src/coordination.ts`.
+
+Open Cowork uses one product model across Desktop, Cloud, Cloud Channel
+Gateway, Standalone Team Gateway, and Paired Desktop:
+
+| Noun | Product meaning |
+|---|---|
+| Project | Durable grouping of related team work. It is not a local host path or Cloud project source. |
+| Task | Durable user/team work item. `CoordinationTask` is not the same object as session `TaskRun`. |
+| Workflow | Saved repeatable automation definition. |
+| Run | Authority-scoped execution attempt for a workflow, task, background prompt, delegation, schedule, or watch trigger. |
+| Schedule | Time trigger that starts runs. |
+| Watch | Delivery subscription for progress from a conversation, project, task, workflow, run, or session. |
+| Delegation | Product-layer relationship from parent work to OpenCode-native child sessions or explicit managed delegate sessions. |
+| Artifact | Durable output or input linked to project, task, workflow, run, or session. |
+| Question | Human clarification request from OpenCode or product coordination tools. |
+| Permission | Human authorization request for an OpenCode tool/runtime action. |
+
+Support is capability-scoped by authority:
+
+| Authority | Projects | Tasks | Workflows | Runs | Schedules | Watches | Delegation |
+|---|---|---|---|---|---|---|---|
+| Desktop Local | `deferred` | `deferred` | `supported` | `supported` | `supported` | `not_supported` | `supported` |
+| Cloud Worker | `deferred` | `deferred` | `supported` | `supported` | `supported` | `deferred` | `deferred` |
+| Cloud Channel Gateway | `deferred` | `deferred` | `supported` | `supported` | `read_only` | `supported` | `deferred` |
+| Standalone Team Gateway | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` | `supported` |
+| Paired Desktop | `read_only` | `read_only` | `deferred` | `read_only` | `deferred` | `deferred` | `read_only` |
+
+Gateway prototype terms map into this model: manager teams are
+Project/Task/Delegation, cron jobs are Schedule plus Run, background jobs are
+Runs, native delegation hints are Delegations, and `/watch` subscriptions are
+Watches. Authority-specific stores may keep their local table names, but
+public docs, APIs, dashboards, and cross-authority bridges should use the
+shared nouns.
+
 ## Workflows
 
 Workflows are an Open Cowork control-plane layer around OpenCode-native

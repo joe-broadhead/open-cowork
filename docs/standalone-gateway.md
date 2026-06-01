@@ -24,6 +24,15 @@ Standalone Gateway owns:
 - scheduler/background jobs, team tasks, watches, backup, retention, doctor,
   smoke, and metrics surfaces
 
+Those Gateway-owned surfaces use the shared
+[Coordination Model](coordination-model.md): team projects/tasks map to
+Projects and Tasks, background jobs map to Runs, cron/scheduled jobs map to
+Schedules plus Runs, channel subscriptions map to Watches, native delegation
+hints and explicit delegate sessions map to Delegations, and uploads/diffs/logs
+map to Artifacts. Gateway table names may stay Gateway-specific internally, but
+operator docs, dashboards, and future Desktop/Cloud bridges should use the
+shared nouns.
+
 Standalone Gateway must keep OpenCode private. It refuses public OpenCode URLs
 and wildcard OpenCode bind addresses. Do not expose the OpenCode port through a
 public reverse proxy.

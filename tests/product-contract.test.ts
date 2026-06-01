@@ -36,6 +36,7 @@ test('product contract is the canonical linked multi-authority contract', () => 
     'Active Workspace And Routing',
     'Cloud Offline And Degraded Behavior',
     'Artifacts',
+    'Coordination Model',
     'Workflows',
     'Settings And Custom Content',
     'Local-To-Cloud Copy And Import',
@@ -45,6 +46,7 @@ test('product contract is the canonical linked multi-authority contract', () => 
     'Standalone Team Gateway is a separate Gateway product mode and execution authority',
     'Paired Desktop must not open a public Desktop or OpenCode port',
     'Local Desktop threads, host paths, local stdio MCPs, machine-native runtime',
+    'CoordinationTask` is not the same object as session `TaskRun`',
   ]) {
     assert.match(productContractFlat, new RegExp(escapeRegex(phrase)), `Product Contract must document ${phrase}`)
   }
@@ -54,6 +56,7 @@ test('product contract is the canonical linked multi-authority contract', () => 
     'docs/open-cowork-cloud.md',
     'docs/downstream.md',
     'docs/roadmap.md',
+    'docs/coordination-model.md',
     'mkdocs.yml',
   ]
   for (const relativePath of linkedDocs) {
