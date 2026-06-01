@@ -117,8 +117,8 @@ export function SettingsPanel({
   useEffect(() => {
     // Fast close-reopen cycles can land these resolves into an unmounted
     // component; guard with a cancelled flag so we don't setState on a
-    // disposed instance. The default settings load is masked; the Models
-    // tab fetches only the active provider's real credential bag below.
+    // disposed instance. The default settings load is masked; the Models tab
+    // fetches only the active provider's descriptor-aware masked bag below.
     let cancelled = false
     Promise.all([
       activeWorkspaceIsLocal ? window.coworkApi.settings.get() : window.coworkApi.settings.get(workspaceOptions),

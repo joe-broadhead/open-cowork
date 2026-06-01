@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 // Smoke: settings are the primary persistence surface for downstream
@@ -15,7 +17,7 @@ import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 //   - locale persistence regressing from `setLocale`
 
 test('settings round-trip survives a full reload through safeStorage + disk', async () => {
-  const { app, page, cleanup } = await launchSmokeApp()
+  const { app, page, paths, cleanup } = await launchSmokeApp()
   try {
     await waitForAppShell(page)
 
@@ -53,16 +55,36 @@ test('settings round-trip survives a full reload through safeStorage + disk', as
     assert.equal(afterReload.selectedProviderId, 'openrouter')
     assert.equal(afterReload.selectedModelId, 'anthropic/claude-opus-4')
 
-    // Credentials come back through a separate IPC so the plain
-    // settings:get doesn't leak them to every renderer consumer.
+    // Credential-editor IPC returns descriptor-aware masks, while the
+    // encrypted settings file still stores the plaintext for runtime use.
     const providerCredentials = await page.evaluate(async () => window.coworkApi.settings.getProviderCredentials('openrouter', {
       workspaceId: 'local',
       purpose: 'credential_editor',
     }))
     assert.equal(
       providerCredentials.apiKey,
+      '••••••••',
+      'credential editor IPC must not expose the stored provider credential plaintext',
+    )
+
+    const encryptedSettingsPath = join(paths.dataRoot, 'settings.enc')
+    const plaintextSettingsPath = join(paths.dataRoot, 'settings.json')
+    const persistedSettingsJson = existsSync(encryptedSettingsPath)
+      ? await app.evaluate(({ safeStorage }, bytes: number[]) => {
+          if (!safeStorage?.decryptString) throw new Error('safeStorage.decryptString is unavailable')
+          return safeStorage.decryptString(Buffer.from(bytes))
+        }, Array.from(readFileSync(encryptedSettingsPath)))
+      : existsSync(plaintextSettingsPath)
+        ? readFileSync(plaintextSettingsPath, 'utf8')
+        : null
+    if (persistedSettingsJson === null) assert.fail('settings must be persisted to disk')
+    const persisted = JSON.parse(persistedSettingsJson) as {
+      providerCredentials?: Record<string, Record<string, string>>
+    }
+    assert.equal(
+      persisted.providerCredentials?.openrouter?.apiKey,
       'roundtrip-key',
-      'safeStorage-encrypted credential must decrypt back to the original value',
+      'stored credential must read back to the original value from persisted settings',
     )
   } finally {
     await cleanup()

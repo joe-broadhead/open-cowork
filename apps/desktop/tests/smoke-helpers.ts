@@ -38,6 +38,7 @@ export async function acceptNextNativeConfirmation(app: ElectronApplication) {
 export interface SmokeHarness {
   app: ElectronApplication
   page: Page
+  paths: SmokePaths
   cleanup: () => Promise<void>
 }
 
@@ -808,6 +809,7 @@ export async function launchSmokeApp(options?: LaunchSmokeAppOptions): Promise<S
   return {
     app: session.app,
     page: session.page,
+    paths,
     async cleanup() {
       await session.close()
       cleanupSmokePaths(paths)

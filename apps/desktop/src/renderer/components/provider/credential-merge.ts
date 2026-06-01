@@ -1,6 +1,14 @@
 type ProviderCredentialBag = Record<string, string>
 
-const CREDENTIAL_MASK = '••••••••'
+export const CREDENTIAL_MASK = '••••••••'
+
+export function isCredentialMask(value: string | null | undefined) {
+  return value === CREDENTIAL_MASK
+}
+
+export function credentialFieldIsSecret(credential: { secret?: boolean }) {
+  return credential.secret !== false
+}
 
 export function mergeFetchedProviderCredentials(
   current: ProviderCredentialBag | undefined,

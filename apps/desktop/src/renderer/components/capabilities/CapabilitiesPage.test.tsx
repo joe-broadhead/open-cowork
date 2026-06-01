@@ -481,6 +481,7 @@ describe('CapabilitiesPage', () => {
           label: 'Account region',
           description: 'Region slug used by the chart API.',
           placeholder: 'us',
+          secret: false,
         },
       ],
     }
@@ -527,6 +528,7 @@ describe('CapabilitiesPage', () => {
             { label: 'API key', value: 'api_key', hint: 'Static API credentials' },
             { label: 'SSO', value: 'sso', hint: 'Browser-based sign in' },
           ],
+          secret: false,
           required: true,
         },
         {
@@ -541,6 +543,7 @@ describe('CapabilitiesPage', () => {
           key: 'ssoUser',
           label: 'SSO email',
           description: 'Email address for single sign-on.',
+          secret: false,
           required: true,
           when: { key: 'authMethod', op: 'eq', value: 'sso' },
         },
