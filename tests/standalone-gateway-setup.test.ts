@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, statSync, rmSync } from 'node:fs'
+import { closeSync, fstatSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -26,8 +26,14 @@ test('standalone gateway setup writes deployable env without echoing secrets', (
     assert.match(result.stdout, /pnpm --filter @open-cowork\/standalone-gateway doctor/)
     assert.doesNotMatch(result.stdout, /gateway-admin-token/)
     assert.doesNotMatch(result.stdout, /telegram-bot-token/)
-    assert.equal((statSync(output).mode & 0o777), 0o600)
-    const env = readFileSync(output, 'utf8')
+    const outputFd = openSync(output, 'r')
+    let env = ''
+    try {
+      assert.equal((fstatSync(outputFd).mode & 0o777), 0o600)
+      env = readFileSync(outputFd, 'utf8')
+    } finally {
+      closeSync(outputFd)
+    }
     assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=gateway-admin-token/)
     assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN=telegram-bot-token/)
   } finally {
