@@ -15,6 +15,28 @@ import {
   normalizeCloudProjectSource,
   type CloudProjectSource,
 } from './project-source.js'
+import type { CloudSessionProjectionEventRecord } from './cloud-session-contract.js'
+export {
+  CLOUD_PROJECTED_SESSION_EVENT_TYPES,
+  CLOUD_SESSION_EVENT_CONTRACT,
+  CLOUD_SESSION_EVENT_TYPES,
+  CLOUD_SESSION_PROJECTION_CONTRACT_VERSION,
+  cloudSessionEventContractFor,
+  cloudSessionEventHasFacet,
+  cloudSessionEventIsChannelRenderable,
+  isCloudProjectedSessionEventType,
+  isCloudSessionEventType,
+} from './cloud-session-contract.js'
+export type {
+  CloudProjectedSessionEventType,
+  CloudSessionEventContractEntry,
+  CloudSessionEventRecord,
+  CloudSessionEventType,
+  CloudSessionProjectionEventRecord,
+  CloudSessionProjectionConsumer,
+  CloudSessionProjectionFacet,
+  CloudSessionProjectionProducer,
+} from './cloud-session-contract.js'
 
 export type CloudSessionMessage = {
   id: string
@@ -55,47 +77,6 @@ export type CloudResolvedQuestion = {
   resolvedAt: string
 }
 
-export const CLOUD_PROJECTED_SESSION_EVENT_TYPES = [
-  'session.created',
-  'session.imported',
-  'session.project_source.bound',
-  'prompt.submitted',
-  'assistant.message',
-  'tool.call',
-  'task.run',
-  'permission.requested',
-  'permission.resolved',
-  'question.asked',
-  'question.resolved',
-  'todos.updated',
-  'cost.updated',
-  'artifact.created',
-  'session.status',
-  'session.idle',
-  'session.aborted',
-  'runtime.error',
-] as const
-
-export const CLOUD_SESSION_EVENT_TYPES = [
-  ...CLOUD_PROJECTED_SESSION_EVENT_TYPES,
-  'snapshot.required',
-  'channel.delivery',
-] as const
-
-export type CloudProjectedSessionEventType = typeof CLOUD_PROJECTED_SESSION_EVENT_TYPES[number]
-export type CloudSessionEventType = typeof CLOUD_SESSION_EVENT_TYPES[number]
-
-const CLOUD_PROJECTED_SESSION_EVENT_TYPE_SET = new Set<string>(CLOUD_PROJECTED_SESSION_EVENT_TYPES)
-const CLOUD_SESSION_EVENT_TYPE_SET = new Set<string>(CLOUD_SESSION_EVENT_TYPES)
-
-export function isCloudProjectedSessionEventType(value: string): value is CloudProjectedSessionEventType {
-  return CLOUD_PROJECTED_SESSION_EVENT_TYPE_SET.has(value)
-}
-
-export function isCloudSessionEventType(value: string): value is CloudSessionEventType {
-  return CLOUD_SESSION_EVENT_TYPE_SET.has(value)
-}
-
 export type CloudSessionProjectionView = {
   sessionId: string
   title: string
@@ -131,12 +112,7 @@ export type CloudProjectionSessionRecord = {
   updatedAt: string
 }
 
-export type CloudProjectionEventRecord = {
-  sequence: number
-  type: string
-  payload: Record<string, unknown>
-  createdAt: string
-}
+export type CloudProjectionEventRecord = CloudSessionProjectionEventRecord<string>
 
 export type CloudSessionProjectionRecord = {
   tenantId?: string
@@ -467,10 +443,9 @@ function addMessage(
   view: CloudSessionProjectionView,
   message: CloudSessionMessage,
 ): CloudSessionProjectionView {
-  if (view.messages.some((entry) => entry.id === message.id)) return view
   return {
     ...view,
-    messages: [...view.messages, message],
+    messages: upsertById(view.messages, message),
   }
 }
 
