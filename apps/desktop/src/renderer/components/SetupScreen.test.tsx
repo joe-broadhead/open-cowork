@@ -99,6 +99,31 @@ beforeEach(() => {
 })
 
 describe('SetupScreen', () => {
+  it('shows topology choices before provider setup', async () => {
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({ apiKey: 'sk-or-scoped' })),
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('button', { name: /Run Desktop locally/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Deploy Gateway/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Connect Cloud/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Pair Desktop/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Connect all surfaces/ })).toBeTruthy()
+  })
+
   it('loads selected-provider credentials through the scoped credential IPC', async () => {
     const get = vi.fn(async () => settings())
     const getProviderCredentials = vi.fn(async () => ({ apiKey: 'sk-or-scoped' }))

@@ -37,6 +37,12 @@ durability, backup/restore, redaction, and fail-closed checks for
 `desktop-local`, `desktop-pairing`, `standalone-gateway`, `cloud-worker`,
 `cloud-channel-gateway`, `cloud-gateway-edge`, and `full-hybrid`.
 
+Use [Setup and Health Center](setup-and-health-center.md) as the operator-facing
+bridge between topology selection and rollout evidence. Desktop exposes the same
+authority-aware states for local runtime readiness, workspace support, Cloud
+auth/sync, Gateway doctor/smoke checks, database migration posture, object store
+posture, backup posture, and pairing freshness.
+
 Production Cloud deployments should run these processes separately:
 
 - cloud `web`: stateless HTTP, browser dashboard, API, SSE, auth, and durable

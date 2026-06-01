@@ -16,6 +16,7 @@ const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((
 const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
+const HealthCenterPage = lazy(() => import('./components/health/HealthCenterPage').then((m) => ({ default: m.HealthCenterPage })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
@@ -512,6 +513,11 @@ export function App() {
                     setView('agents')
                   }}
                 />
+              </Suspense>
+            )}
+            {view === 'health' && (
+              <Suspense fallback={null}>
+                <HealthCenterPage />
               </Suspense>
             )}
           </ViewErrorBoundary>

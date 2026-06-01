@@ -56,6 +56,8 @@ gh attestation verify ./Open-Cowork-<version>-arm64.dmg --repo joe-broadhead/ope
 ## First run
 
 On first launch, Open Cowork asks you to choose:
+- a setup path: local Desktop, standalone Gateway, Cloud connection, Desktop
+  pairing, or a full hybrid deployment
 - a provider
 - a model
 - any required provider credentials
@@ -64,6 +66,10 @@ On first launch, Open Cowork asks you to choose:
   settings
 
 The app then boots the OpenCode runtime with your selected configuration.
+The path selector is informational and authority-aware: it does not upload local
+threads, local files, or secrets. Use the Desktop
+[Health Center](setup-and-health-center.md) after setup to verify runtime,
+workspace, Cloud, Gateway, and pairing readiness.
 By default this is an isolated in-app OpenCode config: Cowork-managed
 agents, skills, MCPs, provider auth, and runtime state live under the
 app runtime home, not your normal machine OpenCode install. The

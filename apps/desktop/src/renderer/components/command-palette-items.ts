@@ -11,7 +11,7 @@ import type {
 import { formatAgentLabel } from '../helpers/agent-label.ts'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities'
+export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -201,6 +201,15 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       hint: 'Cmd + Shift + C',
       keywords: 'capabilities tools skills mcps',
       run: () => onNavigate('capabilities'),
+    },
+    {
+      id: 'nav:health',
+      title: 'Health Center',
+      subtitle: 'Check setup paths, execution authorities, sync, and operator readiness.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'health setup onboarding readiness doctor smoke workspace authority',
+      run: () => onNavigate('health'),
     },
     {
       id: 'nav:settings',
