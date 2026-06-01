@@ -87,7 +87,6 @@ type ManagedWorkerActorInput = {
 export type CreateManagedWorkerPoolInput = {
   poolId?: string
   orgId: string
-  tenantId?: string | null
   name: string
   mode: ManagedWorkerPoolMode
   status?: ManagedWorkerPoolStatus
@@ -116,7 +115,6 @@ export type RegisterManagedWorkerInput = {
   workerId?: string
   orgId: string
   poolId: string
-  tenantId?: string | null
   displayName: string
   status?: ManagedWorkerStatus
   version?: string | null

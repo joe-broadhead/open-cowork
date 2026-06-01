@@ -154,22 +154,25 @@ function runControlPlaneDomainContracts(
       const workerPool = await store.createManagedWorkerPool({
         poolId: `${prefix}-pool`,
         orgId: org.orgId,
-        tenantId,
+        tenantId: `${prefix}-spoofed-pool-tenant`,
         name: 'Managed pool',
         mode: 'self_hosted',
         capabilities: { profiles: ['default'] },
         actor: { actorType: 'user', actorId: accountId, accountId },
-      })
+      } as Parameters<typeof store.createManagedWorkerPool>[0] & { tenantId: string })
       assert.equal(workerPool.status, 'active')
+      assert.equal(workerPool.tenantId, tenantId)
       const managedWorker = await store.registerManagedWorker({
         workerId: `${prefix}-managed-worker`,
         orgId: org.orgId,
         poolId: workerPool.poolId,
+        tenantId: `${prefix}-spoofed-worker-tenant`,
         displayName: 'Managed worker',
         capabilities: { runtime: 'opencode' },
         actor: { actorType: 'user', actorId: accountId, accountId },
-      })
+      } as Parameters<typeof store.registerManagedWorker>[0] & { tenantId: string })
       assert.equal(managedWorker.status, 'pending')
+      assert.equal(managedWorker.tenantId, tenantId)
       await store.updateManagedWorkerStatus({
         orgId: org.orgId,
         workerId: managedWorker.workerId,
