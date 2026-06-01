@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type {
   WorkflowDraft,
   WorkflowRun,
@@ -1347,12 +1347,6 @@ function stableId(prefix: string, ...parts: string[]) {
 
 function createWorkClaimToken(tenantId: string, workId: string, claimedBy: string) {
   return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
-}
-
-function constantTimeStringEquals(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
 }
 
 function stableJson(value: unknown): string {
