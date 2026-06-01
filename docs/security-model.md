@@ -273,6 +273,16 @@ own Cloud control plane. Customer-hosted workers connected to a separate
 managed SaaS control plane are intentionally deferred until a separate trust
 review exists.
 
+Standalone Gateway can optionally register with Cloud as an external workspace
+or as trusted edge capacity only through the
+[Cloud Gateway Registration](cloud-gateway-registration.md) contract.
+`external_workspace` registration does not make Cloud the source of truth for
+Gateway sessions. `edge_worker` registration keeps Cloud as the source of truth
+for Cloud-owned work and requires managed-worker lease-token fencing on every
+event, projection, artifact, checkpoint, usage, and status write. Customer-hosted
+Gateway edge execution against a separate managed SaaS Cloud is deferred and
+must fail closed.
+
 Worker credentials are scoped, expiring, hash-stored after issuance, rotatable,
 and revocable. BYOK plaintext reveal is worker-role-only and
 tenant/provider/session bounded. Provider keys enter OpenCode through runtime

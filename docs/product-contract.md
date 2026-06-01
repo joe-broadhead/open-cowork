@@ -145,11 +145,29 @@ Standalone Team Gateway owns:
 - Gateway sessions, events, projections, workflows, teams, watches, schedules,
   artifacts, approvals, questions, audit, and diagnostics
 
-Standalone Team Gateway must keep OpenCode private and must not expose a public OpenCode port. Any optional Cloud connection is an explicit registration,
-sync, or edge-capacity contract rather than implicit database merging.
+Standalone Team Gateway must keep OpenCode private and must not expose a
+public OpenCode port. Any optional Cloud connection is an explicit
+registration, sync, or edge-capacity contract rather than implicit database
+merging.
 
-Hybrid Gateway is reserved for a later registered-edge design. It must not be
-treated as Cloud Channel Gateway or Standalone Team Gateway by default.
+Hybrid Gateway is defined by the
+[Cloud Gateway Registration](cloud-gateway-registration.md) contract. It must
+not be treated as Cloud Channel Gateway or Standalone Team Gateway by default.
+The supported registration kinds are `external_workspace`, `edge_worker`, and
+`external_workspace_edge_worker`:
+
+- `external_workspace` makes Cloud aware of a redacted Gateway workspace but
+  leaves Gateway as the source of truth for Gateway sessions, workflows,
+  artifacts, approvals, questions, and audit.
+- `edge_worker` lets trusted Gateway capacity run eligible Cloud-owned work
+  through managed-worker leases; Cloud remains source of truth for Cloud
+  sessions, events, projections, artifacts, checkpoints, usage, and audit.
+- `external_workspace_edge_worker` enables both lanes while keeping ownership
+  split by work owner.
+
+Customer-hosted Gateway edge execution against a separate managed SaaS Cloud is
+`customer_hosted_managed_saas_deferred`. It must fail closed until a separate
+trust, update, networking, data-residency, and liability review exists.
 
 Desktop may register a Standalone Gateway workspace using a Gateway URL plus a
 stored token. In the current Desktop implementation this is a connection,
