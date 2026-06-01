@@ -15,6 +15,11 @@
       "redacted summary",
       "checksum of private artifact",
       "command name without secret arguments",
+      "commit SHA",
+      "image digests",
+      "sanitized environment profile",
+      "dates and duration",
+      "pass/fail or go/no-go status",
       "follow-up issue id"
     ],
     "forbiddenPublicFields": [
@@ -31,6 +36,16 @@
     "private-pass",
     "private-fail",
     "not-applicable-with-rationale"
+  ],
+  "requiredReportFields": [
+    "command",
+    "commitSha",
+    "imageDigests",
+    "sanitizedEnvironmentProfile",
+    "startedAt",
+    "finishedAt",
+    "durationMs",
+    "status"
   ],
   "requiredEvidence": [
     {

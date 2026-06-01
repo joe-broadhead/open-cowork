@@ -73,6 +73,9 @@ export OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true
 export OPEN_COWORK_LOAD_INCLUDE_SSE=true
 export OPEN_COWORK_LOAD_OPERATOR_CHECKS=true
 export OPEN_COWORK_LOAD_STRICT=true
+export OPEN_COWORK_EVIDENCE_COMMIT_SHA="$(git rev-parse HEAD)"
+export OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST=sha256:REPLACE_WITH_CLOUD_IMAGE_DIGEST
+export OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST=sha256:REPLACE_WITH_GATEWAY_IMAGE_DIGEST
 ```
 
 Optional knobs:
@@ -89,6 +92,9 @@ Optional knobs:
 - `OPEN_COWORK_LOAD_EXPECT_QUOTA_REJECTIONS=true` for a deliberate
   quota-pressure run after the ordinary zero-unexpected-rejection gate passes
 - `OPEN_COWORK_LOAD_OUTPUT_DIR=.open-cowork-test/launch-readiness`
+- `OPEN_COWORK_EVIDENCE_COMMIT_SHA=...`
+- `OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST=sha256:...`
+- `OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST=sha256:...`
 
 Use short-lived scoped operator tokens. Never paste BYOK keys, OAuth refresh
 tokens, cookie secrets, gateway service tokens, provider webhook secrets, or
@@ -143,7 +149,8 @@ The harness checks:
 
 The output is a JSON report plus a Markdown report under
 `.open-cowork-test/launch-readiness/` unless `OPEN_COWORK_LOAD_OUTPUT_DIR` is
-set.
+set. Each report records the command name, commit SHA, image digests, sanitized
+environment profile, dates, duration, and pass/fail or go/no-go status.
 
 ## Soak Gate
 

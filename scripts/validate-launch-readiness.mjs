@@ -328,6 +328,9 @@ for (const phrase of [
   'OPEN_COWORK_LOAD_BYOK_PROVIDER',
   'OPEN_COWORK_LOAD_EXPECT_QUOTA_REJECTIONS',
   'OPEN_COWORK_LOAD_STRICT',
+  'OPEN_COWORK_EVIDENCE_COMMIT_SHA',
+  'OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST',
+  'OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST',
   'local-self-host-beta',
   'private-beta',
   'public-beta',
@@ -348,8 +351,42 @@ for (const phrase of [
   'Launch Evidence Register',
   'deploy/private-beta/launch-evidence-record.template.json',
   'pnpm deploy:failover:drill',
+  'Commit SHA',
+  'Cloud image digest',
+  'Gateway image digest',
+  'Sanitized environment profile',
 ]) {
   assertIncludes(reportPath, phrase)
+}
+
+for (const phrase of [
+  'createEvidenceMetadata',
+  'OPEN_COWORK_EVIDENCE_COMMIT_SHA',
+  'OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST',
+  'OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST',
+]) {
+  assertIncludes(harnessPath, phrase)
+}
+
+for (const phrase of [
+  'OPEN_COWORK_EVIDENCE_COMMIT_SHA',
+  'OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST',
+  'OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST',
+  'durationMs',
+  'environmentProfile',
+]) {
+  assertIncludes(failoverDrillPath, phrase)
+}
+
+for (const phrase of [
+  'requiredReportFields',
+  'commitSha',
+  'imageDigests',
+  'sanitizedEnvironmentProfile',
+  'dates and duration',
+  'durationMs',
+]) {
+  assertIncludes(evidenceRecordPath, phrase)
 }
 
 for (const phrase of [

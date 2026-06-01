@@ -30,6 +30,26 @@ const statusValues = new Set([
   'not-applicable-with-rationale',
 ])
 
+const requiredReportFields = [
+  'command',
+  'commitSha',
+  'imageDigests',
+  'sanitizedEnvironmentProfile',
+  'startedAt',
+  'finishedAt',
+  'durationMs',
+  'status',
+]
+
+const requiredPublicAllowedFields = [
+  'command name without secret arguments',
+  'commit SHA',
+  'image digests',
+  'sanitized environment profile',
+  'dates and duration',
+  'pass/fail or go/no-go status',
+]
+
 const publicForbiddenMarkers = [
   '/Users/joe',
   'OPEN_COWORK_GCP_PROJECT=',
@@ -127,6 +147,13 @@ function assertChecksum(value, itemId) {
   throw new Error(`${itemId}.checksum must be sha256:<64 hex> or artifact:<immutable id>`)
 }
 
+function assertArrayContainsAll(values, required, label) {
+  if (!Array.isArray(values)) throw new Error(`${label} must be an array`)
+  for (const value of required) {
+    if (!values.includes(value)) throw new Error(`${label} must include ${value}`)
+  }
+}
+
 const args = parseArgs(process.argv.slice(2))
 for (const path of [matrixPath, defaultManifestPath, publicSummaryPath, packagePath, args.manifest]) assertFile(path)
 
@@ -182,6 +209,12 @@ if (manifest.currentPublicTier !== 'local-self-host-beta') {
 if (manifest.publicPrivateBoundary?.publicSummaryStorage !== publicSummaryPath) {
   throw new Error(`${args.manifest} must point to ${publicSummaryPath}`)
 }
+assertArrayContainsAll(
+  manifest.publicPrivateBoundary?.allowedPublicFields,
+  requiredPublicAllowedFields,
+  `${args.manifest}.publicPrivateBoundary.allowedPublicFields`,
+)
+assertArrayContainsAll(manifest.requiredReportFields, requiredReportFields, `${args.manifest}.requiredReportFields`)
 
 const manifestItems = manifest.requiredEvidence
 if (!Array.isArray(manifestItems)) throw new Error(`${args.manifest} must list requiredEvidence`)

@@ -16,7 +16,12 @@ identifiers redacted.
 - Environment:
 - Cloud URL:
 - Gateway URL:
-- Image tags:
+- Image tags/digests:
+- Commit SHA:
+- Cloud image digest:
+- Gateway image digest:
+- Primary command(s):
+- Sanitized environment profile:
 - Helm/Compose/Terraform revision:
 - Target profile: `local-self-host-beta`, `private-beta`, `public-beta`, or
   `enterprise-scale`
@@ -75,6 +80,10 @@ OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
 pnpm deploy:load:strict
 ```
 
+The generated report must include the command name, commit SHA, Cloud and
+Gateway image digests, sanitized environment profile, dates, duration, and
+go/no-go status.
+
 Summarize:
 
 | Area | Target | Actual | Result | Notes |
@@ -104,6 +113,10 @@ OPEN_COWORK_LOAD_OPERATOR_CHECKS=true \
 pnpm deploy:soak:strict
 ```
 
+The generated report must include the command name, commit SHA, Cloud and
+Gateway image digests, sanitized environment profile, dates, duration, and
+go/no-go status.
+
 Record:
 
 - Duration:
@@ -128,8 +141,8 @@ Record:
 - [ ] `pnpm deploy:gateway:smoke`
 - [ ] `pnpm deploy:continuation:smoke`
 - [ ] `pnpm deploy:failover:drill` with Cloud/Gateway URLs, worker/scheduler/
-      gateway hooks, and hook execution enabled. Dry-run output is not launch
-      evidence.
+      gateway hooks, hook execution enabled, and evidence metadata populated.
+      Dry-run output is not launch evidence.
 - [ ] provider-specific smoke such as `pnpm deploy:gcp:smoke` where applicable
 
 ## Failover And Recovery Evidence

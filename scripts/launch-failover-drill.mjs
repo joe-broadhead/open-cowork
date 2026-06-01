@@ -13,6 +13,9 @@ function parseArgs(argv) {
     workerHook: process.env.OPEN_COWORK_FAILOVER_WORKER_HOOK || '',
     schedulerHook: process.env.OPEN_COWORK_FAILOVER_SCHEDULER_HOOK || '',
     gatewayHook: process.env.OPEN_COWORK_FAILOVER_GATEWAY_HOOK || '',
+    commitSha: process.env.OPEN_COWORK_EVIDENCE_COMMIT_SHA || '',
+    cloudImageDigest: process.env.OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST || '',
+    gatewayImageDigest: process.env.OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST || '',
     executeHooks: process.env.OPEN_COWORK_FAILOVER_EXECUTE_HOOKS === 'true',
     dryRun: process.env.OPEN_COWORK_FAILOVER_DRY_RUN === 'true',
     redacted: process.env.OPEN_COWORK_REDACT_OUTPUT !== 'false',
@@ -45,6 +48,15 @@ function parseArgs(argv) {
     } else if (arg === '--gateway-hook') {
       args.gatewayHook = argv[index + 1]
       index += 1
+    } else if (arg === '--commit-sha') {
+      args.commitSha = argv[index + 1]
+      index += 1
+    } else if (arg === '--cloud-image-digest') {
+      args.cloudImageDigest = argv[index + 1]
+      index += 1
+    } else if (arg === '--gateway-image-digest') {
+      args.gatewayImageDigest = argv[index + 1]
+      index += 1
     } else if (arg === '--execute-hooks') {
       args.executeHooks = true
     } else if (arg === '--dry-run') {
@@ -59,6 +71,36 @@ function parseArgs(argv) {
     }
   }
   return args
+}
+
+function currentCommitSha() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+const PRIVATE_EVIDENCE_PATTERNS = [
+  /(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /ya29\.[A-Za-z0-9_-]{8,}/i,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+  /(?:postgres(?:ql)?|mysql|mongodb):\/\//i,
+  /bearer\s+[A-Za-z0-9._-]{8,}/i,
+  /(?:token|secret|password|api[_-]?key)=/i,
+]
+
+function safeEvidenceText(value, fallback = 'not-provided') {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return fallback
+  if (PRIVATE_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return 'redacted-private-value'
+  }
+  return text.replace(/\s+/g, ' ').slice(0, 512)
 }
 
 function redactedUrl(url, redacted) {
@@ -118,6 +160,7 @@ function runHook(name, command, executeHooks, redacted, dryRun) {
 }
 
 const args = parseArgs(process.argv.slice(2))
+const startedMs = Date.now()
 const startedAt = new Date().toISOString()
 const preflight = [
   await probe('cloud-health-before', args.cloudUrl, args.cloudToken, '/healthz', args.redacted, args.dryRun),
@@ -135,13 +178,40 @@ const postflight = [
   await probe('gateway-metrics-after', args.gatewayUrl, args.gatewayAdminToken, '/metrics', args.redacted, args.dryRun),
 ]
 const failed = [...preflight, ...hooks, ...postflight].filter((item) => item.status === 'fail')
+const result = failed.length === 0 ? (args.dryRun ? 'dry-run' : 'pass') : 'fail'
+const finishedAt = new Date().toISOString()
+const durationMs = Date.now() - startedMs
 const report = {
   schemaVersion: 1,
   purpose: 'open-cowork-launch-failover-drill-evidence',
   redacted: args.redacted,
   startedAt,
-  finishedAt: new Date().toISOString(),
-  result: failed.length === 0 ? (args.dryRun ? 'dry-run' : 'pass') : 'fail',
+  finishedAt,
+  durationMs,
+  result,
+  evidence: {
+    command: args.dryRun ? 'pnpm deploy:failover:drill:dry-run' : 'pnpm deploy:failover:drill',
+    commitSha: safeEvidenceText(args.commitSha || currentCommitSha(), 'unknown'),
+    startedAt,
+    finishedAt,
+    durationMs,
+    status: result,
+    imageDigests: {
+      cloud: safeEvidenceText(args.cloudImageDigest),
+      gateway: safeEvidenceText(args.gatewayImageDigest),
+    },
+    environmentProfile: {
+      cloudUrl: redactedUrl(args.cloudUrl, args.redacted),
+      gatewayUrl: redactedUrl(args.gatewayUrl, args.redacted),
+      cloudTokenProvided: Boolean(args.cloudToken),
+      gatewayAdminTokenProvided: Boolean(args.gatewayAdminToken),
+      workerHookConfigured: Boolean(args.workerHook),
+      schedulerHookConfigured: Boolean(args.schedulerHook),
+      gatewayHookConfigured: Boolean(args.gatewayHook),
+      executeHooks: args.executeHooks,
+      dryRun: args.dryRun,
+    },
+  },
   executeHooks: args.executeHooks,
   dryRun: args.dryRun,
   targets: {
