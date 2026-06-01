@@ -184,7 +184,9 @@ jobs:
         run: |
           pnpm deploy:validate -- --require-tools
           pnpm deploy:launch:validate
+          pnpm deploy:launch:evidence:validate
           pnpm deploy:private-beta:validate
+          pnpm deploy:standalone-gateway:validate
           pnpm ops:validate
 
       - name: Whitespace check

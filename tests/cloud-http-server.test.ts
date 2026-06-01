@@ -2209,12 +2209,15 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
   const baseUrl = await fixture.server.listen()
   try {
     await readJson(await fetch(`${baseUrl}/api/workspace`))
+    fixture.store.createTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
+    fixture.store.ensureOrgForTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
 
     const poolResponse = await fetch(`${baseUrl}/api/admin/worker-pools`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         poolId: 'pool-1',
+        tenantId: 'tenant-2',
         name: 'Internal pool',
         mode: 'self_hosted',
         capabilities: { profiles: ['default'] },
@@ -2223,7 +2226,9 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
       }),
     })
     assert.equal(poolResponse.status, 201)
-    assert.equal(asRecord(asRecord(await readJson(poolResponse)).pool).poolId, 'pool-1')
+    const createdPool = asRecord(asRecord(await readJson(poolResponse)).pool)
+    assert.equal(createdPool.poolId, 'pool-1')
+    assert.equal(createdPool.tenantId, 'tenant-1')
 
     const unsupportedPool = await fetch(`${baseUrl}/api/admin/worker-pools`, {
       method: 'POST',
@@ -2238,11 +2243,14 @@ test('cloud HTTP admin APIs manage managed worker lifecycle and worker heartbeat
       body: JSON.stringify({
         workerId: 'worker-1',
         poolId: 'pool-1',
+        tenantId: 'tenant-2',
         displayName: 'Worker one',
       }),
     })
     assert.equal(workerResponse.status, 201)
-    assert.equal(asRecord(asRecord(await readJson(workerResponse)).worker).status, 'pending')
+    const createdWorker = asRecord(asRecord(await readJson(workerResponse)).worker)
+    assert.equal(createdWorker.status, 'pending')
+    assert.equal(createdWorker.tenantId, 'tenant-1')
 
     const secondWorkerResponse = await fetch(`${baseUrl}/api/admin/workers`, {
       method: 'POST',

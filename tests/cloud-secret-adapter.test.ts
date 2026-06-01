@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
 
 import {
   CLOUD_SECRET_ENVELOPE_PREFIX,
@@ -36,7 +35,7 @@ test('cloud secret key validation rejects weak production envelope material', ()
     assert.equal(validateCloudSecretKeyMaterial(weak).valid, false, weak)
   }
 
-  const strong = randomBytes(32).toString('base64url')
+  const strong = 'K7p9Qw2Lm4Vz8Rx6Tu3Na5Yh1Bc0FgDsJkAePiRoUqW'
   assert.equal(validateCloudSecretKeyMaterial(strong).valid, true)
 })
 

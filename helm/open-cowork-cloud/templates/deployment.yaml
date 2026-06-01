@@ -174,21 +174,21 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if eq $roleName "worker" }}
           volumeMounts:
-            - name: worker-data
+            - name: tmp
+              mountPath: /tmp
+            - name: cloud-root
               mountPath: {{ $.Values.cloud.root }}
-          {{- end }}
-      {{- if eq $roleName "worker" }}
       volumes:
-        - name: worker-data
-          {{- if $role.persistence.enabled }}
+        - name: tmp
+          emptyDir: {}
+        - name: cloud-root
+          {{- if and (eq $roleName "worker") $role.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "open-cowork-cloud.fullname" $ }}-worker-data
           {{- else }}
           emptyDir: {}
           {{- end }}
-      {{- end }}
       {{- with $role.topologySpreadConstraints }}
       topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}

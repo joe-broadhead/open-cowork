@@ -5,6 +5,9 @@ export type WhatsAppProviderConfig = Omit<WebhookProviderConfig, "providerKind" 
   sharedSecret: string;
 };
 
+// Bridge-mode only: a trusted WhatsApp/Meta relay must verify native platform
+// webhook signatures first, then re-sign the normalized payload with this
+// shared secret. Do not point Meta webhooks directly at Gateway.
 export const whatsappCapabilities: ChannelCapabilities = {
   threads: false,
   messageEditing: false,

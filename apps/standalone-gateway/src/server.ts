@@ -9,6 +9,67 @@ import type { StandaloneGatewayRepository } from "./repository.js";
 import type { StandaloneGatewayConfig } from "./types.js";
 
 const maxWebhookBodyBytes = 1024 * 1024;
+const webhookRateLimitWindowMs = 60_000;
+const webhookRateLimitMaxRequests = 120;
+const webhookAuthBackoffWindowMs = 60_000;
+const webhookAuthBackoffMaxFailures = 20;
+const webhookAuthBackoffMs = 60_000;
+const maxWebhookRateRecords = 10_000;
+
+interface WebhookRateRecord {
+  count: number;
+  resetAt: number;
+  blockedUntil: number;
+}
+
+class WebhookRateLimiter {
+  private readonly records = new Map<string, WebhookRateRecord>();
+
+  claim(key: string, nowMs: number, windowMs: number, maxRequests: number): { ok: true } | { ok: false; retryAfterMs: number } {
+    const record = this.record(key, nowMs, windowMs);
+    if (record.blockedUntil > nowMs) return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
+    record.count += 1;
+    if (record.count > maxRequests) {
+      record.blockedUntil = Math.max(record.blockedUntil, record.resetAt);
+      return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
+    }
+    return { ok: true };
+  }
+
+  check(key: string, nowMs: number, windowMs: number): { ok: true } | { ok: false; retryAfterMs: number } {
+    const record = this.record(key, nowMs, windowMs);
+    if (record.blockedUntil > nowMs) return { ok: false, retryAfterMs: record.blockedUntil - nowMs };
+    return { ok: true };
+  }
+
+  backoff(key: string, nowMs: number, windowMs: number, maxFailures: number, backoffMs: number): void {
+    const record = this.record(key, nowMs, windowMs);
+    record.count += 1;
+    if (record.count >= maxFailures) {
+      record.blockedUntil = Math.max(record.blockedUntil, nowMs + backoffMs);
+    }
+  }
+
+  private record(key: string, nowMs: number, windowMs: number): WebhookRateRecord {
+    const existing = this.records.get(key);
+    if (existing && existing.resetAt > nowMs) return existing;
+    const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 };
+    this.records.set(key, record);
+    if (this.records.size > maxWebhookRateRecords) this.prune(nowMs);
+    while (this.records.size > maxWebhookRateRecords) {
+      const oldest = this.records.keys().next().value;
+      if (!oldest) break;
+      this.records.delete(oldest);
+    }
+    return record;
+  }
+
+  private prune(nowMs: number): void {
+    for (const [key, record] of this.records) {
+      if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key);
+    }
+  }
+}
 
 export interface StandaloneGatewayServer {
   url(): string | null;
@@ -22,9 +83,13 @@ export function createStandaloneGatewayServer(input: {
   opencode: StandaloneOpenCodeAdapter;
   providers: StandaloneProviderRegistry;
 }): StandaloneGatewayServer {
+  const webhookLimiter = new WebhookRateLimiter();
   const server = createServer((req, res) => {
-    void handleRequest(input, req, res).catch((error) => {
-      writeJson(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    void handleRequest(input, req, res, webhookLimiter).catch((error) => {
+      const retryAfterMs = typeof error.retryAfterMs === "number" ? error.retryAfterMs : null;
+      writeJson(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) }, retryAfterMs ? {
+        "retry-after": retryAfterSeconds(retryAfterMs),
+      } : {});
     });
   });
   return {
@@ -54,7 +119,7 @@ async function handleRequest(input: {
   repository: StandaloneGatewayRepository;
   opencode: StandaloneOpenCodeAdapter;
   providers: StandaloneProviderRegistry;
-}, req: IncomingMessage, res: ServerResponse): Promise<void> {
+}, req: IncomingMessage, res: ServerResponse, webhookLimiter: WebhookRateLimiter): Promise<void> {
   const url = new URL(req.url || "/", "http://localhost");
   if (req.method === "GET" && url.pathname === "/health") {
     writeJson(res, 200, { ok: true, productMode: "standalone" });
@@ -90,9 +155,19 @@ async function handleRequest(input: {
   }
   if (req.method === "POST" && url.pathname.startsWith("/webhooks/")) {
     const providerId = decodeURIComponent(url.pathname.slice("/webhooks/".length));
+    const source = webhookSource(req);
+    enforceWebhookLimit(webhookLimiter, `request:${source}:${providerId}`);
+    enforceWebhookAuthBackoff(webhookLimiter, `auth:${source}:${providerId}`);
     const rawBody = await readBody(req);
     const payload = parseJsonBody(rawBody);
-    await input.providers.handleWebhook(providerId, payload, req.headers, rawBody);
+    try {
+      await input.providers.handleWebhook(providerId, payload, req.headers, rawBody);
+    } catch (error) {
+      if (/signature|secret|authorization|authorized|token|timestamp|replay/i.test(error instanceof Error ? error.message : String(error))) {
+        recordWebhookAuthFailure(webhookLimiter, `auth:${source}:${providerId}`);
+      }
+      throw error;
+    }
     writeJson(res, 202, { ok: true });
     return;
   }
@@ -110,6 +185,32 @@ function isAdminRequest(config: StandaloneGatewayConfig, req: IncomingMessage): 
   const header = Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization;
   const token = typeof header === "string" && header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
   return constantTimeEqual(token, config.server.adminToken);
+}
+
+function enforceWebhookLimit(limiter: WebhookRateLimiter, key: string): void {
+  const verdict = limiter.claim(key, Date.now(), webhookRateLimitWindowMs, webhookRateLimitMaxRequests);
+  if (!verdict.ok) {
+    throw httpError(429, "Too many Standalone Gateway webhook requests. Try again later.", verdict.retryAfterMs);
+  }
+}
+
+function enforceWebhookAuthBackoff(limiter: WebhookRateLimiter, key: string): void {
+  const verdict = limiter.check(key, Date.now(), webhookAuthBackoffWindowMs);
+  if (!verdict.ok) {
+    throw httpError(429, "Too many rejected Standalone Gateway webhook requests. Try again later.", verdict.retryAfterMs);
+  }
+}
+
+function recordWebhookAuthFailure(limiter: WebhookRateLimiter, key: string): void {
+  limiter.backoff(key, Date.now(), webhookAuthBackoffWindowMs, webhookAuthBackoffMaxFailures, webhookAuthBackoffMs);
+}
+
+function webhookSource(req: IncomingMessage): string {
+  return req.socket.remoteAddress || "unknown";
+}
+
+function retryAfterSeconds(ms: number): string {
+  return String(Math.max(1, Math.ceil(ms / 1000)));
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -147,17 +248,19 @@ function constantTimeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftHash, rightHash);
 }
 
-function httpError(statusCode: number, message: string): Error & { statusCode: number } {
-  const error = new Error(message) as Error & { statusCode: number };
+function httpError(statusCode: number, message: string, retryAfterMs?: number): Error & { statusCode: number; retryAfterMs?: number } {
+  const error = new Error(message) as Error & { statusCode: number; retryAfterMs?: number };
   error.statusCode = statusCode;
+  error.retryAfterMs = retryAfterMs;
   return error;
 }
 
-function writeJson(res: ServerResponse, status: number, body: unknown): void {
+function writeJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
+    ...headers,
   });
   res.end(JSON.stringify(body));
 }

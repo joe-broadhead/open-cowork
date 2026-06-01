@@ -5,6 +5,9 @@ export type DiscordProviderConfig = Omit<WebhookProviderConfig, "providerKind" |
   sharedSecret: string;
 };
 
+// Bridge-mode only: a trusted Discord relay must verify native Discord
+// signatures/interactions first, then re-sign the normalized payload with this
+// shared secret. Do not point Discord's Interactions URL directly at Gateway.
 export const discordCapabilities: ChannelCapabilities = {
   threads: true,
   messageEditing: true,

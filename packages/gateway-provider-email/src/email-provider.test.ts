@@ -70,6 +70,30 @@ describe("EmailProvider", () => {
     })).rejects.toThrow("shared secret");
   });
 
+  it("rejects replayed inbound message ids", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new EmailProvider({
+      from: "agent@example.test",
+      inboundSecret: "inbound-secret",
+      transport: fakeTransport(),
+      now: () => new Date("2026-05-29T12:00:00.000Z"),
+    });
+    await provider.start(async (message) => {
+      messages.push(message);
+    });
+    const payload = {
+      messageId: "<m-replay@example.test>",
+      from: "alice@example.test",
+      text: "hello",
+    };
+    const auth = { headers: { "x-open-cowork-gateway-email-secret": "inbound-secret" } };
+
+    await provider.handleWebhookPayload(payload, auth);
+    await expect(provider.handleWebhookPayload(payload, auth)).rejects.toThrow("replay");
+
+    expect(messages).toHaveLength(1);
+  });
+
   it("parses formatted sender addresses with bounded deterministic parsing", async () => {
     const messages: IncomingChannelMessage[] = [];
     const provider = new EmailProvider({

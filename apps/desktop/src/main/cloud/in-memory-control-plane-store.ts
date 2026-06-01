@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type {
   WorkflowDraft,
   WorkflowRun,
@@ -29,7 +29,14 @@ import type {
 import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
-import { generateChannelInteractionToken, generateCloudApiToken, hashChannelInteractionToken, hashCloudApiToken } from './control-plane-tokens.ts'
+import {
+  generateChannelInteractionToken,
+  generateCloudApiToken,
+  hashChannelInteractionToken,
+  hashCloudApiToken,
+  plaintextMatchesCloudApiTokenId,
+  verifyCloudApiTokenHash,
+} from './control-plane-tokens.ts'
 import {
   decodeSessionPageCursor,
   encodeSessionPageCursor,
@@ -56,7 +63,14 @@ export type {
   UpdateManagedWorkerStatusInput,
 } from './managed-worker-types.ts'
 export { generateManagedWorkerCredential, hashManagedWorkerCredential } from './in-memory-domains/workers.ts'
-export { generateChannelInteractionToken, generateCloudApiToken, hashChannelInteractionToken, hashCloudApiToken } from './control-plane-tokens.ts'
+export {
+  generateChannelInteractionToken,
+  generateCloudApiToken,
+  hashChannelInteractionToken,
+  hashCloudApiToken,
+  plaintextMatchesCloudApiTokenId,
+  verifyCloudApiTokenHash,
+} from './control-plane-tokens.ts'
 
 export type ControlPlaneRole = 'owner' | 'admin' | 'member'
 export type ControlPlaneMembershipStatus = 'active' | 'invited' | 'disabled'
@@ -1335,12 +1349,6 @@ function createWorkClaimToken(tenantId: string, workId: string, claimedBy: strin
   return stableId('claim', tenantId, workId, claimedBy, randomBytes(16).toString('base64url'))
 }
 
-function constantTimeStringEquals(left: string, right: string) {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-  return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
-}
-
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -1797,9 +1805,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   findApiTokenByPlaintext(plaintext: string, now = new Date()): ApiTokenRecord | null {
-    const tokenHash = hashCloudApiToken(plaintext)
     for (const token of this.apiTokens.values()) {
-      if (!constantTimeStringEquals(token.tokenHash, tokenHash)) continue
+      if (!plaintextMatchesCloudApiTokenId(plaintext, token.tokenId)) continue
+      if (!verifyCloudApiTokenHash(plaintext, token.tokenHash)) continue
       if (token.revokedAt) return null
       if (token.expiresAt && new Date(token.expiresAt).getTime() <= now.getTime()) return null
       token.lastUsedAt = now.toISOString()

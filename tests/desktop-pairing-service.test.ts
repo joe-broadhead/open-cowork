@@ -263,6 +263,84 @@ test('desktop pairing advances command sequence after local execution when ack d
   assert.equal(pairingService.auditLog(pairing.record.id).some((entry) => entry.action === 'pairing.offline'), true)
 })
 
+test('desktop pairing polls are single-flight and do not overwrite newer store state', async () => {
+  const transport = new MemoryTransport()
+  const { service: pairingService, pairing, store } = service({ transport })
+  store.save({
+    ...store.get(pairing.record.id)!,
+    enabled: true,
+    status: 'paired_offline',
+  })
+
+  let releaseClaim: (() => void) | null = null
+  const claimStarted = new Promise<void>((resolve) => {
+    releaseClaim = resolve
+  })
+  let claimEntered: (() => void) | null = null
+  const enteredClaim = new Promise<void>((resolve) => {
+    claimEntered = resolve
+  })
+  transport.claimCommands = async (_context, request) => {
+    transport.claims.push(request)
+    claimEntered?.()
+    await claimStarted
+    return { commands: [] }
+  }
+
+  const firstPoll = pairingService.pollOnce(pairing.record.id)
+  const secondPoll = pairingService.pollOnce(pairing.record.id)
+  await enteredClaim
+  assert.equal(transport.claims.length, 1)
+
+  store.save({
+    ...store.get(pairing.record.id)!,
+    lastCommandSequence: 41,
+  })
+  releaseClaim?.()
+  const [firstSnapshot, secondSnapshot] = await Promise.all([firstPoll, secondPoll])
+
+  assert.equal(firstSnapshot.lastCommandSequence, 41)
+  assert.deepEqual(secondSnapshot, firstSnapshot)
+  assert.equal(pairingService.get(pairing.record.id)?.lastCommandSequence, 41)
+})
+
+test('desktop pairing poll does not re-enable or execute after concurrent disable', async () => {
+  const runner = executor()
+  const transport = new MemoryTransport()
+  const { service: pairingService, pairing, store } = service({ transport, executor: runner })
+  store.save({
+    ...store.get(pairing.record.id)!,
+    enabled: true,
+    status: 'paired_offline',
+  })
+  const command: DesktopPairingCommand = {
+    id: 'cmd-1',
+    kind: 'prompt',
+    pairingId: pairing.record.id,
+    workspaceId: 'local',
+    sessionId: 'session-1',
+    payload: { text: 'should not run' },
+    sequence: 1,
+    createdAt: '2026-06-01T12:00:00.000Z',
+  }
+  transport.claimCommands = async (_context, request) => {
+    transport.claims.push(request)
+    store.save({
+      ...store.get(pairing.record.id)!,
+      enabled: false,
+      status: 'disabled',
+    })
+    return { commands: [command] }
+  }
+
+  const snapshot = await pairingService.pollOnce(pairing.record.id)
+
+  assert.equal(snapshot.status, 'disabled')
+  assert.equal(pairingService.get(pairing.record.id)?.enabled, false)
+  assert.equal(runner.prompts.length, 0)
+  assert.equal(transport.acks.length, 0)
+})
+
 test('desktop pairing treats accepted-event delivery as best effort', async () => {
   const runner = executor()
   const transport = new MemoryTransport()

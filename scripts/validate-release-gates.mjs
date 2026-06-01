@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { basename, extname, join, relative } from 'node:path'
 
 const branchProtectionPath = 'docs/branch-protection.md'
 const releaseChecklistPath = 'docs/release-checklist.md'
@@ -12,6 +13,41 @@ const privateGoNoGoSummaryPath = 'deploy/private-beta/private-beta-go-no-go.publ
 const launchEvidenceTemplatePath = 'deploy/private-beta/launch-evidence-record.template.json'
 const launchEvidenceMatrixPath = 'deploy/load/launch-evidence-matrix.json'
 const packagePath = 'package.json'
+
+const recursivePrivateValueScanDirs = [
+  'deploy',
+  'docs',
+  'helm',
+  'examples',
+]
+
+const privateValueScanRootFilePatterns = [
+  /^docker-compose.*\.ya?ml$/,
+  /^.+\.example(?:\..+)?$/,
+  /^.+\.template(?:\..+)?$/,
+]
+
+const privateValueScanExtensions = new Set([
+  '.conf',
+  '.css',
+  '.env',
+  '.example',
+  '.js',
+  '.json',
+  '.md',
+  '.plist',
+  '.service',
+  '.template',
+  '.toml',
+  '.txt',
+  '.yaml',
+  '.yml',
+])
+
+const privateValueScanSkippedPrefixes = [
+  'docs/assets/auto/',
+  'docs/javascripts/vendor/',
+]
 
 const requiredBranchChecks = [
   { check: 'validate', workflow: 'CI' },
@@ -160,23 +196,10 @@ function assertPublicSafe(path) {
 }
 
 function assertNoPrivateEnvAssignments(path, contents) {
-  const guardedEnvNames = [
-    'OPEN_COWORK_GCP_PROJECT',
-    'OPEN_COWORK_CLOUD_DATABASE_URL',
-    'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL',
-    'OPEN_COWORK_CLOUD_COOKIE_SECRET',
-    'OPEN_COWORK_CLOUD_SECRET_KEY',
-    'OPEN_COWORK_CLOUD_INTERNAL_TOKEN',
-    'OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY',
-    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
-    'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
-    'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
-    'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
-  ]
-  const assignmentPattern = new RegExp(`\\b(${guardedEnvNames.join('|')})=([^\\s\`\\\\]+)`, 'g')
+  const assignmentPattern = /^[ \t]*(?:export[ \t]+)?([A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|DATABASE_URL|PRIVATE_KEY|ACCESS_KEY|API_KEY)[A-Z0-9_]*)[ \t]*[:=][ \t]*([^#\n`\\]*)/gm
   for (const match of contents.matchAll(assignmentPattern)) {
     const [, envName, rawValue] = match
-    const value = rawValue.replace(/^['"]|['"]$/g, '')
+    const value = rawValue.trim().replace(/^['"]|['"]$/g, '')
     if (!isPublicPlaceholderValue(value)) {
       throw new Error(`${path} must not assign a private value to ${envName}`)
     }
@@ -185,7 +208,9 @@ function assertNoPrivateEnvAssignments(path, contents) {
 
 function isPublicPlaceholderValue(value) {
   if (!value || value === '...' || value === 'PROJECT') return true
-  if (value.startsWith('${') || value.startsWith('<')) return true
+  if (value.startsWith('${') || value.startsWith('{{') || value.startsWith('<')) return true
+  if (value.startsWith('env:') || value.includes('...') || value.includes('PROJECT')) return true
+  if (value.toLowerCase().includes('redacted')) return true
   return [
     'DATABASE_HOST',
     'PASSWORD',
@@ -195,8 +220,54 @@ function isPublicPlaceholderValue(value) {
     'change-me',
     'example.',
     'localhost',
+    'local_dev',
+    'open_cowork',
     'replace-with',
   ].some((placeholder) => value.includes(placeholder))
+}
+
+function normalizedRelative(path) {
+  return path.split('\\').join('/')
+}
+
+function shouldSkipPrivateValueScan(path) {
+  const normalized = normalizedRelative(path)
+  return privateValueScanSkippedPrefixes.some((prefix) => normalized.startsWith(prefix))
+}
+
+function shouldScanPublicFile(path) {
+  const normalized = normalizedRelative(path)
+  if (shouldSkipPrivateValueScan(normalized)) return false
+  const fileName = basename(normalized)
+  if (privateValueScanRootFilePatterns.some((pattern) => pattern.test(fileName))) return true
+  return privateValueScanExtensions.has(extname(fileName))
+}
+
+function collectPrivateValueScanFiles() {
+  const files = new Set(publicSafeFiles)
+  for (const entry of readdirSync('.')) {
+    if (privateValueScanRootFilePatterns.some((pattern) => pattern.test(entry)) && statSync(entry).isFile()) {
+      files.add(entry)
+    }
+  }
+  for (const dir of recursivePrivateValueScanDirs) {
+    if (!existsSync(dir)) continue
+    collectPrivateValueScanFilesFromDir(dir, files)
+  }
+  return Array.from(files).sort()
+}
+
+function collectPrivateValueScanFilesFromDir(dir, files) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    const normalized = normalizedRelative(path)
+    if (shouldSkipPrivateValueScan(normalized)) continue
+    if (entry.isDirectory()) {
+      collectPrivateValueScanFilesFromDir(path, files)
+    } else if (entry.isFile() && shouldScanPublicFile(normalized)) {
+      files.add(normalized)
+    }
+  }
 }
 
 function assertWorkflowJob(path, jobName) {
@@ -210,6 +281,12 @@ function assertPackageScripts() {
   }
   if (packageJson.scripts?.['ops:validate'] !== 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs') {
     throw new Error('package.json ops:validate must run operations and release-gate validators')
+  }
+  if (packageJson.scripts?.['deploy:standalone-gateway:validate'] !== 'node scripts/validate-standalone-gateway.mjs') {
+    throw new Error('package.json must expose deploy:standalone-gateway:validate')
+  }
+  if (packageJson.scripts?.['deploy:launch:evidence:validate'] !== 'node scripts/validate-launch-evidence-manifest.mjs') {
+    throw new Error('package.json must expose deploy:launch:evidence:validate')
   }
 }
 
@@ -244,7 +321,9 @@ function assertCiContract() {
     'bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud.split.yml',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
+    'pnpm deploy:launch:evidence:validate',
     'pnpm deploy:private-beta:validate',
+    'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
     'pnpm docs:build',
     'pnpm --dir apps/desktop test:e2e:packaged',
@@ -264,7 +343,9 @@ function assertReleaseWorkflowContract() {
     'pnpm docs:build',
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
+    'pnpm deploy:launch:evidence:validate',
     'pnpm deploy:private-beta:validate',
+    'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
     'pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/verify-release-tag-signature.mjs',
@@ -328,6 +409,7 @@ function assertReleaseChecklistContract() {
     'BYOK redaction',
     'Gateway replay/dead-letter recovery',
     'private-value scan',
+    '--require-private-pass',
     'Go/No-Go',
   ]) {
     assertIncludes(releaseChecklistPath, phrase)
@@ -373,6 +455,9 @@ assertCiContract()
 assertReleaseWorkflowContract()
 assertReleaseChecklistContract()
 assertGoNoGoTemplateContract()
-for (const path of publicSafeFiles) assertPublicSafe(path)
+for (const path of collectPrivateValueScanFiles()) {
+  if (relative('.', path).startsWith('..')) throw new Error(`private-value scan path escaped repository root: ${path}`)
+  assertPublicSafe(path)
+}
 
 process.stdout.write('[release-gates-validate] release gate contract validated\n')

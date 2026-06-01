@@ -24,7 +24,6 @@ export type CreateManagedWorkerPoolRequest = {
   name: string
   mode: ManagedWorkerPoolMode
   status?: ManagedWorkerPoolStatus
-  tenantId?: string | null
   region?: string | null
   capabilities?: Record<string, unknown>
   maxWorkers?: number | null
@@ -43,7 +42,6 @@ export type UpdateManagedWorkerPoolRequest = {
 export type RegisterManagedWorkerRequest = {
   workerId?: string
   poolId: string
-  tenantId?: string | null
   displayName: string
   status?: ManagedWorkerStatus
   version?: string | null

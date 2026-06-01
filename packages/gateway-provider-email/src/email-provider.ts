@@ -103,6 +103,8 @@ const emailCapabilities: ChannelCapabilities = {
   rateLimitStrategy: "fixed_backoff",
   supportsEphemeralResponses: false
 };
+const defaultEmailReplayWindowMs = 24 * 60 * 60 * 1000;
+const maxSeenEmailMessages = 5_000;
 
 export class EmailProvider implements ChannelProvider {
   readonly kind: ChannelProviderKind = "email";
@@ -111,6 +113,7 @@ export class EmailProvider implements ChannelProvider {
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private readonly transport: EmailTransport;
+  private readonly seenMessageIds = new Map<string, number>();
 
   constructor(private readonly config: EmailProviderConfig) {
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
@@ -134,8 +137,18 @@ export class EmailProvider implements ChannelProvider {
   async handleWebhookPayload(payload: unknown, auth: EmailWebhookAuth): Promise<void> {
     if (!this.handler) throw new Error("Email provider is not started.");
     this.assertWebhookAuthorized(auth);
-    const message = mapEmailPayload(payload, this.config.now?.() ?? new Date(), this.capabilities.maxFileBytes, this.id);
-    if (message) await this.handler(message);
+    const now = this.config.now?.() ?? new Date();
+    const message = mapEmailPayload(payload, now, this.capabilities.maxFileBytes, this.id);
+    if (!message) return;
+    const replayKey = message.providerEventId || message.id;
+    const nowMs = now.getTime();
+    this.claimMessageId(replayKey, nowMs);
+    try {
+      await this.handler(message);
+    } catch (error) {
+      this.seenMessageIds.delete(replayKey);
+      throw error;
+    }
   }
 
   async sendText(target: ChannelTarget, text: string, _options?: SendOptions): Promise<SentMessage> {
@@ -188,6 +201,25 @@ export class EmailProvider implements ChannelProvider {
       || bearerToken(headerValue(auth.headers, "authorization"));
     if (!constantTimeStringEqual(providedSecret, expectedSecret)) {
       throw new Error("Email webhook shared secret verification failed.");
+    }
+  }
+
+  private claimMessageId(messageId: string, nowMs: number): void {
+    this.purgeSeenMessageIds(nowMs);
+    const existingExpiresAt = this.seenMessageIds.get(messageId);
+    if (existingExpiresAt && existingExpiresAt > nowMs) {
+      throw new Error("Email webhook message replay rejected.");
+    }
+    this.seenMessageIds.set(messageId, nowMs + defaultEmailReplayWindowMs);
+    if (this.seenMessageIds.size > maxSeenEmailMessages) {
+      const oldest = this.seenMessageIds.keys().next().value;
+      if (oldest) this.seenMessageIds.delete(oldest);
+    }
+  }
+
+  private purgeSeenMessageIds(nowMs: number): void {
+    for (const [key, expiresAt] of this.seenMessageIds) {
+      if (expiresAt <= nowMs) this.seenMessageIds.delete(key);
     }
   }
 }

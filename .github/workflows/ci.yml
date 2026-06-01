@@ -241,8 +241,14 @@ jobs:
       - name: Run launch readiness validator
         run: pnpm deploy:launch:validate
 
+      - name: Run launch evidence manifest validator
+        run: pnpm deploy:launch:evidence:validate
+
       - name: Run private beta launch package validator
         run: pnpm deploy:private-beta:validate
+
+      - name: Run standalone gateway validator
+        run: pnpm deploy:standalone-gateway:validate
 
       - name: Run operations readiness validator
         run: pnpm ops:validate

@@ -123,7 +123,6 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
           name,
           mode,
           status: poolStatus(body.status) || undefined,
-          tenantId: tools.readString(body.tenantId),
           region: tools.readString(body.region),
           capabilities: tools.readRecord(body.capabilities) || undefined,
           maxWorkers: nullableNumber(body.maxWorkers),
@@ -170,7 +169,6 @@ export async function handleAdminApiRoute(input: CloudApiRouteInput): Promise<bo
         worker: await options.service.registerManagedWorker(context.principal, {
           workerId: tools.readString(body.workerId) || undefined,
           poolId,
-          tenantId: tools.readString(body.tenantId),
           displayName,
           status: workerStatus(body.status) || undefined,
           version: tools.readString(body.version),

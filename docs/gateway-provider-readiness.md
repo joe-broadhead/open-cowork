@@ -69,6 +69,14 @@ Tier 3 providers are bridge-backed adapters for later live-provider hardening.
 They are useful for downstream experiments, but public launch does not depend
 on them until a live provider recipe and smoke path are promoted.
 
+Discord, WhatsApp, and Signal are bridge-mode providers, not native platform
+webhook endpoints. A trusted relay must verify the native platform signature or
+channel-specific auth first, normalize the payload, and then re-sign it with the
+Open Cowork bridge shared secret. Do not point Discord Interactions, Meta
+WhatsApp webhooks, or an unauthenticated Signal bridge directly at Gateway; use
+the Tier 1 providers or the generic signed webhook provider for public ingress
+until native adapters are promoted.
+
 The `fake` provider is not a real channel. It exists for local demos and CI
 smokes only. Public exposure is blocked unless a deployer explicitly opts into
 the demo override.
@@ -90,6 +98,8 @@ the demo override.
 
 - Public webhook providers must fail closed without signing/HMAC/shared-secret
   verification.
+- Gateway and Standalone Gateway webhook HTTP surfaces apply source-scoped
+  request throttles with `Retry-After` before provider dispatch.
 - Generic webhook outbound delivery is signed with timestamped HMAC headers by
   default; legacy shared-secret headers are local compatibility only.
 - Gateway service-token authority is separate from inbound actor authority.

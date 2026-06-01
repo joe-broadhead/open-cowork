@@ -1,0 +1,6 @@
+{{- if eq .Values.cloud.deploymentTier "local" }}
+WARNING: cloud.deploymentTier is "local". This chart will allow local/demo defaults
+that are not suitable for an internet-facing production control plane. Set
+cloud.deploymentTier=public_production for managed production deployments so the
+fail-closed public auth, secret, worker, and object-store gates are enforced.
+{{- end }}

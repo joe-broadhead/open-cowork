@@ -54,3 +54,41 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
     await server.close();
   }
 });
+
+test("standalone server rate-limits repeated webhook requests by source", async () => {
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_PORT: "0",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+  });
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const providers = createStandaloneProviderRegistry(config);
+  const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
+  await server.listen();
+  try {
+    const url = server.url();
+    assert.ok(url);
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/webhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{",
+      });
+      assert.equal(response.status, 400);
+    }
+    const blocked = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    });
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers.get("retry-after"), "60");
+    assert.match(JSON.stringify(await blocked.json()), /Too many Standalone Gateway webhook requests/);
+  } finally {
+    await server.close();
+  }
+});
