@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { WorkflowDraft } from '@open-cowork/shared'
 import { createWorkflowFromTool, previewWorkflowFromTool } from './workflow-tool-actions.ts'
 import { log } from '../logger.ts'
@@ -55,7 +55,14 @@ async function readJsonBody(req: IncomingMessage) {
 function assertAuthorized(req: IncomingMessage) {
   const expected = token
   const auth = String(req.headers.authorization || '')
-  if (!expected || auth !== `Bearer ${expected}`) throw new ToolBridgeHttpError(401, 'Unauthorized workflow tool request.')
+  const prefix = 'Bearer '
+  const candidate = auth.startsWith(prefix) ? auth.slice(prefix.length) : ''
+  if (!expected || !candidate) throw new ToolBridgeHttpError(401, 'Unauthorized workflow tool request.')
+  const expectedBytes = Buffer.from(expected)
+  const candidateBytes = Buffer.from(candidate)
+  if (expectedBytes.length !== candidateBytes.length || !timingSafeEqual(expectedBytes, candidateBytes)) {
+    throw new ToolBridgeHttpError(401, 'Unauthorized workflow tool request.')
+  }
 }
 
 async function handleToolRequest(req: IncomingMessage, res: ServerResponse) {

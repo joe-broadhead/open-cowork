@@ -134,6 +134,7 @@ nav:
       - Deployment Topologies: deployment-topologies.md
       - Hybrid Security Gates: hybrid-security-gates.md
       - Setup and Health Center: setup-and-health-center.md
+      - Production Readiness Audit: production-readiness-audit.md
       - Gateway Appliance: gateway-appliance.md
       - Standalone Gateway: standalone-gateway.md
       - Deployment Readiness: deployment-readiness.md

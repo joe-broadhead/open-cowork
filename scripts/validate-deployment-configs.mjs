@@ -129,6 +129,7 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_EMAIL_MAX_ATTACHMENT_BYTES')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
+  assertIncludes('docker-compose.cloud-gateway.yml', '${OPEN_COWORK_GATEWAY_PUBLISHED_ADDR:-127.0.0.1}:8790:8790')
   for (const file of composeFiles) {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')
@@ -136,6 +137,12 @@ function staticComposeChecks() {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES')
+    assertIncludes(file, '${OPEN_COWORK_CLOUD_PUBLISHED_ADDR:-127.0.0.1}:8787:8787')
+    assertIncludes(file, '${OPEN_COWORK_MINIO_PUBLISHED_ADDR:-127.0.0.1}:9000:9000')
+    assertIncludes(file, '${OPEN_COWORK_MINIO_CONSOLE_PUBLISHED_ADDR:-127.0.0.1}:9001:9001')
+    assertNotIncludes(file, '- "8787:8787"')
+    assertNotIncludes(file, '- "9000:9000"')
+    assertNotIncludes(file, '- "9001:9001"')
   }
   for (const file of [...composeFiles, ...gatewayOnlyComposeFiles]) {
     assertIncludes(file, 'OPEN_COWORK_CONFIG_PATH')
