@@ -61,28 +61,95 @@ function safeBrandingUrl(value: unknown, allowMailto = false) {
   return undefined
 }
 
+const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>([
+  'background',
+  'surface',
+  'mutedSurface',
+  'border',
+  'text',
+  'mutedText',
+  'accent',
+  'accentStrong',
+  'focus',
+  'warn',
+  'danger',
+  'ok',
+])
+const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
+  'title',
+  'subtitle',
+  'signInTitle',
+  'signInBody',
+  'byokDescription',
+  'connectionsDescription',
+  'gatewayDescription',
+  'billingDescription',
+  'usageDescription',
+])
+const PUBLIC_BRANDING_LABEL_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>([
+  'desktopToken',
+  'gatewayToken',
+  'apiToken',
+  'cloudUrl',
+])
+
+function pickObjectStrings<T extends object>(value: unknown, allowedKeys: Set<keyof T>): Partial<T> {
+  const strings = cleanObjectStrings(value)
+  return Object.fromEntries(
+    Object.entries(strings).filter(([key]) => allowedKeys.has(key as keyof T)),
+  ) as Partial<T>
+}
+
+function cleanPublicBranding(input?: PublicBrandingConfig | null): Partial<PublicBrandingConfig> {
+  if (!input) return {}
+  const cleaned: Partial<PublicBrandingConfig> = {}
+  if (typeof input.productName === 'string' && input.productName.trim()) cleaned.productName = input.productName.trim()
+  if (typeof input.shortName === 'string' && input.shortName.trim()) cleaned.shortName = input.shortName.trim()
+  const logoUrl = safeBrandingUrl(input.logoUrl)
+  const supportUrl = safeBrandingUrl(input.supportUrl, true)
+  const privacyUrl = safeBrandingUrl(input.privacyUrl)
+  const securityUrl = safeBrandingUrl(input.securityUrl)
+  const legalUrl = safeBrandingUrl(input.legalUrl)
+  if (logoUrl) cleaned.logoUrl = logoUrl
+  if (supportUrl) cleaned.supportUrl = supportUrl
+  if (privacyUrl) cleaned.privacyUrl = privacyUrl
+  if (securityUrl) cleaned.securityUrl = securityUrl
+  if (legalUrl) cleaned.legalUrl = legalUrl
+  const theme = pickObjectStrings<NonNullable<PublicBrandingConfig['theme']>>(input.theme, PUBLIC_BRANDING_THEME_KEYS)
+  const dashboard = pickObjectStrings<NonNullable<PublicBrandingConfig['dashboard']>>(input.dashboard, PUBLIC_BRANDING_DASHBOARD_KEYS)
+  const labels = pickObjectStrings<NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>(
+    input.managedOrgConnectionLabels,
+    PUBLIC_BRANDING_LABEL_KEYS,
+  )
+  if (Object.keys(theme).length > 0) cleaned.theme = theme
+  if (Object.keys(dashboard).length > 0) cleaned.dashboard = dashboard
+  if (Object.keys(labels).length > 0) cleaned.managedOrgConnectionLabels = labels
+  return cleaned
+}
+
 export function resolvePublicBranding(input?: PublicBrandingConfig | null): PublicBrandingConfig {
+  const cleaned = cleanPublicBranding(input)
   return {
     ...DEFAULT_WEBSITE_PUBLIC_BRANDING,
-    ...(input || {}),
-    productName: input?.productName?.trim() || DEFAULT_WEBSITE_PUBLIC_BRANDING.productName,
-    shortName: input?.shortName?.trim() || DEFAULT_WEBSITE_PUBLIC_BRANDING.shortName,
-    logoUrl: safeBrandingUrl(input?.logoUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.logoUrl,
-    supportUrl: safeBrandingUrl(input?.supportUrl, true) || DEFAULT_WEBSITE_PUBLIC_BRANDING.supportUrl,
-    privacyUrl: safeBrandingUrl(input?.privacyUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.privacyUrl,
-    securityUrl: safeBrandingUrl(input?.securityUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.securityUrl,
-    legalUrl: safeBrandingUrl(input?.legalUrl) || DEFAULT_WEBSITE_PUBLIC_BRANDING.legalUrl,
+    ...cleaned,
+    productName: cleaned.productName || DEFAULT_WEBSITE_PUBLIC_BRANDING.productName,
+    shortName: cleaned.shortName || DEFAULT_WEBSITE_PUBLIC_BRANDING.shortName,
+    logoUrl: cleaned.logoUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.logoUrl,
+    supportUrl: cleaned.supportUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.supportUrl,
+    privacyUrl: cleaned.privacyUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.privacyUrl,
+    securityUrl: cleaned.securityUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.securityUrl,
+    legalUrl: cleaned.legalUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.legalUrl,
     theme: {
       ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.theme || {}),
-      ...cleanObjectStrings(input?.theme),
+      ...(cleaned.theme || {}),
     },
     dashboard: {
       ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}),
-      ...cleanObjectStrings(input?.dashboard),
+      ...(cleaned.dashboard || {}),
     },
     managedOrgConnectionLabels: {
       ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}),
-      ...cleanObjectStrings(input?.managedOrgConnectionLabels),
+      ...(cleaned.managedOrgConnectionLabels || {}),
     },
   }
 }

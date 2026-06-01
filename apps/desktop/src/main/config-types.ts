@@ -658,6 +658,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
   allowedEnvPlaceholders: [],
   branding: {
     name: 'Cowork',
+    shortName: 'Cowork',
     appId: 'com.example.cowork',
     dataDirName: 'cowork',
     helpUrl: '',

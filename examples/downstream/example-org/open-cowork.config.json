@@ -12,21 +12,26 @@
     "OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD"
   ],
   "branding": {
-    "name": "Acme Cowork",
-    "appId": "com.acme.cowork",
-    "dataDirName": "acme-cowork",
-    "helpUrl": "https://support.acme.example/cowork",
-    "projectNamespace": "acme-cowork",
+    "name": "Example Cowork",
+    "shortName": "EX",
+    "appId": "com.example.cowork",
+    "dataDirName": "example-cowork",
+    "helpUrl": "https://support.example.com/cowork",
+    "supportUrl": "https://support.example.com/cowork",
+    "privacyUrl": "https://legal.example.com/privacy",
+    "securityUrl": "https://security.example.com/cowork",
+    "legalUrl": "https://legal.example.com/terms",
+    "projectNamespace": "example-cowork",
     "sidebar": {
       "top": {
         "variant": "text",
-        "title": "Acme Cowork",
+        "title": "Example Cowork",
         "subtitle": "Internal agent workspace"
       },
       "lower": {
-        "text": "Acme internal",
+        "text": "Example internal",
         "linkLabel": "Support",
-        "linkUrl": "https://support.acme.example/cowork"
+        "linkUrl": "https://support.example.com/cowork"
       }
     }
   },
@@ -53,13 +58,13 @@
     "role": "all-in-one",
     "defaultProfile": "data-analyst",
     "publicBranding": {
-      "productName": "Acme Cowork",
-      "shortName": "AC",
-      "logoUrl": "https://assets.acme.example/cowork/logo.png",
-      "supportUrl": "https://support.acme.example/cowork",
-      "privacyUrl": "https://legal.acme.example/privacy",
-      "securityUrl": "https://security.acme.example/cowork",
-      "legalUrl": "https://legal.acme.example/terms",
+      "productName": "Example Cowork",
+      "shortName": "EX",
+      "logoUrl": "https://assets.example.com/cowork/logo.png",
+      "supportUrl": "https://support.example.com/cowork",
+      "privacyUrl": "https://legal.example.com/privacy",
+      "securityUrl": "https://security.example.com/cowork",
+      "legalUrl": "https://legal.example.com/terms",
       "theme": {
         "background": "#f7f8f5",
         "surface": "#ffffff",
@@ -71,25 +76,25 @@
         "accentStrong": "#0a4c35"
       },
       "dashboard": {
-        "title": "Acme workspace",
-        "subtitle": "Manage Acme Cowork keys, clients, and channel agents.",
-        "connectionsDescription": "Issue scoped Acme Cowork tokens for approved desktop and gateway clients.",
-        "gatewayDescription": "Connect approved chat channels to Acme Cowork cloud sessions."
+        "title": "Example workspace",
+        "subtitle": "Manage Example Cowork keys, clients, and channel agents.",
+        "connectionsDescription": "Issue scoped Example Cowork tokens for approved desktop and gateway clients.",
+        "gatewayDescription": "Connect approved chat channels to Example Cowork cloud sessions."
       },
       "managedOrgConnectionLabels": {
-        "desktopToken": "Acme Desktop token",
-        "gatewayToken": "Acme Gateway token",
-        "apiToken": "Acme API token",
-        "cloudUrl": "Acme Cloud URL"
+        "desktopToken": "Example Desktop token",
+        "gatewayToken": "Example Gateway token",
+        "apiToken": "Example API token",
+        "cloudUrl": "Example Cloud URL"
       }
     },
     "auth": {
       "mode": "oidc",
-      "issuerUrl": "https://idp.acme.example",
-      "clientId": "acme-cowork-cloud",
+      "issuerUrl": "https://idp.example.com",
+      "clientId": "example-cowork-cloud",
       "callbackPath": "/auth/callback",
       "cookieSecretRef": "env:OPEN_COWORK_CLOUD_COOKIE_SECRET",
-      "allowedEmailDomains": ["acme.example"],
+      "allowedEmailDomains": ["example.com"],
       "allowSelfServiceSignup": false
     },
     "storage": {
@@ -99,7 +104,7 @@
       },
       "objectStore": {
         "kind": "s3",
-        "bucket": "acme-cowork-artifacts",
+        "bucket": "example-cowork-artifacts",
         "region": "us-east-1",
         "prefix": "production/",
         "credentialsRef": "env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS"
@@ -120,7 +125,7 @@
     "profiles": {
       "data-analyst": {
         "label": "Data analyst",
-        "description": "Focused Acme deployment exposing only the data analyst surface.",
+        "description": "Focused example deployment exposing only the data analyst surface.",
         "agents": ["data-analyst"],
         "tools": ["explorer.read", "charts.save"],
         "mcps": [],
@@ -144,8 +149,8 @@
     "allowUserAddedConnections": false,
     "preconfiguredConnections": [
       {
-        "baseUrl": "https://cowork.acme.example",
-        "label": "Acme Cowork"
+        "baseUrl": "https://cowork.example.com",
+        "label": "Example Cowork"
       }
     ],
     "requireManagedOrg": true,
@@ -154,22 +159,22 @@
   },
   "gateway": {
     "branding": {
-      "productName": "Acme Cowork",
-      "shortName": "AC",
-      "logoUrl": "https://assets.acme.example/cowork/logo.png",
-      "supportUrl": "https://support.acme.example/cowork",
-      "privacyUrl": "https://legal.acme.example/privacy",
-      "securityUrl": "https://security.acme.example/cowork",
-      "legalUrl": "https://legal.acme.example/terms",
+      "productName": "Example Cowork",
+      "shortName": "EX",
+      "logoUrl": "https://assets.example.com/cowork/logo.png",
+      "supportUrl": "https://support.example.com/cowork",
+      "privacyUrl": "https://legal.example.com/privacy",
+      "securityUrl": "https://security.example.com/cowork",
+      "legalUrl": "https://legal.example.com/terms",
       "managedOrgConnectionLabels": {
-        "desktopToken": "Acme Desktop token",
-        "gatewayToken": "Acme Gateway token",
-        "apiToken": "Acme API token",
-        "cloudUrl": "Acme Cloud URL"
+        "desktopToken": "Example Desktop token",
+        "gatewayToken": "Example Gateway token",
+        "apiToken": "Example API token",
+        "cloudUrl": "Example Cloud URL"
       }
     },
     "cloud": {
-      "baseUrl": "https://cowork.acme.example",
+      "baseUrl": "https://cowork.example.com",
       "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
       "allowInsecureHttp": false
     },
@@ -177,7 +182,7 @@
     "server": {
       "host": "0.0.0.0",
       "port": 8790,
-      "publicBaseUrl": "https://cowork-gateway.acme.example",
+      "publicBaseUrl": "https://cowork-gateway.example.com",
       "adminToken": "{env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN}"
     },
     "mode": "self-host",
@@ -192,47 +197,47 @@
     },
     "providers": [
       {
-        "id": "acme-telegram",
+        "id": "example-telegram",
         "kind": "telegram",
-        "channelBindingId": "acme-telegram",
+        "channelBindingId": "example-telegram",
         "credentials": {
           "botToken": "{env:OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN}",
           "webhookSecret": "{env:OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET}"
         },
         "settings": {
           "mode": "webhook",
-          "publicBaseUrl": "https://cowork-gateway.acme.example"
+          "publicBaseUrl": "https://cowork-gateway.example.com"
         }
       },
       {
-        "id": "acme-slack",
+        "id": "example-slack",
         "kind": "slack",
-        "channelBindingId": "acme-slack",
-        "externalWorkspaceId": "T0123ACME",
+        "channelBindingId": "example-slack",
+        "externalWorkspaceId": "TEXAMPLE1",
         "credentials": {
           "botToken": "{env:OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN}",
           "signingSecret": "{env:OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET}"
         },
         "settings": {
-          "teamId": "T0123ACME"
+          "teamId": "TEXAMPLE1"
         }
       },
       {
-        "id": "acme-email",
+        "id": "example-email",
         "kind": "email",
-        "channelBindingId": "acme-email",
-        "externalWorkspaceId": "acme.example",
+        "channelBindingId": "example-email",
+        "externalWorkspaceId": "example.com",
         "credentials": {
           "inboundSecret": "{env:OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET}",
           "smtpPassword": "{env:OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD}"
         },
         "settings": {
-          "from": "agent@acme.example",
-          "inboundAddress": "agent@acme.example",
-          "smtpHost": "smtp.acme.example",
+          "from": "agent@example.com",
+          "inboundAddress": "agent@example.com",
+          "smtpHost": "smtp.example.com",
           "smtpPort": "587",
           "smtpSecure": "false",
-          "smtpUsername": "agent@acme.example"
+          "smtpUsername": "agent@example.com"
         }
       }
     ]

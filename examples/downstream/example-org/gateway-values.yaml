@@ -1,29 +1,29 @@
 image:
-  repository: registry.acme.example/open-cowork-gateway
+  repository: registry.example.com/open-cowork-gateway
   tag: v2026.05.0
 
 gateway:
   productMode: cloud_channel
   mode: self-host
-  cloudBaseUrl: https://cowork.acme.example
+  cloudBaseUrl: https://cowork.example.com
   serviceToken: env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN
   host: 0.0.0.0
   port: 8790
-  publicUrl: https://cowork-gateway.acme.example
+  publicUrl: https://cowork-gateway.example.com
   adminToken: env:OPEN_COWORK_GATEWAY_ADMIN_TOKEN
   branding:
-    productName: Acme Cowork
-    shortName: AC
-    logoUrl: https://assets.acme.example/cowork/logo.png
-    supportUrl: https://support.acme.example/cowork
-    privacyUrl: https://legal.acme.example/privacy
-    securityUrl: https://security.acme.example/cowork
-    legalUrl: https://legal.acme.example/terms
+    productName: Example Cowork
+    shortName: EX
+    logoUrl: https://assets.example.com/cowork/logo.png
+    supportUrl: https://support.example.com/cowork
+    privacyUrl: https://legal.example.com/privacy
+    securityUrl: https://security.example.com/cowork
+    legalUrl: https://legal.example.com/terms
     managedOrgConnectionLabels:
-      desktopToken: Acme Desktop token
-      gatewayToken: Acme Gateway token
-      apiToken: Acme API token
-      cloudUrl: Acme Cloud URL
+      desktopToken: Example Desktop token
+      gatewayToken: Example Gateway token
+      apiToken: Example API token
+      cloudUrl: Example Cloud URL
   metrics:
     enabled: false
   diagnostics:
@@ -31,21 +31,21 @@ gateway:
   telegram:
     botToken: env:OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN
     webhookSecret: env:OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET
-    channelBindingId: acme-telegram
+    channelBindingId: example-telegram
     mode: webhook
   slack:
     botToken: env:OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN
     signingSecret: env:OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET
-    channelBindingId: acme-slack
-    teamId: T0123ACME
+    channelBindingId: example-slack
+    teamId: TEXAMPLE1
   email:
     inboundSecret: env:OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET
-    channelBindingId: acme-email
-    from: agent@acme.example
-    address: agent@acme.example
-    domain: acme.example
-    smtpHost: smtp.acme.example
-    smtpUsername: agent@acme.example
+    channelBindingId: example-email
+    from: agent@example.com
+    address: agent@example.com
+    domain: example.com
+    smtpHost: smtp.example.com
+    smtpUsername: agent@example.com
     smtpPassword: env:OPEN_COWORK_GATEWAY_EMAIL_SMTP_PASSWORD
   webhook:
     deliveryUrl: ""
@@ -66,7 +66,7 @@ podDisruptionBudget:
 ingress:
   enabled: true
   hosts:
-    - host: cowork-gateway.acme.example
+    - host: cowork-gateway.example.com
       paths:
         - path: /
           pathType: Prefix

@@ -79,9 +79,14 @@ export interface BrandingHomeConfig {
 
 export interface BrandingConfig {
   name: string
+  shortName?: string
   appId: string
   dataDirName: string
   helpUrl: string
+  supportUrl?: string
+  privacyUrl?: string
+  securityUrl?: string
+  legalUrl?: string
   projectNamespace?: string
   defaultTheme?: string
   themes?: BrandThemeDefinition[]

@@ -1,15 +1,17 @@
-# Acme Downstream Deployment Example
+# Example Downstream Deployment
 
-This example shows how a company can ship one branded Open Cowork deployment
-without forking runtime code.
+This example shows how an organization can ship one branded Open Cowork
+deployment without forking runtime code. All names, domains, buckets, and ids
+are placeholders reserved for examples; real customer or cloud-provider values
+belong in a private downstream repo or secret manager.
 
 It includes:
 
 - `open-cowork.config.json`: desktop and cloud product configuration for
-  Acme Cowork, including the shared `gateway` section that the headless gateway
-  can load with `OPEN_COWORK_CONFIG_PATH`.
-- `cloud-values.yaml`: Helm values for the Acme cloud control plane.
-- `gateway-values.yaml`: Helm values for the Acme headless gateway.
+  Example Cowork, including the shared `gateway` section that the headless
+  gateway can load with `OPEN_COWORK_CONFIG_PATH`.
+- `cloud-values.yaml`: Helm values for the example cloud control plane.
+- `gateway-values.yaml`: Helm values for the example headless gateway.
 
 The shared config declares `contractVersion: 1`, the current downstream
 distribution contract documented in `docs/downstream-contract.md`.
@@ -39,9 +41,9 @@ Managed BYOK SaaS mode:
 The OpenCode runtime boundary does not change in either mode. OpenCode owns
 execution; Open Cowork owns branding, policy, sync, tenancy, and deployability.
 
-Self-host Acme installs can keep `cloud.billing.enabled=false` and
-`cloud.billing.provider=none`. Managed SaaS billing is an Acme hosting overlay,
-not a requirement for the OSS self-host path.
+Self-host installs can keep `cloud.billing.enabled=false` and
+`cloud.billing.provider=none`. Managed SaaS billing is a downstream hosting
+overlay, not a requirement for the OSS self-host path.
 
 ## Shared Config And Secret Injection
 
@@ -50,7 +52,7 @@ audited file:
 
 - `branding` controls the desktop app shell.
 - `cloud.publicBranding` controls the Cloud Web workbench and admin dashboard.
-- `cloudDesktop` pins the desktop app to the Acme cloud org.
+- `cloudDesktop` pins the desktop app to the configured cloud org.
 - `gateway.productMode=cloud_channel` makes this a Cloud Channel Gateway, not
   a Standalone Team Gateway runtime.
 - `gateway.providers` controls headless channel bindings; `gateway.branding`,
