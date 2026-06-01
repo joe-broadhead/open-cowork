@@ -27,6 +27,41 @@ const publicSafeFiles = [
   branchProtectionPath,
   releaseChecklistPath,
   packagingDocsPath,
+  'docs/deployment-readiness.md',
+  'docker-compose.cloud.yml',
+  'docker-compose.cloud.split.yml',
+  'docker-compose.cloud-gateway.yml',
+  'docker-compose.gateway-remote.yml',
+  'helm/open-cowork-cloud/values.yaml',
+  'helm/open-cowork-gateway/values.yaml',
+  'deploy/README.md',
+  'deploy/aws/README.md',
+  'deploy/azure/README.md',
+  'deploy/digitalocean/README.md',
+  'deploy/gcp/README.md',
+  'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
+  'deploy/gcp/gke/external-secret.example.yaml',
+  'deploy/gcp/gke/managed-certificate.example.yaml',
+  'deploy/gcp/gke/values.gke.yaml.example',
+  'deploy/gcp/smoke/README.md',
+  'deploy/gcp/smoke/evidence.template.json',
+  'deploy/gateway-appliance/README.md',
+  'deploy/gateway-appliance/local-all-in-one.env.example',
+  'deploy/gateway-appliance/remote-cloud.env.example',
+  'deploy/gateway-appliance/reverse-proxy/Caddyfile.example',
+  'deploy/kubernetes/README.md',
+  'deploy/managed-workers/helm-values.worker-pool.yaml.example',
+  'deploy/managed-workers/managed-operator-worker.env.template',
+  'deploy/managed-workers/self-host-worker.env.example',
+  'deploy/observability/managed-worker-slo-template.json',
+  'deploy/private-beta/design-partner-onboarding.template.md',
+  'deploy/private-beta/hosted-byok.config.example.json',
+  'deploy/private-beta/self-host-oss.config.example.json',
+  'deploy/private-beta/private-beta-plans.json',
+  'deploy/topologies/README.md',
+  'deploy/topologies/topology-profiles.json',
+  'examples/downstream/acme/cloud-values.yaml',
+  'examples/downstream/acme/gateway-values.yaml',
   goNoGoTemplatePath,
   privateGoNoGoSummaryPath,
   launchEvidenceTemplatePath,
@@ -101,13 +136,7 @@ function extractBranchProtectionRows() {
 
 function assertPublicSafe(path) {
   const contents = read(path)
-  const forbiddenStrings = [
-    '/Users/joe',
-    'OPEN_COWORK_GCP_PROJECT=',
-    'OPEN_COWORK_CLOUD_DATABASE_URL=postgres://',
-    'OPEN_COWORK_CLOUD_COOKIE_SECRET=',
-    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN=',
-  ]
+  const forbiddenStrings = ['/Users/joe']
   const forbiddenPatterns = [
     /\bAKIA[0-9A-Z]{16}\b/,
     /\bghp_[A-Za-z0-9_]{20,}\b/,
@@ -125,6 +154,47 @@ function assertPublicSafe(path) {
   for (const pattern of forbiddenPatterns) {
     if (pattern.test(contents)) throw new Error(`${path} appears to contain private material matching ${pattern}`)
   }
+  assertNoPrivateEnvAssignments(path, contents)
+}
+
+function assertNoPrivateEnvAssignments(path, contents) {
+  const guardedEnvNames = [
+    'OPEN_COWORK_GCP_PROJECT',
+    'OPEN_COWORK_CLOUD_DATABASE_URL',
+    'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL',
+    'OPEN_COWORK_CLOUD_COOKIE_SECRET',
+    'OPEN_COWORK_CLOUD_SECRET_KEY',
+    'OPEN_COWORK_CLOUD_INTERNAL_TOKEN',
+    'OPEN_COWORK_CLOUD_OBJECT_STORE_SECRET_ACCESS_KEY',
+    'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
+    'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
+    'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
+    'OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET',
+  ]
+  const assignmentPattern = new RegExp(`\\b(${guardedEnvNames.join('|')})=([^\\s\`\\\\]+)`, 'g')
+  for (const match of contents.matchAll(assignmentPattern)) {
+    const [, envName, rawValue] = match
+    const value = rawValue.replace(/^['"]|['"]$/g, '')
+    if (!isPublicPlaceholderValue(value)) {
+      throw new Error(`${path} must not assign a private value to ${envName}`)
+    }
+  }
+}
+
+function isPublicPlaceholderValue(value) {
+  if (!value || value === '...' || value === 'PROJECT') return true
+  if (value.startsWith('${') || value.startsWith('<')) return true
+  return [
+    'DATABASE_HOST',
+    'PASSWORD',
+    'REGION',
+    'REPLACE',
+    'USER',
+    'change-me',
+    'example.',
+    'localhost',
+    'replace-with',
+  ].some((placeholder) => value.includes(placeholder))
 }
 
 function assertWorkflowJob(path, jobName) {
