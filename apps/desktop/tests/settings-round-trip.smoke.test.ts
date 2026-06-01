@@ -55,7 +55,10 @@ test('settings round-trip survives a full reload through safeStorage + disk', as
 
     // Credentials come back through a separate IPC so the plain
     // settings:get doesn't leak them to every renderer consumer.
-    const providerCredentials = await page.evaluate(async () => window.coworkApi.settings.getProviderCredentials('openrouter'))
+    const providerCredentials = await page.evaluate(async () => window.coworkApi.settings.getProviderCredentials('openrouter', {
+      workspaceId: 'local',
+      purpose: 'credential_editor',
+    }))
     assert.equal(
       providerCredentials.apiKey,
       'roundtrip-key',

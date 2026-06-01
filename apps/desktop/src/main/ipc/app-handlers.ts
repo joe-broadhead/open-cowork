@@ -1,4 +1,5 @@
 import electron from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import { objectArg, optionalObjectArg, registerIpcInvoke } from './schema.ts'
 import { validateChartSaveArtifactRequest, validateSettingsUpdate, validateWorkspaceOptions } from './object-validators.ts'
@@ -60,7 +61,7 @@ import type {
   EffectiveAppSettings,
   WorkspaceOptions,
 } from '@open-cowork/shared'
-import { readWorkspaceIdOption } from '../workspace-gateway.ts'
+import { LOCAL_WORKSPACE_ID, readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 export {
   ensureRuntimeAfterAuthLogin,
@@ -144,6 +145,19 @@ function buildCloudEffectiveSettings(base: EffectiveAppSettings, value: Record<s
     effectiveModel: selectedModelId,
     effectiveSmallModel: selectedSmallModelId,
   }
+}
+
+function canReadLocalCredentialBag(
+  context: IpcHandlerContext,
+  event: IpcMainInvokeEvent,
+  options: unknown,
+) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return false
+  if ((options as { purpose?: unknown }).purpose !== 'credential_editor') return false
+  const workspaceId = readWorkspaceIdOption(options)
+  if (workspaceId && workspaceId !== LOCAL_WORKSPACE_ID) return false
+  return context.workspaceGateway.activeWorkspaceId(event) === LOCAL_WORKSPACE_ID
+    && context.workspaceGateway.isLocalWorkspace(event, workspaceId)
 }
 
 const electronShell = (electron as { shell?: typeof import('electron').shell }).shell
@@ -302,17 +316,17 @@ export function registerAppHandlers(context: IpcHandlerContext) {
     return buildCloudEffectiveSettings(base, setting?.value || {})
   })
 
-  context.ipcMain.handle('settings:get-provider-credentials', async (event, providerId: unknown) => {
+  context.ipcMain.handle('settings:get-provider-credentials', async (event, providerId: unknown, options: unknown) => {
     // Scoped opt-in for provider credential editor surfaces. Avoid
     // returning every stored provider and integration secret to any
     // renderer code that only needs one credential bag.
-    if (!context.workspaceGateway.isLocalWorkspace(event, null)) return {}
+    if (!canReadLocalCredentialBag(context, event, options)) return {}
     return getProviderCredentials(normalizeCredentialScopeId(providerId, 'Provider'))
   })
 
-  context.ipcMain.handle('settings:get-integration-credentials', async (event, integrationId: unknown) => {
+  context.ipcMain.handle('settings:get-integration-credentials', async (event, integrationId: unknown, options: unknown) => {
     // Same scoped read for integration/MCP credential editors.
-    if (!context.workspaceGateway.isLocalWorkspace(event, null)) return {}
+    if (!canReadLocalCredentialBag(context, event, options)) return {}
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })
 

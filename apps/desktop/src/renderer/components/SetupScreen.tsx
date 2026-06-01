@@ -4,6 +4,7 @@ import { t } from '../helpers/i18n'
 import { mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
 
 interface Props {
   brandName: string
@@ -100,7 +101,10 @@ export function SetupScreen({
           || initialProvider?.models[0]?.id
           || ''
       const initialCredentials = initialProviderId
-        ? await window.coworkApi.settings.getProviderCredentials(initialProviderId)
+        ? await window.coworkApi.settings.getProviderCredentials(initialProviderId, {
+            workspaceId: LOCAL_WORKSPACE_ID,
+            purpose: 'credential_editor',
+          })
         : {}
       if (cancelled) return
       if (!providerSelectionEdited.current) {
@@ -144,7 +148,10 @@ export function SetupScreen({
   useEffect(() => {
     if (!providerId || loadedCredentialProviders.has(providerId)) return
     let cancelled = false
-    window.coworkApi.settings.getProviderCredentials(providerId).then((credentials) => {
+    window.coworkApi.settings.getProviderCredentials(providerId, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      purpose: 'credential_editor',
+    }).then((credentials) => {
       if (cancelled) return
       mergeLoadedProviderCredentials(providerId, credentials)
       setLoadedCredentialProviders((current) => new Set(current).add(providerId))

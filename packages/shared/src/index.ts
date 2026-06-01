@@ -232,8 +232,8 @@ export interface CoworkAPI {
     get: (options?: WorkspaceOptions) => Promise<EffectiveAppSettings>
     // Scoped unmasked reads for credential editor surfaces. The renderer
     // never receives the full effective settings object with every secret.
-    getProviderCredentials: (providerId: string) => Promise<Record<string, string>>
-    getIntegrationCredentials: (integrationId: string) => Promise<Record<string, string>>
+    getProviderCredentials: (providerId: string, options: WorkspaceOptions & { purpose: 'credential_editor' }) => Promise<Record<string, string>>
+    getIntegrationCredentials: (integrationId: string, options: WorkspaceOptions & { purpose: 'credential_editor' }) => Promise<Record<string, string>>
     set: (updates: WorkspaceScoped<Partial<AppSettings>>) => Promise<EffectiveAppSettings>
   }
   mcp: {

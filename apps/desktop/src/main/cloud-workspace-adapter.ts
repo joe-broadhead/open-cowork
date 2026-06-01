@@ -118,8 +118,13 @@ export type CloudWorkspaceAdapterOptions = {
   cacheEncryptionFallback?: CloudWorkspaceCacheEncryptionFallback
 }
 
+const CLOUD_SYNC_SESSION_PAGE_SIZE = 100
+const CLOUD_SYNC_MAX_SESSION_PAGES = 5
+const CLOUD_SYNC_MAX_VIEW_REFRESHES = 100
+const CLOUD_SYNC_MAX_ARTIFACT_REFRESHES = 100
 const CLOUD_SYNC_VIEW_CONCURRENCY = 8
 const CLOUD_SYNC_ARTIFACT_CONCURRENCY = 4
+const CLOUD_SYNC_RETRY_BACKOFF_MS = 100
 
 function toSessionInfo(record: SessionRecord): SessionInfo {
   return {
@@ -177,12 +182,22 @@ async function settleWithConcurrency<T>(
   return results
 }
 
+async function retrySyncRefresh(task: () => Promise<unknown>) {
+  try {
+    await task()
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, CLOUD_SYNC_RETRY_BACKOFF_MS))
+    await task()
+  }
+}
+
 export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   private readonly transport: CloudTransportAdapter
   private readonly connection: CloudWorkspaceConnectionRecord
   private readonly cache: CloudWorkspaceCache | null
   private readonly inFlightSessionViews = new Map<string, Promise<SessionView>>()
   private readonly inFlightArtifactLists = new Map<string, Promise<SessionArtifact[]>>()
+  private syncGeneration = 0
 
   constructor(options: CloudWorkspaceAdapterOptions) {
     this.connection = options.connection
@@ -226,6 +241,55 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
       const cached = this.cache?.listSessions(cacheKey)
       if (cached) return cached
       throw error
+    }
+  }
+
+  private async listSessionsForSync(cacheKey: string, generation: number): Promise<{
+    viewRefreshCandidates: SessionInfo[]
+    artifactRefreshCandidates: SessionInfo[]
+  }> {
+    const cachedSessions = new Map((this.cache?.listSessions(cacheKey) || []).map((session) => [session.id, session]))
+    const cachedViews = new Set<string>()
+    const cachedArtifacts = new Set<string>()
+    for (const sessionId of cachedSessions.keys()) {
+      if (this.cache?.getSessionView(cacheKey, sessionId)) cachedViews.add(sessionId)
+      if (this.cache?.listArtifacts(cacheKey, sessionId)) cachedArtifacts.add(sessionId)
+    }
+    const sessions: SessionInfo[] = []
+    if (this.transport.listSessionsPage) {
+      let cursor: string | null = null
+      for (let page = 0; page < CLOUD_SYNC_MAX_SESSION_PAGES && generation === this.syncGeneration; page += 1) {
+        const result = await this.transport.listSessionsPage({
+          limit: CLOUD_SYNC_SESSION_PAGE_SIZE,
+          cursor,
+        })
+        sessions.push(...result.sessions.map(toSessionInfo))
+        if (!result.nextCursor || result.nextCursor === cursor) {
+          cursor = null
+          break
+        }
+        cursor = result.nextCursor
+      }
+      if (cursor === null) {
+        this.cache?.upsertSessionList(cacheKey, sessions)
+      } else {
+        for (const session of sessions) this.cache?.upsertSessionInfo(cacheKey, session)
+      }
+    } else {
+      sessions.push(...(await this.transport.listSessions()).map(toSessionInfo))
+      this.cache?.upsertSessionList(cacheKey, sessions)
+    }
+    const changedSessions = sessions.filter((session) => {
+      const cached = cachedSessions.get(session.id)
+      return !cached || cached.updatedAt !== session.updatedAt || !cachedViews.has(session.id)
+    })
+    const artifactSessions = sessions.filter((session) => {
+      const cached = cachedSessions.get(session.id)
+      return !cached || cached.updatedAt !== session.updatedAt || !cachedArtifacts.has(session.id)
+    })
+    return {
+      viewRefreshCandidates: changedSessions.slice(0, CLOUD_SYNC_MAX_VIEW_REFRESHES),
+      artifactRefreshCandidates: artifactSessions.slice(0, CLOUD_SYNC_MAX_ARTIFACT_REFRESHES),
     }
   }
 
@@ -546,18 +610,26 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
   }
 
   async sync(): Promise<void> {
-    const sessions = await this.listSessions()
-    await settleWithConcurrency(sessions, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
-      await this.getSessionView(session.id)
+    const generation = ++this.syncGeneration
+    const cacheKey = cloudWorkspaceCacheKey(this.connection)
+    const plan = await this.listSessionsForSync(cacheKey, generation)
+    if (generation !== this.syncGeneration) return
+    await settleWithConcurrency(plan.viewRefreshCandidates, CLOUD_SYNC_VIEW_CONCURRENCY, async (session) => {
+      if (generation !== this.syncGeneration) return
+      await retrySyncRefresh(() => this.getSessionView(session.id))
     })
+    if (generation !== this.syncGeneration) return
     if (this.transport.listArtifacts) {
-      await settleWithConcurrency(sessions, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
-        await this.listArtifacts(session.id)
+      await settleWithConcurrency(plan.artifactRefreshCandidates, CLOUD_SYNC_ARTIFACT_CONCURRENCY, async (session) => {
+        if (generation !== this.syncGeneration) return
+        await retrySyncRefresh(() => this.listArtifacts(session.id))
       })
     }
+    if (generation !== this.syncGeneration) return
     if (this.transport.listWorkflows) {
       await this.listWorkflows().catch(() => undefined)
     }
+    if (generation !== this.syncGeneration) return
     if (this.transport.listSettings) {
       await this.listSettings().catch(() => undefined)
     }

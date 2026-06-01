@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CustomMcpConfig } from '@open-cowork/shared'
+import type { CustomMcpConfig, DesktopPairingPublicRecord } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import {
@@ -474,8 +474,8 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
         lastCompactedAt: null,
         activeAgent: null,
         lastItemWasTool: false,
-        revision: 7,
-        lastEventAt: 42,
+        revision: 43,
+        lastEventAt: 43,
         isGenerating: true,
         isAwaitingPermission: true,
         isAwaitingQuestion: false,
@@ -562,6 +562,80 @@ test('cloud session SSE publishes authoritative cloud projections instead of loc
   })
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert.equal(sentViews.length, 1)
+})
+
+test('cloud session SSE waits for projection revision to catch up before publishing full views', async () => {
+  const { context, handlers, errors } = createBaseContext()
+  const sentViews: unknown[] = []
+  let subscribedEventHandler: ((event: any) => void) | null = null
+  let projectionFetches = 0
+  const adapter: CloudWorkspaceSessionAdapter = {
+    policy: async () => ({
+      features: { sessions: true },
+      allowedAgents: null,
+      allowedTools: null,
+      allowedMcps: null,
+      localFiles: 'disabled',
+      localStdioMcps: 'disabled',
+      machineRuntimeConfig: 'disabled',
+    }),
+    listSessions: async () => [],
+    createSession: async () => {
+      throw new Error('not used')
+    },
+    getSessionInfo: async () => null,
+    getSessionView: async () => {
+      projectionFetches += 1
+      return emptySessionView({
+        revision: projectionFetches === 1 ? 9 : 10,
+        lastEventAt: projectionFetches === 1 ? 9 : 10,
+      })
+    },
+    promptSession: async () => {},
+    abortSession: async () => {},
+    subscribeSessionEvents: (_sessionId, input) => {
+      subscribedEventHandler = input.onEvent
+      return { close: () => {} }
+    },
+  }
+  context.getMainWindow = () => ({
+    isDestroyed: () => false,
+    webContents: {
+      id: 204,
+      isDestroyed: () => false,
+      send: (channel: string, payload: unknown) => {
+        if (channel === 'session:view') sentViews.push(payload)
+      },
+    },
+  } as any)
+  installCloudWorkspace(context, adapter)
+
+  registerSessionHandlers(context)
+  const invokeEvent = { sender: { id: 204 } }
+  context.workspaceGateway.activate(invokeEvent, 'cloud:test')
+  await handlers.get('session:activate')?.(invokeEvent, 'cloud-session-stale')
+  assert.ok(subscribedEventHandler, 'expected cloud session event subscription')
+  projectionFetches = 0
+
+  subscribedEventHandler({
+    type: 'assistant.message',
+    sessionId: 'cloud-session-stale',
+    sequence: 10,
+    payload: { messageId: 'm1', content: 'fresh stream event' },
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  assert.equal(sentViews.length, 0)
+  assert.equal(errors.some((entry) => entry.includes('behind event sequence 10')), true)
+
+  await new Promise((resolve) => setTimeout(resolve, 350))
+  assert.equal(projectionFetches, 2)
+  assert.equal(sentViews.length, 1)
+  assert.deepEqual(sentViews[0], {
+    sessionId: 'cloud-session-stale',
+    workspaceId: 'cloud:test',
+    view: emptySessionView({ revision: 10, lastEventAt: 10 }),
+  })
 })
 
 test('cloud projection refresh errors back off repeated full-view fetches', async () => {
@@ -1734,6 +1808,14 @@ test('settings handlers sync only portable settings for cloud workspaces', async
   context.workspaceGateway.activate(cloudEvent, 'cloud:test')
   assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(cloudEvent, 'openrouter'), {})
   assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(cloudEvent, 'github'), {})
+  assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(cloudEvent, 'openrouter', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
+  assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(cloudEvent, 'github', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
 
   const current = await handlers.get('settings:get')?.({}, { workspaceId: 'cloud:test' })
   assert.equal(current.selectedProviderId, 'anthropic')
@@ -1760,6 +1842,81 @@ test('settings handlers sync only portable settings for cloud workspaces', async
     'get:portable-settings',
     'set:portable-settings:openai',
   ])
+})
+
+test('raw credential IPC is unavailable from Gateway and Paired Desktop workspaces', async () => {
+  const { context, handlers } = createBaseContext()
+  const pairing: DesktopPairingPublicRecord = {
+    id: 'pairing-credentials',
+    label: 'Paired Desktop',
+    deviceName: 'Phone',
+    status: 'paired_online',
+    enabled: true,
+    brokerUrl: 'https://gateway.example.test',
+    allowedWorkspaceIds: ['local'],
+    allowedSessionIds: [],
+    policy: {
+      allowRemotePrompts: true,
+      allowRemoteAbort: true,
+      remoteApprovals: 'local_confirmation',
+      remoteQuestions: 'local_confirmation',
+      exposeArtifactBodies: false,
+      exposeLocalPaths: false,
+      exposeLocalMcpDetails: false,
+      allowRemoteAttachments: false,
+    },
+    lastConnectedAt: '2026-05-27T10:00:00.000Z',
+    lastHeartbeatAt: '2026-05-27T10:01:00.000Z',
+    lastCommandSequence: 1,
+    error: null,
+    createdAt: '2026-05-27T09:00:00.000Z',
+    updatedAt: '2026-05-27T10:01:00.000Z',
+    revokedAt: null,
+    credential: {
+      hasToken: true,
+      deviceId: 'device-credentials',
+      updatedAt: '2026-05-27T09:00:00.000Z',
+    },
+  }
+  context.workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: null,
+    gatewayCredentialStore: null,
+    desktopPairingProvider: () => [pairing],
+    workspaces: [{
+      id: 'gateway:test',
+      kind: 'gateway',
+      authority: 'gateway_standalone',
+      label: 'Gateway',
+      status: 'online',
+      baseUrl: 'https://gateway.example.test/admin',
+      lastSyncedAt: null,
+    }],
+  })
+
+  registerAppHandlers(context)
+  const gatewayEvent = { sender: { id: 701 } } as never
+  context.workspaceGateway.activate(gatewayEvent, 'gateway:test')
+  assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(gatewayEvent, 'openrouter', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
+  assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(gatewayEvent, 'github', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
+
+  const pairedEvent = { sender: { id: 702 } } as never
+  context.workspaceGateway.activate(pairedEvent, 'paired-desktop:pairing-credentials')
+  assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(pairedEvent, 'openrouter', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
+  assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(pairedEvent, 'github', {
+    workspaceId: LOCAL_WORKSPACE_ID,
+    purpose: 'credential_editor',
+  }), {})
 })
 
 test('custom MCP IPC rejects malformed nested records before persistence', async () => {

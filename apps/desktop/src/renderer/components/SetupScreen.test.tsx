@@ -147,7 +147,10 @@ describe('SetupScreen', () => {
     const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
     await waitFor(() => expect(apiKeyInput).toHaveValue('sk-or-scoped'))
     expect(get).toHaveBeenCalledTimes(1)
-    expect(getProviderCredentials).toHaveBeenCalledWith('openrouter')
+    expect(getProviderCredentials).toHaveBeenCalledWith('openrouter', {
+      workspaceId: 'local',
+      purpose: 'credential_editor',
+    })
   })
 
   it('surfaces initial setup settings load failures through the chat error channel and diagnostics', async () => {

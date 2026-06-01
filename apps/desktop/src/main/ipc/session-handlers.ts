@@ -70,6 +70,7 @@ type CloudProjectionRefreshState = {
   publishedRevision: number
   failedAttempts: number
   nextAllowedAt: number
+  retryAfterFailure: boolean
 }
 
 const cloudProjectionRefreshes = new Map<string, CloudProjectionRefreshState>()
@@ -109,6 +110,7 @@ function queueCloudProjectionRefresh(input: {
     publishedRevision: 0,
     failedAttempts: 0,
     nextAllowedAt: 0,
+    retryAfterFailure: false,
   }
   state.latestSequence = Math.max(state.latestSequence, sequence)
   cloudProjectionRefreshes.set(key, state)
@@ -151,6 +153,9 @@ async function runQueuedCloudProjectionRefresh(input: {
   const requestedSequence = state.latestSequence
   try {
     const view = await context.workspaceGateway.getCloudSessionView(sourceEvent, sessionId, workspaceId)
+    if (view.revision < requestedSequence) {
+      throw new Error(`Cloud projection revision ${view.revision} is behind event sequence ${requestedSequence}.`)
+    }
     if (
       !win.isDestroyed()
       && cloudWorkspaceIsStillActive(context, sourceEvent, workspaceId)
@@ -161,6 +166,7 @@ async function runQueuedCloudProjectionRefresh(input: {
     }
     state.failedAttempts = 0
     state.nextAllowedAt = 0
+    state.retryAfterFailure = false
   } catch (error) {
     state.failedAttempts = Math.min(state.failedAttempts + 1, 8)
     const backoffMs = Math.min(
@@ -168,10 +174,12 @@ async function runQueuedCloudProjectionRefresh(input: {
       CLOUD_PROJECTION_REFRESH_BACKOFF_BASE_MS * 2 ** (state.failedAttempts - 1),
     )
     state.nextAllowedAt = Date.now() + backoffMs
+    state.retryAfterFailure = error instanceof Error && error.message.includes('behind event sequence')
     context.logHandlerError(`cloud session:view ${shortSessionId(sessionId)}`, error)
   } finally {
     state.inFlight = false
-    if (state.latestSequence > requestedSequence) {
+    if (state.latestSequence > requestedSequence || state.retryAfterFailure) {
+      state.retryAfterFailure = false
       if (state.timer) clearTimeout(state.timer)
       const delayMs = Math.max(CLOUD_PROJECTION_REFRESH_DEBOUNCE_MS, state.nextAllowedAt - Date.now())
       state.timer = setTimeout(() => {
@@ -250,7 +258,7 @@ function dispatchCloudWorkspaceSessionEvent(
       sourceEvent,
       sessionId,
       workspaceId,
-      sequence: event.sequence || Date.now(),
+      sequence: typeof event.sequence === 'number' && Number.isFinite(event.sequence) ? event.sequence : 0,
     })
   }
   const dispatchCloudRuntimeEvent = (runtimeEvent: Parameters<typeof dispatchRuntimeSessionEvent>[1]) => {

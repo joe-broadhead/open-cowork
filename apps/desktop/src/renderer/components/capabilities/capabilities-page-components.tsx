@@ -5,6 +5,7 @@ import { credentialFieldIsVisible } from '@open-cowork/shared'
 import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -163,7 +164,10 @@ export function ToolCredentialsCard({
 
   useEffect(() => {
     let cancelled = false
-    window.coworkApi.settings.getIntegrationCredentials(integrationId)
+    window.coworkApi.settings.getIntegrationCredentials(integrationId, {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      purpose: 'credential_editor',
+    })
       .then((current) => {
         if (cancelled) return
         setStored(current)
@@ -225,7 +229,10 @@ export function ToolCredentialsCard({
           [integrationId]: patch,
         },
       })
-      const refreshed = await window.coworkApi.settings.getIntegrationCredentials(integrationId)
+      const refreshed = await window.coworkApi.settings.getIntegrationCredentials(integrationId, {
+        workspaceId: LOCAL_WORKSPACE_ID,
+        purpose: 'credential_editor',
+      })
       setStored(refreshed)
       setDrafts({})
       setSavedAt(Date.now())

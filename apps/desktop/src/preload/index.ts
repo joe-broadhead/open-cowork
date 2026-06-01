@@ -317,8 +317,8 @@ const api: CoworkAPI = {
   },
   settings: {
     get: (options) => invoke('settings:get', options),
-    getProviderCredentials: (providerId) => invoke('settings:get-provider-credentials', providerId),
-    getIntegrationCredentials: (integrationId) => invoke('settings:get-integration-credentials', integrationId),
+    getProviderCredentials: (providerId, options) => invoke('settings:get-provider-credentials', providerId, options),
+    getIntegrationCredentials: (integrationId, options) => invoke('settings:get-integration-credentials', integrationId, options),
     set: (updates) => invoke('settings:set', updates),
   },
   mcp: {
