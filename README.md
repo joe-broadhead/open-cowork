@@ -28,7 +28,7 @@
 
 It brings the power of OpenCode into a desktop experience that developers love and less technical teams can actually use.
 
-[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Open Cowork Cloud](docs/open-cowork-cloud.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
+[Docs](https://joe-broadhead.github.io/open-cowork/) • [Getting Started](docs/getting-started.md) • [Workflows](docs/workflows.md) • [Configuration](docs/configuration.md) • [Open Cowork Cloud](docs/open-cowork-cloud.md) • [Packaging & Migration](docs/oss-packaging-migration.md) • [Downstream](docs/downstream.md) • [Roadmap](docs/roadmap.md)
 
 </div>
 
@@ -78,6 +78,10 @@ Local threads stay local. Open Cowork does not upload local projects, local
 stdio MCPs, machine runtime config, provider keys, or local-only artifacts just
 because a user connects a cloud org. Cloud-safe actions are explicit, policy
 gated, and reported through the workspace support matrix.
+
+The public product names, OCI image names, Gateway mode split, and migration
+path from the historical `opencode-agent-gateway` prototype are documented in
+[OSS Packaging and Gateway Migration](docs/oss-packaging-migration.md).
 
 ## Why it exists
 

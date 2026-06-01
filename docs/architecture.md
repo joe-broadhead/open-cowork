@@ -4,12 +4,13 @@
 
 Open Cowork is not a second runtime.
 
-It is a desktop product layer built on top of OpenCode.
+It is a product layer built on top of OpenCode across Desktop, Cloud, and
+Gateway surfaces.
 
 The clean architectural split is:
 
 - **OpenCode owns execution**
-- **Open Cowork owns composition, packaging, and UI**
+- **Open Cowork owns composition, packaging, UI, sync, policy, and channel adapters**
 
 ## At a glance
 
@@ -105,6 +106,8 @@ The canonical contract for workspace ownership, surface support, sync rules,
 status/reason vocabulary, and downstream boundaries lives in
 [Product Contract](product-contract.md). This section summarizes the
 architectural boundary.
+The canonical naming, packaging, release-channel, and legacy Gateway migration
+contract lives in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
 
 Open Cowork exposes Desktop, Cloud Web, and Gateway surfaces through explicit
 workspace authorities:

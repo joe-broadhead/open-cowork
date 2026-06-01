@@ -33,6 +33,9 @@ through this daemon.
 
 Provider tiers, capabilities, signing requirements, and test expectations are
 tracked in [Gateway Provider Readiness](gateway-provider-readiness.md).
+Product naming, historical `opencode-agent-gateway` migration, and compatibility
+alias policy are tracked in
+[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
 
 ## Product Modes
 
@@ -175,6 +178,11 @@ Existing deployments that use only `OPEN_COWORK_GATEWAY_MODE=self-host` or
 `managed` continue to behave as Cloud Channel Gateway deployments. New configs
 should add `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` or
 `"productMode": "cloud_channel"` for clarity.
+
+If you are migrating from the historical `opencode-agent-gateway` prototype,
+read [OSS Packaging and Gateway Migration](oss-packaging-migration.md) before
+moving state. The old Gateway-owned Postgres and OpenCode runtime state is not
+safe to import into Cloud automatically.
 
 Do not set `standalone` on this daemon. Standalone Team Gateway uses a separate
 app/package layout at `apps/standalone-gateway` so it can own private
