@@ -63,7 +63,8 @@ export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' 
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
 export type WorkReaperAction = 'retried' | 'failed' | 'released'
-export type ChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type ChannelProviderKind = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type ChannelProviderId = ChannelProviderKind | `${ChannelProviderKind}-${string}` | `${string}-${string}`
 export type HeadlessAgentStatus = 'active' | 'disabled'
 export type ChannelBindingStatus = 'active' | 'disabled' | 'auth_required' | 'error'
 export type ChannelIdentityRole = ControlPlaneRole | 'approver' | 'viewer'
@@ -1469,17 +1470,18 @@ function normalizePositiveInteger(value: unknown, label: string) {
 function windowStart(nowMs: number, windowMs: number) {
   return Math.floor(nowMs / windowMs) * windowMs
 }
-
 function quotaRetryAfterMs(nowMs: number, startedAtMs: number, windowMs: number) {
   return Math.max(1, startedAtMs + windowMs - nowMs)
 }
 
 function normalizeProvider(value: unknown): ChannelProviderId {
-  const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
-  if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
-    throw new Error(`Unsupported channel provider ${provider}.`)
-  }
-  return provider
+  const provider = normalizeText(value, 64, 'Channel provider') as ChannelProviderId
+  if (isChannelProviderId(provider)) return provider
+  throw new Error(`Unsupported channel provider ${provider}.`)
+}
+function isChannelProviderId(value: string): value is ChannelProviderId {
+  return ['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(value)
+    || (/^[a-z][a-z0-9_-]{1,63}$/.test(value) && value.includes('-'))
 }
 
 function normalizeBillingStatus(value: unknown): BillingSubscriptionStatus {

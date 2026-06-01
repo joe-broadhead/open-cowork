@@ -1223,6 +1223,88 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
   assert.equal(resolvedWithCommand?.command.kind, 'question.reply')
 })
 
+test('cloud control plane treats provider instance ids as routing namespaces', () => {
+  const store = seededStore()
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  const agent = store.createHeadlessAgent({
+    agentId: 'agent-1',
+    orgId: org.orgId,
+    tenantId: 'tenant-1',
+    profileName: 'data-analyst',
+    name: 'Data analyst',
+    createdByAccountId: 'user-1',
+  })
+  const prod = store.createChannelBinding({
+    bindingId: 'telegram-prod-binding',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    provider: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    displayName: 'Telegram prod',
+  })
+  const support = store.createChannelBinding({
+    bindingId: 'telegram-support-binding',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    provider: 'telegram-support',
+    externalWorkspaceId: 'bot-1',
+    displayName: 'Telegram support',
+  })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-prod',
+    opencodeSessionId: 'oc-session-prod',
+    profileName: 'data-analyst',
+  })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-support',
+    opencodeSessionId: 'oc-session-support',
+    profileName: 'data-analyst',
+  })
+
+  const prodSession = store.bindChannelSession({
+    bindingId: 'telegram-prod-session',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    channelBindingId: prod.bindingId,
+    provider: prod.provider,
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+    sessionId: 'session-prod',
+  })
+  const supportSession = store.bindChannelSession({
+    bindingId: 'telegram-support-session',
+    orgId: org.orgId,
+    agentId: agent.agentId,
+    channelBindingId: support.bindingId,
+    provider: support.provider,
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+    sessionId: 'session-support',
+  })
+
+  assert.notEqual(prodSession.bindingId, supportSession.bindingId)
+  assert.equal(store.findChannelSessionBindingByThread({
+    orgId: org.orgId,
+    provider: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+  })?.sessionId, 'session-prod')
+  assert.equal(store.findChannelSessionBindingByThread({
+    orgId: org.orgId,
+    provider: 'telegram-support',
+    externalWorkspaceId: 'bot-1',
+    externalChatId: 'chat-1',
+    externalThreadId: 'thread-1',
+  })?.sessionId, 'session-support')
+})
+
 test('cloud control plane persists tenant-scoped thread tags and session links', () => {
   const store = seededStore()
   const tag = store.createThreadTag({

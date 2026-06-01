@@ -3,6 +3,8 @@ import type { IncomingHttpHeaders } from 'node:http'
 import type {
   ChannelInteraction,
   ChannelProvider,
+  ChannelProviderId,
+  ChannelProviderKind,
   ChannelTarget,
   IncomingChannelMessage,
 } from '@open-cowork/gateway-channel'
@@ -127,7 +129,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
         return
       }
       if (registration.config.kind === 'fake') {
-        await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider.id, payload))
+        await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider, payload))
         return
       }
       throw new Error(`Gateway provider ${id} does not expose a webhook endpoint.`)
@@ -135,7 +137,7 @@ export function createGatewayProviderRegistry(config: GatewayConfig): GatewayPro
     async emitFake(id, input) {
       const registration = this.get(id)
       if (!registration || registration.config.kind !== 'fake') throw new Error(`Unknown fake gateway provider ${id}.`)
-      await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider.id, input))
+      await (registration.provider as FakeChannelProvider).emit(fakeMessage(registration.provider, input))
     },
   }
 }
@@ -153,6 +155,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
 
   if (config.kind === 'webhook') {
     return new WebhookProvider({
+      providerId: channelProviderConfigId(config),
       deliveryUrl: requiredSetting(config, 'deliveryUrl'),
       sharedSecret: config.credentials.sharedSecret,
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
@@ -170,6 +173,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
   if (config.kind === 'telegram') {
     const mode = settingString(config, 'mode') === 'webhook' ? 'webhook' : 'polling'
     return new TelegramProvider({
+      providerId: channelProviderConfigId(config),
       botToken: requiredCredential(config, 'botToken'),
       mode,
       webhook: mode === 'webhook'
@@ -186,6 +190,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
 
   if (config.kind === 'slack') {
     return new SlackProvider({
+      providerId: channelProviderConfigId(config),
       botToken: requiredCredential(config, 'botToken'),
       signingSecret: requiredCredential(config, 'signingSecret'),
       apiBaseUrl: settingString(config, 'apiBaseUrl') || undefined,
@@ -195,6 +200,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
 
   if (config.kind === 'email') {
     return new EmailProvider({
+      providerId: channelProviderConfigId(config),
       from: requiredSetting(config, 'from'),
       inboundSecret: requiredCredential(config, 'inboundSecret'),
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
@@ -209,7 +215,7 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
     })
   }
 
-  if (config.kind === 'cli') return new CliProvider()
+  if (config.kind === 'cli') return new CliProvider({ providerId: channelProviderConfigId(config) })
 
   throw new Error(`Provider kind ${config.kind} is not implemented by the gateway app yet.`)
 }
@@ -220,6 +226,7 @@ function isBridgeWebhookProviderKind(kind: GatewayProviderConfig['kind']): kind 
 
 function bridgeProviderConfig(config: GatewayProviderConfig, gateway: GatewayConfig) {
   return {
+    providerId: channelProviderConfigId(config),
     deliveryUrl: requiredSetting(config, 'deliveryUrl'),
     sharedSecret: requiredCredential(config, 'sharedSecret'),
     maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
@@ -227,7 +234,11 @@ function bridgeProviderConfig(config: GatewayProviderConfig, gateway: GatewayCon
   }
 }
 
-function fakeMessage(provider: ChannelProvider['id'], payload: unknown): IncomingChannelMessage {
+function channelProviderConfigId(config: GatewayProviderConfig): ChannelProviderId {
+  return config.id as ChannelProviderId
+}
+
+function fakeMessage(provider: Pick<ChannelProvider, 'id' | 'kind'>, payload: unknown): IncomingChannelMessage {
   const record = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? payload as Record<string, unknown>
     : {}
@@ -237,14 +248,19 @@ function fakeMessage(provider: ChannelProvider['id'], payload: unknown): Incomin
   const userId = typeof record.userId === 'string' && record.userId ? record.userId : 'fake-user'
   const interaction = readFakeInteraction(record)
   const target: ChannelTarget = {
-    provider,
+    provider: provider.id,
+    providerKind: provider.kind as ChannelProviderKind,
     chatId,
     threadId,
     userId,
   }
   return {
     id: typeof record.id === 'string' && record.id ? record.id : `fake-${Date.now()}`,
-    provider,
+    providerInstanceId: provider.id,
+    providerEventId: typeof record.id === 'string' && record.id ? record.id : `fake-${Date.now()}`,
+    providerMessageId: typeof record.id === 'string' && record.id ? record.id : null,
+    provider: provider.id,
+    providerKind: provider.kind,
     target,
     sender: {
       providerUserId: userId,

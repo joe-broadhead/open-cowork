@@ -6,14 +6,18 @@ import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderId,
+  ChannelProviderKind,
   ChannelProvider,
   ChannelTarget,
   IncomingChannelMessage,
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface CliProviderConfig {
+  providerId?: ChannelProviderId;
   input?: Readable;
   output?: Writable;
   now?: () => Date;
@@ -42,8 +46,10 @@ export interface CliIncomingPayload {
 }
 
 export class CliProvider implements ChannelProvider {
-  readonly id = "cli" as const;
-  readonly capabilities: ChannelCapabilities = {
+  readonly kind: ChannelProviderKind = "cli";
+  readonly id: ChannelProviderId;
+  readonly capabilities: ChannelCapabilities;
+  private readonly baseCapabilities: ChannelCapabilities = {
     threads: true,
     messageEditing: false,
     inlineButtons: false,
@@ -57,6 +63,12 @@ export class CliProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 0,
     maxButtonTokenBytes: 0,
     maxFileBytes: 10 * 1024 * 1024,
+    maxFileSizeBytes: 10 * 1024 * 1024,
+    inboundFileModes: ["inline_buffer"],
+    outboundFileModes: [],
+    editSemantics: "none",
+    interactionAcknowledgement: "none",
+    rateLimitStrategy: "none",
     supportsEphemeralResponses: false
   };
 
@@ -67,6 +79,8 @@ export class CliProvider implements ChannelProvider {
   private reader: Interface | null = null;
 
   constructor(config: CliProviderConfig = {}) {
+    this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
+    this.capabilities = normalizeChannelCapabilities(this.baseCapabilities);
     this.input = config.input ?? process.stdin;
     this.output = config.output ?? process.stdout;
     this.now = config.now ?? (() => new Date());
@@ -120,7 +134,7 @@ export class CliProvider implements ChannelProvider {
       const payload = trimmed.startsWith("{")
         ? JSON.parse(trimmed) as unknown
         : { text: trimmed };
-      await handler(mapCliPayload(payload, this.now()));
+      await handler(mapCliPayload(payload, this.now(), this.id));
     } catch (error) {
       this.writeJson({
         type: "error",
@@ -140,7 +154,8 @@ export class CliProvider implements ChannelProvider {
       ...payload
     });
     return {
-      provider: "cli",
+      provider: target.provider,
+      providerKind: target.providerKind ?? this.kind,
       chatId: target.chatId,
       threadId: target.threadId,
       messageId,
@@ -149,22 +164,28 @@ export class CliProvider implements ChannelProvider {
   }
 
   private writeJson(payload: Record<string, unknown>): void {
-    this.output.write(`${JSON.stringify({ provider: "cli", ...payload })}\n`);
+    this.output.write(`${JSON.stringify({ provider: this.id, providerKind: this.kind, ...payload })}\n`);
   }
 }
 
-export function mapCliPayload(payload: unknown, now = new Date()): IncomingChannelMessage {
+export function mapCliPayload(payload: unknown, now = new Date(), providerId: ChannelProviderId = "cli"): IncomingChannelMessage {
   const record = isRecord(payload) ? payload as CliIncomingPayload : { text: String(payload ?? "") };
   const text = cleanString(record.text) ?? "";
   const rawText = cleanString(record.rawText) ?? text;
   const chatId = cleanString(record.chatId) ?? "local-cli";
   const userId = cleanString(record.userId) ?? "cli-user";
   const command = parseCommand(text);
+  const id = cleanString(record.id) ?? randomUUID();
   return {
-    id: cleanString(record.id) ?? randomUUID(),
-    provider: "cli",
+    id,
+    providerInstanceId: providerId,
+    providerEventId: id,
+    providerMessageId: id,
+    provider: providerId,
+    providerKind: "cli",
     target: {
-      provider: "cli",
+      provider: providerId,
+      providerKind: "cli",
       chatId,
       isDirect: true,
       threadId: cleanString(record.threadId) ?? null,
@@ -188,11 +209,12 @@ export function mapCliPayload(payload: unknown, now = new Date()): IncomingChann
 }
 
 function normalizeTarget(target: ChannelTarget): ChannelTarget {
-  if (target.provider !== "cli") {
+  if (target.providerKind !== "cli" && target.provider !== "cli" && !String(target.provider).startsWith("cli-")) {
     throw new Error(`CLI provider cannot deliver target for provider ${target.provider}.`);
   }
   return {
-    provider: "cli",
+    provider: target.provider,
+    providerKind: "cli",
     chatId: cleanRequired(target.chatId, "CLI target.chatId"),
     isDirect: target.isDirect === true,
     threadId: cleanString(target.threadId) ?? null,

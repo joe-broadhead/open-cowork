@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
+import { runChannelProviderConformance } from "@open-cowork/gateway-channel";
 import {
   createButtonCapableFakeProvider,
   createButtonlessFakeProvider,
@@ -9,6 +10,56 @@ import {
 } from "@open-cowork/gateway-testing";
 
 describe("FakeChannelProvider", () => {
+  it("passes the provider conformance suite with an instance-aware id", async () => {
+    const provider = new FakeChannelProvider({ id: "cli-main" });
+    const target = {
+      provider: "cli-main" as const,
+      providerKind: "cli" as const,
+      chatId: "local-test",
+      threadId: "thread-1",
+      messageId: "1"
+    };
+
+    const report = await runChannelProviderConformance({
+      provider,
+      target,
+      downloadableAttachment: {
+        filename: "input.txt",
+        buffer: new TextEncoder().encode("input")
+      },
+      inbound: [{
+        name: "text",
+        emit: () => provider.emit({
+          id: "msg-1",
+          providerInstanceId: "cli-main",
+          providerEventId: "event-1",
+          providerMessageId: "msg-1",
+          provider: "cli-main",
+          providerKind: "cli",
+          target,
+          sender: { providerUserId: "user-1" },
+          text: "/approve ok",
+          rawText: "/approve ok",
+          isCommand: true,
+          command: "approve",
+          commandArgs: "ok",
+          attachments: [],
+          receivedAt: new Date("2026-05-27T12:00:00.000Z"),
+          raw: {}
+        }),
+        expected: {
+          text: "/approve ok",
+          command: "approve",
+          chatId: "local-test",
+          threadId: "thread-1"
+        }
+      }]
+    });
+
+    expect(report).toMatchObject({ passed: true, providerId: "cli-main", providerKind: "cli" });
+    expect(report.violations).toEqual([]);
+  });
+
   it("records sent text, files, and buttons for gateway e2e tests", async () => {
     const provider = new FakeChannelProvider();
     const target = {

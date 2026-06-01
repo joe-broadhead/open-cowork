@@ -1,5 +1,4 @@
 import type {
-  ChannelProviderId,
   ChannelProvider,
   ChannelTarget,
 } from '@open-cowork/gateway-channel'
@@ -41,7 +40,7 @@ export const GATEWAY_RENDERED_SESSION_EVENT_TYPES = [
 export async function renderGatewaySessionEvent(
   input: RenderGatewaySessionEventInput,
 ): Promise<RenderGatewaySessionEventResult> {
-  const target = targetForBinding(input.binding, input.provider.id)
+  const target = targetForBinding(input.binding, input.provider)
   if (input.event.type === 'assistant.message') {
     return renderAssistantStream({
       provider: input.provider,
@@ -76,9 +75,10 @@ export async function renderGatewaySessionEvent(
   return { handled: false }
 }
 
-function targetForBinding(binding: ChannelSessionBindingRecord, provider: ChannelProviderId): ChannelTarget {
+function targetForBinding(binding: ChannelSessionBindingRecord, provider: Pick<ChannelProvider, 'id' | 'kind'>): ChannelTarget {
   return {
-    provider,
+    provider: provider.id,
+    providerKind: provider.kind,
     chatId: binding.externalChatId,
     threadId: binding.externalThreadId,
     messageId: binding.lastChatMessageId,

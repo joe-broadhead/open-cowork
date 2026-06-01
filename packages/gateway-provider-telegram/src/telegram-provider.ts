@@ -2,6 +2,8 @@ import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderId,
+  ChannelProviderKind,
   ChannelProvider,
   ChannelTarget,
   IncomingChannelMessage,
@@ -9,12 +11,14 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
 import { timingSafeEqual } from "node:crypto";
 import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
 
 export interface TelegramProviderConfig {
+  providerId?: ChannelProviderId;
   botToken: string;
   mode: "polling" | "webhook";
   fetch?: typeof globalThis.fetch;
@@ -41,8 +45,10 @@ export interface TelegramWebhookAuth {
 }
 
 export class TelegramProvider implements ChannelProvider {
-  readonly id = "telegram" as const;
-  readonly capabilities: ChannelCapabilities = {
+  readonly kind: ChannelProviderKind = "telegram";
+  readonly id: ChannelProviderId;
+  readonly capabilities: ChannelCapabilities;
+  private readonly baseCapabilities: ChannelCapabilities = {
     threads: true,
     messageEditing: true,
     inlineButtons: true,
@@ -56,6 +62,12 @@ export class TelegramProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 4,
     maxButtonTokenBytes: 64,
     maxFileBytes: 20 * 1024 * 1024,
+    maxFileSizeBytes: 20 * 1024 * 1024,
+    inboundFileModes: ["provider_file_id"],
+    outboundFileModes: ["local_path", "inline_buffer"],
+    editSemantics: "message",
+    interactionAcknowledgement: "required",
+    rateLimitStrategy: "retry_after",
     supportsEphemeralResponses: true
   };
 
@@ -68,6 +80,8 @@ export class TelegramProvider implements ChannelProvider {
   private identity?: TelegramBotIdentity;
 
   constructor(private readonly config: TelegramProviderConfig) {
+    this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
+    this.capabilities = normalizeChannelCapabilities(this.baseCapabilities);
     this.bot = new Bot(config.botToken);
   }
 
@@ -87,7 +101,7 @@ export class TelegramProvider implements ChannelProvider {
         if (!this.handler || !this.identity) {
           return;
         }
-        const message = mapTelegramMessage(ctx, this.config, this.identity);
+        const message = mapTelegramMessage(ctx, this.config, this.identity, this.id);
         if (message) {
           await this.handler(message);
         }
@@ -97,7 +111,7 @@ export class TelegramProvider implements ChannelProvider {
         if (!this.handler) {
           return;
         }
-        const message = mapTelegramCallback(ctx);
+        const message = mapTelegramCallback(ctx, this.id);
         if (message) {
           await this.handler(message);
         }
@@ -173,7 +187,8 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const inputFile = file.path ? new InputFile(file.path, file.filename) : new InputFile(file.data ?? new Uint8Array(), file.filename);
+    const filePath = file.localPath ?? file.path;
+    const inputFile = filePath ? new InputFile(filePath, file.filename) : new InputFile(file.data ?? new Uint8Array(), file.filename);
     const sent = await this.retry(() => this.bot.api.sendDocument(toChatId(target.chatId), inputFile, {
       message_thread_id: toThreadId(target.threadId)
     }));
@@ -270,6 +285,7 @@ export function mapTelegramMessage(
   ctx: Context,
   config: TelegramProviderConfig,
   identity: TelegramBotIdentity,
+  providerId: ChannelProviderId = "telegram",
 ): IncomingChannelMessage | null {
   const message = ctx.message;
   const from = message?.from;
@@ -290,9 +306,14 @@ export function mapTelegramMessage(
 
   return {
     id: String(message.message_id),
-    provider: "telegram",
+    providerInstanceId: providerId,
+    providerEventId: String(message.message_id),
+    providerMessageId: String(message.message_id),
+    provider: providerId,
+    providerKind: "telegram",
     target: {
-      provider: "telegram",
+      provider: providerId,
+      providerKind: "telegram",
       chatId: String(chat.id),
       isDirect: chat.type === "private",
       threadId,
@@ -316,7 +337,7 @@ export function mapTelegramMessage(
   };
 }
 
-export function mapTelegramCallback(ctx: Context): IncomingChannelMessage | null {
+export function mapTelegramCallback(ctx: Context, providerId: ChannelProviderId = "telegram"): IncomingChannelMessage | null {
   const query = ctx.callbackQuery;
   const from = query?.from;
   const data = query?.data;
@@ -333,9 +354,14 @@ export function mapTelegramCallback(ctx: Context): IncomingChannelMessage | null
 
   return {
     id: query.id,
-    provider: "telegram",
+    providerInstanceId: providerId,
+    providerEventId: query.id,
+    providerMessageId: String(message.message_id),
+    provider: providerId,
+    providerKind: "telegram",
     target: {
-      provider: "telegram",
+      provider: providerId,
+      providerKind: "telegram",
       chatId: String(chat.id),
       isDirect: chat.type === "private",
       threadId,
@@ -497,7 +523,8 @@ function toThreadId(threadId: string | null | undefined): number | undefined {
 
 function toSentMessage(target: ChannelTarget, messageId: number): SentMessage {
   return {
-    provider: "telegram",
+    provider: target.provider,
+    providerKind: target.providerKind ?? "telegram",
     chatId: target.chatId,
     threadId: target.threadId,
     messageId: String(messageId),

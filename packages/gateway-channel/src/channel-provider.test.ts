@@ -2,12 +2,16 @@ import { describe, it } from "node:test";
 import { expect } from "../../../tests/gateway-test-expect.ts";
 import {
   buildScopeKey,
+  channelProviderKindFromId,
   chunkText,
   createProviderToken,
   fitText,
   isChannelProviderId,
+  isChannelProviderInstanceIdForKind,
+  isChannelProviderKind,
   isSafeScopeKey,
-  isValidProviderToken
+  isValidProviderToken,
+  normalizeChannelCapabilities
 } from "@open-cowork/gateway-channel";
 
 describe("channel provider utilities", () => {
@@ -116,8 +120,31 @@ describe("channel provider utilities", () => {
 
   it("recognizes supported provider ids", () => {
     expect(isChannelProviderId("telegram")).toBe(true);
+    expect(isChannelProviderKind("telegram")).toBe(true);
+    expect(isChannelProviderId("telegram-main")).toBe(true);
+    expect(isChannelProviderInstanceIdForKind("telegram-main", "telegram")).toBe(true);
+    expect(channelProviderKindFromId("slack-work")).toBe("slack");
+    expect(isChannelProviderId("acme-telegram")).toBe(true);
+    expect(channelProviderKindFromId("acme-telegram")).toBe(null);
     expect(isChannelProviderId("whatsapp")).toBe(true);
     expect(isChannelProviderId("matrix")).toBe(false);
+    expect(isChannelProviderId("Matrix-main")).toBe(false);
+  });
+
+  it("derives inbound and outbound file modes from legacy file capability flags", () => {
+    const capabilities = normalizeChannelCapabilities({
+      threads: false,
+      messageEditing: false,
+      inlineButtons: false,
+      fileUploads: true,
+      fileDownloads: false,
+      typingIndicator: false,
+      maxTextLength: 100,
+      preferredParseMode: "plain"
+    });
+
+    expect(capabilities.inboundFileModes).toEqual([]);
+    expect(capabilities.outboundFileModes).toEqual(["local_path", "inline_buffer"]);
   });
 });
 

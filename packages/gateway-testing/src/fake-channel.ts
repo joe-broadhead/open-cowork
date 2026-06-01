@@ -1,6 +1,7 @@
 import type {
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderKind,
   ChannelProvider,
   ChannelProviderId,
   ChannelTarget,
@@ -10,6 +11,7 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export type FakeChannelSentEntry = {
   kind: "text" | "edit" | "buttons" | "file";
@@ -41,10 +43,17 @@ const defaultFakeCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 4,
   maxButtonTokenBytes: 128,
   maxFileBytes: 25 * 1024 * 1024,
+  maxFileSizeBytes: 25 * 1024 * 1024,
+  inboundFileModes: ["inline_buffer"],
+  outboundFileModes: ["inline_buffer"],
+  editSemantics: "message",
+  interactionAcknowledgement: "optional",
+  rateLimitStrategy: "none",
   supportsEphemeralResponses: true
 };
 
 export class FakeChannelProvider implements ChannelProvider {
+  readonly kind: ChannelProviderKind;
   readonly id: ChannelProviderId;
   readonly capabilities: ChannelCapabilities;
 
@@ -55,11 +64,13 @@ export class FakeChannelProvider implements ChannelProvider {
   private readonly now: () => Date;
 
   constructor(options: FakeChannelProviderOptions = {}) {
-    this.id = options.id ?? "cli";
-    this.capabilities = {
+    const identity = normalizeChannelProviderIdentity("cli", options.id ?? "cli");
+    this.kind = identity.providerKind;
+    this.id = identity.providerId;
+    this.capabilities = normalizeChannelCapabilities({
       ...defaultFakeCapabilities,
       ...options.capabilities
-    };
+    });
     this.now = options.now ?? (() => new Date());
   }
 
@@ -140,6 +151,7 @@ export class FakeChannelProvider implements ChannelProvider {
 function sent(target: ChannelTarget, id: number, sentAt: Date): SentMessage {
   return {
     provider: target.provider,
+    providerKind: target.providerKind,
     chatId: target.chatId,
     threadId: target.threadId,
     messageId: String(id),

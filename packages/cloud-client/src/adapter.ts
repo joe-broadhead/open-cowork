@@ -66,7 +66,8 @@ function cloudArtifactIdFromFilePath(filePath: string) {
 export type CloudClientSessionStatus = 'idle' | 'running' | 'closed' | 'errored'
 export type CloudClientCommandKind = 'prompt' | 'abort' | 'permission.respond' | 'question.reply' | 'question.reject'
 export type CloudClientCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
-export type CloudChannelProviderId = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type CloudChannelProviderKind = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
+export type CloudChannelProviderId = CloudChannelProviderKind | `${CloudChannelProviderKind}-${string}` | `${string}-${string}`
 export type CloudChannelIdentityRole = 'owner' | 'admin' | 'member' | 'approver' | 'viewer'
 export type CloudChannelIdentityStatus = 'active' | 'disabled' | 'pending'
 export type CloudChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'

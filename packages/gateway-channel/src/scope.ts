@@ -19,7 +19,7 @@ export function buildScopeKey(target: ChannelTarget): string {
 }
 
 export function isSafeScopeKey(scopeKey: string): boolean {
-  return /^[a-z]+:(dm|chat):[-_a-zA-Z0-9:]+$/.test(scopeKey);
+  return /^[a-z][a-z0-9_-]*:(dm|chat):[-_a-zA-Z0-9:]+$/.test(scopeKey);
 }
 
 function scopeComponent(value: string): string {

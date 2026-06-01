@@ -477,7 +477,14 @@ function readEnum<T extends string>(value: unknown, allowed: readonly T[]): T | 
 }
 
 function readChannelProvider(value: unknown): ChannelProviderId | undefined {
-  return readEnum(value, ['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'] as const)
+  const provider = readString(value)
+  if (!provider) return undefined
+  if (['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
+    return provider as ChannelProviderId
+  }
+  return /^[a-z][a-z0-9_-]{1,63}$/.test(provider) && provider.includes('-')
+    ? provider as ChannelProviderId
+    : undefined
 }
 
 function parseTagIds(url: URL) {
