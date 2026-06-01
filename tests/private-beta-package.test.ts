@@ -24,7 +24,7 @@ test('private beta launch package documents managed and self-host promises', () 
     'Known Private Beta Constraints',
     'Open Cowork does not resell model tokens',
     'Desktop local workspaces stay local',
-    'Gateway is a channel client and delivery adapter',
+    'Cloud Channel Gateway is a channel client and delivery adapter',
     'create or invite org owner',
     'verify membership and role',
     'write-only endpoint',
@@ -260,7 +260,7 @@ test('private beta onboarding and go/no-go templates force complete evidence rec
     'Known Risks And Mitigations',
     'Decision',
     'BYOK plaintext absent',
-    'Gateway is a channel client and delivery adapter',
+    'Cloud Channel Gateway is a channel client and delivery adapter',
     'managed-byok-readiness-contract.template.json',
     'launch-evidence-record.template.json',
     'Onboarding failures preserve machine-readable status and reason codes',
@@ -278,6 +278,7 @@ test('private beta examples keep hosted and OSS modes separate', () => {
   assert.equal(hosted.cloud.billing.defaultPlanKey, 'private-beta-design-partner')
   assert.equal(hosted.cloudDesktop.requireManagedOrg, true)
   assert.equal(hosted.cloudDesktop.allowUserAddedConnections, false)
+  assert.equal(hosted.gateway.productMode, 'cloud_channel')
   assert.equal(hosted.gateway.mode, 'managed')
   assert.equal(hosted.gateway.metrics.enabled, true)
   assert.ok(hosted.gateway.server.adminToken)
@@ -287,6 +288,7 @@ test('private beta examples keep hosted and OSS modes separate', () => {
   assert.equal(selfHost.cloud.billing.provider, 'none')
   assert.equal(selfHost.cloudDesktop.allowUserAddedConnections, true)
   assert.equal(selfHost.cloudDesktop.requireManagedOrg, false)
+  assert.equal(selfHost.gateway.productMode, 'cloud_channel')
   assert.equal(selfHost.gateway.mode, 'self-host')
   assert.equal(selfHost.gateway.providers[0].kind, 'webhook')
   assert.ok(selfHost.gateway.providers[0].credentials.sharedSecret)

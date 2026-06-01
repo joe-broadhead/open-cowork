@@ -293,6 +293,7 @@ test('gateway deployer config validates shared branding providers and safety sem
       baseUrl: 'https://cowork.acme.example',
       serviceToken: '{env:ACME_GATEWAY_SERVICE_TOKEN}',
     },
+    productMode: 'cloud_channel',
     server: {
       host: '0.0.0.0',
       port: 8790,
@@ -321,6 +322,9 @@ test('gateway deployer config validates shared branding providers and safety sem
 
   assert.doesNotThrow(() => validateResolvedConfig(config, 'gateway deployer config'))
   assert.doesNotThrow(() => validateConfigSemantics(config, 'gateway deployer config'))
+
+  config.gateway.productMode = 'cloud'
+  assert.throws(() => validateResolvedConfig(config, 'gateway deployer config'), /gateway\.productMode/)
 })
 
 test('gateway deployer config allows gateway-only secrets to be injected outside desktop validation', () => {

@@ -2,8 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import type { ChannelProviderId } from '@open-cowork/gateway-channel'
-import { jsonConfigCandidates, parseJsoncText } from '@open-cowork/shared'
-import type { GatewayDeploymentConfig, PublicBrandingConfig } from '@open-cowork/shared'
+import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode } from '@open-cowork/shared'
+import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
+
+export type { GatewayProductMode } from '@open-cowork/shared'
 
 export type GatewayMode = 'self-host' | 'managed'
 export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
@@ -11,6 +13,7 @@ export type GatewayProviderKind = ChannelProviderId | 'fake'
 
 export type GatewayConfig = {
   branding: PublicBrandingConfig
+  productMode: GatewayProductMode
   cloud: {
     baseUrl: string
     serviceToken: string
@@ -109,6 +112,7 @@ export function loadGatewayConfig(env: GatewayEnv = process.env): GatewayConfig 
 }
 
 export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv = {}): GatewayConfig {
+  const productMode = resolveGatewayProductMode(env.OPEN_COWORK_GATEWAY_PRODUCT_MODE, raw.productMode)
   const cloud = resolveGatewayCloudConnection(env)
   const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
   const serverHost = readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost
@@ -122,6 +126,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   }
   const config: GatewayConfig = {
     branding: resolveGatewayBranding(raw.branding, env),
+    productMode,
     cloud: {
       baseUrl: cloud.baseUrl,
       serviceToken: cloud.serviceToken,

@@ -61,6 +61,7 @@ test('gateway config requires providers unless the local fake provider is explic
   assert.equal(config.server.port, 0)
   assert.equal(config.server.adminToken, null)
   assert.equal(config.server.allowLoopbackOperatorBypass, true)
+  assert.equal(config.productMode, 'cloud_channel')
   assert.equal(config.mode, 'self-host')
   assert.deepEqual(config.providers.map((provider) => ({
     id: provider.id,
@@ -71,6 +72,50 @@ test('gateway config requires providers unless the local fake provider is explic
     kind: 'fake',
     channelBindingId: 'fake-binding',
   }])
+})
+
+test('gateway config separates product mode from deployment mode', () => {
+  const cloudChannel = resolveGatewayConfig({
+    productMode: 'cloud_channel',
+    mode: 'managed',
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  })
+
+  assert.equal(cloudChannel.productMode, 'cloud_channel')
+  assert.equal(cloudChannel.mode, 'managed')
+
+  const envCloudChannel = resolveGatewayConfig({
+    mode: 'self-host',
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'cloud_channel',
+  })
+  assert.equal(envCloudChannel.productMode, 'cloud_channel')
+
+  assert.throws(() => resolveGatewayConfigBase({}, {
+    OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'standalone',
+  }), /Standalone Team Gateway app/)
+  assert.throws(() => resolveGatewayConfigBase({}, {
+    OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'hybrid',
+  }), /reserved for a later/)
+  assert.throws(() => resolveGatewayConfigBase({}, {
+    OPEN_COWORK_GATEWAY_PRODUCT_MODE: 'cloud',
+  }), /Unsupported gateway productMode/)
+  assert.throws(() => resolveGatewayConfigBase({
+    productMode: 'cloud' as never,
+  }, cloudEnv), /Unsupported gateway productMode/)
 })
 
 test('gateway config loads explicit provider credentials and redacts secrets', () => {

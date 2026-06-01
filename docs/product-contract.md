@@ -97,6 +97,13 @@ Cloud Channel Gateway is a headless Cloud client/channel adapter. It can run on
 a VPS, Mac mini, Raspberry Pi, internal server, Kubernetes, or managed
 infrastructure.
 
+Config identity:
+
+- `gateway.productMode: "cloud_channel"`
+- `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel`
+- existing `gateway.mode` / `OPEN_COWORK_GATEWAY_MODE` remains deployment
+  posture only: `self-host` or `managed`
+
 Cloud Channel Gateway owns:
 
 - channel I/O
@@ -124,6 +131,13 @@ Standalone Team Gateway is a separate Gateway product mode and execution
 authority. It is for users and organizations that want an always-on private
 OpenCode team on a VPS, private server, or Kubernetes without requiring Cloud.
 
+Config identity:
+
+- `gateway.productMode: "standalone"`
+- future standalone app/package entry point, not current `apps/gateway`
+- owns its own Gateway control plane and must not share Cloud Channel Gateway
+  runtime assumptions
+
 Standalone Team Gateway owns:
 
 - private OpenCode runtime supervision
@@ -135,6 +149,9 @@ Standalone Team Gateway owns:
 Standalone Team Gateway must keep OpenCode private. It must not expose a public
 OpenCode port, and any optional Cloud connection is an explicit registration,
 sync, or edge-capacity contract rather than implicit database merging.
+
+Hybrid Gateway is reserved for a later registered-edge design. It must not be
+treated as Cloud Channel Gateway or Standalone Team Gateway by default.
 
 ### Paired Desktop
 

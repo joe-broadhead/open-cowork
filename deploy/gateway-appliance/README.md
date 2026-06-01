@@ -1,11 +1,17 @@
-# Open Cowork Gateway Appliance
+# Open Cowork Cloud Channel Gateway Appliance
 
 This directory contains copyable deployment assets for running Open Cowork
-Gateway as a headless appliance on a VPS, Mac mini, Raspberry Pi, internal
-server, or local Docker host.
+Cloud Channel Gateway as a headless appliance on a VPS, Mac mini, Raspberry
+Pi, internal server, or local Docker host.
 
-Gateway remains a Cloud client. It does not spawn OpenCode and does not own
-control-plane Postgres state.
+This appliance remains a Cloud client. It does not spawn OpenCode and does not
+own control-plane Postgres state. Set
+`OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` explicitly in new
+deployments.
+
+Standalone Team Gateway is a separate product mode that may own private
+OpenCode and Gateway Postgres. Do not run it through these Cloud Channel
+Gateway assets.
 
 ## VPS/Local Compose Recipe
 
@@ -13,8 +19,8 @@ Use this path for self-hosted Gateway appliances and small local Cloud pilots:
 
 | Mode | Compose file | Backing services | Intended use |
 | --- | --- | --- | --- |
-| Remote Cloud | `docker-compose.gateway-remote.yml` | Existing managed Cloud plus this host's Gateway process | VPS, Mac mini, Raspberry Pi, or internal server channel appliance |
-| Local all-in-one | `docker-compose.cloud-gateway.yml` | Cloud, Postgres, MinIO, and Gateway on one Docker host | Local demos, OSS self-host pilots, and internal installs |
+| Remote Cloud | `docker-compose.gateway-remote.yml` | Existing managed Cloud plus this host's Cloud Channel Gateway process | VPS, Mac mini, Raspberry Pi, or internal server channel appliance |
+| Local all-in-one | `docker-compose.cloud-gateway.yml` | Cloud, Postgres, MinIO, and Cloud Channel Gateway on one Docker host | Local demos, OSS self-host pilots, and internal installs |
 
 The Compose files are provider-config only. Keep real domains, tokens, bot
 tokens, SMTP credentials, and webhook secrets in a private `.env.gateway` file
@@ -24,7 +30,7 @@ managed provider recipes.
 
 ## Modes
 
-Remote Cloud mode runs only Gateway on this host:
+Remote Cloud deployment runs only Cloud Channel Gateway on this host:
 
 ```bash
 node scripts/gateway-appliance-setup.mjs \
@@ -42,7 +48,8 @@ The remote compose file refuses to render without
 random operator token before exposing `/ready`, `/metrics`, `/diagnostics`, or
 delivery controls.
 
-Local all-in-one mode runs Cloud, Postgres, MinIO, and Gateway together:
+Local all-in-one deployment runs Cloud, Postgres, MinIO, and Cloud Channel
+Gateway together:
 
 ```bash
 node scripts/gateway-appliance-setup.mjs \
@@ -86,7 +93,7 @@ local-only `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true`.
 
 ## Files
 
-- `remote-cloud.env.example`: remote Cloud Gateway env template.
+- `remote-cloud.env.example`: remote Cloud Channel Gateway env template.
 - `local-all-in-one.env.example`: local Cloud + Gateway env template.
 - `systemd/open-cowork-gateway.service`: Linux, VPS, and Raspberry Pi unit.
 - `launchd/com.open-cowork.gateway.plist`: macOS and Mac mini LaunchDaemon.

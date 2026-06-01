@@ -757,6 +757,7 @@ function validateDocs() {
     'gateway.providers',
     'docs/gateway-appliance.md',
     'docker-compose.gateway-remote.yml',
+    'OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel',
     'OPEN_COWORK_CONFIG_PATH',
     'cloud.billing.provider',
     'OPEN_COWORK_CLOUD_IMAGE',
@@ -884,6 +885,7 @@ function validateDocs() {
       'VPS/Local Compose Recipe',
       'docker-compose.gateway-remote.yml',
       'docker-compose.cloud-gateway.yml',
+      'OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel',
       'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true',
     ],
   }
@@ -929,7 +931,9 @@ function validateDocs() {
     'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
     'docker-compose.gateway-remote.yml',
     'docker-compose.cloud-gateway.yml',
+    'OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel',
     'not an OpenCode runtime',
+    'Standalone Team Gateway',
     'Gateway Provider Readiness',
     'Delivery Drain And Local State',
     'Upgrade And Rollback',
@@ -1026,6 +1030,7 @@ function validateDocs() {
   for (const phrase of [
     '"contractVersion": 1',
     '"gateway"',
+    '"productMode": "cloud_channel"',
     '"providers"',
     'OPEN_COWORK_GATEWAY_SERVICE_TOKEN',
     'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',

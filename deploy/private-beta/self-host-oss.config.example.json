@@ -137,6 +137,7 @@
       "serviceToken": "{env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN}",
       "allowInsecureHttp": false
     },
+    "productMode": "cloud_channel",
     "server": {
       "host": "0.0.0.0",
       "port": 8790,

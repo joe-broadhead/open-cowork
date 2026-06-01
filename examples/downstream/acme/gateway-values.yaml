@@ -3,6 +3,7 @@ image:
   tag: v2026.05.0
 
 gateway:
+  productMode: cloud_channel
   mode: self-host
   cloudBaseUrl: https://cowork.acme.example
   serviceToken: env:OPEN_COWORK_GATEWAY_SERVICE_TOKEN

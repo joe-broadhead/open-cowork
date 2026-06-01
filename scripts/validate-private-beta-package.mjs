@@ -78,7 +78,7 @@ for (const phrase of [
   'Known Private Beta Constraints',
   'Open Cowork does not resell model tokens',
   'Desktop local workspaces stay local',
-  'Gateway is a channel client and delivery adapter',
+  'Cloud Channel Gateway is a channel client and delivery adapter',
   'Public/Private Boundary',
   'managed-byok-readiness-contract.template.json',
   'create or invite org owner',
@@ -186,6 +186,7 @@ if (hosted.contractVersion !== 1) throw new Error('hosted private beta config mu
 if (hosted.cloud?.auth?.signupMode !== 'invite') throw new Error('hosted private beta config must use invite signup mode')
 if (hosted.cloud?.billing?.provider !== 'stub') throw new Error('hosted private beta config must keep billing stubbed')
 if (hosted.cloudDesktop?.requireManagedOrg !== true) throw new Error('hosted private beta config must require a managed org')
+if (hosted.gateway?.productMode !== 'cloud_channel') throw new Error('hosted private beta config must declare cloud_channel gateway product mode')
 if (hosted.gateway?.mode !== 'managed') throw new Error('hosted private beta config must declare managed gateway mode')
 if (hosted.gateway?.metrics?.enabled !== true) throw new Error('hosted private beta config must expose protected operator metrics')
 if (!hosted.gateway?.server?.adminToken) throw new Error('hosted private beta config must require gateway admin token')
@@ -198,6 +199,7 @@ if (!['none', 'stub'].includes(selfHost.cloud?.billing?.provider)) {
 if (selfHost.cloudDesktop?.allowUserAddedConnections !== true) {
   throw new Error('self-host config must allow user-added cloud connections')
 }
+if (selfHost.gateway?.productMode !== 'cloud_channel') throw new Error('self-host config must declare cloud_channel gateway product mode')
 if (selfHost.gateway?.mode !== 'self-host') throw new Error('self-host config must declare self-host gateway mode')
 if (!selfHost.gateway?.providers?.some((provider) => provider.kind === 'webhook' && provider.credentials?.sharedSecret)) {
   throw new Error('self-host config must demonstrate signed webhook ingress')
@@ -527,7 +529,7 @@ for (const phrase of [
   'Known Risks And Mitigations',
   'Decision',
   'BYOK plaintext absent',
-  'Gateway is a channel client and delivery adapter',
+  'Cloud Channel Gateway is a channel client and delivery adapter',
   'managed-byok-readiness-contract.template.json',
   'launch-evidence-record.template.json',
   'Onboarding failures preserve machine-readable status and reason codes',

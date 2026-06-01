@@ -1,29 +1,57 @@
 ---
-title: Gateway Appliance
-description: Run Open Cowork Gateway on a VPS, Mac mini, Raspberry Pi, or internal server.
+title: Cloud Channel Gateway Appliance
+description: Run the Cloud Channel Gateway on a VPS, Mac mini, Raspberry Pi, or internal server.
 ---
 
-# Gateway Appliance
+# Cloud Channel Gateway Appliance
 
-Open Cowork Gateway is the headless channel surface for Open Cowork Cloud. It
-lets users talk to their cloud workspace from Telegram, Slack, email, webhooks,
-and future channels while Cloud remains the source of truth.
+The current `apps/gateway` daemon is the **Cloud Channel Gateway**. It is the
+headless channel surface for Open Cowork Cloud. It lets users talk to their
+cloud workspace from Telegram, Slack, email, webhooks, and future channels
+while Cloud remains the source of truth.
 
-Gateway is not an OpenCode runtime. It owns channel I/O, command parsing,
-provider-specific rendering, approvals, questions, and delivery retries. Cloud
-owns tenancy, sessions, commands, projections, workflows, artifacts, and
-OpenCode execution.
+Cloud Channel Gateway is not an OpenCode runtime. It owns channel I/O, command
+parsing, provider-specific rendering, approvals/questions UX, and delivery
+retries. Cloud owns tenancy, sessions, commands, projections, workflows,
+artifacts, and OpenCode execution.
+
+Standalone Team Gateway is a separate product mode. It may own a private
+OpenCode runtime and Gateway Postgres, but it is not implemented by
+`apps/gateway` and must not be enabled through this daemon.
 
 Provider tiers, capabilities, signing requirements, and test expectations are
 tracked in [Gateway Provider Readiness](gateway-provider-readiness.md).
 
-## Supported Modes
+## Product Modes
+
+Gateway has two independent mode concepts:
+
+- `OPEN_COWORK_GATEWAY_PRODUCT_MODE`: execution authority. The current daemon
+  supports only `cloud_channel`.
+- `OPEN_COWORK_GATEWAY_MODE`: deployment posture for this daemon. Existing
+  values remain `self-host` and `managed`; this affects diagnostics and
+  operator labeling only.
+
+| Product mode | Execution authority | Current support |
+| --- | --- | --- |
+| `cloud_channel` | Cloud workers execute; Gateway is a Cloud HTTP/SSE client. | Supported by `apps/gateway`. |
+| `standalone` | Gateway owns private OpenCode runtime and Gateway Postgres. | Separate Standalone Team Gateway app/design; current daemon fails closed. |
+| `hybrid` | Cloud-connected edge/standalone authority. | Reserved for a later trust and registration design. |
+
+Existing Gateway deployments are Cloud Channel Gateways. To make that explicit,
+set:
+
+```bash
+OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel
+```
+
+## Supported Cloud Channel Deployments
 
 ### Remote Cloud
 
-Use remote Cloud mode when you already run Open Cowork Cloud somewhere else
-and want a small Gateway process on a VPS, Mac mini, Raspberry Pi, or internal
-server.
+Use remote Cloud deployment when you already run Open Cowork Cloud somewhere
+else and want a small Cloud Channel Gateway process on a VPS, Mac mini,
+Raspberry Pi, or internal server.
 
 Required inputs:
 
@@ -54,8 +82,9 @@ proxy in front of it for public webhook mode.
 
 ### Local All-In-One
 
-Use local all-in-one mode for self-hosted OSS pilots and internal appliances.
-It runs Cloud all-in-one, Postgres, MinIO, and Gateway on one host:
+Use local all-in-one deployment for self-hosted OSS pilots and internal
+appliances. It runs Cloud all-in-one, Postgres, MinIO, and Cloud Channel
+Gateway on one host:
 
 ```bash
 pnpm gateway:setup -- \
@@ -128,14 +157,25 @@ macOS and Mac mini:
 - Restrict inbound firewall rules to HTTPS and SSH management.
 - Keep env files out of git and command history.
 
+## Migration Notes
+
+Existing deployments that use only `OPEN_COWORK_GATEWAY_MODE=self-host` or
+`managed` continue to behave as Cloud Channel Gateway deployments. New configs
+should add `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` or
+`"productMode": "cloud_channel"` for clarity.
+
+Do not set `standalone` on this daemon. Standalone Team Gateway will use a
+separate app/package layout so it can own private runtime state without
+weakening the Cloud Channel Gateway boundary.
+
 ## Delivery Drain And Local State
 
-Gateway keeps Cloud as the authoritative store for channel bindings, cursors,
-deliveries, sessions, workflows, and audit events. The appliance does not need
-a local database for production state. On shutdown, Gateway closes new Cloud
-delivery subscriptions, drains in-flight delivery sends, acknowledges completed
-deliveries, then stops providers. A restart resumes from Cloud-owned cursors
-and delivery records.
+Cloud Channel Gateway keeps Cloud as the authoritative store for channel
+bindings, cursors, deliveries, sessions, workflows, and audit events. The
+appliance does not need a local database for production state. On shutdown,
+Gateway closes new Cloud delivery subscriptions, drains in-flight delivery
+sends, acknowledges completed deliveries, then stops providers. A restart
+resumes from Cloud-owned cursors and delivery records.
 
 ## Upgrade And Rollback
 

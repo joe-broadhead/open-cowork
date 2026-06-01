@@ -16,7 +16,7 @@ Private beta is a managed service posture, not a different product fork:
 - Desktop cloud workspaces sync through Open Cowork Cloud.
 - Cloud Web, Desktop cloud workspaces, and Gateway all continue the same cloud
   sessions through the shared control plane.
-- Gateway is a channel client and delivery adapter, not an OpenCode runtime.
+- Cloud Channel Gateway is a channel client and delivery adapter, not an OpenCode runtime.
 - Users bring provider keys. Open Cowork does not resell model tokens.
 - Billing can be manual or stubbed during private beta.
 - OSS self-hosters can run Cloud and Gateway without Stripe or managed-only

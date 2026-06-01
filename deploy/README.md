@@ -75,7 +75,7 @@ OpenCode session execution.
 | Azure | `deploy/azure/` | AKS or Container Apps split roles, Azure Database for PostgreSQL, Blob Storage, Key Vault, ACR | Container Apps all-in-one service |
 | DigitalOcean | `deploy/digitalocean/` | DOKS split roles, Managed PostgreSQL, Spaces, registry, External Secrets or Kubernetes Secrets | App Platform all-in-one component |
 | Generic Kubernetes | `deploy/kubernetes/` | Provider-neutral Helm on any conformant Kubernetes cluster | Single namespace split-role pilot |
-| VPS/local Compose | `deploy/gateway-appliance/` plus root Compose files | Remote Gateway appliance against managed Cloud, or local all-in-one Cloud + Gateway | Local all-in-one Compose |
+| VPS/local Compose | `deploy/gateway-appliance/` plus root Compose files | Remote Cloud Channel Gateway appliance against managed Cloud, or local all-in-one Cloud + Cloud Channel Gateway | Local all-in-one Compose |
 
 Every recipe must stay provider-config only:
 
@@ -92,8 +92,9 @@ For VPS, Mac mini, Raspberry Pi, and internal-server installs, use the Gateway
 appliance path in `docs/gateway-appliance.md` plus the templates under
 `deploy/gateway-appliance/`. The appliance supports remote Cloud mode through
 `docker-compose.gateway-remote.yml` and local all-in-one mode through
-`docker-compose.cloud-gateway.yml`. Both modes keep Gateway as a Cloud client,
-not an OpenCode runtime.
+`docker-compose.cloud-gateway.yml`. Both deployments use
+`OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` and keep Gateway as a Cloud
+client, not an OpenCode runtime.
 
 For managed worker service-plane deployments, use the public-safe templates in
 `deploy/managed-workers/`. They cover self-hosted worker env files,
