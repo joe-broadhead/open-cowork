@@ -66,6 +66,41 @@ function writeProviderDefaultConfig(configDir: string, internalDefaultModel = 'i
   }))
 }
 
+function writeCredentialDescriptorConfig(configDir: string) {
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    providers: {
+      available: ['acme'],
+      defaultProvider: 'acme',
+      defaultModel: 'acme/model',
+      descriptors: {
+        acme: {
+          runtime: 'builtin',
+          name: 'Acme',
+          description: 'Acme provider',
+          defaultModel: 'acme/model',
+          credentials: [
+            { key: 'apiKey', label: 'API key', description: 'Secret API key', secret: true },
+            { key: 'projectId', label: 'Project', description: 'Visible project id', secret: false },
+          ],
+          models: [{ id: 'acme/model', name: 'Acme Model' }],
+        },
+      },
+    },
+    mcps: [{
+      name: 'github',
+      type: 'remote',
+      description: 'GitHub',
+      authMode: 'api_token',
+      url: 'https://mcp.example.test/github',
+      credentials: [
+        { key: 'token', label: 'Token', description: 'Secret token', secret: true },
+        { key: 'host', label: 'Host', description: 'Visible host', secret: false },
+      ],
+    }],
+  }))
+}
+
 async function importFreshSettingsModule(label: string) {
   return import(`../apps/desktop/src/main/settings.ts?${label}-${Date.now()}`)
 }
@@ -321,14 +356,14 @@ test('loadSettings migrates legacy encrypted development settings to plaintext',
   }
 })
 
-test('credential reads are scoped while default effective settings can be masked', async () => {
+test('credential reads return descriptor-aware masks while default effective settings can be masked', async () => {
   const tempRoot = testTempDir('opencowork-settings-scoped-credentials-')
   const configDir = join(tempRoot, 'downstream')
   const userDataDir = join(tempRoot, 'user-data')
   const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
   const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
 
-  writeEmptyConfig(configDir)
+  writeCredentialDescriptorConfig(configDir)
   process.env.OPEN_COWORK_CONFIG_DIR = configDir
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
   clearConfigCaches()
@@ -342,21 +377,29 @@ test('credential reads are scoped while default effective settings can be masked
       maskEffectiveSettingsCredentials,
       saveSettings,
     } = await importFreshSettingsModule('scoped-credentials')
-    saveSettings({
-      providerCredentials: {
-        openrouter: { apiKey: 'provider-secret' },
-        databricks: { token: 'other-provider-secret' },
-      },
-      integrationCredentials: {
-        github: { token: 'integration-secret' },
-      },
-    })
+      saveSettings({
+        providerCredentials: {
+          acme: { apiKey: 'provider-secret', projectId: 'project-visible' },
+          databricks: { token: 'other-provider-secret' },
+        },
+        integrationCredentials: {
+          github: { token: 'integration-secret', host: 'github.example.test' },
+        },
+      })
 
     const masked = maskEffectiveSettingsCredentials(getEffectiveSettings())
-    assert.equal(masked.providerCredentials.openrouter.apiKey, CREDENTIAL_MASK)
+    assert.equal(masked.providerCredentials.acme.apiKey, CREDENTIAL_MASK)
+    assert.equal(masked.providerCredentials.acme.projectId, CREDENTIAL_MASK)
     assert.equal(masked.integrationCredentials.github.token, CREDENTIAL_MASK)
-    assert.deepEqual(getProviderCredentials('openrouter'), { apiKey: 'provider-secret' })
-    assert.deepEqual(getIntegrationCredentials('github'), { token: 'integration-secret' })
+    assert.equal(masked.integrationCredentials.github.host, CREDENTIAL_MASK)
+    assert.deepEqual(getProviderCredentials('acme'), {
+      apiKey: CREDENTIAL_MASK,
+      projectId: 'project-visible',
+    })
+    assert.deepEqual(getIntegrationCredentials('github'), {
+      token: CREDENTIAL_MASK,
+      host: 'github.example.test',
+    })
   } finally {
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir

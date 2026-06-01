@@ -8,9 +8,11 @@ import {
   type EffectiveAppSettings,
   type RuntimePermissionPolicy,
 } from '@open-cowork/shared'
+import type { CredentialField } from '@open-cowork/shared/providers'
 import {
   getAppConfig,
   getAppDataDir,
+  getConfiguredMcpsFromConfig,
   getProviderDescriptor,
   getPublicAppConfig,
   normalizeProviderModelId,
@@ -438,6 +440,21 @@ function decryptLegacyDevelopmentSecret(raw: Buffer) {
 // masked value back can't overwrite the real key with the mask string.
 export const CREDENTIAL_MASK = '••••••••'
 
+function maskCredentialBag(
+  value: Record<string, string>,
+  fields: readonly CredentialField[] | undefined,
+) {
+  const fieldByKey = new Map((fields || []).map((field) => [field.key, field] as const))
+  const masked: Record<string, string> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    const field = fieldByKey.get(key)
+    masked[key] = field && field.secret === false
+      ? entry
+      : entry && entry.length > 0 ? CREDENTIAL_MASK : ''
+  }
+  return masked
+}
+
 function maskNestedStringMap(value: Record<string, Record<string, string>>) {
   const masked: Record<string, Record<string, string>> = {}
   for (const [outer, inner] of Object.entries(value)) {
@@ -553,10 +570,8 @@ export function clearSettingsCache() {
 export function saveSettings(settings: Partial<AppSettings>) {
   const current = settingsCache || loadSettings()
   const updates = normalizeSettingsUpdate(settings)
-  // Strip mask sentinels so a caller that round-tripped `settings:get`
-  // (which returns masked credentials) can't accidentally overwrite
-  // real keys with the mask string. Safe because the real value can
-  // only have been preserved through the scoped credential IPCs.
+  // Strip mask sentinels so a caller that round-tripped masked credential
+  // state can't accidentally overwrite real keys with the mask string.
   const merged: AppSettings = {
     ...current,
     ...updates,
@@ -600,12 +615,13 @@ export function getIntegrationCredentialValue(settings: AppSettings, integration
 
 export function getProviderCredentials(providerId: string) {
   const credentials = loadSettings().providerCredentials[providerId] || {}
-  return { ...credentials }
+  return maskCredentialBag(credentials, getProviderDescriptor(providerId)?.credentials)
 }
 
 export function getIntegrationCredentials(integrationId: string) {
   const credentials = loadSettings().integrationCredentials[integrationId] || {}
-  return { ...credentials }
+  const configuredMcp = getConfiguredMcpsFromConfig().find((entry) => entry.name === integrationId)
+  return maskCredentialBag(credentials, configuredMcp?.credentials)
 }
 
 export function isSetupComplete(settings = loadSettings()) {

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CustomMcpConfig, DesktopPairingPublicRecord } from '@open-cowork/shared'
@@ -84,6 +84,41 @@ function createBaseContext() {
   }
 
   return { context, handlers, errors }
+}
+
+function writeCredentialDescriptorConfig(configDir: string) {
+  mkdirSync(configDir, { recursive: true })
+  writeFileSync(join(configDir, 'config.jsonc'), JSON.stringify({
+    providers: {
+      available: ['acme'],
+      defaultProvider: 'acme',
+      defaultModel: 'acme/model',
+      descriptors: {
+        acme: {
+          runtime: 'builtin',
+          name: 'Acme',
+          description: 'Acme provider',
+          defaultModel: 'acme/model',
+          credentials: [
+            { key: 'apiKey', label: 'API key', description: 'Secret API key', secret: true },
+            { key: 'projectId', label: 'Project', description: 'Visible project id', secret: false },
+          ],
+          models: [{ id: 'acme/model', name: 'Acme Model' }],
+        },
+      },
+    },
+    mcps: [{
+      name: 'github',
+      type: 'remote',
+      description: 'GitHub',
+      authMode: 'api_token',
+      url: 'https://mcp.example.test/github',
+      credentials: [
+        { key: 'token', label: 'Token', description: 'Secret token', secret: true },
+        { key: 'host', label: 'Host', description: 'Visible host', secret: false },
+      ],
+    }],
+  }))
 }
 
 function desktopPairingRecord(overrides: Partial<DesktopPairingPublicRecord> = {}): DesktopPairingPublicRecord {
@@ -1976,7 +2011,80 @@ test('settings handlers sync only portable settings for cloud workspaces', async
   ])
 })
 
-test('raw credential IPC is unavailable from Gateway and Paired Desktop workspaces', async () => {
+test('local credential editor IPC masks secret fields and preserves them on save', async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-ipc-masked-credentials-'))
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeCredentialDescriptorConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  try {
+    const {
+      CREDENTIAL_MASK,
+      clearSettingsCache,
+      loadSettings,
+      saveSettings,
+    } = await import('../apps/desktop/src/main/settings.ts')
+    clearSettingsCache()
+    saveSettings({
+      providerCredentials: {
+        acme: { apiKey: 'provider-secret', projectId: 'project-visible' },
+      },
+      integrationCredentials: {
+        github: { token: 'integration-secret', host: 'github.example.test' },
+      },
+    })
+
+    const { context, handlers } = createBaseContext()
+    registerAppHandlers(context)
+    const localEvent = { sender: { id: 901 } } as never
+
+    assert.deepEqual(await handlers.get('settings:get-provider-credentials')?.(localEvent, 'acme', {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      purpose: 'credential_editor',
+    }), {
+      apiKey: CREDENTIAL_MASK,
+      projectId: 'project-visible',
+    })
+    assert.deepEqual(await handlers.get('settings:get-integration-credentials')?.(localEvent, 'github', {
+      workspaceId: LOCAL_WORKSPACE_ID,
+      purpose: 'credential_editor',
+    }), {
+      token: CREDENTIAL_MASK,
+      host: 'github.example.test',
+    })
+
+    saveSettings({
+      providerCredentials: {
+        acme: { apiKey: CREDENTIAL_MASK, projectId: 'project-updated' },
+      },
+      integrationCredentials: {
+        github: { token: CREDENTIAL_MASK, host: 'github-updated.example.test' },
+      },
+    })
+    const persisted = loadSettings()
+    assert.equal(persisted.providerCredentials.acme.apiKey, 'provider-secret')
+    assert.equal(persisted.providerCredentials.acme.projectId, 'project-updated')
+    assert.equal(persisted.integrationCredentials.github.token, 'integration-secret')
+    assert.equal(persisted.integrationCredentials.github.host, 'github-updated.example.test')
+  } finally {
+    const { clearSettingsCache } = await import('../apps/desktop/src/main/settings.ts')
+    clearSettingsCache()
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('credential editor IPC is unavailable from Gateway and Paired Desktop workspaces', async () => {
   const { context, handlers } = createBaseContext()
   const pairing: DesktopPairingPublicRecord = {
     id: 'pairing-credentials',

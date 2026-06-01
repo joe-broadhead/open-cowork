@@ -48,32 +48,12 @@ The remaining work is concentrated in four areas:
 - The Workflow tool bridge now verifies bearer tokens with
   `timingSafeEqual`, matching the Agent tool bridge, with a same-length
   wrong-token regression test.
+- Local credential editor IPC now returns descriptor-aware masked secret fields
+  instead of raw provider or integration secrets. Non-secret descriptor fields
+  can still be shown for editing, and echoed mask sentinels preserve the stored
+  secret on save.
 
 ## High Priority
-
-### Renderer IPC Can Read Raw Local Credentials
-
-Evidence:
-
-- `apps/desktop/src/preload/index.ts` exposes
-  `settings:get-provider-credentials` and
-  `settings:get-integration-credentials`.
-- `apps/desktop/src/main/ipc/app-handlers.ts` allows reads when the renderer
-  supplies `{ purpose: "credential_editor" }` for the local workspace.
-- `apps/desktop/src/main/settings.ts` returns raw provider and integration
-  credential bags.
-
-Impact: any renderer script execution in the trusted app can exfiltrate local
-provider keys and integration secrets. Existing Electron isolation, navigation
-guards, IPC sender validation, masked default settings, and encrypted-at-rest
-storage reduce exposure, but renderer compromise still becomes full local
-credential compromise.
-
-Target state: make credentials write-only from the renderer by default. Use
-masked placeholders plus replace-secret flows. If reveal is necessary, require
-a short-lived main-process reveal grant tied to a specific provider/key and a
-native or OS-backed confirmation. Add regression tests proving ordinary
-renderer code cannot retrieve raw secrets.
 
 ### Worker Lease Renewal Loss Does Not Cancel Active Execution
 

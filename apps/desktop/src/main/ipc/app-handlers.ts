@@ -317,15 +317,15 @@ export function registerAppHandlers(context: IpcHandlerContext) {
   })
 
   context.ipcMain.handle('settings:get-provider-credentials', async (event, providerId: unknown, options: unknown) => {
-    // Scoped opt-in for provider credential editor surfaces. Avoid
-    // returning every stored provider and integration secret to any
-    // renderer code that only needs one credential bag.
+    // Scoped opt-in for provider credential editor surfaces. Secret values
+    // are masked so the renderer can show configured state without receiving
+    // raw provider keys.
     if (!canReadLocalCredentialBag(context, event, options)) return {}
     return getProviderCredentials(normalizeCredentialScopeId(providerId, 'Provider'))
   })
 
   context.ipcMain.handle('settings:get-integration-credentials', async (event, integrationId: unknown, options: unknown) => {
-    // Same scoped read for integration/MCP credential editors.
+    // Same scoped, masked read for integration/MCP credential editors.
     if (!canReadLocalCredentialBag(context, event, options)) return {}
     return getIntegrationCredentials(normalizeCredentialScopeId(integrationId, 'Integration'))
   })

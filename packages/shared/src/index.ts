@@ -230,8 +230,9 @@ export interface CoworkAPI {
     // Returns credentials masked ('••••••••' for set values). Safe default
     // for any consumer that only needs non-secret fields.
     get: (options?: WorkspaceOptions) => Promise<EffectiveAppSettings>
-    // Scoped unmasked reads for credential editor surfaces. The renderer
-    // never receives the full effective settings object with every secret.
+    // Scoped masked reads for credential editor surfaces. Secret fields return
+    // the mask sentinel for configured values; raw secrets stay in the main
+    // process and are preserved when the mask is echoed through settings.set.
     getProviderCredentials: (providerId: string, options: WorkspaceOptions & { purpose: 'credential_editor' }) => Promise<Record<string, string>>
     getIntegrationCredentials: (integrationId: string, options: WorkspaceOptions & { purpose: 'credential_editor' }) => Promise<Record<string, string>>
     set: (updates: WorkspaceScoped<Partial<AppSettings>>) => Promise<EffectiveAppSettings>

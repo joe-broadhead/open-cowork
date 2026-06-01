@@ -6,6 +6,7 @@ import type { CapabilityTool, RuntimeContextOptions } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { credentialFieldIsSecret } from '../provider/credential-merge'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -268,9 +269,10 @@ export function ToolCredentialsCard({
           const draft = drafts[credential.key]
           const options = credential.options || []
           const isChoiceField = (credential.type === 'select' || credential.type === 'radio') && options.length > 0
+          const credentialIsSecret = credentialFieldIsSecret(credential)
           const value = draft !== undefined
             ? draft
-            : credential.secret && !isChoiceField
+            : credentialIsSecret && !isChoiceField
               ? (hasStored ? '••••••••' : '')
               : storedValue
           const selectedOption = options.find((option) => option.value === value)
@@ -346,11 +348,11 @@ export function ToolCredentialsCard({
                 {credential.label}{credential.required ? <span className="text-red ms-1">*</span> : null}
               </span>
               <input
-                type={credential.secret ? 'password' : 'text'}
+                type={credentialIsSecret ? 'password' : 'text'}
                 value={value}
                 placeholder={credential.placeholder || ''}
                 onFocus={(event) => {
-                  if (credential.secret && draft === undefined && hasStored) {
+                  if (credentialIsSecret && draft === undefined && hasStored) {
                     setDrafts((current) => ({ ...current, [credential.key]: '' }))
                     event.currentTarget.value = ''
                   }

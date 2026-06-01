@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { credentialFieldIsSecret, isCredentialMask } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 import {
   fieldLabelCls,
@@ -195,19 +196,27 @@ export function ModelsPanel({
 
           {provider.credentials.length ? (
             <div className={panelCardCls}>
-              {provider.credentials.map((credential) => (
-                <label key={credential.key} className="flex flex-col gap-1.5">
-                  <span className={fieldLabelCls}>{credential.label}</span>
-                  <input
-                    type={credential.secret ? 'password' : 'text'}
-                    value={providerCredentials[credential.key] || ''}
-                    onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
-                    placeholder={credential.placeholder}
-                    className={inputCls}
-                  />
-                  <span className="text-[10px] text-text-muted">{credential.description}</span>
-                </label>
-              ))}
+              {provider.credentials.map((credential) => {
+                const credentialIsSecret = credentialFieldIsSecret(credential)
+                return (
+                  <label key={credential.key} className="flex flex-col gap-1.5">
+                    <span className={fieldLabelCls}>{credential.label}</span>
+                    <input
+                      type={credentialIsSecret ? 'password' : 'text'}
+                      value={providerCredentials[credential.key] || ''}
+                      onFocus={() => {
+                        if (credentialIsSecret && isCredentialMask(providerCredentials[credential.key])) {
+                          updateProviderCredential(provider.id, credential.key, '')
+                        }
+                      }}
+                      onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
+                      placeholder={credential.placeholder}
+                      className={inputCls}
+                    />
+                    <span className="text-[10px] text-text-muted">{credential.description}</span>
+                  </label>
+                )
+              })}
             </div>
           ) : null}
         </div>

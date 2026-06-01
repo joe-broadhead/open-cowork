@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SETUP_INTENTS, type ProviderDescriptor, type SetupIntentId } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
-import { mergeFetchedProviderCredentials } from './provider/credential-merge'
+import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
@@ -85,7 +85,7 @@ export function SetupScreen({
 
   useEffect(() => {
     // Settings are loaded masked by default. The setup form requests only
-    // the selected provider's credential bag below.
+    // the selected provider's descriptor-aware masked credential bag below.
     let cancelled = false
     window.coworkApi.settings.get().then(async (settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
@@ -317,19 +317,27 @@ export function SetupScreen({
               />
               {selectedProvider.credentials.length > 0 ? (
                 <div className="flex flex-col gap-2.5 rounded-xl border border-border-subtle p-3.5" style={{ background: 'var(--color-elevated)' }}>
-                  {selectedProvider.credentials.map((credential) => (
-                    <label key={credential.key} className="flex flex-col gap-1">
-                      <span className="text-[11px] text-text-muted font-medium">{credential.label}</span>
-                      <input
-                        type={credential.secret ? 'password' : 'text'}
-                        value={selectedCredentials[credential.key] || ''}
-                        onChange={(event) => updateCredential(credential.key, event.target.value)}
-                        placeholder={credential.placeholder}
-                        className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
-                      />
-                      <span className="text-[10px] text-text-muted">{credential.description}</span>
-                    </label>
-                  ))}
+                  {selectedProvider.credentials.map((credential) => {
+                    const credentialIsSecret = credentialFieldIsSecret(credential)
+                    return (
+                      <label key={credential.key} className="flex flex-col gap-1">
+                        <span className="text-[11px] text-text-muted font-medium">{credential.label}</span>
+                        <input
+                          type={credentialIsSecret ? 'password' : 'text'}
+                          value={selectedCredentials[credential.key] || ''}
+                          onFocus={() => {
+                            if (credentialIsSecret && isCredentialMask(selectedCredentials[credential.key])) {
+                              updateCredential(credential.key, '')
+                            }
+                          }}
+                          onChange={(event) => updateCredential(credential.key, event.target.value)}
+                          placeholder={credential.placeholder}
+                          className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
+                        />
+                        <span className="text-[10px] text-text-muted">{credential.description}</span>
+                      </label>
+                    )
+                  })}
                 </div>
               ) : null}
 
