@@ -55,6 +55,13 @@ The machine-readable profile contract lives in
 `deploy/topologies/README.md` and the docs page in
 `docs/deployment-topologies.md`.
 
+Each topology must also pass its matching hybrid security gate before it is
+exposed to users or public callbacks. The gate contract lives in
+`deploy/security/hybrid-security-gates.json`, with the operator docs in
+`docs/hybrid-security-gates.md`. These gates define per-mode auth, revocation,
+approval/question policy, audit events, quotas/rate limits, durability,
+backup/restore, redaction, and fail-closed behavior.
+
 | Profile | Use case | Execution authority | Reference assets |
 | --- | --- | --- | --- |
 | `desktop-only` | private local Desktop with no Cloud dependency | Desktop Local | `docs/desktop-app.md` |

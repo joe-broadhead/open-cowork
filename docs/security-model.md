@@ -95,6 +95,18 @@ an `Authorization: Bearer <secret>` header or the signed
 `X-Open-Cowork-Timestamp` / `X-Open-Cowork-Signature` HMAC headers. Rotating a
 webhook secret keeps the local URL stable and invalidates old headers.
 
+## Hybrid security gates
+
+Desktop, Cloud, Gateway, and Desktop pairing modes have separate authority and
+audit boundaries. The production contract for those boundaries is documented in
+[Hybrid Security Gates](hybrid-security-gates.md) and enforced by
+`deploy/security/hybrid-security-gates.json` through `pnpm deploy:validate`.
+The core rules are that every thread has one execution authority, Desktop
+pairing defaults remote approvals and questions to `local_confirmation`, public
+Gateway ingress requires provider signing or HMAC, and production Cloud/Gateway
+deployments fail closed without durable stores, TLS, admin auth, backups, and
+redaction posture.
+
 ## Data at rest
 
 User data is stored under Electron's `userData` path, which is branded

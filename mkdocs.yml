@@ -130,6 +130,7 @@ nav:
       - Managed Workers: managed-workers.md
       - Cloud Gateway Registration: cloud-gateway-registration.md
       - Deployment Topologies: deployment-topologies.md
+      - Hybrid Security Gates: hybrid-security-gates.md
       - Gateway Appliance: gateway-appliance.md
       - Standalone Gateway: standalone-gateway.md
       - Deployment Readiness: deployment-readiness.md
