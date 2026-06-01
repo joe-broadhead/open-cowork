@@ -119,11 +119,14 @@ workspace authorities:
 - **Cloud Channel Gateway** is a headless cloud client. It adapts Telegram,
   Slack, email, webhooks, and other channels onto the cloud HTTP/SSE contract.
   In this mode Gateway never imports the OpenCode SDK, starts OpenCode, or owns
-  control-plane Postgres state.
+  control-plane Postgres state. The current `apps/gateway` daemon is this mode
+  and must use `productMode=cloud_channel`.
 - **Standalone Team Gateway** is a Gateway-owned execution authority for
   private VPS/server/Kubernetes deployments. It may supervise a private
   OpenCode runtime and own Gateway Postgres/control-plane state, but it must
-  keep OpenCode private and separate from Cloud Channel Gateway mode.
+  keep OpenCode private and separate from Cloud Channel Gateway mode. It uses
+  `productMode=standalone` and a separate app/package layout, not the current
+  Cloud Channel Gateway daemon.
 - **Paired Desktop** is an outbound connector authority. The Desktop local
   runtime still executes; remote Gateway/mobile/Cloud callers only reach it
   through explicit, revocable pairing without public Desktop or OpenCode ports.

@@ -19,6 +19,7 @@ test('gateway appliance setup renders remote Telegram polling env', () => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /OPEN_COWORK_CLOUD_BASE_URL=https:\/\/cloud\.example\.test/)
   assert.match(result.stdout, /OPEN_COWORK_GATEWAY_SERVICE_TOKEN=gateway-service-token/)
+  assert.match(result.stdout, /OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel/)
   assert.match(result.stdout, /OPEN_COWORK_GATEWAY_TELEGRAM_MODE=polling/)
   assert.match(result.stdout, /docker-compose\.gateway-remote\.yml/)
 })

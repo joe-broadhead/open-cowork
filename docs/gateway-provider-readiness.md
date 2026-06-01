@@ -5,10 +5,14 @@ description: Production readiness tiers, capabilities, authentication, and test 
 
 # Gateway Provider Readiness
 
-Gateway providers are channel adapters. They never own OpenCode execution,
-sessions, workflow scheduling, or Cloud control-plane state. Every provider
-normalizes channel input into Cloud channel APIs and renders Cloud session
-events back to the channel.
+Gateway providers in this document are Cloud Channel Gateway adapters. They
+never own OpenCode execution, sessions, workflow scheduling, or Cloud
+control-plane state. Every provider normalizes channel input into Cloud
+channel APIs and renders Cloud session events back to the channel.
+
+Standalone Team Gateway may reuse provider packages later, but its private
+runtime/control-plane ownership is a separate product mode and not part of this
+Cloud Channel Gateway readiness matrix.
 
 The typed source of truth is
 `apps/gateway/src/provider-readiness.ts`. The Gateway test suite verifies that

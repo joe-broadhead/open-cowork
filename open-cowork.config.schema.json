@@ -398,6 +398,7 @@
         "branding": { "$ref": "#/$defs/cloudPublicBranding" },
         "cloud": { "$ref": "#/$defs/gatewayCloudConfig" },
         "server": { "$ref": "#/$defs/gatewayServerConfig" },
+        "productMode": { "type": "string", "enum": ["cloud_channel", "standalone", "hybrid"] },
         "mode": { "type": "string", "enum": ["self-host", "managed"] },
         "logging": {
           "type": "object",

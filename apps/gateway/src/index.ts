@@ -13,6 +13,7 @@ export {
   redactGatewayEnv,
   type GatewayConfig,
   type GatewayCloudConnectionConfig,
+  type GatewayProductMode,
   type GatewayProviderConfig,
 } from './config.js'
 export {

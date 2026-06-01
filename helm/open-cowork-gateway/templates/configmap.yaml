@@ -15,6 +15,7 @@ data:
   OPEN_COWORK_GATEWAY_PUBLIC_URL: {{ .Values.gateway.publicUrl | quote }}
   OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: {{ .Values.gateway.allowLoopbackOperatorBypass | quote }}
   OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES: {{ .Values.gateway.maxRequestBodyBytes | quote }}
+  OPEN_COWORK_GATEWAY_PRODUCT_MODE: {{ .Values.gateway.productMode | quote }}
   OPEN_COWORK_GATEWAY_MODE: {{ .Values.gateway.mode | quote }}
   OPEN_COWORK_GATEWAY_LOG_LEVEL: {{ .Values.gateway.logLevel | quote }}
   OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS: {{ .Values.gateway.timeouts.cloudRequestMs | quote }}

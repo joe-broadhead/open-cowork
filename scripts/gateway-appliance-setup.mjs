@@ -9,7 +9,7 @@ const defaults = {
 }
 
 function usage() {
-  return `Open Cowork Gateway appliance setup
+  return `Open Cowork Cloud Channel Gateway appliance setup
 
 Usage:
   node scripts/gateway-appliance-setup.mjs --mode remote --cloud-url https://cowork.example.com --service-token TOKEN --telegram-bot-token TOKEN --print
@@ -97,6 +97,7 @@ function renderEnv(config) {
     `OPEN_COWORK_GATEWAY_HOST=${publicWebhookMode ? '0.0.0.0' : '127.0.0.1'}`,
     'OPEN_COWORK_GATEWAY_PORT=8790',
     `OPEN_COWORK_GATEWAY_PUBLIC_URL=${quote(config.publicUrl || '')}`,
+    'OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel',
     'OPEN_COWORK_GATEWAY_MODE=self-host',
     'OPEN_COWORK_GATEWAY_METRICS_ENABLED=false',
     'OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED=false',

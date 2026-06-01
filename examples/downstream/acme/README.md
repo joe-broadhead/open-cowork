@@ -51,6 +51,8 @@ audited file:
 - `branding` controls the desktop app shell.
 - `cloud.publicBranding` controls the Cloud Web workbench and admin dashboard.
 - `cloudDesktop` pins the desktop app to the Acme cloud org.
+- `gateway.productMode=cloud_channel` makes this a Cloud Channel Gateway, not
+  a Standalone Team Gateway runtime.
 - `gateway.providers` controls headless channel bindings; `gateway.branding`,
   `gateway.cloud`, and `gateway.server` control the gateway label, cloud URL,
   and public URL.

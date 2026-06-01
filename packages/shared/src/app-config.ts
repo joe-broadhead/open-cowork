@@ -136,6 +136,41 @@ export interface PublicBrandingConfig {
   managedOrgConnectionLabels?: ManagedOrgConnectionLabels
 }
 
+export const GATEWAY_PRODUCT_MODES = [
+  'cloud_channel',
+  'standalone',
+  'hybrid',
+] as const
+
+export type GatewayProductMode = typeof GATEWAY_PRODUCT_MODES[number]
+
+export function resolveGatewayProductMode(envValue: unknown, configValue: unknown): GatewayProductMode {
+  const productMode = readGatewayProductMode(envValue) || readGatewayProductMode(configValue) || 'cloud_channel'
+  assertGatewayProductModeSupported(productMode)
+  return productMode
+}
+
+function readGatewayProductMode(value: unknown): GatewayProductMode | null {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return null
+  if (text === 'cloud_channel' || text === 'standalone' || text === 'hybrid') return text
+  throw new Error(`Unsupported gateway productMode ${text}. Use cloud_channel, standalone, or hybrid.`)
+}
+
+function assertGatewayProductModeSupported(productMode: GatewayProductMode) {
+  if (productMode === 'cloud_channel') return
+  if (productMode === 'standalone') {
+    throw new Error(
+      'Gateway productMode=standalone is a separate Standalone Team Gateway app. '
+      + 'The current apps/gateway daemon only supports productMode=cloud_channel and must stay a Cloud client.',
+    )
+  }
+  throw new Error(
+    'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
+    + 'The current apps/gateway daemon only supports productMode=cloud_channel.',
+  )
+}
+
 export type GatewayDeploymentMode = 'self-host' | 'managed'
 export type GatewayDeploymentLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 export type GatewayDeploymentProviderKind =
@@ -162,6 +197,7 @@ export interface GatewayDeploymentProviderConfig {
 
 export interface GatewayDeploymentConfig {
   branding?: Partial<PublicBrandingConfig>
+  productMode?: GatewayProductMode
   cloud?: {
     baseUrl?: string
     serviceToken?: string

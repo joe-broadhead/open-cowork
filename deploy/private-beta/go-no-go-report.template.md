@@ -107,7 +107,7 @@ checksum or immutable artifact id, owner, and timestamp.
 - [ ] BYOK plaintext absent from read APIs, logs, diagnostics, launch reports,
       renderer state, Desktop cache, and Gateway logs.
 - [ ] Desktop local workspaces stay local and are not uploaded implicitly.
-- [ ] Gateway is a channel client and delivery adapter, not an execution runtime.
+- [ ] Cloud Channel Gateway is a channel client and delivery adapter, not an execution runtime.
 - [ ] Public gateway ingress is signed or HMAC-authenticated.
 - [ ] Public Cloud auth uses OIDC or signed trusted-header auth.
 - [ ] Tokens are show-once, scoped, expiring by default, and revocable.

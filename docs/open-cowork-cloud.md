@@ -153,17 +153,18 @@ Use the all-in-one reference for quick local checks:
 docker compose -f docker-compose.cloud.yml up --build
 ```
 
-Use the Gateway appliance references when a user should talk to Cloud from a
-headless channel:
+Use the Cloud Channel Gateway appliance references when a user should talk to
+Cloud from a headless channel:
 
 ```bash
 docker compose -f docker-compose.gateway-remote.yml up --build
 docker compose -f docker-compose.cloud-gateway.yml up --build
 ```
 
-The remote Gateway compose file connects to an existing Cloud URL and binds
-loopback by default. The Cloud + Gateway compose file runs a local all-in-one
-Cloud control plane, Postgres, MinIO, and Gateway on one host. See
+The remote Cloud Channel Gateway compose file connects to an existing Cloud URL
+and binds loopback by default. The Cloud + Gateway compose file runs a local
+all-in-one Cloud control plane, Postgres, MinIO, and Cloud Channel Gateway on
+one host. See
 `docs/gateway-appliance.md` for VPS, Mac mini, Raspberry Pi, systemd, launchd,
 Telegram webhook, TLS, firewall, upgrade, and rollback guidance.
 Provider launch tiers and contract tests are tracked in
@@ -404,7 +405,9 @@ real self-hosted gateway:
    `OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN`,
    `OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN`, or
    `OPEN_COWORK_GATEWAY_EMAIL_INBOUND_SECRET`.
-6. Set `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` for metrics, diagnostics, readiness
+6. Set `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` for clarity. The
+   current daemon fails closed for `standalone` and `hybrid` product modes.
+7. Set `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` for metrics, diagnostics, readiness
    provider inventory, and delivery backlog controls. Only local loopback demos
    should use `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true`.
    Compose references require this value explicitly and the gateway rejects
@@ -727,6 +730,7 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS` | Deadline for outbound bridge/webhook delivery and Slack API calls. |
 | `OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS` | Deadline for SMTP connection/read/write operations. |
 | `OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS` | Maximum time to drain in-flight deliveries before provider shutdown. |
+| `OPEN_COWORK_GATEWAY_PRODUCT_MODE` | `cloud_channel` for the current Cloud Channel Gateway daemon. `standalone` and `hybrid` are separate/future product modes and fail closed here. |
 | `OPEN_COWORK_GATEWAY_MODE` | `self-host` or `managed`; affects diagnostics and deployment labeling. |
 | `OPEN_COWORK_GATEWAY_PUBLIC_BRANDING_JSON` | JSON object matching the public branding contract; Helm renders this from `gateway.branding`. |
 | `OPEN_COWORK_GATEWAY_BRAND_NAME` / `OPEN_COWORK_GATEWAY_BRAND_SHORT_NAME` | Simple env overrides for gateway health/readiness and setup metadata. |
