@@ -508,9 +508,10 @@ Public `header` auth deployments must also set
 `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF`; the proxy must inject that value
 and sign the identity headers with `x-open-cowork-header-auth-timestamp` and
 `x-open-cowork-header-auth-signature`. Unsigned header auth is local/demo only.
-Public OIDC deployments must set
-`OPEN_COWORK_CLOUD_PUBLIC_URL` so redirect URIs never depend on forwarded
-headers from untrusted callers.
+Public web deployments, including trusted-header deployments, must set
+`OPEN_COWORK_CLOUD_PUBLIC_URL` to the canonical HTTPS origin so redirects,
+cookies, and proxy handling never depend on forwarded headers from untrusted
+callers.
 The gateway chart also fails closed unless at least one provider is configured
 through `gateway.providersJson`, Telegram, Slack, email, generic webhook
 settings, or an existing secret.
@@ -926,8 +927,8 @@ browser is not the only protection.
 
 - `GET /livez` reports process liveness and the active cloud role/profile.
 - `GET /readyz` reports dependency readiness for the control plane, object
-  store, secret adapter, and billing adapter. Kubernetes readiness probes should
-  use this route.
+  store, secret adapter, billing adapter, auth config, and role-specific worker
+  dependencies. Kubernetes readiness probes should use this route.
 - `GET /healthz` remains available as a backward-compatible liveness route.
 - `GET /api/runtime/status` reports the active role/profile, whether this
   process can execute runtime commands, and whether commands are handled inline

@@ -15,6 +15,7 @@ import {
   parseCloudDeploymentTier,
   resolveCloudAuthConfig,
   resolveCloudControlPlaneUrl,
+  resolveCloudCookieSecret,
   resolveCloudBootstrapOptionsFromEnv,
   resolveCloudBillingConfig,
   resolveCloudInternalToken,
@@ -498,6 +499,13 @@ test('cloud public header and OIDC auth require spoofing-resistant deployment se
   assert.throws(() => assertCloudAuthDeploymentSafe({
     role: 'web',
     hostname: '0.0.0.0',
+    auth: { mode: 'header', headerSecretRef: 'env:MISSING_HEADER_AUTH_SECRET' },
+    env: {},
+  }), /HEADER_AUTH_SECRET/)
+
+  assert.throws(() => assertCloudAuthDeploymentSafe({
+    role: 'web',
+    hostname: '0.0.0.0',
     auth: { mode: 'header', headerSecret: 'trusted-proxy-secret', headerAllowUnsigned: true },
     env: {},
   }), /signed trusted headers/)
@@ -686,7 +694,18 @@ test('public production deployment guard enforces strong secrets and web auth po
     env: { ...baseEnv, OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET },
     checkpointsEnabled: false,
     autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
   }), /signed identity headers/)
+
+  assert.throws(() => assertCloudProductionDeploymentSafe({
+    tier: 'public_production',
+    role: 'web',
+    config: productionConfig,
+    auth: { mode: 'header', headerSecret: STRONG_CLOUD_SECRET },
+    env: { ...baseEnv, OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET },
+    checkpointsEnabled: false,
+    autoProcessCommands: false,
+  }), /PUBLIC_URL/)
 
   assert.doesNotThrow(() => assertCloudProductionDeploymentSafe({
     tier: 'public_production',
@@ -696,7 +715,55 @@ test('public production deployment guard enforces strong secrets and web auth po
     env: { ...baseEnv, OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET },
     checkpointsEnabled: false,
     autoProcessCommands: false,
+    publicUrl: 'https://cloud.example.test',
   }))
+})
+
+test('cloud secret resolver honors cookie secret env refs for runtime wiring', () => {
+  assert.equal(resolveCloudCookieSecret(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_COOKIE_SECRET_REF: 'env:COOKIE_SECRET_FROM_REF',
+    COOKIE_SECRET_FROM_REF: STRONG_CLOUD_COOKIE_SECRET,
+  }), STRONG_CLOUD_COOKIE_SECRET)
+})
+
+test('public production cloud app rejects in-memory adapter overrides after dependency construction', async () => {
+  const productionConfig = {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      storage: {
+        controlPlane: { kind: 'postgres' as const },
+        objectStore: {
+          kind: 'gcs' as const,
+          bucket: 'open-cowork-test-bucket',
+        },
+      },
+    },
+  }
+
+  await assert.rejects(() => startCloudApp({
+    config: productionConfig,
+    runtime: new FakeRuntime(),
+    store: new InMemoryControlPlaneStore(),
+    objectStore: createInMemoryObjectStore(),
+    env: {
+      OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'public_production',
+      OPEN_COWORK_CLOUD_ROLE: 'web',
+      OPEN_COWORK_CLOUD_HOST: '127.0.0.1',
+      OPEN_COWORK_CLOUD_AUTO_PROCESS_COMMANDS: 'false',
+      OPEN_COWORK_CLOUD_AUTH_MODE: 'header',
+      OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET: STRONG_CLOUD_SECRET,
+      OPEN_COWORK_CLOUD_SIGNUP_MODE: 'invite',
+      OPEN_COWORK_CLOUD_CONTROL_PLANE_URL: 'postgres://user:pass@db.example.test:5432/open_cowork',
+      OPEN_COWORK_CLOUD_SECRET_KEY: STRONG_CLOUD_SECRET,
+      OPEN_COWORK_CLOUD_COOKIE_SECRET: STRONG_CLOUD_COOKIE_SECRET,
+      OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
+      OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: 'gcs',
+      OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: 'open-cowork-test-bucket',
+    },
+    hostname: '127.0.0.1',
+    port: 0,
+  }), /resolved control-plane store/)
 })
 
 test('cloud control plane local adapter remains default without a postgres URL', async () => {

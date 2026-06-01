@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { CloudBillingConfig } from '../config-types.ts'
+import type { CloudAuthConfig, CloudBillingConfig } from '../config-types.ts'
 import type { BillingAdapter } from './billing-adapter.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { ControlPlaneStore } from './control-plane-store.ts'
@@ -29,6 +29,14 @@ export type CloudReadinessOptions = {
   secretAdapter: SecretAdapter
   billingConfig: CloudBillingConfig
   billingAdapter?: BillingAdapter | null
+  authConfig?: CloudAuthConfig | null
+  deploymentTier?: 'local' | 'self_host_beta' | 'private_beta' | 'public_production'
+  publicUrl?: string | null
+  cookieSecure?: boolean
+  sessionCookiesConfigured?: boolean
+  browserAuthConfigured?: boolean
+  checkpointsEnabled?: boolean
+  checkpointStoreConfigured?: boolean
   requireSchemaMigrations?: boolean
   now?: () => Date
   objectStoreCheckTtlMs?: number
@@ -107,6 +115,70 @@ function checkBillingAdapter(config: CloudBillingConfig, adapter: BillingAdapter
   }
 }
 
+function isLoopbackHost(hostname: string) {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || hostname === '[::1]'
+    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+}
+
+function assertPublicHttpsOrigin(value: string | null | undefined) {
+  const raw = value?.trim()
+  if (!raw) throw new Error('Public production readiness requires a configured public URL.')
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error('Public URL is not a valid origin.')
+  }
+  if (url.protocol !== 'https:' || isLoopbackHost(url.hostname) || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('Public production readiness requires an HTTPS non-loopback public origin.')
+  }
+}
+
+function checkAuthConfig(options: CloudReadinessOptions) {
+  const auth = options.authConfig
+  if (!auth) return
+  const isPublicProduction = options.deploymentTier === 'public_production'
+  if (isPublicProduction) {
+    assertPublicHttpsOrigin(options.publicUrl)
+    if (auth.mode === 'none') throw new Error('Public production readiness requires authenticated access.')
+  }
+  if (auth.mode === 'header') {
+    if (!auth.headerSecret?.trim() && !auth.headerSecretRef?.trim()) {
+      throw new Error('Trusted-header auth readiness requires a header auth secret or secret ref.')
+    }
+    if (isPublicProduction && auth.headerAllowUnsigned) {
+      throw new Error('Public production trusted-header readiness requires signed identity headers.')
+    }
+  }
+  if (auth.mode === 'oidc') {
+    if (!auth.issuerUrl?.trim() || !auth.clientId?.trim()) {
+      throw new Error('OIDC readiness requires issuer URL and client ID.')
+    }
+    if (!options.sessionCookiesConfigured) {
+      throw new Error('OIDC readiness requires signed browser session cookies.')
+    }
+    if (!options.browserAuthConfigured) {
+      throw new Error('OIDC readiness requires a browser auth provider.')
+    }
+  }
+  if (isPublicProduction && options.cookieSecure === false) {
+    throw new Error('Public production readiness requires Secure browser cookies.')
+  }
+}
+
+function checkRoleDependencies(options: CloudReadinessOptions) {
+  if (options.deploymentTier !== 'public_production') return
+  if ((options.policy.role === 'worker' || options.policy.role === 'all-in-one') && !options.checkpointsEnabled) {
+    throw new Error('Public production worker readiness requires checkpoints to be enabled.')
+  }
+  if ((options.policy.role === 'worker' || options.policy.role === 'all-in-one') && !options.checkpointStoreConfigured) {
+    throw new Error('Public production worker readiness requires a checkpoint store.')
+  }
+}
+
 export function createCloudReadinessCheck(options: CloudReadinessOptions) {
   let cachedObjectStore: CachedCheck | null = null
   const objectStoreCheckTtlMs = options.objectStoreCheckTtlMs ?? DEFAULT_OBJECT_STORE_CHECK_TTL_MS
@@ -132,6 +204,8 @@ export function createCloudReadinessCheck(options: CloudReadinessOptions) {
 
     checks.push(await check('secret_adapter', () => checkSecretAdapter(options.secretAdapter)))
     checks.push(await check('billing_adapter', () => checkBillingAdapter(options.billingConfig, options.billingAdapter)))
+    checks.push(await check('auth_config', () => checkAuthConfig(options)))
+    checks.push(await check('role_dependencies', () => checkRoleDependencies(options)))
 
     return {
       ok: checks.every((entry) => entry.status === 'ok'),

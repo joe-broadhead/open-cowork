@@ -131,6 +131,7 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES')
   for (const file of composeFiles) {
     assertIncludes(file, 'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS')
+    assertIncludes(file, 'OPEN_COWORK_CLOUD_DEPLOYMENT_TIER')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_SIGNUP_MODE')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
     assertIncludes(file, 'OPEN_COWORK_CLOUD_HEADER_AUTH_MAX_SIGNATURE_AGE_MS')
@@ -182,6 +183,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.web.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.worker.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.scheduler.enabled=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'web role requires cloud.publicUrl')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'web role must set roles.web.autoProcessCommands=false')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires provider-backed object storage')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.auth.signupMode')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production header auth requires cloud.auth.headerSecret')
@@ -349,6 +355,113 @@ function validateHelm() {
         'ingress.enabled=true',
       ],
       'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-no-worker',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.auth.headerSecret=ci-header-secret-with-enough-entropy-123456789',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKeyRef=env:OPEN_COWORK_CLOUD_SECRET_KEY',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret-with-enough-entropy-123456789',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production requires roles.worker.enabled=true'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-no-public-url',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.auth.headerSecret=ci-header-secret-with-enough-entropy-123456789',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKeyRef=env:OPEN_COWORK_CLOUD_SECRET_KEY',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret-with-enough-entropy-123456789',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production web role requires cloud.publicUrl'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-inline-web-worker',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.auth.headerSecret=ci-header-secret-with-enough-entropy-123456789',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'roles.web.autoProcessCommands=true',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKeyRef=env:OPEN_COWORK_CLOUD_SECRET_KEY',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret-with-enough-entropy-123456789',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production web role must set roles.web.autoProcessCommands=false'
     )
 
     run('helm', [
@@ -1523,6 +1636,8 @@ function validateGcpReference() {
     'checkpointsEnabled: true',
     'topologySpreadConstraints:',
     'topology.kubernetes.io/zone',
+    'whenUnsatisfiable: DoNotSchedule',
+    'app.kubernetes.io/name: open-cowork-cloud',
     'podDisruptionBudget:',
     'serviceAccount:',
     'iam.gke.io/gcp-service-account',
