@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../apps/desktop/src/main/workflow/workflow-schedule.ts'
+import {
+  computeNextWorkflowRunAt,
+  validateWorkflowSchedule,
+} from '../packages/shared/src/workflow.ts'
 
 test('workflow schedules compute the next enabled trigger', () => {
   const next = computeNextWorkflowRunAt([
@@ -38,4 +41,15 @@ test('workflow schedule validation catches incomplete scheduled triggers', () =>
     runAtHour: 9,
     runAtMinute: 0,
   }), 'Schedule timezone is invalid.')
+})
+
+test('desktop workflow schedule module re-exports the shared validator', async () => {
+  const desktop = await import('../apps/desktop/src/main/workflow/workflow-schedule.ts')
+
+  const schedule = {
+    type: 'one_time' as const,
+    timezone: 'UTC',
+  }
+  assert.equal(desktop.validateWorkflowSchedule(schedule), validateWorkflowSchedule(schedule))
+  assert.equal(desktop.computeNextWorkflowRunAt([], new Date('2026-05-14T09:30:00.000Z')), null)
 })

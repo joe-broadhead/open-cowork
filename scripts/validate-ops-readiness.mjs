@@ -32,6 +32,7 @@ const launchRunbookPath = 'docs/runbooks/launch-readiness.md'
 const launchReportPath = 'docs/runbooks/launch-readiness-report.md'
 const managedWorkerDocsPath = 'docs/managed-workers.md'
 const cloudGatewayRegistrationDocsPath = 'docs/cloud-gateway-registration.md'
+const coordinationModelDocsPath = 'docs/coordination-model.md'
 const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
 const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
 const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
@@ -48,6 +49,7 @@ for (const path of [
   launchReportPath,
   managedWorkerDocsPath,
   cloudGatewayRegistrationDocsPath,
+  coordinationModelDocsPath,
   managedWorkerDeployPath,
   managedWorkerReleaseTemplatePath,
   managedWorkerRestoreTemplatePath,
@@ -187,6 +189,20 @@ for (const phrase of [
   'This document defines the production contract for issue #582.',
 ]) {
   assertIncludes(cloudGatewayRegistrationDocsPath, phrase)
+}
+
+for (const phrase of [
+  'Coordination Model',
+  '`CoordinationTask` is durable product work',
+  'It is not `TaskRun`',
+  '`CoordinationProject` is a product planning container',
+  'manager teams',
+  'cron jobs',
+  'background jobs',
+  'native delegation hints',
+  '`/watch`',
+]) {
+  assertIncludes(coordinationModelDocsPath, phrase)
 }
 
 for (const phrase of [

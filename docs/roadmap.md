@@ -79,7 +79,9 @@ child issues below are the source of truth for implementation scope and
 acceptance. The canonical workspace and authority semantics live in the
 [Product Contract](product-contract.md). Optional Cloud registration for
 Standalone Gateway workspaces and edge capacity is defined in
-[Cloud Gateway Registration](cloud-gateway-registration.md).
+[Cloud Gateway Registration](cloud-gateway-registration.md). Shared team,
+workflow, schedule, watch, and delegation nouns are defined in the
+[Coordination Model](coordination-model.md).
 
 - [#576](https://github.com/joe-broadhead/open-cowork/issues/576) - execution
   authority and workspace support contract.

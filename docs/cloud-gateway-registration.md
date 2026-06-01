@@ -9,6 +9,12 @@ Cloud Gateway registration is the optional bridge between a Standalone Team
 Gateway and Open Cowork Cloud. It is not required for Gateway-only operation,
 and it is not a database merge between Gateway Postgres and Cloud Postgres.
 
+Registration also follows the shared
+[Coordination Model](coordination-model.md): Gateway-owned Projects, Tasks,
+Runs, Schedules, Watches, Delegations, Artifacts, Questions, and Permissions
+remain Gateway-owned unless an explicit import/export or Cloud-owned edge work
+claim says otherwise.
+
 The registration model has two independent jobs:
 
 - let Cloud know about an external Gateway workspace without taking ownership
@@ -76,6 +82,8 @@ boundaries. Cloud may store:
 
 - Gateway registration id, display name, URL, status, version, and health
 - redacted capability advertisements
+- redacted coordination metadata for Projects, Tasks, Runs, Schedules, Watches,
+  Delegations, Artifacts, Questions, and Permissions when policy allows it
 - redacted session/workflow metadata when policy allows it
 - redacted projection snapshots when an explicit sync policy allows it
 - artifact metadata, not artifact bodies, unless a separate import/export flow

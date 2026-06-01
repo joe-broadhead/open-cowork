@@ -8,6 +8,13 @@ description: Thread-native repeatable work in Open Cowork.
 Workflows are saved repeatable tasks created from a normal OpenCode setup
 thread with the Workflow Designer agent.
 
+Workflows are one noun in Open Cowork's shared
+[Coordination Model](coordination-model.md). They are saved repeatable
+automations. Projects and tasks coordinate multi-agent/team work, runs are
+authority-scoped execution attempts, schedules trigger runs, and watches deliver
+progress. A workflow may create runs, artifacts, questions, and permissions, but
+it is not a separate runtime.
+
 Workflow setup depends on the configured agent id `workflow-designer`.
 Downstream builds that keep workflows enabled should keep that agent in
 their app config, or intentionally update the workflow setup policy in code
@@ -24,6 +31,11 @@ There is no separate workflow runtime, inbox board, or hidden task engine.
 Open Cowork does include a hidden built-in **Executive Assistant** agent for
 workflow supervision, readiness checks, and run coordination; it is
 workflow-only and is not shown in the normal chat agent picker.
+
+`CoordinationTask` is durable product work. It is distinct from the session
+`TaskRun` projection used to show OpenCode child-session delegation in chat.
+Likewise, a `CoordinationProject` is a planning container and does not imply a
+local project directory or host-path grant.
 
 ## How Creation Works
 
