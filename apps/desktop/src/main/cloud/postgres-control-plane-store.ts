@@ -3899,7 +3899,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     executor: PgExecutor,
     input: RecordAuditEventInput,
   ): Promise<AuditEventRecord> {
-    const eventId = input.eventId || `audit_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const eventId = input.eventId || randomRecordId('audit')
     const result = await executor.query(
       `INSERT INTO cloud_audit_events (
         event_id, org_id, account_id, actor_type, actor_id,
@@ -3931,7 +3931,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     executor: PgExecutor,
     input: RecordUsageEventInput,
   ): Promise<UsageEventRecord> {
-    const eventId = input.eventId || `usage_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const eventId = input.eventId || randomRecordId('usage')
     const result = await executor.query(
       `INSERT INTO cloud_usage_events (
         event_id, org_id, account_id, event_type, quantity, unit, metadata, created_at
@@ -4383,6 +4383,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       client.release()
     }
   }
+}
+
+function randomRecordId(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${randomBytes(8).toString('base64url')}`
 }
 
 export async function createPostgresControlPlaneStore(options: PostgresControlPlaneStoreOptions) {

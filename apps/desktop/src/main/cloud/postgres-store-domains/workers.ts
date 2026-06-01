@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import {
   generateManagedWorkerCredential,
   hashManagedWorkerCredential,
@@ -57,7 +58,7 @@ export class PostgresManagedWorkersRepository {
     const now = nowIso(input.createdAt)
     const org = await this.maybeOne(`SELECT * FROM cloud_orgs WHERE org_id = $1`, [input.orgId])
     if (!org) throw new Error(`Unknown org ${input.orgId}.`)
-    const poolId = input.poolId || `mwp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const poolId = input.poolId || randomRecordId('mwp')
     return this.options.withTransaction(async (client) => {
       const result = await client.query(
         `INSERT INTO cloud_worker_pools (
@@ -164,7 +165,7 @@ export class PostgresManagedWorkersRepository {
     const pool = await this.getPool(input.orgId, input.poolId)
     if (!pool) throw new Error(`Unknown managed worker pool ${input.poolId}.`)
     const now = nowIso(input.createdAt)
-    const workerId = input.workerId || `mworker_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+    const workerId = input.workerId || randomRecordId('mworker')
     return this.options.withTransaction(async (client) => {
       const result = await client.query(
         `INSERT INTO cloud_managed_workers (
@@ -619,6 +620,10 @@ function normalizeCredentialScopes(scopes: ManagedWorkerCredentialScope[] | unde
   const normalized = [...new Set(scopes?.length ? scopes : ['heartbeat'])]
   if (normalized.some((scope) => scope !== 'heartbeat')) throw new Error('Managed worker credential scope is unsupported.')
   return normalized as ManagedWorkerCredentialScope[]
+}
+
+function randomRecordId(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${randomBytes(8).toString('base64url')}`
 }
 
 function normalizeMetadata(value: Record<string, unknown> | undefined, label: string) {
