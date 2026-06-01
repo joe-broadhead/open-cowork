@@ -71,7 +71,7 @@ export class PostgresManagedWorkersRepository {
         [
           poolId,
           input.orgId,
-          input.tenantId === undefined ? org.tenant_id : input.tenantId,
+          String(org.tenant_id),
           normalizeText(input.name, MANAGED_WORKER_TEXT_MAX_LENGTH, 'Managed worker pool name'),
           normalizePoolMode(input.mode),
           normalizePoolStatus(input.status),
@@ -179,7 +179,7 @@ export class PostgresManagedWorkersRepository {
         [
           workerId,
           input.orgId,
-          input.tenantId === undefined ? pool.tenantId : input.tenantId,
+          pool.tenantId,
           input.poolId,
           normalizeText(input.displayName, MANAGED_WORKER_TEXT_MAX_LENGTH, 'Managed worker display name'),
           normalizeWorkerStatus(input.status),

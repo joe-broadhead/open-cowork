@@ -26,7 +26,6 @@ const MANAGED_WORKER_SUPPORTED_POOL_MODES = new Set<ManagedWorkerPoolMode>(['saa
 
 type ManagedWorkersDomainHost = {
   orgTenantId(orgId: string): string | null
-  hasTenant(tenantId: string): boolean
   recordAuditEvent(input: RecordAuditEventInput): unknown
 }
 
@@ -44,12 +43,11 @@ export class InMemoryManagedWorkersDomain {
   createPool(input: CreateManagedWorkerPoolInput): ManagedWorkerPoolRecord {
     const orgTenantId = this.host.orgTenantId(input.orgId)
     if (!orgTenantId) throw new Error(`Unknown org ${input.orgId}.`)
-    if (input.tenantId && !this.host.hasTenant(input.tenantId)) throw new Error(`Unknown tenant ${input.tenantId}.`)
     const now = nowIso(input.createdAt)
     const record: ManagedWorkerPoolRecord = {
       poolId: input.poolId || stableId('mwp', input.orgId, input.name, now),
       orgId: input.orgId,
-      tenantId: input.tenantId === undefined ? orgTenantId : input.tenantId,
+      tenantId: orgTenantId,
       name: normalizeText(input.name, MANAGED_WORKER_TEXT_MAX_LENGTH, 'Managed worker pool name'),
       mode: normalizePoolMode(input.mode),
       status: normalizePoolStatus(input.status),
@@ -135,7 +133,7 @@ export class InMemoryManagedWorkersDomain {
     const record: ManagedWorkerRecord = {
       workerId: input.workerId || stableId('mworker', input.orgId, input.poolId, input.displayName, now),
       orgId: input.orgId,
-      tenantId: input.tenantId === undefined ? pool.tenantId : input.tenantId,
+      tenantId: pool.tenantId,
       poolId: input.poolId,
       displayName: normalizeText(input.displayName, MANAGED_WORKER_TEXT_MAX_LENGTH, 'Managed worker display name'),
       status: normalizeWorkerStatus(input.status),

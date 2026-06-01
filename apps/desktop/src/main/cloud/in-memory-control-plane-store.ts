@@ -1549,7 +1549,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly workspaceEvents = new Map<string, { nextSequence: number, events: WorkspaceEventRecord[] }>()
   private readonly managedWorkersDomain = new InMemoryManagedWorkersDomain({
     orgTenantId: (orgId) => this.orgs.get(orgId)?.tenantId || null,
-    hasTenant: (tenantId) => this.tenants.has(tenantId),
     recordAuditEvent: (input) => this.recordAuditEvent(input),
   })
   private readonly quotaDomain = new InMemoryQuotaDomain({
