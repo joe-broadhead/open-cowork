@@ -34,6 +34,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/standalone-gateway test',
     'pnpm --filter @open-cowork/website test',
     'node scripts/run-node-tests.mjs',
   ])
@@ -43,6 +44,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
+    'pnpm --filter @open-cowork/standalone-gateway test',
     'node scripts/run-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
   ])
@@ -98,6 +100,11 @@ test('root deployment scripts expose provider smoke gates', () => {
     'pnpm build:gateway',
     'node scripts/gateway-cloud-smoke.mjs',
   ])
+  assert.deepEqual(splitScriptSteps(requireScript('deploy:standalone-gateway:smoke')), [
+    'pnpm build:standalone-gateway',
+    'node apps/standalone-gateway/dist/main.js smoke',
+  ])
+  assert.equal(requireScript('deploy:standalone-gateway:validate'), 'node scripts/validate-standalone-gateway.mjs')
   assert.deepEqual(splitScriptSteps(requireScript('deploy:continuation:smoke')), [
     'pnpm build:gateway',
     'pnpm build:shared',
@@ -118,12 +125,14 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
   assert.equal(requireScript('build:packages'), 'pnpm --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
+  assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
   assert.equal(requireScript('build:website'), 'pnpm --filter @open-cowork/website build')
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm build:packages',
     'pnpm build:mcps',
     'pnpm build:gateway',
+    'pnpm build:standalone-gateway',
     'pnpm build:website',
     'pnpm --filter @open-cowork/desktop build',
   ])
@@ -139,6 +148,7 @@ test('root typecheck script covers package, MCP, gateway, website, and desktop s
     'pnpm build:packages',
     'pnpm typecheck:mcps',
     'pnpm typecheck:gateway',
+    'pnpm typecheck:standalone-gateway',
     'pnpm typecheck:website',
     'pnpm --filter @open-cowork/desktop build:electron',
     'pnpm --filter @open-cowork/desktop typecheck',
@@ -146,6 +156,7 @@ test('root typecheck script covers package, MCP, gateway, website, and desktop s
 
   assert.equal(requireScript('typecheck:mcps'), 'pnpm --filter=./mcps/* typecheck')
   assert.equal(requireScript('typecheck:gateway'), 'pnpm --filter @open-cowork/gateway typecheck')
+  assert.equal(requireScript('typecheck:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway typecheck')
   assert.equal(requireScript('typecheck:website'), 'pnpm --filter @open-cowork/website typecheck')
 })
 

@@ -11,7 +11,8 @@ deployments.
 
 Standalone Team Gateway is a separate product mode that may own private
 OpenCode and Gateway Postgres. Do not run it through these Cloud Channel
-Gateway assets.
+Gateway assets; use `apps/standalone-gateway` and
+`deploy/standalone-gateway` instead.
 
 ## VPS/Local Compose Recipe
 

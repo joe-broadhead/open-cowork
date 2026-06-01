@@ -145,19 +145,25 @@ export const GATEWAY_PRODUCT_MODES = [
 export type GatewayProductMode = typeof GATEWAY_PRODUCT_MODES[number]
 
 export function resolveGatewayProductMode(envValue: unknown, configValue: unknown): GatewayProductMode {
-  const productMode = readGatewayProductMode(envValue) || readGatewayProductMode(configValue) || 'cloud_channel'
-  assertGatewayProductModeSupported(productMode)
+  const productMode = parseGatewayProductMode(envValue) || parseGatewayProductMode(configValue) || 'cloud_channel'
+  assertCloudChannelGatewayProductMode(productMode)
   return productMode
 }
 
-function readGatewayProductMode(value: unknown): GatewayProductMode | null {
+export function resolveStandaloneGatewayProductMode(envValue: unknown, configValue: unknown): GatewayProductMode {
+  const productMode = parseGatewayProductMode(envValue) || parseGatewayProductMode(configValue) || 'standalone'
+  assertStandaloneGatewayProductMode(productMode)
+  return productMode
+}
+
+export function parseGatewayProductMode(value: unknown): GatewayProductMode | null {
   const text = typeof value === 'string' ? value.trim() : ''
   if (!text) return null
   if (text === 'cloud_channel' || text === 'standalone' || text === 'hybrid') return text
   throw new Error(`Unsupported gateway productMode ${text}. Use cloud_channel, standalone, or hybrid.`)
 }
 
-function assertGatewayProductModeSupported(productMode: GatewayProductMode) {
+export function assertCloudChannelGatewayProductMode(productMode: GatewayProductMode) {
   if (productMode === 'cloud_channel') return
   if (productMode === 'standalone') {
     throw new Error(
@@ -168,6 +174,20 @@ function assertGatewayProductModeSupported(productMode: GatewayProductMode) {
   throw new Error(
     'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
     + 'The current apps/gateway daemon only supports productMode=cloud_channel.',
+  )
+}
+
+export function assertStandaloneGatewayProductMode(productMode: GatewayProductMode) {
+  if (productMode === 'standalone') return
+  if (productMode === 'cloud_channel') {
+    throw new Error(
+      'Gateway productMode=cloud_channel is the Cloud Channel Gateway app. '
+      + 'Standalone Gateway deployments must use productMode=standalone.',
+    )
+  }
+  throw new Error(
+    'Gateway productMode=hybrid is reserved for a later Cloud-connected edge/standalone design. '
+    + 'Standalone Gateway deployments must use productMode=standalone.',
   )
 }
 

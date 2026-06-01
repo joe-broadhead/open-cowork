@@ -1,6 +1,9 @@
 {{- if and (not .Values.image.tag) (not .Values.image.digest) }}
 {{- fail "image.tag or image.digest is required; pin a release tag or immutable digest instead of relying on latest." }}
 {{- end }}
+{{- if ne .Values.gateway.productMode "cloud_channel" }}
+{{- fail "open-cowork-gateway Helm chart only deploys Cloud Channel Gateway. Use the standalone gateway chart/app for gateway.productMode=standalone." }}
+{{- end }}
 {{- if eq .Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}

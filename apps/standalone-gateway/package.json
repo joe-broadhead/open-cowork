@@ -1,0 +1,31 @@
+{
+  "name": "@open-cowork/standalone-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Open Cowork Gateway execution appliance with private OpenCode and Postgres",
+  "main": "dist/index.js",
+  "bin": {
+    "open-cowork-gateway-standalone": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc",
+    "typecheck": "pnpm --filter @open-cowork/gateway-channel build && pnpm --filter @open-cowork/gateway-provider-telegram build && pnpm --filter @open-cowork/gateway-provider-webhook build && pnpm --filter @open-cowork/gateway-testing build && tsc --noEmit",
+    "test": "pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "start": "node dist/main.js serve",
+    "doctor": "node dist/main.js doctor",
+    "smoke": "node dist/main.js smoke"
+  },
+  "dependencies": {
+    "@open-cowork/gateway-channel": "workspace:*",
+    "@open-cowork/gateway-provider-telegram": "workspace:*",
+    "@open-cowork/gateway-provider-webhook": "workspace:*",
+    "@open-cowork/gateway-testing": "workspace:*",
+    "@opencode-ai/sdk": "1.15.5",
+    "pg": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^6.0.0"
+  }
+}

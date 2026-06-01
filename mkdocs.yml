@@ -127,6 +127,7 @@ nav:
       - Open Cowork Cloud: open-cowork-cloud.md
       - Managed Workers: managed-workers.md
       - Gateway Appliance: gateway-appliance.md
+      - Standalone Gateway: standalone-gateway.md
       - Deployment Readiness: deployment-readiness.md
       - Launch Readiness Gates: runbooks/launch-readiness.md
       - Launch Readiness Report: runbooks/launch-readiness-report.md
