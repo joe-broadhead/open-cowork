@@ -9,6 +9,8 @@ import {
 } from '@open-cowork/gateway-testing'
 import {
   CLOUD_SESSION_EVENT_TYPES,
+  CLOUD_SESSION_EVENT_CONTRACT,
+  cloudSessionEventIsChannelRenderable,
   isCloudSessionEventType,
 } from '@open-cowork/shared'
 
@@ -81,6 +83,10 @@ test('event renderer edits streaming assistant output for button-capable provide
 })
 
 test('event renderer handles only canonical shared cloud session events', () => {
+  const channelRenderableTypes = CLOUD_SESSION_EVENT_CONTRACT
+    .filter((entry) => entry.channelRenderable)
+    .map((entry) => entry.type)
+    .sort()
   assert.deepEqual([...GATEWAY_RENDERED_SESSION_EVENT_TYPES].sort(), [
     'artifact.created',
     'assistant.message',
@@ -88,11 +94,14 @@ test('event renderer handles only canonical shared cloud session events', () => 
     'question.asked',
     'tool.call',
   ])
+  assert.deepEqual([...GATEWAY_RENDERED_SESSION_EVENT_TYPES].sort(), channelRenderableTypes)
 
   for (const type of GATEWAY_RENDERED_SESSION_EVENT_TYPES) {
     assert.equal(CLOUD_SESSION_EVENT_TYPES.includes(type), true)
     assert.equal(isCloudSessionEventType(type), true, `${type} must stay in the shared cloud event contract`)
+    assert.equal(cloudSessionEventIsChannelRenderable(type), true, `${type} must stay declared as channel-renderable`)
   }
+  assert.equal(cloudSessionEventIsChannelRenderable('permission.resolved'), false)
   assert.equal(isCloudSessionEventType('permission.asked'), false, 'raw SDK events must not become gateway-rendered cloud events')
 })
 

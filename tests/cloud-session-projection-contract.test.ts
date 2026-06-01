@@ -2,7 +2,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  CLOUD_PROJECTED_SESSION_EVENT_TYPES,
+  CLOUD_SESSION_EVENT_CONTRACT,
   CLOUD_SESSION_EVENT_TYPES,
+  CLOUD_SESSION_PROJECTION_CONTRACT_VERSION,
+  cloudSessionEventContractFor,
+  cloudSessionEventHasFacet,
   cloudSessionViewToSessionView,
   createCloudSessionProjectionView,
   emptySessionView,
@@ -32,6 +37,82 @@ function event(sequence: number, type: string, payload: Record<string, unknown> 
     createdAt: `2026-05-28T10:${String(sequence).padStart(2, '0')}:00.000Z`,
   }
 }
+
+function minimalPayloadFor(type: string): Record<string, unknown> {
+  switch (type) {
+    case 'session.created':
+      return { title: 'Contract session' }
+    case 'session.imported':
+      return {
+        sourceFingerprint: 'sha256:source',
+        importedAt: '2026-05-28T10:00:00.000Z',
+        itemCounts: { messages: 1 },
+      }
+    case 'session.project_source.bound':
+      return { projectSource: { kind: 'snapshot', snapshotId: 'snapshot-1' } }
+    case 'prompt.submitted':
+      return { messageId: 'user-1', text: 'run checks' }
+    case 'assistant.message':
+      return { messageId: 'assistant-1', content: 'ok' }
+    case 'tool.call':
+      return { id: 'tool-1', name: 'bash', status: 'running' }
+    case 'task.run':
+      return { id: 'task-1', title: 'Task', status: 'running' }
+    case 'permission.requested':
+      return { permissionId: 'permission-1', tool: 'bash', description: 'Approve' }
+    case 'permission.resolved':
+      return { permissionId: 'permission-1', allowed: true }
+    case 'question.asked':
+      return { requestId: 'question-1', questions: [{ question: 'Continue?' }] }
+    case 'question.resolved':
+      return { requestId: 'question-1', answers: ['Yes'] }
+    case 'todos.updated':
+      return { todos: [{ id: 'todo-1', content: 'Ship it' }] }
+    case 'cost.updated':
+      return { cost: 0.01, tokens: { input: 1, output: 2 } }
+    case 'artifact.created':
+      return { artifactId: 'artifact-1', filename: 'result.txt' }
+    case 'session.status':
+      return { statusType: 'running' }
+    case 'runtime.error':
+      return { message: 'Runtime failed' }
+    default:
+      return {}
+  }
+}
+
+test('cloud session event vocabulary is versioned and reducer-backed', () => {
+  assert.equal(CLOUD_SESSION_PROJECTION_CONTRACT_VERSION, 1)
+  assert.deepEqual(CLOUD_SESSION_EVENT_CONTRACT.map((entry) => entry.type), [...CLOUD_SESSION_EVENT_TYPES])
+  assert.deepEqual(
+    CLOUD_SESSION_EVENT_CONTRACT.filter((entry) => entry.projected).map((entry) => entry.type),
+    [...CLOUD_PROJECTED_SESSION_EVENT_TYPES],
+  )
+
+  for (const entry of CLOUD_SESSION_EVENT_CONTRACT) {
+    assert.equal(entry.description.length > 0, true, `${entry.type} must be documented`)
+    assert.equal(entry.facets.length > 0, true, `${entry.type} must declare projection facets`)
+    assert.equal(entry.consumers.length > 0, true, `${entry.type} must declare consumers`)
+    assert.equal(entry.producers.length > 0, true, `${entry.type} must declare producers`)
+    assert.deepEqual(cloudSessionEventContractFor(entry.type), entry)
+  }
+
+  const session = baseSession()
+  for (const type of CLOUD_PROJECTED_SESSION_EVENT_TYPES) {
+    const reduced = reduceCloudSessionProjectionEvent(
+      session,
+      createCloudSessionProjectionView(session),
+      event(1, type, minimalPayloadFor(type)),
+    )
+    assert.equal(reduced.updatedAt, '2026-05-28T10:01:00.000Z', `${type} must be handled by the shared reducer`)
+  }
+
+  assert.equal(cloudSessionEventHasFacet('permission.requested', 'approvals'), true)
+  assert.equal(cloudSessionEventHasFacet('question.asked', 'questions'), true)
+  assert.equal(cloudSessionEventHasFacet('artifact.created', 'artifacts'), true)
+  assert.equal(cloudSessionEventHasFacet('assistant.message', 'messages'), true)
+  assert.equal(cloudSessionEventHasFacet('snapshot.required', 'control'), true)
+})
 
 test('shared cloud projection reducer feeds desktop SessionView contract', () => {
   const session = baseSession()
@@ -90,6 +171,35 @@ test('shared cloud projection reducer feeds desktop SessionView contract', () =>
   assert.equal(sessionView.pendingApprovals[0]?.id, 'permission-1')
   assert.equal(sessionView.isAwaitingPermission, true)
   assert.equal(sessionView.isGenerating, false)
+})
+
+test('assistant message events update existing streamed content by message id', () => {
+  const session = baseSession()
+  let view = createCloudSessionProjectionView(session)
+  view = reduceCloudSessionProjectionEvent(session, view, event(1, 'assistant.message', {
+    messageId: 'assistant-stream-1',
+    content: 'Hel',
+  }))
+  view = reduceCloudSessionProjectionEvent(session, view, event(2, 'assistant.message', {
+    messageId: 'assistant-stream-1',
+    content: 'Hello',
+  }))
+
+  assert.equal(view.messages.length, 1)
+  assert.equal(view.messages[0]?.content, 'Hello')
+  assert.equal(view.messages[0]?.createdAt, '2026-05-28T10:02:00.000Z')
+
+  const sessionView = cloudSessionViewToSessionView({
+    session,
+    projection: {
+      tenantId: session.tenantId,
+      sessionId: session.sessionId,
+      sequence: 2,
+      view,
+      updatedAt: '2026-05-28T10:02:00.000Z',
+    },
+  })
+  assert.deepEqual(sessionView.messages.map((message) => message.content), ['Hello'])
 })
 
 test('cloud projection reducer covers durable runtime event state transitions', () => {

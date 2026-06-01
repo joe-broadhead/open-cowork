@@ -9,6 +9,8 @@ import {
   CloudQuotaService,
   CloudWorkflowService,
 } from '../apps/desktop/src/main/cloud/services/index.ts'
+import { CloudServiceError } from '../apps/desktop/src/main/cloud/cloud-service-error.ts'
+import type { ByokSecretMetadata, ByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import type { CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
 
 const principal: CloudPrincipal = {
@@ -20,6 +22,35 @@ const principal: CloudPrincipal = {
   accountId: 'account-1',
   role: 'owner',
   authSource: 'local',
+}
+
+function metadata(providerId = 'anthropic'): ByokSecretMetadata {
+  return {
+    secretId: `sec_${providerId}`,
+    providerId,
+    status: 'active',
+    credentialKind: 'plaintext',
+    last4: '1234',
+    keyFingerprint: 'fp',
+    lastValidatedAt: null,
+    validationError: null,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  }
+}
+
+function byokStore(overrides: Partial<ByokSecretStore> = {}): ByokSecretStore {
+  return {
+    async listMetadata() { return [] },
+    async getMetadata() { return null },
+    async setSecret(input) { return metadata(input.providerId) },
+    async disableSecret(_input) { return metadata(_input.providerId) },
+    async recordValidation() { return null },
+    async activateWithoutValidation(input) { return metadata(input.providerId) },
+    async validateActiveSecret(input) { return metadata(input.providerId) },
+    async revealActiveSecret() { return 'plaintext-key' },
+    ...overrides,
+  }
 }
 
 test('cloud domain services expose testable seams without an HTTP server', async () => {
@@ -83,42 +114,15 @@ test('cloud domain services expose testable seams without an HTTP server', async
   })
 
   const byok = new CloudByokService({
-    async listByokSecrets() {
-      calls.push('byok.list')
-      return []
-    },
-    async getByokSecret() {
-      calls.push('byok.get')
-      return null
-    },
-    async setByokSecret() {
-      calls.push('byok.set')
-      return {
-        secretId: 'sec_1',
-        orgId: 'org-1',
-        providerId: 'anthropic',
-        status: 'active',
-        last4: '1234',
-        keyFingerprint: 'fp',
-        kmsRef: null,
-        lastValidatedAt: null,
-        validationError: null,
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
-    },
-    async validateByokSecret() {
-      calls.push('byok.validate')
-      return null
-    },
-    async overrideByokSecretValidation() {
-      calls.push('byok.override')
-      return null
-    },
-    async disableByokSecret() {
-      calls.push('byok.disable')
-      return null
-    },
+    ensurePrincipal: async (input) => input,
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    byokSecrets: byokStore({
+      async listMetadata() {
+        calls.push('byok.list')
+        return []
+      },
+    }),
+    assertBillingAllowed: async () => {},
   })
 
   const billing = new CloudBillingService({
@@ -207,4 +211,124 @@ test('cloud domain services expose testable seams without an HTTP server', async
     'channel.deliveries',
     'workflow.list',
   ])
+})
+
+test('cloud BYOK service enforces storage, provider, KMS, billing, and audit boundaries', async () => {
+  const calls: unknown[] = []
+  const apiTokenPrincipal: CloudPrincipal = {
+    ...principal,
+    authSource: 'api_token',
+    tokenId: 'tok_admin',
+    tokenScopes: ['admin'],
+  }
+  const service = new CloudByokService({
+    ensurePrincipal: async (input) => {
+      calls.push('ensure')
+      return input
+    },
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    byokSecrets: byokStore({
+      async setSecret(input) {
+        calls.push({
+          kind: 'setSecret',
+          orgId: input.orgId,
+          providerId: input.providerId,
+          kmsRef: input.kmsRef,
+          actor: input.actor,
+          createdByAccountId: input.createdByAccountId,
+        })
+        return metadata(input.providerId)
+      },
+    }),
+    byokPolicy: {
+      allowedProviderIds: ['anthropic'],
+      kmsRefs: {
+        enabled: true,
+        allowEnvRefs: false,
+        allowedPrefixes: ['gcp-sm://projects/test/secrets/'],
+      },
+      checkEntitlement: async (input) => {
+        calls.push({ kind: 'entitlement', orgId: input.orgId, providerId: input.providerId })
+        return { allowed: true }
+      },
+    },
+    assertBillingAllowed: async (input) => {
+      calls.push({ kind: 'billing', orgId: input.orgId, action: input.action, providerId: input.providerId })
+    },
+  })
+
+  await assert.rejects(
+    () => new CloudByokService({
+      ensurePrincipal: async (input) => input,
+      principalOrgId: (input) => input.orgId || input.tenantId,
+      byokSecrets: null,
+      assertBillingAllowed: async () => {},
+    }).listSecrets(principal),
+    /BYOK secret storage is not configured/,
+  )
+  await assert.rejects(
+    () => service.setSecret(apiTokenPrincipal, { providerId: 'openai', plaintext: 'sk-test' }),
+    /not enabled for BYOK/,
+  )
+  await assert.rejects(
+    () => service.setSecret(apiTokenPrincipal, { providerId: 'anthropic', kmsRef: 'env:ANTHROPIC_API_KEY' }),
+    /Environment-backed BYOK references are not enabled/,
+  )
+  await assert.rejects(
+    () => service.setSecret(apiTokenPrincipal, { providerId: 'anthropic', kmsRef: 'aws-sm://secret' }),
+    /KMS-backed BYOK reference is not allowed/,
+  )
+
+  const result = await service.setSecret(apiTokenPrincipal, {
+    providerId: 'Anthropic',
+    kmsRef: 'gcp-sm://projects/test/secrets/anthropic-key',
+  })
+
+  assert.equal(result.providerId, 'anthropic')
+  assert.deepEqual(calls, [
+    'ensure',
+    'ensure',
+    'ensure',
+    'ensure',
+    { kind: 'billing', orgId: 'org-1', action: 'byok.provider', providerId: 'anthropic' },
+    { kind: 'entitlement', orgId: 'org-1', providerId: 'anthropic' },
+    {
+      kind: 'setSecret',
+      orgId: 'org-1',
+      providerId: 'anthropic',
+      kmsRef: 'gcp-sm://projects/test/secrets/anthropic-key',
+      actor: {
+        actorType: 'api_token',
+        actorId: 'tok_admin',
+        accountId: 'account-1',
+      },
+      createdByAccountId: 'account-1',
+    },
+  ])
+})
+
+test('cloud BYOK service rejects non-admin principals before billing or mutation', async () => {
+  const calls: string[] = []
+  const service = new CloudByokService({
+    ensurePrincipal: async (input) => input,
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    byokSecrets: byokStore({
+      async setSecret(input) {
+        calls.push(`set:${input.providerId}`)
+        return metadata(input.providerId)
+      },
+    }),
+    assertBillingAllowed: async () => {
+      calls.push('billing')
+    },
+  })
+  const member: CloudPrincipal = { ...principal, authSource: 'user', role: 'member' }
+
+  await assert.rejects(
+    () => service.setSecret(member, { providerId: 'anthropic', plaintext: 'sk-test' }),
+    (error) => error instanceof CloudServiceError
+      && error.status === 403
+      && /BYOK credential administration/.test(error.message),
+  )
+  assert.deepEqual(calls, [])
 })

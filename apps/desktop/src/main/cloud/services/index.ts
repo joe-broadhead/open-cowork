@@ -1,7 +1,15 @@
 export { CloudIdentityService } from './identity-service.ts'
 export type { CloudIdentityServiceDelegate } from './identity-service.ts'
 export { CloudByokService } from './byok-service.ts'
-export type { CloudByokServiceDelegate } from './byok-service.ts'
+export type {
+  ByokEntitlementChecker,
+  ByokEntitlementVerdict,
+  ByokKmsRefPolicy,
+  ByokManagementPolicy,
+  ByokPolicyOverview,
+  ByokRuntimeEntitlementChecker,
+  CloudByokServiceOptions,
+} from './byok-service.ts'
 export { CloudBillingService } from './billing-service.ts'
 export type { CloudBillingServiceDelegate } from './billing-service.ts'
 export { CloudQuotaService } from './quota-service.ts'
