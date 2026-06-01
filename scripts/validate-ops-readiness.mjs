@@ -31,6 +31,7 @@ const drillReportPath = 'docs/runbooks/restore-drill-report.md'
 const launchRunbookPath = 'docs/runbooks/launch-readiness.md'
 const launchReportPath = 'docs/runbooks/launch-readiness-report.md'
 const managedWorkerDocsPath = 'docs/managed-workers.md'
+const cloudGatewayRegistrationDocsPath = 'docs/cloud-gateway-registration.md'
 const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
 const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
 const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
@@ -46,6 +47,7 @@ for (const path of [
   launchRunbookPath,
   launchReportPath,
   managedWorkerDocsPath,
+  cloudGatewayRegistrationDocsPath,
   managedWorkerDeployPath,
   managedWorkerReleaseTemplatePath,
   managedWorkerRestoreTemplatePath,
@@ -151,12 +153,40 @@ for (const phrase of [
   'Phase 5 Operations Contract',
   'deploy/managed-workers/',
   'OPEN_COWORK_CLOUD_SHUTDOWN_GRACE_MS',
+  'Cloud Gateway Registration',
+  'external_workspace',
+  'edge_worker',
+  'customer_hosted_managed_saas_deferred',
   'Rolling Updates',
   'Rollback And Emergency Revoke',
   'SLO And Alert Template',
   'Backup And Restore',
 ]) {
   assertIncludes(managedWorkerDocsPath, phrase)
+}
+
+for (const phrase of [
+  'Cloud Gateway registration',
+  'external_workspace',
+  'edge_worker',
+  'external_workspace_edge_worker',
+  'gateway.registration.heartbeat',
+  'gateway.edge.write_fenced_output',
+  'raw_gateway_database',
+  'raw_opencode_runtime_home',
+  'raw_local_paths',
+  'raw_provider_keys',
+  'raw_mcp_secrets',
+  'raw_channel_secrets',
+  'gateway_private_files',
+  'cloud_byok_plaintext',
+  'unfenced_event_writes',
+  'customer_hosted_managed_saas_deferred',
+  'Drain behavior is controlled and non-destructive',
+  'No database transaction may remain open while Gateway-run OpenCode work',
+  'This document defines the production contract for issue #582.',
+]) {
+  assertIncludes(cloudGatewayRegistrationDocsPath, phrase)
 }
 
 for (const phrase of [

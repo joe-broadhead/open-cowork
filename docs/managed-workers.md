@@ -129,6 +129,36 @@ Excluded by default:
 - direct Gateway-owned execution
 - peer-to-peer desktop sync
 
+## Gateway Edge Capacity
+
+Standalone Team Gateway can optionally connect to Cloud through the
+[Cloud Gateway Registration](cloud-gateway-registration.md) contract. This
+does not change the V1 managed-worker decision: edge execution is allowed only
+when the Cloud/Gateway trust model is `self_hosted_same_operator` or
+`saas_operator_managed`. Customer-hosted Gateway edge workers connected to a
+separate managed SaaS control plane remain
+`customer_hosted_managed_saas_deferred`.
+
+The registration kind decides the boundary:
+
+| Registration kind | Managed-worker relationship |
+| --- | --- |
+| `external_workspace` | Not a worker. Cloud may store redacted Gateway workspace metadata, health, capabilities, cursors, and audit summaries. Gateway remains source of truth for Gateway-owned sessions. |
+| `edge_worker` | Worker-like capacity. Gateway claims only eligible Cloud-owned work and writes Cloud-owned output with managed-worker lease-token fencing. |
+| `external_workspace_edge_worker` | Both lanes. Gateway-owned work stays Gateway-owned; Cloud-owned work uses the managed-worker claim/fencing path. |
+
+Edge Gateway credentials are distinct from Cloud Channel Gateway service
+tokens and from human/admin credentials. They are scoped to registration
+heartbeat, capability advertisement, optional metadata sync, and, when
+enabled, edge work claim/renew/fenced-output operations. They cannot call BYOK
+read/reveal APIs, billing APIs, tenant admin APIs, Desktop APIs, or operator
+APIs.
+
+Cloud must never merge Gateway Postgres with Cloud Postgres. Cloud-owned edge
+work uses Cloud command, lease, event, projection, artifact, checkpoint, usage,
+and audit records. Gateway-owned external-workspace work uses Gateway records,
+with only explicitly allowed redacted metadata syncing to Cloud.
+
 ## Worker Lifecycle
 
 Worker records use these states:

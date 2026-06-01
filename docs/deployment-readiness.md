@@ -211,6 +211,11 @@ provider control plane.
   exposed as production capacity: explicit worker identity, scoped expiring
   credentials, lifecycle state, durable work claims, lease-token fencing,
   checkpoint/artifact ownership, recovery rules, quotas, and operator runbooks.
+- Cloud-connected Standalone Gateway deployments must follow the
+  [Cloud Gateway Registration](cloud-gateway-registration.md) contract:
+  `external_workspace` is redacted metadata only, `edge_worker` uses
+  managed-worker lease fencing for Cloud-owned work, and customer-hosted edge
+  workers against managed SaaS remain deferred.
 - Use the public templates under `deploy/managed-workers/` for self-hosted and
   managed-worker pool deployment, release evidence, and restore drills.
 - The first supported managed-worker mode is control-plane-owned worker pools.
