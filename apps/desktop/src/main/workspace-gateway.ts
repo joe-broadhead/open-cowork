@@ -1,4 +1,8 @@
 import type { IpcMainInvokeEvent } from 'electron'
+import {
+  WORKSPACE_SUPPORT_APIS,
+  workspaceApiSupportContextForAuthority,
+} from '@open-cowork/shared'
 import type {
   AddCloudWorkspaceInput,
   CapabilitySkill,
@@ -93,6 +97,7 @@ export type WorkspaceGatewayOptions = {
 const LOCAL_WORKSPACE: WorkspaceRegistration = {
   id: LOCAL_WORKSPACE_ID,
   kind: 'local',
+  authority: 'desktop_local',
   label: 'Local',
   status: 'online',
   lastSyncedAt: null,
@@ -133,34 +138,6 @@ const DISABLED_CLOUD_POLICY: WorkspacePolicy = {
   localStdioMcps: 'disabled',
   machineRuntimeConfig: 'disabled',
 }
-
-const WORKSPACE_SUPPORT_APIS = [
-  'sessions.list',
-  'sessions.create',
-  'sessions.activate',
-  'sessions.get',
-  'sessions.prompt',
-  'sessions.abort',
-  'sessions.fileSnippet',
-  'sessions.diff',
-  'threads.search',
-  'threads.tags',
-  'threads.smartFilters',
-  'workflows.list',
-  'workflows.run',
-  'artifacts.list',
-  'artifacts.upload',
-  'artifacts.download',
-  'artifacts.reveal',
-  'settings.portable',
-  'customContent.agents',
-  'customContent.skills',
-  'customContent.mcps',
-  'capabilities.catalog',
-  'localFiles',
-  'localStdioMcps',
-  'machineRuntimeConfig',
-] as const
 
 const CLOUD_CUSTOM_AGENTS_KEY = 'custom-agents'
 const CLOUD_CUSTOM_MCPS_KEY = 'custom-mcps'
@@ -206,6 +183,7 @@ function cloudRegistrationFromConnection(connection: CloudWorkspaceConnectionRec
   return {
     id: connection.id,
     kind: 'cloud',
+    authority: 'cloud_worker',
     label: connection.label,
     status: 'auth_required',
     baseUrl: connection.baseUrl,
@@ -463,6 +441,11 @@ export class WorkspaceGateway {
         api,
         status: 'supported',
         verdict: { allowed: true, reason: null },
+        context: workspaceApiSupportContextForAuthority('desktop_local', {
+          surface: 'desktop_local',
+          onlineState: workspace.status,
+          status: 'supported',
+        }),
       }))
     }
     const policy = await this.cloudPolicy(event, workspace.id)
@@ -475,6 +458,22 @@ export class WorkspaceGateway {
         reason,
         ...(reason ? { policyCode: status } : {}),
       },
+      context: workspaceApiSupportContextForAuthority('cloud_worker', {
+        surface: 'desktop_cloud',
+        onlineState: workspace.status,
+        status,
+        pathExposure: status === 'not_supported' ? 'not_exposed' : 'cloud_safe_refs',
+        ...(api === 'artifacts.reveal' ? { artifactReveal: 'none' as const } : {}),
+        ...(reason
+          ? {
+              blockedReason: {
+                allowed: status === 'supported' || status === 'read_only',
+                reason,
+                policyCode: status,
+              },
+            }
+          : {}),
+      }),
     })
     const supportedIf = (api: string, allowed: boolean, reason: string): WorkspaceApiSupport => (
       allowed ? cloudSupport(api, 'supported') : cloudSupport(api, 'blocked_by_policy', reason)

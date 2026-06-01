@@ -224,6 +224,7 @@ function SidebarLowerBranding({ lower }: { lower?: BrandingSidebarLowerConfig })
 const LOCAL_WORKSPACE_FALLBACK: WorkspaceInfo = {
   id: 'local',
   kind: 'local',
+  authority: 'desktop_local',
   label: 'Local',
   status: 'online',
   active: true,
@@ -263,8 +264,17 @@ function workspaceSupportReason(support: WorkspaceApiSupport[] | undefined, ...a
 }
 
 function workspaceDescription(workspace: WorkspaceInfo, support: WorkspaceApiSupport[] | undefined) {
-  if (workspace.kind === 'local') {
+  if (workspace.authority === 'desktop_local' || workspace.kind === 'local') {
     return t('workspace.local', 'Local workspace - private on this device')
+  }
+  if (workspace.authority === 'gateway_standalone') {
+    return t('workspace.gatewayStandalone', 'Standalone Gateway - private Gateway execution')
+  }
+  if (workspace.authority === 'desktop_paired') {
+    return t('workspace.desktopPaired', 'Paired Desktop - remote access to an opted-in local workspace')
+  }
+  if (workspace.authority === 'cloud_channel_gateway') {
+    return t('workspace.cloudChannelGateway', 'Cloud Channel Gateway - channel access to Cloud execution')
   }
   if (workspace.status === 'offline') {
     return t('workspace.offlineCached', 'Offline cached - cloud sends are disabled')
