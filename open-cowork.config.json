@@ -4,9 +4,11 @@
   "allowedEnvPlaceholders": [],
   "branding": {
     "name": "Open Cowork",
+    "shortName": "OC",
     "appId": "com.opencowork.desktop",
     "dataDirName": "open-cowork",
     "helpUrl": "https://github.com/joe-broadhead/open-cowork",
+    "supportUrl": "https://github.com/joe-broadhead/open-cowork/issues",
     "projectNamespace": "opencowork",
     "defaultTheme": "mercury"
   },

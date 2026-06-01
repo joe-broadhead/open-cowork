@@ -259,10 +259,10 @@ test('cloud public branding validates and rejects unsafe URLs or unknown keys', 
   assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding/)
 })
 
-test('Acme downstream example validates against the public schema', () => {
-  const config = JSON.parse(readFileSync('examples/downstream/acme/open-cowork.config.json', 'utf-8'))
-  assert.doesNotThrow(() => validateResolvedConfig(config, 'examples/downstream/acme/open-cowork.config.json'))
-  assert.doesNotThrow(() => validateConfigSemantics(config, 'examples/downstream/acme/open-cowork.config.json'))
+test('downstream example validates against the public schema', () => {
+  const config = JSON.parse(readFileSync('examples/downstream/example-org/open-cowork.config.json', 'utf-8'))
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'examples/downstream/example-org/open-cowork.config.json'))
+  assert.doesNotThrow(() => validateConfigSemantics(config, 'examples/downstream/example-org/open-cowork.config.json'))
 })
 
 test('private beta deployment examples validate against the public schema', () => {

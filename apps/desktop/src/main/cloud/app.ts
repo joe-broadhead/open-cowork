@@ -569,8 +569,49 @@ function safePublicBrandingUrl(value: unknown, allowMailto = false) {
   return undefined
 }
 
+const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>([
+  'background',
+  'surface',
+  'mutedSurface',
+  'border',
+  'text',
+  'mutedText',
+  'accent',
+  'accentStrong',
+  'focus',
+  'warn',
+  'danger',
+  'ok',
+])
+const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
+  'title',
+  'subtitle',
+  'signInTitle',
+  'signInBody',
+  'byokDescription',
+  'connectionsDescription',
+  'gatewayDescription',
+  'billingDescription',
+  'usageDescription',
+])
+const PUBLIC_BRANDING_LABEL_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>([
+  'desktopToken',
+  'gatewayToken',
+  'apiToken',
+  'cloudUrl',
+])
+
+function pickBrandingStrings<T extends object>(value: unknown, allowedKeys: Set<keyof T>): Partial<T> {
+  const strings = cleanBrandingObject(value)
+  return Object.fromEntries(
+    Object.entries(strings).filter(([key]) => allowedKeys.has(key as keyof T)),
+  ) as Partial<T>
+}
+
 function cleanPublicBrandingEntry(entry: Partial<PublicBrandingConfig>) {
-  const cleaned = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined && value !== null && value !== '')) as Partial<PublicBrandingConfig> & Record<string, unknown>
+  const cleaned: Partial<PublicBrandingConfig> = {}
+  if (typeof entry.productName === 'string' && entry.productName.trim()) cleaned.productName = entry.productName.trim()
+  if (typeof entry.shortName === 'string' && entry.shortName.trim()) cleaned.shortName = entry.shortName.trim()
   const urls: Array<[keyof PublicBrandingConfig, boolean]> = [
     ['logoUrl', false],
     ['supportUrl', true],
@@ -579,11 +620,18 @@ function cleanPublicBrandingEntry(entry: Partial<PublicBrandingConfig>) {
     ['legalUrl', false],
   ]
   for (const [key, allowMailto] of urls) {
-    if (!(key in cleaned)) continue
-    const safeUrl = safePublicBrandingUrl(cleaned[key], allowMailto)
+    const safeUrl = safePublicBrandingUrl(entry[key], allowMailto)
     if (safeUrl) cleaned[key] = safeUrl
-    else delete cleaned[key]
   }
+  const theme = pickBrandingStrings<NonNullable<PublicBrandingConfig['theme']>>(entry.theme, PUBLIC_BRANDING_THEME_KEYS)
+  const dashboard = pickBrandingStrings<NonNullable<PublicBrandingConfig['dashboard']>>(entry.dashboard, PUBLIC_BRANDING_DASHBOARD_KEYS)
+  const labels = pickBrandingStrings<NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>(
+    entry.managedOrgConnectionLabels,
+    PUBLIC_BRANDING_LABEL_KEYS,
+  )
+  if (Object.keys(theme).length > 0) cleaned.theme = theme
+  if (Object.keys(dashboard).length > 0) cleaned.dashboard = dashboard
+  if (Object.keys(labels).length > 0) cleaned.managedOrgConnectionLabels = labels
   return cleaned
 }
 

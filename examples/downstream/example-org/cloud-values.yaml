@@ -1,29 +1,29 @@
 image:
-  repository: registry.acme.example/open-cowork-cloud
+  repository: registry.example.com/open-cowork-cloud
   tag: v2026.05.0
 
 cloud:
   profile: data-analyst
-  publicUrl: https://cowork.acme.example
+  publicUrl: https://cowork.example.com
   auth:
     mode: oidc
-    oidcIssuerUrl: https://idp.acme.example
-    oidcClientId: acme-cowork-cloud
+    oidcIssuerUrl: https://idp.example.com
+    oidcClientId: example-cowork-cloud
     oidcClientSecretRef: env:OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET
     allowedEmailDomains:
-      - acme.example
+      - example.com
   controlPlaneUrl: env:OPEN_COWORK_CLOUD_DATABASE_URL
   cookieSecretRef: env:OPEN_COWORK_CLOUD_COOKIE_SECRET
   secretKeyRef: env:OPEN_COWORK_CLOUD_SECRET_KEY
   internalTokenRef: env:OPEN_COWORK_CLOUD_INTERNAL_TOKEN
   branding:
-    productName: Acme Cowork
-    shortName: AC
-    logoUrl: https://assets.acme.example/cowork/logo.png
-    supportUrl: https://support.acme.example/cowork
-    privacyUrl: https://legal.acme.example/privacy
-    securityUrl: https://security.acme.example/cowork
-    legalUrl: https://legal.acme.example/terms
+    productName: Example Cowork
+    shortName: EX
+    logoUrl: https://assets.example.com/cowork/logo.png
+    supportUrl: https://support.example.com/cowork
+    privacyUrl: https://legal.example.com/privacy
+    securityUrl: https://security.example.com/cowork
+    legalUrl: https://legal.example.com/terms
     theme:
       background: "#f7f8f5"
       surface: "#ffffff"
@@ -34,18 +34,18 @@ cloud:
       accent: "#0f6b4b"
       accentStrong: "#0a4c35"
     dashboard:
-      title: Acme workspace
-      subtitle: Manage Acme Cowork keys, clients, and channel agents.
-      connectionsDescription: Issue scoped Acme Cowork tokens for approved desktop and gateway clients.
-      gatewayDescription: Connect approved chat channels to Acme Cowork cloud sessions.
+      title: Example workspace
+      subtitle: Manage Example Cowork keys, clients, and channel agents.
+      connectionsDescription: Issue scoped Example Cowork tokens for approved desktop and gateway clients.
+      gatewayDescription: Connect approved chat channels to Example Cowork cloud sessions.
     managedOrgConnectionLabels:
-      desktopToken: Acme Desktop token
-      gatewayToken: Acme Gateway token
-      apiToken: Acme API token
-      cloudUrl: Acme Cloud URL
+      desktopToken: Example Desktop token
+      gatewayToken: Example Gateway token
+      apiToken: Example API token
+      cloudUrl: Example Cloud URL
   objectStore:
     kind: s3
-    bucket: acme-cowork-artifacts
+    bucket: example-cowork-artifacts
     region: us-east-1
     prefix: production/
     credentialsRef: env:OPEN_COWORK_CLOUD_OBJECT_STORE_CREDENTIALS
@@ -75,7 +75,7 @@ roles:
 ingress:
   enabled: true
   hosts:
-    - host: cowork.acme.example
+    - host: cowork.example.com
       paths:
         - path: /
           pathType: Prefix

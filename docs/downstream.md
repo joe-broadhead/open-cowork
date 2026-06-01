@@ -57,9 +57,9 @@ keys, local stdio MCP commands, or machine runtime config into cloud. Use
 cloud-safe remote MCPs, explicit artifact upload, or admin-managed profiles
 when a capability must be available in cloud.
 
-For a complete Acme-style deployment that covers desktop config, cloud Helm
+For a complete placeholder deployment that covers desktop config, cloud Helm
 values, gateway Helm values, OIDC, branding, and profile/tool/agent allowlists,
-see `examples/downstream/acme/`.
+see `examples/downstream/example-org/`.
 
 ## Mental model
 
@@ -77,20 +77,20 @@ Everything downstream-customizable goes through two layers:
 A downstream distribution typically ships a directory with this layout:
 
 ```text
-acme-cowork/
+example-cowork/
 ├── config.json           # or open-cowork.config.json
 ├── skills/
-│   ├── acme-reports/
+│   ├── example-reports/
 │   │   └── SKILL.md
-│   └── acme-tickets/
+│   └── example-tickets/
 │       └── SKILL.md
 └── mcps/
-    └── acme-crm/
+    └── example-crm/
         └── dist/
             └── index.js
 ```
 
-Then launches the app with `OPEN_COWORK_DOWNSTREAM_ROOT=/etc/acme-cowork`.
+Then launches the app with `OPEN_COWORK_DOWNSTREAM_ROOT=/etc/example-cowork`.
 
 ## Config merge order
 
@@ -204,6 +204,11 @@ Self-host OSS deployments can leave `cloud.billing.enabled=false` and
 billing webhooks, BYOK validator/override evidence, quotas, and launch
 readiness gates before public traffic.
 
+Managed BYOK SaaS can live in a separate managed/private repo that supplies
+config overlays, billing adapters, object-store and secret refs, and operations
+evidence. That repo should not fork Open Cowork runtime behavior or require
+billing for the OSS self-host path.
+
 Downstream deployment recipes must also preserve these production contracts:
 
 - images are pinned by immutable release tag or digest; `latest`, `stable`,
@@ -308,12 +313,12 @@ listed in `allowedEnvPlaceholders`:
 
 ```json
 {
-  "allowedEnvPlaceholders": ["ACME_LLM_GATEWAY_URL"],
+  "allowedEnvPlaceholders": ["EXAMPLE_LLM_GATEWAY_URL"],
   "providers": {
     "custom": {
-      "acme-gateway": {
+      "example-gateway": {
         "options": {
-          "baseURL": "{env:ACME_LLM_GATEWAY_URL}"
+          "baseURL": "{env:EXAMPLE_LLM_GATEWAY_URL}"
         }
       }
     }
@@ -332,17 +337,17 @@ need to be listed in `allowedEnvPlaceholders`.
 
 ## Worked example
 
-A downstream distribution that brands the app "Acme Cowork", ships one custom
+A downstream distribution that brands the app "Example Cowork", ships one custom
 provider, one internal MCP, and one internal skill would look like:
 
 ```text
-/etc/acme-cowork/
+/etc/example-cowork/
 ├── config.json
 ├── skills/
-│   └── acme-tickets/
+│   └── example-tickets/
 │       └── SKILL.md
 └── mcps/
-    └── acme-crm/
+    └── example-crm/
         └── dist/
             └── index.js
 ```
@@ -352,27 +357,27 @@ provider, one internal MCP, and one internal skill would look like:
 ```jsonc
 {
   "contractVersion": 1,
-  "allowedEnvPlaceholders": ["ACME_GATEWAY_URL", "ACME_GATEWAY_KEY"],
+  "allowedEnvPlaceholders": ["EXAMPLE_GATEWAY_URL", "EXAMPLE_GATEWAY_KEY"],
   "branding": {
-    "name": "Acme Cowork",
-    "appId": "com.acme.cowork",
-    "dataDirName": "acme-cowork",
-    "helpUrl": "https://internal.acme.example/cowork",
+    "name": "Example Cowork",
+    "appId": "com.example.cowork",
+    "dataDirName": "example-cowork",
+    "helpUrl": "https://internal.example.com/cowork",
     "sidebar": {
       "top": {
         "variant": "logo-text",
-        "logoAsset": "branding/acme-logo.svg",
+        "logoAsset": "branding/example-logo.svg",
         "mediaSize": 36,
         "mediaFit": "vertical",
         "mediaAlign": "center",
-        "title": "Acme AI",
+        "title": "Example AI",
         "subtitle": "Private workspace"
       },
       "lower": {
-        "text": "Acme internal build",
+        "text": "Example internal build",
         "secondaryText": "Support from Data Platform.",
         "linkLabel": "Get help",
-        "linkUrl": "https://internal.acme.example/cowork-help"
+        "linkUrl": "https://internal.example.com/cowork-help"
       }
     },
     "home": {
@@ -384,31 +389,31 @@ provider, one internal MCP, and one internal skill would look like:
     }
   },
   "providers": {
-    "available": ["acme-gateway"],
+    "available": ["example-gateway"],
     "descriptors": {
-      "acme-gateway": {
+      "example-gateway": {
         "runtime": "custom",
-        "name": "Acme Gateway",
+        "name": "Example Gateway",
         "description": "Internal LLM gateway.",
-        "defaultModel": "acme-large",
+        "defaultModel": "example-large",
         "credentials": []
       }
     },
     "custom": {
-      "acme-gateway": {
-        "name": "Acme Gateway",
-        "defaultModel": "acme-large",
+      "example-gateway": {
+        "name": "Example Gateway",
+        "defaultModel": "example-large",
         "options": {
-          "baseURL": "{env:ACME_GATEWAY_URL}",
-          "apiKey": "{env:ACME_GATEWAY_KEY}"
+          "baseURL": "{env:EXAMPLE_GATEWAY_URL}",
+          "apiKey": "{env:EXAMPLE_GATEWAY_KEY}"
         },
         "models": {
-          "acme-large": { "name": "Acme Large" }
+          "example-large": { "name": "Example Large" }
         }
       }
     },
-    "defaultProvider": "acme-gateway",
-    "defaultModel": "acme-large"
+    "defaultProvider": "example-gateway",
+    "defaultModel": "example-large"
   }
   // ...tools, skills, mcps, agents, permissions as needed
 }
@@ -417,10 +422,10 @@ provider, one internal MCP, and one internal skill would look like:
 Launch the packaged app with:
 
 ```bash
-OPEN_COWORK_DOWNSTREAM_ROOT=/etc/acme-cowork \
-  ACME_GATEWAY_URL=https://llm.internal.acme.example \
-  ACME_GATEWAY_KEY="$(cat /run/secrets/acme-gateway-key)" \
-  ./Acme\ Cowork
+OPEN_COWORK_DOWNSTREAM_ROOT=/etc/example-cowork \
+  EXAMPLE_GATEWAY_URL=https://llm.internal.example.com \
+  EXAMPLE_GATEWAY_KEY="$(cat /run/secrets/example-gateway-key)" \
+  ./Example\ Cowork
 ```
 
 ## Rebranding the packaged app
@@ -437,9 +442,9 @@ forking `electron-builder.yml`:
 Example downstream build:
 
 ```bash
-APP_PRODUCT_NAME="Acme Cowork" \
-  APP_ID="com.acme.cowork" \
-  APP_ARTIFACT_PREFIX="Acme-Cowork" \
+APP_PRODUCT_NAME="Example Cowork" \
+  APP_ID="com.example.cowork" \
+  APP_ARTIFACT_PREFIX="Example-Cowork" \
   pnpm --dir apps/desktop dist:ci:mac
 ```
 
@@ -453,7 +458,7 @@ Downstream builds can also configure sidebar and Home copy under
 they do not change OpenCode runtime providers, agents, permissions, MCPs, or
 skills. For logo-backed sidebar variants, place image files under the repo-level
 `branding/` directory and reference them with `branding.sidebar.top.logoAsset`,
-for example `branding/acme-logo.svg`. The app rejects absolute paths, traversal,
+for example `branding/example-logo.svg`. The app rejects absolute paths, traversal,
 remote URLs, and unsupported extensions.
 
 Sidebar top branding can also tune the rendered media with
@@ -523,12 +528,12 @@ Downstream installs that want their own telemetry collector
 
 ```json
 {
-  "allowedEnvPlaceholders": ["ACME_TELEMETRY_TOKEN"],
+  "allowedEnvPlaceholders": ["EXAMPLE_TELEMETRY_TOKEN"],
   "telemetry": {
     "enabled": true,
-    "endpoint": "https://events.acme.example/ingest",
+    "endpoint": "https://events.example.com/ingest",
     "headers": {
-      "Authorization": "Bearer {env:ACME_TELEMETRY_TOKEN}"
+      "Authorization": "Bearer {env:EXAMPLE_TELEMETRY_TOKEN}"
     }
   }
 }

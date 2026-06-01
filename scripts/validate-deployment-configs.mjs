@@ -1144,10 +1144,10 @@ function validateDocs() {
     'deploy/private-beta/design-partner-onboarding.template.md',
     'deploy/private-beta/go-no-go-report.template.md',
     'deploy/private-beta/private-beta-launch-profile.template.json',
-    'examples/downstream/acme/README.md',
-    'examples/downstream/acme/open-cowork.config.json',
-    'examples/downstream/acme/cloud-values.yaml',
-    'examples/downstream/acme/gateway-values.yaml',
+    'examples/downstream/example-org/README.md',
+    'examples/downstream/example-org/open-cowork.config.json',
+    'examples/downstream/example-org/cloud-values.yaml',
+    'examples/downstream/example-org/gateway-values.yaml',
   ]) {
     assertPublicTemplateSafe(path)
   }
@@ -1610,14 +1610,14 @@ function validateDocs() {
     }
   }
 
-  const acmeReadme = read('examples/downstream/acme/README.md')
+  const exampleReadme = read('examples/downstream/example-org/README.md')
   for (const phrase of ['OPEN_COWORK_CONFIG_PATH', 'contractVersion: 1', 'docs/downstream-contract.md', 'cloud.publicBranding', 'cloudDesktop', 'gateway.providers', 'immutable downstream release tag or digest', 'cloud.billing.provider=none']) {
-    if (!acmeReadme.includes(phrase)) {
-      throw new Error(`examples/downstream/acme/README.md must include ${phrase}`)
+    if (!exampleReadme.includes(phrase)) {
+      throw new Error(`examples/downstream/example-org/README.md must include ${phrase}`)
     }
   }
 
-  const acmeConfig = read('examples/downstream/acme/open-cowork.config.json')
+  const exampleConfig = read('examples/downstream/example-org/open-cowork.config.json')
   for (const phrase of [
     '"contractVersion": 1',
     '"gateway"',
@@ -1627,8 +1627,8 @@ function validateDocs() {
     'OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
     'OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN',
   ]) {
-    if (!acmeConfig.includes(phrase)) {
-      throw new Error(`examples/downstream/acme/open-cowork.config.json must include ${phrase}`)
+    if (!exampleConfig.includes(phrase)) {
+      throw new Error(`examples/downstream/example-org/open-cowork.config.json must include ${phrase}`)
     }
   }
 }

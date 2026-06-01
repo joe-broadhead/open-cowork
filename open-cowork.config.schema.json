@@ -19,9 +19,14 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
+        "shortName": { "type": "string", "minLength": 1, "maxLength": 16 },
         "appId": { "type": "string" },
         "dataDirName": { "type": "string" },
         "helpUrl": { "type": "string" },
+        "supportUrl": { "$ref": "#/$defs/cloudPublicBrandingSupportUrl" },
+        "privacyUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "securityUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
+        "legalUrl": { "$ref": "#/$defs/cloudPublicBrandingUrl" },
         "projectNamespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
         "defaultTheme": { "type": "string" },
         "themes": {

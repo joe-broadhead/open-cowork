@@ -56,7 +56,7 @@ The version 1 contract covers these deployer-owned surfaces.
 
 | Surface | Config key or artifact | Supported customization |
 | --- | --- | --- |
-| Product identity | `branding.name`, `branding.appId`, `branding.dataDirName`, `branding.helpUrl`, `branding.projectNamespace` | Desktop app identity and on-disk namespace. `opencowork` remains only for documented back-compat defaults. |
+| Product identity | `branding.name`, `branding.shortName`, `branding.appId`, `branding.dataDirName`, `branding.helpUrl`, `branding.supportUrl`, `branding.privacyUrl`, `branding.securityUrl`, `branding.legalUrl`, `branding.projectNamespace` | Desktop app identity, public desktop links, and on-disk namespace. `opencowork` remains only for documented back-compat defaults. |
 | Desktop shell | `branding.sidebar`, `branding.home`, bundled `branding/` assets | Sidebar, first-run, home/composer copy, local image assets, theme selection. |
 | Legal and support links | `branding.helpUrl`, `cloud.publicBranding.*Url`, `gateway.branding.*Url` | HTTPS public links, with `mailto:` allowed only where explicitly documented. |
 | Cloud Desktop sync | `cloudDesktop` | Managed cloud orgs, user-added connection policy, cache mode, cache encryption fallback. |
@@ -89,7 +89,7 @@ Downstream branding must flow through config and assets:
 - Gateway: `gateway.branding`, provider display setup docs, and channel setup
   labels where the provider supports them.
 - Docs/examples: downstream example files and docs should use public-safe
-  placeholder brands such as Acme Cowork.
+  placeholder brands such as Example Cowork.
 - Release artifacts: packager-supported names, icons, bundle ids, update feed
   labels, and manual fallback URLs.
 
@@ -106,6 +106,8 @@ Downstream extension work must start in the layer that owns the concept.
 | Billing adapters | `apps/desktop/src/main/cloud/billing-adapter.ts`, `stub-billing-adapter.ts`, `stripe-billing-adapter.ts` | Core services consume provider-neutral subscription and entitlement records. Provider SDK imports stay behind adapters. |
 | Object-store adapters | `apps/desktop/src/main/cloud/object-store.ts` and deployment object-store config | Callers use object-store interfaces. Artifact, snapshot, and checkpoint code must not branch on cloud vendor ids. |
 | Secret/KMS adapters | `apps/desktop/src/main/cloud/secret-adapter.ts`, `byok-secret-store.ts`, secret ref resolvers | Secrets are refs or encrypted envelopes. Plaintext reveal is limited to the owning runtime role. |
+| OIDC/header auth | `cloud.auth`, trusted-proxy header middleware, OIDC provider wiring | Auth modes stay config-driven. Header auth requires signed trusted-proxy headers; OIDC secrets stay behind refs or provider secret managers. |
+| Observability adapters | `telemetry`, `deploy/observability/`, health and diagnostics endpoints | Downstream collectors receive provider-neutral events and metrics. Public templates use placeholders and diagnostics must not reveal secrets. |
 | Runtime profiles and policy packs | `cloud.profiles`, `cloud.runtime`, `cloud-config.ts`, `runtime-config-builder.ts` | Cloud profiles force app-managed runtime config by default and must not enable machine config or arbitrary local stdio MCPs without explicit policy. |
 | Worker pool modes | `docs/managed-workers.md`, `managed-worker-types.ts`, `services/managed-worker-service.ts`, deployment manifests | Add modes only with trust-model docs, lifecycle tests, and deployment gates. Customer-hosted workers remain deferred unless separately designed. |
 | Cloud Web modules and admin panels | `apps/website/src`, `docs/cloud-web-workbench.md`, route/API metadata tests | Web remains a cloud API client. It must not import stores, runtime adapters, secret adapters, or provider-specific internals. |
@@ -139,6 +141,8 @@ A downstream distribution is inside the version 1 contract when:
 - `open-cowork.config.json` validates with `contractVersion: 1`
 - Desktop, Cloud Web, and Gateway branding come from config/assets
 - self-host installs can keep `cloud.billing.provider=none` or `stub`
+- managed BYOK SaaS can live in a separate downstream repo using overlays and
+  adapters without forking core behavior
 - secrets are supplied by env refs or the secret adapter, not committed config
 - Cloud profiles define allowed agents/tools/MCPs and runtime hardening
 - Gateway providers are explicit and signed where public
