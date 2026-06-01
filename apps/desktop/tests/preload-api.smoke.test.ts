@@ -19,10 +19,11 @@ test('preload exposes the expected coworkApi surface', async () => {
           workflowsStartDraft: typeof api.workflows?.startDraft,
           chartRenderSvg: typeof api.chart?.renderSvg,
           artifactReadAttachment: typeof api.artifact?.readAttachment,
-      workspaceList: typeof api.workspace?.list,
-      workspaceActivate: typeof api.workspace?.activate,
-      projectSourceValidate: typeof api.projectSource?.validate,
-      onSessionPatch: typeof api.on?.sessionPatch,
+          workspaceList: typeof api.workspace?.list,
+          workspaceActivate: typeof api.workspace?.activate,
+          desktopPairingList: typeof api.desktopPairing?.list,
+          projectSourceValidate: typeof api.projectSource?.validate,
+          onSessionPatch: typeof api.on?.sessionPatch,
         },
       }
     })
@@ -37,6 +38,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       artifactReadAttachment: 'function',
       workspaceList: 'function',
       workspaceActivate: 'function',
+      desktopPairingList: 'function',
       projectSourceValidate: 'function',
       onSessionPatch: 'function',
     })
@@ -51,6 +53,7 @@ test('preload exposes the expected coworkApi surface', async () => {
       'command',
       'confirm',
       'custom',
+      'desktopPairing',
       'diagnostics',
       'dialog',
       'explorer',

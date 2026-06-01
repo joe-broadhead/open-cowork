@@ -68,6 +68,14 @@ import type {
   DestructiveConfirmationRequest,
 } from './destructive-actions.js'
 import type {
+  DesktopPairingAuditEvent,
+  DesktopPairingCreated,
+  DesktopPairingCreateInput,
+  DesktopPairingPublicRecord,
+  DesktopPairingStatusSnapshot,
+  DesktopPairingUpdateInput,
+} from './desktop-pairing.js'
+import type {
   McpStatus,
   PermissionRequest,
 } from './events.js'
@@ -129,6 +137,7 @@ export * from './capabilities.js'
 export * from './cloud-session-projection.js'
 export * from './custom-content.js'
 export * from './destructive-actions.js'
+export * from './desktop-pairing.js'
 export * from './events.js'
 export * from './explorer.js'
 export * from './jsonc.js'
@@ -156,6 +165,16 @@ export interface CoworkAPI {
     policy: (workspaceId?: string) => Promise<WorkspacePolicy>
     support: (workspaceId?: string) => Promise<WorkspaceApiSupport[]>
     sync: (workspaceId?: string) => Promise<WorkspaceSyncResult>
+  }
+  desktopPairing: {
+    list: () => Promise<DesktopPairingPublicRecord[]>
+    create: (input: DesktopPairingCreateInput) => Promise<DesktopPairingCreated>
+    update: (pairingId: string, input: DesktopPairingUpdateInput) => Promise<DesktopPairingPublicRecord>
+    connect: (pairingId: string) => Promise<DesktopPairingStatusSnapshot>
+    disconnect: (pairingId: string) => Promise<DesktopPairingStatusSnapshot>
+    revoke: (pairingId: string) => Promise<DesktopPairingStatusSnapshot>
+    sync: (pairingId: string) => Promise<DesktopPairingStatusSnapshot>
+    audit: (pairingId?: string) => Promise<DesktopPairingAuditEvent[]>
   }
   auth: {
     status: () => Promise<AuthState>

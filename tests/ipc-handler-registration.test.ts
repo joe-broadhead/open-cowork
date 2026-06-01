@@ -11,6 +11,7 @@ import { registerCustomContentHandlers } from '../apps/desktop/src/main/ipc/cust
 import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
+import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 
 function createTestContext() {
@@ -28,6 +29,17 @@ function createTestContext() {
       },
     },
     workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
+    desktopPairingService: {
+      list: () => [],
+      create: () => { throw new Error('not used in registration test') },
+      update: () => { throw new Error('not used in registration test') },
+      connect: async () => { throw new Error('not used in registration test') },
+      disconnect: () => { throw new Error('not used in registration test') },
+      revoke: async () => { throw new Error('not used in registration test') },
+      pollOnce: async () => { throw new Error('not used in registration test') },
+      auditLog: () => [],
+      observeRuntimeEvent: () => {},
+    } as never,
     getMainWindow: () => null,
     normalizeDirectory: () => '/tmp',
     ensureSessionRecord: () => null,
@@ -83,6 +95,7 @@ test('IPC handler modules register their core channels', () => {
   const { context, handlers, listeners } = createTestContext()
 
   registerWorkspaceHandlers(context)
+  registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)
@@ -102,6 +115,9 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('workspace:activate'), true)
   assert.equal(handlers.has('workspace:policy'), true)
   assert.equal(handlers.has('workspace:support'), true)
+  assert.equal(handlers.has('desktop-pairing:list'), true)
+  assert.equal(handlers.has('desktop-pairing:create'), true)
+  assert.equal(handlers.has('desktop-pairing:revoke'), true)
   assert.equal(handlers.has('auth:status'), true)
   assert.equal(handlers.has('settings:set'), true)
   assert.equal(handlers.has('settings:get-provider-credentials'), true)
@@ -139,6 +155,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   const { context, handlers, listeners } = createTestContext()
 
   registerWorkspaceHandlers(context)
+  registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)
