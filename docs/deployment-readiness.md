@@ -218,11 +218,16 @@ provider control plane.
 ### Gateway Scaling And Operator Auth
 
 - Run one gateway replica per channel-binding shard until stream ownership and
-  cursors are externalized. The Helm chart rejects `replicaCount > 1` unless
-  `gateway.experimentalDistributedOwnership=true` is set deliberately.
+  cursors are externalized. For production, use one Helm release/deployment per
+  shard with `replicaCount: 1`; the
+  `gateway.experimentalDistributedOwnership=true` escape hatch is for lab
+  deployments only and does not remove the need for an explicit shard ownership
+  design.
 - Configure `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` for operator endpoints in every
   shared or public deployment. The loopback bypass is explicit local-only:
   `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true` and a loopback bind.
+  Runtime rejects loopback bypass when a public URL or proxy-forwarded request
+  is present.
 - Keep `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` aligned with provider
   advertised file limits. Generic bridge/email attachment limits default to the
   same request-body cap.

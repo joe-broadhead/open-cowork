@@ -140,7 +140,7 @@ jobs:
         run: |
           docker compose -f docker-compose.cloud.yml config --quiet
           docker compose -f docker-compose.cloud.split.yml config --quiet
-          OPEN_COWORK_GATEWAY_ADMIN_TOKEN=ci-gateway-admin-token docker compose -f docker-compose.cloud-gateway.yml config --quiet
+          OPEN_COWORK_GATEWAY_SERVICE_TOKEN=ci-gateway-service-token OPEN_COWORK_GATEWAY_ADMIN_TOKEN=ci-gateway-admin-token docker compose -f docker-compose.cloud-gateway.yml config --quiet
 
       - name: Build cloud OCI image
         run: |
@@ -162,7 +162,7 @@ jobs:
         run: bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud.split.yml
 
       - name: Run cloud plus gateway Compose smoke test
-        run: OPEN_COWORK_GATEWAY_ADMIN_TOKEN=ci-gateway-admin-token OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
+        run: OPEN_COWORK_GATEWAY_SERVICE_TOKEN=ci-gateway-service-token OPEN_COWORK_GATEWAY_ADMIN_TOKEN=ci-gateway-admin-token OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true OPEN_COWORK_GATEWAY_SMOKE_URL=http://127.0.0.1:8790/ready bash scripts/ci-cloud-compose-smoke.sh docker-compose.cloud-gateway.yml
 
       - name: Install Helm
         run: |

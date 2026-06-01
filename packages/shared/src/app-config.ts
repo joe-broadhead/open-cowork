@@ -216,6 +216,7 @@ export interface GatewayDeploymentProviderConfig {
 }
 
 export interface GatewayDeploymentConfig {
+  instanceId?: string
   branding?: Partial<PublicBrandingConfig>
   productMode?: GatewayProductMode
   cloud?: {

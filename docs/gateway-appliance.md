@@ -164,13 +164,32 @@ macOS and Mac mini:
 
 - Use HTTPS for every public Cloud and Gateway URL.
 - Keep Gateway loopback-bound unless a reverse proxy terminates TLS.
-- Configure `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` before exposing metrics,
-  diagnostics, delivery controls, or webhook endpoints.
+- Configure `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` before exposing operator
+  endpoints: `/metrics`, `/diagnostics`, `/deliveries`, and delivery retry or
+  dead-letter actions.
+- Public reverse proxies must strip untrusted
+  `x-open-cowork-gateway-admin-token` headers and either block operator
+  endpoints or require the Gateway admin bearer token.
+- Route public `/webhooks/*` only for providers with provider-native signing or
+  shared-secret verification enabled. Webhook auth is provider auth, not the
+  Gateway operator token.
 - Keep the fake provider disabled outside explicit loopback smoke tests.
-- Configure a shared secret for the generic webhook provider.
+- Configure a shared secret for the generic webhook and bridge providers.
+- Keep provider `maxAttachmentBytes` at or below
+  `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES`; startup rejects inline
+  attachment limits that exceed the daemon request-body cap.
 - Rotate Telegram bot tokens and Cloud service tokens after exposure.
 - Restrict inbound firewall rules to HTTPS and SSH management.
 - Keep env files out of git and command history.
+
+## Operator Auth Threat Model
+
+| Deployment | Operator endpoint contract |
+| --- | --- |
+| Loopback development | `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true` is allowed only when the daemon is self-hosted, bound to loopback, has no public URL, and the request is not proxy-forwarded. |
+| VPS behind reverse proxy | Prefer keeping the daemon on `127.0.0.1`; set `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; proxy `/webhooks/*` to providers and block or separately protect `/metrics`, `/diagnostics`, and `/deliveries*`. |
+| Public bind | Set `OPEN_COWORK_GATEWAY_PUBLIC_URL=https://...` and `OPEN_COWORK_GATEWAY_ADMIN_TOKEN`; never enable loopback bypass, fake provider, or CLI provider. |
+| Kubernetes/managed | Use the Helm chart with `replicaCount: 1`, `gateway.existingSecret`, HTTPS ingress, and an admin token. Use one release per channel-binding shard until distributed stream ownership is implemented. |
 
 ## Migration Notes
 
@@ -197,6 +216,14 @@ appliance does not need a local database for production state. On shutdown,
 Gateway closes new Cloud delivery subscriptions, drains in-flight delivery
 sends, acknowledges completed deliveries, then stops providers. A restart
 resumes from Cloud-owned cursors and delivery records.
+
+Session-event rendering is ordered by Cloud event sequence. If provider
+rendering fails transiently, Gateway reconnects from the last persisted cursor
+and prevents later queued events from jumping the failed event. If retry budget
+is exhausted, Gateway skips the poison event, advances the Cloud-owned cursor,
+and exposes aggregate counters such as
+`open_cowork_gateway_session_render_dead_letters_total` and
+`open_cowork_gateway_dropped_session_events_total` for operator follow-up.
 
 ## Upgrade And Rollback
 

@@ -203,8 +203,13 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.publicUrl must use HTTPS')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.allowLoopbackOperatorBypass=true is not allowed with ingress')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken is a placeholder')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken is a placeholder')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway replicaCount > 1 is unsafe while stream/replay state is process-local')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.allowLoopbackOperatorBypass=true requires gateway.host=127.0.0.1 or localhost')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'OPEN_COWORK_GATEWAY_INSTANCE_ID')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'image.tag=latest is not allowed')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'topologySpreadConstraints')
   assertIncludes('helm/open-cowork-gateway/templates/pdb.yaml', 'PodDisruptionBudget')
@@ -599,6 +604,63 @@ function validateHelm() {
       ],
       'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled'
     )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-gateway-http-public-url',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'gateway.publicUrl=http://gateway.example.com',
+      ],
+      'gateway.publicUrl must use HTTPS'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-gateway-ingress-loopback-bypass',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'gateway.allowLoopbackOperatorBypass=true',
+        '--set',
+        'ingress.enabled=true',
+        '--set',
+        'gateway.publicUrl=https://gateway.example.com',
+      ],
+      'gateway.allowLoopbackOperatorBypass=true is not allowed with ingress'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-gateway-placeholder-admin',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=replace-with-operator-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+      ],
+      'gateway.adminToken is a placeholder'
+    )
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }
@@ -854,7 +916,6 @@ function validateHybridSecurityGates() {
 
   const gatewayConfig = read('apps/gateway/src/config.ts')
   for (const phrase of [
-    'Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
     'authenticated webhook ingress',
     'signingSecret',
     'webhookSecret',
@@ -862,6 +923,10 @@ function validateHybridSecurityGates() {
     if (!gatewayConfig.includes(phrase)) {
       throw new Error(`apps/gateway/src/config.ts must include ${phrase}`)
     }
+  }
+  const gatewayConfigSafety = read('apps/gateway/src/config-safety.ts')
+  if (!gatewayConfigSafety.includes('Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN')) {
+    throw new Error('apps/gateway/src/config-safety.ts must include Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN')
   }
 
   const standaloneNetworkPolicy = read('apps/standalone-gateway/src/network-policy.ts')

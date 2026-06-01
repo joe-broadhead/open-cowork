@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { sanitizeForExport } from '../apps/desktop/src/main/log-sanitizer.ts'
 import { sanitizeCloudObservabilityAttributes } from '../apps/desktop/src/main/cloud/observability.ts'
-import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/src/config.ts'
+import { redactGatewayConfig, resolveGatewayConfig } from '../apps/gateway/dist/config.js'
 
 test('cloud and gateway distribution diagnostics redact secrets, signed URLs, and local paths', () => {
   const rawByok = ['sk', 'distributionsecretvalue1234567890abcdef123456'].join('-')

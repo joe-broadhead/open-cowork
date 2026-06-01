@@ -120,10 +120,11 @@ test('hybrid security contract is grounded in code-level fail-closed behavior', 
   assert.match(workspace, /workspace\.remote_approval_required/)
 
   const gatewayConfig = read('apps/gateway/src/config.ts')
-  assert.match(gatewayConfig, /Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
   assert.match(gatewayConfig, /authenticated webhook ingress/)
   assert.match(gatewayConfig, /signingSecret/)
   assert.match(gatewayConfig, /webhookSecret/)
+  const gatewayConfigSafety = read('apps/gateway/src/config-safety.ts')
+  assert.match(gatewayConfigSafety, /Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN/)
 
   const standaloneNetworkPolicy = read('apps/standalone-gateway/src/network-policy.ts')
   assert.match(standaloneNetworkPolicy, /public OpenCode endpoint/)

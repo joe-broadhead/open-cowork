@@ -151,7 +151,14 @@ function providerHealthError(provider: ChannelProvider) {
 }
 
 function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): ChannelProvider {
-  if (config.kind === 'fake') return new FakeChannelProvider()
+  if (config.kind === 'fake') {
+    return new FakeChannelProvider({
+      capabilities: {
+        maxFileBytes: gateway.server.maxRequestBodyBytes,
+        maxFileSizeBytes: gateway.server.maxRequestBodyBytes,
+      },
+    })
+  }
 
   if (config.kind === 'webhook') {
     return new WebhookProvider({

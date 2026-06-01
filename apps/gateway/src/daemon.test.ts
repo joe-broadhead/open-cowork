@@ -241,6 +241,108 @@ test('gateway diagnostics are disabled by default in managed mode', async () => 
   }
 })
 
+test('gateway loopback operator bypass rejects proxied-looking requests', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS: 'true',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime)
+  const url = await http.listen()
+
+  try {
+    const local = await fetch(`${url}/diagnostics`)
+    assert.equal(local.status, 200)
+
+    const proxied = await readJson(await fetch(`${url}/diagnostics`, {
+      headers: {
+        'x-forwarded-host': 'gateway.example.test',
+        'x-forwarded-proto': 'https',
+      },
+    }))
+    assert.equal(proxied.error, 'Gateway admin authorization is required.')
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway operator endpoints require the admin token when configured', async () => {
+  const calls: string[] = []
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+    async listDeliveries() {
+      calls.push('list')
+      return []
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_METRICS_ENABLED: 'true',
+    OPEN_COWORK_GATEWAY_DIAGNOSTICS_ENABLED: 'true',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    for (const path of ['/metrics', '/diagnostics', '/deliveries']) {
+      const missing = await fetch(`${url}${path}`)
+      assert.equal(missing.status, 401, `${path} rejects missing token`)
+
+      const wrong = await fetch(`${url}${path}`, {
+        headers: { authorization: 'Bearer wrong-token' },
+      })
+      assert.equal(wrong.status, 401, `${path} rejects wrong token`)
+    }
+    assert.deepEqual(calls, [])
+
+    const metrics = await fetch(`${url}/metrics`, {
+      headers: { authorization: 'Bearer admin-token' },
+    })
+    assert.equal(metrics.status, 200)
+    const diagnostics = await fetch(`${url}/diagnostics`, {
+      headers: { 'x-open-cowork-gateway-admin-token': 'admin-token' },
+    })
+    assert.equal(diagnostics.status, 200)
+    const deliveries = await fetch(`${url}/deliveries`, {
+      headers: { authorization: 'Bearer admin-token' },
+    })
+    assert.equal(deliveries.status, 200)
+    assert.deepEqual(calls, ['list'])
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
 test('gateway provider registry wires fake, first-party, bridge, and CLI providers', () => {
   const registry = createGatewayProviderRegistry(resolveGatewayConfig({
     cloud: {
@@ -587,6 +689,97 @@ test('gateway webhooks fail closed without leaking provider auth errors', async 
     })
     assert.equal(unknown.status, 404)
     assert.equal((await readJson(unknown)).error, 'Gateway webhook provider was not found.')
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway rejects oversized webhook bodies before provider dispatch', async () => {
+  const prompted: string[] = []
+  const cloud: CloudGateway = {
+    async resolveIdentity(input) {
+      return {
+        identityId: `identity-${input.externalUserId}`,
+        orgId: 'tenant-1',
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId || null,
+        externalUserId: input.externalUserId,
+        accountId: null,
+        role: 'member',
+        status: 'active',
+        metadata: {},
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async bindSession(input) {
+      return {
+        binding: {
+          bindingId: 'session-binding-1',
+          orgId: 'tenant-1',
+          agentId: 'agent-1',
+          channelBindingId: input.channelBindingId,
+          provider: input.provider,
+          externalWorkspaceId: input.externalWorkspaceId || null,
+          externalThreadId: input.externalThreadId,
+          externalChatId: input.externalChatId,
+          sessionId: 'session-1',
+          lastEventSequence: 0,
+          lastWorkspaceSequence: 0,
+          lastChatMessageId: null,
+          status: 'active',
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        session: {
+          session: { sessionId: 'session-1' },
+          projection: null,
+        },
+      } as never
+    },
+    async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
+    async prompt(input) {
+      prompted.push(input.text)
+      return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
+    },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
+    subscribeSessionEvents() { return { close() {} } },
+    subscribeDeliveries() { return { close() {} } },
+    async updateCursor() { return null },
+    async ackDelivery() { return null },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+      maxRequestBodyBytes: 1024,
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    const response = await fetch(`${url}/webhooks/fake`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'x'.repeat(2048), chatId: 'chat-1', userId: 'user-1' }),
+    })
+    assert.equal(response.status, 413)
+    assert.equal((await readJson(response)).error, 'Gateway request body exceeds the configured limit.')
+    assert.deepEqual(prompted, [])
   } finally {
     await http.close()
     await runtime.stop()

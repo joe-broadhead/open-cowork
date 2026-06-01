@@ -5,6 +5,14 @@ import { isChannelProviderKind, normalizeChannelProviderIdentity, type ChannelPr
 import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode } from '@open-cowork/shared'
 import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
 
+import {
+  assertGatewayConfigSafe,
+  assertHttpsPublicUrl,
+  isLoopbackHost,
+  normalizeGatewayPublicBaseUrl,
+  readGatewayInstanceId,
+} from './config-safety.js'
+
 export type { GatewayProductMode } from '@open-cowork/shared'
 
 export type GatewayMode = 'self-host' | 'managed'
@@ -12,6 +20,7 @@ export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 export type GatewayProviderKind = ChannelProviderKind | 'fake'
 
 export type GatewayConfig = {
+  instanceId: string
   branding: PublicBrandingConfig
   productMode: GatewayProductMode
   cloud: {
@@ -114,7 +123,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
   const cloud = resolveGatewayCloudConnection(env)
   const mode = readMode(env.OPEN_COWORK_GATEWAY_MODE) || raw.mode || 'self-host'
   const serverHost = readString(env.OPEN_COWORK_GATEWAY_HOST) || readString(raw.server?.host) || defaultHost
-  const serverPublicBaseUrl = readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? readNullableString(raw.server?.publicBaseUrl)
+  const serverPublicBaseUrl = normalizeGatewayPublicBaseUrl(readNullableString(env.OPEN_COWORK_GATEWAY_PUBLIC_URL) ?? raw.server?.publicBaseUrl)
   const serverMaxRequestBodyBytes = readBoundedInteger(env.OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES ?? raw.server?.maxRequestBodyBytes, defaultMaxRequestBodyBytes, 1024, maxAllowedRequestBodyBytes)
   const timeouts = {
     cloudRequestMs: cloud.requestTimeoutMs,
@@ -123,6 +132,7 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
     shutdownDrainMs: readBoundedInteger(env.OPEN_COWORK_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_MS ?? raw.timeouts?.shutdownDrainMs, defaultTimeouts.shutdownDrainMs, 100, 120_000),
   }
   const config: GatewayConfig = {
+    instanceId: readGatewayInstanceId(env.OPEN_COWORK_GATEWAY_INSTANCE_ID ?? raw.instanceId ?? env.HOSTNAME),
     branding: resolveGatewayBranding(raw.branding, env),
     productMode,
     cloud: {
@@ -639,8 +649,16 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
   const hasMaxAttachmentBytes = settings.maxAttachmentBytes !== undefined
     && settings.maxAttachmentBytes !== null
     && settings.maxAttachmentBytes !== ''
-  if ((kind === 'webhook' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal' || kind === 'email') && !hasMaxAttachmentBytes) {
-    settings.maxAttachmentBytes = maxRequestBody
+  if (isRequestBodyBackedAttachmentProvider(kind)) {
+    const attachmentLimit = readAttachmentLimit(settings.maxAttachmentBytes, id)
+    if (attachmentLimit !== null && attachmentLimit > maxRequestBody) {
+      throw new Error(`Gateway provider ${id} maxAttachmentBytes cannot exceed server.maxRequestBodyBytes (${maxRequestBody}).`)
+    }
+    if (!hasMaxAttachmentBytes || attachmentLimit === null) {
+      settings.maxAttachmentBytes = maxRequestBody
+    } else {
+      settings.maxAttachmentBytes = attachmentLimit
+    }
   }
   if (kind === 'discord' || kind === 'whatsapp' || kind === 'signal') {
     if (!credentials.sharedSecret) throw new Error(`Gateway provider ${id} requires credential sharedSecret for authenticated ${kind} bridge ingress.`)
@@ -689,6 +707,23 @@ function readProviderKind(value: unknown): GatewayProviderKind {
   throw new Error(`Unsupported gateway provider kind: ${kind || String(value)}`)
 }
 
+function isRequestBodyBackedAttachmentProvider(kind: GatewayProviderKind) {
+  return kind === 'webhook'
+    || kind === 'discord'
+    || kind === 'whatsapp'
+    || kind === 'signal'
+    || kind === 'email'
+}
+
+function readAttachmentLimit(value: unknown, providerId: string): number | null {
+  if (value === undefined || value === null || value === '') return null
+  const parsed = typeof value === 'number' ? value : Number(readString(value))
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maxAllowedRequestBodyBytes) {
+    throw new Error(`Gateway provider ${providerId} maxAttachmentBytes must be an integer between 1 and ${maxAllowedRequestBodyBytes}.`)
+  }
+  return parsed
+}
+
 function assertUniqueProviderIds(providers: GatewayProviderConfig[]) {
   const seen = new Set<string>()
   for (const provider of providers) {
@@ -708,73 +743,8 @@ function normalizeBaseUrl(value: string, allowInsecureHttp: boolean) {
   return normalized
 }
 
-function isLoopbackHost(hostname: string) {
-  return hostname === 'localhost'
-    || hostname === '127.0.0.1'
-    || hostname === '::1'
-    || hostname === '[::1]'
-    || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-}
-
-function isPublicBindHost(hostname: string) {
-  const host = hostname.trim().toLowerCase()
-  return host === '0.0.0.0' || host === '::' || host === '[::]' || !isLoopbackHost(host)
-}
-
-function isPublicBaseUrl(value: string | null) {
-  if (!value) return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && !isLoopbackHost(url.hostname)
-  } catch {
-    return false
-  }
-}
-
-function assertHttpsPublicUrl(value: string, label: string) {
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error(`${label} must be a valid HTTPS URL.`)
-  }
-  if (url.protocol !== 'https:') throw new Error(`${label} must use HTTPS.`)
-  if (isLoopbackHost(url.hostname)) throw new Error(`${label} must be publicly reachable, not loopback.`)
-}
-
-function assertGatewayConfigSafe(config: GatewayConfig, options: { allowPublicFakeProvider: boolean }) {
-  const publicBind = isPublicBindHost(config.server.host)
-  const publicExposure = publicBind || isPublicBaseUrl(config.server.publicBaseUrl)
-  const loopbackOperatorBypass = config.server.allowLoopbackOperatorBypass && isLoopbackHost(config.server.host) && config.mode === 'self-host'
-  if (config.server.allowLoopbackOperatorBypass && !loopbackOperatorBypass) {
-    throw new Error('OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS is only allowed for self-host gateways bound to loopback.')
-  }
-  if (!config.server.adminToken && !loopbackOperatorBypass) {
-    throw new Error('Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN. For local loopback development only, set OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS=true explicitly.')
-  }
-  if (config.server.adminToken && isPlaceholderSecret(config.server.adminToken)) {
-    throw new Error('Gateway operator admin token is still a placeholder. Set OPEN_COWORK_GATEWAY_ADMIN_TOKEN to a generated secret before startup.')
-  }
-  if (publicExposure && !config.server.adminToken) {
-    throw new Error('Gateway public deployments require OPEN_COWORK_GATEWAY_ADMIN_TOKEN for metrics, diagnostics, and delivery operations.')
-  }
-  if (publicBind && (config.metrics.enabled || config.diagnostics.enabled) && !config.server.adminToken) {
-    throw new Error('Gateway metrics or diagnostics on a public bind require OPEN_COWORK_GATEWAY_ADMIN_TOKEN.')
-  }
-  if (publicExposure && config.providers.some((provider) => provider.enabled && provider.kind === 'fake') && !(options.allowPublicFakeProvider && config.mode === 'self-host')) {
-    throw new Error('Gateway fake provider cannot be exposed publicly unless OPEN_COWORK_GATEWAY_ALLOW_PUBLIC_FAKE_PROVIDER=true is set explicitly for a self-host demo.')
-  }
-  if (publicExposure && config.providers.some((provider) => provider.enabled && provider.kind === 'cli')) {
-    throw new Error('Gateway CLI provider is local-only and cannot be exposed publicly.')
-  }
-}
-
 function readString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
-}
-
-function isPlaceholderSecret(value: string) {
-  return /^(change-me|replace-with|example-|demo-)/i.test(value.trim())
 }
 
 function readNullableString(value: unknown) {
