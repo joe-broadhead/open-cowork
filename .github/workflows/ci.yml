@@ -131,6 +131,9 @@ jobs:
       - name: Run OpenCode portability proof
         run: pnpm proof:cloud:opencode-portability --json
 
+      - name: Run Desktop Web Gateway continuation gates
+        run: pnpm test:cloud-continuation
+
       - name: Run real Postgres cloud concurrency tests
         run: node --no-warnings --experimental-strip-types --test tests/cloud-postgres-concurrency.test.ts
         env:

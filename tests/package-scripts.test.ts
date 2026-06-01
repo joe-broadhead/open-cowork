@@ -117,7 +117,8 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:soak'), 'node scripts/launch-readiness.mjs --mode soak')
   assert.equal(requireScript('deploy:launch:validate'), 'node scripts/validate-launch-readiness.mjs')
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
-  assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs')
+  assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs')
+  assert.equal(requireScript('release:gates:validate'), 'node scripts/validate-release-gates.mjs')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {
@@ -182,6 +183,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm lint',
     'pnpm test',
     'pnpm test:cloud-web',
+    'pnpm test:cloud-continuation',
     'pnpm test:renderer',
     'pnpm typecheck',
     'pnpm perf:check',
@@ -191,6 +193,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm deploy:launch:validate',
     'pnpm deploy:private-beta:validate',
     'pnpm ops:validate',
+    'pnpm proof:cloud:opencode-portability --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level critical',
   ]) {
@@ -201,9 +204,15 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm lint',
     'pnpm typecheck',
     'pnpm test',
+    'pnpm test:cloud-web',
+    'pnpm test:cloud-continuation',
     'pnpm test:renderer',
     'pnpm perf:check',
     'pnpm docs:build',
+    'pnpm deploy:validate -- --require-tools',
+    'pnpm deploy:launch:validate',
+    'pnpm deploy:private-beta:validate',
+    'pnpm ops:validate',
     'pnpm --dir apps/desktop test:e2e:packaged',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level critical',
@@ -219,6 +228,13 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'THIRD_PARTY_NOTICES.md',
     'SHA256SUMS.txt',
     'SHA256SUMS.txt.asc',
+    'open-cowork-cloud.image.sbom.cdx.json',
+    'open-cowork-cloud.image.scan.grype.json',
+    'open-cowork-cloud.image.cosign-verify.json',
+    'open-cowork-gateway.image.sbom.cdx.json',
+    'open-cowork-gateway.image.scan.grype.json',
+    'open-cowork-gateway.image.cosign-verify.json',
+    'release-oci-supply-chain',
   ]) {
     assert.match(releaseWorkflow, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must preserve ${evidence}`)
   }
