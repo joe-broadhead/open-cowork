@@ -1784,10 +1784,14 @@ export class CloudHttpServer {
         const readiness = this.options.readiness
           ? await this.options.readiness()
           : {
-              ok: true,
+              ok: false,
               role: this.options.policy.role,
               profileName: this.options.policy.profileName,
-              checks: [],
+              checks: [{
+                name: 'readiness_config',
+                status: 'error',
+                detail: 'Readiness checks are not configured for this server.',
+              }],
             } satisfies CloudReadinessReport
         writeJson(res, readiness.ok ? 200 : 503, readiness, requestOptions.corsOrigin)
         return

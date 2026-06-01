@@ -99,7 +99,8 @@ provider control plane.
 - Header auth includes `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET` or
   `OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF`; identity headers from arbitrary
   clients are never trusted directly.
-- Public dashboard traffic uses HTTPS and a stable `OPEN_COWORK_CLOUD_PUBLIC_URL`.
+- Public dashboard traffic uses HTTPS and a stable `OPEN_COWORK_CLOUD_PUBLIC_URL`
+  for OIDC and trusted-header deployments alike.
 
 ### Cookie Secret
 
@@ -196,7 +197,8 @@ provider control plane.
   public deployments. This tier fails startup unless the control plane is
   durable Postgres, object storage is provider-backed, secret/cookie material is
   production-strength or resolved from a managed secret ref, auth is enabled,
-  web does not process commands inline, and workers have checkpoints enabled.
+  the web role has a canonical HTTPS public URL, web does not process commands
+  inline, and workers have checkpoints enabled.
 - Use `/livez` for process liveness and `/readyz` for dependency readiness.
   `/healthz` remains backward-compatible, but Kubernetes readiness probes should
   not use it for public production.

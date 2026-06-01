@@ -5,11 +5,23 @@
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if not $.Values.roles.web.enabled }}
+{{- fail "cloud.deploymentTier=public_production requires roles.web.enabled=true." }}
+{{- end }}
+{{- if not $.Values.roles.worker.enabled }}
+{{- fail "cloud.deploymentTier=public_production requires roles.worker.enabled=true." }}
+{{- end }}
+{{- if not $.Values.roles.scheduler.enabled }}
+{{- fail "cloud.deploymentTier=public_production requires roles.scheduler.enabled=true." }}
+{{- end }}
 {{- if eq $.Values.cloud.auth.mode "none" }}
 {{- fail "cloud.deploymentTier=public_production requires cloud.auth.mode=oidc or header." }}
 {{- end }}
 {{- if not $.Values.cloud.auth.signupMode }}
 {{- fail "cloud.deploymentTier=public_production requires cloud.auth.signupMode so org auto-provisioning is explicit." }}
+{{- end }}
+{{- if and $.Values.roles.web.enabled (not $.Values.cloud.publicUrl) }}
+{{- fail "cloud.deploymentTier=public_production web role requires cloud.publicUrl for HTTPS redirects, cookies, and proxy safety." }}
 {{- end }}
 {{- if and (not $.Values.cloud.controlPlaneUrl) (not $.Values.cloud.existingSecret) }}
 {{- fail "cloud.deploymentTier=public_production requires durable Postgres control plane credentials via cloud.controlPlaneUrl or cloud.existingSecret." }}
@@ -29,14 +41,14 @@
 {{- if and $.Values.roles.web.enabled (not $.Values.cloud.cookieSecret) (not $.Values.cloud.cookieSecretRef) (not $.Values.cloud.existingSecret) }}
 {{- fail "cloud.deploymentTier=public_production web role requires cloud.cookieSecret, cloud.cookieSecretRef, or cloud.existingSecret." }}
 {{- end }}
+{{- if and $.Values.roles.web.enabled $.Values.roles.web.autoProcessCommands }}
+{{- fail "cloud.deploymentTier=public_production web role must set roles.web.autoProcessCommands=false and use worker roles for execution." }}
+{{- end }}
 {{- if and $.Values.roles.web.enabled (eq $.Values.cloud.auth.mode "header") (not $.Values.cloud.auth.headerSecret) (not $.Values.cloud.auth.headerSecretRef) (not $.Values.cloud.existingSecret) }}
 {{- fail "cloud.deploymentTier=public_production header auth requires cloud.auth.headerSecret, cloud.auth.headerSecretRef, or cloud.existingSecret." }}
 {{- end }}
 {{- if and $.Values.roles.web.enabled (eq $.Values.cloud.auth.mode "header") $.Values.cloud.auth.headerAllowUnsigned }}
 {{- fail "cloud.deploymentTier=public_production header auth requires signed trusted headers; cloud.auth.headerAllowUnsigned must be false." }}
-{{- end }}
-{{- if and $.Values.roles.web.enabled (eq $.Values.cloud.auth.mode "oidc") (not $.Values.cloud.publicUrl) }}
-{{- fail "cloud.deploymentTier=public_production OIDC requires cloud.publicUrl." }}
 {{- end }}
 {{- if and $.Values.roles.worker.enabled (not $.Values.cloud.checkpoints.enabled) }}
 {{- fail "cloud.deploymentTier=public_production worker role requires cloud.checkpoints.enabled=true." }}

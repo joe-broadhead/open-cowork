@@ -912,6 +912,24 @@ test('cloud HTTP server blocks session quotas before eager runtime creation', as
   }
 })
 
+test('cloud HTTP server readiness fails closed when no readiness callback is configured', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const live = await readJson(await fetch(`${baseUrl}/livez`))
+    assert.equal(live.ok, true)
+
+    const response = await fetch(`${baseUrl}/readyz`)
+    assert.equal(response.status, 503)
+    const ready = await readJson(response)
+    assert.equal(ready.ok, false)
+    const checks = asArray(ready.checks).map(asRecord)
+    assert.equal(checks.some((entry) => entry.name === 'readiness_config' && entry.status === 'error'), true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server returns machine-readable rate-limit and auth-backoff responses', async () => {
   const fixture = createFixture({
     auth: () => {

@@ -304,15 +304,59 @@ export function resolveCloudAuthConfig(config: OpenCoworkConfig, env: Env = proc
   }
 }
 
+async function resolveConfiguredSecretRef(ref: string | null | undefined, env: Env) {
+  const value = ref?.trim()
+  if (!value) return null
+  if (value.startsWith('env:') || secretRefIsManaged(value)) {
+    return resolveCloudSecretRef(value, { env })
+  }
+  return resolveEnvRef(value, env)
+}
+
+async function resolveCloudSecretMaterial(input: {
+  value?: string | null
+  ref?: string | null
+  env: Env
+}) {
+  const direct = input.value?.trim()
+  if (direct) return direct
+  return resolveConfiguredSecretRef(input.ref, input.env)
+}
+
+async function resolveCloudAuthRuntimeSecrets(auth: CloudAuthConfig, env: Env): Promise<CloudAuthConfig> {
+  if (auth.mode !== 'header') return auth
+  const headerSecret = await resolveCloudSecretMaterial({
+    value: auth.headerSecret,
+    ref: auth.headerSecretRef,
+    env,
+  })
+  return {
+    ...auth,
+    headerSecret: headerSecret || auth.headerSecret,
+  }
+}
+
 export function resolveCloudControlPlaneUrl(config: OpenCoworkConfig, env: Env = process.env) {
   return envValue(env, 'OPEN_COWORK_CLOUD_CONTROL_PLANE_URL')
     || resolveEnvRef(config.cloud.storage.controlPlane.urlRef, env)
 }
 
 export function resolveCloudCookieSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
+  const cookieSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef
   return envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
-    || resolveEnvRef(config.cloud.auth.cookieSecretRef, env)
+    || resolveEnvRef(cookieSecretRef, env)
     || envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
+}
+
+async function resolveCloudCookieSecretForRuntime(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
+  const cookieSecret = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET')
+  if (cookieSecret) return cookieSecret
+  const cookieSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECRET_REF') || config.cloud.auth.cookieSecretRef
+  const resolvedCookieSecret = await resolveConfiguredSecretRef(cookieSecretRef, env)
+  if (resolvedCookieSecret) return resolvedCookieSecret
+  const cloudSecret = envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY')
+  if (cloudSecret) return cloudSecret
+  return resolveConfiguredSecretRef(envValue(env, 'OPEN_COWORK_CLOUD_SECRET_KEY_REF'), env)
 }
 
 export function resolveCloudAbuseConfig(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env): CloudAbuseConfig {
@@ -425,8 +469,16 @@ async function createBillingAdapterForCloud(input: {
 }
 
 export function resolveCloudOidcClientSecret(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
+  const clientSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef
   return envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET')
-    || resolveEnvRef(config.cloud.auth.clientSecretRef, env)
+    || resolveEnvRef(clientSecretRef, env)
+}
+
+async function resolveCloudOidcClientSecretForRuntime(config: Pick<OpenCoworkConfig, 'cloud'>, env: Env = process.env) {
+  const clientSecret = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET')
+  if (clientSecret) return clientSecret
+  const clientSecretRef = envValue(env, 'OPEN_COWORK_CLOUD_OIDC_CLIENT_SECRET_REF') || config.cloud.auth.clientSecretRef
+  return resolveConfiguredSecretRef(clientSecretRef, env)
 }
 
 export function resolveCloudInternalToken(env: Env = process.env) {
@@ -976,6 +1028,10 @@ export function assertCloudProductionDeploymentSafe(input: {
   }
 
   if (shouldRunCloudWeb(input.role)) {
+    if (!input.publicUrl?.trim()) {
+      throw new Error('Public production cloud web deployments require OPEN_COWORK_CLOUD_PUBLIC_URL so redirects, cookies, and proxy handling use a stable HTTPS origin.')
+    }
+    assertPublicHttpsOrigin(input.publicUrl, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
     if (!envValue(input.env, 'OPEN_COWORK_CLOUD_SIGNUP_MODE')) {
       throw new Error('Public production cloud web deployments require explicit OPEN_COWORK_CLOUD_SIGNUP_MODE so org auto-provisioning is intentional.')
     }
@@ -1011,11 +1067,46 @@ export function assertCloudProductionDeploymentSafe(input: {
   if (input.auth.mode === 'header' && input.auth.headerAllowUnsigned) {
     throw new Error('Public production trusted-header deployments require signed identity headers.')
   }
-  if (input.auth.mode === 'oidc') {
-    if (!input.publicUrl?.trim()) {
-      throw new Error('Public production OIDC deployments require OPEN_COWORK_CLOUD_PUBLIC_URL.')
-    }
-    assertPublicHttpsOrigin(input.publicUrl, 'OPEN_COWORK_CLOUD_PUBLIC_URL')
+}
+
+function assertCloudProductionCoreAdaptersSafe(input: {
+  tier: CloudDeploymentTier
+  store: ControlPlaneStore
+  objectStore: ObjectStoreAdapter
+  secretAdapter: SecretAdapter
+}) {
+  if (input.tier !== 'public_production') return
+  if (input.store instanceof InMemoryControlPlaneStore) {
+    throw new Error('Public production cloud deployments require the resolved control-plane store to be durable. In-memory control-plane stores are local/self-host-beta only.')
+  }
+  if (input.objectStore.kind === 'filesystem' || input.objectStore.kind === 'unavailable') {
+    throw new Error('Public production cloud deployments require the resolved object store to be provider-backed. Filesystem or unavailable object stores are local/self-host-beta only.')
+  }
+  if (input.secretAdapter.mode !== 'envelope-v1') {
+    throw new Error('Public production cloud deployments require envelope-encrypted secret storage.')
+  }
+}
+
+function assertCloudProductionRoleRuntimeSafe(input: {
+  tier: CloudDeploymentTier
+  role: CloudRuntimePolicy['role']
+  auth: CloudAuthConfig
+  checkpointStore: WorkspaceCheckpointStore | null
+  sessionCookies: CloudSessionCookieManager | null
+  browserAuth: CloudBrowserAuthProvider | null
+}) {
+  if (input.tier !== 'public_production') return
+  if (shouldRunCloudWorker(input.role) && !input.checkpointStore) {
+    throw new Error('Public production cloud worker deployments require an object-store checkpoint adapter.')
+  }
+  if (shouldRunCloudWeb(input.role) && !input.sessionCookies) {
+    throw new Error('Public production cloud web deployments require signed browser session cookies.')
+  }
+  if (shouldRunCloudWeb(input.role) && input.auth.mode === 'oidc' && !input.browserAuth) {
+    throw new Error('Public production OIDC deployments require a configured browser auth provider.')
+  }
+  if (input.auth.mode === 'header' && !input.auth.headerSecret?.trim()) {
+    throw new Error('Public production trusted-header deployments require a resolved header auth secret.')
   }
 }
 
@@ -1171,7 +1262,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const envOptions = resolveCloudBootstrapOptionsFromEnv(env)
   const config = options.config || DEFAULT_CONFIG
   const policy = resolveCloudRuntimePolicy(config, env)
-  const authConfig = resolveCloudAuthConfig(config, env)
+  const authConfig = await resolveCloudAuthRuntimeSecrets(resolveCloudAuthConfig(config, env), env)
   const abuseConfig = resolveCloudAbuseConfig(config, env)
   const billingConfig = resolveCloudBillingConfig(config, env)
   const listenHostname = options.hostname || envOptions.hostname
@@ -1211,6 +1302,12 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   const objectStore = options.objectStore || await (options.objectStoreFactory || createObjectStoreForCloud)({ config, env, paths })
   const secretAdapter = options.secretAdapter || await createCloudSecretAdapterFromEnv(env, {
     requireStrongKeyMaterial: envOptions.deploymentTier === 'public_production',
+  })
+  assertCloudProductionCoreAdaptersSafe({
+    tier: envOptions.deploymentTier,
+    store,
+    objectStore,
+    secretAdapter,
   })
   const billingAdapter = Object.prototype.hasOwnProperty.call(options, 'billingAdapter')
     ? options.billingAdapter || null
@@ -1303,7 +1400,9 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
   )
   const artifacts = new CloudArtifactService(service, objectStore)
   const hasSessionCookieOverride = Object.prototype.hasOwnProperty.call(options, 'sessionCookies')
-  const cookieSecret = resolveCloudCookieSecret(resolvedAuthConfig, env)
+  const cookieSecret = shouldRunCloudWeb(policy.role)
+    ? await resolveCloudCookieSecretForRuntime(resolvedAuthConfig, env)
+    : null
   const sessionCookies = shouldRunCloudWeb(policy.role)
     ? hasSessionCookieOverride
       ? options.sessionCookies || null
@@ -1320,13 +1419,21 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       ? options.browserAuth || null
       : sessionCookies && cookieSecret && authConfig.mode === 'oidc'
         ? createOidcBrowserAuthProvider(authConfig, {
-            clientSecret: resolveCloudOidcClientSecret(resolvedAuthConfig, env),
+            clientSecret: await resolveCloudOidcClientSecretForRuntime(resolvedAuthConfig, env),
             publicUrl: envOptions.publicUrl,
             stateCookieSecret: cookieSecret,
             secureCookies: envOptions.cookieSecure,
           })
         : null
     : null
+  assertCloudProductionRoleRuntimeSafe({
+    tier: envOptions.deploymentTier,
+    role: policy.role,
+    auth: authConfig,
+    checkpointStore,
+    sessionCookies,
+    browserAuth,
+  })
   const worker = shouldRunCloudWorker(policy.role)
     ? new CloudWorker(
         store,
@@ -1450,6 +1557,14 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
           secretAdapter,
           billingConfig,
           billingAdapter,
+          authConfig,
+          deploymentTier: envOptions.deploymentTier,
+          publicUrl: envOptions.publicUrl,
+          cookieSecure: envOptions.cookieSecure,
+          sessionCookiesConfigured: Boolean(sessionCookies),
+          browserAuthConfigured: Boolean(browserAuth),
+          checkpointsEnabled,
+          checkpointStoreConfigured: Boolean(checkpointStore),
           requireSchemaMigrations: envOptions.deploymentTier === 'public_production',
         }),
       })
