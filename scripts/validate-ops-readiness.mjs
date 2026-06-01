@@ -33,6 +33,8 @@ const launchReportPath = 'docs/runbooks/launch-readiness-report.md'
 const managedWorkerDocsPath = 'docs/managed-workers.md'
 const cloudGatewayRegistrationDocsPath = 'docs/cloud-gateway-registration.md'
 const coordinationModelDocsPath = 'docs/coordination-model.md'
+const deploymentTopologyDocsPath = 'docs/deployment-topologies.md'
+const deploymentTopologyProfilesPath = 'deploy/topologies/topology-profiles.json'
 const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
 const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
 const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
@@ -50,12 +52,30 @@ for (const path of [
   managedWorkerDocsPath,
   cloudGatewayRegistrationDocsPath,
   coordinationModelDocsPath,
+  deploymentTopologyDocsPath,
+  deploymentTopologyProfilesPath,
   managedWorkerDeployPath,
   managedWorkerReleaseTemplatePath,
   managedWorkerRestoreTemplatePath,
   managedWorkerSloTemplatePath,
 ]) {
   assertFile(path)
+}
+
+const topologyProfiles = parseJson(deploymentTopologyProfilesPath)
+for (const profileId of [
+  'desktop-only',
+  'gateway-only',
+  'cloud-only',
+  'cloud-channel-gateway',
+  'desktop-gateway',
+  'cloud-gateway-edge',
+  'full-hybrid',
+]) {
+  if (!(topologyProfiles.profiles || []).some((profile) => profile.id === profileId)) {
+    throw new Error(`${deploymentTopologyProfilesPath} is missing ${profileId}`)
+  }
+  assertIncludes(deploymentTopologyDocsPath, profileId)
 }
 
 const requiredMetrics = [

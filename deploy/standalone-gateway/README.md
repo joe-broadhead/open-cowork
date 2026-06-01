@@ -4,6 +4,12 @@ This directory contains deployment assets for the Gateway-only execution
 appliance. It is separate from the Cloud Channel Gateway under
 `deploy/gateway-appliance`.
 
+This is the `gateway-only` topology profile from
+`deploy/topologies/topology-profiles.json`. Use
+`deploy/topologies/README.md` when comparing it with Desktop-only, Cloud-only,
+Cloud Channel Gateway, Desktop pairing, edge registration, and full-hybrid
+deployments.
+
 Standalone Gateway owns private OpenCode execution and Gateway Postgres. It
 does not require Open Cowork Cloud.
 

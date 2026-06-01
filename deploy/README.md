@@ -44,6 +44,32 @@ The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`
 and can also be enabled as the cloud chart's optional gateway dependency.
 
+## Topology Profiles
+
+Start with a topology profile, then choose a provider recipe. The topology
+defines the product boundary and execution authority; the provider recipe only
+wires infrastructure.
+
+The machine-readable profile contract lives in
+`deploy/topologies/topology-profiles.json`, with the operator guide in
+`deploy/topologies/README.md` and the docs page in
+`docs/deployment-topologies.md`.
+
+| Profile | Use case | Execution authority | Reference assets |
+| --- | --- | --- | --- |
+| `desktop-only` | private local Desktop with no Cloud dependency | Desktop Local | `docs/desktop-app.md` |
+| `gateway-only` | Telegram-to-VPS OpenCode team | Standalone Team Gateway | `deploy/standalone-gateway/` |
+| `cloud-only` | browser/org Cloud workspaces | Cloud worker | `helm/open-cowork-cloud/` |
+| `cloud-channel-gateway` | Cloud workspaces through Telegram/Slack/email/webhook | Cloud worker; Gateway is a channel adapter | `deploy/gateway-appliance/`, `helm/open-cowork-gateway/` |
+| `desktop-gateway` | remote surface reaches opted-in Desktop | Desktop Local; broker is a connector | `docs/desktop-outbound-pairing.md` |
+| `cloud-gateway-edge` | Cloud registers an external Gateway authority | Cloud worker or Standalone Gateway per workspace | `docs/cloud-gateway-registration.md` |
+| `full-hybrid` | enterprise combination of Desktop, Cloud, Gateway, and pairing | Desktop Local, Cloud worker, or Standalone Gateway per workspace | all smaller kits |
+
+Every profile has a security boundary and validation command. Production
+operators should run the profile validator through `pnpm deploy:validate`
+before traffic and then run the profile-specific smoke commands listed in the
+topology contract.
+
 ## Deployment Repository Strategy
 
 Keep public templates separate from real operator state:

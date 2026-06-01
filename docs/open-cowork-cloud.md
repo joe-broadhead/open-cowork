@@ -10,6 +10,11 @@ Open Cowork product layer as a web app. It keeps the same ownership boundary
 as the desktop app: OpenCode owns execution, while Open Cowork owns
 composition, profiles, durable projection, workflows, and deployment policy.
 
+Choose a deployment topology before choosing a cloud provider. Cloud-only,
+Cloud Channel Gateway, Cloud Gateway edge, and full-hybrid deployments are
+defined in [Deployment Topologies](deployment-topologies.md) and the
+machine-readable `deploy/topologies/topology-profiles.json` contract.
+
 The cloud entrypoint is one OCI image with role-based behavior:
 
 | Role | Purpose | Scaling note |
