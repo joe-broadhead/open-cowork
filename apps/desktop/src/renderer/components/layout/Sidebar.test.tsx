@@ -159,6 +159,13 @@ describe('Sidebar', () => {
           baseUrl: 'https://cloud.acme.test',
           lastSyncedAt: '2026-05-27T10:00:00.000Z',
         })),
+        support: vi.fn(async (workspaceId?: string) => workspaceId === 'cloud:acme'
+          ? [{
+              api: 'sessions.list',
+              status: 'supported',
+              verdict: { allowed: true, reason: null },
+            }]
+          : []),
       },
       session: {
         list: sessionList,
@@ -308,6 +315,183 @@ describe('Sidebar', () => {
       name: /Acme Cloud.*Policy disabled.*Cloud chat is disabled by this workspace policy/i,
     })).toBeTruthy()
     expect(support).toHaveBeenCalledWith('cloud:acme')
+  })
+
+  it('represents Gateway workspaces without routing them through Cloud session loading', async () => {
+    const sessionList = vi.fn(async () => [])
+    const support = vi.fn(async (workspaceId?: string) => workspaceId === 'gateway:private'
+      ? [{
+          api: 'sessions.list',
+          status: 'deferred',
+          verdict: {
+            allowed: false,
+            reason: 'Desktop Gateway sessions are deferred until the Standalone Gateway API is available.',
+          },
+          context: {
+            authority: 'gateway_standalone',
+            runtimeAuthority: 'gateway_standalone',
+            surface: 'gateway_standalone',
+            durableStateOwner: 'gateway_control_plane',
+            ownership: {
+              sessions: 'gateway_control_plane',
+              events: 'gateway_control_plane',
+              projections: 'gateway_control_plane',
+              workflows: 'gateway_control_plane',
+              artifacts: 'gateway_control_plane',
+              settings: 'gateway_control_plane',
+              credentials: 'gateway_control_plane',
+              approvals: 'gateway_control_plane',
+              questions: 'gateway_control_plane',
+              audit: 'gateway_control_plane',
+            },
+            onlineState: 'online',
+            mutation: 'deferred',
+            artifacts: { metadata: 'deferred', body: 'gateway_artifact_store', reveal: 'none' },
+            approvals: 'gateway_standalone',
+            questions: 'gateway_standalone',
+            workflows: 'deferred',
+            pathExposure: 'redacted_remote',
+            pairingState: 'not_applicable',
+          },
+        }]
+      : [])
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              authority: 'desktop_local',
+              label: 'Local',
+              status: 'online',
+              active: true,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'gateway:private',
+              kind: 'gateway',
+              authority: 'gateway_standalone',
+              label: 'Private Gateway',
+              status: 'online',
+              active: false,
+              baseUrl: 'https://gateway.example.test',
+              lastSyncedAt: null,
+            },
+          ])
+          .mockResolvedValueOnce([
+            {
+              id: 'local',
+              kind: 'local',
+              authority: 'desktop_local',
+              label: 'Local',
+              status: 'online',
+              active: false,
+              lastSyncedAt: null,
+            },
+            {
+              id: 'gateway:private',
+              kind: 'gateway',
+              authority: 'gateway_standalone',
+              label: 'Private Gateway',
+              status: 'online',
+              active: true,
+              baseUrl: 'https://gateway.example.test',
+              lastSyncedAt: null,
+            },
+          ]),
+        activate: vi.fn(async () => ({
+          id: 'gateway:private',
+          kind: 'gateway',
+          authority: 'gateway_standalone',
+          label: 'Private Gateway',
+          status: 'online',
+          active: true,
+          baseUrl: 'https://gateway.example.test',
+          lastSyncedAt: null,
+        })),
+        support,
+      },
+      session: {
+        list: sessionList,
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Private Gateway.*Online.*Standalone Gateway/i }))
+
+    await waitFor(() => {
+      expect(window.coworkApi.workspace.activate).toHaveBeenCalledWith('gateway:private')
+    })
+    expect(sessionList).toHaveBeenCalledWith({ workspaceId: 'local' })
+    expect(sessionList).not.toHaveBeenCalledWith({ workspaceId: 'gateway:private' })
+  })
+
+  it('adds Gateway workspaces from the switcher without exposing the token after submit', async () => {
+    const addGateway = vi.fn(async () => ({
+      id: 'gateway:private',
+      kind: 'gateway',
+      authority: 'gateway_standalone',
+      label: 'Private Gateway',
+      status: 'online',
+      active: false,
+      baseUrl: 'https://gateway.example.test',
+      lastSyncedAt: null,
+    }))
+    installRendererTestCoworkApi({
+      workspace: {
+        addGateway,
+        list: vi.fn()
+          .mockResolvedValueOnce([{
+            id: 'local',
+            kind: 'local',
+            label: 'Local',
+            status: 'online',
+            active: true,
+            lastSyncedAt: null,
+          }])
+          .mockResolvedValueOnce([{
+            id: 'gateway:private',
+            kind: 'gateway',
+            authority: 'gateway_standalone',
+            label: 'Private Gateway',
+            status: 'online',
+            active: false,
+            baseUrl: 'https://gateway.example.test',
+            lastSyncedAt: null,
+          }]),
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Gateway workspace' }))
+    fireEvent.change(screen.getByLabelText('Gateway URL'), { target: { value: 'https://gateway.example.test' } })
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Private Gateway' } })
+    fireEvent.change(screen.getByLabelText('Gateway token'), { target: { value: 'secret-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add Gateway' }))
+
+    await waitFor(() => {
+      expect(addGateway).toHaveBeenCalledWith({
+        baseUrl: 'https://gateway.example.test',
+        label: 'Private Gateway',
+        token: 'secret-token',
+      })
+    })
+    expect(screen.queryByDisplayValue('secret-token')).toBeNull()
   })
 
   it('renders configured top and lower downstream branding surfaces', () => {

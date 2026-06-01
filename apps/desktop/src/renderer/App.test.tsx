@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AuthState, EffectiveAppSettings, PublicAppConfig, RuntimeStatus, SessionInfo } from '@open-cowork/shared'
+import { workspaceApiSupportContextForAuthority, type AuthState, type EffectiveAppSettings, type PublicAppConfig, type RuntimeStatus, type SessionInfo, type WorkspaceApiSupport } from '@open-cowork/shared'
 import { useSessionStore } from './stores/session'
+import { useWorkspaceSupportStore } from './stores/workspace-support'
+import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
 
@@ -305,6 +307,8 @@ const newSession: SessionInfo = {
 
 function resetSessionStore() {
   useSessionStore.setState({
+    activeWorkspaceId: LOCAL_WORKSPACE_ID,
+    sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [] },
     sessions: [],
     currentSessionId: null,
     globalErrors: [],
@@ -316,6 +320,13 @@ function resetSessionStore() {
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+  })
+  const localSupport = useWorkspaceSupportStore.getState().supportByWorkspace[LOCAL_WORKSPACE_ID] || []
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: { [LOCAL_WORKSPACE_ID]: localSupport },
+    loadedByWorkspace: { [LOCAL_WORKSPACE_ID]: true },
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
   })
 }
 
@@ -506,6 +517,42 @@ describe('App', () => {
       message: expect.stringContaining('ipc down'),
       view: 'runtime',
     }))
+  })
+
+  it('does not call session.list when the active workspace defers session listing', async () => {
+    const support: WorkspaceApiSupport[] = [{
+      api: 'sessions.list',
+      status: 'deferred',
+      verdict: {
+        allowed: false,
+        reason: 'Standalone Gateway session listing is deferred.',
+      },
+      context: workspaceApiSupportContextForAuthority('gateway_standalone', {
+        surface: 'gateway_standalone',
+        onlineState: 'auth_required',
+        status: 'deferred',
+      }),
+    }]
+    useSessionStore.setState({
+      activeWorkspaceId: 'gateway:test',
+      sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [], 'gateway:test': [{ ...newSession, id: 'stale-gateway-session' }] },
+      sessions: [{ ...newSession, id: 'stale-gateway-session' }],
+    })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: { [LOCAL_WORKSPACE_ID]: useWorkspaceSupportStore.getState().supportByWorkspace[LOCAL_WORKSPACE_ID] || [], 'gateway:test': support },
+      loadedByWorkspace: { [LOCAL_WORKSPACE_ID]: true, 'gateway:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+    const { api } = installAppApi()
+    vi.mocked(api.workspace.support).mockResolvedValue(support)
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    await waitFor(() => expect(api.runtime.status).toHaveBeenCalled())
+    expect(api.session.list).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().sessions).toEqual([])
   })
 
   it('creates and prompts a new session from the Home composer path', async () => {

@@ -28,6 +28,8 @@ import { configureI18n, subscribeLocale } from './helpers/i18n'
 import { registerExtraThemes, setDefaultThemeId } from './helpers/theme-presets'
 import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
+import { supportAllows, supportEntry, useWorkspaceSupportStore } from './stores/workspace-support'
+import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from './stores/session-workspace-keys'
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
@@ -119,9 +121,25 @@ export function App() {
   }, [setRendererErrorNotice])
 
   const loadSessions = useCallback(async () => {
-    return window.coworkApi.session.list().then((sessions) => {
-      setSessions(sessions || [])
-    }).catch((err) => reportAppError('Could not load your threads. Try refreshing the app.', err, 'sessions'))
+    const workspaceId = normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId)
+    try {
+      if (workspaceId !== LOCAL_WORKSPACE_ID) {
+        const support = await useWorkspaceSupportStore.getState().loadWorkspaceSupport(workspaceId)
+        const listSupport = supportEntry(support, 'sessions.list')
+        if (!listSupport || !supportAllows(listSupport)) {
+          if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) === workspaceId) setSessions([])
+          return
+        }
+      }
+      const sessions = workspaceId === LOCAL_WORKSPACE_ID
+        ? await window.coworkApi.session.list()
+        : await window.coworkApi.session.list({ workspaceId })
+      if (normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId) === workspaceId) {
+        setSessions(sessions || [])
+      }
+    } catch (err) {
+      reportAppError('Could not load your threads. Try refreshing the app.', err, 'sessions')
+    }
   }, [reportAppError, setSessions])
 
   const {

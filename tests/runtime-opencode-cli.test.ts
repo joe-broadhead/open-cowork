@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync } from 'fs'
-import { delimiter, dirname } from 'path'
+import { existsSync, readdirSync, realpathSync } from 'fs'
+import { delimiter, dirname, join, resolve } from 'path'
 import {
   applyBundledOpencodeCliEnvironment,
   getBundledOpencodeSdkVersion,
@@ -9,6 +9,32 @@ import {
   readBundledOpencodeCliVersion,
   resolveBundledOpencodeCliEnvironment,
 } from '../apps/desktop/src/main/runtime-opencode-cli.ts'
+
+function installedNativeBinaryPath(): string | null {
+  const platform = process.platform === 'win32' ? 'windows' : process.platform
+  const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
+  const moduleNames = [
+    process.arch === 'x64' ? `opencode-${platform}-${process.arch}-baseline` : '',
+    `opencode-${platform}-${process.arch}`,
+  ].filter(Boolean)
+
+  for (const moduleName of moduleNames) {
+    const pnpmStoreDir = resolve(process.cwd(), 'node_modules', '.pnpm')
+    const opencodeAiStoreNodeModules = existsSync(pnpmStoreDir)
+      ? readdirSync(pnpmStoreDir)
+        .filter((entry) => entry.startsWith('opencode-ai@'))
+        .map((entry) => join(pnpmStoreDir, entry, 'node_modules', moduleName, 'bin', binary))
+      : []
+    const candidates = [
+      resolve(process.cwd(), 'node_modules', '.pnpm', 'node_modules', moduleName, 'bin', binary),
+      ...opencodeAiStoreNodeModules,
+    ]
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) return realpathSync(candidate)
+    }
+  }
+  return null
+}
 
 test('applyBundledOpencodeCliEnvironment returns a usable bundled OpenCode binary path without trusting inherited overrides', () => {
   const previousPath = process.env.PATH
@@ -18,10 +44,19 @@ test('applyBundledOpencodeCliEnvironment returns a usable bundled OpenCode binar
     process.env.OPENCODE_BIN_PATH = '/tmp/user-controlled-opencode'
     const env = applyBundledOpencodeCliEnvironment()
 
+    const installedNative = installedNativeBinaryPath()
+    if (installedNative) {
+      assert.equal(typeof env.opencodeBinPath, 'string')
+      assert.equal(realpathSync(env.opencodeBinPath || ''), installedNative)
+    }
+
     const binary = env.opencodeBinPath
     if (typeof binary === 'string' && binary.length > 0) {
       assert.equal(process.env.OPENCODE_BIN_PATH, '/tmp/user-controlled-opencode')
       assert.equal(existsSync(binary), true)
+      if (process.platform !== 'win32') {
+        assert.doesNotMatch(binary, /opencode-ai[/\\]bin[/\\]opencode\.exe$/)
+      }
       const pathEntries = (process.env.PATH || '').split(delimiter).filter(Boolean)
       assert.equal(pathEntries[0], dirname(binary))
 

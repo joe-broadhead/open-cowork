@@ -12,7 +12,7 @@ import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
-import { useWorkspaceSupportStore } from '../../stores/workspace-support'
+import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 interface Props {
   currentView: AppView
@@ -304,12 +304,32 @@ function WorkspaceSwitcher() {
   const loadWorkspaceSupport = useWorkspaceSupportStore((state) => state.loadWorkspaceSupport)
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([LOCAL_WORKSPACE_FALLBACK])
   const [open, setOpen] = useState(false)
+  const [showGatewayForm, setShowGatewayForm] = useState(false)
+  const [gatewayUrl, setGatewayUrl] = useState('')
+  const [gatewayToken, setGatewayToken] = useState('')
+  const [gatewayLabel, setGatewayLabel] = useState('')
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
 
   const refreshSupport = async (listedWorkspaces: WorkspaceInfo[], cancelled: () => boolean) => {
-    await Promise.all(listedWorkspaces.map((workspace) => loadWorkspaceSupport(workspace.id, { force: true }).catch(() => [])))
+    const entries = await Promise.all(listedWorkspaces.map(async (workspace) => ({
+      workspace,
+      support: await loadWorkspaceSupport(workspace.id, { force: true }).catch(() => []),
+    })))
     if (cancelled()) return
+    return entries
+  }
+
+  const workspaceCanListSessions = (workspace: WorkspaceInfo, support: WorkspaceApiSupport[] | undefined) => {
+    if (workspace.kind === 'local') return true
+    if (!support) return false
+    const entry = supportEntry(support, 'sessions.list')
+    return Boolean(entry) && supportAllows(entry)
+  }
+
+  const loadSessionsForWorkspace = async (workspace: WorkspaceInfo, support?: WorkspaceApiSupport[]) => {
+    if (!workspaceCanListSessions(workspace, support)) return []
+    return window.coworkApi.session.list({ workspaceId: workspace.id })
   }
 
   useEffect(() => {
@@ -321,15 +341,13 @@ function WorkspaceSwitcher() {
         if (cancelled) return
         const listedWorkspaces = next.length > 0 ? next : [LOCAL_WORKSPACE_FALLBACK]
         setWorkspaces(listedWorkspaces)
-        void refreshSupport(listedWorkspaces, () => cancelled)
+        const supportEntries = await refreshSupport(listedWorkspaces, () => cancelled)
+        if (cancelled) return
         const active = listedWorkspaces.find((workspace) => workspace.active) || listedWorkspaces[0] || LOCAL_WORKSPACE_FALLBACK
         setActiveWorkspace(active.id)
-        if (active.kind === 'local' || active.status === 'online') {
-          const sessions = await window.coworkApi.session.list({ workspaceId: active.id })
-          if (!cancelled) setSessions(sessions)
-        } else if (!cancelled) {
-          setSessions([])
-        }
+        const activeSupport = supportEntries?.find((entry) => entry.workspace.id === active.id)?.support
+        const sessions = await loadSessionsForWorkspace(active, activeSupport)
+        if (!cancelled) setSessions(sessions)
       })
       .catch(() => {
         if (!cancelled) setWorkspaces([LOCAL_WORKSPACE_FALLBACK])
@@ -353,34 +371,49 @@ function WorkspaceSwitcher() {
       }
       const nextWorkspaces = await window.coworkApi.workspace.list()
       setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [activated])
-      void refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [activated], () => false)
+      const supportEntries = await refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [activated], () => false)
+      const activeSupport = supportEntries?.find((entry) => entry.workspace.id === activated.id)?.support
       if (activated.id !== previousId) {
         setActiveWorkspace(activated.id)
         setCurrentSession(null)
       }
-      if (activated.kind === 'local' || activated.status === 'online') {
-        setSessions(await window.coworkApi.session.list({ workspaceId: activated.id }))
-      } else {
-        setSessions([])
-      }
+      setSessions(await loadSessionsForWorkspace(activated, activeSupport))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       try {
         const restored = await window.coworkApi.workspace.activate(previousId)
         const restoredWorkspaces = await window.coworkApi.workspace.list()
         setWorkspaces(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored])
-        void refreshSupport(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored], () => false)
+        const supportEntries = await refreshSupport(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored], () => false)
+        const restoredSupport = supportEntries?.find((entry) => entry.workspace.id === restored.id)?.support
         setActiveWorkspace(restored.id)
-        if (restored.kind === 'local' || restored.status === 'online') {
-          setSessions(await window.coworkApi.session.list({ workspaceId: restored.id }))
-        } else {
-          setSessions([])
-        }
+        setSessions(await loadSessionsForWorkspace(restored, restoredSupport))
       } catch {
         // Leave the visible workspace unchanged if rollback also fails; the
         // original login error is still the actionable user-facing failure.
       }
       addGlobalError(message || t('workspace.switchFailed', 'Could not switch workspace.'))
+    }
+  }
+
+  const addGatewayWorkspace = async () => {
+    const baseUrl = gatewayUrl.trim()
+    if (!baseUrl) return
+    try {
+      const workspace = await window.coworkApi.workspace.addGateway({
+        baseUrl,
+        label: gatewayLabel.trim() || undefined,
+        token: gatewayToken.trim() || undefined,
+      })
+      setGatewayUrl('')
+      setGatewayToken('')
+      setGatewayLabel('')
+      setShowGatewayForm(false)
+      const nextWorkspaces = await window.coworkApi.workspace.list()
+      setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [workspace])
+      void refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [workspace], () => false)
+    } catch (error) {
+      addGlobalError(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -428,6 +461,60 @@ function WorkspaceSwitcher() {
               </div>
             </button>
           ))}
+          <div className="border-t border-border-subtle p-2">
+            {showGatewayForm ? (
+              <div className="space-y-2">
+                <input
+                  type="url"
+                  value={gatewayUrl}
+                  onChange={(event) => setGatewayUrl(event.target.value)}
+                  placeholder={t('workspace.gatewayUrl', 'Gateway URL')}
+                  aria-label={t('workspace.gatewayUrl', 'Gateway URL')}
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                />
+                <input
+                  type="text"
+                  value={gatewayLabel}
+                  onChange={(event) => setGatewayLabel(event.target.value)}
+                  placeholder={t('workspace.gatewayLabel', 'Label')}
+                  aria-label={t('workspace.gatewayLabel', 'Label')}
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                />
+                <input
+                  type="password"
+                  value={gatewayToken}
+                  onChange={(event) => setGatewayToken(event.target.value)}
+                  placeholder={t('workspace.gatewayToken', 'Gateway token')}
+                  aria-label={t('workspace.gatewayToken', 'Gateway token')}
+                  className="w-full rounded-md border border-border-subtle bg-base px-2 py-1.5 text-[12px] text-text outline-none focus:border-border"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void addGatewayWorkspace()}
+                    className="flex-1 rounded-md border border-border-subtle px-2 py-1.5 text-[12px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text"
+                  >
+                    {t('workspace.addGateway', 'Add Gateway')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGatewayForm(false)}
+                    className="rounded-md border border-border-subtle px-2 py-1.5 text-[12px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+                  >
+                    {t('workspace.cancel', 'Cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowGatewayForm(true)}
+                className="w-full rounded-md border border-border-subtle px-2 py-1.5 text-start text-[12px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+              >
+                {t('workspace.connectGateway', 'Connect Gateway workspace')}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

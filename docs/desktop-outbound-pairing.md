@@ -116,5 +116,11 @@ The Local workspace Settings panel includes Pairing controls for:
 - revoking a pairing
 - reviewing recent remote-access audit events
 
-Cloud workspaces do not show this panel because Cloud/Gateway sync is already
-handled through the Cloud control plane.
+The Desktop workspace switcher also projects configured pairings as
+`Paired Desktop` workspace rows so users can see whether a connector is
+online, offline, disabled, or revoked. Those rows are status/support surfaces:
+the Local workspace remains the execution authority, and Desktop does not
+route paired workspace chat/session controls through Cloud.
+
+Cloud workspaces do not show the Pairing settings panel because Cloud/Gateway
+sync is already handled through the Cloud control plane.
