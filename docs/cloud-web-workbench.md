@@ -99,7 +99,8 @@ pnpm docs:build
 git diff --check
 ```
 
-The Cloud Web gates cover browser workflow smoke, accessibility/keyboard
-behavior, responsive layout expectations, performance budgets for large thread
-and admin lists, route/API matrix coverage, backend cursor validation, and
-package-boundary checks that keep the browser out of server-only modules.
+The Cloud Web gates cover JSDOM workflow smoke, CI Chromium desktop/mobile
+smoke, accessibility/keyboard behavior, responsive layout expectations,
+performance budgets for large thread and admin lists, route/API matrix coverage,
+backend cursor validation, and package-boundary checks that keep the browser out
+of server-only modules.

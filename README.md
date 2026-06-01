@@ -119,10 +119,10 @@ It helps technical users move faster, while making agentic workflows accessible 
   Configure branding, providers, defaults, bundled tools, bundled skills, docs, and release workflows.
 
 - **Provider-neutral cloud shape**
-  Run Open Cowork Cloud as all-in-one, web, worker, or scheduler roles on Docker, Helm/Kubernetes, or managed cloud infrastructure.
+  Run Open Cowork Cloud as all-in-one, web, worker, or scheduler roles on Docker or Helm/Kubernetes. The public repo currently claims `local-self-host-beta`; hosted/private-beta claims require private operations evidence from the target environment.
 
 - **Production-grade gates**
-  CI, CodeQL, smoke tests, docs, audits, checksums, SBOMs, and provenance support.
+  CI, CodeQL, Cloud Web browser smoke, release actor/check verification, protected publish environments, docs, audits, checksums, SBOMs, and provenance support.
 
 ## Screenshots
 
@@ -304,16 +304,18 @@ Start here:
 ## Repository layout
 
 ```text
-apps/desktop     Electron main process, preload bridge, renderer UI, packaging
-packages/shared  Shared types, IPC contracts, and shortcuts
-mcps/agents      Bundled custom agent authoring MCP
-mcps/charts      Bundled charts MCP
-mcps/clock       Bundled clock and calendar MCP
-mcps/skills      Bundled skill bundle MCP
-mcps/workflows   Bundled workflow authoring MCP
-skills           Bundled OpenCode skill bundles
-docs             MkDocs documentation source
-tests            Repo-level Node test suite
+apps/desktop                       Electron main process, preload bridge, renderer UI, runtime composition, cloud control plane, packaging
+apps/website                       Cloud Web browser workbench and route/API matrix
+apps/gateway                       Cloud Channel Gateway daemon
+apps/standalone-gateway            Standalone Team Gateway appliance
+packages/shared                    Shared types, IPC contracts, and cloud projection contracts
+packages/cloud-client              Workspace Cloud HTTP/SSE client package
+packages/gateway-*                 Provider-neutral gateway contracts, testing helpers, and provider adapters
+mcps/*                             Bundled Open Cowork MCP servers
+skills                             Bundled OpenCode skill bundles
+docker, helm, deploy               Cloud, Gateway, release, and launch-readiness deployment artifacts
+docs                               MkDocs documentation source
+tests                              Repo-level Node test suite
 ```
 
 ## Release automation
@@ -324,6 +326,7 @@ The repo includes GitHub Actions for:
 - documentation deployment to GitHub Pages
 - tagged release builds for macOS and Linux artifacts
 - monthly maintenance and dependency-drift checks
+- release preflight verification for allowed actors, required green checks, signed tags, and protected `release-publish` environments before publishing artifacts or images
 
 See [Packaging and Releases](docs/packaging-and-releases.md) for the workflow model and release gates.
 

@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `5be6f7161bc08a823d797daa4b097bc2f07739655deafeb5b0440ceb7b454ffa`
+- pnpm lockfile SHA-256: `234fc3847fc9e40d36acdeb05ee5e0766cd008b0f66dc2fe56c859b09f3695eb`
 - Production package entries: 503
 - Bundled license directories: 460 (43 package entries have no standalone license file or are workspace links)
 
@@ -121,7 +121,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | @types/trusted-types | 2.0.7 | MIT | THIRD_PARTY_LICENSES/@types__trusted-types@2.0.7/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/unist | 2.0.11 | MIT | THIRD_PARTY_LICENSES/@types__unist@2.0.11/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
 | @types/unist | 3.0.3 | MIT | THIRD_PARTY_LICENSES/@types__unist@3.0.3/ | https://github.com/DefinitelyTyped/DefinitelyTyped.git |
-| @ungap/structured-clone | 1.3.0 | ISC | THIRD_PARTY_LICENSES/@ungap__structured-clone@1.3.0/ | git+https://github.com/ungap/structured-clone.git |
+| @ungap/structured-clone | 1.3.1 | ISC | THIRD_PARTY_LICENSES/@ungap__structured-clone@1.3.1/ | git+https://github.com/ungap/structured-clone.git |
 | @upsetjs/venn.js | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@upsetjs__venn.js@2.0.0/ | https://github.com/upsetjs/venn.js.git |
 | abort-controller | 3.0.0 | MIT | THIRD_PARTY_LICENSES/abort-controller@3.0.0/ | git+https://github.com/mysticatea/abort-controller.git |
 | accepts | 2.0.0 | MIT | THIRD_PARTY_LICENSES/accepts@2.0.0/ | jshttp/accepts |

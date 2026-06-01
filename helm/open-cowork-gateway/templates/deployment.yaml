@@ -11,6 +11,11 @@
 {{- fail "gateway replicaCount > 1 is unsafe while stream/replay state is process-local; run one replica per channel-binding shard or set gateway.experimentalDistributedOwnership=true for explicit experimental deployments." }}
 {{- end }}
 {{- $sharedConfig := or .Values.gateway.configPath .Values.gateway.configDir .Values.gateway.downstreamRoot }}
+{{- $publicGateway := or .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort") .Values.gateway.publicUrl .Values.gateway.telegram.publicUrl }}
+{{- $inlineGatewaySecrets := or .Values.gateway.serviceToken .Values.gateway.adminToken .Values.gateway.providersJson .Values.gateway.telegram.botToken .Values.gateway.telegram.webhookSecret .Values.gateway.slack.botToken .Values.gateway.slack.signingSecret .Values.gateway.email.inboundSecret .Values.gateway.email.smtpPassword .Values.gateway.webhook.sharedSecret }}
+{{- if and $publicGateway (not .Values.gateway.existingSecret) $inlineGatewaySecrets }}
+{{- fail "public Gateway deployments reject inline secret-bearing Helm values; set gateway.existingSecret for service, admin, provider, and webhook tokens." }}
+{{- end }}
 {{- if and (not $sharedConfig) (not .Values.gateway.cloudBaseUrl) }}
 {{- fail "gateway.cloudBaseUrl is required." }}
 {{- end }}

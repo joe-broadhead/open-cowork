@@ -45,7 +45,9 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
+    'pnpm --filter @open-cowork/website test',
     'node scripts/run-node-tests.mjs --coverage',
+    'node scripts/run-workspace-node-tests.mjs --coverage',
     'node scripts/coverage-summary.mjs --check --node-only --no-write',
   ])
 
@@ -75,7 +77,9 @@ test('root node test scripts prepare generated shared artifacts before tests run
     'pnpm --filter @open-cowork/shared build',
     'pnpm run perf:check:run',
   ])
-  assert.equal(requireScript('test:browser:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts')
+  assert.equal(requireScript('test:browser:dom', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts')
+  assert.equal(requireScript('test:browser:real', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-real-e2e.spec.ts')
+  assert.equal(requireScript('test:browser:run', websitePackageJson), 'pnpm run test:browser:dom && pnpm run test:browser:real')
   assert.equal(requireScript('test:a11y:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/accessibility.test.ts')
   assert.equal(requireScript('perf:check:run', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/performance.test.ts')
 })
@@ -195,7 +199,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm ops:validate',
     'pnpm proof:cloud:opencode-portability --json',
     'pnpm audit --prod --audit-level moderate',
-    'pnpm audit --audit-level critical',
+    'pnpm audit --audit-level high',
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }
@@ -215,8 +219,10 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm ops:validate',
     'pnpm --dir apps/desktop test:e2e:packaged',
     'pnpm audit --prod --audit-level moderate',
-    'pnpm audit --audit-level critical',
+    'pnpm audit --audit-level high',
     'node scripts/verify-release-tag-signature.mjs',
+    'node scripts/verify-release-actor.mjs',
+    'node scripts/verify-release-checks.mjs',
   ]) {
     assert.match(releaseWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must run ${command}`)
   }

@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto'
 import { GoogleAuth } from 'google-auth-library'
+import { assertAzureKeyVaultSecretUrl } from './secret-ref-policy.ts'
 
 export const CLOUD_SECRET_ENVELOPE_PREFIX = 'enc:v1:'
 export const CLOUD_SECRET_PLAINTEXT_PREFIX = 'plain:v1:'
@@ -348,14 +349,21 @@ async function resolveGcpSecretManagerRef(
 }
 
 function azureVaultUrlFromRef(ref: string) {
-  if (ref.startsWith('https://')) return new URL(ref)
+  if (ref.startsWith('https://')) {
+    assertAzureKeyVaultSecretUrl(ref)
+    return new URL(ref)
+  }
   const url = new URL(ref)
-  const [first, second, third] = `${url.host}${url.pathname}`.split('/').filter(Boolean)
-  if (!first || second !== 'secrets' || !third) {
+  if (url.username || url.password || url.hash || url.search) {
+    throw new Error('Azure Key Vault references must use azure-kv://{vault}/secrets/{secret}/{version?} without credentials, fragments, or query parameters.')
+  }
+  const [first, second, third, fourth, ...rest] = `${url.host}${url.pathname}`.split('/').filter(Boolean)
+  if (!first || second !== 'secrets' || !third || rest.length > 0) {
     throw new Error('Azure Key Vault references must use azure-kv://{vault}/secrets/{secret}/{version?}.')
   }
-  const version = `${url.host}${url.pathname}`.split('/').filter(Boolean)[3]
-  return new URL(`https://${first}.vault.azure.net/secrets/${encodeURIComponent(third)}${version ? `/${encodeURIComponent(version)}` : ''}`)
+  const candidate = `https://${first}.vault.azure.net/secrets/${encodeURIComponent(third)}${fourth ? `/${encodeURIComponent(fourth)}` : ''}`
+  assertAzureKeyVaultSecretUrl(candidate)
+  return new URL(candidate)
 }
 
 async function resolveAzureKeyVaultRef(

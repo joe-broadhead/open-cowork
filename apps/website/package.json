@@ -11,7 +11,9 @@
     "typecheck": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
     "test": "node --no-warnings --experimental-strip-types --test src/*.test.ts",
     "test:browser": "pnpm --filter @open-cowork/shared build && pnpm run test:browser:run",
-    "test:browser:run": "node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts",
+    "test:browser:dom": "node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts",
+    "test:browser:real": "node --no-warnings --experimental-strip-types --test src/browser-real-e2e.spec.ts",
+    "test:browser:run": "pnpm run test:browser:dom && pnpm run test:browser:real",
     "test:a11y": "pnpm --filter @open-cowork/shared build && pnpm run test:a11y:run",
     "test:a11y:run": "node --no-warnings --experimental-strip-types --test src/accessibility.test.ts",
     "perf:check": "pnpm --filter @open-cowork/shared build && pnpm run perf:check:run",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^22.12.0",
     "jsdom": "26.1.0",
+    "playwright-core": "^1.59.1",
     "typescript": "^6.0.0"
   }
 }

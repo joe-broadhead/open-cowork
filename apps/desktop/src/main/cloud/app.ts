@@ -10,7 +10,8 @@ import {
   resolveCloudRuntimePolicy,
   type CloudRuntimePolicy,
 } from './cloud-config.ts'
-import { type ControlPlaneStore, InMemoryControlPlaneStore } from './control-plane-store.ts'
+import type { ControlPlaneStore } from './control-plane-store.ts'
+import { InMemoryControlPlaneStore } from './in-memory-control-plane-store.ts'
 import {
   createCloudHttpServer,
   CloudHttpError,
@@ -48,6 +49,7 @@ import {
   resolveCloudSecretRef,
   type SecretAdapter,
 } from './secret-adapter.ts'
+import { isManagedCloudSecretRef } from './secret-ref-policy.ts'
 import { createCloudSessionCookieManager, type CloudSessionCookieManager } from './session-cookie-auth.ts'
 import { CloudSessionService, type ByokManagementPolicy, type CloudPrincipal } from './session-service.ts'
 import { CloudScheduler } from './scheduler.ts'
@@ -1014,16 +1016,7 @@ export function assertCloudAuthDeploymentSafe(input: {
 }
 
 function secretRefIsManaged(ref: string | null | undefined) {
-  const value = ref?.trim()
-  return Boolean(
-    value
-    && (
-      value.startsWith('gcp-sm://')
-      || value.startsWith('aws-sm://')
-      || value.startsWith('azure-kv://')
-      || value.startsWith('https://')
-    ),
-  )
+  return isManagedCloudSecretRef(ref)
 }
 
 function hasProductionSecretMaterial(env: Env, keyName: string, refName: string, configRef?: string | null) {

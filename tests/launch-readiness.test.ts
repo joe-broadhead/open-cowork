@@ -431,15 +431,13 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
   }
 })
 
-test('launch readiness plan supports the local self-host beta tier', async () => {
+test('launch readiness plan defaults to the local self-host beta tier', async () => {
   const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-launch-plan-'))
   try {
     const { stdout } = await execFileAsync(process.execPath, [
       'scripts/launch-readiness.mjs',
       '--mode',
       'plan',
-      '--profile',
-      'local-self-host-beta',
       '--commit-sha',
       evidenceCommitSha,
       '--cloud-image-digest',

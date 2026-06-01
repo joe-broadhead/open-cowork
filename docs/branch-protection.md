@@ -29,5 +29,11 @@ protection in GitHub before merging the rename.
 - Require conversation resolution before merging.
 - Require signed commits for release tags; release tags are separately verified
   by `scripts/verify-release-tag-signature.mjs`.
+- Protect the `release-publish` environment and require reviewer approval for
+  jobs that publish GitHub Releases or GHCR images.
+- Keep `OPEN_COWORK_RELEASE_ALLOWED_ACTORS` limited to trusted release
+  maintainers; `scripts/verify-release-actor.mjs` blocks unexpected actors and
+  `scripts/verify-release-checks.mjs` blocks publishing when required checks
+  for the tag commit are missing or red.
 - Keep administrator bypass exceptional and document any emergency merge in the
   release notes or incident notes.

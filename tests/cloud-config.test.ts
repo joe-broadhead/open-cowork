@@ -70,6 +70,16 @@ test('cloud project source policy allows safe git sources and blocks disallowed 
     repositoryUrl: 'https://github.com/acme/repo.git',
     credentialRef: 'https://vault-name.vault.azure.net/secrets/github-token',
   }, policy).allowed, true)
+  assert.equal(evaluateCloudProjectSourcePolicy({
+    kind: 'git',
+    repositoryUrl: 'https://github.com/acme/repo.git',
+    credentialRef: 'https://vault-name.vault.azure.net.evil.example/secrets/github-token',
+  }, policy).policyCode, 'project_source.git.credential_ref')
+  assert.equal(evaluateCloudProjectSourcePolicy({
+    kind: 'git',
+    repositoryUrl: 'https://github.com/acme/repo.git',
+    credentialRef: 'https://vault-name.vault.azure.net/secrets/github-token?redirect=https://evil.example',
+  }, policy).policyCode, 'project_source.git.credential_ref')
 })
 
 test('cloud project source policy enforces repository and uploaded snapshot limits', () => {

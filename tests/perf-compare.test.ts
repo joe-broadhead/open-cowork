@@ -49,3 +49,15 @@ test('compareReports still fails material regressions beyond jitter allowance', 
     'engine.stream.mixed p95 1.81 ms exceeds baseline limit 1.79 ms',
   ])
 })
+
+test('compareReports fails when a baseline benchmark disappears from the current report', () => {
+  const baseline = makeReport(1.5, 0.94)
+  const current = {
+    ...makeReport(1.5, 0.94),
+    benchmarks: [],
+  }
+
+  assert.deepEqual(compareReports(current, baseline), [
+    'engine.stream.mixed is present in the baseline but missing from the current report',
+  ])
+})

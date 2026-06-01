@@ -17,6 +17,7 @@ import { normalizeFindTextPattern, registerExplorerHandlers } from '../apps/desk
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
+import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -40,6 +41,7 @@ function createBaseContext() {
     workspaceGateway: createWorkspaceGateway({ cloudRegistry: null, cloudCredentialStore: null }),
     desktopPairingService: {
       list: () => [],
+      get: () => null,
       create: () => { throw new Error('not stubbed') },
       update: () => { throw new Error('not stubbed') },
       connect: async () => { throw new Error('not stubbed') },
@@ -84,6 +86,42 @@ function createBaseContext() {
   return { context, handlers, errors }
 }
 
+function desktopPairingRecord(overrides: Partial<DesktopPairingPublicRecord> = {}): DesktopPairingPublicRecord {
+  return {
+    id: 'pairing-1',
+    label: 'Phone Gateway',
+    deviceName: 'Phone',
+    status: 'disabled',
+    enabled: false,
+    brokerUrl: 'https://gateway.example.test',
+    allowedWorkspaceIds: ['local'],
+    allowedSessionIds: null,
+    policy: {
+      allowRemotePrompts: true,
+      allowRemoteAbort: true,
+      remoteApprovals: 'local_confirmation',
+      remoteQuestions: 'local_confirmation',
+      exposeArtifactBodies: false,
+      exposeLocalPaths: false,
+      exposeLocalMcpDetails: false,
+      allowRemoteAttachments: false,
+    },
+    lastConnectedAt: null,
+    lastHeartbeatAt: null,
+    lastCommandSequence: 0,
+    error: null,
+    createdAt: '2026-05-27T09:00:00.000Z',
+    updatedAt: '2026-05-27T09:00:00.000Z',
+    revokedAt: null,
+    credential: {
+      hasToken: true,
+      deviceId: 'device-1',
+      updatedAt: '2026-05-27T09:00:00.000Z',
+    },
+    ...overrides,
+  }
+}
+
 function emptySessionView(overrides: Record<string, unknown> = {}) {
   return {
     messages: [],
@@ -112,6 +150,100 @@ function emptySessionView(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+test('desktop-pairing:create requires native confirmation before minting a token', async () => {
+  const { context, handlers } = createBaseContext()
+  let createCalled = false
+  let confirmationDetail = ''
+  context.requestNativeConfirmation = async (options) => {
+    confirmationDetail = options.detail || ''
+    return false
+  }
+  context.desktopPairingService = {
+    ...context.desktopPairingService,
+    create: () => {
+      createCalled = true
+      throw new Error('should not mint token')
+    },
+  } as never
+
+  registerDesktopPairingHandlers(context)
+
+  await assert.rejects(
+    () => handlers.get('desktop-pairing:create')?.({}, {
+      label: 'Phone',
+      brokerUrl: 'https://gateway.example.test/connect',
+      enabled: true,
+    }),
+    /creation cancelled/,
+  )
+  assert.equal(createCalled, false)
+  assert.match(confirmationDetail, /Broker: https:\/\/gateway\.example\.test/)
+  assert.match(confirmationDetail, /Workspaces: local/)
+})
+
+test('desktop-pairing:update confirms authority changes but not metadata-only edits', async () => {
+  const { context, handlers } = createBaseContext()
+  const record = desktopPairingRecord()
+  const confirmations: string[] = []
+  const updates: unknown[] = []
+  context.requestNativeConfirmation = async (options) => {
+    confirmations.push(options.detail || '')
+    return true
+  }
+  context.desktopPairingService = {
+    ...context.desktopPairingService,
+    get: () => record,
+    update: (_pairingId: string, input: unknown) => {
+      updates.push(input)
+      return record
+    },
+  } as never
+
+  registerDesktopPairingHandlers(context)
+
+  await handlers.get('desktop-pairing:update')?.({}, 'pairing-1', { label: 'New label' })
+  assert.equal(confirmations.length, 0)
+
+  await handlers.get('desktop-pairing:update')?.({}, 'pairing-1', {
+    enabled: true,
+    brokerUrl: 'https://new-gateway.example.test',
+    policy: { allowRemotePrompts: false },
+  })
+  assert.equal(confirmations.length, 1)
+  assert.match(confirmations[0], /Change: enable remote connection/)
+  assert.match(confirmations[0], /Change: broker URL/)
+  assert.match(confirmations[0], /allowRemotePrompts: false/)
+  assert.equal(updates.length, 2)
+})
+
+test('desktop-pairing:connect requires confirmation before enabling a disabled pairing', async () => {
+  const { context, handlers } = createBaseContext()
+  const record = desktopPairingRecord({ enabled: false })
+  let confirmed = false
+  let connected = false
+  context.requestNativeConfirmation = async () => {
+    confirmed = true
+    return false
+  }
+  context.desktopPairingService = {
+    ...context.desktopPairingService,
+    get: () => record,
+    connect: async () => {
+      connected = true
+      throw new Error('should not connect')
+    },
+  } as never
+
+  registerDesktopPairingHandlers(context)
+
+  await assert.rejects(
+    () => handlers.get('desktop-pairing:connect')?.({}, 'pairing-1'),
+    /enable cancelled/,
+  )
+  assert.equal(confirmed, true)
+  assert.equal(connected, false)
+})
 
 function installCloudWorkspace(context: IpcHandlerContext, adapter: CloudWorkspaceSessionAdapter) {
   context.workspaceGateway = createWorkspaceGateway({

@@ -29,7 +29,7 @@ import {
   startCloudApp,
 } from '../apps/desktop/src/main/cloud/app.ts'
 import { getAppConfig } from '../apps/desktop/src/main/config-loader.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import { createInMemoryObjectStore, createUnavailableObjectStore } from '../apps/desktop/src/main/cloud/object-store.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
 import { createUnavailableSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'

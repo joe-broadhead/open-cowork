@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { createCloudWebBrowserHarness, waitFor } from './browser-test-harness.ts'
 
 test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
@@ -25,6 +26,29 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
     assert.equal((harness.document.querySelector('#byok-form input[name="providerId"]') as HTMLInputElement).disabled, true)
     assert.equal((harness.document.querySelector('#desktop-token') as HTMLButtonElement).disabled, true)
     assert.equal(harness.lastRequest((request) => request.path === '/api/workspace')?.method, 'GET')
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser exercises every route declared in the route API matrix', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+
+    for (const entry of CLOUD_WEB_ROUTE_API_MATRIX) {
+      const link = harness.document.querySelector(`[data-route-link="${entry.routeId}"]`) as HTMLElement | null
+      const panel = harness.document.querySelector(`[data-route-panel="${entry.routeId}"]`) as HTMLElement | null
+      assert.ok(link, `${entry.routeId} route link exists`)
+      assert.ok(panel, `${entry.routeId} route panel exists`)
+      assert.equal(link.hidden, false, `${entry.routeId} route link is visible to admins`)
+
+      link.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+      await waitFor(() => {
+        assert.equal(harness.document.body.dataset.route, entry.routeId)
+        assert.equal(panel.getAttribute('aria-hidden'), 'false')
+      })
+    }
   } finally {
     harness.close()
   }

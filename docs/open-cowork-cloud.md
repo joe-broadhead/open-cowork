@@ -200,9 +200,9 @@ HTTP/SSE contract as API clients: sessions are loaded from durable projections,
 prompts are written as commands, and session event streams reconnect from the
 last durable event sequence.
 
-The typed `createHttpSseCloudTransportAdapter` wraps that HTTP/SSE contract for
-browser clients that need a `window.coworkApi`-style transport without Electron
-IPC.
+The workspace `@open-cowork/cloud-client` package provides the typed
+`createHttpSseCloudTransportAdapter` for clients built from this repo that need
+HTTP/SSE Cloud transport without Electron IPC.
 
 ## Cloud Web Workbench
 
@@ -470,11 +470,12 @@ point:
 ```bash
 helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-cloud \
+  --set cloud.deploymentTier=public_production \
   --set cloud.profile=full \
   --set cloud.auth.mode=oidc \
   --set cloud.auth.oidcIssuerUrl='https://issuer.example.com' \
   --set cloud.auth.oidcClientId='open-cowork-cloud' \
-  --set cloud.controlPlaneUrl='postgres://...' \
+  --set cloud.existingSecret=open-cowork-cloud-secrets \
   --set cloud.objectStore.kind=s3 \
   --set cloud.objectStore.bucket='open-cowork' \
   --set roles.worker.enabled=true \
@@ -483,7 +484,15 @@ helm upgrade --install open-cowork-cloud helm/open-cowork-cloud \
 
 Use `cloud.existingSecret` in production so database URLs, object-store
 credentials, and envelope keys come from your platform secret manager rather
-than from Helm values.
+than from Helm values. Public production chart installs reject inline
+secret-bearing values such as `cloud.controlPlaneUrl`, cookie secrets, header
+auth secrets, object-store credentials, and OIDC client secrets. The external
+secret must provide the runtime environment keys the chart reads, such as
+`OPEN_COWORK_CLOUD_CONTROL_PLANE_URL`, `OPEN_COWORK_CLOUD_SECRET_KEY_REF`,
+`OPEN_COWORK_CLOUD_COOKIE_SECRET_REF`, and object-store credential keys. Use
+managed refs such as
+`azure-kv://prod-vault/secrets/open-cowork-secret-key/current` for envelope,
+cookie, header, and OIDC client secrets where the runtime supports them.
 
 Install the gateway chart next to cloud when you want channel access:
 
@@ -491,8 +500,7 @@ Install the gateway chart next to cloud when you want channel access:
 helm upgrade --install open-cowork-gateway helm/open-cowork-gateway \
   --set image.repository=ghcr.io/joe-broadhead/open-cowork-gateway \
   --set gateway.cloudBaseUrl='https://cowork.example.com' \
-  --set gateway.serviceToken='replace-with-secret-manager-value' \
-  --set gateway.adminToken='replace-with-operator-token'
+  --set gateway.existingSecret=open-cowork-gateway-secrets
 ```
 
 For production, set `gateway.existingSecret` and inject
@@ -519,9 +527,11 @@ through `gateway.providersJson`, Telegram, Slack, email, generic webhook
 settings, or an existing secret.
 It also fails closed when `replicaCount > 1` without
 `gateway.experimentalDistributedOwnership=true`, when operator auth is missing,
-when public URLs are not HTTPS, when loopback operator bypass is combined with
-public exposure, when placeholder secrets are still present, or when generic
-webhook ingress is configured without a shared secret.
+when public URLs are not HTTPS, when public deployments use inline
+secret-bearing Helm values without `gateway.existingSecret`, when loopback
+operator bypass is combined with public exposure, when placeholder secrets are
+still present, or when generic webhook ingress is configured without a shared
+secret.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and

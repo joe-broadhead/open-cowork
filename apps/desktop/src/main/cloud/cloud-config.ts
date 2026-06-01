@@ -15,6 +15,7 @@ import type {
   CloudRole,
   OpenCoworkConfig,
 } from '../config-types.ts'
+import { isSupportedCloudSecretRef } from './secret-ref-policy.ts'
 
 type Env = Record<string, string | undefined>
 
@@ -93,31 +94,6 @@ function isSafeGitRef(ref: string | null | undefined) {
   if (!trimmed || trimmed.startsWith('-') || trimmed.includes('\0') || trimmed.includes('\\')) return false
   if (trimmed.includes('..') || trimmed.includes('@{') || trimmed.endsWith('.') || trimmed.includes('//')) return false
   return !trimmed.split('/').some((part) => !part || part === '.' || part === '..')
-}
-
-function isSupportedCloudSecretRef(ref: string | null | undefined) {
-  if (!ref) return true
-  const trimmed = ref.trim()
-  if (
-    trimmed.startsWith('env:')
-    || trimmed.startsWith('gcp-sm://')
-    || trimmed.startsWith('aws-sm://')
-    || trimmed.startsWith('azure-kv://')
-  ) {
-    return true
-  }
-  if (trimmed.startsWith('https://')) {
-    try {
-      const url = new URL(trimmed)
-      return !url.username
-        && !url.password
-        && url.hostname.toLowerCase().endsWith('.vault.azure.net')
-        && url.pathname.split('/').filter(Boolean)[0] === 'secrets'
-    } catch {
-      return false
-    }
-  }
-  return false
 }
 
 export function resolveCloudRole(

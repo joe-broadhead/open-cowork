@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { extname, join, relative } from 'node:path'
 
-test('cloud client package is standalone and desktop transport is a compatibility re-export', () => {
+test('cloud client package boundary and desktop transport compatibility re-export stay documented', () => {
   const root = process.cwd()
   const packageJson = JSON.parse(readFileSync(join(root, 'packages/cloud-client/package.json'), 'utf8')) as {
     name?: string
@@ -60,7 +60,8 @@ test('cloud client package is standalone and desktop transport is a compatibilit
   assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service|@opencode-ai\/sdk/)
   assert.equal(desktopTransport.trim(), "export * from '../../../../../packages/cloud-client/src/index.ts'")
   for (const document of [readme, docs]) {
-    assert.match(document, /supported public package|supported typed client/i)
+    assert.match(document, /supported typed .*client|workspace\/source\s+package/i)
+    assert.match(document, /not an independently versioned public npm SDK|standalone SDK publishing/i)
     assert.match(document, /pre-1\.0|SemVer|semver/i)
     assert.match(document, /requestTimeoutMs/i)
     assert.match(document, /signal/i)

@@ -70,7 +70,7 @@ The repository includes:
   - typecheck
   - perf gate
   - production dependency audit at `moderate` severity
-  - full dependency audit at `critical` severity
+  - full dependency audit at `high` severity
   - docs build through `pnpm docs:build`
 
 - `docs.yml`
@@ -80,6 +80,8 @@ The repository includes:
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
+  - verifies the tag signature, allowed release actor, and required green CI
+    checks before publishing
   - reruns Cloud Web, Desktop/Web/Gateway continuation, Docker/Compose,
     Helm, deployment, launch, private-beta, and ops readiness gates before
     publishing a tag
@@ -94,6 +96,8 @@ The repository includes:
   - publishes `latest-mac.yml` only for signed/notarized macOS release
     artifacts, so unsigned preview builds stay on the manual update path
   - attaches GitHub build provenance attestation metadata
+  - publishes artifacts and OCI images through the protected
+    `release-publish` environment
 
 - `monthly-maintenance.yml`
   - runs on the first day of each month

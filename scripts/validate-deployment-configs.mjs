@@ -190,8 +190,11 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'web role must set roles.web.autoProcessCommands=false')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires provider-backed object storage')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.auth.signupMode')
-  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production header auth requires cloud.auth.headerSecret')
-  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'managed envelope key refs')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production header auth requires cloud.auth.headerSecretRef')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects inline secret-bearing Helm values')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires durable Postgres control plane credentials via cloud.existingSecret')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.secretKeyRef or cloud.existingSecret')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production web role requires cloud.cookieSecretRef or cloud.existingSecret')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /livez')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'path: /readyz')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'roles.worker.replicas > 1 requires cloud.checkpoints.enabled=true')
@@ -200,6 +203,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'topologySpreadConstraints')
   assertIncludes('helm/open-cowork-cloud/templates/pdb.yaml', 'PodDisruptionBudget')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.serviceToken or gateway.existingSecret is required')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'public Gateway deployments reject inline secret-bearing Helm values')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.webhook.sharedSecret or gateway.existingSecret is required')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints')
@@ -433,7 +437,7 @@ function validateHelm() {
       'helm',
       [
         'template',
-        'unsafe-public-cloud-inline-web-worker',
+        'unsafe-public-cloud-inline-secrets',
         cloudChart,
         '--set',
         'image.tag=ci',
@@ -452,13 +456,40 @@ function validateHelm() {
         '--set',
         'roles.scheduler.enabled=true',
         '--set',
-        'roles.web.autoProcessCommands=true',
-        '--set',
         'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
         '--set',
-        'cloud.secretKeyRef=env:OPEN_COWORK_CLOUD_SECRET_KEY',
+        'cloud.objectStore.kind=s3',
         '--set',
-        'cloud.cookieSecret=ci-cookie-secret-with-enough-entropy-123456789',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production rejects inline secret-bearing Helm values'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-inline-web-worker',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'roles.web.autoProcessCommands=true',
+        '--set',
+        'cloud.existingSecret=open-cowork-cloud-secrets',
         '--set',
         'cloud.objectStore.kind=s3',
         '--set',
@@ -608,16 +639,31 @@ function validateHelm() {
       'helm',
       [
         'template',
-        'unsafe-gateway-http-public-url',
+        'unsafe-public-gateway-inline-secrets',
         gatewayChart,
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.publicUrl=https://gateway.example.com',
         '--set',
         'gateway.serviceToken=ci-gateway-token',
         '--set',
         'gateway.adminToken=ci-gateway-admin-token',
         '--set',
         'gateway.telegram.botToken=ci-telegram-token',
+      ],
+      'public Gateway deployments reject inline secret-bearing Helm values'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-gateway-http-public-url',
+        gatewayChart,
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.existingSecret=open-cowork-gateway-secrets',
         '--set',
         'gateway.publicUrl=http://gateway.example.com',
       ],
@@ -632,9 +678,7 @@ function validateHelm() {
         '--set',
         'gateway.cloudBaseUrl=https://cloud.example.com',
         '--set',
-        'gateway.serviceToken=ci-gateway-token',
-        '--set',
-        'gateway.telegram.botToken=ci-telegram-token',
+        'gateway.existingSecret=open-cowork-gateway-secrets',
         '--set',
         'gateway.allowLoopbackOperatorBypass=true',
         '--set',

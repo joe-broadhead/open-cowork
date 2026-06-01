@@ -6,7 +6,7 @@ import type {
   ProjectionControlPlaneStore,
   SessionControlPlaneStore,
 } from '../apps/desktop/src/main/cloud/control-plane-store-domains.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import { CloudSessionEventBus, CloudWorkspaceEventBus } from '../apps/desktop/src/main/cloud/session-event-bus.ts'
 import { CloudSessionProjectionService } from '../apps/desktop/src/main/cloud/session-projection-service.ts'
 

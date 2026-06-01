@@ -135,6 +135,38 @@ test('cloud secret refs resolve Azure Key Vault payloads', async () => {
   assert.equal(requests[0]?.init?.headers?.authorization, 'Bearer azure-token')
 })
 
+test('cloud secret refs only send Azure tokens to Azure Key Vault secret URLs', async () => {
+  let tokenRequested = false
+  const fetcher: CloudSecretStoreHttpClient = async () => {
+    throw new Error('fetch should not be called for invalid Azure refs')
+  }
+
+  for (const ref of [
+    'https://attacker.example.test/secrets/cloud-secret',
+    'https://vault-name.vault.azure.net.evil.example/secrets/cloud-secret',
+    'https://token@vault-name.vault.azure.net/secrets/cloud-secret',
+    'https://vault-name.vault.azure.net/keys/cloud-secret',
+    'https://vault-name.vault.azure.net/secrets/cloud-secret?redirect=https://attacker.example.test',
+    'azure-kv://token@vault-name/secrets/cloud-secret',
+    'azure-kv://vault-name/secrets/cloud-secret?redirect=https://attacker.example.test',
+    'azure-kv://vault-name/secrets/cloud-secret#fragment',
+  ]) {
+    await assert.rejects(
+      () => resolveCloudSecretRef(ref, {
+        fetch: fetcher,
+        azureAccessTokenProvider: () => {
+          tokenRequested = true
+          return 'azure-token'
+        },
+      }),
+      /Azure Key Vault/,
+      ref,
+    )
+  }
+
+  assert.equal(tokenRequested, false)
+})
+
 test('cloud secret refs resolve AWS Secrets Manager payloads with signed requests', async () => {
   const requests: Array<{ url: string, init?: Parameters<CloudSecretStoreHttpClient>[1] }> = []
   const fetcher: CloudSecretStoreHttpClient = async (url, init) => {
