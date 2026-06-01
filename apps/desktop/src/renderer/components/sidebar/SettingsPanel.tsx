@@ -21,8 +21,9 @@ import { LanguagePicker } from './SettingsLanguagePicker'
 import { ModelsPanel } from './SettingsModelsPanel'
 import { PermissionsPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
+import { SettingsPairingPanel } from './SettingsPairingPanel'
 
-type SettingsTab = 'appearance' | 'models' | 'permissions' | 'workflows' | 'storage'
+type SettingsTab = 'appearance' | 'models' | 'permissions' | 'workflows' | 'storage' | 'pairing'
 
 function describeSettingsPanelError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -182,6 +183,7 @@ export function SettingsPanel({
         { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
         ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
         { id: 'workflows' as const, label: t('settings.tab.workflows', 'Workflows'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
+        ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
       ],
     [activeWorkspaceIsLocal],
@@ -368,6 +370,9 @@ export function SettingsPanel({
                 lastCleanup={lastCleanup}
                 onCleanup={runCleanup}
               />
+            )}
+            {tab === 'pairing' && (
+              <SettingsPairingPanel />
             )}
           </div>
 

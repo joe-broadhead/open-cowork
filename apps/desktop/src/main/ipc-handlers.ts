@@ -16,7 +16,11 @@ import { getAppConfig } from './config-loader.ts'
 import { log } from './logger.ts'
 import { getMcpStatus } from './events.ts'
 import { shortSessionId } from './log-sanitizer.ts'
-import { dispatchRuntimeSessionEvent, setSessionHistoryRefreshHandler } from './session-event-dispatcher.ts'
+import {
+  addRuntimeSessionEventObserver,
+  dispatchRuntimeSessionEvent,
+  setSessionHistoryRefreshHandler,
+} from './session-event-dispatcher.ts'
 import { getSessionRecord, listSessionRecords } from './session-registry.ts'
 import { syncSessionView } from './session-history-loader.ts'
 import { listRuntimeToolsForResolvedContext } from './runtime-tools.ts'
@@ -33,6 +37,7 @@ import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
 import { registerThreadHandlers } from './ipc/thread-handlers.ts'
 import { registerWorkspaceHandlers } from './ipc/workspace-handlers.ts'
+import { registerDesktopPairingHandlers } from './ipc/desktop-pairing-handlers.ts'
 import type { IpcHandlerContext } from './ipc/context.ts'
 import { objectArg, registerIpcInvoke } from './ipc/schema.ts'
 import { validateDestructiveConfirmationRequest } from './ipc/object-validators.ts'
@@ -52,6 +57,8 @@ import { getThreadIndexService } from './thread-index/thread-index-service.ts'
 import { showNativeConfirmation, type NativeConfirmationOptions } from './native-confirmation.ts'
 import { sdkErrorMessage } from './sdk-error.ts'
 import { createWorkspaceGateway } from './workspace-gateway.ts'
+import { createDesktopPairingService } from './desktop-pairing/service.ts'
+import { createDesktopPairingLocalExecutor } from './desktop-pairing/local-executor.ts'
 
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
@@ -310,9 +317,29 @@ export function setupIpcHandlers(
     capabilityToolMethodCache,
   })
 
-  const context: IpcHandlerContext = {
+  let context!: IpcHandlerContext
+  let desktopPairingExecutor: ReturnType<typeof createDesktopPairingLocalExecutor> | null = null
+  const getDesktopPairingExecutor = () => {
+    desktopPairingExecutor ||= createDesktopPairingLocalExecutor(context)
+    return desktopPairingExecutor
+  }
+  const desktopPairingService = createDesktopPairingService({
+    executor: {
+      createSession: async (...args) => getDesktopPairingExecutor().createSession(...args),
+      prompt: async (...args) => getDesktopPairingExecutor().prompt(...args),
+      abort: async (...args) => getDesktopPairingExecutor().abort(...args),
+      respondPermission: async (...args) => getDesktopPairingExecutor().respondPermission(...args),
+      replyQuestion: async (...args) => getDesktopPairingExecutor().replyQuestion(...args),
+      rejectQuestion: async (...args) => getDesktopPairingExecutor().rejectQuestion(...args),
+      listSessions: async (...args) => getDesktopPairingExecutor().listSessions(...args),
+    },
+  })
+  addRuntimeSessionEventObserver((event) => desktopPairingService.observeRuntimeEvent(event))
+
+  context = {
     ipcMain: instrumentedIpcMain,
     workspaceGateway,
+    desktopPairingService,
     getMainWindow,
     normalizeDirectory,
     ensureSessionRecord,
@@ -352,6 +379,7 @@ export function setupIpcHandlers(
   getThreadIndexService().reconcileThreadIndexFromRegistry()
 
   registerWorkspaceHandlers(context)
+  registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)

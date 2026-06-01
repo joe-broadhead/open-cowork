@@ -80,6 +80,7 @@ const pendingViewFlushByWindowId = new Map<number, PendingViewFlush>()
 const pendingPatchFlushByWindowId = new Map<number, PendingPatchFlush>()
 const patchViewRecoverySessionIdsByWindowId = new Map<number, Set<string>>()
 let sessionHistoryRefreshHandler: ((sessionId: string) => Promise<void>) | null = null
+const runtimeSessionEventObservers = new Set<(event: RuntimeSessionEvent) => void>()
 const historyRefreshQueue = new Map<string, {
   win: BrowserWindow
   queued: boolean
@@ -192,6 +193,11 @@ export function setSessionHistoryRefreshHandler(
   handler: ((sessionId: string) => Promise<void>) | null,
 ) {
   sessionHistoryRefreshHandler = handler
+}
+
+export function addRuntimeSessionEventObserver(observer: (event: RuntimeSessionEvent) => void) {
+  runtimeSessionEventObservers.add(observer)
+  return () => runtimeSessionEventObservers.delete(observer)
 }
 
 export function publishNotification(
@@ -537,6 +543,13 @@ export function dispatchRuntimeSessionEvent(
 ) {
   const eventType = getEventType(event)
   sessionEngine.applyStreamEvent(event)
+  for (const observer of runtimeSessionEventObservers) {
+    try {
+      observer(event)
+    } catch (err) {
+      log('events', `Runtime session observer failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
   if (event.sessionId) {
     try {
       getThreadIndexService().scheduleThreadMetadataRefresh(event.sessionId)

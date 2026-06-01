@@ -161,6 +161,8 @@ Paired Desktop must:
 
 - connect outbound from Desktop
 - use revocable pairing credentials and workspace allowlists
+- claim remote commands through leased broker records and acknowledge or fail
+  each command with the lease token
 - redact local paths, local MCP details, and artifact bodies by default
 - require explicit policy for remote approvals/questions
 - audit remote prompts, decisions, and revocation locally and, when connected,
@@ -168,6 +170,13 @@ Paired Desktop must:
 
 Paired Desktop must not open a public Desktop or OpenCode port, and pairing is
 not local-to-cloud sync.
+
+The v1 Desktop implementation exposes a local Settings panel plus a typed
+outbound broker contract for `create_session`, `prompt`, `abort`,
+`permission.respond`, `question.reply`, `question.reject`, `status`, and
+`revoke_pairing`. Cloud edge registration and Gateway-managed broker routes are
+covered by the later hybrid edge issue; the Desktop connector already fails
+closed when no broker URL or credential is configured.
 
 ## Active Workspace And Routing
 
