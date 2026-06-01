@@ -48,11 +48,13 @@ export type CloudRuntimeAdapter = {
     parts: CloudRuntimePromptPart[]
     agent: string
     context?: CloudRuntimeExecutionContext | null
+    messageId?: string
+    signal?: AbortSignal
   }): Promise<CloudPromptResult | void>
-  abortSession(input: { sessionId: string, context?: CloudRuntimeExecutionContext | null }): Promise<void>
-  replyToQuestion?(input: { requestId: string, answers: unknown[], context?: CloudRuntimeExecutionContext | null }): Promise<void>
-  rejectQuestion?(input: { requestId: string, context?: CloudRuntimeExecutionContext | null }): Promise<void>
-  respondToPermission?(input: { permissionId: string, allowed: boolean, context?: CloudRuntimeExecutionContext | null }): Promise<void>
+  abortSession(input: { sessionId: string, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
+  replyToQuestion?(input: { requestId: string, answers: unknown[], context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
+  rejectQuestion?(input: { requestId: string, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
+  respondToPermission?(input: { permissionId: string, allowed: boolean, context?: CloudRuntimeExecutionContext | null, signal?: AbortSignal }): Promise<void>
   subscribeEvents?: (
     listener: CloudRuntimeEventListener,
     options?: CloudRuntimeSubscribeOptions,
@@ -67,8 +69,9 @@ type SdkLikeClient = {
       sessionID: string
       parts: CloudRuntimePromptPart[]
       agent: string
-    }, options?: { throwOnError?: boolean }): Promise<unknown>
-    abort(input: { sessionID: string }): Promise<unknown>
+      messageID?: string
+    }, options?: { throwOnError?: boolean, signal?: AbortSignal }): Promise<unknown>
+    abort(input: { sessionID: string }, options?: { throwOnError?: boolean, signal?: AbortSignal }): Promise<unknown>
   }
   question?: {
     reply?: unknown
@@ -103,42 +106,43 @@ export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntim
         sessionID: input.sessionId,
         parts: input.parts,
         agent: input.agent,
-      }, { throwOnError: true })
+        ...(input.messageId ? { messageID: input.messageId } : {}),
+      }, { throwOnError: true, signal: input.signal })
     },
     async abortSession(input) {
-      await client.session.abort({ sessionID: input.sessionId })
+      await client.session.abort({ sessionID: input.sessionId }, { throwOnError: true, signal: input.signal })
     },
     async replyToQuestion(input) {
       if (typeof client.question?.reply !== 'function') throw new Error('OpenCode question replies are not available.')
       const reply = client.question.reply as (
         request: { requestID: string, answers: unknown[] },
-        options?: { throwOnError?: boolean },
+        options?: { throwOnError?: boolean, signal?: AbortSignal },
       ) => Promise<unknown>
       await reply.call(client.question, {
         requestID: input.requestId,
         answers: input.answers,
-      }, { throwOnError: true })
+      }, { throwOnError: true, signal: input.signal })
     },
     async rejectQuestion(input) {
       if (typeof client.question?.reject !== 'function') throw new Error('OpenCode question rejection is not available.')
       const reject = client.question.reject as (
         request: { requestID: string },
-        options?: { throwOnError?: boolean },
+        options?: { throwOnError?: boolean, signal?: AbortSignal },
       ) => Promise<unknown>
       await reject.call(client.question, {
         requestID: input.requestId,
-      }, { throwOnError: true })
+      }, { throwOnError: true, signal: input.signal })
     },
     async respondToPermission(input) {
       if (typeof client.permission?.reply !== 'function') throw new Error('OpenCode permission responses are not available.')
       const reply = client.permission.reply as (
         request: { requestID: string, reply: 'once' | 'reject' },
-        options?: { throwOnError?: boolean },
+        options?: { throwOnError?: boolean, signal?: AbortSignal },
       ) => Promise<unknown>
       await reply.call(client.permission, {
         requestID: input.permissionId,
         reply: input.allowed ? 'once' : 'reject',
-      }, { throwOnError: true })
+      }, { throwOnError: true, signal: input.signal })
     },
   }
 }
