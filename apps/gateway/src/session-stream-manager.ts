@@ -42,6 +42,7 @@ type StreamState = {
   renderFailures: Map<number, number>
   queue: Promise<void>
   closed: boolean
+  generation: number
   retryTimer?: ReturnType<typeof setTimeout>
 }
 
@@ -60,6 +61,7 @@ export function createGatewaySessionStreamManager(
       if (existing) {
         existing.binding = input.binding
         existing.provider = input.provider
+        existing.lastEventSequence = Math.max(existing.lastEventSequence, input.binding.lastEventSequence)
         existing.lastWorkspaceSequence = Math.max(existing.lastWorkspaceSequence, input.binding.lastWorkspaceSequence)
         existing.lastChatMessageId = input.binding.lastChatMessageId ?? existing.lastChatMessageId
         return
@@ -76,6 +78,7 @@ export function createGatewaySessionStreamManager(
         renderFailures: new Map(),
         queue: Promise.resolve(),
         closed: false,
+        generation: 0,
       }
       streams.set(input.binding.bindingId, state)
       subscribe(state)
@@ -98,20 +101,27 @@ export function createGatewaySessionStreamManager(
   function subscribe(state: StreamState) {
     if (state.closed) return
     state.subscription?.close()
+    state.generation += 1
+    const generation = state.generation
     state.subscription = cloud.subscribeSessionEvents({
       sessionId: state.binding.sessionId,
       afterSequence: state.lastEventSequence,
       onEvent: (event) => {
-        state.queue = state.queue.then(() => handleEvent(state, event))
+        state.queue = state.queue.then(() => handleEvent(state, event, generation))
       },
       onError: () => {
         metrics.errors += 1
         metrics.streamReconnects += 1
-        state.subscription?.close()
-        state.subscription = null
-        scheduleRetry(state)
+        reconnect(state)
       },
     })
+  }
+
+  function reconnect(state: StreamState) {
+    state.generation += 1
+    state.subscription?.close()
+    state.subscription = null
+    scheduleRetry(state)
   }
 
   function scheduleRetry(state: StreamState) {
@@ -123,13 +133,16 @@ export function createGatewaySessionStreamManager(
     state.retryTimer.unref?.()
   }
 
-  async function handleEvent(state: StreamState, event: CloudTransportSessionEvent) {
+  async function handleEvent(state: StreamState, event: CloudTransportSessionEvent, generation: number) {
     if (state.closed) return
+    if (generation !== state.generation) return
     if (event.type === 'snapshot.required') {
       try {
         await hydrateSnapshot(state, event)
       } catch {
         metrics.errors += 1
+        metrics.streamReconnects += 1
+        reconnect(state)
       }
       return
     }
@@ -149,7 +162,7 @@ export function createGatewaySessionStreamManager(
         state: state.renderState,
       })
       const lastChatMessageId = rendered.lastChatMessageId ?? state.lastChatMessageId
-      const updated = await cloud.updateCursor({
+      const updated = await persistCursor(state, {
         bindingId: state.binding.bindingId,
         lastEventSequence: event.sequence,
         lastWorkspaceSequence: state.lastWorkspaceSequence,
@@ -166,10 +179,9 @@ export function createGatewaySessionStreamManager(
       state.renderFailures.set(event.sequence, attempts)
       const failure = classifyProviderFailure(error)
       if (failure.transient && attempts < maxRenderAttempts) {
+        metrics.sessionRenderRetries += 1
         metrics.streamReconnects += 1
-        state.subscription?.close()
-        state.subscription = null
-        scheduleRetry(state)
+        reconnect(state)
         return
       }
       try {
@@ -177,16 +189,15 @@ export function createGatewaySessionStreamManager(
       } catch {
         metrics.errors += 1
         metrics.streamReconnects += 1
-        state.subscription?.close()
-        state.subscription = null
-        scheduleRetry(state)
+        reconnect(state)
       }
     }
   }
 
   async function skipFailedEvent(state: StreamState, event: CloudTransportSessionEvent) {
     metrics.droppedSessionEvents += 1
-    const updated = await cloud.updateCursor({
+    metrics.sessionRenderDeadLetters += 1
+    const updated = await persistCursor(state, {
       bindingId: state.binding.bindingId,
       lastEventSequence: event.sequence,
       lastWorkspaceSequence: state.lastWorkspaceSequence,
@@ -208,7 +219,7 @@ export function createGatewaySessionStreamManager(
       event.sequence,
     )
     if (latestSequence <= state.lastEventSequence) return
-    const updated = await cloud.updateCursor({
+    const updated = await persistCursor(state, {
       bindingId: state.binding.bindingId,
       lastEventSequence: latestSequence,
       lastWorkspaceSequence: state.lastWorkspaceSequence,
@@ -218,6 +229,20 @@ export function createGatewaySessionStreamManager(
     state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
     state.lastChatMessageId = updated?.lastChatMessageId ?? state.lastChatMessageId
     if (updated) state.binding = updated
+  }
+
+  async function persistCursor(state: StreamState, input: {
+    bindingId: string
+    lastEventSequence: number
+    lastWorkspaceSequence: number
+    lastChatMessageId?: string | null
+  }) {
+    const updated = await cloud.updateCursor(input)
+    if (!updated) {
+      metrics.cursorPersistenceFailures += 1
+      throw new Error(`Gateway cursor persistence failed for channel binding ${state.binding.bindingId}.`)
+    }
+    return updated
   }
 
   return manager

@@ -23,26 +23,56 @@
 {{- if and .Values.ingress.enabled (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.publicUrl is required when gateway ingress is enabled." }}
 {{- end }}
+{{- if and .Values.gateway.publicUrl (not (hasPrefix "https://" .Values.gateway.publicUrl)) }}
+{{- fail "gateway.publicUrl must use HTTPS for public or proxied Gateway deployments." }}
+{{- end }}
+{{- if and .Values.gateway.publicUrl (or (contains "localhost" .Values.gateway.publicUrl) (contains "127.0.0.1" .Values.gateway.publicUrl) (contains "[::1]" .Values.gateway.publicUrl)) }}
+{{- fail "gateway.publicUrl must be publicly reachable and cannot be loopback." }}
+{{- end }}
+{{- if and (or .Values.ingress.enabled (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort")) .Values.gateway.allowLoopbackOperatorBypass }}
+{{- fail "gateway.allowLoopbackOperatorBypass=true is not allowed with ingress, LoadBalancer, or NodePort exposure." }}
+{{- end }}
 {{- if and (not $sharedConfig) (not .Values.gateway.adminToken) (not .Values.gateway.existingSecret) (not .Values.gateway.allowLoopbackOperatorBypass) }}
 {{- fail "gateway.adminToken or gateway.existingSecret is required for gateway operator endpoints; gateway.allowLoopbackOperatorBypass=true is local loopback-only." }}
+{{- end }}
+{{- if and .Values.gateway.adminToken (or (hasPrefix "replace-with" .Values.gateway.adminToken) (hasPrefix "change-me" .Values.gateway.adminToken) (hasPrefix "example-" .Values.gateway.adminToken) (hasPrefix "demo-" .Values.gateway.adminToken)) }}
+{{- fail "gateway.adminToken is a placeholder; use a generated operator token or gateway.existingSecret." }}
 {{- end }}
 {{- if and .Values.gateway.allowLoopbackOperatorBypass (ne .Values.gateway.host "127.0.0.1") (ne .Values.gateway.host "localhost") }}
 {{- fail "gateway.allowLoopbackOperatorBypass=true requires gateway.host=127.0.0.1 or localhost." }}
 {{- end }}
+{{- if and .Values.gateway.serviceToken (or (hasPrefix "replace-with" .Values.gateway.serviceToken) (hasPrefix "change-me" .Values.gateway.serviceToken) (hasPrefix "example-" .Values.gateway.serviceToken) (hasPrefix "demo-" .Values.gateway.serviceToken)) }}
+{{- fail "gateway.serviceToken is a placeholder; use a generated gateway-scoped token or gateway.existingSecret." }}
+{{- end }}
 {{- if and .Values.gateway.webhook.deliveryUrl (not .Values.gateway.webhook.sharedSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.webhook.sharedSecret or gateway.existingSecret is required when the generic webhook provider is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.webhook.sharedSecret (or (hasPrefix "replace-with" .Values.gateway.webhook.sharedSecret) (hasPrefix "change-me" .Values.gateway.webhook.sharedSecret) (hasPrefix "example-" .Values.gateway.webhook.sharedSecret) (hasPrefix "demo-" .Values.gateway.webhook.sharedSecret)) }}
+{{- fail "gateway.webhook.sharedSecret is a placeholder; use a generated shared secret or gateway.existingSecret." }}
 {{- end }}
 {{- if and (eq .Values.gateway.telegram.mode "webhook") (not .Values.gateway.telegram.webhookSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.telegram.webhookSecret or gateway.existingSecret is required when Telegram webhook mode is enabled." }}
 {{- end }}
+{{- if and .Values.gateway.telegram.webhookSecret (or (hasPrefix "replace-with" .Values.gateway.telegram.webhookSecret) (hasPrefix "change-me" .Values.gateway.telegram.webhookSecret) (hasPrefix "example-" .Values.gateway.telegram.webhookSecret) (hasPrefix "demo-" .Values.gateway.telegram.webhookSecret)) }}
+{{- fail "gateway.telegram.webhookSecret is a placeholder; use a generated webhook secret or gateway.existingSecret." }}
+{{- end }}
 {{- if and (eq .Values.gateway.telegram.mode "webhook") (not .Values.gateway.telegram.publicUrl) (not .Values.gateway.publicUrl) }}
 {{- fail "gateway.telegram.publicUrl or gateway.publicUrl is required when Telegram webhook mode is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.telegram.publicUrl (not (hasPrefix "https://" .Values.gateway.telegram.publicUrl)) }}
+{{- fail "gateway.telegram.publicUrl must use HTTPS when Telegram webhook mode is enabled." }}
 {{- end }}
 {{- if and .Values.gateway.slack.botToken (not .Values.gateway.slack.signingSecret) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.slack.signingSecret or gateway.existingSecret is required when the Slack provider is enabled." }}
 {{- end }}
+{{- if and .Values.gateway.slack.signingSecret (or (hasPrefix "replace-with" .Values.gateway.slack.signingSecret) (hasPrefix "change-me" .Values.gateway.slack.signingSecret) (hasPrefix "example-" .Values.gateway.slack.signingSecret) (hasPrefix "demo-" .Values.gateway.slack.signingSecret)) }}
+{{- fail "gateway.slack.signingSecret is a placeholder; use a generated signing secret or gateway.existingSecret." }}
+{{- end }}
 {{- if and .Values.gateway.email.inboundSecret (or (not .Values.gateway.email.from) (not .Values.gateway.email.smtpHost)) (not .Values.gateway.existingSecret) }}
 {{- fail "gateway.email.from and gateway.email.smtpHost are required when the email provider is enabled." }}
+{{- end }}
+{{- if and .Values.gateway.email.inboundSecret (or (hasPrefix "replace-with" .Values.gateway.email.inboundSecret) (hasPrefix "change-me" .Values.gateway.email.inboundSecret) (hasPrefix "example-" .Values.gateway.email.inboundSecret) (hasPrefix "demo-" .Values.gateway.email.inboundSecret)) }}
+{{- fail "gateway.email.inboundSecret is a placeholder; use a generated inbound secret or gateway.existingSecret." }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -77,6 +107,11 @@ spec:
                 name: {{ include "open-cowork-gateway.fullname" . }}-config
             - secretRef:
                 name: {{ include "open-cowork-gateway.secretName" . }}
+          env:
+            - name: OPEN_COWORK_GATEWAY_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           ports:
             - name: http
               containerPort: {{ .Values.gateway.port }}

@@ -426,6 +426,54 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       serviceToken: 'service-token',
     },
     server: {
+      publicBaseUrl: 'not a url',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /PUBLIC_URL.*valid HTTPS URL/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      publicBaseUrl: 'http://gateway.example.test',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /PUBLIC_URL.*HTTPS/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      publicBaseUrl: 'https://gateway.example.test',
+      allowLoopbackOperatorBypass: true,
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }), /ALLOW_LOOPBACK_OPERATOR_BYPASS/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
       host: '0.0.0.0',
       adminToken: 'admin-token',
     },
@@ -527,6 +575,23 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
   assert.throws(() => resolveGatewayConfig({
     cloud: {
       baseUrl: 'https://cloud.example.test',
+      serviceToken: 'replace-with-gateway-service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: { botToken: 'telegram-token' },
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'replace-with-gateway-service-token',
+  }), /cloud service token is still a placeholder/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
       serviceToken: 'service-token',
     },
     server: {
@@ -538,6 +603,22 @@ test('gateway config rejects unsafe public admin, fake, and webhook ingress defa
       settings: { deliveryUrl: 'https://bridge.example.test/out' },
     }],
   }), /sharedSecret/)
+
+  assert.throws(() => resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'webhook',
+      channelBindingId: 'webhook',
+      credentials: { sharedSecret: 'replace-with-webhook-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/out' },
+    }],
+  }), /credential sharedSecret is still a placeholder/)
 
   assert.throws(() => resolveGatewayConfig({
     cloud: {
@@ -593,6 +674,30 @@ test('gateway config inherits public URL for Telegram webhook mode', () => {
     OPEN_COWORK_GATEWAY_TELEGRAM_WEBHOOK_SECRET: 'telegram-webhook-secret',
   })
   assert.equal(providerSpecific.providers[0]?.settings.publicBaseUrl, 'https://telegram-gateway.example.test')
+
+  const rawConfigFallback = resolveGatewayConfig({
+    server: {
+      publicBaseUrl: 'https://gateway-from-config.example.test',
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'telegram',
+      channelBindingId: 'telegram',
+      credentials: {
+        botToken: 'telegram-token',
+        webhookSecret: 'telegram-webhook-secret',
+      },
+      settings: {
+        mode: 'webhook',
+      },
+    }],
+  }, {
+    ...operatorEnv,
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PUBLIC_URL: '',
+  })
+  assert.equal(rawConfigFallback.providers[0]?.settings.publicBaseUrl, 'https://gateway-from-config.example.test')
 })
 
 test('gateway config fails closed for unsafe Telegram webhook setup', () => {
@@ -630,6 +735,7 @@ test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI prov
     ...operatorEnv,
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
     OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES: '2097152',
     OPEN_COWORK_GATEWAY_TELEGRAM_BOT_TOKEN: 'telegram-token',
     OPEN_COWORK_GATEWAY_SLACK_BOT_TOKEN: 'slack-token',
     OPEN_COWORK_GATEWAY_SLACK_SIGNING_SECRET: 'slack-signing-secret',
@@ -692,9 +798,62 @@ test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI prov
   }])
   assert.equal(config.providers.find((provider) => provider.kind === 'slack')?.externalWorkspaceId, 'T123')
   assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.smtpHost, 'smtp.example.test')
-  assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.maxAttachmentBytes, '2097152')
-  assert.equal(config.providers.find((provider) => provider.kind === 'webhook')?.settings.maxAttachmentBytes, '2097152')
+  assert.equal(config.providers.find((provider) => provider.kind === 'email')?.settings.maxAttachmentBytes, 2097152)
+  assert.equal(config.providers.find((provider) => provider.kind === 'webhook')?.settings.maxAttachmentBytes, 2097152)
   assert.equal(config.providers.find((provider) => provider.kind === 'discord')?.credentials.sharedSecret, 'discord-secret')
+})
+
+test('gateway config keeps request-body backed provider file limits within daemon body limits', () => {
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+      maxRequestBodyBytes: 2048,
+    },
+    providers: [{
+      kind: 'email',
+      channelBindingId: 'email',
+      credentials: {
+        inboundSecret: 'email-inbound-secret',
+      },
+      settings: {
+        from: 'agent@example.test',
+        smtpHost: 'smtp.example.test',
+      },
+    }],
+  }, operatorEnv)
+  assert.equal(config.server.maxRequestBodyBytes, 2048)
+  assert.equal(config.providers[0]?.settings.maxAttachmentBytes, 2048)
+
+  assert.throws(() => resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+      maxRequestBodyBytes: 2048,
+    },
+    providers: [{
+      kind: 'webhook',
+      channelBindingId: 'webhook',
+      credentials: { sharedSecret: 'webhook-secret' },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/out',
+        maxAttachmentBytes: 4096,
+      },
+    }],
+  }, operatorEnv), /maxAttachmentBytes cannot exceed server\.maxRequestBodyBytes/)
+})
+
+test('gateway config normalizes instance ids for delivery ownership', () => {
+  const config = resolveGatewayConfig({
+    instanceId: 'Gateway Pod 01/Blue',
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, operatorEnv)
+
+  assert.equal(config.instanceId, 'gateway-pod-01-blue')
 })
 
 test('gateway config supports multiple instance ids for one provider kind', () => {

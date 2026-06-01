@@ -256,7 +256,7 @@ function providerStatus(runtime: GatewayRuntime) {
 }
 
 function isAdminRequest(config: GatewayConfig, req: IncomingMessage) {
-  if (!config.server.adminToken) return config.server.allowLoopbackOperatorBypass && isLoopbackHost(config.server.host)
+  if (!config.server.adminToken) return config.server.allowLoopbackOperatorBypass && isLoopbackOperatorBypassRequest(config, req)
   const bearer = readBearer(req.headers.authorization)
   const header = firstHeader(req.headers['x-open-cowork-gateway-admin-token'])
   return constantTimeStringEqual(bearer || header, config.server.adminToken)
@@ -280,6 +280,35 @@ function isLoopbackHost(hostname: string) {
     || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
 }
 
+function isLoopbackOperatorBypassRequest(config: GatewayConfig, req: IncomingMessage) {
+  if (!isLoopbackHost(config.server.host)) return false
+  if (config.server.publicBaseUrl) return false
+  if (hasForwardedHeaders(req)) return false
+  const remoteAddress = req.socket.remoteAddress || ''
+  if (remoteAddress && !isLoopbackHost(remoteAddress)) return false
+  const hostHeader = hostHeaderHostname(firstHeader(req.headers.host)) || config.server.host
+  return isLoopbackHost(hostHeader)
+}
+
+function hostHeaderHostname(value: string) {
+  const host = value.trim()
+  if (!host) return ''
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']')
+    return end > 0 ? host.slice(0, end + 1) : host
+  }
+  return host.split(':')[0] || ''
+}
+
+function hasForwardedHeaders(req: IncomingMessage) {
+  return Boolean(
+    req.headers.forwarded
+      || req.headers['x-forwarded-for']
+      || req.headers['x-forwarded-host']
+      || req.headers['x-forwarded-proto'],
+  )
+}
+
 function constantTimeStringEqual(left: string | null | undefined, right: string | null | undefined) {
   if (!left || !right) return false
   const leftBytes = Buffer.from(left)
@@ -291,7 +320,7 @@ async function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024) {
   let raw = ''
   for await (const chunk of req) {
     raw += chunk
-    if (Buffer.byteLength(raw) > maxBytes) throw new Error('Request body is too large.')
+    if (Buffer.byteLength(raw) > maxBytes) throw new GatewayHttpError(413, 'Gateway request body exceeds the configured limit.')
   }
   return { raw }
 }

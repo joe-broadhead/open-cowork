@@ -458,9 +458,11 @@ secrets, long-polling or webhook connections, and a different scaling profile.
 It does not import the OpenCode SDK and does not own control-plane Postgres
 state.
 Gateway stream state is process-local today, so run one replica per
-channel-binding shard. The Helm chart fails closed for `replicaCount > 1`
+channel-binding shard. For production, deploy one Gateway release per shard
+with `replicaCount: 1`. The Helm chart fails closed for `replicaCount > 1`
 unless `gateway.experimentalDistributedOwnership=true` is set explicitly for an
-experimental deployment.
+experimental deployment; that flag is a lab escape hatch, not a production
+distributed-ownership implementation.
 
 For Kubernetes, use the provider-neutral Helm chart as the scalable starting
 point:
@@ -517,7 +519,9 @@ through `gateway.providersJson`, Telegram, Slack, email, generic webhook
 settings, or an existing secret.
 It also fails closed when `replicaCount > 1` without
 `gateway.experimentalDistributedOwnership=true`, when operator auth is missing,
-or when generic webhook ingress is configured without a shared secret.
+when public URLs are not HTTPS, when loopback operator bypass is combined with
+public exposure, when placeholder secrets are still present, or when generic
+webhook ingress is configured without a shared secret.
 
 The Helm chart uses an ephemeral worker runtime root by default. That is the
 scalable path: workers externalize durable session state through Postgres and
@@ -730,10 +734,11 @@ Gateway variables:
 | `OPEN_COWORK_CLOUD_BASE_URL` | Cloud web base URL used by the gateway HTTP/SSE client. |
 | `OPEN_COWORK_GATEWAY_SERVICE_TOKEN` | Scoped cloud API token with gateway access. Store it as a secret. |
 | `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` | Required for operator endpoints in shared/public deployments. Send as bearer auth or `x-open-cowork-gateway-admin-token`. |
-| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Do not enable behind a reverse proxy. |
+| `OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS` | Explicit local-only bypass for operator endpoints when bound to loopback. Runtime rejects public URLs and proxy-forwarded requests for this bypass. |
 | `OPEN_COWORK_GATEWAY_ALLOW_INSECURE_HTTP` | Allows non-loopback HTTP cloud URLs for local Docker networks only. |
 | `OPEN_COWORK_GATEWAY_HOST` / `OPEN_COWORK_GATEWAY_PORT` | Gateway HTTP bind address and port. |
-| `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public gateway URL for channel webhook registration. |
+| `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public HTTPS gateway URL for channel webhook registration. Non-HTTPS and loopback values fail closed. |
+| `OPEN_COWORK_GATEWAY_INSTANCE_ID` | Optional stable gateway instance/shard id used as Cloud delivery claimant. Kubernetes sets it from the pod name. |
 | `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` | Maximum inbound webhook/body size. Bridge/email file limits default to this cap. |
 | `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` | Deadline for cloud HTTP API calls made by the gateway. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS` | Deadline for outbound bridge/webhook delivery and Slack API calls. |

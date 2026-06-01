@@ -14,6 +14,9 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   metrics.deliveryLatencyMsTotal = 123
   metrics.webhookRequests = 4
   metrics.streamReconnects = 5
+  metrics.sessionRenderRetries = 2
+  metrics.sessionRenderDeadLetters = 1
+  metrics.cursorPersistenceFailures = 1
   metrics.cloudSubscriptionErrors = 1
   metrics.droppedSessionEvents = 1
 
@@ -28,5 +31,8 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   assert.match(text, /open_cowork_gateway_delivery_latency_ms_total 123/)
   assert.match(text, /open_cowork_gateway_webhook_requests_total 4/)
   assert.match(text, /open_cowork_gateway_stream_reconnects_total 5/)
+  assert.match(text, /open_cowork_gateway_session_render_retries_total 2/)
+  assert.match(text, /open_cowork_gateway_session_render_dead_letters_total 1/)
+  assert.match(text, /open_cowork_gateway_cursor_persistence_failures_total 1/)
   assert.match(text, /open_cowork_gateway_cloud_subscription_errors_total 1/)
 })

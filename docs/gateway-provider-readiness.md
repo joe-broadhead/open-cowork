@@ -52,7 +52,7 @@ the kind for capability/policy decisions.
 | `discord` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-discord/src/discord-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
 | `whatsapp` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Inline buttons plus token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-whatsapp/src/whatsapp-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
 | `signal` | Tier 3 | Later hardening | signed bridge webhook | Bridge shared secret | Token fallback | Bridge uploads/downloads capped by Gateway request-body limit | `packages/gateway-provider-signal/src/signal-provider.test.ts`, `packages/gateway-provider-webhook/src/webhook-provider.test.ts` |
-| `fake` | Tier demo | Demo only | local fake webhook | Explicit `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true`; loopback by default | Inline buttons plus token fallback | In-memory test files | `packages/gateway-testing/src/fake-channel.test.ts`, `apps/gateway/src/daemon.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
+| `fake` | Tier demo | Demo only | local fake webhook | Explicit `OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true`; loopback by default | Inline buttons plus token fallback | In-memory test files capped by Gateway request-body limit | `packages/gateway-testing/src/fake-channel.test.ts`, `apps/gateway/src/daemon.test.ts`, `scripts/gateway-cloud-smoke.mjs` |
 
 ## Tier Policy
 

@@ -38,6 +38,7 @@ export function createGatewayRuntime(
 ): GatewayRuntime {
   const metrics = createGatewayMetrics()
   const streams = createGatewaySessionStreamManager(cloud, metrics)
+  const claimedBy = `gateway:${config.instanceId}`
   const deliverySubscriptions: Array<{ close(): void }> = []
   const inFlightDeliveries = new Set<Promise<void>>()
   let started = false
@@ -52,7 +53,7 @@ export function createGatewayRuntime(
       started = true
       if (options.subscribeDeliveries !== false) {
         deliverySubscriptions.push(cloud.subscribeDeliveries({
-          claimedBy: `gateway:${config.mode}`,
+          claimedBy,
           onDelivery: (delivery) => {
             const task = handleDelivery(delivery, providers, cloud, metrics)
               .finally(() => {
