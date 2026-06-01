@@ -9,6 +9,19 @@ Reference workflows in the repository root:
 - [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release.yml) — tag-driven release, signing preflight, checksums, provenance.
 - [`.github/workflows/monthly-maintenance.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/monthly-maintenance.yml) — monthly drift checks for dependencies and SDK compatibility.
 
+## Release Claim Levels
+
+Do not use a stronger claim level in release notes, docs, marketing copy, or
+support handoffs until every required evidence item for that level is complete
+and linked from the release Go/No-Go report.
+
+| Claim level | Allowed claim | Required evidence |
+| --- | --- | --- |
+| `local-self-host-beta` | Local or trusted self-host beta only. | Protected CI gates plus supply-chain artifacts, local/self-host smoke tests, deployment validators, docs build, private-value scan, and no public managed-SaaS promise. |
+| `private-hosted-beta` | Managed BYOK with design partners only. | Everything from `local-self-host-beta`, plus production-like load/soak, restore drill, worker failover, BYOK redaction, Gateway replay/dead-letter recovery, support ownership, and private Go/No-Go evidence. |
+| `public-beta` | Public hosted BYOK signups with caps and support coverage. | Everything from `private-hosted-beta`, plus abuse controls, quota evidence, branch-protected Cloud/Gateway/continuation gates, immutable release artifacts, and public-safe launch evidence. |
+| `enterprise-ready` | Enterprise downstream/self-host and managed deployment claim. | Everything from `public-beta`, plus HA topology evidence, backup/restore RPO/RTO proof, audit/security evidence, downstream branding/configuration proof, and support runbooks. |
+
 ## Before tagging
 
 ### Repository quality

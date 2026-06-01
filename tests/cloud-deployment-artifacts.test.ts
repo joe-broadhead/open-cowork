@@ -789,7 +789,8 @@ test('operations observability assets define metrics, dashboards, alerts, and re
   const backup = readRepoFile('docs/runbooks/backup-restore.md')
   const drill = readRepoFile('docs/runbooks/restore-drill-report.md')
 
-  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs"/)
+  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs && node scripts\/validate-release-gates\.mjs"/)
+  assert.match(packageJson, /"release:gates:validate": "node scripts\/validate-release-gates\.mjs"/)
   assert.match(validator, /open_cowork_cloud_http_requests_total/)
   assert.match(validator, /open_cowork_gateway_delivery_dead_letters_total/)
 
@@ -871,7 +872,8 @@ test('deployment validation and smoke scripts cover compose, helm, cloud, and ga
   assert.match(packageJson, /"deploy:smoke": "node scripts\/smoke-deployment\.mjs"/)
   assert.match(packageJson, /"deploy:gateway:smoke": "pnpm build:gateway && node scripts\/gateway-cloud-smoke\.mjs"/)
   assert.match(packageJson, /"deploy:continuation:smoke": "pnpm build:gateway && pnpm build:shared && node --no-warnings --experimental-strip-types scripts\/cloud-continuation-smoke\.mjs"/)
-  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs"/)
+  assert.match(packageJson, /"ops:validate": "node scripts\/validate-ops-readiness\.mjs && node scripts\/validate-release-gates\.mjs"/)
+  assert.match(packageJson, /"release:gates:validate": "node scripts\/validate-release-gates\.mjs"/)
   assert.match(scriptsReadme, /pnpm deploy:validate/)
   assert.match(scriptsReadme, /pnpm deploy:smoke/)
   assert.match(scriptsReadme, /pnpm deploy:gateway:smoke/)
