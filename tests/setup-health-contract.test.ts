@@ -12,6 +12,12 @@ import {
 import {
   workspaceAuthorityContract,
 } from '../packages/shared/src/workspace.ts'
+import {
+  SETUP_HEALTH_CHECKS as DIST_SETUP_HEALTH_CHECKS,
+  SETUP_INTENTS as DIST_SETUP_INTENTS,
+  setupHealthCheckById as distSetupHealthCheckById,
+  setupIntentById as distSetupIntentById,
+} from '../packages/shared/dist/index.js'
 
 test('setup health contract covers every first-run topology path', () => {
   const intentIds = new Set(SETUP_INTENTS.map((intent) => intent.id))
@@ -39,6 +45,24 @@ test('setup health checks provide recovery docs for release readiness', () => {
     assert.ok(check.recoveryAction)
     assert.ok(check.docs.length > 0)
   }
+})
+
+test('built shared package exports setup and health helpers', () => {
+  assert.deepEqual(
+    DIST_SETUP_INTENTS.map((intent) => intent.id).sort(),
+    SETUP_INTENTS.map((intent) => intent.id).sort(),
+  )
+  assert.deepEqual(
+    DIST_SETUP_HEALTH_CHECKS.map((check) => check.id).sort(),
+    SETUP_HEALTH_CHECKS.map((check) => check.id).sort(),
+  )
+  assert.equal(distSetupIntentById('full-hybrid')?.authority, 'mixed')
+  assert.equal(distSetupIntentById('missing-intent'), null)
+  assert.equal(
+    distSetupHealthCheckById('gateway.operator_auth.configured')?.severityWhenMissing,
+    'action_required',
+  )
+  assert.equal(distSetupHealthCheckById('missing-check'), null)
 })
 
 test('desktop setup and health surfaces consume the shared setup contract', () => {
