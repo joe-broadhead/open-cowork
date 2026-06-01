@@ -20,6 +20,7 @@ export function compareReports(current: BenchmarkReport, baseline: BenchmarkRepo
   const p95Multiplier = baseline.regressionThresholds?.p95Multiplier || DEFAULT_THRESHOLDS.p95Multiplier
   const jitterAllowanceMs = baseline.regressionThresholds?.jitterAllowanceMs ?? DEFAULT_THRESHOLDS.jitterAllowanceMs
   const comparableEnvironment = hasComparableEnvironment(current, baseline)
+  const currentNames = new Set(current.benchmarks.map((entry) => entry.name))
   const avgAbsoluteFloorMs = comparableEnvironment
     ? baseline.regressionThresholds?.avgAbsoluteFloorMs || DEFAULT_THRESHOLDS.avgAbsoluteFloorMs
     : Math.max(
@@ -32,6 +33,12 @@ export function compareReports(current: BenchmarkReport, baseline: BenchmarkRepo
       baseline.regressionThresholds?.p95AbsoluteFloorMs || DEFAULT_THRESHOLDS.p95AbsoluteFloorMs,
       CROSS_ENVIRONMENT_FLOORS.p95AbsoluteFloorMs,
     )
+
+  for (const baselineEntry of baseline.benchmarks) {
+    if (!currentNames.has(baselineEntry.name)) {
+      failures.push(`${baselineEntry.name} is present in the baseline but missing from the current report`)
+    }
+  }
 
   for (const currentEntry of current.benchmarks) {
     const baselineEntry = baselineByName.get(currentEntry.name)

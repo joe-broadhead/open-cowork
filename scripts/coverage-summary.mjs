@@ -7,8 +7,33 @@ export const SHARED_COVERAGE_INPUT = {
   includePathPrefixes: ['packages/shared/'],
   thresholds: { lines: 90, functions: 90, branches: 75 },
 }
+export const WORKSPACE_NODE_COVERAGE_INPUT = {
+  name: 'Workspace Node',
+  path: 'coverage/workspace/lcov.info',
+  includePathPrefixes: [
+    'apps/gateway/dist/',
+    'apps/standalone-gateway/dist/',
+    'apps/website/src/',
+    'mcps/agents/dist/',
+    'mcps/charts/dist/',
+    'mcps/clock/dist/',
+    'mcps/skills/dist/',
+    'mcps/workflows/dist/',
+    'packages/gateway-channel/dist/',
+    'packages/gateway-provider-cli/dist/',
+    'packages/gateway-provider-discord/dist/',
+    'packages/gateway-provider-email/dist/',
+    'packages/gateway-provider-signal/dist/',
+    'packages/gateway-provider-slack/dist/',
+    'packages/gateway-provider-telegram/dist/',
+    'packages/gateway-provider-webhook/dist/',
+    'packages/gateway-provider-whatsapp/dist/',
+    'packages/gateway-testing/dist/',
+  ],
+  thresholds: { lines: 40, functions: 28, branches: 68 },
+}
 export const RENDERER_COVERAGE_INPUT = { name: 'Renderer', path: 'coverage/renderer/lcov.info', thresholds: { lines: 65, functions: 62, branches: 58 } }
-export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
+export const DEFAULT_INPUTS = [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, RENDERER_COVERAGE_INPUT]
 
 function normalizeCoveragePath(path, includePathPrefixes = []) {
   const normalized = path.replace(/\\/g, '/')
@@ -196,7 +221,7 @@ export function renderCoverageMarkdown(summary) {
 }
 
 function inputsFromArgs(args) {
-  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT]
+  if (args.includes('--node-only')) return [NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT]
   if (args.includes('--renderer-only')) return [RENDERER_COVERAGE_INPUT]
   return DEFAULT_INPUTS
 }

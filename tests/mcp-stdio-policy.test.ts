@@ -156,6 +156,27 @@ test('rejects script-eval flags that would turn an allowed runtime into an RCE',
     command: 'deno',
     args: ['--eval', 'Deno.exit()'],
   }), /evaluates inline code/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'node-eval-attached',
+    scope: 'machine',
+    directory: null,
+    command: 'node',
+    args: ['--eval=process.exit(0)'],
+  }), /evaluates inline code/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'python-eval-attached',
+    scope: 'machine',
+    directory: null,
+    command: 'python3',
+    args: ['-cprint("owned")'],
+  }), /evaluates inline code/)
+  assert.throws(() => validateCustomMcpStdioCommand({
+    name: 'ruby-eval-attached',
+    scope: 'machine',
+    directory: null,
+    command: 'ruby',
+    args: ['-eputs ENV.inspect'],
+  }), /evaluates inline code/)
 })
 
 test('rejects shell metacharacters smuggled into command or args', () => {

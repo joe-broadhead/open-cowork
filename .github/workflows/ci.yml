@@ -57,8 +57,8 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level moderate
 
-      - name: Audit full dependency graph (critical advisory)
-        run: pnpm audit --audit-level critical
+      - name: Audit full dependency graph (high advisory)
+        run: pnpm audit --audit-level high
 
       - name: Verify third-party notices
         run: |
@@ -283,7 +283,7 @@ jobs:
         run: pnpm test:e2e
 
       - name: Package desktop app (unsigned smoke)
-        run: pnpm --dir apps/desktop dist:ci
+        run: pnpm --dir apps/desktop dist:ci:mac
 
       - name: Ad-hoc sign packaged app for smoke launch
         run: find apps/desktop/release -depth -type d -name "*.app" -exec codesign --force --deep --sign - {} \;

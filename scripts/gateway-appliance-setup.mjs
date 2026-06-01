@@ -12,7 +12,7 @@ function usage() {
   return `Open Cowork Cloud Channel Gateway appliance setup
 
 Usage:
-  node scripts/gateway-appliance-setup.mjs --mode remote --cloud-url https://cowork.example.com --service-token TOKEN --telegram-bot-token TOKEN --print
+  node scripts/gateway-appliance-setup.mjs --mode remote --cloud-url https://cowork.example.com --service-token TOKEN --telegram-bot-token TOKEN --output .env.gateway
   node scripts/gateway-appliance-setup.mjs --mode local --telegram-bot-token TOKEN --output .env.gateway
 
 Options:
@@ -27,11 +27,12 @@ Options:
   --admin-token TOKEN
   --output PATH
   --print
+  --allow-secret-print
 `
 }
 
 function parseArgs(argv) {
-  const parsed = { ...defaults, print: false }
+  const parsed = { ...defaults, print: false, allowSecretPrint: false }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') {
@@ -40,6 +41,10 @@ function parseArgs(argv) {
     }
     if (arg === '--print') {
       parsed.print = true
+      continue
+    }
+    if (arg === '--allow-secret-print') {
+      parsed.allowSecretPrint = true
       continue
     }
     if (!arg.startsWith('--')) throw new Error(`Unexpected argument: ${arg}`)
@@ -120,6 +125,15 @@ function renderEnv(config) {
   return `${lines.join('\n')}\n`
 }
 
+function hasSensitivePrintArgs(config) {
+  return Boolean(
+    config.serviceToken
+    || config.adminToken
+    || config.telegramBotToken
+    || config.telegramWebhookSecret
+  )
+}
+
 function renderNextSteps(config) {
   const composeFile = config.mode === 'local'
     ? 'docker-compose.cloud-gateway.yml'
@@ -151,6 +165,9 @@ function main() {
   const envText = renderEnv(config)
   const nextSteps = renderNextSteps(config)
   if (config.print) {
+    if (hasSensitivePrintArgs(config) && !config.allowSecretPrint) {
+      throw new Error('--print would write live gateway secrets to stdout. Write an env file instead, or add --allow-secret-print only for an intentionally private terminal.')
+    }
     process.stdout.write(envText)
     process.stdout.write('\n')
     process.stdout.write(nextSteps)

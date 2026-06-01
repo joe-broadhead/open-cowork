@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,

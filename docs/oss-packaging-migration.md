@@ -46,7 +46,7 @@ the historical standalone prototype.
 | Cloud Channel Gateway Helm chart | `helm/open-cowork-gateway` | release/deployment asset |
 | Standalone Gateway app | `@open-cowork/standalone-gateway` workspace package | internal workspace package |
 | Standalone Gateway CLI | `open-cowork-gateway-standalone` | source-built CLI |
-| Shared API client | `@open-cowork/cloud-client` | workspace SDK; public SDK packaging requires its own release checklist |
+| Shared API client | `@open-cowork/cloud-client` | workspace source package; public SDK packaging requires its own release checklist |
 | Shared contracts | `@open-cowork/shared` | internal/shared workspace package |
 
 The release workflow publishes Desktop artifacts plus Cloud and Gateway OCI

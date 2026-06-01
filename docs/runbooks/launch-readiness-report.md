@@ -72,7 +72,7 @@ follow-up issue id.
 Attach the JSON and Markdown output from:
 
 ```bash
-OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_PROFILE=local-self-host-beta \
 OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \
@@ -105,7 +105,7 @@ Summarize:
 Attach the JSON and Markdown output from:
 
 ```bash
-OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_PROFILE=local-self-host-beta \
 OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
 OPEN_COWORK_LOAD_INCLUDE_MUTATIONS=true \
 OPEN_COWORK_LOAD_INCLUDE_SSE=true \

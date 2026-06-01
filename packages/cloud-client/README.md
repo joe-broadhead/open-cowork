@@ -4,11 +4,13 @@ Typed HTTP and SSE client for Open Cowork Cloud.
 
 ## Support Status
 
-`@open-cowork/cloud-client` is a supported public package surface for Open
-Cowork clients and downstream deployers. The package is still versioned with
-the repository while Open Cowork is pre-1.0, so typed API changes may occur in
-minor releases until `1.0.0`. Runtime execution remains owned by OpenCode; this
-client only talks to Open Cowork Cloud product APIs.
+`@open-cowork/cloud-client` is the supported typed Cloud HTTP/SSE client for
+Open Cowork clients built from this repo. It is still a workspace/source
+package, not an independently versioned public npm SDK. While Open Cowork is
+pre-1.0, typed API changes may occur in ordinary repo releases until a
+standalone SDK publishing and support policy is announced. Runtime execution
+remains owned by OpenCode; this client only talks to Open Cowork Cloud product
+APIs.
 
 ## Entry Points
 
@@ -194,7 +196,7 @@ rather than parsing human-readable messages.
 
 ## Release Checklist
 
-Before publishing or treating a release as a supported SDK update:
+Before publishing or treating a repo release as a cloud-client contract update:
 
 - Run `pnpm --filter @open-cowork/shared build`.
 - Run `pnpm --filter @open-cowork/cloud-client build`.
@@ -206,3 +208,5 @@ Before publishing or treating a release as a supported SDK update:
   examples or fixtures.
 - For pre-1.0 releases, document typed API breaks in release notes. After
   `1.0.0`, follow SemVer major-version rules for breaking changes.
+- Do not present this as a standalone published SDK until package publication,
+  versioning, and support ownership are explicit.

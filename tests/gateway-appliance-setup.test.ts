@@ -15,6 +15,7 @@ test('gateway appliance setup renders remote Telegram polling env', () => {
     '--service-token', 'gateway-service-token',
     '--telegram-bot-token', 'telegram-bot-token',
     '--print',
+    '--allow-secret-print',
   ])
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /OPEN_COWORK_CLOUD_BASE_URL=https:\/\/cloud\.example\.test/)
@@ -22,6 +23,19 @@ test('gateway appliance setup renders remote Telegram polling env', () => {
   assert.match(result.stdout, /OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel/)
   assert.match(result.stdout, /OPEN_COWORK_GATEWAY_TELEGRAM_MODE=polling/)
   assert.match(result.stdout, /docker-compose\.gateway-remote\.yml/)
+})
+
+test('gateway appliance setup refuses to print live secrets without explicit override', () => {
+  const result = runSetup([
+    '--mode', 'remote',
+    '--cloud-url', 'https://cloud.example.test',
+    '--service-token', 'gateway-service-token',
+    '--telegram-bot-token', 'telegram-bot-token',
+    '--print',
+  ])
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /write live gateway secrets to stdout/)
 })
 
 test('gateway appliance setup requires HTTPS public URL and admin token for Telegram webhook', () => {

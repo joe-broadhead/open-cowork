@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { CLOUD_WEB_ROUTES, CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientStateContract } from './client-contract.ts'
@@ -34,6 +34,13 @@ const html = cloudWebsiteHtml({
     workflows: true,
   },
 })
+
+const repositoryTestsDir = new URL('../../../tests/', import.meta.url)
+
+function routeMatrixTestUrl(filename: string) {
+  if (filename === 'cloud-continuation-e2e.test.ts') return new URL(filename, repositoryTestsDir)
+  return new URL(filename, import.meta.url)
+}
 
 test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Open Cowork Cloud/)
@@ -90,6 +97,9 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
     assert.equal(entry.redactionContract.rawSecretsAllowed, false, `${entry.routeId} forbids raw secrets`)
     assert.ok(entry.redactionContract.browserSanitizer, `${entry.routeId} names the browser/server sanitizer boundary`)
     assert.ok(entry.tests.length > 0, `${entry.routeId} lists test coverage`)
+    for (const filename of entry.tests) {
+      assert.ok(existsSync(fileURLToPath(routeMatrixTestUrl(filename))), `${entry.routeId} listed test file exists: ${filename}`)
+    }
     for (const endpointId of entry.endpointIds) {
       assert.ok(endpoints.has(endpointId), `${entry.routeId} references known endpoint ${endpointId}`)
     }

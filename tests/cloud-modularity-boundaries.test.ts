@@ -163,6 +163,13 @@ test('postgres store delegates row mapping to domain modules', () => {
   assertSourceBudget('Postgres store domain module', join(cloudRoot, 'postgres-store-domains'), 700)
 })
 
+test('control plane store contract barrel does not export concrete stores', () => {
+  const source = readFileSync(join(cloudRoot, 'control-plane-store.ts'), 'utf8')
+  assert.doesNotMatch(source, /export \* from '\.\/in-memory-control-plane-store\.ts'/)
+  assert.doesNotMatch(source, /InMemoryControlPlaneStore/)
+  assert.match(source, /export type \* from '\.\/in-memory-control-plane-store\.ts'/)
+})
+
 test('session service delegates command payload parsing to command service module', () => {
   const source = readFileSync(join(cloudRoot, 'session-service.ts'), 'utf8')
   assert.doesNotMatch(source, /function normalize(Prompt|QuestionReply|QuestionReject|Permission)Payload\(/)

@@ -1051,7 +1051,7 @@ ${report.gates.overall === 'go'
 async function main() {
   const targetsPath = argOrEnv('targets', 'OPEN_COWORK_LOAD_TARGETS', DEFAULT_TARGETS_PATH)
   const targets = readJson(targetsPath)
-  const profileName = argOrEnv('profile', 'OPEN_COWORK_LOAD_PROFILE', 'private-beta')
+  const profileName = argOrEnv('profile', 'OPEN_COWORK_LOAD_PROFILE', 'local-self-host-beta')
   const profile = targets.profiles?.[profileName]
   if (!profile) {
     throw new Error(`Unknown launch-readiness profile ${profileName}.`)

@@ -74,6 +74,32 @@ const SCRIPT_EVAL_FLAGS = new Set([
   '--execute',   // some custom runtimes
 ])
 
+const SCRIPT_EVAL_LONG_FLAGS_WITH_VALUE = new Set([
+  '--command',
+  '--eval',
+  '--eval-file',
+  '--execute',
+])
+
+const SCRIPT_EVAL_SHORT_FLAGS_WITH_VALUE = [
+  '-c',
+  '-e',
+  '-E',
+  '-p',
+  '-pe',
+  '-ne',
+]
+
+function isScriptEvalArgument(arg: string) {
+  if (SCRIPT_EVAL_FLAGS.has(arg)) return true
+  for (const flag of SCRIPT_EVAL_LONG_FLAGS_WITH_VALUE) {
+    if (arg.startsWith(`${flag}=`)) return true
+  }
+  return SCRIPT_EVAL_SHORT_FLAGS_WITH_VALUE.some((flag) => (
+    arg.startsWith(flag) && arg.length > flag.length
+  ))
+}
+
 // Patterns that only ever appear inside shell-style command strings.
 // We reject them in individual argv entries because the user sometimes
 // pastes a full command line into the single "Command" field and we
@@ -121,7 +147,7 @@ export function validateCustomMcpStdioCommand(custom: Pick<CustomMcpConfig, 'nam
     if (typeof arg !== 'string') {
       throw new Error(`Local MCP "${custom.name}" has a non-string argument: ${JSON.stringify(arg)}.`)
     }
-    if (SCRIPT_EVAL_FLAGS.has(arg)) {
+    if (isScriptEvalArgument(arg)) {
       throw new Error(
         `Local MCP "${custom.name}" uses "${arg}" which evaluates inline code. ` +
         `Ship the MCP as a published npm package (npx …) or a script file on disk instead.`,

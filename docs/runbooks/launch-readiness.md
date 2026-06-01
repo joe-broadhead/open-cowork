@@ -80,8 +80,8 @@ export OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST=sha256:REPLACE_WITH_GATEWAY_IMA
 
 Optional knobs:
 
-- `OPEN_COWORK_LOAD_PROFILE=private-beta`, `public-beta`, or
-  `enterprise-scale`
+- `OPEN_COWORK_LOAD_PROFILE=local-self-host-beta` (default), `private-beta`,
+  `public-beta`, or `enterprise-scale`
 - `OPEN_COWORK_LOAD_DURATION_MS=...`
 - `OPEN_COWORK_LOAD_CONCURRENCY=...`
 - `OPEN_COWORK_LOAD_REQUEST_RATE=...`
@@ -105,7 +105,7 @@ GCP project-specific values into committed reports.
 Generate the operation plan before running traffic:
 
 ```bash
-OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_PROFILE=local-self-host-beta \
 OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
 OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
 OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
@@ -125,7 +125,7 @@ Run the short stress gate against local Compose and the production-like
 deployment.
 
 ```bash
-OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_PROFILE=local-self-host-beta \
 OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
 OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
 OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \
@@ -157,7 +157,7 @@ environment profile, dates, duration, and pass/fail or go/no-go status.
 Run the long-duration gate after the load gate is green:
 
 ```bash
-OPEN_COWORK_LOAD_PROFILE=private-beta \
+OPEN_COWORK_LOAD_PROFILE=local-self-host-beta \
 OPEN_COWORK_LOAD_CLOUD_TOKEN=... \
 OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN=... \
 OPEN_COWORK_LOAD_BYOK_PROVIDER=anthropic \

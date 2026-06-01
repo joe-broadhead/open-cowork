@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { DEFAULT_CONFIG, type OpenCoworkConfig } from '../apps/desktop/src/main/config-types.ts'
 import { createByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
 import type {

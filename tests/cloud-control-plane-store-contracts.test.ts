@@ -4,9 +4,9 @@ import { randomUUID } from 'node:crypto'
 
 import {
   ControlPlaneQuotaExceededError,
-  InMemoryControlPlaneStore,
   type ControlPlaneStore,
 } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import { createPostgresControlPlaneStore } from '../apps/desktop/src/main/cloud/postgres-control-plane-store.ts'
 
 const POSTGRES_URL = process.env.OPEN_COWORK_TEST_POSTGRES_URL

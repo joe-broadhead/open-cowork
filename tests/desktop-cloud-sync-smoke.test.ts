@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimeEvent,

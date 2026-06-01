@@ -51,7 +51,7 @@
     "test:cloud-continuation": "pnpm test:prepare && pnpm build:gateway && node scripts/run-node-tests.mjs tests/cloud-continuation-e2e.test.ts",
     "test:renderer": "pnpm --filter @open-cowork/desktop test:renderer",
     "test:coverage": "pnpm test:coverage:node && pnpm test:coverage:renderer && node scripts/coverage-summary.mjs --check",
-    "test:coverage:node": "pnpm test:prepare && pnpm --workspace-concurrency=1 --filter=./packages/* test && pnpm --filter=./mcps/* test && pnpm --filter @open-cowork/gateway test && pnpm --filter @open-cowork/standalone-gateway test && node scripts/run-node-tests.mjs --coverage && node scripts/coverage-summary.mjs --check --node-only --no-write",
+    "test:coverage:node": "pnpm test:prepare && pnpm --workspace-concurrency=1 --filter=./packages/* test && pnpm --filter=./mcps/* test && pnpm --filter @open-cowork/gateway test && pnpm --filter @open-cowork/standalone-gateway test && pnpm --filter @open-cowork/website test && node scripts/run-node-tests.mjs --coverage && node scripts/run-workspace-node-tests.mjs --coverage && node scripts/coverage-summary.mjs --check --node-only --no-write",
     "test:coverage:renderer": "pnpm --filter @open-cowork/desktop test:coverage:renderer",
     "test:e2e": "pnpm --filter @open-cowork/desktop test:e2e",
     "test:e2e:packaged": "pnpm --filter @open-cowork/desktop test:e2e:packaged",
@@ -103,6 +103,7 @@
       "opencode-ai"
     ],
     "overrides": {
+      "@ungap/structured-clone": "1.3.1",
       "electron-builder-squirrel-windows": "26.8.1",
       "ip-address@<=10.1.0": ">=10.1.1",
       "mermaid>uuid": "^14.0.0",

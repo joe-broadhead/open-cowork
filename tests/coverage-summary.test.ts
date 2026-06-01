@@ -3,7 +3,7 @@ import test from 'node:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_INPUTS, SHARED_COVERAGE_INPUT, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
+import { DEFAULT_INPUTS, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
 
 test('coverage summary parses lcov totals and renders a PR-safe table', () => {
   const totals = parseLcovInfo([
@@ -196,4 +196,26 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
     branches: 75,
   })
   assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
+})
+
+test('coverage summary reports the enforced shipped workspace ratchet', () => {
+  assert.deepEqual(WORKSPACE_NODE_COVERAGE_INPUT.thresholds, {
+    lines: 40,
+    functions: 28,
+    branches: 68,
+  })
+  assert.ok(DEFAULT_INPUTS.includes(WORKSPACE_NODE_COVERAGE_INPUT))
+  for (const expectedPrefix of [
+    'apps/gateway/dist/',
+    'apps/standalone-gateway/dist/',
+    'apps/website/src/',
+    'mcps/workflows/dist/',
+    'packages/gateway-channel/dist/',
+    'packages/gateway-provider-slack/dist/',
+  ]) {
+    assert.ok(
+      WORKSPACE_NODE_COVERAGE_INPUT.includePathPrefixes.includes(expectedPrefix),
+      `workspace coverage includes ${expectedPrefix}`,
+    )
+  }
 })

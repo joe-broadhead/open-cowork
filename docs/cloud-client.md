@@ -1,12 +1,14 @@
 ---
-title: Cloud Client SDK
-description: Public package contract for the typed Open Cowork Cloud HTTP and SSE client.
+title: Cloud Client Package
+description: Workspace package contract for the typed Open Cowork Cloud HTTP and SSE client.
 ---
 
-# Cloud Client SDK
+# Cloud Client Package
 
-`@open-cowork/cloud-client` is the supported typed client for Open Cowork Cloud.
-Desktop cloud workspaces, Cloud Web, Gateway, and downstream clients should use
+`@open-cowork/cloud-client` is the typed Cloud HTTP/SSE client used by Open
+Cowork first-party clients. It is a supported workspace/source package for the
+current repo, not an independently versioned public npm SDK yet. Desktop cloud
+workspaces, Cloud Web, Gateway, and downstream builds from this repo should use
 this package instead of importing Cloud control-plane internals.
 
 ## Contract
@@ -20,7 +22,9 @@ this package instead of importing Cloud control-plane internals.
   product commands, reads projections, subscribes to events, and manages
   product surfaces such as workflows, artifacts, BYOK metadata, and channel
   deliveries.
-- While Open Cowork is pre-1.0, typed API changes can happen in minor releases.
+- While Open Cowork is pre-1.0 and the package ships with the repo, typed API
+  changes can happen in ordinary repo releases. Treat it as a source-level
+  contract until an explicit standalone SDK publishing policy is announced.
   Breaking changes after `1.0.0` require a major version.
 - Modules outside the documented entry points are internal. Do not import
   Desktop Cloud server files, control-plane stores, runtime adapters, or source
@@ -199,7 +203,7 @@ parsing strings.
 | `network` | Fetch/network failure before an HTTP response |
 | `request` | Invalid client request construction |
 
-## Publish Checklist
+## Release Checklist
 
 - Build shared first: `pnpm --filter @open-cowork/shared build`.
 - Build the SDK: `pnpm --filter @open-cowork/cloud-client build`.
@@ -209,5 +213,6 @@ parsing strings.
   changes.
 - Keep examples free of private deployment URLs, org ids, tokens, provider keys,
   and project-specific values.
-- Pre-1.0 typed breaks must be called out in release notes. After `1.0.0`,
-  breaking API changes require a SemVer major version.
+- Pre-1.0 typed breaks must be called out in release notes. Do not present the
+  package as a standalone published SDK until package publication, versioning,
+  and support ownership are explicit.

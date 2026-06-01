@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: read
+      checks: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -84,11 +85,22 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-release-tag-signature.mjs
 
+      - name: Verify release actor
+        env:
+          OPEN_COWORK_RELEASE_ALLOWED_ACTORS: ${{ vars.OPEN_COWORK_RELEASE_ALLOWED_ACTORS }}
+        run: node scripts/verify-release-actor.mjs
+
+      - name: Verify release commit checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OPEN_COWORK_RELEASE_REQUIRED_CHECKS: ${{ vars.OPEN_COWORK_RELEASE_REQUIRED_CHECKS }}
+        run: node scripts/verify-release-checks.mjs
+
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level moderate
 
-      - name: Audit full dependency graph (critical advisory)
-        run: pnpm audit --audit-level critical
+      - name: Audit full dependency graph (high advisory)
+        run: pnpm audit --audit-level high
 
       - name: Lint
         run: pnpm lint
@@ -433,6 +445,8 @@ jobs:
       - release-policy
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment:
+      name: release-publish
     permissions:
       contents: read
       packages: write
@@ -660,6 +674,8 @@ jobs:
       - publish-oci-images
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: release-publish
     permissions:
       contents: write
       attestations: write

@@ -7,7 +7,7 @@ import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adap
 import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
 import { createByokSecretStore, type ByokSecretStoreOptions } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import { resolveCloudRuntimePolicy, type CloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
-import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import {
   CloudHttpError,
   createCloudHttpServer,
