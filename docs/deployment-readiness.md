@@ -29,6 +29,14 @@ The topology profile contract lives in
 `deploy/topologies/README.md`; the docs overview is
 [Deployment Topologies](deployment-topologies.md).
 
+After choosing a topology, apply the matching security gate from
+[Hybrid Security Gates](hybrid-security-gates.md). The gate contract lives in
+`deploy/security/hybrid-security-gates.json` and defines the required auth,
+revocation, approval/question policy, audit events, quotas/rate limits,
+durability, backup/restore, redaction, and fail-closed checks for
+`desktop-local`, `desktop-pairing`, `standalone-gateway`, `cloud-worker`,
+`cloud-channel-gateway`, `cloud-gateway-edge`, and `full-hybrid`.
+
 Production Cloud deployments should run these processes separately:
 
 - cloud `web`: stateless HTTP, browser dashboard, API, SSE, auth, and durable

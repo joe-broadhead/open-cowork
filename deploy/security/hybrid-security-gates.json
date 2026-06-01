@@ -1,0 +1,512 @@
+{
+  "schemaVersion": 1,
+  "purpose": "open-cowork-hybrid-security-gates",
+  "summary": "Mode-aware production security gates for Desktop, Gateway, Cloud, and hybrid Open Cowork deployments. These gates compose the topology profiles and must pass before exposing hybrid connectors to company users, customers, or public channel callbacks.",
+  "globalRules": [
+    "OpenCode owns execution. Open Cowork owns composition, policy, projection, audit, and deployability.",
+    "Every workspace has one execution authority at a time: desktop_local, gateway_standalone, or cloud_worker.",
+    "Gateway service tokens authenticate gateway processes only; they do not grant channel actors approval authority.",
+    "Remote approvals default to local_confirmation for Desktop-owned execution. remote_allowed is opt-in, scoped, and audited.",
+    "Provider ingress must use provider signing, HMAC, or equivalent shared-secret verification before Gateway or Cloud acts.",
+    "Production public endpoints fail closed without TLS, admin token, durable stores, backups, and redaction posture."
+  ],
+  "gates": [
+    {
+      "id": "desktop-local",
+      "label": "Desktop Local Execution",
+      "topologyProfiles": ["desktop-only"],
+      "authority": "desktop_local",
+      "scope": "Local Desktop sessions, local projects, local custom MCPs, local workflows, and local credentials.",
+      "auth": [
+        "Renderer access is limited to the preload coworkApi whitelist.",
+        "Local filesystem authority comes from main-process project grants, not renderer-provided paths.",
+        "Credentials stay in OS secure storage or fail closed when secure storage is unavailable in packaged builds."
+      ],
+      "revocation": [
+        "Users can remove cloud connections and local credentials independently.",
+        "Local directory grants are scoped to Cowork-owned session, workflow, or picker records.",
+        "Deleting local sessions remains local and does not revoke or mutate cloud sessions."
+      ],
+      "approvalPolicy": [
+        "OpenCode owns tool approval semantics.",
+        "Open Cowork only composes typed policy and does not mirror tool execution.",
+        "No remote user can approve Desktop-owned risky actions in desktop-only mode."
+      ],
+      "questionPolicy": [
+        "Questions are answered by the local Desktop user.",
+        "No remote question reply path is enabled without an explicit pairing connector."
+      ],
+      "auditEvents": [
+        "credential.updated",
+        "credential.deleted",
+        "session.created",
+        "workflow.run.created",
+        "custom_mcp.saved"
+      ],
+      "rateLimits": [
+        "Local Desktop is not exposed as a public network service.",
+        "Renderer IPC remains bounded by typed handlers and local process policy."
+      ],
+      "durability": [
+        "Desktop app data",
+        "Local session registry",
+        "Local workflow SQLite",
+        "OS secure storage where available"
+      ],
+      "backupRestore": [
+        "Desktop data backup is user/operator owned.",
+        "No cloud backup promise exists for desktop-only local data."
+      ],
+      "redaction": [
+        "Renderer sees masked credential metadata by default.",
+        "Logs redact provider keys, OAuth tokens, local sensitive paths, and full session identifiers."
+      ],
+      "failClosedChecks": [
+        "Cloud workspace URLs require HTTPS except localhost.",
+        "Packaged builds refuse plaintext credential persistence.",
+        "Local host paths never enter Cloud workspaces implicitly."
+      ],
+      "validationEvidence": [
+        "pnpm lint",
+        "pnpm typecheck",
+        "pnpm test",
+        "pnpm test:e2e"
+      ]
+    },
+    {
+      "id": "desktop-pairing",
+      "label": "Desktop Outbound Pairing",
+      "topologyProfiles": ["desktop-gateway"],
+      "authority": "desktop_local",
+      "scope": "Opt-in outbound broker connection that lets a trusted remote surface reach Desktop-owned Local workspaces without opening a Desktop or OpenCode listener.",
+      "auth": [
+        "Desktop initiates outbound transport to the broker.",
+        "Broker commands require bearer pairing token plus pairing id and device id headers.",
+        "Non-loopback broker URLs require HTTPS."
+      ],
+      "revocation": [
+        "Pairing can be disabled or revoked from Desktop.",
+        "Broker command leases expire and include fencing tokens.",
+        "Revoked pairings stop accepting prompts, approvals, questions, and remote event publishes."
+      ],
+      "approvalPolicy": [
+        "Default remote approval policy is local_confirmation.",
+        "Desktop returns requires_local_confirmation until a local user confirms the permission.",
+        "remote_allowed is allowed only by explicit pairing policy, scoped workspace/session/actor rules, and audit.",
+        "Policy-denied actions return blocked_by_policy."
+      ],
+      "questionPolicy": [
+        "Default remote question policy is local_confirmation.",
+        "Remote question replies require local confirmation unless the pairing explicitly allows remote_allowed for that actor and workspace.",
+        "Question rejects and replies are auditable commands."
+      ],
+      "auditEvents": [
+        "pairing.created",
+        "pairing.updated",
+        "pairing.enabled",
+        "pairing.disabled",
+        "pairing.connected",
+        "pairing.offline",
+        "pairing.revoked",
+        "command.accepted",
+        "command.completed",
+        "command.failed",
+        "command.blocked",
+        "remote.event.published"
+      ],
+      "rateLimits": [
+        "Broker enforces per-pairing command rate limits.",
+        "Desktop enforces command lease freshness and ignores stale commands.",
+        "Remote prompt floods should surface Retry-After semantics at the broker boundary."
+      ],
+      "durability": [
+        "Desktop pairing records",
+        "Broker command log",
+        "Broker event cursor",
+        "Local audit log"
+      ],
+      "backupRestore": [
+        "Desktop local store backup remains local/operator owned.",
+        "Broker command and cursor state must be restorable before pairing is advertised as production."
+      ],
+      "redaction": [
+        "Local paths, local MCP details, artifact bodies, provider keys, OAuth tokens, and MCP secrets redact by default.",
+        "Remote event payloads expose metadata unless policy explicitly allows richer fields."
+      ],
+      "failClosedChecks": [
+        "No public Desktop port.",
+        "No public OpenCode port.",
+        "Non-loopback broker URLs require HTTPS.",
+        "Pairing token and device identity are required before any command is accepted.",
+        "Missing policy defaults to local_confirmation or blocked_by_policy, never remote_allowed."
+      ],
+      "validationEvidence": [
+        "pnpm test",
+        "pnpm test:e2e",
+        "pnpm deploy:validate"
+      ]
+    },
+    {
+      "id": "standalone-gateway",
+      "label": "Standalone Gateway Execution",
+      "topologyProfiles": ["gateway-only"],
+      "authority": "gateway_standalone",
+      "scope": "Gateway owns private OpenCode execution for channel-first deployments without Open Cowork Cloud.",
+      "auth": [
+        "Operator endpoints require an admin token.",
+        "OpenCode endpoint must be loopback or private network only.",
+        "Provider webhooks require shared secret or HMAC verification before dispatch."
+      ],
+      "revocation": [
+        "Admin token rotation blocks operator access immediately after process reload.",
+        "Provider tokens and shared secrets can be removed from deployment secrets.",
+        "Channel identities and session bindings can be disabled in Gateway Postgres."
+      ],
+      "approvalPolicy": [
+        "Channel actor RBAC decides who may answer approval prompts.",
+        "Gateway approval tokens are single-use and mapped to the originating provider actor.",
+        "A service/operator token alone cannot approve runtime permissions for arbitrary users."
+      ],
+      "questionPolicy": [
+        "Question replies require a resolved channel actor with session access.",
+        "Button-less providers use token or magic-link flows with replay protection."
+      ],
+      "auditEvents": [
+        "provider.ingress.accepted",
+        "provider.ingress.rejected",
+        "session.bound",
+        "prompt.accepted",
+        "permission.requested",
+        "permission.responded",
+        "question.asked",
+        "question.replied",
+        "artifact.accessed",
+        "operator.login.failed"
+      ],
+      "rateLimits": [
+        "Per-provider ingress rate limits.",
+        "Per-channel actor prompt limits.",
+        "Operator endpoint rate limits with Retry-After on 429."
+      ],
+      "durability": [
+        "Gateway Postgres",
+        "Gateway artifact storage",
+        "Channel credential secret storage",
+        "Delivery cursors and dead letters"
+      ],
+      "backupRestore": [
+        "Postgres backups are required.",
+        "Artifact backups are required when file ingress or generated artifacts are enabled.",
+        "Restore drill must prove channel session binding and approval-token recovery behavior."
+      ],
+      "redaction": [
+        "Channel secrets, provider tokens, OpenCode auth tokens, local server URLs, file paths, and raw payload secrets are redacted from logs and diagnostics."
+      ],
+      "failClosedChecks": [
+        "Public OpenCode endpoints rejected.",
+        "Missing admin token rejected except explicit loopback-only development bypass.",
+        "Fake provider is explicit local/demo-only.",
+        "Webhook provider requires authenticated webhook ingress.",
+        "File ingress cannot advertise sizes above daemon body limits."
+      ],
+      "validationEvidence": [
+        "pnpm deploy:standalone-gateway:validate",
+        "pnpm deploy:standalone-gateway:smoke",
+        "pnpm deploy:validate"
+      ]
+    },
+    {
+      "id": "cloud-worker",
+      "label": "Cloud Worker Execution",
+      "topologyProfiles": ["cloud-only"],
+      "authority": "cloud_worker",
+      "scope": "Open Cowork Cloud web, worker, scheduler, Postgres, object store, BYOK, workflows, projections, and browser workbench.",
+      "auth": [
+        "Public cloud uses OIDC, signed trusted header auth, cookie auth, or scoped API tokens.",
+        "header auth requires a trusted proxy proof and shared signature secret.",
+        "Mutating APIs require tenant membership and policy checks."
+      ],
+      "revocation": [
+        "API tokens can be revoked.",
+        "Membership revocation blocks session and workflow mutations.",
+        "BYOK secret rotation changes the worker-side runtime config for new work."
+      ],
+      "approvalPolicy": [
+        "Cloud approvals are tied to authenticated user, tenant membership, and runtime policy.",
+        "Worker leases fence stale projection writes.",
+        "Remembered approvals are scoped by user, tenant, profile, and policy."
+      ],
+      "questionPolicy": [
+        "Questions are stored in durable projection state.",
+        "Replies require authenticated user authority and tenant membership.",
+        "Late join clients hydrate pending questions from session snapshots."
+      ],
+      "auditEvents": [
+        "org.created",
+        "membership.created",
+        "api_token.created",
+        "api_token.revoked",
+        "byok.secret.updated",
+        "session.created",
+        "prompt.enqueued",
+        "permission.responded",
+        "question.replied",
+        "workflow.run.created",
+        "artifact.accessed",
+        "quota.rejected"
+      ],
+      "rateLimits": [
+        "Per-IP, per-token, per-user, per-org, and per-workspace limits.",
+        "Quota denials return 402 or 429 with Retry-After where applicable.",
+        "Worker spawn and command claim paths enforce subscription and quota state."
+      ],
+      "durability": [
+        "Cloud Postgres",
+        "Provider-backed object storage",
+        "Secret adapter/KMS or secret-manager refs",
+        "Worker checkpoints",
+        "Event logs and session projections"
+      ],
+      "backupRestore": [
+        "Postgres backup and point-in-time recovery.",
+        "Object-store artifact/checkpoint backup.",
+        "Secret/KMS reference restore proof.",
+        "Restore drill proves session projection parity, worker recovery, scheduler recovery, and redaction."
+      ],
+      "redaction": [
+        "BYOK plaintext only appears inside worker runtime config.",
+        "HTTP payloads, renderer state, logs, diagnostics, caches, and audit rows never include raw provider keys, OAuth tokens, MCP secrets, channel secrets, or sensitive local paths."
+      ],
+      "failClosedChecks": [
+        "public_production requires Postgres.",
+        "public_production requires provider-backed object storage.",
+        "public_production rejects weak inline secrets.",
+        "public auth mode none is rejected unless explicit insecure local/demo override is set.",
+        "Worker scale-out requires checkpoints and shared object storage."
+      ],
+      "validationEvidence": [
+        "pnpm deploy:validate",
+        "pnpm deploy:launch:validate",
+        "pnpm ops:validate",
+        "pnpm test:cloud-web",
+        "pnpm test:cloud-continuation"
+      ]
+    },
+    {
+      "id": "cloud-channel-gateway",
+      "label": "Cloud Channel Gateway",
+      "topologyProfiles": ["cloud-channel-gateway"],
+      "authority": "cloud_worker",
+      "scope": "Gateway is a channel adapter and Cloud client for Cloud-owned workspaces. Cloud workers own OpenCode execution.",
+      "auth": [
+        "Gateway process authenticates to Cloud with a scoped gateway service token.",
+        "Inbound provider actor identity is resolved separately from the gateway token.",
+        "Provider ingress requires provider signing, HMAC, shared secret, or provider-native signature verification.",
+        "Operator endpoints require an admin token."
+      ],
+      "revocation": [
+        "Gateway service token revocation stops Cloud API access.",
+        "Channel binding revocation stops routing for a provider workspace/thread.",
+        "Delivery cursor state prevents replay across gateway restarts."
+      ],
+      "approvalPolicy": [
+        "Gateway service token does not grant actor approval authority.",
+        "Approval authority is checked against resolved channel actor membership, RBAC, profile, and policy.",
+        "Inline approval buttons and token fallbacks are single-use and replay protected."
+      ],
+      "questionPolicy": [
+        "Question replies require resolved channel actor authority.",
+        "Button-less channels use token or magic-link fallback with replay protection.",
+        "Cloud snapshots remain source of truth for pending questions."
+      ],
+      "auditEvents": [
+        "gateway.registered",
+        "gateway.revoked",
+        "channel.binding.created",
+        "channel.binding.revoked",
+        "provider.ingress.accepted",
+        "provider.ingress.rejected",
+        "delivery.sent",
+        "delivery.dead_lettered",
+        "permission.responded",
+        "question.replied"
+      ],
+      "rateLimits": [
+        "Per-provider ingress limits.",
+        "Per-channel actor prompt limits.",
+        "Per-gateway delivery retry and dead-letter limits.",
+        "Cloud returns Retry-After on rate-limit responses."
+      ],
+      "durability": [
+        "Cloud Postgres for channel bindings, identities, interactions, deliveries, and cursors.",
+        "Cloud object store for artifacts.",
+        "Gateway process state is disposable except provider long-poll/webhook connections."
+      ],
+      "backupRestore": [
+        "Cloud backup covers channel bindings, delivery backlog, and event cursors.",
+        "Gateway redeploy with the same service token and provider credentials resumes from Cloud cursors."
+      ],
+      "redaction": [
+        "Channel secrets never reach renderer state.",
+        "Provider payload secrets, actor private metadata, raw channel files, and artifact private URLs are redacted in diagnostics."
+      ],
+      "failClosedChecks": [
+        "Gateway has no @opencode-ai/sdk dependency.",
+        "Gateway has no direct Postgres access for Cloud control-plane state.",
+        "Missing admin token blocks metrics, diagnostics, and delivery operator endpoints.",
+        "Replica count above one is blocked unless distributed ownership is explicit.",
+        "Fake provider remains local/demo-only."
+      ],
+      "validationEvidence": [
+        "pnpm deploy:validate",
+        "pnpm ops:validate",
+        "pnpm deploy:gateway:smoke",
+        "pnpm deploy:continuation:smoke"
+      ]
+    },
+    {
+      "id": "cloud-gateway-edge",
+      "label": "Cloud With Registered Edge Gateway",
+      "topologyProfiles": ["cloud-gateway-edge"],
+      "authority": "cloud_worker,gateway_standalone",
+      "scope": "Cloud registers an external Gateway or edge worker as a separate authority with explicit trust, metadata boundaries, and fencing.",
+      "auth": [
+        "Edge registration uses scoped API tokens and gateway identity records.",
+        "Cloud never trusts raw Gateway database state or raw OpenCode runtime homes.",
+        "External workspace metadata is tenant-scoped and explicitly registered."
+      ],
+      "revocation": [
+        "Gateway registration can be revoked from Cloud.",
+        "Edge worker leases expire and stale writes are rejected.",
+        "Registered external workspace visibility can be disabled without deleting Gateway-owned state."
+      ],
+      "approvalPolicy": [
+        "Cloud approval authority applies only to Cloud-owned sessions.",
+        "Gateway-owned approvals remain in Gateway authority unless an explicit import/export or edge execution policy allows the bridge.",
+        "customer_hosted_managed_saas_deferred remains a trust boundary until contractual controls exist."
+      ],
+      "questionPolicy": [
+        "Cloud questions and Gateway questions remain scoped to their execution authority.",
+        "Cross-authority question relay requires explicit policy, actor identity, and audit on both sides."
+      ],
+      "auditEvents": [
+        "gateway.registration.created",
+        "gateway.registration.heartbeat",
+        "gateway.registration.revoked",
+        "gateway.edge.lease_claimed",
+        "gateway.edge.write_fenced_output",
+        "external_workspace.visible",
+        "external_workspace.hidden"
+      ],
+      "rateLimits": [
+        "Per-registration heartbeat limits.",
+        "Per-edge worker command and write limits.",
+        "Cloud API returns Retry-After for registration and edge-write throttles."
+      ],
+      "durability": [
+        "Cloud registration records",
+        "Gateway Postgres where Gateway owns execution",
+        "Audit records on both authorities",
+        "Fenced event cursor state"
+      ],
+      "backupRestore": [
+        "Cloud restore must preserve gateway registration and revocation state.",
+        "Gateway restore remains Gateway/operator owned.",
+        "Cross-authority restore drills must prove no unfenced duplicate output."
+      ],
+      "redaction": [
+        "No raw Gateway runtime home, raw local paths, raw provider keys, raw channel secrets, or gateway private files in Cloud registration payloads."
+      ],
+      "failClosedChecks": [
+        "external workspace mode cannot sync raw Gateway runtime state.",
+        "Edge execution disabled unless explicit policy allows it.",
+        "Fenced writes require current lease token.",
+        "customer_hosted_managed_saas_deferred requires operator review before managed SaaS claims."
+      ],
+      "validationEvidence": [
+        "pnpm deploy:validate",
+        "pnpm ops:validate",
+        "pnpm deploy:gateway:smoke",
+        "pnpm test"
+      ]
+    },
+    {
+      "id": "full-hybrid",
+      "label": "Full Hybrid Enterprise Composition",
+      "topologyProfiles": ["full-hybrid"],
+      "authority": "desktop_local,cloud_worker,gateway_standalone",
+      "scope": "Enterprise composition of Desktop Local, Cloud workspaces, Cloud Channel Gateway, Standalone Gateway, and optional Desktop pairing.",
+      "auth": [
+        "Every connector uses its own explicit auth boundary.",
+        "Desktop pairing, Gateway service tokens, Cloud OIDC/header/API-token auth, and provider signing are independent.",
+        "No connector inherits authority from another connector without an explicit policy decision."
+      ],
+      "revocation": [
+        "Each authority has an independent revocation path.",
+        "Workspace movement across authorities is explicit import, sync, registration, or pairing.",
+        "Revocation state is included in restore and incident-response evidence."
+      ],
+      "approvalPolicy": [
+        "Every workspace declares one execution authority.",
+        "Remote approvals follow the owning authority policy.",
+        "Desktop-owned risky actions require local_confirmation unless explicitly remote_allowed by scoped policy.",
+        "Cloud-owned approvals require tenant membership and policy.",
+        "Gateway-owned approvals require channel RBAC."
+      ],
+      "questionPolicy": [
+        "Questions route through the owning authority projection.",
+        "Cross-client question replies are allowed only when the client is authorized for that workspace and authority."
+      ],
+      "auditEvents": [
+        "authority.transition.requested",
+        "authority.transition.completed",
+        "authority.transition.rejected",
+        "workspace.policy.updated",
+        "pairing.revoked",
+        "gateway.revoked",
+        "api_token.revoked",
+        "permission.responded",
+        "question.replied",
+        "artifact.accessed",
+        "workflow.run.created"
+      ],
+      "rateLimits": [
+        "Per-authority limits compose; the strictest applicable quota wins.",
+        "Public Cloud, Gateway, and broker endpoints use Retry-After for throttles.",
+        "Org-level abuse controls can disable new execution without deleting local data."
+      ],
+      "durability": [
+        "Cloud Postgres and object storage",
+        "Gateway Postgres where Gateway owns execution",
+        "Desktop local store where Desktop owns execution",
+        "Audit logs and restore evidence for every enabled authority"
+      ],
+      "backupRestore": [
+        "Cloud restore, Gateway restore, and Desktop local backup boundaries are documented separately.",
+        "Hybrid restore drill proves authority boundaries and no implicit local-to-cloud upload.",
+        "Restore evidence must include redaction review."
+      ],
+      "redaction": [
+        "Secrets never cross renderer, cache, log, audit, diagnostics, or channel boundaries.",
+        "Local paths and local file bodies are never uploaded implicitly.",
+        "Cross-authority dashboards show metadata and policy verdicts, not raw private state."
+      ],
+      "failClosedChecks": [
+        "All smaller gates must pass before claiming full-hybrid production readiness.",
+        "Workspace support matrix must not overclaim capabilities.",
+        "Authority transitions require explicit user or admin action.",
+        "One execution authority per thread is enforced before command dispatch."
+      ],
+      "validationEvidence": [
+        "pnpm lint",
+        "pnpm typecheck",
+        "pnpm test",
+        "pnpm test:e2e",
+        "pnpm deploy:validate",
+        "pnpm deploy:launch:validate",
+        "pnpm ops:validate",
+        "pnpm test:cloud-continuation"
+      ]
+    }
+  ]
+}

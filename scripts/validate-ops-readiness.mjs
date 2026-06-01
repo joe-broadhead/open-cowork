@@ -35,6 +35,8 @@ const cloudGatewayRegistrationDocsPath = 'docs/cloud-gateway-registration.md'
 const coordinationModelDocsPath = 'docs/coordination-model.md'
 const deploymentTopologyDocsPath = 'docs/deployment-topologies.md'
 const deploymentTopologyProfilesPath = 'deploy/topologies/topology-profiles.json'
+const hybridSecurityDocsPath = 'docs/hybrid-security-gates.md'
+const hybridSecurityGatesPath = 'deploy/security/hybrid-security-gates.json'
 const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
 const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
 const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
@@ -54,6 +56,8 @@ for (const path of [
   coordinationModelDocsPath,
   deploymentTopologyDocsPath,
   deploymentTopologyProfilesPath,
+  hybridSecurityDocsPath,
+  hybridSecurityGatesPath,
   managedWorkerDeployPath,
   managedWorkerReleaseTemplatePath,
   managedWorkerRestoreTemplatePath,
@@ -76,6 +80,44 @@ for (const profileId of [
     throw new Error(`${deploymentTopologyProfilesPath} is missing ${profileId}`)
   }
   assertIncludes(deploymentTopologyDocsPath, profileId)
+}
+
+const hybridSecurityGates = parseJson(hybridSecurityGatesPath)
+if (hybridSecurityGates.schemaVersion !== 1 || hybridSecurityGates.purpose !== 'open-cowork-hybrid-security-gates') {
+  throw new Error(`${hybridSecurityGatesPath} must declare the hybrid security gate contract`)
+}
+const requiredHybridGateProfiles = {
+  'desktop-local': 'desktop-only',
+  'desktop-pairing': 'desktop-gateway',
+  'standalone-gateway': 'gateway-only',
+  'cloud-worker': 'cloud-only',
+  'cloud-channel-gateway': 'cloud-channel-gateway',
+  'cloud-gateway-edge': 'cloud-gateway-edge',
+  'full-hybrid': 'full-hybrid',
+}
+for (const [gateId, topologyProfileId] of Object.entries(requiredHybridGateProfiles)) {
+  if (!(hybridSecurityGates.gates || []).some((gate) => gate.id === gateId)) {
+    throw new Error(`${hybridSecurityGatesPath} is missing ${gateId}`)
+  }
+  assertIncludes(hybridSecurityDocsPath, gateId)
+  assertIncludes(deploymentTopologyDocsPath, topologyProfileId)
+}
+for (const phrase of [
+  'local_confirmation',
+  'remote_allowed',
+  'requires_local_confirmation',
+  'blocked_by_policy',
+  'Retry-After',
+  'admin token',
+  'provider signing',
+  'HMAC',
+  'backup',
+  'restore',
+  'redaction',
+  'one execution authority',
+  'customer_hosted_managed_saas_deferred',
+]) {
+  assertIncludes(hybridSecurityDocsPath, phrase)
 }
 
 const requiredMetrics = [

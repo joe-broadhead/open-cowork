@@ -630,10 +630,152 @@ function validateTopologyProfiles() {
   }
 }
 
+function validateHybridSecurityGates() {
+  const gatesPath = 'deploy/security/hybrid-security-gates.json'
+  const gatesDocsPath = 'docs/hybrid-security-gates.md'
+  const readinessPath = 'docs/deployment-readiness.md'
+  const gatesDocument = parseJson(gatesPath)
+  const topologyProfiles = new Set(parseJson('deploy/topologies/topology-profiles.json').profiles.map((profile) => profile.id))
+  const packageScripts = parseJson('package.json').scripts ?? {}
+  const requiredGateIds = [
+    'desktop-local',
+    'desktop-pairing',
+    'standalone-gateway',
+    'cloud-worker',
+    'cloud-channel-gateway',
+    'cloud-gateway-edge',
+    'full-hybrid',
+  ]
+
+  if (gatesDocument.schemaVersion !== 1) {
+    throw new Error(`${gatesPath} must declare schemaVersion 1`)
+  }
+  if (gatesDocument.purpose !== 'open-cowork-hybrid-security-gates') {
+    throw new Error(`${gatesPath} must declare open-cowork-hybrid-security-gates purpose`)
+  }
+  if (!Array.isArray(gatesDocument.gates)) {
+    throw new Error(`${gatesPath} must contain a gates array`)
+  }
+
+  const gates = new Map(gatesDocument.gates.map((gate) => [gate.id, gate]))
+  for (const id of requiredGateIds) {
+    const gate = gates.get(id)
+    if (!gate) throw new Error(`${gatesPath} is missing gate ${id}`)
+    for (const field of ['label', 'authority', 'scope']) {
+      if (!gate[field] || typeof gate[field] !== 'string') {
+        throw new Error(`${gatesPath} gate ${id} must include string field ${field}`)
+      }
+    }
+    for (const field of [
+      'topologyProfiles',
+      'auth',
+      'revocation',
+      'approvalPolicy',
+      'questionPolicy',
+      'auditEvents',
+      'rateLimits',
+      'durability',
+      'backupRestore',
+      'redaction',
+      'failClosedChecks',
+      'validationEvidence',
+    ]) {
+      if (!Array.isArray(gate[field]) || gate[field].length === 0) {
+        throw new Error(`${gatesPath} gate ${id} must include non-empty array field ${field}`)
+      }
+    }
+    for (const profileId of gate.topologyProfiles) {
+      if (!topologyProfiles.has(profileId)) {
+        throw new Error(`${gatesPath} gate ${id} references unknown topology profile ${profileId}`)
+      }
+    }
+    for (const command of gate.validationEvidence) {
+      const match = /^pnpm\s+([^\s]+)/.exec(command)
+      if (!match) throw new Error(`${gatesPath} gate ${id} command must start with pnpm: ${command}`)
+      const scriptName = match[1]
+      if (scriptName.startsWith('--')) continue
+      if (!packageScripts[scriptName]) {
+        throw new Error(`${gatesPath} gate ${id} references missing package script: ${scriptName}`)
+      }
+    }
+    assertIncludes(gatesDocsPath, `\`${id}\``)
+    assertIncludes(readinessPath, `\`${id}\``)
+  }
+
+  const combinedGateText = `${JSON.stringify(gatesDocument)}\n${read(gatesDocsPath)}\n${read(readinessPath)}`
+  for (const phrase of [
+    'local_confirmation',
+    'remote_allowed',
+    'requires_local_confirmation',
+    'blocked_by_policy',
+    'Retry-After',
+    'admin token',
+    'provider signing',
+    'HMAC',
+    'audit',
+    'backup',
+    'restore',
+    'redact',
+    'customer_hosted_managed_saas_deferred',
+    'one execution authority',
+  ]) {
+    if (!combinedGateText.includes(phrase)) {
+      throw new Error(`${gatesPath} and ${gatesDocsPath} must include hybrid security phrase: ${phrase}`)
+    }
+  }
+
+  const desktopPairing = read('packages/shared/src/desktop-pairing.ts')
+  for (const phrase of [
+    "remoteApprovals: 'local_confirmation'",
+    "remoteQuestions: 'local_confirmation'",
+    'requires_local_confirmation',
+    'blocked_by_policy',
+    'remote_allowed',
+    'pairing.revoked',
+    'command.blocked',
+  ]) {
+    if (!desktopPairing.includes(phrase)) {
+      throw new Error(`packages/shared/src/desktop-pairing.ts must include ${phrase}`)
+    }
+  }
+
+  const gatewayConfig = read('apps/gateway/src/config.ts')
+  for (const phrase of [
+    'Gateway operator endpoints require OPEN_COWORK_GATEWAY_ADMIN_TOKEN',
+    'authenticated webhook ingress',
+    'signingSecret',
+    'webhookSecret',
+  ]) {
+    if (!gatewayConfig.includes(phrase)) {
+      throw new Error(`apps/gateway/src/config.ts must include ${phrase}`)
+    }
+  }
+
+  const standaloneNetworkPolicy = read('apps/standalone-gateway/src/network-policy.ts')
+  if (!standaloneNetworkPolicy.includes('public OpenCode endpoint')) {
+    throw new Error('apps/standalone-gateway/src/network-policy.ts must reject public OpenCode endpoint')
+  }
+
+  const cloudHttpServer = read('apps/desktop/src/main/cloud/http-server.ts')
+  for (const phrase of ['Retry-After', 'quota_rejections']) {
+    if (!cloudHttpServer.includes(phrase)) {
+      throw new Error(`apps/desktop/src/main/cloud/http-server.ts must include ${phrase}`)
+    }
+  }
+
+  const workspace = read('packages/shared/src/workspace.ts')
+  for (const phrase of ['OPENCODE_RUNTIME_AUTHORITIES', 'workspace.remote_approval_required']) {
+    if (!workspace.includes(phrase)) {
+      throw new Error(`packages/shared/src/workspace.ts must include ${phrase}`)
+    }
+  }
+}
+
 function validateDocs() {
   const requiredDocs = [
     'docs/deployment-readiness.md',
     'docs/deployment-topologies.md',
+    'docs/hybrid-security-gates.md',
     'docs/downstream-contract.md',
     'docs/runbooks/cloud-managed-operations.md',
     'docs/runbooks/backup-restore.md',
@@ -662,6 +804,7 @@ function validateDocs() {
     'deploy/README.md',
     'deploy/topologies/README.md',
     'deploy/topologies/topology-profiles.json',
+    'deploy/security/hybrid-security-gates.json',
     'deploy/observability/metrics-catalog.json',
     'deploy/observability/prometheus-alerts.yaml',
     'deploy/observability/grafana-open-cowork-overview.json',
@@ -697,6 +840,8 @@ function validateDocs() {
     'deploy/gcp/smoke/evidence.template.json',
     'deploy/topologies/README.md',
     'deploy/topologies/topology-profiles.json',
+    'deploy/security/hybrid-security-gates.json',
+    'docs/hybrid-security-gates.md',
     'deploy/observability/managed-worker-slo-template.json',
     'deploy/private-beta/hosted-byok.config.example.json',
     'deploy/private-beta/self-host-oss.config.example.json',
@@ -1557,6 +1702,7 @@ function validateReleaseSupplyChain() {
 validateCompose()
 validateHelm()
 validateTopologyProfiles()
+validateHybridSecurityGates()
 validateDocs()
 validateGcpReference()
 validateReleaseSupplyChain()
