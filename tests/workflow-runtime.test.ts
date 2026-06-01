@@ -368,6 +368,17 @@ test('workflow tool bridge requires bearer auth and creates workflows through th
     assert.equal(unauthorized.status, 401)
     assert.match(await unauthorized.text(), /Unauthorized workflow tool request/)
 
+    const wrongSameLengthToken = String(token).replace(/.$/, (char) => (char === 'A' ? 'B' : 'A'))
+    const wrongSameLength = await fetch(`${baseUrl}/preview`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${wrongSameLengthToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(manualWorkflowDraft),
+    })
+    assert.equal(wrongSameLength.status, 401)
+
     const preview = await fetch(`${baseUrl}/preview`, {
       method: 'POST',
       headers: {
