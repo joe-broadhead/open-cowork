@@ -312,7 +312,7 @@ function renderAudit() {
     actions.appendChild(pill(event.actorType || 'system'));
     row.appendChild(main);
     row.appendChild(actions);
-    appendDetails(row, 'Redacted metadata', event.metadata || {});
+    appendDetails(row, 'Redacted metadata', safeOperationalMetadata(event.metadata || {}));
     list.appendChild(row);
   }
 }`

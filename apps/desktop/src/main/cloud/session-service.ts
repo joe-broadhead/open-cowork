@@ -31,6 +31,7 @@ import {
   listCapabilitySkills,
   listCapabilityTools,
 } from '../capability-catalog.ts'
+import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
   BillingSubscriptionRecord,
@@ -618,6 +619,11 @@ function boundedImportText(value: unknown, label: string, maxLength = SESSION_IM
   if (typeof value !== 'string') return ''
   if (value.length > maxLength) throw new CloudServiceError(400, `${label} exceeds ${maxLength} characters.`)
   return value
+}
+
+function normalizedCloudListLimit(value: number | null | undefined, fallback = 100, max = 500) {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(1, Math.min(max, Math.floor(value || fallback)))
 }
 
 function importAuditActor(principal: CloudPrincipal): { actorType: 'user' | 'api_token', actorId: string, accountId: string | null } {
@@ -1295,11 +1301,20 @@ export class CloudSessionService {
     input: Omit<ListSessionsPageInput, 'tenantId' | 'userId'> = {},
   ): Promise<ListSessionsPageRecord> {
     await this.ensurePrincipal(principal)
-    return this.store.listSessionsPage({
-      ...input,
-      tenantId: principal.tenantId,
-      userId: principal.userId,
-    })
+    try {
+      return await this.store.listSessionsPage({
+        ...input,
+        tenantId: principal.tenantId,
+        userId: principal.userId,
+      })
+    } catch (error) {
+      if (error instanceof InvalidSessionPageCursorError) {
+        throw new CloudServiceError(400, 'Session list cursor is invalid.', {
+          policyCode: 'sessions.cursor.invalid',
+        })
+      }
+      throw error
+    }
   }
 
   async getSessionView(principal: CloudPrincipal, sessionId: string): Promise<CloudSessionView> {
@@ -1431,10 +1446,11 @@ export class CloudSessionService {
     })
   }
 
-  async listHeadlessAgents(principal: CloudPrincipal): Promise<HeadlessAgentRecord[]> {
+  async listHeadlessAgents(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<HeadlessAgentRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
-    return this.store.listHeadlessAgents(this.principalOrgId(principal))
+    return (await this.store.listHeadlessAgents(this.principalOrgId(principal)))
+      .slice(0, normalizedCloudListLimit(input.limit))
   }
 
   async createHeadlessAgent(
@@ -1494,10 +1510,16 @@ export class CloudSessionService {
     })
   }
 
-  async listChannelBindings(principal: CloudPrincipal, agentId?: string | null): Promise<PublicChannelBindingRecord[]> {
+  async listChannelBindings(
+    principal: CloudPrincipal,
+    agentId?: string | null,
+    input: { limit?: number | null } = {},
+  ): Promise<PublicChannelBindingRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertChannelSetupAllowed(principal)
-    return (await this.store.listChannelBindings(this.principalOrgId(principal), agentId)).map(publicChannelBinding)
+    return (await this.store.listChannelBindings(this.principalOrgId(principal), agentId))
+      .slice(0, normalizedCloudListLimit(input.limit))
+      .map(publicChannelBinding)
   }
 
   async createChannelBinding(
@@ -2344,10 +2366,11 @@ export class CloudSessionService {
     return this.store.deleteThreadSmartFilter(principal.tenantId, filterId)
   }
 
-  async listWorkflows(principal: CloudPrincipal): Promise<WorkflowListPayload> {
+  async listWorkflows(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<WorkflowListPayload> {
     await this.ensurePrincipal(principal)
     this.assertWorkflowsEnabled()
-    const workflows = await this.store.listWorkflows(principal.tenantId, principal.userId)
+    const workflows = (await this.store.listWorkflows(principal.tenantId, principal.userId))
+      .slice(0, normalizedCloudListLimit(input.limit))
     const runs = (await Promise.all(workflows.map((workflow) => (
       this.store.listWorkflowRuns(principal.tenantId, workflow.id, 25)
     )))).flat()
@@ -2762,10 +2785,11 @@ export class CloudSessionService {
     }
   }
 
-  async listApiTokens(principal: CloudPrincipal): Promise<PublicApiTokenRecord[]> {
+  async listApiTokens(principal: CloudPrincipal, input: { limit?: number | null } = {}): Promise<PublicApiTokenRecord[]> {
     await this.ensurePrincipal(principal)
     this.assertApiTokenAdmin(principal)
-    const tokens = await this.store.listApiTokens(this.principalOrgId(principal))
+    const tokens = (await this.store.listApiTokens(this.principalOrgId(principal)))
+      .slice(0, normalizedCloudListLimit(input.limit))
     return tokens.map(publicApiToken)
   }
 

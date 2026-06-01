@@ -85,6 +85,29 @@ function runControlPlaneDomainContracts(
       const firstSessionPage = await store.listSessionsPage({ tenantId, userId, limit: 1 })
       assert.deepEqual(firstSessionPage.items.map((session) => session.sessionId), [sessionId])
       assert.equal(firstSessionPage.nextCursor, null)
+
+      const sameUpdatedAt = new Date('2026-01-02T00:00:00.000Z')
+      for (const suffix of ['a', 'b', 'c']) {
+        await store.createSession({
+          tenantId,
+          userId,
+          sessionId: `${prefix}-page-${suffix}`,
+          opencodeSessionId: `${prefix}-runtime-${suffix}`,
+          profileName: suffix === 'c' ? 'data-analyst' : 'default',
+          title: `cursor-contract ${suffix}`,
+          createdAt: sameUpdatedAt,
+        })
+      }
+      const cursorPageOne = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract' })
+      assert.deepEqual(cursorPageOne.items.map((session) => session.sessionId), [`${prefix}-page-a`, `${prefix}-page-b`])
+      assert.ok(cursorPageOne.nextCursor)
+      const cursorPageTwo = await store.listSessionsPage({ tenantId, userId, limit: 2, query: 'cursor-contract', cursor: cursorPageOne.nextCursor })
+      assert.deepEqual(cursorPageTwo.items.map((session) => session.sessionId), [`${prefix}-page-c`])
+      assert.equal(new Set([...cursorPageOne.items, ...cursorPageTwo.items].map((session) => session.sessionId)).size, 3)
+      await assert.rejects(
+        Promise.resolve().then(() => store.listSessionsPage({ tenantId, userId, limit: 2, query: 'changed-filter', cursor: cursorPageOne.nextCursor })),
+        /cursor/i,
+      )
       const event = await store.appendSessionEvent({
         tenantId,
         sessionId,

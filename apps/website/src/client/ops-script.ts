@@ -181,10 +181,11 @@ function renderDiagnostics() {
     row.appendChild(span);
     health.appendChild(row);
   }
-  appendDetails(bundle, 'Redacted diagnostics JSON', diagnostics);
+  const redactedDiagnostics = safeOperationalMetadata(diagnostics);
+  appendDetails(bundle, 'Redacted diagnostics JSON', redactedDiagnostics);
   const actions = document.createElement('div');
   actions.className = 'row-actions';
-  actions.appendChild(actionButton('Download bundle', () => downloadJson('open-cowork-diagnostics.json', diagnostics), 'primary', false));
+  actions.appendChild(actionButton('Download bundle', () => downloadJson('open-cowork-diagnostics.json', redactedDiagnostics), 'primary', false));
   bundle.appendChild(actions);
 }`
 }

@@ -4,6 +4,18 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { CLOUD_WEB_CLIENT_ENDPOINTS } from './client-contract.ts'
 import { CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
+import {
+  iso,
+  makeAuditEvents,
+  makeDeliveries,
+  makeMembers,
+  makeSession,
+  makeSessionView,
+  makeTokens,
+  makeUsageEvents,
+  makeWorkers,
+  makeWorkflows,
+} from './browser-test-fixtures.ts'
 
 const require = createRequire(import.meta.url)
 const { JSDOM, VirtualConsole } = require('jsdom') as {
@@ -33,76 +45,16 @@ type BrowserHarnessOptions = {
   features?: Record<string, boolean>
   sessionCount?: number
   hydratedViewCount?: number
+  memberCount?: number
+  tokenCount?: number
+  deliveryCount?: number
+  workflowCount?: number
+  workerCount?: number
+  auditCount?: number
+  usageCount?: number
+  artifactCount?: number
   promptFailure?: { status: number, error: string, policyCode?: string }
   projectSourceDenied?: boolean
-}
-
-function iso(index = 0) {
-  return new Date(Date.UTC(2026, 0, 1, 12, 0, index)).toISOString()
-}
-
-function makeSession(index: number) {
-  const status = index % 37 === 0 ? 'running' : 'idle'
-  return {
-    sessionId: `session-${index}`,
-    title: `Cloud thread ${index}`,
-    profileName: index % 3 === 0 ? 'data-analyst' : 'default',
-    status,
-    updatedAt: iso(index % 60),
-    tags: index % 5 === 0 ? ['finance'] : [],
-    smartFilters: index % 7 === 0 ? ['recent'] : [],
-  }
-}
-
-function makeSessionView(session: ReturnType<typeof makeSession>, sequence = 10): any {
-  return {
-    session,
-    projection: {
-      sequence,
-      view: {
-        title: session.title,
-        profileName: session.profileName,
-        status: session.status,
-        updatedAt: session.updatedAt,
-        messages: [
-          { id: `${session.sessionId}-user`, role: 'user', content: 'Summarize the workspace.', order: 1 },
-          { id: `${session.sessionId}-assistant`, role: 'assistant', content: `Workspace summary for ${session.title}.`, order: 2 },
-        ],
-        toolCalls: [
-          { id: `${session.sessionId}-tool`, name: 'repo.search', status: 'completed', input: { query: 'todo' }, output: { matches: 2 }, order: 3 },
-        ],
-        taskRuns: [
-          { id: `${session.sessionId}-task`, title: 'Analysis task', agent: 'data-analyst', status: 'completed', content: 'Checked repository context.', order: 4 },
-        ],
-        pendingApprovals: [
-          { id: `${session.sessionId}-approval`, tool: 'shell', description: 'Run read-only tests', input: { command: 'pnpm test' }, order: 5 },
-        ],
-        pendingQuestions: [
-          {
-            id: `${session.sessionId}-question`,
-            questions: [{ header: 'Scope', question: 'Continue with deployment smoke?', options: [{ label: 'Yes' }, { label: 'No' }] }],
-            order: 6,
-          },
-        ],
-        resolvedApprovals: [],
-        resolvedQuestions: [],
-        artifacts: [
-          { artifactId: `${session.sessionId}-artifact`, filename: 'summary.txt', contentType: 'text/plain', size: 24, order: 7 },
-        ],
-        todos: [{ id: 'todo-1', content: 'Verify browser workbench', status: 'done', priority: 'high' }],
-        errors: [],
-        sessionCost: 0.0123,
-        sessionTokens: { input: 1000, output: 250, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-        contextState: 'idle',
-        compactionCount: 0,
-        projectSource: session.sessionId.endsWith('0')
-          ? { kind: 'git', repositoryUrl: 'https://github.com/example/repo.git' }
-          : null,
-        tags: session.tags,
-        smartFilters: session.smartFilters,
-      },
-    },
-  }
 }
 
 function parseJsonBody(value: unknown) {
@@ -173,8 +125,9 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
 
   const sessions = Array.from({ length: options.sessionCount || 1 }, (_, index) => makeSession(index + 1))
   const hydratedViewCount = options.hydratedViewCount ?? sessions.length
+  const artifactCount = options.artifactCount || 1
   const views: Record<string, any> = Object.fromEntries(
-    sessions.slice(0, hydratedViewCount).map((session, index) => [session.sessionId, makeSessionView(session, index + 10)]),
+    sessions.slice(0, hydratedViewCount).map((session, index) => [session.sessionId, makeSessionView(session, index + 10, artifactCount)]),
   )
   const requests: MockRequest[] = []
   const eventSources: MockEventSource[] = []
@@ -182,38 +135,35 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     byok: [
       { providerId: 'anthropic', credentialKind: 'kms_ref', last4: '1234', status: 'active', updatedAt: iso(1), lastValidatedAt: null },
     ],
-    tokens: [
-      { tokenId: 'token-1', name: 'Desktop connection', last4: 'abcd', scopes: ['desktop'], lastUsedAt: null, revokedAt: null },
-    ],
-    members: [
-      { accountId: 'acct-1', email: 'owner@example.test', role: 'owner', status: 'active', updatedAt: iso(1) },
-      { accountId: 'acct-2', email: 'member@example.test', role: 'member', status: 'active', updatedAt: iso(2) },
-    ],
+    tokens: makeTokens(options.tokenCount || 1),
+    members: makeMembers(options.memberCount || 2),
     agents: [
       { agentId: 'agent-1', name: 'On-call coding agent', profileName: 'default', status: 'active' },
     ],
     bindings: [
       { bindingId: 'binding-1', agentId: 'agent-1', provider: 'telegram', displayName: 'Team Telegram', status: 'active', settings: { defaultChatId: 'chat-1' } },
     ],
-    deliveries: [
-      { deliveryId: 'delivery-1', provider: 'telegram', channelBindingId: 'binding-1', status: 'failed', eventType: 'session.completed', attemptCount: 1, lastError: '[redacted]', nextAttemptAt: iso(3) },
-    ],
+    deliveries: makeDeliveries(options.deliveryCount || 1),
     workerPools: [
       { poolId: 'pool-1', name: 'Primary worker pool', mode: 'self_hosted', status: 'active', region: 'test-region', maxWorkers: 3, maxConcurrentWork: 6, updatedAt: iso(4) },
     ],
-    workers: [
-      { workerId: 'worker-1', poolId: 'pool-1', displayName: 'Worker one', status: 'active', version: 'test', currentLoad: 1, lastHeartbeatAt: iso(5), lastErrorCode: null, lastErrorSummary: null },
-      { workerId: 'worker-2', poolId: 'pool-1', displayName: 'Worker two', status: 'paused', version: 'test', currentLoad: 0, lastHeartbeatAt: null, lastErrorCode: null, lastErrorSummary: null },
-    ],
+    workers: makeWorkers(options.workerCount || 2),
     workerHeartbeats: [
       { workerId: 'worker-1', poolId: 'pool-1', version: 'test', currentLoad: 1, activeWorkIds: ['session-1'], receivedAt: iso(5) },
     ],
-    workflows: [
-      { id: 'workflow-1', title: 'Daily review', instructions: 'Review changed work.', agentName: 'build', status: 'active', latestRunStatus: 'completed', triggers: [{ type: 'manual', enabled: true }], updatedAt: iso(5) },
-    ],
-    runs: [
-      { id: 'run-1', workflowId: 'workflow-1', title: 'Daily review run', status: 'completed', sessionId: 'session-1', triggerType: 'manual', createdAt: iso(6), summary: 'Done' },
-    ],
+    workflows: makeWorkflows(options.workflowCount || 1),
+    runs: Array.from({ length: Math.min(options.workflowCount || 1, 60) }, (_, index) => ({
+      id: `run-${index + 1}`,
+      workflowId: `workflow-${index + 1}`,
+      title: index === 0 ? 'Daily review run' : `Workflow run ${index + 1}`,
+      status: 'completed',
+      sessionId: 'session-1',
+      triggerType: 'manual',
+      createdAt: iso(index + 6),
+      summary: 'Done',
+    })),
+    auditEvents: makeAuditEvents(options.auditCount || 1),
+    usageEvents: makeUsageEvents(options.usageCount || 1),
   }
 
   const makeRequestRecord = (input: string | URL | Request, init: RequestInit = {}) => {
@@ -227,6 +177,12 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       body: parseJsonBody(init.body),
       headers: Object.fromEntries(headers.entries()),
     }
+  }
+
+  const limitFromRequest = (request: ReturnType<typeof makeRequestRecord>, fallback: number, max = 500) => {
+    const params = new URL(request.path, 'https://cloud.example.test').searchParams
+    const parsed = Number(params.get('limit') || fallback)
+    return Math.min(Math.max(Math.floor(Number.isFinite(parsed) ? parsed : fallback), 1), max)
   }
 
   async function handleFetch(input: string | URL | Request, init: RequestInit = {}) {
@@ -274,7 +230,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       state.byok = state.byok.map((secret: any) => secret.providerId === providerId ? { ...secret, status: 'disabled', disabledAt: iso(12) } : secret)
       return jsonResponse({ ok: true })
     }
-    if (request.method === 'GET' && request.pathname === '/api/api-tokens') return jsonResponse({ tokens: state.tokens })
+    if (request.method === 'GET' && request.pathname === '/api/api-tokens') return jsonResponse({ tokens: state.tokens.slice(0, limitFromRequest(request, 100)) })
     if (request.method === 'POST' && request.pathname === '/api/api-tokens') {
       const token = {
         tokenId: `token-${state.tokens.length + 1}`,
@@ -307,7 +263,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({ url: 'https://billing.example.test/checkout' })
     }
     if (request.method === 'GET' && request.pathname === '/api/usage/events') {
-      return jsonResponse({ events: [{ eventId: 'usage-1', eventType: 'prompt', quantity: 1, unit: 'count', createdAt: iso(7) }] })
+      return jsonResponse({ events: state.usageEvents.slice(0, limitFromRequest(request, 20)) })
     }
     if (request.method === 'GET' && request.pathname === '/api/usage/summary') {
       return jsonResponse({
@@ -333,7 +289,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         },
       })
     }
-    if (request.method === 'GET' && request.pathname === '/api/admin/members') return jsonResponse({ members: state.members })
+    if (request.method === 'GET' && request.pathname === '/api/admin/members') return jsonResponse({ members: state.members.slice(0, limitFromRequest(request, 100)) })
     if (request.method === 'POST' && request.pathname === '/api/admin/members') {
       state.members = [{ accountId: `acct-${state.members.length + 1}`, email: (request.body as Record<string, unknown>)?.email, role: (request.body as Record<string, unknown>)?.role || 'member', status: 'invited', updatedAt: iso(9) }, ...state.members]
       return jsonResponse({ member: state.members[0] })
@@ -345,28 +301,28 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({ member: state.members.find((member: any) => member.accountId === accountId) })
     }
     if (request.method === 'GET' && request.pathname === '/api/admin/audit') {
-      return jsonResponse({ events: [{ eventId: 'audit-1', eventType: 'byok.updated', actorType: 'user', actorId: 'user-1', targetType: 'byok', targetId: 'anthropic', metadata: { token: '[redacted]' }, createdAt: iso(8) }] })
+      return jsonResponse({ events: state.auditEvents.slice(0, limitFromRequest(request, 100)) })
     }
-    if (request.method === 'GET' && request.pathname === '/api/admin/worker-pools') return jsonResponse({ pools: state.workerPools })
-    if (request.method === 'GET' && request.pathname === '/api/admin/workers') return jsonResponse({ workers: state.workers })
+    if (request.method === 'GET' && request.pathname === '/api/admin/worker-pools') return jsonResponse({ pools: state.workerPools.slice(0, limitFromRequest(request, 100)) })
+    if (request.method === 'GET' && request.pathname === '/api/admin/workers') return jsonResponse({ workers: state.workers.slice(0, limitFromRequest(request, 100)) })
     const workerHeartbeatsMatch = request.pathname.match(/^\/api\/admin\/workers\/([^/]+)\/heartbeats$/)
     if (request.method === 'GET' && workerHeartbeatsMatch) {
       const workerId = decodeURIComponent(workerHeartbeatsMatch[1])
       return jsonResponse({ heartbeats: state.workerHeartbeats.filter((heartbeat: any) => heartbeat.workerId === workerId) })
     }
-    if (request.method === 'GET' && request.pathname === '/api/channels/agents') return jsonResponse({ agents: state.agents })
+    if (request.method === 'GET' && request.pathname === '/api/channels/agents') return jsonResponse({ agents: state.agents.slice(0, limitFromRequest(request, 100)) })
     if (request.method === 'POST' && request.pathname === '/api/channels/agents') {
       const agent = { agentId: `agent-${state.agents.length + 1}`, name: (request.body as Record<string, unknown>)?.name || 'Agent', profileName: (request.body as Record<string, unknown>)?.profileName || 'default', status: 'active' }
       state.agents = [agent, ...state.agents]
       return jsonResponse({ agent })
     }
-    if (request.method === 'GET' && request.pathname === '/api/channels/bindings') return jsonResponse({ bindings: state.bindings })
+    if (request.method === 'GET' && request.pathname === '/api/channels/bindings') return jsonResponse({ bindings: state.bindings.slice(0, limitFromRequest(request, 100)) })
     if (request.method === 'POST' && request.pathname === '/api/channels/bindings') {
       const binding = { bindingId: `binding-${state.bindings.length + 1}`, ...(request.body as Record<string, unknown>), status: 'auth_required' }
       state.bindings = [binding, ...state.bindings]
       return jsonResponse({ binding })
     }
-    if (request.method === 'GET' && request.pathname === '/api/channels/deliveries') return jsonResponse({ deliveries: state.deliveries })
+    if (request.method === 'GET' && request.pathname === '/api/channels/deliveries') return jsonResponse({ deliveries: state.deliveries.slice(0, limitFromRequest(request, 50)) })
     if (request.method === 'POST' && request.pathname.includes('/retry')) {
       state.deliveries = state.deliveries.map((delivery: any) => ({ ...delivery, status: delivery.deliveryId === request.pathname.split('/')[4] ? 'pending' : delivery.status }))
       return jsonResponse({ delivery: state.deliveries[0] })
@@ -381,7 +337,8 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         redaction: 'secrets-redacted',
         runtime: { role: 'web', commandProcessing: 'disabled', heartbeatCount: 2 },
         byok: { configuredProviders: 1 },
-        gateway: { agents: { total: state.agents.length }, deliverySampleLimit: 200 },
+        gateway: { agents: { total: state.agents.length }, deliverySampleLimit: 200, token: 'leaked-secret' },
+        objectStore: { signedUrl: 'https://object.example.test/signed?token=leaked-secret' },
       })
     }
     if (request.method === 'GET' && request.pathname === '/api/capabilities') {
@@ -396,7 +353,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         ],
       })
     }
-    if (request.method === 'GET' && request.pathname === '/api/workflows') return jsonResponse({ workflows: state.workflows, runs: state.runs })
+    if (request.method === 'GET' && request.pathname === '/api/workflows') return jsonResponse({ workflows: state.workflows.slice(0, limitFromRequest(request, 100)), runs: state.runs.slice(0, 50) })
     const workflowRunMatch = request.pathname.match(/^\/api\/workflows\/([^/]+)\/run$/)
     if (request.method === 'POST' && workflowRunMatch) {
       const workflow = state.workflows.find((entry: any) => entry.id === workflowRunMatch[1]) || state.workflows[0]
@@ -438,7 +395,14 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse(views[session.sessionId])
     }
     const sessionViewMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/view$/)
-    if (request.method === 'GET' && sessionViewMatch) return jsonResponse(views[decodeURIComponent(sessionViewMatch[1])])
+    if (request.method === 'GET' && sessionViewMatch) {
+      const sessionId = decodeURIComponent(sessionViewMatch[1])
+      if (!views[sessionId]) {
+        const session = sessions.find((entry) => entry.sessionId === sessionId)
+        if (session) views[sessionId] = makeSessionView(session, 10, artifactCount)
+      }
+      return jsonResponse(views[sessionId] || { error: 'Not found' }, views[sessionId] ? 200 : 404)
+    }
     const sessionEventsMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/events$/)
     if (request.method === 'GET' && sessionEventsMatch) return jsonResponse({ ok: true })
     const promptMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/)
@@ -481,7 +445,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     const artifactListMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/)
     if (request.method === 'GET' && artifactListMatch) {
       const view = views[decodeURIComponent(artifactListMatch[1])]
-      return jsonResponse({ artifacts: view.projection.view.artifacts })
+      return jsonResponse({ artifacts: view.projection.view.artifacts.slice(0, limitFromRequest(request, 100)) })
     }
     const artifactMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts\/([^/]+)$/)
     if (request.method === 'GET' && artifactMatch) {
@@ -550,13 +514,13 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     window.eval(clientScript)
     await waitFor(() => {
       assert.notEqual(document.body.dataset.auth, 'loading')
-    })
+    }, 8000)
     if (document.body.dataset.auth === 'signed-in') {
       await waitFor(() => {
         assert.doesNotMatch(document.querySelector('#thread-list')?.textContent || '', /No cloud threads loaded/)
         assert.doesNotMatch(document.querySelector('#workbench-agent-list')?.textContent || '', /No profile-allowed agents loaded|No agents loaded/)
         assert.doesNotMatch(document.querySelector('#workflow-list')?.textContent || '', /No workflows loaded/)
-      })
+      }, 8000)
     }
     return harness
   }

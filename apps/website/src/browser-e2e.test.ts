@@ -91,14 +91,75 @@ test('cloud web browser pages cloud threads through backend cursors without losi
     assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1000/)
     assert.match(harness.document.querySelector('#thread-limit-status')?.textContent || '', /1000 of 1000 loaded of about 1001 total/)
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path.includes('cursor=offset%3A800')))
+    assert.equal((loadMore as HTMLElement).hidden, false)
+
+    const laterPageRow = [...harness.document.querySelectorAll('#thread-list [role="row"]')]
+      .find((row) => row.textContent?.includes('Cloud thread 1000'))
+    assert.ok(laterPageRow)
+    ;(laterPageRow.querySelector('button') as HTMLButtonElement).click()
+    await waitFor(() => assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Cloud thread 1000/))
 
     const workspaceSource = harness.eventSources.find((source) => source.url === '/api/events')
     assert.ok(workspaceSource)
     workspaceSource.emit('snapshot.required', { type: 'snapshot.required', sequence: 0 })
     await waitFor(() => {
-      assert.equal(harness.document.querySelectorAll('#thread-list [role="row"]').length, 1000)
+      const rows = [...harness.document.querySelectorAll('#thread-list [role="row"]')]
+      assert.equal(rows.length, 1000)
+      assert.equal(new Set(rows.map((row) => row.textContent || '')).size, rows.length)
       assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1000/)
+      assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Cloud thread 1000/)
+      assert.match(harness.document.querySelector('#thread-list [data-selected="true"]')?.textContent || '', /Cloud thread 1000/)
+      assert.equal((loadMore as HTMLElement).hidden, false)
     })
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser bounds large admin surfaces and redacts unsafe operational details', async () => {
+  const harness = await createCloudWebBrowserHarness({
+    role: 'admin',
+    memberCount: 150,
+    tokenCount: 140,
+    deliveryCount: 80,
+    workflowCount: 140,
+    workerCount: 120,
+    auditCount: 130,
+    usageCount: 40,
+    artifactCount: 140,
+  }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+
+    assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#token-list > .row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#delivery-list > .row').length, 50)
+    assert.equal(harness.document.querySelectorAll('#workflow-list [role="row"]').length, 100)
+    assert.equal(harness.document.querySelectorAll('#audit-list > .row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100)
+    assert.ok(harness.document.querySelectorAll('#usage-list > .row').length <= 12)
+    assert.ok(harness.document.querySelectorAll('#admin-worker-summary > .row').length <= 11)
+
+    assert.ok(harness.lastRequest((request) => request.path === '/api/admin/members?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/api-tokens?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/agents?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/bindings?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/deliveries?limit=50'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/workflows?limit=100'))
+
+    const auditText = harness.document.querySelector('#audit-list')?.textContent || ''
+    assert.doesNotMatch(auditText, /leaked-secret|signed\?token=/)
+    assert.match(auditText, /\[redacted\]/)
+
+    const deliveryText = harness.document.querySelector('#delivery-list')?.textContent || ''
+    assert.doesNotMatch(deliveryText, /leaked-secret|signed\?token=/)
+
+    const artifactText = harness.document.querySelector('#artifact-list')?.textContent || ''
+    assert.doesNotMatch(artifactText, /signed\?token=|objectKey/)
+
+    harness.clickText('#diagnostics button', 'Prepare bundle')
+    await waitFor(() => assert.match(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /secrets-redacted/))
+    assert.doesNotMatch(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /leaked-secret|signed\?token=/)
   } finally {
     harness.close()
   }
@@ -124,7 +185,7 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
       assert.equal(harness.document.body.dataset.route, 'artifacts')
       assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
     })
-    assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts$/.test(request.path)))
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts(?:\?|$)/.test(request.path)))
 
     harness.clickText('.artifact-card button', 'Download')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts\/session-1-artifact$/.test(request.path))))

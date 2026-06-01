@@ -137,3 +137,37 @@ test('cloud web browser renders 10k session lists with bounded DOM work', async 
     harness.close()
   }
 })
+
+test('cloud web browser keeps large admin surfaces bounded across route transitions', async () => {
+  const start = performance.now()
+  const harness = await createCloudWebBrowserHarness({
+    role: 'admin',
+    memberCount: 1_000,
+    tokenCount: 1_000,
+    deliveryCount: 1_000,
+    workflowCount: 1_000,
+    workerCount: 1_000,
+    auditCount: 1_000,
+    usageCount: 1_000,
+    artifactCount: 1_000,
+  }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100))
+    budget('browser bootstrap with large admin fixtures', performance.now() - start, 8000)
+
+    const routeStart = performance.now()
+    for (const label of ['Members', 'Connections', 'Gateway', 'Audit', 'Usage', 'Workflows', 'Artifacts']) {
+      harness.clickText('[data-route-link]', label)
+    }
+    budget('admin route transitions over large fixtures', performance.now() - routeStart, 1200)
+
+    assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#token-list > .row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#delivery-list > .row').length, 50)
+    assert.equal(harness.document.querySelectorAll('#workflow-list [role="row"]').length, 100)
+    assert.equal(harness.document.querySelectorAll('#audit-list > .row').length, 100)
+    assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100)
+  } finally {
+    harness.close()
+  }
+})

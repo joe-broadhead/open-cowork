@@ -51,7 +51,11 @@ export async function handleChannelsApiRoute(input: {
 
   if (collection === 'agents') {
     if (!itemId && req.method === 'GET') {
-      tools.writeJson(res, 200, { agents: await options.service.listHeadlessAgents(context.principal) }, options.corsOrigin)
+      tools.writeJson(res, 200, {
+        agents: await options.service.listHeadlessAgents(context.principal, {
+          limit: tools.readNonNegativeInteger(context.url.searchParams.get('limit'), 100),
+        }),
+      }, options.corsOrigin)
       return true
     }
     if (!itemId && req.method === 'POST') {
@@ -91,7 +95,9 @@ export async function handleChannelsApiRoute(input: {
   if (collection === 'bindings') {
     if (!itemId && req.method === 'GET') {
       tools.writeJson(res, 200, {
-        bindings: await options.service.listChannelBindings(context.principal, context.url.searchParams.get('agentId')),
+        bindings: await options.service.listChannelBindings(context.principal, context.url.searchParams.get('agentId'), {
+          limit: tools.readNonNegativeInteger(context.url.searchParams.get('limit'), 100),
+        }),
       }, options.corsOrigin)
       return true
     }

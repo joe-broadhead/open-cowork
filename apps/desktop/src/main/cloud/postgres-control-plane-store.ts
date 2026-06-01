@@ -2119,7 +2119,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async listSessionsPage(input: ListSessionsPageInput) {
     await this.requireTenantUser(input.tenantId, input.userId)
     const limit = Math.max(1, Math.min(500, Math.floor(input.limit ?? 100)))
-    const cursor = decodeSessionPageCursor(input.cursor)
+    const cursor = decodeSessionPageCursor(input.cursor, input)
     const params: unknown[] = [input.tenantId, input.userId]
     const where = ['tenant_id = $1', 'user_id = $2']
     if (input.status) {
@@ -2158,7 +2158,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const items = rows.slice(0, limit)
     return {
       items,
-      nextCursor: rows.length > limit && items.length > 0 ? encodeSessionPageCursor(items[items.length - 1]!) : null,
+      nextCursor: rows.length > limit && items.length > 0 ? encodeSessionPageCursor(items[items.length - 1]!, input) : null,
       totalEstimate: rows.length > limit ? limit + 1 : rows.length,
     }
   }

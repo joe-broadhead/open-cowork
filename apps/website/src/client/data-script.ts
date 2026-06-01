@@ -37,12 +37,12 @@ async function loadCapabilities() {
 
 async function loadWorkflows() {
   const payload = await optionalSurfaceLoad(
-    () => api(endpoint('workflows', '/api/workflows')),
+    () => api(withQuery(endpoint('workflows', '/api/workflows'), { limit: listLimit('workflows') })),
     { workflows: [], runs: [] },
     (error) => { state.workflows.error = error; },
   );
-  state.workflows.workflows = normalizeList(payload.workflows);
-  state.workflows.runs = normalizeList(payload.runs);
+  state.workflows.workflows = boundedList(payload.workflows, 'workflows');
+  state.workflows.runs = boundedList(payload.runs, 'workflowRuns');
   if (state.selectedWorkflowId && !state.workflows.workflows.some((workflow) => workflow.id === state.selectedWorkflowId)) {
     state.selectedWorkflowId = null;
   }
@@ -87,7 +87,7 @@ async function loadAdminSurfaces() {
       setAdminError,
     ),
     optionalSurfaceLoad(
-      () => api(endpoint('adminMembers', '/api/admin/members')).then((body) => body.members || []),
+      () => api(withQuery(endpoint('adminMembers', '/api/admin/members'), { limit: listLimit('members') })).then((body) => body.members || []),
       [],
       setAdminError,
     ),
@@ -108,10 +108,13 @@ async function loadAdminSurfaces() {
     ),
   ]);
   state.admin.policy = policy;
-  state.admin.members = normalizeList(members);
-  state.admin.workerPools = normalizeList(workerPools);
-  state.admin.workers = normalizeList(workers);
-  state.admin.auditEvents = normalizeList(auditEvents);
+  state.admin.members = boundedList(members, 'members');
+  state.admin.workerPools = boundedList(workerPools, 'workerPools');
+  state.admin.workers = boundedList(workers, 'workers');
+  state.admin.auditEvents = boundedList(auditEvents, 'auditEvents').map((event) => ({
+    ...event,
+    metadata: safeOperationalMetadata(event.metadata),
+  }));
   state.admin.error = adminError;
   state.admin.workerError = workerError;
   renderMembers();
@@ -122,19 +125,24 @@ async function loadAdminSurfaces() {
 
 async function loadGatewayOps() {
   const [agents, bindings, deliveries] = await Promise.all([
-    optionalLoad(() => api(endpoint('channelAgents', '/api/channels/agents')).then((body) => body.agents || []), []),
-    optionalLoad(() => api(endpoint('channelBindings', '/api/channels/bindings')).then((body) => body.bindings || []), []),
+    optionalLoad(() => api(withQuery(endpoint('channelAgents', '/api/channels/agents'), { limit: listLimit('headlessAgents') })).then((body) => body.agents || []), []),
+    optionalLoad(() => api(withQuery(endpoint('channelBindings', '/api/channels/bindings'), { limit: listLimit('channelBindings') })).then((body) => body.bindings || []), []),
     optionalLoad(() => api(endpoint('channelDeliveries', '/api/channels/deliveries?limit=50')).then((body) => body.deliveries || []), []),
   ]);
-  state.agents = normalizeList(agents);
-  state.bindings = normalizeList(bindings);
-  state.deliveries = normalizeList(deliveries);
+  state.agents = boundedList(agents, 'headlessAgents');
+  state.bindings = boundedList(bindings, 'channelBindings');
+  state.deliveries = boundedList(deliveries, 'channelDeliveries').map((delivery) => ({
+    ...delivery,
+    target: safeOperationalMetadata(delivery.target),
+    payload: safeOperationalMetadata(delivery.payload),
+    lastError: safeOperationalText(delivery.lastError),
+  }));
   renderGateway();
 }
 
 async function loadDiagnostics() {
   state.diagnosticsError = null;
-  state.diagnostics = await optionalSurfaceLoad(
+  const diagnostics = await optionalSurfaceLoad(
     () => api(endpoint('diagnostics', '/api/diagnostics')),
     null,
     (error) => {
@@ -142,6 +150,7 @@ async function loadDiagnostics() {
       if (error) setStatus(error, 'error');
     },
   );
+  state.diagnostics = diagnostics ? safeOperationalMetadata(diagnostics) : null;
   renderDiagnostics();
 }
 
@@ -154,16 +163,16 @@ async function refreshDashboard() {
   state.workspace = await api(endpoint('workspace', '/api/workspace'));
   const [byok, tokens, billing, usage, usageSummary] = await Promise.all([
     optionalLoad(() => api(endpoint('byok', '/api/byok')).then((body) => body.secrets || []), []),
-    optionalLoad(() => api(endpoint('apiTokens', '/api/api-tokens')).then((body) => body.tokens || []), []),
+    optionalLoad(() => api(withQuery(endpoint('apiTokens', '/api/api-tokens'), { limit: listLimit('apiTokens') })).then((body) => body.tokens || []), []),
     optionalLoad(() => api(endpoint('billingSubscription', '/api/billing/subscription')), { enabled: false }),
     optionalLoad(() => api(endpoint('usageEvents', '/api/usage/events?limit=20')).then((body) => body.events || []), []),
     optionalLoad(() => api(endpoint('usageSummary', '/api/usage/summary?limit=100')), null),
   ]);
-  state.byok = byok;
-  state.tokens = tokens;
+  state.byok = normalizeList(byok);
+  state.tokens = boundedList(tokens, 'apiTokens');
   state.billing = billing;
-  state.usage = usage;
-  state.usageSummary = usageSummary;
+  state.usage = boundedList(usage, 'usageEvents').map((event) => safeOperationalMetadata(event));
+  state.usageSummary = usageSummary ? safeOperationalMetadata(usageSummary) : null;
   document.body.dataset.auth = 'signed-in';
   setStatus('Workbench synced', 'ok');
   setRoute(window.location.hash.replace(/^#/, '') || state.activeRoute || defaultRoute(), true);
@@ -308,11 +317,18 @@ function downloadJson(filename, payload) {
 }
 
 function exportAuditEvents() {
-  downloadJson('open-cowork-audit-events.json', { exportedAt: new Date().toISOString(), events: filteredAuditEvents() });
+  downloadJson('open-cowork-audit-events.json', {
+    exportedAt: new Date().toISOString(),
+    events: filteredAuditEvents().map((event) => safeOperationalMetadata(event)),
+  });
 }
 
 function exportUsageEvents() {
-  downloadJson('open-cowork-usage-summary.json', { exportedAt: new Date().toISOString(), summary: state.usageSummary, events: state.usage });
+  downloadJson('open-cowork-usage-summary.json', {
+    exportedAt: new Date().toISOString(),
+    summary: safeOperationalMetadata(state.usageSummary),
+    events: state.usage.map((event) => safeOperationalMetadata(event)),
+  });
 }
 
 async function createAgent(formData) {
