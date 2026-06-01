@@ -22,6 +22,8 @@ import {
 } from './http-server.ts'
 import {
   createCloudObservabilityFromEnv,
+  recordCloudLog,
+  recordCloudMetric,
   recordCloudSchedulerMetric,
   recordCloudWorkerMetric,
   type CloudObservabilityAdapter,
@@ -1176,7 +1178,7 @@ async function recordLoopError(
   error: unknown,
   attributes: Record<string, string | number | boolean | null | undefined> = {},
 ) {
-  await observability?.metric({
+  await recordCloudMetric(observability, {
     name: 'open_cowork_cloud_loop_errors_total',
     value: 1,
     unit: '1',
@@ -1186,7 +1188,7 @@ async function recordLoopError(
       error_name: error instanceof Error ? error.name : 'Error',
     },
   })
-  await observability?.log({
+  await recordCloudLog(observability, {
     level: 'error',
     name,
     message: error instanceof Error ? error.message : String(error),
@@ -1216,7 +1218,7 @@ async function waitForLoopDrain(
   ])
   if (timeout) clearTimeout(timeout)
   if (result === timeoutMarker) {
-    await observability?.log({
+    await recordCloudLog(observability, {
       level: 'warn',
       name: `cloud.${loopName}.shutdown_timeout`,
       message: `Cloud ${loopName} loop did not finish before shutdown grace elapsed.`,
@@ -1539,7 +1541,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         ))
       }, {
         onDroppedEvent(event) {
-          void observability?.metric({
+          void recordCloudMetric(observability, {
             name: 'open_cowork_cloud_opencode_events_dropped_total',
             value: 1,
             unit: '1',
@@ -1635,7 +1637,11 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
       ])
       runtimeUnsubscribe?.()
       await server?.close()
-      await observability?.close?.()
+      try {
+        await observability?.close?.()
+      } catch {
+        // Telemetry shutdown must not block runtime, object-store, or control-plane cleanup.
+      }
       await runtime.close?.()
       await objectStore.close?.()
       await store.close?.()

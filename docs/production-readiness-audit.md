@@ -1,6 +1,6 @@
 # Production Readiness Audit
 
-Last updated: 2026-06-01.
+Last updated: 2026-06-02.
 
 This audit records the current delta between the repository and a polished
 enterprise-production target. It is based on local source inspection, targeted
@@ -15,18 +15,17 @@ Cloud tenant boundaries are guarded, release supply-chain controls are mature,
 and deployment templates have explicit production gates. No critical issue was
 found in the current review.
 
-The remaining work is concentrated in four areas:
+The remaining work is concentrated in three areas:
 
-- high-value security hardening around renderer-accessible local secrets
-- Cloud worker lifecycle and operational correctness under failure
 - release/promotion proof for hosted production claims
 - maintainability guardrails for the largest Cloud compatibility facades and
   generated or vendored surfaces
+- shutdown and backpressure behavior for long-lived Cloud streams and queues
 
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `7fdbfb7203657b98a2b1d424404c9a3075152d29`.
+  `d904f74cb97e4697294966ec0cb1743f07706f77`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -52,42 +51,16 @@ The remaining work is concentrated in four areas:
   instead of raw provider or integration secrets. Non-secret descriptor fields
   can still be shown for editing, and echoed mask sentinels preserve the stored
   secret on save.
+- Cloud worker command execution now aborts on lease-renewal loss, propagates
+  `AbortSignal` through runtime command calls, uses stable OpenCode message IDs
+  for prompt retries, and has regressions for active and cached lease renewal
+  failure paths.
+- Cloud observability hot paths are best-effort: composite adapters isolate
+  failing sinks, worker/scheduler/HTTP record helpers suppress telemetry sink
+  failures, and OTLP export uses bounded queues, drop counters, and periodic
+  flush.
 
 ## High Priority
-
-### Worker Lease Renewal Loss Does Not Cancel Active Execution
-
-Evidence:
-
-- `apps/desktop/src/main/cloud/worker.ts` renews leases while executing
-  commands.
-- Renewal failures are caught and recorded, but the active command is not
-  aborted.
-
-Impact: after lease expiry, another worker can reclaim a command while the
-stale worker continues runtime or external side effects. Store writes are
-fenced, but side effects outside the store are not.
-
-Target state: propagate renewal loss through an `AbortSignal`, fail or cancel
-the active command, and add a regression where renewal fails and another worker
-attempts reclaim.
-
-### Telemetry Failure Can Affect Command Correctness
-
-Evidence:
-
-- Composite observability adapters use `Promise.all`.
-- Worker success-path metrics are awaited inside command execution.
-- OTLP spans and metrics are buffered in arrays and flushed only on explicit
-  flush or close.
-
-Impact: a telemetry sink failure can turn an already-executed command into a
-worker failure or retry. Long-running OTLP deployments can retain unbounded
-telemetry until shutdown.
-
-Target state: make hot-path telemetry best-effort, introduce bounded queues and
-drop counters, add periodic OTLP flush, and test a failing adapter during a
-successful command.
 
 ### Active SSE Streams Can Block Cloud Shutdown
 

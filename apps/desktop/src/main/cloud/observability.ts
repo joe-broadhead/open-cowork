@@ -56,6 +56,8 @@ export type OtlpHttpCloudObservabilityOptions = {
   serviceVersion?: string | null
   headers?: Record<string, string>
   fetch?: typeof fetch
+  flushIntervalMs?: number
+  maxQueueSize?: number
 }
 
 export type CloudHttpRequestObservation = {
@@ -77,6 +79,8 @@ type CloudPrometheusMetricPoint = {
 }
 
 const DEFAULT_SERVICE_NAME = 'open-cowork-cloud'
+const DEFAULT_OTLP_FLUSH_INTERVAL_MS = 30_000
+const DEFAULT_OTLP_MAX_QUEUE_SIZE = 1_000
 const SENSITIVE_FIELD = /(authorization|cookie|token|secret|password|credential|key|ref|kmsref|ciphertext|envelope)$/i
 const MAX_STRING_LENGTH = 512
 const SIGNED_URL_QUERY_PATTERN = /\b(https?:\/\/[^\s"'<>?]+)\?[^"'<> \t\r\n]+/gi
@@ -225,27 +229,61 @@ export function createNoopCloudObservability(): CloudObservabilityAdapter {
   }
 }
 
+async function observeBestEffort(callback: () => void | Promise<void>) {
+  try {
+    await callback()
+  } catch {
+    // Telemetry must never become part of product correctness.
+  }
+}
+
+async function observeAllBestEffort(callbacks: Array<() => void | Promise<void>>) {
+  await Promise.allSettled(callbacks.map((callback) => Promise.resolve().then(callback)))
+}
+
+export async function recordCloudLog(
+  observability: CloudObservabilityAdapter | null | undefined,
+  record: CloudLogRecord,
+) {
+  if (!observability) return
+  await observeBestEffort(() => observability.log(record))
+}
+
+export async function recordCloudMetric(
+  observability: CloudObservabilityAdapter | null | undefined,
+  record: CloudMetricRecord,
+) {
+  if (!observability) return
+  await observeBestEffort(() => observability.metric(record))
+}
+
 export function createCompositeCloudObservability(adapters: Array<CloudObservabilityAdapter | null | undefined>): CloudObservabilityAdapter {
   const active = adapters.filter((adapter): adapter is CloudObservabilityAdapter => Boolean(adapter))
   if (active.length === 0) return createNoopCloudObservability()
   return {
     async log(record) {
-      await Promise.all(active.map((adapter) => adapter.log(record)))
+      await observeAllBestEffort(active.map((adapter) => () => adapter.log(record)))
     },
     async metric(record) {
-      await Promise.all(active.map((adapter) => adapter.metric(record)))
+      await observeAllBestEffort(active.map((adapter) => () => adapter.metric(record)))
     },
     async span(record) {
-      await Promise.all(active.map((adapter) => adapter.span(record)))
+      await observeAllBestEffort(active.map((adapter) => () => adapter.span(record)))
     },
     renderPrometheus() {
-      return active.map((adapter) => adapter.renderPrometheus?.()).filter(Boolean).join('\n')
+      return active.map((adapter) => {
+        try {
+          return adapter.renderPrometheus?.() || ''
+        } catch {
+          return ''
+        }
+      }).filter(Boolean).join('\n')
     },
     async flush() {
-      await Promise.all(active.map((adapter) => adapter.flush?.()))
+      await observeAllBestEffort(active.map((adapter) => () => adapter.flush?.()))
     },
     async close() {
-      await Promise.all(active.map((adapter) => adapter.close?.()))
+      await observeAllBestEffort(active.map((adapter) => () => adapter.close?.()))
     },
   }
 }
@@ -361,12 +399,25 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
   const fetcher = options.fetch || globalThis.fetch
   const serviceName = options.serviceName || DEFAULT_SERVICE_NAME
   const serviceVersion = options.serviceVersion || null
+  const maxQueueSize = Math.max(1, Math.floor(options.maxQueueSize || DEFAULT_OTLP_MAX_QUEUE_SIZE))
+  const flushIntervalMs = Math.max(0, Math.floor(options.flushIntervalMs ?? DEFAULT_OTLP_FLUSH_INTERVAL_MS))
   const headers = {
     'content-type': 'application/json',
     ...(options.headers || {}),
   }
   const spans: CloudSpanRecord[] = []
   const metrics: CloudMetricRecord[] = []
+  let droppedSpansTotal = 0
+  let droppedMetricsTotal = 0
+  let flushing: Promise<void> | null = null
+
+  function enqueue<T>(queue: T[], record: T, onDrop: () => void) {
+    if (queue.length >= maxQueueSize) {
+      queue.shift()
+      onDrop()
+    }
+    queue.push(record)
+  }
 
   async function post(path: '/v1/traces' | '/v1/metrics', body: unknown) {
     const response = await fetcher(normalizeEndpoint(options.endpoint, path), {
@@ -406,8 +457,24 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
   }
 
   async function flushMetrics() {
-    if (metrics.length === 0) return
+    if (metrics.length === 0 && droppedSpansTotal === 0 && droppedMetricsTotal === 0) return
     const pending = metrics.splice(0)
+    if (droppedSpansTotal > 0) {
+      pending.push({
+        name: 'open_cowork_cloud_otlp_dropped_records_total',
+        value: droppedSpansTotal,
+        unit: '1',
+        attributes: { kind: 'span' },
+      })
+    }
+    if (droppedMetricsTotal > 0) {
+      pending.push({
+        name: 'open_cowork_cloud_otlp_dropped_records_total',
+        value: droppedMetricsTotal,
+        unit: '1',
+        attributes: { kind: 'metric' },
+      })
+    }
     await post('/v1/metrics', {
       resourceMetrics: [{
         resource: {
@@ -420,7 +487,7 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
             unit: metric.unit || '',
             sum: {
               aggregationTemporality: 2,
-              isMonotonic: false,
+              isMonotonic: metric.name.endsWith('_total'),
               dataPoints: [{
                 timeUnixNano: timeUnixNano(metric.timestamp || new Date()),
                 asDouble: metric.value,
@@ -433,21 +500,47 @@ export function createOtlpHttpCloudObservability(options: OtlpHttpCloudObservabi
     })
   }
 
+  async function flushAll() {
+    if (flushing) return flushing
+    flushing = (async () => {
+      await Promise.allSettled([
+        flushSpans(),
+        flushMetrics(),
+      ])
+    })()
+    try {
+      await flushing
+    } finally {
+      flushing = null
+    }
+  }
+
+  const flushTimer = flushIntervalMs > 0
+    ? setInterval(() => {
+        void flushAll()
+      }, flushIntervalMs)
+    : null
+  flushTimer?.unref?.()
+
   return {
     log() {},
     metric(record) {
-      metrics.push(record)
+      if (!Number.isFinite(record.value)) return
+      enqueue(metrics, record, () => {
+        droppedMetricsTotal += 1
+      })
     },
     span(record) {
-      spans.push(record)
+      enqueue(spans, record, () => {
+        droppedSpansTotal += 1
+      })
     },
     async flush() {
-      await flushSpans()
-      await flushMetrics()
+      await flushAll()
     },
     async close() {
-      await flushSpans()
-      await flushMetrics()
+      if (flushTimer) clearInterval(flushTimer)
+      await flushAll()
     },
   }
 }
@@ -467,7 +560,7 @@ export async function recordCloudHttpRequest(
     'cloud.role': input.role,
     'cloud.profile': input.profileName,
   }
-  await observability.log({
+  await observeBestEffort(() => observability.log({
     level: input.statusCode >= 500 ? 'error' : input.statusCode >= 400 ? 'warn' : 'info',
     name: 'cloud.http.request',
     message: `${input.method} ${input.path} ${input.statusCode}`,
@@ -476,15 +569,15 @@ export async function recordCloudHttpRequest(
       duration_ms: input.durationMs,
     },
     timestamp,
-  })
-  await observability.metric({
+  }))
+  await observeBestEffort(() => observability.metric({
     name: 'cloud.http.server.duration_ms',
     value: input.durationMs,
     unit: 'ms',
     attributes,
     timestamp,
-  })
-  await observability.metric({
+  }))
+  await observeBestEffort(() => observability.metric({
     name: 'open_cowork_cloud_http_requests_total',
     value: 1,
     unit: '1',
@@ -496,8 +589,8 @@ export async function recordCloudHttpRequest(
       'cloud.profile': input.profileName,
     },
     timestamp,
-  })
-  await observability.metric({
+  }))
+  await observeBestEffort(() => observability.metric({
     name: 'open_cowork_cloud_http_request_duration_ms',
     value: input.durationMs,
     unit: 'ms',
@@ -509,8 +602,8 @@ export async function recordCloudHttpRequest(
       'cloud.profile': input.profileName,
     },
     timestamp,
-  })
-  await observability.span({
+  }))
+  await observeBestEffort(() => observability.span({
     name: 'cloud.http.request',
     startTime: new Date(timestamp.getTime() - input.durationMs),
     endTime: timestamp,
@@ -519,7 +612,7 @@ export async function recordCloudHttpRequest(
       duration_ms: input.durationMs,
     },
     status,
-  })
+  }))
 }
 
 export async function recordCloudWorkerMetric(
@@ -537,7 +630,7 @@ export async function recordCloudWorkerMetric(
 ) {
   if (!observability) return
   const timestamp = input.timestamp || new Date()
-  await observability.metric({
+  await observeBestEffort(() => observability.metric({
     name: input.name,
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
@@ -548,7 +641,7 @@ export async function recordCloudWorkerMetric(
       status: input.status || undefined,
     },
     timestamp,
-  })
+  }))
 }
 
 export async function recordCloudSchedulerMetric(
@@ -564,7 +657,7 @@ export async function recordCloudSchedulerMetric(
 ) {
   if (!observability) return
   const timestamp = input.timestamp || new Date()
-  await observability.metric({
+  await observeBestEffort(() => observability.metric({
     name: input.name,
     value: input.value ?? 1,
     unit: input.name.endsWith('_ms') ? 'ms' : '1',
@@ -573,7 +666,7 @@ export async function recordCloudSchedulerMetric(
       status: input.status || undefined,
     },
     timestamp,
-  })
+  }))
 }
 
 function parseJsonHeaders(value: string | null) {
@@ -591,6 +684,26 @@ function parseJsonHeaders(value: string | null) {
 
 function envValue(env: Env, key: string) {
   return normalizeString(env[key])
+}
+
+function parseOptionalNonNegativeInteger(env: Env, key: string) {
+  const value = envValue(env, key)
+  if (!value) return undefined
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${key} must be a non-negative integer.`)
+  }
+  return parsed
+}
+
+function parseOptionalPositiveInteger(env: Env, key: string) {
+  const value = envValue(env, key)
+  if (!value) return undefined
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${key} must be a positive integer.`)
+  }
+  return parsed
 }
 
 export function createCloudObservabilityFromEnv(env: Env = process.env) {
@@ -616,6 +729,8 @@ export function createCloudObservabilityFromEnv(env: Env = process.env) {
       serviceName,
       serviceVersion,
       headers: parseJsonHeaders(envValue(env, 'OPEN_COWORK_CLOUD_OTLP_HEADERS')),
+      flushIntervalMs: parseOptionalNonNegativeInteger(env, 'OPEN_COWORK_CLOUD_OTLP_FLUSH_INTERVAL_MS'),
+      maxQueueSize: parseOptionalPositiveInteger(env, 'OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE'),
     }))
   }
 
