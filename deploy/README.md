@@ -39,6 +39,10 @@ Use these invariants across every provider:
   live deployment after rollout.
 - For the GCP reference deployment, run `pnpm deploy:gcp:preflight` before
   rollout and `pnpm deploy:gcp:smoke` after traffic is routed.
+- Use `docs/setup-and-health-center.md` and the Desktop Health Center as the
+  product-facing readiness view for Desktop, Cloud, Gateway, and pairing paths.
+  It should agree with `pnpm deploy:validate`, `pnpm ops:validate`, Gateway
+  doctor output, and smoke evidence before production traffic is routed.
 
 The canonical scalable manifest is the provider-neutral Helm chart in
 `helm/open-cowork-cloud`; the gateway chart lives in `helm/open-cowork-gateway`

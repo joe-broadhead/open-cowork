@@ -25,7 +25,21 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'New Thread' })).toBeTruthy()
     expect(screen.getByText('Workflows')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
+    expect(screen.getByText('Health Center')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
+  })
+
+  it('navigates to the Health Center from the primary nav', () => {
+    const onViewChange = vi.fn()
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={onViewChange}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Health Center' }))
+    expect(onViewChange).toHaveBeenCalledWith('health')
   })
 
   it('renders the workspace switcher and activates a selected workspace', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ProviderDescriptor } from '@open-cowork/shared'
+import { SETUP_INTENTS, type ProviderDescriptor, type SetupIntentId } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
@@ -57,6 +57,7 @@ export function SetupScreen({
   const [modelId, setModelId] = useState(defaultModelId || '')
   const [providerCredentials, setProviderCredentials] = useState<Record<string, Record<string, string>>>({})
   const [runtimeToolingBridgeEnabled, setRuntimeToolingBridgeEnabled] = useState(true)
+  const [selectedIntentId, setSelectedIntentId] = useState<SetupIntentId>('desktop-local')
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -122,6 +123,10 @@ export function SetupScreen({
   const selectedProvider = useMemo(
     () => providers.find((provider) => provider.id === providerId) || null,
     [providers, providerId],
+  )
+  const selectedIntent = useMemo(
+    () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) || SETUP_INTENTS[0],
+    [selectedIntentId],
   )
 
   useEffect(() => {
@@ -232,6 +237,40 @@ export function SetupScreen({
         </div>
 
         <div className="mt-6 w-full flex flex-col gap-3">
+          <div className="rounded-xl border border-border-subtle bg-elevated p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+              {t('setup.pathLabel', 'Setup path')}
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {SETUP_INTENTS.map((intent) => (
+                <button
+                  key={intent.id}
+                  type="button"
+                  onClick={() => setSelectedIntentId(intent.id)}
+                  className="min-h-[86px] rounded-lg border px-3 py-2 text-start transition-colors"
+                  style={{
+                    background: selectedIntentId === intent.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'var(--color-base)',
+                    borderColor: selectedIntentId === intent.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                  }}
+                >
+                  <div className="text-[12px] font-semibold text-text">{intent.label}</div>
+                  <div className="mt-1 line-clamp-3 text-[10px] leading-relaxed text-text-muted">{intent.summary}</div>
+                </button>
+              ))}
+            </div>
+            {selectedIntent ? (
+              <div className="mt-2 rounded-lg border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-secondary">
+                <div className="font-medium text-text">{selectedIntent.topologyProfile}</div>
+                <div className="mt-1 text-text-muted">{selectedIntent.nextActions[0]}</div>
+                {selectedIntent.primaryCommand ? (
+                  <div className="mt-2 rounded border border-border-subtle px-2 py-1 font-mono text-[10px] text-text-muted">
+                    {selectedIntent.primaryCommand}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
           {providers.map((provider) => (
             <button
               key={provider.id}

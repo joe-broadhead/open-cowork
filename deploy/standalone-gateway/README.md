@@ -21,10 +21,14 @@ does not require Open Cowork Cloud.
 
 ```bash
 pnpm standalone-gateway:setup -- \
+  --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --output .env.standalone-gateway
 ```
+
+The helper refuses public OpenCode URLs and writes the env file with mode
+`0600`. It will not print provided secrets unless `--allow-secret-print` is set.
 
 4. Run:
 
@@ -52,5 +56,7 @@ pnpm --filter @open-cowork/standalone-gateway start
 Validate the static deployment contract with:
 
 ```bash
+pnpm --filter @open-cowork/standalone-gateway doctor
+pnpm deploy:standalone-gateway:smoke
 pnpm deploy:standalone-gateway:validate
 ```

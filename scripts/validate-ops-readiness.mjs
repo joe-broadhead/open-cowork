@@ -37,6 +37,8 @@ const deploymentTopologyDocsPath = 'docs/deployment-topologies.md'
 const deploymentTopologyProfilesPath = 'deploy/topologies/topology-profiles.json'
 const hybridSecurityDocsPath = 'docs/hybrid-security-gates.md'
 const hybridSecurityGatesPath = 'deploy/security/hybrid-security-gates.json'
+const setupHealthDocsPath = 'docs/setup-and-health-center.md'
+const setupHealthContractPath = 'packages/shared/src/setup-health.ts'
 const managedWorkerDeployPath = 'deploy/managed-workers/README.md'
 const managedWorkerReleaseTemplatePath = 'deploy/managed-workers/worker-release-evidence.template.md'
 const managedWorkerRestoreTemplatePath = 'deploy/managed-workers/worker-restore-drill.template.md'
@@ -58,6 +60,8 @@ for (const path of [
   deploymentTopologyProfilesPath,
   hybridSecurityDocsPath,
   hybridSecurityGatesPath,
+  setupHealthDocsPath,
+  setupHealthContractPath,
   managedWorkerDeployPath,
   managedWorkerReleaseTemplatePath,
   managedWorkerRestoreTemplatePath,
@@ -118,6 +122,32 @@ for (const phrase of [
   'customer_hosted_managed_saas_deferred',
 ]) {
   assertIncludes(hybridSecurityDocsPath, phrase)
+}
+
+for (const phrase of [
+  'desktop-local',
+  'gateway-only',
+  'cloud-connect',
+  'desktop-pairing',
+  'full-hybrid',
+  'authority-aware',
+  'doctor',
+  'smoke',
+  'pnpm standalone-gateway:setup',
+  'pnpm gateway:setup',
+  'pnpm deploy:validate',
+  'pnpm ops:validate',
+]) {
+  assertIncludes(setupHealthDocsPath, phrase)
+}
+for (const phrase of [
+  'SETUP_INTENTS',
+  'SETUP_HEALTH_CHECKS',
+  'gateway.private_opencode.reachable',
+  'cloud.object_store.configured',
+  'pairing.remote_policy.scoped',
+]) {
+  assertIncludes(setupHealthContractPath, phrase)
 }
 
 const requiredMetrics = [

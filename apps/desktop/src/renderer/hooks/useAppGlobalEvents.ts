@@ -208,6 +208,7 @@ export function useAppGlobalEvents({
       if (nextView === 'workflows') setView('workflows')
       if (nextView === 'agents') setView('agents')
       if (nextView === 'capabilities') setView('capabilities')
+      if (nextView === 'health') setView('health')
       if (nextView === 'home') setView('home')
       if (nextView === 'settings') openSidebarSettings()
     })

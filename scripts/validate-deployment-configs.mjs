@@ -771,11 +771,127 @@ function validateHybridSecurityGates() {
   }
 }
 
+function validateSetupHealthCenter() {
+  const setupContractPath = 'packages/shared/src/setup-health.ts'
+  const setupDocsPath = 'docs/setup-and-health-center.md'
+  const setupScreenPath = 'apps/desktop/src/renderer/components/SetupScreen.tsx'
+  const healthCenterPath = 'apps/desktop/src/renderer/components/health/HealthCenterPage.tsx'
+  const sidebarPath = 'apps/desktop/src/renderer/components/layout/Sidebar.tsx'
+  const appTypesPath = 'apps/desktop/src/renderer/app-types.ts'
+  const standaloneSetupPath = 'scripts/standalone-gateway-setup.mjs'
+  const setupContract = read(setupContractPath)
+  const setupDocs = read(setupDocsPath)
+  const packageScripts = parseJson('package.json').scripts ?? {}
+
+  for (const id of [
+    'desktop-local',
+    'gateway-only',
+    'cloud-connect',
+    'desktop-pairing',
+    'full-hybrid',
+  ]) {
+    if (!setupContract.includes(`'${id}'`)) {
+      throw new Error(`${setupContractPath} must include setup intent ${id}`)
+    }
+    assertIncludes(setupDocsPath, `\`${id}\``)
+  }
+
+  for (const checkId of [
+    'desktop.runtime.ready',
+    'desktop.credentials.configured',
+    'workspace.authority.declared',
+    'workspace.cloud.authenticated',
+    'workspace.cloud.sync.reachable',
+    'gateway.private_opencode.reachable',
+    'gateway.provider.healthy',
+    'gateway.operator_auth.configured',
+    'cloud.database.migrated',
+    'cloud.object_store.configured',
+    'cloud.backup_posture.configured',
+    'pairing.connection.active',
+    'pairing.remote_policy.scoped',
+  ]) {
+    if (!setupContract.includes(`'${checkId}'`)) {
+      throw new Error(`${setupContractPath} must include health check ${checkId}`)
+    }
+  }
+
+  for (const phrase of [
+    'Health Center',
+    'authority-aware',
+    'doctor',
+    'smoke',
+    '0600',
+    'raw credentials',
+    'pnpm standalone-gateway:setup',
+    'pnpm gateway:setup',
+    'pnpm deploy:standalone-gateway:smoke',
+    'pnpm deploy:gateway:smoke',
+    'pnpm deploy:validate',
+    'pnpm ops:validate',
+  ]) {
+    if (!setupDocs.includes(phrase)) {
+      throw new Error(`${setupDocsPath} must include setup health phrase: ${phrase}`)
+    }
+  }
+
+  for (const scriptName of [
+    'standalone-gateway:setup',
+    'gateway:setup',
+    'deploy:standalone-gateway:smoke',
+    'deploy:gateway:smoke',
+    'deploy:validate',
+    'ops:validate',
+  ]) {
+    if (!packageScripts[scriptName]) {
+      throw new Error(`package.json scripts must include ${scriptName}`)
+    }
+  }
+
+  const setupScreen = read(setupScreenPath)
+  if (!setupScreen.includes('SETUP_INTENTS') || !setupScreen.includes('Setup path')) {
+    throw new Error(`${setupScreenPath} must render shared setup intents`)
+  }
+
+  const healthCenter = read(healthCenterPath)
+  for (const phrase of [
+    'SETUP_INTENTS',
+    'SETUP_HEALTH_CHECKS',
+    'workspace.support',
+    'runtime.status',
+    'runtimeInputs',
+    'desktopPairing.list',
+    'workspaceAuthorityContract',
+    'No raw credential values are shown',
+  ]) {
+    if (!healthCenter.includes(phrase)) {
+      throw new Error(`${healthCenterPath} must include ${phrase}`)
+    }
+  }
+
+  assertIncludes(sidebarPath, 'Health Center')
+  assertIncludes(appTypesPath, "'health'")
+
+  const standaloneSetup = read(standaloneSetupPath)
+  for (const phrase of [
+    'mode: 0o600',
+    'Refusing to print secret arguments',
+    'must point at loopback or private network OpenCode',
+    'pnpm --filter @open-cowork/standalone-gateway doctor',
+    'pnpm deploy:standalone-gateway:smoke',
+  ]) {
+    if (!standaloneSetup.includes(phrase)) {
+      throw new Error(`${standaloneSetupPath} must include ${phrase}`)
+    }
+  }
+}
+
 function validateDocs() {
   const requiredDocs = [
     'docs/deployment-readiness.md',
     'docs/deployment-topologies.md',
     'docs/hybrid-security-gates.md',
+    'docs/setup-and-health-center.md',
     'docs/downstream-contract.md',
     'docs/runbooks/cloud-managed-operations.md',
     'docs/runbooks/backup-restore.md',
@@ -842,6 +958,7 @@ function validateDocs() {
     'deploy/topologies/topology-profiles.json',
     'deploy/security/hybrid-security-gates.json',
     'docs/hybrid-security-gates.md',
+    'docs/setup-and-health-center.md',
     'deploy/observability/managed-worker-slo-template.json',
     'deploy/private-beta/hosted-byok.config.example.json',
     'deploy/private-beta/self-host-oss.config.example.json',
@@ -1703,6 +1820,7 @@ validateCompose()
 validateHelm()
 validateTopologyProfiles()
 validateHybridSecurityGates()
+validateSetupHealthCenter()
 validateDocs()
 validateGcpReference()
 validateReleaseSupplyChain()

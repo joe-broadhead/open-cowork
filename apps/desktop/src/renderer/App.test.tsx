@@ -78,7 +78,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     settingsRequestNonce,
   }: {
     currentView: string
-    onViewChange: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities') => void
+    onViewChange: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health') => void
     searchRequestNonce: number
     settingsRequestNonce: number
   }) => (
@@ -180,6 +180,10 @@ vi.mock('./components/capabilities/CapabilitiesPage', () => ({
   ),
 }))
 
+vi.mock('./components/health/HealthCenterPage', () => ({
+  HealthCenterPage: () => <div data-testid="health-page">Health Center</div>,
+}))
+
 vi.mock('./components/CommandPalette', () => ({
   CommandPalette: ({
     onClose,
@@ -192,7 +196,7 @@ vi.mock('./components/CommandPalette', () => ({
     onToggleSearch,
   }: {
     onClose: () => void
-    onNavigate: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities') => void
+    onNavigate: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health') => void
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
@@ -606,6 +610,9 @@ describe('App', () => {
 
     act(() => listeners.menuNavigate?.('agents'))
     expect(await screen.findByTestId('agents-page')).toBeInTheDocument()
+
+    act(() => listeners.menuNavigate?.('health'))
+    expect(await screen.findByTestId('health-page')).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
     await waitFor(() => expect(screen.getByTestId('sidebar')).toHaveAttribute('data-search-nonce', '1'))

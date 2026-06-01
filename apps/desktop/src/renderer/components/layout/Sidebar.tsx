@@ -642,6 +642,15 @@ export function Sidebar({
               </svg>
               {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
+            <button onClick={() => onViewChange('health')}
+              aria-current={currentView === 'health' ? 'page' : undefined}
+              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6.5 1.75 10.5 3.2v3.1c0 2.25-1.45 4.15-4 4.95-2.55-.8-4-2.7-4-4.95V3.2l4-1.45Z" />
+                <path d="M4.6 6.5 5.8 7.7 8.7 4.8" />
+              </svg>
+              {t('sidebar.healthCenter', 'Health Center')}
+            </button>
           </div>
 
           {/* Threads — ThreadList owns its own scroll container so it

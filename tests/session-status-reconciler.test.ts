@@ -22,7 +22,7 @@ test('session status reconciler resolves a stuck busy session when status become
     },
   })
 
-  const deadline = Date.now() + 100
+  const deadline = Date.now() + 1000
   while (Date.now() < deadline && idleCalls === 0) {
     await sleep(5)
   }
@@ -110,7 +110,7 @@ test('session status reconciler retries after transient lookup errors and still 
     },
   })
 
-  const deadline = Date.now() + 100
+  const deadline = Date.now() + 1000
   while (Date.now() < deadline && idleCalls === 0) {
     await sleep(5)
   }

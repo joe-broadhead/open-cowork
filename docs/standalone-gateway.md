@@ -56,10 +56,16 @@ Generate a starter env file:
 
 ```bash
 pnpm standalone-gateway:setup -- \
+  --admin-token "$OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
   --opencode-url http://127.0.0.1:4096 \
   --telegram-bot-token "$TELEGRAM_BOT_TOKEN" \
   --output .env.standalone-gateway
 ```
+
+The setup helper writes env files with mode `0600`, refuses public OpenCode
+URLs, and does not echo provided secrets to stdout when `--output` is used. Use
+`--print` only for placeholder examples unless you explicitly pass
+`--allow-secret-print` in a controlled terminal.
 
 ## Run
 
