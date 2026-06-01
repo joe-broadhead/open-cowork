@@ -6,14 +6,18 @@ import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderId,
+  ChannelProviderKind,
   ChannelProvider,
   ChannelTarget,
   IncomingChannelMessage,
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface EmailProviderConfig {
+  providerId?: ChannelProviderId;
   from: string;
   inboundSecret: string;
   smtp?: SmtpEmailTransportConfig;
@@ -91,23 +95,31 @@ const emailCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 0,
   maxButtonTokenBytes: 0,
   maxFileBytes: 15 * 1024 * 1024,
+  maxFileSizeBytes: 15 * 1024 * 1024,
+  inboundFileModes: ["inline_buffer"],
+  outboundFileModes: [],
+  editSemantics: "none",
+  interactionAcknowledgement: "none",
+  rateLimitStrategy: "fixed_backoff",
   supportsEphemeralResponses: false
 };
 
 export class EmailProvider implements ChannelProvider {
-  readonly id = "email" as const;
+  readonly kind: ChannelProviderKind = "email";
+  readonly id: ChannelProviderId;
   readonly capabilities: ChannelCapabilities;
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private readonly transport: EmailTransport;
 
   constructor(private readonly config: EmailProviderConfig) {
+    this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
     if (!emailAddress(config.from)) throw new Error("Email provider requires a valid from address.");
     if (!config.inboundSecret.trim()) throw new Error("Email inbound secret is required.");
-    this.capabilities = {
+    this.capabilities = normalizeChannelCapabilities({
       ...emailCapabilities,
       maxFileBytes: Math.min(emailCapabilities.maxFileBytes!, normalizeAttachmentLimit(config.maxAttachmentBytes) ?? emailCapabilities.maxFileBytes!)
-    };
+    });
     this.transport = config.transport || new SmtpEmailTransport(config.smtp || missingSmtpConfig());
   }
 
@@ -122,7 +134,7 @@ export class EmailProvider implements ChannelProvider {
   async handleWebhookPayload(payload: unknown, auth: EmailWebhookAuth): Promise<void> {
     if (!this.handler) throw new Error("Email provider is not started.");
     this.assertWebhookAuthorized(auth);
-    const message = mapEmailPayload(payload, this.config.now?.() ?? new Date(), this.capabilities.maxFileBytes);
+    const message = mapEmailPayload(payload, this.config.now?.() ?? new Date(), this.capabilities.maxFileBytes, this.id);
     if (message) await this.handler(message);
   }
 
@@ -138,7 +150,8 @@ export class EmailProvider implements ChannelProvider {
       references: target.threadId ? [target.threadId] : null
     });
     return {
-      provider: "email",
+      provider: target.provider,
+      providerKind: target.providerKind ?? "email",
       chatId: target.chatId,
       threadId: target.threadId || messageId,
       messageId: result?.messageId || messageId,
@@ -209,7 +222,7 @@ export class SmtpEmailTransport implements EmailTransport {
   }
 }
 
-function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number | undefined): IncomingChannelMessage | null {
+function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number | undefined, providerId: ChannelProviderId = "email"): IncomingChannelMessage | null {
   const input = objectRecord(payload) as EmailIncomingPayload;
   const from = emailAddress(input.from) || emailAddress(input.sender);
   if (!from) return null;
@@ -221,9 +234,14 @@ function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number
     || messageId;
   return {
     id: messageId,
-    provider: "email",
+    providerInstanceId: providerId,
+    providerEventId: messageId,
+    providerMessageId: messageId,
+    provider: providerId,
+    providerKind: "email",
     target: {
-      provider: "email",
+      provider: providerId,
+      providerKind: "email",
       chatId: from,
       threadId,
       userId: from,

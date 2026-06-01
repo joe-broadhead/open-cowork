@@ -342,45 +342,96 @@ test('gateway provider registry wires fake, first-party, bridge, and CLI provide
     id: registration.config.id,
     kind: registration.config.kind,
     provider: registration.provider.id,
+    providerKind: registration.provider.kind,
   })), [{
     id: 'fake',
     kind: 'fake',
     provider: 'cli',
+    providerKind: 'cli',
   }, {
     id: 'telegram',
     kind: 'telegram',
     provider: 'telegram',
+    providerKind: 'telegram',
   }, {
     id: 'slack',
     kind: 'slack',
     provider: 'slack',
+    providerKind: 'slack',
   }, {
     id: 'email',
     kind: 'email',
     provider: 'email',
+    providerKind: 'email',
   }, {
     id: 'webhook',
     kind: 'webhook',
     provider: 'webhook',
+    providerKind: 'webhook',
   }, {
     id: 'discord',
     kind: 'discord',
     provider: 'discord',
+    providerKind: 'discord',
   }, {
     id: 'whatsapp',
     kind: 'whatsapp',
     provider: 'whatsapp',
+    providerKind: 'whatsapp',
   }, {
     id: 'signal',
     kind: 'signal',
     provider: 'signal',
+    providerKind: 'signal',
   }, {
     id: 'cli',
     kind: 'cli',
     provider: 'cli',
+    providerKind: 'cli',
   }])
   assert.equal(registry.registrations.find((entry) => entry.config.kind === 'whatsapp')?.provider.capabilities.inlineButtons, true)
   assert.equal(registry.registrations.find((entry) => entry.config.kind === 'signal')?.provider.capabilities.inlineButtons, false)
+})
+
+test('gateway provider registry keeps same-kind provider instances isolated', () => {
+  const registry = createGatewayProviderRegistry(resolveGatewayConfig({
+    cloud: {
+      baseUrl: 'https://cloud.example.test',
+      serviceToken: 'service-token',
+    },
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'webhook-ci',
+      kind: 'webhook',
+      channelBindingId: 'webhook-ci-binding',
+      credentials: { sharedSecret: 'ci-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/ci' },
+    }, {
+      id: 'webhook-prod',
+      kind: 'webhook',
+      channelBindingId: 'webhook-prod-binding',
+      credentials: { sharedSecret: 'prod-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/prod' },
+    }],
+  }))
+
+  assert.deepEqual(registry.registrations.map((registration) => ({
+    id: registration.config.id,
+    kind: registration.provider.kind,
+    provider: registration.provider.id,
+  })), [{
+    id: 'webhook-ci',
+    kind: 'webhook',
+    provider: 'webhook-ci',
+  }, {
+    id: 'webhook-prod',
+    kind: 'webhook',
+    provider: 'webhook-prod',
+  }])
+  assert.equal(registry.get('webhook-ci')?.provider.id, 'webhook-ci')
+  assert.equal(registry.get('webhook-prod')?.provider.id, 'webhook-prod')
 })
 
 test('gateway daemon accepts signed Slack webhook verification payloads', async () => {

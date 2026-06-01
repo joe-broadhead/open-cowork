@@ -3,6 +3,7 @@ import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderKind,
   ChannelProviderId,
   ChannelProvider,
   ChannelTarget,
@@ -11,9 +12,11 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { channelProviderKindFromId, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface WebhookProviderConfig {
   providerId?: ChannelProviderId;
+  providerKind?: ChannelProviderKind;
   deliveryUrl: string;
   sharedSecret?: string;
   capabilities?: Partial<ChannelCapabilities>;
@@ -78,6 +81,7 @@ export interface MapWebhookPayloadOptions {
 }
 
 export class WebhookProvider implements ChannelProvider {
+  readonly kind: ChannelProviderKind;
   readonly id: ChannelProviderId;
   readonly capabilities: ChannelCapabilities;
 
@@ -89,18 +93,23 @@ export class WebhookProvider implements ChannelProvider {
     if (config.sharedSecret !== undefined) {
       validateHeaderValue(config.sharedSecret, "Webhook shared secret");
     }
-    this.id = config.providerId ?? "webhook";
+    const identity = normalizeChannelProviderIdentity(
+      config.providerKind ?? channelProviderKindFromId(config.providerId) ?? "webhook",
+      config.providerId,
+    );
+    this.kind = identity.providerKind;
+    this.id = identity.providerId;
     const configuredMaxAttachmentBytes = normalizeTimeoutOrByteLimit(config.maxAttachmentBytes);
     const mergedCapabilities = {
       ...defaultWebhookCapabilities,
       ...config.capabilities
     };
-    this.capabilities = {
+    this.capabilities = normalizeChannelCapabilities({
       ...mergedCapabilities,
       maxFileBytes: configuredMaxAttachmentBytes
         ? Math.min(mergedCapabilities.maxFileBytes ?? configuredMaxAttachmentBytes, configuredMaxAttachmentBytes)
         : mergedCapabilities.maxFileBytes
-    };
+    });
   }
 
   async start(handler: (message: IncomingChannelMessage) => Promise<void>): Promise<void> {
@@ -116,7 +125,7 @@ export class WebhookProvider implements ChannelProvider {
       throw new Error("Webhook provider is not started");
     }
     this.assertIngressAuthorized(auth);
-    await this.handler(mapWebhookPayload(payload, this.config.now?.() ?? new Date(), this.id, {
+    await this.handler(mapWebhookPayload(payload, this.config.now?.() ?? new Date(), this.id, this.kind, {
       maxAttachmentBytes: this.config.maxAttachmentBytes
     }));
   }
@@ -204,11 +213,11 @@ export class WebhookProvider implements ChannelProvider {
     if (payload.target && payload.target.provider !== this.id) {
       throw new Error(`Webhook bridge ${this.id} cannot deliver target for provider ${payload.target.provider}`);
     }
-    const normalizedTarget = payload.target ? normalizeOutboundTarget(payload.target, this.id) : undefined;
+    const normalizedTarget = payload.target ? normalizeOutboundTarget(payload.target, this.id, this.kind) : undefined;
     const normalizedPayload = normalizedTarget ? { ...payload, target: normalizedTarget } : payload;
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
     const deliveryId = randomUUID();
-    const body = JSON.stringify({ deliveryId, provider: this.id, ...normalizedPayload });
+    const body = JSON.stringify({ deliveryId, provider: this.id, providerKind: this.kind, ...normalizedPayload });
     const response = await withWebhookRetry(async () => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), normalizeDeliveryTimeoutMs(this.config.deliveryTimeoutMs));
@@ -249,9 +258,11 @@ export class WebhookProvider implements ChannelProvider {
     const messageId = cleanOptionalString(responseBody.messageId, "Webhook delivery response.messageId", 512) ?? randomUUID();
     return {
       provider: this.id,
+      providerKind: this.kind,
       chatId: target?.chatId ?? "",
       threadId: target?.threadId,
       messageId,
+      providerDeliveryId: deliveryId,
       sentAt: new Date()
     };
   }
@@ -316,6 +327,12 @@ export const defaultWebhookCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 4,
   maxButtonTokenBytes: 64,
   maxFileBytes: 25 * 1024 * 1024,
+  maxFileSizeBytes: 25 * 1024 * 1024,
+  inboundFileModes: ["inline_buffer"],
+  outboundFileModes: ["inline_buffer"],
+  editSemantics: "message",
+  interactionAcknowledgement: "optional",
+  rateLimitStrategy: "fixed_backoff",
   supportsEphemeralResponses: false
 };
 
@@ -387,8 +404,13 @@ export function mapWebhookPayload(
   payload: unknown,
   now = new Date(),
   providerId: ChannelProviderId = "webhook",
+  providerKindOrOptions: ChannelProviderKind | MapWebhookPayloadOptions = channelProviderKindFromId(providerId) ?? "webhook",
   options: MapWebhookPayloadOptions = {},
 ): IncomingChannelMessage {
+  const providerKind = typeof providerKindOrOptions === "string"
+    ? providerKindOrOptions
+    : channelProviderKindFromId(providerId) ?? "webhook";
+  const resolvedOptions = typeof providerKindOrOptions === "string" ? options : providerKindOrOptions;
   const record = requireRecord(payload, "Webhook payload");
   const target = normalizeTarget(record.target);
   const sender = normalizeSender(record.sender);
@@ -396,11 +418,17 @@ export function mapWebhookPayload(
   const text = optionalString(record.text) ?? interaction?.token ?? "";
   const rawText = optionalString(record.rawText) ?? text;
   const command = parseWebhookCommand(text);
+  const eventId = optionalString(record.id) ?? randomUUID();
   return {
-    id: optionalString(record.id) ?? randomUUID(),
+    id: eventId,
+    providerInstanceId: providerId,
+    providerEventId: eventId,
+    providerMessageId: eventId,
     provider: providerId,
+    providerKind,
     target: {
       provider: providerId,
+      providerKind,
       chatId: target.chatId,
       isDirect: target.isDirect,
       threadId: target.threadId,
@@ -413,7 +441,7 @@ export function mapWebhookPayload(
     isCommand: command !== null,
     command: command?.command,
     commandArgs: command?.args,
-    attachments: normalizeAttachments(record.attachments, options),
+    attachments: normalizeAttachments(record.attachments, resolvedOptions),
     interaction,
     receivedAt: parseReceivedAt(record.receivedAt, now),
     raw: payload
@@ -449,13 +477,14 @@ function validateWebhookText(text: string, capabilities: Pick<ChannelCapabilitie
   }
 }
 
-function normalizeOutboundTarget(target: ChannelTarget, provider: ChannelProviderId): ChannelTarget {
+function normalizeOutboundTarget(target: ChannelTarget, provider: ChannelProviderId, providerKind: ChannelProviderKind): ChannelTarget {
   const chatId = cleanRequiredString(target.chatId, "Webhook delivery target.chatId", 512);
   if (!chatId) {
     throw new Error("Webhook delivery target.chatId is required");
   }
   return {
     provider,
+    providerKind,
     chatId,
     isDirect: target.isDirect === true,
     threadId: cleanOptionalString(target.threadId, "Webhook delivery target.threadId", 512) ?? null,

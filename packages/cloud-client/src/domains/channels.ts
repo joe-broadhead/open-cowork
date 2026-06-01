@@ -9,6 +9,7 @@ export type {
   CloudChannelIdentityRole,
   CloudChannelIdentityStatus,
   CloudChannelProviderId,
+  CloudChannelProviderKind,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
 } from '../adapter.js'

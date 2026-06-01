@@ -291,11 +291,16 @@ function retryAfterMs(nowMs: number, windowStartedAtMs: number, windowMs: number
 }
 
 function normalizeProvider(value: unknown): ChannelProviderId {
-  const provider = normalizeText(value, 32, 'Channel provider') as ChannelProviderId
-  if (!['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(provider)) {
+  const provider = normalizeText(value, 64, 'Channel provider') as ChannelProviderId
+  if (!isChannelProviderId(provider)) {
     throw new Error(`Unsupported channel provider ${provider}.`)
   }
   return provider
+}
+
+function isChannelProviderId(value: string): value is ChannelProviderId {
+  if (['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(value)) return true
+  return /^[a-z][a-z0-9_-]{1,63}$/.test(value) && value.includes('-')
 }
 
 function normalizeByokProviderId(value: unknown) {

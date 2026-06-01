@@ -697,6 +697,63 @@ test('gateway config loads Slack, email, Telegram, webhook, bridge, and CLI prov
   assert.equal(config.providers.find((provider) => provider.kind === 'discord')?.credentials.sharedSecret, 'discord-secret')
 })
 
+test('gateway config supports multiple instance ids for one provider kind', () => {
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'webhook-ci',
+      kind: 'webhook',
+      channelBindingId: 'webhook-ci-binding',
+      credentials: { sharedSecret: 'ci-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/ci' },
+    }, {
+      id: 'webhook-prod',
+      kind: 'webhook',
+      channelBindingId: 'webhook-prod-binding',
+      credentials: { sharedSecret: 'prod-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/prod' },
+    }],
+  }, operatorEnv)
+
+  assert.deepEqual(config.providers.map((provider) => ({
+    id: provider.id,
+    kind: provider.kind,
+    channelBindingId: provider.channelBindingId,
+  })), [{
+    id: 'webhook-ci',
+    kind: 'webhook',
+    channelBindingId: 'webhook-ci-binding',
+  }, {
+    id: 'webhook-prod',
+    kind: 'webhook',
+    channelBindingId: 'webhook-prod-binding',
+  }])
+
+  assert.throws(() => resolveGatewayConfig({
+    providers: [{
+      id: 'webhook-ci',
+      kind: 'webhook',
+      channelBindingId: 'webhook-ci-a',
+      credentials: { sharedSecret: 'ci-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/ci' },
+    }, {
+      id: 'webhook-ci',
+      kind: 'webhook',
+      channelBindingId: 'webhook-ci-b',
+      credentials: { sharedSecret: 'ci-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/ci' },
+    }],
+  }, operatorEnv), /Duplicate gateway provider id webhook-ci/)
+  assert.throws(() => resolveGatewayConfig({
+    providers: [{
+      id: 'bad id',
+      kind: 'webhook',
+      channelBindingId: 'webhook-ci',
+      credentials: { sharedSecret: 'ci-secret' },
+      settings: { deliveryUrl: 'https://bridge.example.test/ci' },
+    }],
+  }, operatorEnv), /safe legacy provider id/)
+})
+
 test('gateway config loads the shared open-cowork config gateway section with allowlisted env placeholders', () => {
   const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-config-'))
   try {

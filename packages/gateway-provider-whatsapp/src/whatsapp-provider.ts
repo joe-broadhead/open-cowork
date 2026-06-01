@@ -1,7 +1,7 @@
 import type { ChannelCapabilities } from "@open-cowork/gateway-channel";
 import { WebhookProvider, type WebhookProviderConfig } from "@open-cowork/gateway-provider-webhook";
 
-export type WhatsAppProviderConfig = Omit<WebhookProviderConfig, "providerId" | "capabilities" | "sharedSecret"> & {
+export type WhatsAppProviderConfig = Omit<WebhookProviderConfig, "providerKind" | "capabilities" | "sharedSecret"> & {
   sharedSecret: string;
 };
 
@@ -19,6 +19,12 @@ export const whatsappCapabilities: ChannelCapabilities = {
   maxButtonRowsPerMessage: 1,
   maxButtonTokenBytes: 64,
   maxFileBytes: 16 * 1024 * 1024,
+  maxFileSizeBytes: 16 * 1024 * 1024,
+  inboundFileModes: ["provider_file_id", "download_url", "inline_buffer"],
+  outboundFileModes: ["inline_buffer"],
+  editSemantics: "none",
+  interactionAcknowledgement: "optional",
+  rateLimitStrategy: "fixed_backoff",
   supportsEphemeralResponses: false
 };
 
@@ -29,7 +35,8 @@ export class WhatsAppProvider extends WebhookProvider {
     }
     super({
       ...config,
-      providerId: "whatsapp",
+      providerKind: "whatsapp",
+      providerId: config.providerId ?? "whatsapp",
       capabilities: whatsappCapabilities
     });
   }

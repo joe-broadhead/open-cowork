@@ -5,6 +5,8 @@ import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderId,
+  ChannelProviderKind,
   ChannelProvider,
   ChannelTarget,
   IncomingChannelMessage,
@@ -12,8 +14,10 @@ import type {
   SendOptions,
   SentMessage
 } from "@open-cowork/gateway-channel";
+import { normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
 
 export interface SlackProviderConfig {
+  providerId?: ChannelProviderId;
   botToken: string;
   signingSecret: string;
   apiBaseUrl?: string;
@@ -53,8 +57,10 @@ const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 const defaultSlackRequestTimeoutMs = 15_000;
 
 export class SlackProvider implements ChannelProvider {
-  readonly id = "slack" as const;
-  readonly capabilities: ChannelCapabilities = {
+  readonly kind: ChannelProviderKind = "slack";
+  readonly id: ChannelProviderId;
+  readonly capabilities: ChannelCapabilities;
+  private readonly baseCapabilities: ChannelCapabilities = {
     threads: true,
     messageEditing: true,
     inlineButtons: true,
@@ -68,12 +74,20 @@ export class SlackProvider implements ChannelProvider {
     maxButtonRowsPerMessage: 5,
     maxButtonTokenBytes: 2000,
     maxFileBytes: 20 * 1024 * 1024,
+    maxFileSizeBytes: 20 * 1024 * 1024,
+    inboundFileModes: ["download_url", "provider_file_id"],
+    outboundFileModes: ["local_path", "inline_buffer"],
+    editSemantics: "message",
+    interactionAcknowledgement: "optional",
+    rateLimitStrategy: "retry_after",
     supportsEphemeralResponses: false
   };
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
 
   constructor(private readonly config: SlackProviderConfig) {
+    this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
+    this.capabilities = normalizeChannelCapabilities(this.baseCapabilities);
     if (!config.botToken.trim()) throw new Error("Slack bot token is required.");
     if (!config.signingSecret.trim()) throw new Error("Slack signing secret is required.");
   }
@@ -95,7 +109,7 @@ export class SlackProvider implements ChannelProvider {
     }
 
     if (!this.handler) throw new Error("Slack provider is not started.");
-    const message = mapSlackPayload(record, this.config.now?.() ?? new Date());
+    const message = mapSlackPayload(record, this.config.now?.() ?? new Date(), this.id);
     if (message) await this.handler(message);
     return undefined;
   }
@@ -122,7 +136,8 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async sendFile(target: ChannelTarget, file: OutgoingFile): Promise<SentMessage> {
-    const data = file.data || (file.path ? new Uint8Array(await readFile(file.path)) : new Uint8Array());
+    const filePath = file.localPath ?? file.path;
+    const data = file.data || (filePath ? new Uint8Array(await readFile(filePath)) : new Uint8Array());
     if (data.byteLength === 0) throw new Error("Slack file upload requires file data.");
     if (data.byteLength > this.capabilities.maxFileBytes!) {
       throw new Error(`Slack file exceeds maxFileBytes ${this.capabilities.maxFileBytes}.`);
@@ -258,17 +273,17 @@ function normalizeRequestTimeoutMs(value: number | undefined): number {
   return Math.min(120_000, Math.max(100, Math.floor(value)));
 }
 
-function mapSlackPayload(payload: Record<string, unknown>, now: Date): IncomingChannelMessage | null {
+function mapSlackPayload(payload: Record<string, unknown>, now: Date, providerId: ChannelProviderId = "slack"): IncomingChannelMessage | null {
   if (payload.type === "event_callback") {
-    return mapSlackEvent(objectRecord(payload.event), payload, now);
+    return mapSlackEvent(objectRecord(payload.event), payload, now, providerId);
   }
   if (payload.type === "block_actions") {
-    return mapSlackInteraction(payload, now);
+    return mapSlackInteraction(payload, now, providerId);
   }
   return null;
 }
 
-function mapSlackEvent(event: Record<string, unknown>, envelope: Record<string, unknown>, now: Date): IncomingChannelMessage | null {
+function mapSlackEvent(event: Record<string, unknown>, envelope: Record<string, unknown>, now: Date, providerId: ChannelProviderId): IncomingChannelMessage | null {
   if (event.type !== "message" || event.subtype === "bot_message" || stringField(event, "bot_id")) return null;
   const user = stringField(event, "user");
   const channel = stringField(event, "channel");
@@ -278,9 +293,14 @@ function mapSlackEvent(event: Record<string, unknown>, envelope: Record<string, 
   const teamId = stringField(envelope, "team_id") || stringField(event, "team");
   return {
     id: stringField(event, "client_msg_id") || `slack-${teamId || "team"}-${channel}-${ts}`,
-    provider: "slack",
+    providerInstanceId: providerId,
+    providerEventId: stringField(envelope, "event_id") || stringField(event, "client_msg_id") || `${channel}:${ts}`,
+    providerMessageId: ts,
+    provider: providerId,
+    providerKind: "slack",
     target: {
-      provider: "slack",
+      provider: providerId,
+      providerKind: "slack",
       chatId: channel,
       threadId: stringField(event, "thread_ts") || ts,
       userId: user,
@@ -304,7 +324,7 @@ function mapSlackEvent(event: Record<string, unknown>, envelope: Record<string, 
   };
 }
 
-function mapSlackInteraction(payload: Record<string, unknown>, now: Date): IncomingChannelMessage | null {
+function mapSlackInteraction(payload: Record<string, unknown>, now: Date, providerId: ChannelProviderId): IncomingChannelMessage | null {
   const user = objectRecord(payload.user);
   const channel = objectRecord(payload.channel);
   const message = objectRecord(payload.message);
@@ -315,11 +335,17 @@ function mapSlackInteraction(payload: Record<string, unknown>, now: Date): Incom
   const channelId = stringField(channel, "id");
   const messageTs = stringField(message, "thread_ts") || stringField(message, "ts") || stringField(payload, "message_ts");
   if (!token || !userId || !channelId) return null;
+  const id = stringField(payload, "trigger_id") || stringField(action, "action_ts") || randomUUID();
   return {
-    id: stringField(payload, "trigger_id") || stringField(action, "action_ts") || randomUUID(),
-    provider: "slack",
+    id,
+    providerInstanceId: providerId,
+    providerEventId: id,
+    providerMessageId: stringField(message, "ts") ?? null,
+    provider: providerId,
+    providerKind: "slack",
     target: {
-      provider: "slack",
+      provider: providerId,
+      providerKind: "slack",
       chatId: channelId,
       threadId: messageTs,
       userId,
@@ -366,7 +392,8 @@ function validateSlackButtons(buttons: ChannelButton[][]): void {
 
 function sentMessage(target: ChannelTarget, messageId: string): SentMessage {
   return {
-    provider: "slack",
+    provider: target.provider,
+    providerKind: target.providerKind ?? "slack",
     chatId: target.chatId,
     threadId: target.threadId || messageId,
     messageId,

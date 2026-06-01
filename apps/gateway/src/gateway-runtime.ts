@@ -208,7 +208,7 @@ async function handleDelivery(
 }
 
 async function sendDelivery(provider: ChannelProvider, delivery: ChannelDeliveryRecord): Promise<SentMessage> {
-  const target = readDeliveryTarget(delivery)
+  const target = readDeliveryTarget(delivery, provider)
   const text = typeof delivery.payload.text === 'string'
     ? delivery.payload.text
     : typeof delivery.payload.message === 'string'
@@ -231,10 +231,11 @@ function findDeliveryProvider(providers: GatewayProviderRegistry, delivery: Chan
   return providers.registrations.find((entry) => entry.config.channelBindingId === delivery.channelBindingId) || null
 }
 
-function readDeliveryTarget(delivery: ChannelDeliveryRecord): ChannelTarget {
+function readDeliveryTarget(delivery: ChannelDeliveryRecord, provider: Pick<ChannelProvider, 'id' | 'kind'>): ChannelTarget {
   const target = delivery.target
   return {
-    provider: delivery.provider as ChannelTarget['provider'],
+    provider: provider.id,
+    providerKind: provider.kind,
     chatId: stringField(target.externalChatId) || stringField(target.chatId) || 'unknown',
     threadId: stringField(target.externalThreadId) || stringField(target.threadId),
     messageId: stringField(target.lastChatMessageId) || stringField(target.messageId),

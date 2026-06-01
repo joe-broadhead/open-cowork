@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import type { ChannelProviderId } from '@open-cowork/gateway-channel'
+import { isChannelProviderKind, normalizeChannelProviderIdentity, type ChannelProviderKind } from '@open-cowork/gateway-channel'
 import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode } from '@open-cowork/shared'
 import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
 
@@ -9,7 +9,7 @@ export type { GatewayProductMode } from '@open-cowork/shared'
 
 export type GatewayMode = 'self-host' | 'managed'
 export type GatewayLogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
-export type GatewayProviderKind = ChannelProviderId | 'fake'
+export type GatewayProviderKind = ChannelProviderKind | 'fake'
 
 export type GatewayConfig = {
   branding: PublicBrandingConfig
@@ -46,9 +46,7 @@ export type GatewayConfig = {
   providers: GatewayProviderConfig[]
 }
 
-export type GatewayCloudConnectionConfig = GatewayConfig['cloud'] & {
-  requestTimeoutMs: number
-}
+export type GatewayCloudConnectionConfig = GatewayConfig['cloud'] & { requestTimeoutMs: number }
 
 export type GatewayProviderConfig = {
   id: string
@@ -441,6 +439,7 @@ function normalizeProviders(rawProviders: GatewayRawConfig['providers'], env: Ga
     : readBoolean(env.OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER, false)
       ? [defaultFakeProvider(env)]
       : []
+  assertUniqueProviderIds(normalized)
   const enabled = normalized.filter((provider) => provider.enabled)
   if (enabled.length === 0) {
     throw new Error('At least one gateway provider must be enabled. Set OPEN_COWORK_GATEWAY_PROVIDERS, configure Telegram/webhook credentials, or explicitly enable the local fake provider with OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER=true.')
@@ -623,7 +622,8 @@ function defaultFakeProvider(env: GatewayEnv): GatewayProviderConfig {
 
 function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: GatewayProviderKind }, index: number, gatewayPublicBaseUrl?: string | null, maxRequestBody = defaultMaxRequestBodyBytes): GatewayProviderConfig {
   const kind = readProviderKind(raw.kind)
-  const id = readString(raw.id) || `${kind}-${index + 1}`
+  const requestedId = readString(raw.id) || `${kind}-${index + 1}`
+  const id = kind === 'fake' ? requestedId : normalizeChannelProviderIdentity(kind, requestedId).providerId
   const channelBindingId = readString(raw.channelBindingId)
   if (!channelBindingId) throw new Error(`Gateway provider ${id} requires channelBindingId.`)
   const credentials = cleanStringRecord(raw.credentials)
@@ -683,10 +683,18 @@ function normalizeProvider(raw: Partial<GatewayProviderConfig> & { kind: Gateway
 
 function readProviderKind(value: unknown): GatewayProviderKind {
   const kind = readString(value)
-  if (kind === 'fake' || kind === 'telegram' || kind === 'slack' || kind === 'email' || kind === 'webhook' || kind === 'discord' || kind === 'whatsapp' || kind === 'signal' || kind === 'cli') {
+  if (kind === 'fake' || isChannelProviderKind(kind)) {
     return kind
   }
   throw new Error(`Unsupported gateway provider kind: ${kind || String(value)}`)
+}
+
+function assertUniqueProviderIds(providers: GatewayProviderConfig[]) {
+  const seen = new Set<string>()
+  for (const provider of providers) {
+    if (seen.has(provider.id)) throw new Error(`Duplicate gateway provider id ${provider.id}.`)
+    seen.add(provider.id)
+  }
 }
 
 function normalizeBaseUrl(value: string, allowInsecureHttp: boolean) {

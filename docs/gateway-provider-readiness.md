@@ -18,6 +18,28 @@ The typed source of truth is
 `apps/gateway/src/provider-readiness.ts`. The Gateway test suite verifies that
 this page, the matrix, and actual provider capabilities stay aligned.
 
+## Provider Identity Contract
+
+Gateway provider configuration separates provider kind from provider instance:
+
+- `kind` is the adapter implementation, such as `telegram`, `slack`, `email`,
+  or `webhook`.
+- `id` is the configured provider instance, such as `telegram-main`,
+  `telegram-support`, `slack-work`, or `webhook-ci`.
+- `channelBindingId` is the Cloud control-plane binding that maps the provider
+  instance to a headless agent and delivery route.
+
+Kind-only ids such as `telegram` remain supported for existing self-hosted
+configs. New production configs should use explicit instance ids so multiple
+providers of the same kind can coexist without sharing cursors, health,
+deliveries, or channel-thread bindings. Legacy downstream ids such as
+`acme-telegram` are accepted for compatibility, but kind-prefixed ids are the
+recommended convention for new deployments.
+
+Every provider exposes `id`, `kind`, and capabilities, and may expose runtime
+health. Provider readiness and diagnostics use the instance id for routing and
+the kind for capability/policy decisions.
+
 ## Provider Readiness Matrix
 
 | Provider | Tier | Status | Modes | Auth / signing | Approvals | Files | Contract tests |
