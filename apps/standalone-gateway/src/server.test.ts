@@ -55,6 +55,83 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
   }
 });
 
+test("standalone server hides unexpected webhook exception details", async (t) => {
+  const stderr = t.mock.method(process.stderr, "write", () => true);
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_PORT: "0",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+  });
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const providers = {
+    async handleWebhook() {
+      const error = new Error("provider failed while reading /private/standalone-gateway-config");
+      error.stack = "Error: provider failed\n    at /private/standalone-gateway-config.ts:1:1";
+      throw error;
+    },
+  };
+  const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
+  await server.listen();
+  try {
+    const url = server.url();
+    assert.ok(url);
+    const response = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(response.status, 500);
+    const body = await response.json();
+    assert.deepEqual(body, { ok: false, error: "internal_server_error" });
+    assert.doesNotMatch(JSON.stringify(body), /private|standalone-gateway-config|provider failed/);
+    assert.equal(stderr.mock.callCount(), 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("standalone server sanitizes webhook verification failures", async () => {
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_PORT: "0",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+  });
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const providers = {
+    async handleWebhook() {
+      throw new Error("Webhook signature verification failed for /private/provider-hook");
+    },
+  };
+  const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
+  await server.listen();
+  try {
+    const url = server.url();
+    assert.ok(url);
+    const response = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(response.status, 401);
+    const body = await response.json();
+    assert.deepEqual(body, {
+      ok: false,
+      error: "Standalone Gateway webhook verification failed.",
+    });
+    assert.doesNotMatch(JSON.stringify(body), /private|provider-hook|signature verification failed for/);
+  } finally {
+    await server.close();
+  }
+});
+
 test("standalone server rate-limits repeated webhook requests by source", async () => {
   const config = loadStandaloneGatewayConfig({
     OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",

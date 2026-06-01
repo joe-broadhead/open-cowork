@@ -15,11 +15,19 @@ const webhookAuthBackoffWindowMs = 60_000;
 const webhookAuthBackoffMaxFailures = 20;
 const webhookAuthBackoffMs = 60_000;
 const maxWebhookRateRecords = 10_000;
+const standaloneHttpErrorMarker = Symbol("standalone-http-error");
 
 interface WebhookRateRecord {
   count: number;
   resetAt: number;
   blockedUntil: number;
+}
+
+type StandaloneHttpError = Error & {
+  statusCode: number;
+  publicMessage: string;
+  retryAfterMs?: number;
+  [standaloneHttpErrorMarker]: true;
 }
 
 class WebhookRateLimiter {
@@ -86,9 +94,10 @@ export function createStandaloneGatewayServer(input: {
   const webhookLimiter = new WebhookRateLimiter();
   const server = createServer((req, res) => {
     void handleRequest(input, req, res, webhookLimiter).catch((error) => {
-      const retryAfterMs = typeof error.retryAfterMs === "number" ? error.retryAfterMs : null;
-      writeJson(res, error.statusCode || 500, { ok: false, error: error instanceof Error ? error.message : String(error) }, retryAfterMs ? {
-        "retry-after": retryAfterSeconds(retryAfterMs),
+      const responseError = publicErrorResponse(error);
+      if (responseError.statusCode >= 500) logInternalError(error);
+      writeJson(res, responseError.statusCode, { ok: false, error: responseError.message }, responseError.retryAfterMs ? {
+        "retry-after": retryAfterSeconds(responseError.retryAfterMs),
       } : {});
     });
   });
@@ -163,8 +172,9 @@ async function handleRequest(input: {
     try {
       await input.providers.handleWebhook(providerId, payload, req.headers, rawBody);
     } catch (error) {
-      if (/signature|secret|authorization|authorized|token|timestamp|replay/i.test(error instanceof Error ? error.message : String(error))) {
+      if (isWebhookAuthFailure(error)) {
         recordWebhookAuthFailure(webhookLimiter, `auth:${source}:${providerId}`);
+        throw httpError(401, "Standalone Gateway webhook verification failed.");
       }
       throw error;
     }
@@ -176,9 +186,7 @@ async function handleRequest(input: {
 
 function assertAdmin(config: StandaloneGatewayConfig, req: IncomingMessage): void {
   if (isAdminRequest(config, req)) return;
-  const error = new Error("Standalone Gateway admin token required.") as Error & { statusCode: number };
-  error.statusCode = 401;
-  throw error;
+  throw httpError(401, "Standalone Gateway admin token required.");
 }
 
 function isAdminRequest(config: StandaloneGatewayConfig, req: IncomingMessage): boolean {
@@ -248,11 +256,41 @@ function constantTimeEqual(left: string, right: string): boolean {
   return timingSafeEqual(leftHash, rightHash);
 }
 
-function httpError(statusCode: number, message: string, retryAfterMs?: number): Error & { statusCode: number; retryAfterMs?: number } {
-  const error = new Error(message) as Error & { statusCode: number; retryAfterMs?: number };
+function httpError(statusCode: number, message: string, retryAfterMs?: number): StandaloneHttpError {
+  const error = new Error(message) as StandaloneHttpError;
   error.statusCode = statusCode;
+  error.publicMessage = message;
   error.retryAfterMs = retryAfterMs;
+  error[standaloneHttpErrorMarker] = true;
   return error;
+}
+
+function publicErrorResponse(error: unknown): { statusCode: number; message: string; retryAfterMs: number | null } {
+  if (isStandaloneHttpError(error)) {
+    return {
+      statusCode: error.statusCode,
+      message: error.publicMessage,
+      retryAfterMs: typeof error.retryAfterMs === "number" ? error.retryAfterMs : null,
+    };
+  }
+  return { statusCode: 500, message: "internal_server_error", retryAfterMs: null };
+}
+
+function isStandaloneHttpError(error: unknown): error is StandaloneHttpError {
+  return error instanceof Error
+    && (error as { [standaloneHttpErrorMarker]?: unknown })[standaloneHttpErrorMarker] === true
+    && typeof (error as { statusCode?: unknown }).statusCode === "number"
+    && typeof (error as { publicMessage?: unknown }).publicMessage === "string";
+}
+
+function isWebhookAuthFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /signature|secret|authorization|authorized|token|timestamp|replay/i.test(message);
+}
+
+function logInternalError(error: unknown): void {
+  const detail = error instanceof Error ? (error.stack || error.message) : String(error);
+  process.stderr.write(`Standalone Gateway request failed: ${detail}\n`);
 }
 
 function writeJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
