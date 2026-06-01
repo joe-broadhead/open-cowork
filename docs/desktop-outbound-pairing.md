@@ -66,7 +66,13 @@ Desktop authenticates with:
 - `x-open-cowork-pairing-id`
 - `x-open-cowork-device-id`
 
-Non-loopback broker URLs must use HTTPS.
+Non-loopback broker URLs must use HTTPS and must not target loopback,
+link-local, private, non-routable, or cloud metadata networks. Desktop rejects
+literal private targets before saving a pairing and re-checks DNS resolution
+before every token-bearing broker request. Broker URLs cannot include embedded
+username/password credentials; query strings and fragments are stripped before
+persistence. Local development may use `http://localhost`,
+`http://127.0.0.1`, or `http://[::1]`.
 
 ## Command Lease Semantics
 

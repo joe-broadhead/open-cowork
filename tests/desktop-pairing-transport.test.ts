@@ -44,11 +44,31 @@ test('desktop pairing HTTP transport blocks metadata and private broker targets 
   assert.equal(fetches, 0)
 })
 
+test('desktop pairing HTTP transport fails closed on unresolved broker hostnames before sending the token', async () => {
+  let fetches = 0
+  const transport = new HttpDesktopPairingTransport({
+    fetchImpl: async () => {
+      fetches += 1
+      return new Response(null, { status: 204 })
+    },
+  })
+
+  await assert.rejects(
+    () => transport.heartbeat({
+      record: record('https://localhost.open-cowork.invalid'),
+      credential: { pairingId: 'pairing-1', deviceId: 'device-1', token: 'secret-token', updatedAt: '2026-06-01T12:00:00.000Z' },
+    }),
+    /Could not resolve|resolves to a loopback|resolves to a private|resolves to a cloud-metadata/,
+  )
+  assert.equal(fetches, 0)
+})
+
 test('desktop pairing HTTP transport keeps the explicit localhost development exception', async () => {
   let requestedUrl = ''
   const transport = new HttpDesktopPairingTransport({
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, init) => {
       requestedUrl = String(url)
+      assert.equal(init?.redirect, 'error')
       return new Response(null, { status: 204 })
     },
   })

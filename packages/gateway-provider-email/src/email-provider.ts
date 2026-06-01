@@ -258,7 +258,10 @@ function mapEmailPayload(payload: unknown, now: Date, maxAttachmentBytes: number
   const input = objectRecord(payload) as EmailIncomingPayload;
   const from = emailAddress(input.from) || emailAddress(input.sender);
   if (!from) return null;
-  const messageId = cleanHeaderId(input.messageId || input.id) || emailMessageId();
+  const messageId = cleanHeaderId(input.messageId || input.id);
+  if (!messageId) {
+    throw new Error("Email webhook messageId or id is required for replay protection.");
+  }
   const text = stringField(input, "text") || stringField(input, "body") || "";
   const threadId = cleanHeaderId(input.threadId)
     || cleanHeaderId(input.inReplyTo)

@@ -536,7 +536,7 @@ ${cloudWebsiteStyles(branding)}
                   <option value="telegram">Telegram</option>
                   <option value="slack">Slack</option>
                   <option value="email">Email</option>
-                  <option value="discord">Discord</option>
+                  <option value="discord">Discord Bridge</option>
                   <option value="webhook">Webhook</option>
                 </select></label>
                 <label><span>Display name</span><input name="displayName" autocomplete="off" placeholder="Team Slack" data-admin-control="true"></label>

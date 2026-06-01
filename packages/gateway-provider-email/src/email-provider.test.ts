@@ -106,6 +106,7 @@ describe("EmailProvider", () => {
     });
 
     await provider.handleWebhookPayload({
+      messageId: "<formatted-sender@example.test>",
       from: `"Alice Example" <ALICE+ops@example.test> ${"%".repeat(2048)}`,
       text: "hello",
     }, {
@@ -114,6 +115,22 @@ describe("EmailProvider", () => {
 
     expect(messages[0]?.target.chatId).toBe("alice+ops@example.test");
     expect(messages[0]?.sender.displayName).toBe("Alice Example");
+  });
+
+  it("rejects inbound mail without a stable replay key", async () => {
+    const provider = new EmailProvider({
+      from: "agent@example.test",
+      inboundSecret: "inbound-secret",
+      transport: fakeTransport(),
+    });
+    await provider.start(async () => {});
+
+    await expect(provider.handleWebhookPayload({
+      from: "alice@example.test",
+      text: "hello",
+    }, {
+      sharedSecret: "inbound-secret",
+    })).rejects.toThrow("messageId or id is required");
   });
 
   it("sends threaded outbound email and keeps approvals on token fallback", async () => {

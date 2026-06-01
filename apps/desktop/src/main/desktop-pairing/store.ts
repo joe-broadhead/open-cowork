@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getAppDataDir } from '../config-loader.ts'
 import { writeFileAtomic } from '../fs-atomic.ts'
+import { evaluateDesktopPairingBrokerUrl } from './broker-url-policy.ts'
 
 const MAX_TEXT_BYTES = 512
 const MAX_URL_BYTES = 2048
@@ -69,14 +70,9 @@ function normalizeRequiredIso(value: unknown, label: string) {
 export function normalizeDesktopPairingBrokerUrl(value: unknown) {
   const raw = nullableText(value, 'Desktop pairing broker URL', MAX_URL_BYTES)
   if (!raw) return null
-  const parsed = new URL(raw)
-  if (parsed.protocol !== 'https:') {
-    const host = parsed.hostname.toLowerCase()
-    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1'
-    if (parsed.protocol !== 'http:' || !loopback) {
-      throw new Error('Desktop pairing broker URL must use https, except for localhost development.')
-    }
-  }
+  const verdict = evaluateDesktopPairingBrokerUrl(raw)
+  if (!verdict.ok) throw new Error(verdict.reason)
+  const parsed = verdict.url
   parsed.hash = ''
   parsed.search = ''
   return parsed.toString().replace(/\/+$/, '')

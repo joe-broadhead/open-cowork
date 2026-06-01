@@ -6,7 +6,7 @@ import type {
   DesktopPairingRemoteEvent,
 } from '@open-cowork/shared'
 import type { DesktopPairingCredentialRecord } from './credentials.ts'
-import { evaluateHttpMcpUrlResolved } from '../mcp-url-policy.ts'
+import { resolveDesktopPairingBrokerUrl } from './broker-url-policy.ts'
 
 export type DesktopPairingTransportContext = {
   record: DesktopPairingRecord
@@ -44,23 +44,6 @@ const DEFAULT_TIMEOUT_MS = 15_000
 
 function joinUrl(baseUrl: string, path: string) {
   return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
-}
-
-function isLocalDevelopmentBroker(rawUrl: string) {
-  try {
-    const parsed = new URL(rawUrl)
-    const host = parsed.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
-  } catch {
-    return false
-  }
-}
-
-async function resolveBrokerUrl(rawUrl: string) {
-  const verdict = await evaluateHttpMcpUrlResolved(rawUrl, { allowPrivateNetwork: false })
-  if (verdict.ok) return verdict.url.toString()
-  if (isLocalDevelopmentBroker(rawUrl)) return rawUrl
-  throw new Error(`Desktop pairing broker URL is not allowed. ${verdict.reason}`)
 }
 
 function timeoutSignal(timeoutMs: number) {
@@ -152,7 +135,7 @@ export class HttpDesktopPairingTransport implements DesktopPairingTransport {
     if (!context.record.brokerUrl) {
       throw new Error('Desktop pairing broker URL is not configured.')
     }
-    const brokerUrl = await resolveBrokerUrl(context.record.brokerUrl)
+    const brokerUrl = await resolveDesktopPairingBrokerUrl(context.record.brokerUrl)
     const { signal, clear } = timeoutSignal(this.timeoutMs)
     try {
       const response = await this.fetchImpl(joinUrl(brokerUrl, path), {
@@ -164,6 +147,7 @@ export class HttpDesktopPairingTransport implements DesktopPairingTransport {
           'x-open-cowork-device-id': context.credential.deviceId,
         },
         body: input.body === undefined ? undefined : JSON.stringify(input.body),
+        redirect: 'error',
         signal,
       })
       if (!response.ok) {

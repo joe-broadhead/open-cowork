@@ -201,7 +201,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
   },
   {
     kind: 'discord',
-    displayName: 'Discord',
+    displayName: 'Discord Bridge',
     tier: 3,
     status: 'later',
     intendedUse: 'Bridge-backed provider for later live-provider hardening.',
@@ -233,7 +233,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
   },
   {
     kind: 'whatsapp',
-    displayName: 'WhatsApp',
+    displayName: 'WhatsApp Bridge',
     tier: 3,
     status: 'later',
     intendedUse: 'Bridge-backed provider for later WhatsApp Cloud API or Twilio hardening.',
@@ -265,7 +265,7 @@ export const GATEWAY_PROVIDER_READINESS_MATRIX: GatewayProviderReadinessEntry[] 
   },
   {
     kind: 'signal',
-    displayName: 'Signal',
+    displayName: 'Signal Bridge',
     tier: 3,
     status: 'later',
     intendedUse: 'Bridge-backed provider for later signal-cli hardening.',
