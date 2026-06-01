@@ -123,7 +123,7 @@ test('root deployment scripts expose provider smoke gates', () => {
 test('root build and dist scripts preserve release build prerequisites', () => {
   assert.equal(requireScript('build:desktop'), 'pnpm --filter @open-cowork/desktop build')
   assert.equal(requireScript('build:mcps'), 'pnpm --filter=./mcps/* build')
-  assert.equal(requireScript('build:packages'), 'pnpm --filter=./packages/* build')
+  assert.equal(requireScript('build:packages'), 'pnpm --workspace-concurrency=1 --filter=./packages/* build')
   assert.equal(requireScript('build:gateway'), 'pnpm --filter @open-cowork/gateway build')
   assert.equal(requireScript('build:standalone-gateway'), 'pnpm --filter @open-cowork/standalone-gateway build')
   assert.equal(requireScript('build:website'), 'pnpm --filter @open-cowork/website build')
