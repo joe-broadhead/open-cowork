@@ -1,6 +1,6 @@
 ---
 title: Open Cowork
-description: Desktop AI workspace built on top of OpenCode — composable, brandable, workflow-ready.
+description: OpenCode product layer for Desktop, Cloud, Gateway, and branded downstream deployments.
 hide:
   - navigation
   - toc
@@ -8,7 +8,7 @@ hide:
 
 # Open Cowork
 
-<p class="subtitle">A desktop AI workspace built on OpenCode. Configurable, brandable, workflow-ready, and engineered like a public product — not a demo.</p>
+<p class="subtitle">An OpenCode product layer for Desktop, Cloud, Gateway, and branded downstream deployments. Configurable, sync-aware, and engineered like a public product, not a demo.</p>
 
 [Get started :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
 [Why this exists :material-arrow-right:](architecture.md){ .md-button }
@@ -39,12 +39,12 @@ hide:
 
 ## What it is
 
-Open Cowork is the **desktop product layer** built on top of OpenCode.
+Open Cowork is the **product layer** built on top of OpenCode.
 
 The split is deliberate and load-bearing:
 
 - :material-engine: **OpenCode executes** — sessions, agents, approvals, MCP calls, tool semantics, event streams.
-- :material-palette: **Open Cowork composes** — UI, branding, packaging, workflows, sandbox UX, downstream config.
+- :material-palette: **Open Cowork composes** — Desktop, Cloud, Gateway, UI, branding, packaging, workflows, sync, policy, and downstream config.
 
 That boundary is what lets you embed the same battle-tested runtime that
 the OpenCode CLI uses, while still shipping a distinct product with your
@@ -122,9 +122,19 @@ own branding, providers, skills, and workflows.
 
     Rebrand and reconfigure without forking. Three env vars rename the
     app; a config overlay ships your providers, skills, MCPs, and
-    permissions. Same binary, distinct product.
+    permissions. Same source, distinct product.
 
     [:octicons-arrow-right-24: Downstream Customization](downstream.md)
+
+-   :material-server-network:{ .lg } **Cloud and Gateway surfaces**
+
+    ---
+
+    Cloud is the durable source of truth for shared workspaces. Gateway is
+    the headless channel client for Telegram, Slack, email, webhooks, and
+    future channels. Standalone Gateway remains a separate appliance mode.
+
+    [:octicons-arrow-right-24: OSS Packaging and Gateway Migration](oss-packaging-migration.md)
 
 </div>
 
@@ -138,7 +148,7 @@ own branding, providers, skills, and workflows.
 | **Power user** | Schedule recurring work, build skills | [Workflows](workflows.md) → [Workflow Recipes](workflow-recipes.md) |
 | **Downstream distributor** | Ship a branded internal build | [Configuration](configuration.md) → [Downstream Customization](downstream.md) |
 | **Contributor** | Land my first PR | [First Contribution](first-contribution.md) → [Architecture](architecture.md) |
-| **Operator / release manager** | Cut a release, run the gates | [Packaging and Releases](packaging-and-releases.md) → [Release Checklist](release-checklist.md) |
+| **Operator / release manager** | Cut a release, run the gates | [OSS Packaging and Gateway Migration](oss-packaging-migration.md) → [Packaging and Releases](packaging-and-releases.md) |
 | **Security reviewer** | Confirm the threat model holds | [Security Model](security-model.md) → [Telemetry and Privacy](privacy.md) |
 
 </div>
@@ -233,13 +243,15 @@ own branding, providers, skills, and workflows.
 
 | ✅ This is | ❌ This isn't |
 |---|---|
-| A polished desktop product layer on top of OpenCode | A second AI runtime |
-| A configurable, brandable shell for internal builds | A SaaS — everything runs locally |
-| A durable scheduler around Workflow Designer setup threads and OpenCode run agents | A new agent framework |
-| A fork-friendly source you can rebrand without touching the code | A black box |
+| A polished product layer on top of OpenCode | A second AI runtime |
+| A configurable, brandable source for Desktop, Cloud, and Gateway deployments | Lock-in to one hosted service |
+| A durable control plane around OpenCode sessions, projections, workflows, and channels | A new agent framework |
+| A fork-friendly source you can rebrand without touching the code | An implicit sync engine for local files, secrets, or host paths |
 
 ## Read next
 
 - [Glossary](glossary.md) — every term that shows up across these docs.
 - [Getting Started](getting-started.md) — install, sign in, run a session.
 - [Architecture](architecture.md) — the layers, the invariants, and why they're invariants.
+- [OSS Packaging and Gateway Migration](oss-packaging-migration.md) — product
+  names, package boundaries, release channels, and gateway migration policy.

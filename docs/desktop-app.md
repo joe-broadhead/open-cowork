@@ -11,6 +11,10 @@ understand and that map cleanly onto OpenCode:
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
 - `Settings` — appearance, models, permissions, storage, and workflow run behavior
 
+Desktop is one Open Cowork surface. Cloud, Gateway, Standalone Gateway, Mobile,
+and Teams naming and package boundaries are defined in
+[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+
 Team dashboards, incident-control dashboards, and unsupervised autonomous
 learning controls are not part of the active app surface. User-invoked
 improvement work still belongs in Chat through the bundled `autoresearch`

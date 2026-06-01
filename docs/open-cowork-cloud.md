@@ -14,6 +14,9 @@ Choose a deployment topology before choosing a cloud provider. Cloud-only,
 Cloud Channel Gateway, Cloud Gateway edge, and full-hybrid deployments are
 defined in [Deployment Topologies](deployment-topologies.md) and the
 machine-readable `deploy/topologies/topology-profiles.json` contract.
+Product naming, release channels, image names, and legacy Gateway migration
+policy are defined in
+[OSS Packaging and Gateway Migration](oss-packaging-migration.md).
 
 The cloud entrypoint is one OCI image with role-based behavior:
 

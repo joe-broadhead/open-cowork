@@ -41,6 +41,9 @@ Reference workflows in the repository root:
 - [ ] README matches current product behavior
 - [ ] config docs match `open-cowork.config.json`
 - [ ] packaging and release docs match the workflows
+- [ ] [OSS Packaging and Gateway Migration](oss-packaging-migration.md) matches
+      the current Desktop, Cloud, Gateway, Standalone Gateway, image, package,
+      and compatibility-alias behavior
 - [ ] if a primary UI route changed, `pnpm screenshots` has regenerated
       `docs/assets/auto/` and the changed screenshots were reviewed before
       release
@@ -67,6 +70,12 @@ Reference workflows in the repository root:
 - [ ] repository metadata and remotes point at the intended public `open-cowork` repo
 - [ ] first public release history-reset/squash decision is complete before making the repo public
 - [ ] release workflows point at the correct package names and scripts
+- [ ] release notes state the accepted launch tier: `v0.x` preview, private
+      hosted beta, public beta, stable, or enterprise-ready
+- [ ] Cloud Channel Gateway and Standalone Gateway are not described as the
+      same product mode in release notes, docs, or deployment assets
+- [ ] any `opencode-gateway` or `opencode-agent-gateway` compatibility alias
+      points at the matching Open Cowork artifact and is marked as legacy
 - [ ] macOS and Linux packaging scripts still match Electron Builder config
 - [ ] release workflow is still tag-driven only
 - [ ] release tag will be an annotated signed tag and GitHub shows it as verified

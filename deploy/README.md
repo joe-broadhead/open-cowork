@@ -4,6 +4,8 @@ These recipes are thin provider-specific compositions of the same
 `open-cowork-cloud` and `open-cowork-gateway` images, roles, and adapters.
 Provider behavior should stay in deployment configuration, cloud services, and
 adapter wiring rather than in core runtime/session logic.
+Product names, image/package naming, release channels, and legacy Gateway
+migration policy are defined in `docs/oss-packaging-migration.md`.
 
 Use these invariants across every provider:
 

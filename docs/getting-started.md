@@ -6,6 +6,27 @@
 - pnpm `>=10`
 - Python `>=3.11` for documentation work
 
+## Choose the product surface
+
+Open Cowork has one source tree and several deployable surfaces:
+
+- **Open Cowork Desktop** for local desktop work and optional Cloud
+  workspace sync.
+- **Open Cowork Cloud** for shared browser, Desktop, and Gateway cloud
+  workspaces.
+- **Open Cowork Gateway** for headless Telegram, Slack, email, webhook, and
+  other channel access to Cloud.
+- **Open Cowork Standalone Gateway** for Gateway-only private appliances that
+  own their own private OpenCode runtime.
+
+Start with Desktop if you are evaluating the product personally. Start with
+Cloud plus Cloud Channel Gateway if you need synced Desktop/Web/chat sessions.
+Start with Standalone Gateway only when you intentionally want a chat-first
+private appliance with no Cloud dependency.
+
+The naming, package, image, release-channel, and legacy Gateway migration
+contract is in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+
 ## Verify toolchain first
 
 Before installing dependencies, verify Node and install `pnpm` via Corepack:

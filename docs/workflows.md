@@ -20,6 +20,10 @@ Downstream builds that keep workflows enabled should keep that agent in
 their app config, or intentionally update the workflow setup policy in code
 and config together.
 
+Workflows appear across Desktop, Cloud, and Gateway deployments according to
+the product mode. The release and packaging names for those modes are defined
+in [OSS Packaging and Gateway Migration](oss-packaging-migration.md).
+
 The product rule is simple:
 
 - **OpenCode executes** sessions, agents, approvals, tools, skills, and

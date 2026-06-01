@@ -4,6 +4,23 @@
 
 Open Cowork packages desktop artifacts with Electron Builder.
 
+Product naming, compatibility aliases, Gateway migration policy, and support
+channels are defined in
+[OSS Packaging and Gateway Migration](oss-packaging-migration.md). Treat that
+page as the source of truth when changing public artifact names, OCI image
+names, Helm chart names, or Gateway mode language.
+
+## Product Artifacts
+
+| Product surface | Release artifact |
+| --- | --- |
+| Open Cowork Desktop | macOS `.dmg`/`.zip`, Linux `.AppImage`/`.deb` |
+| Open Cowork Cloud | `open-cowork-cloud` OCI image, Helm chart, Compose references |
+| Open Cowork Gateway | `open-cowork-gateway` OCI image, Helm chart, Compose references |
+| Open Cowork Standalone Gateway | source-built `open-cowork-gateway-standalone` CLI; no public image until the image release gate exists |
+| Open Cowork Mobile | reserved name; no artifact |
+| Open Cowork Teams | reserved product/edition name; no separate runtime |
+
 Current release targets:
 
 ### macOS
