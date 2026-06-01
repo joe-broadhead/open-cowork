@@ -453,9 +453,11 @@ function parseLimit(url: URL) {
 }
 
 function parseSessionStatus(value: string | null): ControlPlaneSessionStatus | null {
-  return value === 'idle' || value === 'running' || value === 'closed' || value === 'errored'
-    ? value
-    : null
+  if (!value) return null
+  if (value === 'idle' || value === 'running' || value === 'closed' || value === 'errored') return value
+  throw new CloudServiceError(400, 'Unsupported session status filter.', {
+    policyCode: 'sessions.status.invalid',
+  })
 }
 
 function readNonNegativeInteger(value: unknown, fallback = 0) {
@@ -1251,7 +1253,9 @@ async function handleApiRequest(
     const workflowAction = action
 
     if (!workflowId && req.method === 'GET') {
-      writeJson(res, 200, await options.service.listWorkflows(context.principal), options.corsOrigin)
+      writeJson(res, 200, await options.service.listWorkflows(context.principal, {
+        limit: parseLimit(context.url),
+      }), options.corsOrigin)
       return
     }
 

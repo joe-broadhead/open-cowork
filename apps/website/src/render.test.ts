@@ -75,7 +75,20 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
     assert.ok(entry.states.loading && entry.states.empty && entry.states.error, `${entry.routeId} defines loading/empty/error states`)
     assert.ok(entry.disabledBehavior, `${entry.routeId} defines disabled behavior`)
     assert.ok(entry.pagination, `${entry.routeId} defines pagination/cursor behavior`)
+    assert.ok(entry.paginationContract, `${entry.routeId} defines structured pagination contract`)
+    assert.equal(typeof entry.paginationContract.implemented, 'boolean', `${entry.routeId} declares pagination implementation status`)
+    assert.ok(['cursor', 'bounded-page', 'local-bounded', 'not-applicable', 'deferred'].includes(entry.paginationContract.mode), `${entry.routeId} declares a known pagination mode`)
+    assert.ok(['implemented', 'not-applicable', 'deferred'].includes(entry.paginationContract.cursor), `${entry.routeId} declares cursor state`)
+    if (entry.paginationContract.mode === 'bounded-page' || entry.paginationContract.mode === 'local-bounded' || entry.paginationContract.limit !== null) {
+      assert.ok(
+        typeof entry.paginationContract.limit === 'number' && entry.paginationContract.limit > 0,
+        `${entry.routeId} declares a positive list limit`,
+      )
+    }
     assert.ok(entry.redaction, `${entry.routeId} defines redaction behavior`)
+    assert.ok(entry.redactionContract, `${entry.routeId} defines structured redaction contract`)
+    assert.equal(entry.redactionContract.rawSecretsAllowed, false, `${entry.routeId} forbids raw secrets`)
+    assert.ok(entry.redactionContract.browserSanitizer, `${entry.routeId} names the browser/server sanitizer boundary`)
     assert.ok(entry.tests.length > 0, `${entry.routeId} lists test coverage`)
     for (const endpointId of entry.endpointIds) {
       assert.ok(endpoints.has(endpointId), `${entry.routeId} references known endpoint ${endpointId}`)
@@ -89,6 +102,13 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
   }
   assert.doesNotMatch(doc, /backend cursoring is deferred until the sessions API exposes cursors/)
   assert.match(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'threads')?.pagination || '', /cursor pages/)
+  assert.equal(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'threads')?.paginationContract.cursor, 'implemented')
+  for (const routeId of ['members', 'audit', 'usage', 'gateway', 'connections', 'policy', 'workflows', 'artifacts', 'diagnostics']) {
+    const entry = CLOUD_WEB_ROUTE_API_MATRIX.find((candidate) => candidate.routeId === routeId)
+    assert.ok(entry, `${routeId} has a route matrix entry`)
+    assert.ok(entry.paginationContract.limit === null || entry.paginationContract.limit <= 100, `${routeId} is browser-bounded`)
+    assert.equal(entry.redactionContract.rawSecretsAllowed, false, `${routeId} forbids raw secrets`)
+  }
 })
 
 test('cloud website bootstrap exposes typed client endpoint metadata', () => {
@@ -166,12 +186,13 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionQuestionReject')?.path, '/api/sessions/:sessionId/question-reject')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'sessionArtifact')?.path, '/api/sessions/:sessionId/artifacts/:artifactId')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'capabilitiesCatalog')?.path, '/api/capabilities')
-  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflows')?.path, '/api/workflows')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflows')?.path, '/api/workflows?limit=100')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workflowRun')?.path, '/api/workflows/:workflowId/run')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSourceValidate')?.path, '/api/project-sources/validate')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'projectSnapshots')?.path, '/api/project-sources/snapshots')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminPolicy')?.path, '/api/admin/policy')
-  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMembers')?.path, '/api/admin/members')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'apiTokens')?.path, '/api/api-tokens?limit=100')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMembers')?.path, '/api/admin/members?limit=100')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberInvite')?.method, 'POST')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminMemberUpdate')?.path, '/api/admin/members/:accountId/update')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'adminAudit')?.path, '/api/admin/audit?limit=100')

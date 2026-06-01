@@ -61,6 +61,14 @@ test('cloud control plane paginates and filters user session lists', () => {
   const second = store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', limit: 2, cursor: first.nextCursor })
   assert.deepEqual(second.items.map((session) => session.sessionId), ['session-1'])
   assert.equal(second.nextCursor, null)
+  assert.throws(
+    () => store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', limit: 2, status: 'closed', cursor: first.nextCursor }),
+    /cursor/i,
+  )
+  assert.throws(
+    () => store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', limit: 2, cursor: 'not-a-valid-cursor' }),
+    /cursor/i,
+  )
 
   assert.deepEqual(
     store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1', status: 'closed' }).items.map((session) => session.sessionId),

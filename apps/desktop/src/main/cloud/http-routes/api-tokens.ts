@@ -4,7 +4,11 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
   const { req, res, options, context, itemId, action, tools } = input
 
   if (!itemId && req.method === 'GET') {
-    tools.writeJson(res, 200, { tokens: await options.service.listApiTokens(context.principal) }, options.corsOrigin)
+    tools.writeJson(res, 200, {
+      tokens: await options.service.listApiTokens(context.principal, {
+        limit: tools.parseLimit(context.url),
+      }),
+    }, options.corsOrigin)
     return true
   }
 

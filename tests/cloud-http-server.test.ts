@@ -351,6 +351,122 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
   }
 })
 
+test('cloud HTTP server paginates session lists with scoped cursors and filters', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const createdSessionIds: string[] = []
+    for (const [index, profileName] of ['default', 'data-analyst', 'default', 'default', 'default'].entries()) {
+      const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ profileName }),
+      }))
+      const sessionId = String(asRecord(created.session).sessionId)
+      createdSessionIds.push(sessionId)
+      fixture.store.updateSessionStatus({
+        tenantId: 'tenant-1',
+        sessionId,
+        status: index === 2 ? 'closed' : 'idle',
+        title: index === 1 ? 'Revenue model' : `Cursor contract ${index + 1}`,
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+    }
+
+    const firstResponse = await fetch(`${baseUrl}/api/sessions?limit=2`)
+    assert.equal(firstResponse.status, 200)
+    const first = await readJson(firstResponse)
+    const firstItems = asArray(first.sessions).map((session) => String(asRecord(session).sessionId))
+    assert.deepEqual(firstItems, [createdSessionIds[0], createdSessionIds[1]])
+    assert.equal(first.totalEstimate, 5)
+    assert.equal(typeof first.nextCursor, 'string')
+
+    const secondResponse = await fetch(`${baseUrl}/api/sessions?limit=2&cursor=${encodeURIComponent(String(first.nextCursor))}`)
+    assert.equal(secondResponse.status, 200)
+    const second = await readJson(secondResponse)
+    const secondItems = asArray(second.sessions).map((session) => String(asRecord(session).sessionId))
+    assert.deepEqual(secondItems, [createdSessionIds[2], createdSessionIds[3]])
+    assert.equal(new Set([...firstItems, ...secondItems]).size, 4)
+
+    const statusFiltered = await readJson(await fetch(`${baseUrl}/api/sessions?status=closed`))
+    assert.deepEqual(asArray(statusFiltered.sessions).map((session) => String(asRecord(session).sessionId)), [createdSessionIds[2]])
+
+    const profileFiltered = await readJson(await fetch(`${baseUrl}/api/sessions?profileName=data-analyst`))
+    assert.deepEqual(asArray(profileFiltered.sessions).map((session) => String(asRecord(session).sessionId)), [createdSessionIds[1]])
+
+    const qFiltered = await readJson(await fetch(`${baseUrl}/api/sessions?q=revenue`))
+    assert.deepEqual(asArray(qFiltered.sessions).map((session) => String(asRecord(session).sessionId)), [createdSessionIds[1]])
+
+    const queryFiltered = await readJson(await fetch(`${baseUrl}/api/sessions?query=revenue`))
+    assert.deepEqual(asArray(queryFiltered.sessions).map((session) => String(asRecord(session).sessionId)), [createdSessionIds[1]])
+
+    const malformedCursor = await fetch(`${baseUrl}/api/sessions?cursor=not-a-valid-cursor`)
+    assert.equal(malformedCursor.status, 400)
+    assert.match(String((await readJson(malformedCursor)).error), /cursor/i)
+
+    const mismatchedFilterCursor = await fetch(`${baseUrl}/api/sessions?status=closed&cursor=${encodeURIComponent(String(first.nextCursor))}`)
+    assert.equal(mismatchedFilterCursor.status, 400)
+    assert.match(String((await readJson(mismatchedFilterCursor)).error), /cursor/i)
+
+    const unsupportedStatus = await fetch(`${baseUrl}/api/sessions?status=deleted`)
+    assert.equal(unsupportedStatus.status, 400)
+    assert.match(String((await readJson(unsupportedStatus)).error), /status/i)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP session list cursors are scoped to the authenticated tenant', async () => {
+  const tenant1Principal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner1@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const tenant2Principal = {
+    tenantId: 'tenant-2',
+    tenantName: 'Tenant 2',
+    orgId: 'tenant-2',
+    userId: 'owner-2',
+    accountId: 'owner-2',
+    email: 'owner2@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-tenant']) === 'tenant-2' ? tenant2Principal : tenant1Principal,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fixture.service.ensurePrincipal(tenant1Principal)
+    await fixture.service.ensurePrincipal(tenant2Principal)
+    for (let index = 0; index < 3; index += 1) {
+      await fetch(`${baseUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    }
+    const first = await readJson(await fetch(`${baseUrl}/api/sessions?limit=1`))
+    assert.equal(typeof first.nextCursor, 'string')
+
+    const tenantTwoList = await readJson(await fetch(`${baseUrl}/api/sessions`, { headers: { 'x-test-tenant': 'tenant-2' } }))
+    assert.deepEqual(asArray(tenantTwoList.sessions), [])
+
+    const tenantTwoCursor = await fetch(`${baseUrl}/api/sessions?cursor=${encodeURIComponent(String(first.nextCursor))}`, {
+      headers: { 'x-test-tenant': 'tenant-2' },
+    })
+    assert.equal(tenantTwoCursor.status, 400)
+    assert.match(String((await readJson(tenantTwoCursor)).error), /cursor/i)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server imports a redacted local session snapshot and audits the copy', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()

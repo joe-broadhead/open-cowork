@@ -86,6 +86,24 @@ const state = {
   activeRoute: bootstrap.defaultRoute || 'threads',
 };
 
+const CLOUD_WEB_LIST_LIMITS = {
+  members: 100,
+  apiTokens: 100,
+  headlessAgents: 100,
+  channelBindings: 100,
+  channelDeliveries: 50,
+  auditEvents: 100,
+  usageEvents: 20,
+  usageQuotas: 100,
+  usageTotals: 100,
+  workerPools: 100,
+  workers: 100,
+  workflows: 100,
+  workflowRuns: 50,
+  sessionArtifacts: 100,
+  diagnosticsArrays: 50,
+};
+
 const qs = (selector, root = document) => root.querySelector(selector);
 const qsa = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
@@ -353,6 +371,15 @@ function actionButton(label, onClick, variant = '', disabled = false) {
 
 function normalizeList(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function listLimit(key) {
+  const value = CLOUD_WEB_LIST_LIMITS[key];
+  return Number.isFinite(value) && value > 0 ? value : 100;
+}
+
+function boundedList(value, key) {
+  return normalizeList(value).slice(0, listLimit(key));
 }
 
 function safeObject(value) {
@@ -646,7 +673,7 @@ function filteredAuditEvents() {
       event.eventType,
       event.targetType,
       event.targetId,
-      compactJson(event.metadata),
+      compactJson(safeOperationalMetadata(event.metadata)),
     ].filter(Boolean).join(' ').toLowerCase();
     return tokens.every((token) => haystack.includes(token));
   });

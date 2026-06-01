@@ -30,6 +30,10 @@ import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import { generateChannelInteractionToken, generateCloudApiToken, hashChannelInteractionToken, hashCloudApiToken } from './control-plane-tokens.ts'
+import {
+  decodeSessionPageCursor,
+  encodeSessionPageCursor,
+} from './session-page-cursor.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -1321,31 +1325,6 @@ function nowIso(now: Date | undefined) {
 function normalizeListLimit(value: number | null | undefined, fallback = 100, max = 500) {
   if (!Number.isFinite(value)) return fallback
   return Math.max(1, Math.min(max, Math.floor(value || fallback)))
-}
-
-export function encodeSessionPageCursor(session: Pick<SessionRecord, 'updatedAt' | 'sessionId'>) {
-  return Buffer.from(JSON.stringify({
-    updatedAt: session.updatedAt,
-    sessionId: session.sessionId,
-  }), 'utf8').toString('base64url')
-}
-
-export function decodeSessionPageCursor(cursor: string | null | undefined): { updatedAt: string, sessionId: string } | null {
-  if (!cursor) return null
-  try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
-    if (
-      parsed
-      && typeof parsed === 'object'
-      && typeof parsed.updatedAt === 'string'
-      && typeof parsed.sessionId === 'string'
-    ) {
-      return { updatedAt: parsed.updatedAt, sessionId: parsed.sessionId }
-    }
-  } catch {
-    return null
-  }
-  return null
 }
 
 function stableId(prefix: string, ...parts: string[]) {
@@ -2976,7 +2955,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   listSessionsPage(input: ListSessionsPageInput): ListSessionsPageRecord {
     this.requireTenantUser(input.tenantId, input.userId)
     const limit = normalizeListLimit(input.limit)
-    const cursor = decodeSessionPageCursor(input.cursor)
+    const cursor = decodeSessionPageCursor(input.cursor, input)
     const query = input.query?.trim().toLowerCase() || null
     const filtered = Array.from(this.sessions.values())
       .map((session) => session.record)
@@ -3000,7 +2979,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const hasMore = filtered.length > limit
     return {
       items: page.map((session) => clone(session)),
-      nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!) : null,
+      nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!, input) : null,
       totalEstimate: filtered.length,
     }
   }

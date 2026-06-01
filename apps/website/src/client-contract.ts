@@ -160,19 +160,19 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
   {
     id: 'apiTokens',
     method: 'GET',
-    path: '/api/api-tokens',
+    path: '/api/api-tokens?limit=100',
     csrf: false,
   },
   {
     id: 'channelAgents',
     method: 'GET',
-    path: '/api/channels/agents',
+    path: '/api/channels/agents?limit=100',
     csrf: false,
   },
   {
     id: 'channelBindings',
     method: 'GET',
-    path: '/api/channels/bindings',
+    path: '/api/channels/bindings?limit=100',
     csrf: false,
   },
   {
@@ -304,7 +304,7 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
   {
     id: 'workflows',
     method: 'GET',
-    path: '/api/workflows',
+    path: '/api/workflows?limit=100',
     csrf: false,
   },
   {
@@ -358,7 +358,7 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
   {
     id: 'adminMembers',
     method: 'GET',
-    path: '/api/admin/members',
+    path: '/api/admin/members?limit=100',
     csrf: false,
   },
   {

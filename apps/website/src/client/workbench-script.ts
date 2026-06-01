@@ -573,7 +573,7 @@ function renderArtifacts() {
     empty.textContent = view ? 'No artifacts for the selected thread.' : 'Select a cloud thread to inspect artifacts.';
     panel.appendChild(empty);
   } else {
-    for (const artifact of projection.artifacts) {
+    for (const artifact of projection.artifacts.slice(0, listLimit('sessionArtifacts'))) {
       panel.appendChild(renderArtifactCard(artifact));
     }
   }
@@ -1013,7 +1013,7 @@ async function inspectArtifact(artifactIdValue) {
   };
   renderArtifacts();
   try {
-    const artifacts = await api(endpointPath('sessionArtifacts', '/api/sessions/:sessionId/artifacts', { sessionId: state.selectedSessionId }))
+    const artifacts = await api(withQuery(endpointPath('sessionArtifacts', '/api/sessions/:sessionId/artifacts', { sessionId: state.selectedSessionId }), { limit: listLimit('sessionArtifacts') }))
       .then((body) => normalizeList(body.artifacts));
     const metadata = artifacts.find((artifact) => artifactId(artifact) === artifactIdValue) || { artifactId: artifactIdValue };
     state.artifactPanel.metadata = safeArtifactMetadata(metadata);
