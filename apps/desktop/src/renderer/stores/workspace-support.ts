@@ -1,41 +1,27 @@
 import { useEffect, useMemo } from 'react'
 import { create } from 'zustand'
-import type { WorkspaceApiSupport, WorkspaceApiSupportStatus } from '@open-cowork/shared'
+import {
+  WORKSPACE_SUPPORT_APIS,
+  workspaceApiSupportContextForAuthority,
+  type WorkspaceApiSupport,
+  type WorkspaceApiSupportContext,
+  type WorkspaceApiSupportStatus,
+  type WorkspaceExecutionAuthority,
+} from '@open-cowork/shared'
 import { useSessionStore } from './session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from './session-workspace-keys'
 
-export const WORKSPACE_SUPPORT_APIS = [
-  'sessions.list',
-  'sessions.create',
-  'sessions.activate',
-  'sessions.get',
-  'sessions.prompt',
-  'sessions.abort',
-  'sessions.fileSnippet',
-  'sessions.diff',
-  'threads.search',
-  'threads.tags',
-  'threads.smartFilters',
-  'workflows.list',
-  'workflows.run',
-  'artifacts.list',
-  'artifacts.upload',
-  'artifacts.download',
-  'artifacts.reveal',
-  'settings.portable',
-  'customContent.agents',
-  'customContent.skills',
-  'customContent.mcps',
-  'capabilities.catalog',
-  'localFiles',
-  'localStdioMcps',
-  'machineRuntimeConfig',
-] as const
+export { WORKSPACE_SUPPORT_APIS } from '@open-cowork/shared'
 
 const LOCAL_SUPPORT: WorkspaceApiSupport[] = WORKSPACE_SUPPORT_APIS.map((api) => ({
   api,
   status: 'supported',
   verdict: { allowed: true, reason: null },
+  context: workspaceApiSupportContextForAuthority('desktop_local', {
+    surface: 'desktop_local',
+    onlineState: 'online',
+    status: 'supported',
+  }),
 }))
 
 type WorkspaceSupportState = {
@@ -69,11 +55,20 @@ export function supportReason(
   return supportEntry(support, api)?.verdict?.reason || fallback
 }
 
+export function supportContext(support: WorkspaceApiSupport[] | undefined): WorkspaceApiSupportContext | null {
+  return support?.find((entry) => entry.context)?.context || null
+}
+
+export function supportAuthority(support: WorkspaceApiSupport[] | undefined): WorkspaceExecutionAuthority | null {
+  return supportContext(support)?.authority || null
+}
+
 function statusIsUnavailable(status?: WorkspaceApiSupportStatus) {
   return status === 'blocked_by_policy' || status === 'not_supported' || status === 'deferred'
 }
 
 export function deriveWorkspaceSupportFlags(support: WorkspaceApiSupport[] | undefined) {
+  const context = supportContext(support)
   const entry = (api: string) => supportEntry(support, api)
   const mutation = (api: string) => supportAllows(entry(api), { mutation: true })
   const readable = (api: string) => supportAllows(entry(api))
@@ -87,6 +82,13 @@ export function deriveWorkspaceSupportFlags(support: WorkspaceApiSupport[] | und
   )
 
   return {
+    authority: context?.authority || null,
+    runtimeAuthority: context?.runtimeAuthority || null,
+    durableStateOwner: context?.durableStateOwner || null,
+    pathExposure: context?.pathExposure || null,
+    pairingState: context?.pairingState || null,
+    canExposeLocalPaths: context?.pathExposure === 'local_private',
+    canMutateAuthority: context?.mutation === 'supported',
     canCreateSession: mutation('sessions.create'),
     canPrompt: mutation('sessions.prompt'),
     canAbort: mutation('sessions.abort'),

@@ -106,8 +106,8 @@ status/reason vocabulary, and downstream boundaries lives in
 [Product Contract](product-contract.md). This section summarizes the
 architectural boundary.
 
-Open Cowork exposes three product surfaces without changing the execution
-owner:
+Open Cowork exposes Desktop, Cloud Web, and Gateway surfaces through explicit
+workspace authorities:
 
 - **Desktop Local workspace** uses the local Electron main process and local
   OpenCode runtime. Threads, local project paths, local stdio MCPs, machine
@@ -116,10 +116,17 @@ owner:
   web clients sync because both read and write the same tenant-scoped cloud
   sessions, event log, projections, workflows, artifacts, settings metadata,
   and policy verdicts.
-- **Gateway** is a headless cloud client. It adapts Telegram, Slack, email,
-  webhooks, and other channels onto the cloud HTTP/SSE contract. It never
-  imports the OpenCode SDK, starts OpenCode, or owns control-plane Postgres
-  state.
+- **Cloud Channel Gateway** is a headless cloud client. It adapts Telegram,
+  Slack, email, webhooks, and other channels onto the cloud HTTP/SSE contract.
+  In this mode Gateway never imports the OpenCode SDK, starts OpenCode, or owns
+  control-plane Postgres state.
+- **Standalone Team Gateway** is a Gateway-owned execution authority for
+  private VPS/server/Kubernetes deployments. It may supervise a private
+  OpenCode runtime and own Gateway Postgres/control-plane state, but it must
+  keep OpenCode private and separate from Cloud Channel Gateway mode.
+- **Paired Desktop** is an outbound connector authority. The Desktop local
+  runtime still executes; remote Gateway/mobile/Cloud callers only reach it
+  through explicit, revocable pairing without public Desktop or OpenCode ports.
 
 A thread belongs to exactly one workspace. Local threads do not become cloud
 threads unless a user intentionally creates or imports cloud-safe content
@@ -128,9 +135,10 @@ OpenCode runtime-home replication and not peer-to-peer desktop sync.
 
 Renderer code should treat `workspace.support()` as the canonical capability
 source for workspace-scoped actions. The support matrix distinguishes local
-actions, cloud-safe actions, policy-disabled actions, offline cached state, and
-future/deferred surfaces before the renderer opens project pickers, exposes
-host-path diffs, enables custom content, or sends mutations.
+actions, cloud-safe actions, Gateway-owned actions, paired-Desktop actions,
+policy-disabled actions, offline cached state, and future/deferred surfaces
+before the renderer opens project pickers, exposes host-path diffs, enables
+custom content, or sends mutations.
 
 Laptop-independent execution is specified as a managed worker service plane,
 not as a new runtime. Managed workers are registered cloud execution capacity

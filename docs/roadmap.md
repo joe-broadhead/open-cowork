@@ -1,21 +1,22 @@
 # Roadmap
 
-Last updated: 2026-05-31.
+Last updated: 2026-06-01.
 
-Open Cowork is now planned and verified as a three-surface product over one
-OpenCode-backed control plane:
+Open Cowork is now planned as a multi-authority product over OpenCode:
 
-- **Desktop:** local-first Electron app with optional cloud workspaces.
-- **Cloud:** web app, API, worker, scheduler, control plane, BYOK, policy, and
-  object storage.
-- **Gateway:** headless channel adapter for Telegram, Slack, email, webhooks,
-  and later channels.
+- **Desktop:** local-first Electron app with local workspaces, optional cloud
+  workspaces, and future outbound pairing.
+- **Cloud:** web app, API, worker, scheduler, control plane, BYOK, policy,
+  object storage, and optional Cloud Channel Gateway.
+- **Gateway:** either a Cloud Channel Gateway adapter or a Standalone Team
+  Gateway execution appliance with private OpenCode and Gateway Postgres.
 
 The product promise is **workspace-scoped product sync**, not peer-to-peer sync
-and not runtime replication. Cloud workspaces sync across desktop, web, and
-gateway because every surface reads and writes the same tenant-scoped cloud
-control plane. Local desktop workspaces stay private unless the user explicitly
-copies selected state into cloud.
+and not runtime-home replication. Cloud workspaces sync across Desktop, Cloud
+Web, and Cloud Channel Gateway because every surface reads and writes the same
+tenant-scoped Cloud control plane. Local Desktop and Standalone Gateway
+workspaces stay private unless a user explicitly imports, pairs, registers, or
+syncs through a documented connector.
 
 ## First Principle
 
@@ -34,13 +35,17 @@ simplified or removed.
 
 ## Product Thesis
 
-Open Cowork should be useful in three deployment modes:
+Open Cowork should be useful in every supported deployment mode:
 
 - **Local desktop:** a user runs OpenCode locally through a polished desktop
   product layer with no cloud dependency.
+- **Gateway-only:** a user or team runs an always-on private Gateway OpenCode
+  appliance on a VPS, private server, or Kubernetes without Cloud.
 - **Self-hosted cloud:** an organization runs desktop, cloud, and gateway on its
   own infrastructure with its own branding, auth, storage, secrets, profiles,
   tools, agents, MCPs, and gateway providers.
+- **Hybrid:** Desktop, Gateway, and Cloud can be combined through explicit
+  workspace authorities, Cloud registration, and outbound Desktop pairing.
 - **Managed BYOK SaaS:** Open Cowork can be hosted as a service where customers
   bring their own provider keys and pay for managed sync, cloud execution,
   policy, gateway channels, reliability, and operations.
@@ -55,8 +60,9 @@ source product remains deployable without commercial lock-in.
    gateway continue the same cloud sessions.
 3. Local stays local. Local desktop sessions, files, MCPs, and credentials are
    never uploaded implicitly.
-4. Gateway is headless and cloud-backed. It can run on a VPS, but it does not
-   own session, runtime, or control-plane state.
+4. Gateway mode is explicit. Cloud Channel Gateway is headless and
+   cloud-backed; Standalone Team Gateway may own private OpenCode and Gateway
+   Postgres without requiring Cloud.
 5. Downstream deployers can configure the product without forking core code:
    branding, cloud URL, auth, profiles, tools, agents, MCPs, features, object
    store, secrets, quotas, and gateway providers.
@@ -67,127 +73,36 @@ source product remains deployable without commercial lock-in.
 
 ## Strategic Roadmap
 
-The active launch roadmap is tracked by
-[issue #547](https://github.com/joe-broadhead/open-cowork/issues/547). The
-child issues below are the source of truth for remaining implementation scope
-and acceptance.
+The active multi-authority roadmap is tracked by
+[issue #575](https://github.com/joe-broadhead/open-cowork/issues/575). The
+child issues below are the source of truth for implementation scope and
+acceptance. The canonical workspace and authority semantics live in the
+[Product Contract](product-contract.md).
 
-### Phase 1: Product Contract And UX Semantics
-
-Make the three-surface model explicit in one canonical contract, shared status
-vocabulary, docs links, and regression tests.
-
-Tracked by [#548](https://github.com/joe-broadhead/open-cowork/issues/548).
-
-Acceptance:
-
-- [Product Contract](product-contract.md) defines Desktop Local, Desktop Cloud,
-  Cloud Web, Gateway Channel, and Admin/Operator behavior.
-- Workspace state is clearly scoped as local or cloud.
-- Local-only and cloud-safe actions are distinct in UI, docs, and support
-  verdicts.
-- OpenCode/Open Cowork ownership boundaries are documented and tested.
-
-### Phase 2: Cloud Web Workbench Completion
-
-Complete Cloud Web as a production end-user and admin workbench, including
-browser quality and route/API evidence.
-
-Tracked by [#549](https://github.com/joe-broadhead/open-cowork/issues/549).
-
-Acceptance:
-
-- Cloud threads can be started and continued from Web, Desktop Cloud, and
-  Gateway where a channel is bound.
-- SessionView parity covers messages, tool traces, approvals, questions,
-  artifacts, todos, cost/status/errors, and reload hydration.
-- Admin surfaces cover members, policy, BYOK, quotas, workers, Gateway, audit,
-  usage, and diagnostics with role checks and redaction.
-- Browser E2E, accessibility, and performance gates pass.
-
-### Phase 3: Gateway Appliance v1
-
-Make Gateway a production-grade headless Cloud client for self-hosted and
-managed channel deployments.
-
-Tracked by [#550](https://github.com/joe-broadhead/open-cowork/issues/550).
-
-Acceptance:
-
-- Gateway can self-host on a VPS/internal host with scoped service-token auth.
-- Telegram, Slack, Email, Webhook, CLI, and later providers share one
-  capability-driven rendering model.
-- Approvals/questions work through inline controls where supported and
-  token/link fallback where not.
-- Gateway has no OpenCode SDK imports and no direct control-plane database
-  ownership.
-
-### Phase 4: Downstream Distribution Contract
-
-Freeze the configuration, branding, packaging, and extension contracts that
-let organizations ship internal or managed distributions without source
-patches.
-
-Tracked by [#551](https://github.com/joe-broadhead/open-cowork/issues/551).
-
-Acceptance:
-
-- A downstream organization can configure product name, logo, cloud URL, auth,
-  profiles, tools, agents, MCPs, object store, secret adapter, quotas, billing
-  mode, and Gateway providers without core source patches.
-- Public examples use placeholders only.
-- Extension docs map each seam to concrete modules and forbidden imports.
-- Validators catch private-value leakage and branding regressions.
-
-### Phase 5: Reference Deployments
-
-Prove provider-neutral deployment with GCP first, while keeping real project
-values outside the public repo.
-
-Tracked by [#552](https://github.com/joe-broadhead/open-cowork/issues/552).
-
-Acceptance:
-
-- GCP deploys from a clean tmp/private repo using public templates.
-- No real GCP project ids, account ids, private domains, customer names,
-  prices, or secrets are committed.
-- Cloud, Desktop connection, Gateway, worker, artifact, workflow, and restore
-  smoke checks have a shared contract.
-- AWS, Azure, DigitalOcean, Kubernetes, and VPS recipes stay adapter/config
-  differences only.
-
-### Phase 6: Managed BYOK SaaS Readiness
-
-Prepare the open-source/public pieces needed by a downstream managed BYOK SaaS
-repo without mixing private values into this repo.
-
-Tracked by [#553](https://github.com/joe-broadhead/open-cowork/issues/553).
-
-Acceptance:
-
-- Self-host deployments work with billing disabled or stubbed.
-- BYOK plaintext is never readable over HTTP and is revealed only in the
-  worker/runtime role as allowed.
-- Billing and entitlement gates block expensive managed execution before worker
-  spawn/claim where possible.
-- Public/private boundaries for onboarding, billing, support, evidence, and
-  private launch values are documented and validated.
-
-### Phase 7: Launch Evidence
-
-Back launch claims with repeatable load, soak, failover, restore, security,
-release, browser, Gateway, deployment, and private-value evidence.
-
-Tracked by [#554](https://github.com/joe-broadhead/open-cowork/issues/554).
-
-Acceptance:
-
-- Evidence states which launch tier is proven: local/self-host beta, private
-  hosted beta, public hosted beta, general availability, or enterprise-scale.
-- Release gates fail closed when a surface-specific check is missing.
-- Load/failover/restore/security findings create narrow follow-up issues.
-- Public evidence templates contain no real project ids, domains, customers,
-  prices, support rosters, or secrets.
+- [#576](https://github.com/joe-broadhead/open-cowork/issues/576) - execution
+  authority and workspace support contract.
+- [#577](https://github.com/joe-broadhead/open-cowork/issues/577) - split Cloud
+  Channel Gateway and Standalone Team Gateway modes.
+- [#578](https://github.com/joe-broadhead/open-cowork/issues/578) -
+  instance-aware channel provider platform.
+- [#579](https://github.com/joe-broadhead/open-cowork/issues/579) - Standalone
+  Gateway execution appliance.
+- [#580](https://github.com/joe-broadhead/open-cowork/issues/580) - Desktop
+  outbound pairing connector.
+- [#581](https://github.com/joe-broadhead/open-cowork/issues/581) - Gateway and
+  paired Desktop workspaces in Desktop.
+- [#582](https://github.com/joe-broadhead/open-cowork/issues/582) - Cloud edge
+  execution and Gateway registration.
+- [#583](https://github.com/joe-broadhead/open-cowork/issues/583) - unified
+  teams, workflows, schedules, watches, and delegation.
+- [#584](https://github.com/joe-broadhead/open-cowork/issues/584) - enterprise
+  and solo deployment topology kits.
+- [#585](https://github.com/joe-broadhead/open-cowork/issues/585) - production
+  security, policy, audit, and compliance gates for hybrid modes.
+- [#586](https://github.com/joe-broadhead/open-cowork/issues/586) - setup,
+  onboarding, and health center.
+- [#587](https://github.com/joe-broadhead/open-cowork/issues/587) - OSS
+  packaging, docs, and migration strategy for merged Gateway products.
 
 ## Core Product Loop
 

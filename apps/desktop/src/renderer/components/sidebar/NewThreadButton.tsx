@@ -50,6 +50,9 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const workspaceSupport = workspaceSupportState.workspaceId === normalizedWorkspaceId ? workspaceSupportState.support : []
   const workspaceSupportLoaded = workspaceSupportState.workspaceId === normalizedWorkspaceId && workspaceSupportState.loaded
   const workspaceSupportError = workspaceSupportState.workspaceId === normalizedWorkspaceId ? workspaceSupportState.error : null
+  const canExposeLocalPaths = workspaceSupportState.workspaceId === normalizedWorkspaceId
+    ? workspaceSupportState.flags.canExposeLocalPaths
+    : false
   const createSupport = supportEntry(workspaceSupport, 'sessions.create')
   const localFilesSupport = supportEntry(workspaceSupport, 'localFiles')
   const cloudCreateReason = workspaceSupportError
@@ -58,20 +61,20 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       : createSupport?.verdict?.reason || t('newThread.createBlocked', 'Thread creation is disabled by this workspace policy.'))
   const localFilesReason = localFilesSupport?.verdict?.reason || t('newThread.localFilesBlocked', 'Cloud workspaces do not implicitly upload local files.')
   const blankDisabled = (!activeWorkspaceIsLocal && (!workspaceSupportLoaded || Boolean(workspaceSupportError))) || !supportAllows(createSupport, { mutation: true })
-  const projectDisabled = activeWorkspaceIsLocal
+  const projectDisabled = canExposeLocalPaths
     ? blankDisabled || !supportAllows(localFilesSupport, { mutation: true })
     : blankDisabled
   const projectDisabledReason = blankDisabled
     ? cloudCreateReason
-    : activeWorkspaceIsLocal
+    : canExposeLocalPaths
       ? localFilesReason
       : null
-  const blankHint = activeWorkspaceIsLocal
+  const blankHint = canExposeLocalPaths
     ? t('newThread.blankHint', 'Local workspace - start with Build and the currently available agents, tools, and skills')
     : t('newThread.blankCloudHint', 'Cloud-safe action - start a synced cloud thread')
   const projectHint = projectDisabled
-    ? `${activeWorkspaceIsLocal ? t('newThread.localOnlyAction', 'Local-only action') : t('newThread.cloudAction', 'Cloud action')} - ${projectDisabledReason || ''}`
-    : activeWorkspaceIsLocal
+    ? `${canExposeLocalPaths ? t('newThread.localOnlyAction', 'Local-only action') : t('newThread.cloudAction', 'Cloud action')} - ${projectDisabledReason || ''}`
+    : canExposeLocalPaths
       ? t('newThread.projectHint', 'Local-only action - choose a directory the agent can read and edit')
       : t('newThread.cloudProjectHint', 'Cloud-safe action - choose Git or upload an explicit snapshot')
 
