@@ -50,6 +50,8 @@ for (const phrase of [
   if (!standaloneDocs.includes(phrase)) throw new Error(`Standalone Gateway docs must mention: ${phrase}`)
 }
 
+assertPublicSafeStandaloneEnv(read('deploy/standalone-gateway/standalone.env.example'))
+
 const networkPolicy = read('apps/standalone-gateway/src/network-policy.ts')
 for (const phrase of ['public OpenCode endpoint', 'wildcard address', 'loopback/private']) {
   if (!networkPolicy.includes(phrase)) throw new Error(`Standalone network policy must guard ${phrase}`)
@@ -59,4 +61,42 @@ process.stdout.write('[standalone-gateway-validate] standalone gateway artifacts
 
 function read(file) {
   return readFileSync(join(root, file), 'utf8')
+}
+
+function assertPublicSafeStandaloneEnv(contents) {
+  const forbiddenPatterns = [
+    /\bAKIA[0-9A-Z]{16}\b/,
+    /\bghp_[A-Za-z0-9_]{20,}\b/,
+    /\bsk-[A-Za-z0-9]{20,}\b/,
+    /\bxoxb-[A-Za-z0-9-]{20,}\b/,
+    /\bAIza[0-9A-Za-z_-]{20,}\b/,
+    /BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY/,
+  ]
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(contents)) {
+      throw new Error(`Standalone Gateway env example appears to contain private material matching ${pattern}`)
+    }
+  }
+
+  const sensitiveAssignmentPattern = /^[ \t]*([A-Z][A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|DATABASE_URL|PRIVATE_KEY|ACCESS_KEY|API_KEY)[A-Z0-9_]*)[ \t]*=[ \t]*([^\n#]*)/gm
+  for (const match of contents.matchAll(sensitiveAssignmentPattern)) {
+    const [, name, rawValue] = match
+    const value = rawValue.trim().replace(/^['"]|['"]$/g, '')
+    if (!isPublicPlaceholderValue(value)) {
+      throw new Error(`deploy/standalone-gateway/standalone.env.example must not assign a private value to ${name}`)
+    }
+  }
+}
+
+function isPublicPlaceholderValue(value) {
+  if (!value || value === '...' || value.includes('...')) return true
+  if (value.startsWith('${') || value.startsWith('<')) return true
+  return [
+    'PASSWORD',
+    'REPLACE',
+    'change-me',
+    'example.',
+    'localhost',
+    'replace-with',
+  ].some((placeholder) => value.includes(placeholder))
 }

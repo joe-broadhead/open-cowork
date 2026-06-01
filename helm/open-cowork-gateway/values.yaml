@@ -90,12 +90,23 @@ podSecurityContext:
   runAsUser: 1000
   runAsGroup: 1000
   fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 containerSecurityContext:
+  readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
   capabilities:
     drop:
       - ALL
+
+networkPolicy:
+  enabled: true
+  ingress:
+    from: []
+  egress:
+    enabled: false
+    to: []
 
 resources: {}
 

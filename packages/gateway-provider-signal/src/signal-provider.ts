@@ -5,6 +5,9 @@ export type SignalProviderConfig = Omit<WebhookProviderConfig, "providerKind" | 
   sharedSecret: string;
 };
 
+// Bridge-mode only: a trusted Signal bridge process must authenticate its
+// upstream channel first, then re-sign the normalized payload with this shared
+// secret. Do not expose this adapter as an unauthenticated public endpoint.
 export const signalCapabilities: ChannelCapabilities = {
   threads: false,
   messageEditing: false,

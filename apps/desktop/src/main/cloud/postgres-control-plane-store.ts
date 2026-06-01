@@ -6,6 +6,7 @@ import {
   generateCloudApiToken,
   hashChannelInteractionToken,
   hashCloudApiToken,
+  verifyCloudApiTokenHash,
   decodeSessionPageCursor,
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
@@ -655,15 +656,26 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async findApiTokenByPlaintext(plaintext: string, now = new Date()) {
-    const tokenHash = hashCloudApiToken(plaintext)
+    const nowText = nowIso(now)
+    const candidates = await this.pool.query(
+      `SELECT *
+       FROM cloud_api_tokens
+       WHERE left($1, length('occ_' || token_id || '_')) = ('occ_' || token_id || '_')
+         AND revoked_at IS NULL
+         AND (expires_at IS NULL OR expires_at > $2)
+       ORDER BY created_at DESC`,
+      [plaintext, nowText],
+    )
+    const matched = candidates.rows.find((row) => verifyCloudApiTokenHash(plaintext, String(row.token_hash)))
+    if (!matched) return null
     const result = await this.pool.query(
       `UPDATE cloud_api_tokens
        SET last_used_at = $2, updated_at = $2
-       WHERE token_hash = $1
+       WHERE token_id = $1
          AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at > $2)
        RETURNING *`,
-      [tokenHash, nowIso(now)],
+      [String(matched.token_id), nowText],
     )
     return result.rows[0] ? apiTokenFromRow(result.rows[0]) : null
   }

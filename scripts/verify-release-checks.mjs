@@ -9,6 +9,8 @@ const DEFAULT_REQUIRED_CHECKS = [
   'coverage',
   'analyze (javascript-typescript)',
 ]
+const CHECK_RUNS_PAGE_SIZE = 100
+const MAX_CHECK_RUN_PAGES = 20
 
 function splitCsv(value, fallback = []) {
   const entries = String(value || '')
@@ -67,11 +69,20 @@ export async function verifyReleaseChecks(options) {
   if (!owner || !repo || repository.split('/').length !== 2) {
     throw new Error(`repository must be in owner/name form, got ${repository}.`)
   }
-  const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(sha)}/check-runs?per_page=100`
-  const payload = await githubJson(path, token, apiBaseUrl)
+  const checkRuns = []
+  for (let page = 1; page <= MAX_CHECK_RUN_PAGES; page += 1) {
+    const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(sha)}/check-runs?per_page=${CHECK_RUNS_PAGE_SIZE}&page=${page}`
+    const payload = await githubJson(path, token, apiBaseUrl)
+    const pageRuns = Array.isArray(payload?.check_runs) ? payload.check_runs : []
+    checkRuns.push(...pageRuns)
+    if (pageRuns.length < CHECK_RUNS_PAGE_SIZE) break
+    if (page === MAX_CHECK_RUN_PAGES) {
+      throw new Error(`Release commit has more than ${MAX_CHECK_RUN_PAGES * CHECK_RUNS_PAGE_SIZE} check runs; tighten OPEN_COWORK_RELEASE_REQUIRED_CHECKS or reduce duplicated checks.`)
+    }
+  }
   return validateRequiredReleaseChecks({
     requiredChecks: options?.requiredChecks,
-    checkRuns: payload?.check_runs,
+    checkRuns,
   })
 }
 

@@ -73,6 +73,36 @@ describe("SlackProvider", () => {
     await expect(provider.handleWebhookPayload({ type: "url_verification", challenge: "ok" }, {})).rejects.toThrow("signature");
   });
 
+  it("rejects replayed Slack signatures inside the timestamp window", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      now: () => fixedNow,
+    });
+    await provider.start(async (message) => {
+      messages.push(message);
+    });
+    const payload = {
+      type: "event_callback",
+      team_id: "T123",
+      event: {
+        type: "message",
+        user: "U123",
+        channel: "C123",
+        text: "hello",
+        ts: "1716984000.000100",
+      },
+    };
+    const rawBody = JSON.stringify(payload);
+    const headers = signedHeaders(rawBody);
+
+    await provider.handleWebhookPayload(payload, { headers, rawBody });
+    await expect(provider.handleWebhookPayload(payload, { headers, rawBody })).rejects.toThrow("replay");
+
+    expect(messages).toHaveLength(1);
+  });
+
   it("maps Slack button actions to provider-neutral interactions", async () => {
     const messages: IncomingChannelMessage[] = [];
     const provider = new SlackProvider({

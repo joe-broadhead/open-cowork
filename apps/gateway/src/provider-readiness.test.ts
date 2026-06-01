@@ -159,6 +159,8 @@ test('gateway provider readiness matrix matches actual provider capabilities and
   }))
   const doc = readFileSync(fileURLToPath(new URL('../../../docs/gateway-provider-readiness.md', import.meta.url)), 'utf8')
   assert.match(doc, /Provider Readiness Matrix/)
+  assert.match(doc, /Discord, WhatsApp, and Signal are bridge-mode providers/)
+  assert.match(doc, /must verify the native platform signature/)
 
   for (const entry of GATEWAY_PROVIDER_READINESS_MATRIX) {
     const registration = registry.registrations.find((candidate) => candidate.config.kind === entry.kind)

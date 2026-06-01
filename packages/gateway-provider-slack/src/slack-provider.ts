@@ -55,6 +55,7 @@ type SlackApiResponse = {
 const defaultSlackApiBaseUrl = "https://slack.com/api";
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 const defaultSlackRequestTimeoutMs = 15_000;
+const maxSeenSlackSignatures = 5_000;
 
 export class SlackProvider implements ChannelProvider {
   readonly kind: ChannelProviderKind = "slack";
@@ -84,6 +85,7 @@ export class SlackProvider implements ChannelProvider {
   };
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
+  private readonly seenWebhookSignatures = new Map<string, number>();
 
   constructor(private readonly config: SlackProviderConfig) {
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
@@ -218,6 +220,26 @@ export class SlackProvider implements ChannelProvider {
     const expected = `v0=${createHmac("sha256", signingSecret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
     if (!constantTimeStringEqual(signature, expected)) {
       throw new Error("Slack webhook signature verification failed.");
+    }
+    this.claimWebhookSignature(`${timestamp}:${signature}`, nowMs, maxAgeMs);
+  }
+
+  private claimWebhookSignature(replayKey: string, nowMs: number, maxAgeMs: number): void {
+    this.purgeSeenWebhookSignatures(nowMs);
+    const existingExpiresAt = this.seenWebhookSignatures.get(replayKey);
+    if (existingExpiresAt && existingExpiresAt > nowMs) {
+      throw new Error("Slack webhook signature replay rejected.");
+    }
+    this.seenWebhookSignatures.set(replayKey, nowMs + maxAgeMs);
+    if (this.seenWebhookSignatures.size > maxSeenSlackSignatures) {
+      const oldest = this.seenWebhookSignatures.keys().next().value;
+      if (oldest) this.seenWebhookSignatures.delete(oldest);
+    }
+  }
+
+  private purgeSeenWebhookSignatures(nowMs: number): void {
+    for (const [key, expiresAt] of this.seenWebhookSignatures) {
+      if (expiresAt <= nowMs) this.seenWebhookSignatures.delete(key);
     }
   }
 

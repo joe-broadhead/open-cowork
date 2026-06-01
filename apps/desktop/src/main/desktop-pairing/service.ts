@@ -153,6 +153,7 @@ export class DesktopPairingService {
   private readonly tokenFactory: () => string
   private readonly pollIntervalMs: number
   private readonly running = new Map<string, RunningPairing>()
+  private readonly pollFlights = new Map<string, Promise<DesktopPairingStatusSnapshot>>()
 
   constructor(options: DesktopPairingServiceOptions) {
     this.store = options.store || createFileDesktopPairingStore()
@@ -269,6 +270,17 @@ export class DesktopPairingService {
   }
 
   async pollOnce(pairingId: string): Promise<DesktopPairingStatusSnapshot> {
+    const existing = this.pollFlights.get(pairingId)
+    if (existing) return existing
+    const flight = this.pollOnceExclusive(pairingId)
+      .finally(() => {
+        if (this.pollFlights.get(pairingId) === flight) this.pollFlights.delete(pairingId)
+      })
+    this.pollFlights.set(pairingId, flight)
+    return flight
+  }
+
+  private async pollOnceExclusive(pairingId: string): Promise<DesktopPairingStatusSnapshot> {
     const record = this.requireRecord(pairingId)
     if (record.status === 'revoked' || !record.enabled) return this.snapshot(record)
     const credential = this.credentialStore.get(record.id)
@@ -292,9 +304,10 @@ export class DesktopPairingService {
         },
       })
       let latest = this.markOnline(record)
+      if (!latest.enabled || latest.status === 'revoked') return this.snapshot(latest)
       for (const command of claim.commands) {
         latest = await this.executeClaimedCommand(latest, credential, transport, command)
-        if (latest.status === 'paired_offline' || latest.status === 'revoked') break
+        if (!latest.enabled || latest.status === 'paired_offline' || latest.status === 'revoked') break
       }
       return this.snapshot(latest)
     } catch (error) {
@@ -540,16 +553,18 @@ export class DesktopPairingService {
 
   private markOnline(record: DesktopPairingRecord) {
     const timestamp = this.now().toISOString()
+    const latest = this.store.get(record.id) || record
+    if (!latest.enabled || latest.status === 'revoked') return latest
     const next = this.store.save({
-      ...record,
+      ...latest,
       status: 'paired_online',
       enabled: true,
-      lastConnectedAt: record.lastConnectedAt || timestamp,
+      lastConnectedAt: latest.lastConnectedAt || timestamp,
       lastHeartbeatAt: timestamp,
       error: null,
       updatedAt: timestamp,
     })
-    if (record.status !== 'paired_online') this.audit(next.id, 'pairing.connected')
+    if (latest.status !== 'paired_online') this.audit(next.id, 'pairing.connected')
     return next
   }
 
@@ -567,13 +582,15 @@ export class DesktopPairingService {
   }
 
   private markOfflineRecord(record: DesktopPairingRecord, error: string): DesktopPairingRecord {
+    const latest = this.store.get(record.id) || record
+    if (!latest.enabled || latest.status === 'revoked') return latest
     const next = this.store.save({
-      ...record,
+      ...latest,
       status: 'paired_offline',
       error,
       updatedAt: this.now().toISOString(),
     })
-    if (record.status !== 'paired_offline' || record.error !== error) {
+    if (latest.status !== 'paired_offline' || latest.error !== error) {
       this.audit(next.id, 'pairing.offline', { reason: error })
     }
     return next

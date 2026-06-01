@@ -786,6 +786,53 @@ test('gateway rejects oversized webhook bodies before provider dispatch', async 
   }
 })
 
+test('gateway webhooks apply a source rate limit before provider dispatch', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/missing`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      assert.equal(response.status, 404)
+    }
+    const blocked = await fetch(`${url}/webhooks/missing`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(blocked.status, 429)
+    assert.equal(blocked.headers.get('retry-after'), '60')
+    assert.equal((await readJson(blocked)).error, 'Too many Gateway webhook requests. Try again later.')
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
 test('gateway daemon exposes admin delivery backlog controls', async () => {
   const calls: string[] = []
   const cloud = {

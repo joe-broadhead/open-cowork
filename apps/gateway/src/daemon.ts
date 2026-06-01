@@ -7,9 +7,85 @@ import { createGatewayRuntime, type GatewayRuntime } from './gateway-runtime.js'
 import { renderPrometheusMetrics } from './metrics.js'
 
 class GatewayHttpError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(readonly status: number, message: string, readonly retryAfterMs?: number) {
     super(message)
   }
+}
+
+type GatewayWebhookRateRecord = {
+  count: number
+  resetAt: number
+  blockedUntil: number
+}
+
+const maxWebhookRateRecords = 10_000
+
+class GatewayWebhookRateLimiter {
+  private readonly records = new Map<string, GatewayWebhookRateRecord>()
+
+  claim(input: { key: string, nowMs: number, windowMs: number, maxRequests: number }) {
+    const record = this.record(input.key, input.nowMs, input.windowMs)
+    if (record.blockedUntil > input.nowMs) {
+      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
+    }
+    record.count += 1
+    if (record.count > input.maxRequests) {
+      record.blockedUntil = Math.max(record.blockedUntil, record.resetAt)
+      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
+    }
+    return { ok: true as const }
+  }
+
+  backoff(input: { key: string, nowMs: number, windowMs: number, maxFailures: number, backoffMs: number }) {
+    const record = this.record(input.key, input.nowMs, input.windowMs)
+    if (record.blockedUntil > input.nowMs) {
+      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
+    }
+    record.count += 1
+    if (record.count >= input.maxFailures) {
+      record.blockedUntil = Math.max(record.blockedUntil, input.nowMs + input.backoffMs)
+    }
+    return { ok: true as const }
+  }
+
+  check(input: { key: string, nowMs: number, windowMs: number }) {
+    const record = this.record(input.key, input.nowMs, input.windowMs)
+    if (record.blockedUntil > input.nowMs) {
+      return { ok: false as const, retryAfterMs: record.blockedUntil - input.nowMs }
+    }
+    return { ok: true as const }
+  }
+
+  private record(key: string, nowMs: number, windowMs: number) {
+    const existing = this.records.get(key)
+    if (existing && existing.resetAt > nowMs) return existing
+    const record = { count: 0, resetAt: nowMs + windowMs, blockedUntil: 0 }
+    this.records.set(key, record)
+    if (this.records.size > maxWebhookRateRecords) this.prune(nowMs)
+    while (this.records.size > maxWebhookRateRecords) {
+      const oldest = this.records.keys().next().value
+      if (!oldest) break
+      this.records.delete(oldest)
+    }
+    return record
+  }
+
+  private prune(nowMs: number) {
+    for (const [key, record] of this.records) {
+      if (record.resetAt <= nowMs && record.blockedUntil <= nowMs) this.records.delete(key)
+    }
+  }
+}
+
+const webhookRateLimit = {
+  windowMs: 60_000,
+  maxRequests: 120,
+}
+
+const webhookAuthBackoff = {
+  windowMs: 60_000,
+  maxFailures: 20,
+  backoffMs: 60_000,
 }
 
 export type GatewayHttpServer = {
@@ -46,14 +122,16 @@ export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway =
 }
 
 export function createGatewayHttpServer(config: GatewayConfig, runtime: GatewayRuntime, cloud?: CloudGateway): GatewayHttpServer {
+  const webhookLimiter = new GatewayWebhookRateLimiter()
   const server = createServer((req, res) => {
-    void handleRequest(config, runtime, req, res, cloud).catch((error) => {
+    void handleRequest(config, runtime, req, res, cloud, webhookLimiter).catch((error) => {
       runtime.metrics.errors += 1
       if (error instanceof GatewayHttpError) {
+        const headers = error.retryAfterMs ? { 'retry-after': retryAfterSeconds(error.retryAfterMs) } : undefined
         writeJson(res, error.status, {
           ok: false,
           error: error.message,
-        })
+        }, headers)
         return
       }
       writeJson(res, 500, {
@@ -97,6 +175,7 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   cloud?: CloudGateway,
+  webhookLimiter?: GatewayWebhookRateLimiter,
 ) {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
@@ -210,6 +289,10 @@ async function handleRequest(
   const webhookMatch = /^\/webhooks\/([^/]+)$/.exec(url.pathname)
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
+    const providerId = decodeURIComponent(webhookMatch[1])
+    const source = webhookSource(req)
+    enforceGatewayWebhookLimit(webhookLimiter, `request:${source}:${providerId}`)
+    enforceGatewayWebhookAuthBackoff(webhookLimiter, `auth:${source}:${providerId}`)
     const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
     let payload: unknown
     try {
@@ -219,9 +302,13 @@ async function handleRequest(
     }
     let result: Awaited<ReturnType<typeof runtime.providers.handleWebhook>>
     try {
-      result = await runtime.providers.handleWebhook(decodeURIComponent(webhookMatch[1]), payload, req.headers, body.raw)
+      result = await runtime.providers.handleWebhook(providerId, payload, req.headers, body.raw)
     } catch (error) {
-      throw classifyGatewayWebhookError(error)
+      const classified = classifyGatewayWebhookError(error)
+      if (classified.status === 401) {
+        recordGatewayWebhookAuthFailure(webhookLimiter, `auth:${source}:${providerId}`)
+      }
+      throw classified
     }
     writeJson(res, result?.challenge ? 200 : 202, result?.challenge ? { challenge: result.challenge } : { ok: true })
     return
@@ -242,6 +329,49 @@ function classifyGatewayWebhookError(error: unknown) {
     return new GatewayHttpError(400, 'Gateway webhook payload is invalid.')
   }
   return new GatewayHttpError(502, 'Gateway webhook provider failed.')
+}
+
+function enforceGatewayWebhookLimit(limiter: GatewayWebhookRateLimiter | undefined, key: string) {
+  if (!limiter) return
+  const verdict = limiter.claim({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookRateLimit.windowMs,
+    maxRequests: webhookRateLimit.maxRequests,
+  })
+  if (!verdict.ok) {
+    throw new GatewayHttpError(429, 'Too many Gateway webhook requests. Try again later.', verdict.retryAfterMs)
+  }
+}
+
+function enforceGatewayWebhookAuthBackoff(limiter: GatewayWebhookRateLimiter | undefined, key: string) {
+  if (!limiter) return
+  const verdict = limiter.check({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookAuthBackoff.windowMs,
+  })
+  if (!verdict.ok) {
+    throw new GatewayHttpError(429, 'Too many rejected Gateway webhook requests. Try again later.', verdict.retryAfterMs)
+  }
+}
+
+function recordGatewayWebhookAuthFailure(limiter: GatewayWebhookRateLimiter | undefined, key: string) {
+  limiter?.backoff({
+    key,
+    nowMs: Date.now(),
+    windowMs: webhookAuthBackoff.windowMs,
+    maxFailures: webhookAuthBackoff.maxFailures,
+    backoffMs: webhookAuthBackoff.backoffMs,
+  })
+}
+
+function webhookSource(req: IncomingMessage) {
+  return req.socket.remoteAddress || 'unknown'
+}
+
+function retryAfterSeconds(ms: number) {
+  return String(Math.max(1, Math.ceil(ms / 1000)))
 }
 
 function providerStatus(runtime: GatewayRuntime) {
@@ -356,7 +486,10 @@ function stringField(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function writeJson(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
+function writeJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    ...headers,
+  })
   res.end(JSON.stringify(body))
 }

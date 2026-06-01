@@ -15,6 +15,8 @@ export {
   generateCloudApiToken,
   hashChannelInteractionToken,
   hashCloudApiToken,
+  plaintextMatchesCloudApiTokenId,
+  verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
 export {
   generateManagedWorkerCredential,
