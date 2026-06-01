@@ -2,18 +2,40 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  CloudTransportError,
   createHttpSseCloudTransportAdapter,
+  isCloudTransportError,
   type CloudTransportEventSource,
   type CloudTransportFetch,
 } from '../apps/desktop/src/main/cloud/transport-adapter.ts'
 import { CLOUD_SESSION_EVENT_TYPES } from '../packages/shared/dist/cloud-session-projection.js'
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get(name: string) {
+        return headers[name] || headers[name.toLowerCase()] || null
+      },
+    },
     async text() {
       return JSON.stringify(body)
+    },
+  }
+}
+
+function textResponse(text: string, status = 200, headers: Record<string, string> = {}) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: {
+      get(name: string) {
+        return headers[name] || headers[name.toLowerCase()] || null
+      },
+    },
+    async text() {
+      return text
     },
   }
 }
@@ -510,6 +532,127 @@ test('cloud transport adapter authenticates SSE subscriptions with bearer header
   assert.equal(requests[0]?.init?.credentials, 'include')
 })
 
+test('cloud transport adapter exposes typed HTTP error taxonomy', async () => {
+  const cases: Array<{ status: number, kind: CloudTransportError['kind'] }> = [
+    { status: 401, kind: 'unauthorized' },
+    { status: 403, kind: 'forbidden' },
+    { status: 402, kind: 'payment_required' },
+    { status: 404, kind: 'not_found' },
+    { status: 409, kind: 'conflict' },
+    { status: 429, kind: 'rate_limited' },
+    { status: 500, kind: 'server' },
+  ]
+
+  for (const testCase of cases) {
+    const transport = createHttpSseCloudTransportAdapter({
+      baseUrl: 'https://cloud.example.test',
+      fetch: async () => jsonResponse(
+        { error: `status ${testCase.status}`, code: `E_${testCase.status}` },
+        testCase.status,
+        { 'retry-after': '60' },
+      ),
+    })
+
+    await assert.rejects(
+      transport.getConfig(),
+      (error) => {
+        assert.equal(isCloudTransportError(error), true)
+        const transportError = error as CloudTransportError
+        assert.equal(transportError.kind, testCase.kind)
+        assert.equal(transportError.status, testCase.status)
+        assert.equal(transportError.code, `E_${testCase.status}`)
+        assert.equal(transportError.retryAfter, '60')
+        assert.match(transportError.url || '', /^https:\/\/cloud\.example\.test\/api\/config$/)
+        return true
+      },
+    )
+  }
+})
+
+test('cloud transport adapter exposes typed parse and network errors', async () => {
+  const parseTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    fetch: async () => textResponse('{not-json', 200),
+  })
+  await assert.rejects(
+    parseTransport.getConfig(),
+    (error) => {
+      assert.equal(isCloudTransportError(error), true)
+      assert.equal((error as CloudTransportError).kind, 'parse')
+      assert.equal((error as CloudTransportError).status, 200)
+      assert.equal((error as CloudTransportError).body, '{not-json')
+      return true
+    },
+  )
+
+  const networkTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    fetch: async () => {
+      throw new Error('socket closed')
+    },
+  })
+  await assert.rejects(
+    networkTransport.getConfig(),
+    (error) => {
+      assert.equal(isCloudTransportError(error), true)
+      assert.equal((error as CloudTransportError).kind, 'network')
+      assert.match((error as CloudTransportError).message, /network request failed/)
+      return true
+    },
+  )
+})
+
+test('cloud transport adapter reports typed fetch SSE failures', async () => {
+  const httpErrors: unknown[] = []
+  const failedTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    headers: { authorization: 'Bearer cloud-token' },
+    fetch: async () => jsonResponse({ error: 'expired token', code: 'TOKEN_EXPIRED' }, 401),
+  })
+  failedTransport.subscribeWorkspaceEvents({
+    onEvent() {},
+    onError(error) {
+      httpErrors.push(error)
+    },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(httpErrors.length, 1)
+  assert.equal(isCloudTransportError(httpErrors[0]), true)
+  assert.equal((httpErrors[0] as CloudTransportError).kind, 'unauthorized')
+  assert.equal((httpErrors[0] as CloudTransportError).code, 'TOKEN_EXPIRED')
+
+  const parseErrors: unknown[] = []
+  const parseTransport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    headers: { authorization: 'Bearer cloud-token' },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      async text() {
+        return ''
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {not-json\n\n'))
+          controller.close()
+        },
+      }),
+    }),
+  })
+  parseTransport.subscribeSessionEvents('session-1', {
+    onEvent() {},
+    onError(error) {
+      parseErrors.push(error)
+    },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(parseErrors.length, 1)
+  assert.equal(isCloudTransportError(parseErrors[0]), true)
+  assert.equal((parseErrors[0] as CloudTransportError).kind, 'parse')
+})
+
 test('cloud transport adapter applies request timeout and caller cancellation signals', async () => {
   const timeoutTransport = createHttpSseCloudTransportAdapter({
     baseUrl: 'https://cloud.example.test',
@@ -520,7 +663,15 @@ test('cloud transport adapter applies request timeout and caller cancellation si
     }),
   })
 
-  await assert.rejects(timeoutTransport.getConfig(), /request aborted by timeout/)
+  await assert.rejects(
+    timeoutTransport.getConfig(),
+    (error) => {
+      assert.equal(error instanceof CloudTransportError, true)
+      assert.equal((error as CloudTransportError).kind, 'timeout')
+      assert.match((error as CloudTransportError).message, /timed out/)
+      return true
+    },
+  )
 
   const controller = new AbortController()
   const cancelledTransport = createHttpSseCloudTransportAdapter({
@@ -533,7 +684,14 @@ test('cloud transport adapter applies request timeout and caller cancellation si
   })
   const request = cancelledTransport.getConfig()
   controller.abort()
-  await assert.rejects(request, /request aborted by caller/)
+  await assert.rejects(
+    request,
+    (error) => {
+      assert.equal(error instanceof CloudTransportError, true)
+      assert.equal((error as CloudTransportError).kind, 'abort')
+      return true
+    },
+  )
 })
 
 test('cloud transport adapter closes EventSource SSE subscriptions on caller cancellation', () => {
