@@ -216,10 +216,13 @@ export async function writeE2EWindowReadyProbe(
       const settings = await api.settings.get();
       const installCapability = await api.updates.installCapability();
       const action = ${JSON.stringify(action)};
-      const initialSessions = await api.session.list();
-      const initialIds = initialSessions.map((session) => session.id);
-      let sessions = initialSessions;
+      let sessions = [];
+      let initialIds = [];
       let createdSessionId = null;
+      if (action === 'create-session' || action === 'list-sessions') {
+        sessions = await api.session.list();
+        initialIds = sessions.map((session) => session.id);
+      }
       if (action === 'create-session') {
         await withTimeout((async () => {
           const deadline = Date.now() + 60000;
