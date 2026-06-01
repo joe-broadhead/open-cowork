@@ -31,7 +31,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
 
   assert.deepEqual(splitScriptSteps(requireScript('test')), [
     'pnpm test:prepare',
-    'pnpm --filter=./packages/* test',
+    'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
@@ -41,7 +41,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
 
   assert.deepEqual(splitScriptSteps(requireScript('test:coverage:node')), [
     'pnpm test:prepare',
-    'pnpm --filter=./packages/* test',
+    'pnpm --workspace-concurrency=1 --filter=./packages/* test',
     'pnpm --filter=./mcps/* test',
     'pnpm --filter @open-cowork/gateway test',
     'pnpm --filter @open-cowork/standalone-gateway test',
