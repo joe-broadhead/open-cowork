@@ -32,7 +32,7 @@
     "build:standalone-gateway": "pnpm --filter @open-cowork/standalone-gateway build",
     "build:website": "pnpm --filter @open-cowork/website build",
     "build:mcps": "pnpm --filter=./mcps/* build",
-    "build:packages": "pnpm --filter=./packages/* build",
+    "build:packages": "pnpm --workspace-concurrency=1 --filter=./packages/* build",
     "build:shared": "pnpm --filter @open-cowork/shared build",
     "docs:build": "node scripts/docs-build.mjs build",
     "docs:serve": "node scripts/docs-build.mjs serve",

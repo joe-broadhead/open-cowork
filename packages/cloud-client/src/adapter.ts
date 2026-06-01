@@ -499,6 +499,7 @@ export type CloudTransportFetch = (
   ok: boolean
   status: number
   text(): Promise<string>
+  headers?: { get(name: string): string | null }
   body?: ReadableStream<Uint8Array> | null
 }>
 
@@ -769,6 +770,64 @@ export type CloudTransportAdapter = {
 
 type ApiErrorPayload = {
   error?: string
+  code?: string
+}
+
+export type CloudTransportErrorKind =
+  | 'unauthorized'
+  | 'forbidden'
+  | 'payment_required'
+  | 'not_found'
+  | 'conflict'
+  | 'rate_limited'
+  | 'server'
+  | 'http'
+  | 'network'
+  | 'abort'
+  | 'timeout'
+  | 'parse'
+  | 'sse'
+  | 'request'
+
+export type CloudTransportErrorOptions = {
+  kind: CloudTransportErrorKind
+  message: string
+  status?: number
+  method?: string
+  url?: string
+  retryAfter?: string | null
+  code?: string | null
+  body?: unknown
+  cause?: unknown
+}
+
+export class CloudTransportError extends Error {
+  readonly kind: CloudTransportErrorKind
+  readonly status?: number
+  readonly method?: string
+  readonly url?: string
+  readonly retryAfter?: string | null
+  readonly code?: string | null
+  readonly body?: unknown
+  readonly cause?: unknown
+
+  constructor(options: CloudTransportErrorOptions) {
+    super(options.message)
+    this.name = 'CloudTransportError'
+    this.kind = options.kind
+    this.status = options.status
+    this.method = options.method
+    this.url = options.url
+    this.retryAfter = options.retryAfter
+    this.code = options.code
+    this.body = options.body
+    this.cause = options.cause
+  }
+}
+
+export function isCloudTransportError(value: unknown): value is CloudTransportError {
+  return value instanceof CloudTransportError
+    || Boolean(value && typeof value === 'object' && (value as { name?: unknown }).name === 'CloudTransportError')
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined) {
@@ -945,18 +1004,47 @@ function subscribeEventSource(
     signal?: AbortSignal
   },
 ) {
-  const source = new EventSourceImpl(url, {
-    withCredentials: input.credentials === 'include',
-  })
+  let source: InstanceType<CloudTransportEventSource>
+  try {
+    source = new EventSourceImpl(url, {
+      withCredentials: input.credentials === 'include',
+    })
+  } catch (error) {
+    throw new CloudTransportError({
+      kind: 'sse',
+      message: `Cloud transport EventSource subscription failed to start: ${url}`,
+      url,
+      cause: error,
+    })
+  }
   let closed = false
   const onEvent = (event: { data: string }) => {
-    const parsed = JSON.parse(event.data) as CloudTransportWorkspaceEvent
-    input.onEvent(parsed)
+    try {
+      const parsed = JSON.parse(event.data) as CloudTransportWorkspaceEvent
+      input.onEvent(parsed)
+    } catch (error) {
+      if (!closed) {
+        input.onError?.(new CloudTransportError({
+          kind: 'parse',
+          message: `Cloud transport EventSource payload was not valid JSON: ${url}`,
+          url,
+          body: event.data,
+          cause: error,
+        }))
+      }
+    }
   }
   source.onmessage = onEvent
   for (const type of CLOUD_SESSION_EVENT_TYPES) source.addEventListener(type, onEvent)
   source.onerror = (error) => {
-    if (!closed) input.onError?.(error)
+    if (!closed) {
+      input.onError?.(new CloudTransportError({
+        kind: 'sse',
+        message: `Cloud transport EventSource subscription failed: ${url}`,
+        url,
+        cause: error,
+      }))
+    }
   }
   const abort = () => {
     closed = true
@@ -992,7 +1080,19 @@ function subscribeFetchSse(
 
   const dispatch = (dataLines: string[]) => {
     if (dataLines.length === 0) return
-    const parsed = JSON.parse(dataLines.join('\n')) as CloudTransportWorkspaceEvent
+    const payload = dataLines.join('\n')
+    let parsed: CloudTransportWorkspaceEvent
+    try {
+      parsed = JSON.parse(payload) as CloudTransportWorkspaceEvent
+    } catch (error) {
+      throw new CloudTransportError({
+        kind: 'parse',
+        message: `Cloud transport SSE payload was not valid JSON: ${url}`,
+        url,
+        body: payload,
+        cause: error,
+      })
+    }
     input.onEvent(parsed)
   }
 
@@ -1008,10 +1108,27 @@ function subscribeFetchSse(
         signal: controller.signal,
       })
       if (!response.ok) {
-        throw new Error(`Cloud transport SSE subscription failed with HTTP ${response.status}: ${url}`)
+        const text = await response.text()
+        const body = parseApiErrorPayload(text)
+        throw new CloudTransportError({
+          kind: cloudTransportErrorKindForStatus(response.status),
+          message: apiErrorMessage(body, `Cloud transport SSE subscription failed with HTTP ${response.status}: ${url}`),
+          method: 'GET',
+          url,
+          status: response.status,
+          retryAfter: responseHeader(response, 'retry-after'),
+          code: apiErrorCode(body),
+          body,
+        })
       }
       if (!response.body) {
-        throw new Error('Cloud transport SSE response did not include a readable stream.')
+        throw new CloudTransportError({
+          kind: 'sse',
+          message: `Cloud transport SSE response did not include a readable stream: ${url}`,
+          method: 'GET',
+          url,
+          status: response.status,
+        })
       }
 
       const reader = response.body.getReader()
@@ -1057,7 +1174,14 @@ function subscribeFetchSse(
       detachAbortSignal()
     }
   })().catch((error) => {
-    if (!closed) input.onError?.(error)
+    if (!closed) {
+      input.onError?.(cloudTransportErrorFromUnknown(error, {
+        kind: 'sse',
+        message: `Cloud transport SSE subscription failed: ${url}`,
+        method: 'GET',
+        url,
+      }))
+    }
   })
 
   return {
@@ -1095,9 +1219,69 @@ function normalizeRequestTimeoutMs(value: number | null | undefined) {
 
 function cloudApiRequestUrl(baseUrl: string, path: string) {
   if (!path.startsWith('/api/')) {
-    throw new Error('Cloud transport path must target an API route.')
+    throw new CloudTransportError({
+      kind: 'request',
+      message: 'Cloud transport path must target an API route.',
+      url: path,
+    })
   }
   return `${baseUrl}${path}`
+}
+
+function cloudTransportErrorKindForStatus(status: number): CloudTransportErrorKind {
+  if (status === 401) return 'unauthorized'
+  if (status === 403) return 'forbidden'
+  if (status === 402) return 'payment_required'
+  if (status === 404) return 'not_found'
+  if (status === 409) return 'conflict'
+  if (status === 429) return 'rate_limited'
+  if (status >= 500) return 'server'
+  return 'http'
+}
+
+function responseHeader(response: Awaited<ReturnType<CloudTransportFetch>>, name: string) {
+  try {
+    return response.headers?.get(name) || response.headers?.get(name.toLowerCase()) || null
+  } catch {
+    return null
+  }
+}
+
+function errorMessageFromUnknown(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  return fallback
+}
+
+function cloudTransportErrorFromUnknown(error: unknown, fallback: CloudTransportErrorOptions) {
+  if (isCloudTransportError(error)) return error
+  return new CloudTransportError({
+    ...fallback,
+    cause: error,
+    message: fallback.message || errorMessageFromUnknown(error, 'Cloud transport request failed.'),
+  })
+}
+
+function parseApiErrorPayload(text: string): ApiErrorPayload | string | null {
+  if (!text) return null
+  try {
+    const parsed = JSON.parse(text) as unknown
+    return asRecord(parsed) as ApiErrorPayload
+  } catch {
+    return text
+  }
+}
+
+function apiErrorMessage(body: ApiErrorPayload | string | null, fallback: string) {
+  if (typeof body === 'string' && body.trim()) return body
+  if (body && typeof body !== 'string' && typeof body.error === 'string' && body.error.trim()) return body.error
+  return fallback
+}
+
+function apiErrorCode(body: ApiErrorPayload | string | null) {
+  return body && typeof body !== 'string' && typeof body.code === 'string' && body.code.trim()
+    ? body.code
+    : null
 }
 
 function attachAbortSignal(
@@ -1118,13 +1302,51 @@ function attachAbortSignal(
   return () => signal.removeEventListener('abort', abort)
 }
 
-async function parseJson<T>(response: Awaited<ReturnType<CloudTransportFetch>>, url: string): Promise<T> {
-  const text = await response.text()
-  const body = text ? JSON.parse(text) as T & ApiErrorPayload : {} as T & ApiErrorPayload
-  if (!response.ok) {
-    throw new Error(body.error || `Cloud transport request failed with HTTP ${response.status}: ${url}`)
+async function parseJson<T>(
+  response: Awaited<ReturnType<CloudTransportFetch>>,
+  url: string,
+  method: string,
+): Promise<T> {
+  let text: string
+  try {
+    text = await response.text()
+  } catch (error) {
+    throw new CloudTransportError({
+      kind: 'network',
+      message: `Cloud transport failed to read response body: ${method} ${url}`,
+      method,
+      url,
+      status: response.status,
+      cause: error,
+    })
   }
-  return body
+  if (!response.ok) {
+    const body = parseApiErrorPayload(text)
+    throw new CloudTransportError({
+      kind: cloudTransportErrorKindForStatus(response.status),
+      message: apiErrorMessage(body, `Cloud transport request failed with HTTP ${response.status}: ${method} ${url}`),
+      method,
+      url,
+      status: response.status,
+      retryAfter: responseHeader(response, 'retry-after'),
+      code: apiErrorCode(body),
+      body,
+    })
+  }
+  if (!text) return {} as T
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    throw new CloudTransportError({
+      kind: 'parse',
+      message: `Cloud transport response was not valid JSON: ${method} ${url}`,
+      method,
+      url,
+      status: response.status,
+      body: text,
+      cause: error,
+    })
+  }
 }
 
 export function createHttpSseCloudTransportAdapter(
@@ -1156,9 +1378,20 @@ export function createHttpSseCloudTransportAdapter(
     const requestUrl = cloudApiRequestUrl(baseUrl, path)
     const controller = new AbortController()
     const detachAbortSignal = attachAbortSignal(controller, options.signal)
+    let timedOut = false
     const timeout = requestTimeoutMs > 0
-      ? setTimeout(() => controller.abort(), requestTimeoutMs)
+      ? setTimeout(() => {
+        timedOut = true
+        controller.abort(new CloudTransportError({
+          kind: 'timeout',
+          message: `Cloud transport request timed out after ${requestTimeoutMs}ms: ${method} ${path}`,
+          method,
+          url: requestUrl,
+        }))
+      }, requestTimeoutMs)
       : null
+    const timeoutHandle = timeout as unknown as { unref?: () => void } | null
+    timeoutHandle?.unref?.()
     try {
       // This transport intentionally sends authenticated cloud API payloads, including
       // user-selected artifact uploads that callers validate and authorize upstream.
@@ -1170,7 +1403,34 @@ export function createHttpSseCloudTransportAdapter(
         credentials: options.credentials,
         signal: controller.signal,
       })
-      return parseJson<T>(response, path)
+      return parseJson<T>(response, requestUrl, method)
+    } catch (error) {
+      if (isCloudTransportError(error)) throw error
+      if (timedOut) {
+        throw new CloudTransportError({
+          kind: 'timeout',
+          message: `Cloud transport request timed out after ${requestTimeoutMs}ms: ${method} ${path}`,
+          method,
+          url: requestUrl,
+          cause: error,
+        })
+      }
+      if (options.signal?.aborted || controller.signal.aborted) {
+        throw new CloudTransportError({
+          kind: 'abort',
+          message: `Cloud transport request was aborted: ${method} ${path}`,
+          method,
+          url: requestUrl,
+          cause: error,
+        })
+      }
+      throw new CloudTransportError({
+        kind: 'network',
+        message: `Cloud transport network request failed: ${method} ${path}`,
+        method,
+        url: requestUrl,
+        cause: error,
+      })
     } finally {
       if (timeout) clearTimeout(timeout)
       detachAbortSignal()

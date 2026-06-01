@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { extname, join, relative } from 'node:path'
 
 test('cloud client package is standalone and desktop transport is a compatibility re-export', () => {
   const root = process.cwd()
@@ -65,6 +65,45 @@ test('cloud client package is standalone and desktop transport is a compatibilit
     assert.match(document, /requestTimeoutMs/i)
     assert.match(document, /signal/i)
     assert.match(document, /does not retry automatically/i)
+    assert.match(document, /CloudTransportError|error taxonomy/i)
+    assert.match(document, /service-token|Gateway/i)
+    assert.match(document, /operator/i)
+    assert.match(document, /publish checklist|release checklist/i)
+  }
+})
+
+test('first-party client surfaces stay on public cloud-client/shared boundaries', () => {
+  const root = process.cwd()
+  const clientRoots = [
+    'apps/desktop/src/preload',
+    'apps/desktop/src/renderer',
+    'apps/gateway/src',
+    'apps/website/src',
+    'packages/cloud-client/src',
+  ]
+  const forbidden = [
+    /@opencode-ai\/sdk/,
+    /apps\/desktop\/src\/main\/cloud\/(?:app|http-server|session-service|control-plane-store|postgres-control-plane-store|in-memory-control-plane-store|runtime-adapter|opencode-runtime-adapter|secret-adapter|object-store|worker)/,
+    /\.\.\/.*main\/cloud\/(?:app|http-server|session-service|control-plane-store|postgres-control-plane-store|in-memory-control-plane-store|runtime-adapter|opencode-runtime-adapter|secret-adapter|object-store|worker)/,
+    /postgres-control-plane-store/,
+    /in-memory-control-plane-store/,
+    /control-plane-store/,
+    /session-service/,
+    /opencode-runtime-adapter/,
+  ]
+
+  for (const clientRoot of clientRoots) {
+    for (const filePath of sourceFiles(join(root, clientRoot))) {
+      if (filePath.endsWith('.test.ts') || filePath.endsWith('.test.tsx')) continue
+      const source = readFileSync(filePath, 'utf8')
+      for (const pattern of forbidden) {
+        assert.doesNotMatch(
+          source,
+          pattern,
+          `${relative(root, filePath)} imports server/runtime internals instead of @open-cowork/cloud-client or @open-cowork/shared`,
+        )
+      }
+    }
   }
 })
 
@@ -89,4 +128,15 @@ function clientSources(directory: string): string[] {
     else if (entry.isFile() && entry.name.endsWith('.ts')) sources.push(readFileSync(path, 'utf8'))
   }
   return sources
+}
+
+function sourceFiles(directory: string): string[] {
+  const files: string[] = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (['node_modules', 'dist'].includes(entry.name)) continue
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...sourceFiles(path))
+    else if (entry.isFile() && ['.ts', '.tsx', '.js', '.jsx', '.mjs'].includes(extname(path))) files.push(path)
+  }
+  return files
 }
