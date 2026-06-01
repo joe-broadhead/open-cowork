@@ -10,6 +10,10 @@ headless channel surface for Open Cowork Cloud. It lets users talk to their
 cloud workspace from Telegram, Slack, email, webhooks, and future channels
 while Cloud remains the source of truth.
 
+Use the `cloud-channel-gateway` topology profile when deploying this daemon.
+The profile is documented in [Deployment Topologies](deployment-topologies.md)
+and in `deploy/topologies/topology-profiles.json`.
+
 Cloud Channel Gateway is not an OpenCode runtime. It owns channel I/O, command
 parsing, provider-specific rendering, approvals/questions UX, and delivery
 retries. Cloud owns tenancy, sessions, commands, projections, workflows,

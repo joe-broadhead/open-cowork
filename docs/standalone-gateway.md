@@ -10,6 +10,10 @@ for a VPS, private server, Mac mini, internal workstation, or Kubernetes
 cluster where the Gateway owns private OpenCode execution and durable Gateway
 Postgres state without requiring Open Cowork Cloud.
 
+Use the `gateway-only` topology profile for this deployment path. The profile
+is documented in [Deployment Topologies](deployment-topologies.md) and in
+`deploy/topologies/topology-profiles.json`.
+
 This is not the Cloud Channel Gateway. Cloud Channel Gateway is a Cloud client.
 Standalone Gateway is an execution authority.
 

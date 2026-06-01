@@ -491,9 +491,149 @@ function validateHelm() {
   }
 }
 
+function validateTopologyProfiles() {
+  const topologyPath = 'deploy/topologies/topology-profiles.json'
+  const topologyReadmePath = 'deploy/topologies/README.md'
+  const topologyDocsPath = 'docs/deployment-topologies.md'
+  const profilesDocument = parseJson(topologyPath)
+  const packageScripts = parseJson('package.json').scripts ?? {}
+  const requiredProfileIds = [
+    'desktop-only',
+    'gateway-only',
+    'cloud-only',
+    'cloud-channel-gateway',
+    'desktop-gateway',
+    'cloud-gateway-edge',
+    'full-hybrid',
+  ]
+
+  if (profilesDocument.schemaVersion !== 1) {
+    throw new Error(`${topologyPath} must declare schemaVersion 1`)
+  }
+  if (profilesDocument.purpose !== 'open-cowork-deployment-topology-profiles') {
+    throw new Error(`${topologyPath} must declare open-cowork-deployment-topology-profiles purpose`)
+  }
+  if (!Array.isArray(profilesDocument.profiles)) {
+    throw new Error(`${topologyPath} must contain a profiles array`)
+  }
+
+  const profiles = new Map(profilesDocument.profiles.map((profile) => [profile.id, profile]))
+  for (const id of requiredProfileIds) {
+    const profile = profiles.get(id)
+    if (!profile) throw new Error(`${topologyPath} is missing profile ${id}`)
+    for (const field of [
+      'label',
+      'status',
+      'soloPath',
+      'productionPath',
+      'securityBoundary',
+    ]) {
+      if (!profile[field] || typeof profile[field] !== 'string') {
+        throw new Error(`${topologyPath} profile ${id} must include string field ${field}`)
+      }
+    }
+    for (const field of [
+      'intendedOperators',
+      'surfaces',
+      'executionAuthorities',
+      'controlPlanes',
+      'referenceAssets',
+      'requiredDurability',
+      'failClosedChecks',
+      'validationCommands',
+      'smokeCommands',
+      'notes',
+    ]) {
+      if (!Array.isArray(profile[field]) || profile[field].length === 0) {
+        throw new Error(`${topologyPath} profile ${id} must include non-empty array field ${field}`)
+      }
+    }
+  }
+
+  const expectedCommands = {
+    'desktop-only': ['pnpm test:e2e'],
+    'gateway-only': ['pnpm deploy:standalone-gateway:validate', 'pnpm deploy:standalone-gateway:smoke'],
+    'cloud-only': ['pnpm deploy:validate', 'pnpm ops:validate', 'pnpm test:cloud-web'],
+    'cloud-channel-gateway': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke', 'pnpm deploy:continuation:smoke'],
+    'desktop-gateway': ['pnpm test:e2e'],
+    'cloud-gateway-edge': ['pnpm deploy:validate', 'pnpm deploy:gateway:smoke'],
+    'full-hybrid': ['pnpm lint', 'pnpm typecheck', 'pnpm test', 'pnpm test:e2e', 'pnpm deploy:validate', 'pnpm test:cloud-continuation'],
+  }
+
+  for (const [id, commands] of Object.entries(expectedCommands)) {
+    const profile = profiles.get(id)
+    const commandText = [...profile.validationCommands, ...profile.smokeCommands].join('\n')
+    for (const command of commands) {
+      if (!commandText.includes(command)) {
+        throw new Error(`${topologyPath} profile ${id} must include ${command}`)
+      }
+    }
+  }
+  for (const profile of profilesDocument.profiles) {
+    for (const command of [...profile.validationCommands, ...profile.smokeCommands]) {
+      const match = /^pnpm\s+([^\s]+)/.exec(command)
+      if (!match) throw new Error(`${topologyPath} profile ${profile.id} command must start with pnpm: ${command}`)
+      const scriptName = match[1]
+      if (scriptName.startsWith('--')) continue
+      if (!packageScripts[scriptName]) {
+        throw new Error(`${topologyPath} profile ${profile.id} references missing package script: ${scriptName}`)
+      }
+    }
+  }
+
+  const boundaryText = profilesDocument.profiles
+    .map((profile) => `${profile.id}\n${profile.securityBoundary}\n${profile.failClosedChecks.join('\n')}`)
+    .join('\n')
+  for (const phrase of [
+    'No public OpenCode port',
+    'OpenCode stays loopback/private',
+    'Gateway is a Cloud client',
+    'no Desktop or OpenCode port is public',
+    'one execution authority',
+    'non-loopback broker URLs require HTTPS',
+    'provider-backed object storage',
+    'admin token required',
+  ]) {
+    if (!boundaryText.toLowerCase().includes(phrase.toLowerCase())) {
+      throw new Error(`${topologyPath} must include topology boundary phrase: ${phrase}`)
+    }
+  }
+
+  for (const id of requiredProfileIds) {
+    assertIncludes(topologyReadmePath, `\`${id}\``)
+    assertIncludes(topologyDocsPath, `\`${id}\``)
+  }
+  for (const phrase of [
+    'Telegram-to-VPS OpenCode team',
+    'provider recipes',
+    'systemd',
+    'launchd',
+    'docker-compose.gateway-remote.yml',
+    'docker-compose.cloud-gateway.yml',
+    'helm/open-cowork-cloud/',
+    'helm/open-cowork-gateway/',
+    'one execution authority',
+    'fail closed',
+    'pnpm deploy:validate',
+  ]) {
+    assertIncludes(topologyReadmePath, phrase)
+  }
+  for (const phrase of [
+    'Profile Matrix',
+    'Choosing A Path',
+    'Production Boundaries',
+    'Required Validation',
+    'deploy/topologies/topology-profiles.json',
+    'deploy/topologies/README.md',
+  ]) {
+    assertIncludes(topologyDocsPath, phrase)
+  }
+}
+
 function validateDocs() {
   const requiredDocs = [
     'docs/deployment-readiness.md',
+    'docs/deployment-topologies.md',
     'docs/downstream-contract.md',
     'docs/runbooks/cloud-managed-operations.md',
     'docs/runbooks/backup-restore.md',
@@ -520,6 +660,8 @@ function validateDocs() {
     'deploy/managed-workers/worker-release-evidence.template.md',
     'deploy/managed-workers/worker-restore-drill.template.md',
     'deploy/README.md',
+    'deploy/topologies/README.md',
+    'deploy/topologies/topology-profiles.json',
     'deploy/observability/metrics-catalog.json',
     'deploy/observability/prometheus-alerts.yaml',
     'deploy/observability/grafana-open-cowork-overview.json',
@@ -538,6 +680,7 @@ function validateDocs() {
   }
   for (const path of [
     'docs/managed-workers.md',
+    'docs/deployment-topologies.md',
     'docs/runbooks/cloud-managed-operations.md',
     'deploy/managed-workers/README.md',
     'deploy/managed-workers/self-host-worker.env.example',
@@ -552,6 +695,8 @@ function validateDocs() {
     'deploy/gcp/cloud-run/all-in-one.service.yaml.example',
     'deploy/gcp/smoke/README.md',
     'deploy/gcp/smoke/evidence.template.json',
+    'deploy/topologies/README.md',
+    'deploy/topologies/topology-profiles.json',
     'deploy/observability/managed-worker-slo-template.json',
     'deploy/private-beta/hosted-byok.config.example.json',
     'deploy/private-beta/self-host-oss.config.example.json',
@@ -746,6 +891,12 @@ function validateDocs() {
   const deployReadme = read('deploy/README.md')
   for (const phrase of [
     'Provider Recipes',
+    'Topology Profiles',
+    'deploy/topologies/topology-profiles.json',
+    'docs/deployment-topologies.md',
+    'gateway-only',
+    'cloud-channel-gateway',
+    'full-hybrid',
     'Deployment Repository Strategy',
     'tmp/local deployment repo',
     'Private/downstream deployment repo',
@@ -1405,6 +1556,7 @@ function validateReleaseSupplyChain() {
 
 validateCompose()
 validateHelm()
+validateTopologyProfiles()
 validateDocs()
 validateGcpReference()
 validateReleaseSupplyChain()

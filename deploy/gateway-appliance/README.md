@@ -9,6 +9,11 @@ own control-plane Postgres state. Set
 `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` explicitly in new
 deployments.
 
+This is the `cloud-channel-gateway` topology profile from
+`deploy/topologies/topology-profiles.json`. Use
+`deploy/topologies/README.md` when comparing it with Gateway-only, Cloud-only,
+Desktop pairing, edge registration, and full-hybrid deployments.
+
 Standalone Team Gateway is a separate product mode that may own private
 OpenCode and Gateway Postgres. Do not run it through these Cloud Channel
 Gateway assets; use `apps/standalone-gateway` and

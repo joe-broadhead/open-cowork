@@ -145,8 +145,8 @@ Standalone Team Gateway owns:
 - Gateway sessions, events, projections, workflows, teams, watches, schedules,
   artifacts, approvals, questions, audit, and diagnostics
 
-Standalone Team Gateway must keep OpenCode private and must not expose a
-public OpenCode port. Any optional Cloud connection is an explicit
+Standalone Team Gateway must keep OpenCode private and must not expose a public OpenCode port.
+Any optional Cloud connection is an explicit
 registration, sync, or edge-capacity contract rather than implicit database
 merging.
 

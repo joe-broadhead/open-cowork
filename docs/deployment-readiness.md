@@ -12,7 +12,24 @@ not add provider-specific branches to core app code.
 
 ## Required Topology
 
-Production deployments should run these processes separately:
+Choose one of the first-class topology profiles before choosing a provider:
+
+| Profile | Production boundary |
+| --- | --- |
+| `desktop-only` | local Desktop execution, no remote dependency |
+| `gateway-only` | Standalone Gateway owns private OpenCode and Gateway Postgres |
+| `cloud-only` | Cloud web/worker/scheduler own Cloud workspaces |
+| `cloud-channel-gateway` | Gateway is a Cloud client and channel adapter |
+| `desktop-gateway` | Desktop executes through outbound pairing only |
+| `cloud-gateway-edge` | Cloud registers an external Gateway/edge authority explicitly |
+| `full-hybrid` | every workspace declares one execution authority |
+
+The topology profile contract lives in
+`deploy/topologies/topology-profiles.json`; the operator kit is
+`deploy/topologies/README.md`; the docs overview is
+[Deployment Topologies](deployment-topologies.md).
+
+Production Cloud deployments should run these processes separately:
 
 - cloud `web`: stateless HTTP, browser dashboard, API, SSE, auth, and durable
   projections.
