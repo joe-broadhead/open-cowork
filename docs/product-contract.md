@@ -127,14 +127,13 @@ OpenCode, or own control-plane Postgres state.
 
 ### Standalone Team Gateway
 
-Standalone Team Gateway is a separate Gateway product mode and execution
-authority. It is for users and organizations that want an always-on private
+Standalone Team Gateway is a separate Gateway product mode and execution authority. It is for users and organizations that want an always-on private
 OpenCode team on a VPS, private server, or Kubernetes without requiring Cloud.
 
 Config identity:
 
 - `gateway.productMode: "standalone"`
-- future standalone app/package entry point, not current `apps/gateway`
+- standalone app/package entry point: `apps/standalone-gateway`
 - owns its own Gateway control plane and must not share Cloud Channel Gateway
   runtime assumptions
 
@@ -146,8 +145,7 @@ Standalone Team Gateway owns:
 - Gateway sessions, events, projections, workflows, teams, watches, schedules,
   artifacts, approvals, questions, audit, and diagnostics
 
-Standalone Team Gateway must keep OpenCode private. It must not expose a public
-OpenCode port, and any optional Cloud connection is an explicit registration,
+Standalone Team Gateway must keep OpenCode private and must not expose a public OpenCode port. Any optional Cloud connection is an explicit registration,
 sync, or edge-capacity contract rather than implicit database merging.
 
 Hybrid Gateway is reserved for a later registered-edge design. It must not be

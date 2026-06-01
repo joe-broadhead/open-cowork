@@ -125,7 +125,7 @@ workspace authorities:
   private VPS/server/Kubernetes deployments. It may supervise a private
   OpenCode runtime and own Gateway Postgres/control-plane state, but it must
   keep OpenCode private and separate from Cloud Channel Gateway mode. It uses
-  `productMode=standalone` and a separate app/package layout, not the current
+  `productMode=standalone` and `apps/standalone-gateway`, not the current
   Cloud Channel Gateway daemon.
 - **Paired Desktop** is an outbound connector authority. The Desktop local
   runtime still executes; remote Gateway/mobile/Cloud callers only reach it

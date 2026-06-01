@@ -12,8 +12,12 @@ composition or SDK-event normalization code.
 
 ## Import Rules
 
-- Gateway packages must not import `@opencode-ai/sdk`, `opencode-ai`, direct
-  Postgres clients, or cloud control-plane store implementations.
+- Cloud Channel Gateway packages must not import `@opencode-ai/sdk`,
+  `opencode-ai`, direct Postgres clients, or cloud control-plane store
+  implementations.
+- Standalone Gateway is a separate execution authority. Its SDK usage is
+  limited to the documented private OpenCode adapter in
+  `apps/standalone-gateway/src/opencode.ts`.
 - Web, website, renderer, preload, and `@open-cowork/cloud-client` code must
   not import `@opencode-ai/sdk`.
 - Desktop and cloud runtime code may import the SDK only in the files listed
@@ -52,6 +56,7 @@ Open Cowork product state.
 - `apps/desktop/src/main/runtime-state.ts`
 - `apps/desktop/src/main/runtime.ts`
 - `apps/desktop/src/main/session-history-loader.ts`
+- `apps/standalone-gateway/src/opencode.ts`
 
 ## Shared Event Contract
 
@@ -65,10 +70,17 @@ OpenCode SDK event
   -> desktop/web/gateway rendering
 ```
 
-Gateway rendering consumes `@open-cowork/cloud-client` session events. It should
-never receive SDK client objects, SDK event envelopes, or OpenCode subprocess
-handles. If a gateway feature needs more detail, add that detail to the shared
-cloud event contract and projection tests rather than importing the SDK.
+Cloud Channel Gateway rendering consumes `@open-cowork/cloud-client` session
+events. It should never receive SDK client objects, SDK event envelopes, or
+OpenCode subprocess handles. If a Cloud Channel Gateway feature needs more
+detail, add that detail to the shared cloud event contract and projection tests
+rather than importing the SDK.
+
+Standalone Gateway has its own private OpenCode runtime boundary. SDK client
+objects and raw SDK events must stay inside
+`apps/standalone-gateway/src/opencode.ts`; the rest of the standalone app
+should consume normalized standalone events and durable Gateway repository
+records.
 
 ## SDK v2 Upgrade Checklist
 

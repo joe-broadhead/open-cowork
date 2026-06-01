@@ -21,6 +21,7 @@ const sourceRoots = [
   'apps/desktop/src/preload',
   'apps/desktop/src/renderer',
   'apps/gateway/src',
+  'apps/standalone-gateway/src',
   'apps/website/src',
   'packages',
 ] as const
@@ -49,6 +50,7 @@ const allowedSdkImportPaths = new Set([
   'apps/desktop/src/main/runtime-state.ts',
   'apps/desktop/src/main/runtime.ts',
   'apps/desktop/src/main/session-history-loader.ts',
+  'apps/standalone-gateway/src/opencode.ts',
 ])
 
 test('OpenCode SDK imports stay inside documented runtime boundary modules', () => {
@@ -81,7 +83,7 @@ test('OpenCode SDK imports stay inside documented runtime boundary modules', () 
   }
 })
 
-test('only the desktop package declares OpenCode runtime dependencies', () => {
+test('only runtime authority packages declare OpenCode runtime dependencies', () => {
   const opencodeManifests: string[] = []
   for (const manifestPath of packageManifests(root)) {
     const relativePath = relative(root, manifestPath)
@@ -100,7 +102,10 @@ test('only the desktop package declares OpenCode runtime dependencies', () => {
     const declaresOpencode = dependencySets.some((dependencies) => dependencies?.['@opencode-ai/sdk'] || dependencies?.['opencode-ai'])
     if (declaresOpencode) opencodeManifests.push(relativePath)
   }
-  assert.deepEqual(opencodeManifests.sort(), ['apps/desktop/package.json'])
+  assert.deepEqual(opencodeManifests.sort(), [
+    'apps/desktop/package.json',
+    'apps/standalone-gateway/package.json',
+  ])
 })
 
 function sourceFiles(directory: string): string[] {

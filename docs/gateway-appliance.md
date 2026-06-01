@@ -16,8 +16,9 @@ retries. Cloud owns tenancy, sessions, commands, projections, workflows,
 artifacts, and OpenCode execution.
 
 Standalone Team Gateway is a separate product mode. It may own a private
-OpenCode runtime and Gateway Postgres, but it is not implemented by
-`apps/gateway` and must not be enabled through this daemon.
+OpenCode runtime and Gateway Postgres, but it is implemented by
+`apps/standalone-gateway`, not by `apps/gateway`, and must not be enabled
+through this daemon.
 
 Provider tiers, capabilities, signing requirements, and test expectations are
 tracked in [Gateway Provider Readiness](gateway-provider-readiness.md).
@@ -35,7 +36,7 @@ Gateway has two independent mode concepts:
 | Product mode | Execution authority | Current support |
 | --- | --- | --- |
 | `cloud_channel` | Cloud workers execute; Gateway is a Cloud HTTP/SSE client. | Supported by `apps/gateway`. |
-| `standalone` | Gateway owns private OpenCode runtime and Gateway Postgres. | Separate Standalone Team Gateway app/design; current daemon fails closed. |
+| `standalone` | Gateway owns private OpenCode runtime and Gateway Postgres. | Supported by `apps/standalone-gateway`; current daemon fails closed. |
 | `hybrid` | Cloud-connected edge/standalone authority. | Reserved for a later trust and registration design. |
 
 Existing Gateway deployments are Cloud Channel Gateways. To make that explicit,
@@ -164,9 +165,10 @@ Existing deployments that use only `OPEN_COWORK_GATEWAY_MODE=self-host` or
 should add `OPEN_COWORK_GATEWAY_PRODUCT_MODE=cloud_channel` or
 `"productMode": "cloud_channel"` for clarity.
 
-Do not set `standalone` on this daemon. Standalone Team Gateway will use a
-separate app/package layout so it can own private runtime state without
-weakening the Cloud Channel Gateway boundary.
+Do not set `standalone` on this daemon. Standalone Team Gateway uses a separate
+app/package layout at `apps/standalone-gateway` so it can own private
+runtime state without weakening the Cloud Channel Gateway boundary. See
+[Standalone Gateway](standalone-gateway.md).
 
 ## Delivery Drain And Local State
 
