@@ -334,6 +334,7 @@ export function setupIpcHandlers(
       listSessions: async (...args) => getDesktopPairingExecutor().listSessions(...args),
     },
   })
+  workspaceGateway.setDesktopPairingProvider(() => desktopPairingService.list())
   addRuntimeSessionEventObserver((event) => desktopPairingService.observeRuntimeEvent(event))
 
   context = {

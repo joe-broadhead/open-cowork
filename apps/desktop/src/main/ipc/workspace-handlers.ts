@@ -1,4 +1,4 @@
-import type { AddCloudWorkspaceInput } from '@open-cowork/shared'
+import type { AddCloudWorkspaceInput, AddGatewayWorkspaceInput } from '@open-cowork/shared'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { IpcHandlerContext } from './context.ts'
 import {
@@ -47,6 +47,26 @@ function validateAddCloudWorkspaceInput(value: Record<string, unknown>): AddClou
   return input
 }
 
+function validateAddGatewayWorkspaceInput(value: Record<string, unknown>): AddGatewayWorkspaceInput {
+  if (typeof value.baseUrl !== 'string' || !value.baseUrl.trim()) {
+    throw new Error('workspace:add-gateway requires baseUrl.')
+  }
+  const input: AddGatewayWorkspaceInput = {
+    baseUrl: value.baseUrl.trim(),
+  }
+  if (value.label !== undefined && value.label !== null) {
+    if (typeof value.label !== 'string') throw new Error('workspace:add-gateway label must be a string.')
+    const label = value.label.trim()
+    if (label) input.label = label
+  }
+  if (value.token !== undefined && value.token !== null) {
+    if (typeof value.token !== 'string') throw new Error('workspace:add-gateway token must be a string.')
+    const token = value.token.trim()
+    if (token) input.token = token
+  }
+  return input
+}
+
 export function registerWorkspaceHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'workspace:list', noIpcArgs, async (event) => {
     return context.workspaceGateway.list(event)
@@ -60,6 +80,10 @@ export function registerWorkspaceHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'workspace:add-cloud', objectArg<AddCloudWorkspaceInput>('cloud workspace input', validateAddCloudWorkspaceInput), async (event, input) => {
     return context.workspaceGateway.addCloud(event, input)
+  })
+
+  registerIpcInvoke(context, 'workspace:add-gateway', objectArg<AddGatewayWorkspaceInput>('gateway workspace input', validateAddGatewayWorkspaceInput), async (event, input) => {
+    return context.workspaceGateway.addGateway(event, input)
   })
 
   registerIpcInvoke(context, 'workspace:remove', stringArg('workspace id'), async (event, workspaceId) => {

@@ -58,6 +58,16 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         baseUrl: input.baseUrl,
         lastSyncedAt: null,
       })),
+      addGateway: vi.fn(async (input: { baseUrl: string; label?: string }) => ({
+        id: 'gateway:test',
+        kind: 'gateway',
+        authority: 'gateway_standalone',
+        label: input.label || 'Gateway',
+        status: 'auth_required',
+        active: false,
+        baseUrl: input.baseUrl,
+        lastSyncedAt: null,
+      })),
       remove: vi.fn(async () => true),
       login: vi.fn(async () => ({
         id: 'local',

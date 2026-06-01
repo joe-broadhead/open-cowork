@@ -10,6 +10,10 @@ import {
   parseManagedOpencodeServerStdoutChunk,
 } from './runtime-managed-server-output.ts'
 
+const currentModulePath = typeof __filename === 'string' && __filename !== '[eval]'
+  ? __filename
+  : import.meta.url
+
 type ParentPortLike = {
   postMessage(message: ManagedOpencodeServerSupervisorMessage): void
   on(event: 'message', listener: (message: { data: unknown } | unknown) => void): unknown
@@ -17,7 +21,7 @@ type ParentPortLike = {
 
 function loadElectronParentPort() {
   try {
-    const require = createRequire(import.meta.url)
+    const require = createRequire(currentModulePath)
     const electron = require('electron') as { parentPort?: ParentPortLike }
     return electron.parentPort
   } catch {

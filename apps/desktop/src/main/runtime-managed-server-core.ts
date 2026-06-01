@@ -4,6 +4,7 @@ import {
   type ManagedOpencodeServerParentMessage,
   type ManagedOpencodeServerSupervisorMessage,
 } from './runtime-managed-server-protocol.ts'
+import { appendManagedOpencodeOutputTail } from './runtime-managed-server-output.ts'
 
 export const MANAGED_OPENCODE_SERVER_USERNAME = 'opencode'
 
@@ -22,8 +23,8 @@ export type ManagedOpencodeServerUnexpectedExit = {
 
 export type ManagedOpencodeSupervisorProcess = {
   pid?: number
-  stdout?: { resume(): unknown } | null
-  stderr?: { resume(): unknown } | null
+  stdout?: { resume(): unknown; on?(event: 'data', listener: (chunk: Buffer) => void): unknown } | null
+  stderr?: { resume(): unknown; on?(event: 'data', listener: (chunk: Buffer) => void): unknown } | null
   postMessage(message: ManagedOpencodeServerParentMessage): void
   kill(): boolean
   on(event: 'message', listener: (message: ManagedOpencodeServerSupervisorMessage) => void): unknown
@@ -168,6 +169,19 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
   let startupSettled = false
   let started = false
   let startupTimer: NodeJS.Timeout | null = null
+  let supervisorOutputTail = ''
+
+  proc.stdout?.on?.('data', (chunk: Buffer) => {
+    supervisorOutputTail = appendManagedOpencodeOutputTail(supervisorOutputTail, chunk.toString())
+  })
+  proc.stderr?.on?.('data', (chunk: Buffer) => {
+    supervisorOutputTail = appendManagedOpencodeOutputTail(supervisorOutputTail, chunk.toString())
+  })
+
+  function withSupervisorOutput(message: string) {
+    const tail = supervisorOutputTail.trim()
+    return tail ? `${message}\nSupervisor output: ${tail}` : message
+  }
 
   function clearStartupTimer() {
     if (!startupTimer) return
@@ -241,7 +255,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
 
     function onExit(code: number | null, signal?: NodeJS.Signals | null) {
       if (!startupSettled) {
-        rejectStartup(new Error(`Managed OpenCode supervisor exited with code ${code}`))
+        rejectStartup(new Error(withSupervisorOutput(`Managed OpenCode supervisor exited with code ${code}`)))
         return
       }
       if (!closeRequested) {
@@ -250,7 +264,7 @@ export async function createManagedOpencodeServerWithSupervisor(options: Opencod
     }
 
     function onError(...errorArgs: unknown[]) {
-      rejectStartup(new Error(messageFromErrorArgs(errorArgs) || 'Managed OpenCode supervisor failed.'))
+      rejectStartup(new Error(withSupervisorOutput(messageFromErrorArgs(errorArgs) || 'Managed OpenCode supervisor failed.')))
     }
 
     startupTimer = setTimeout(() => {

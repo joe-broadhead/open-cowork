@@ -175,7 +175,7 @@ export function useActiveWorkspaceSupport() {
   const flags = useMemo(() => {
     const next = deriveWorkspaceSupportFlags(support)
     if (activeWorkspaceId === LOCAL_WORKSPACE_ID || loaded) return next
-    const checkingReason = 'Checking cloud workspace policy.'
+    const checkingReason = 'Checking workspace policy.'
     return {
       ...next,
       canCreateSession: false,

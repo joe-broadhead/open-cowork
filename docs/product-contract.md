@@ -151,6 +151,13 @@ sync, or edge-capacity contract rather than implicit database merging.
 Hybrid Gateway is reserved for a later registered-edge design. It must not be
 treated as Cloud Channel Gateway or Standalone Team Gateway by default.
 
+Desktop may register a Standalone Gateway workspace using a Gateway URL plus a
+stored token. In the current Desktop implementation this is a connection,
+health, and support-contract surface only: session list, prompt, artifact,
+workflow, approval, and question operations are marked `deferred` until the
+Standalone Gateway ships a Desktop-safe session/projection API. Desktop must
+not treat a Standalone Gateway workspace as Cloud or Local.
+
 ### Paired Desktop
 
 Paired Desktop is a connector authority for remote access to an opted-in
@@ -177,6 +184,11 @@ outbound broker contract for `create_session`, `prompt`, `abort`,
 `revoke_pairing`. Cloud edge registration and Gateway-managed broker routes are
 covered by the later hybrid edge issue; the Desktop connector already fails
 closed when no broker URL or credential is configured.
+
+Desktop may show configured pairing records as `Paired Desktop` workspace rows
+for status and capability visibility. These rows are not a second local
+workspace and do not make local sessions sync implicitly. Remote session
+operation remains gated by the outbound broker and pairing policy.
 
 ## Active Workspace And Routing
 

@@ -1,10 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { FileCloudWorkspaceRegistry } from '../apps/desktop/src/main/cloud-workspace-registry.ts'
 import { FileCloudWorkspaceCredentialStore } from '../apps/desktop/src/main/cloud-workspace-credentials.ts'
+import { FileGatewayWorkspaceRegistry } from '../apps/desktop/src/main/gateway-workspace-registry.ts'
+import { FileGatewayWorkspaceCredentialStore } from '../apps/desktop/src/main/gateway-workspace-credentials.ts'
+import type { GatewayWorkspaceStatusAdapter } from '../apps/desktop/src/main/gateway-workspace-adapter.ts'
 import {
   LOCAL_WORKSPACE_ID,
   createWorkspaceGateway,
@@ -15,7 +18,7 @@ import {
   type CloudWorkspaceSessionAdapter,
 } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 import type { CloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import type { WorkspaceApiSupport } from '@open-cowork/shared'
+import type { DesktopPairingPublicRecord, WorkspaceApiSupport } from '@open-cowork/shared'
 
 function event(senderId: number) {
   return { sender: { id: senderId } } as never
@@ -206,6 +209,144 @@ test('workspace gateway registers cloud connections without enabling unauthentic
   assert.equal(support.find((entry) => entry.api === 'artifacts.reveal')?.status, 'not_supported')
   assert.equal(support.find((entry) => entry.api === 'artifacts.reveal')?.context?.artifacts.reveal, 'none')
   await assert.rejects(() => gateway.sync(event(1), workspace.id), /Sign in|not available/)
+})
+
+test('workspace gateway registers standalone Gateway workspaces without treating them as Cloud', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-'))
+  const registry = new FileGatewayWorkspaceRegistry(join(root, 'gateway-workspaces.json'))
+  const credentials = new FileGatewayWorkspaceCredentialStore({
+    path: join(root, 'gateway-workspace-credentials.json'),
+    secretStorage: encryptedStorage(),
+  })
+  let syncCalls = 0
+  const gatewayAdapter: GatewayWorkspaceStatusAdapter = {
+    health: async () => ({ ok: true, productMode: 'standalone' }),
+    ready: async () => ({ ok: true }),
+    sync: async () => { syncCalls += 1 },
+  }
+  const workspaceGateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: registry,
+    gatewayCredentialStore: credentials,
+    gatewayAdapterFactory: () => gatewayAdapter,
+  })
+
+  const workspace = workspaceGateway.addGateway(event(1), {
+    baseUrl: 'https://gateway.example.test/admin/',
+    label: 'Private Gateway',
+    token: 'gateway-token',
+  })
+
+  assert.equal(workspace.kind, 'gateway')
+  assert.equal(workspace.authority, 'gateway_standalone')
+  assert.equal(workspace.status, 'online')
+  assert.equal(workspace.baseUrl, 'https://gateway.example.test/admin')
+  assert.equal(Object.values(workspace as Record<string, unknown>).includes('gateway-token'), false)
+  assert.equal(credentials.getToken(workspace.id), 'gateway-token')
+  assert.equal(registry.list()[0]?.label, 'Private Gateway')
+
+  const support = await workspaceGateway.supportMatrix(event(1), workspace.id)
+  assert.equal(supportStatus(support, 'sessions.list').status, 'deferred')
+  assert.equal(supportStatus(support, 'sessions.list').context?.authority, 'gateway_standalone')
+  assert.equal(supportStatus(support, 'sessions.list').context?.runtimeAuthority, 'gateway_standalone')
+  assert.equal(supportStatus(support, 'sessions.list').context?.ownership.sessions, 'gateway_control_plane')
+  assert.equal(supportStatus(support, 'localFiles').status, 'not_supported')
+  assert.equal(supportStatus(support, 'localFiles').context?.pathExposure, 'redacted_remote')
+  assert.equal(supportStatus(support, 'artifacts.reveal').status, 'not_supported')
+  assert.equal(supportStatus(support, 'artifacts.reveal').context?.artifacts.reveal, 'none')
+  await assert.rejects(() => workspaceGateway.listCloudSessions(event(1), workspace.id), /Cloud workspace/)
+
+  const result = await workspaceGateway.sync(event(1), workspace.id)
+
+  assert.equal(result.ok, true)
+  assert.equal(syncCalls, 1)
+  assert.equal(registry.list()[0]?.lastSyncedAt, result.syncedAt)
+  assert.equal(workspaceGateway.list(event(1)).find((entry) => entry.id === workspace.id)?.lastSyncedAt, result.syncedAt)
+})
+
+test('gateway workspace registry enforces safe metadata-only URLs', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-gateway-workspace-url-'))
+  const path = join(root, 'gateway-workspaces.json')
+  writeFileSync(path, JSON.stringify([{
+    baseUrl: 'https://gateway.example.test/admin/?token=secret#frag',
+    label: 'Persisted Gateway',
+    token: 'should-not-surface',
+    accessToken: 'should-not-surface',
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+  }]))
+  const registry = new FileGatewayWorkspaceRegistry(path)
+
+  const [persisted] = registry.list()
+
+  assert.equal(persisted?.baseUrl, 'https://gateway.example.test/admin')
+  assert.equal(Object.hasOwn(persisted as object, 'token'), false)
+  assert.equal(Object.hasOwn(persisted as object, 'accessToken'), false)
+  assert.throws(() => registry.upsert({ baseUrl: 'http://gateway.example.test' }), /https/)
+
+  const local = registry.upsert({ baseUrl: 'http://127.0.0.1:8790/?token=secret#frag', label: 'Local Gateway' })
+
+  assert.equal(local.baseUrl, 'http://127.0.0.1:8790')
+  assert.doesNotMatch(readFileSync(path, 'utf-8'), /should-not-surface|token=secret/)
+})
+
+test('workspace gateway projects local Desktop pairings as read-only paired workspaces', async () => {
+  const pairing: DesktopPairingPublicRecord = {
+    id: 'pairing-1',
+    label: 'Phone Gateway',
+    deviceName: 'Phone',
+    status: 'paired_online',
+    enabled: true,
+    brokerUrl: 'https://gateway.example.test',
+    allowedWorkspaceIds: ['local'],
+    allowedSessionIds: ['session-1'],
+    policy: {
+      allowRemotePrompts: true,
+      allowRemoteAbort: true,
+      remoteApprovals: 'local_confirmation',
+      remoteQuestions: 'local_confirmation',
+      exposeArtifactBodies: false,
+      exposeLocalPaths: false,
+      exposeLocalMcpDetails: false,
+      allowRemoteAttachments: false,
+    },
+    lastConnectedAt: '2026-05-27T10:00:00.000Z',
+    lastHeartbeatAt: '2026-05-27T10:01:00.000Z',
+    lastCommandSequence: 7,
+    error: null,
+    createdAt: '2026-05-27T09:00:00.000Z',
+    updatedAt: '2026-05-27T10:01:00.000Z',
+    revokedAt: null,
+    credential: {
+      hasToken: true,
+      deviceId: 'device-1',
+      updatedAt: '2026-05-27T09:00:00.000Z',
+    },
+  }
+  const gateway = createWorkspaceGateway({
+    cloudRegistry: null,
+    cloudCredentialStore: null,
+    gatewayRegistry: null,
+    gatewayCredentialStore: null,
+    desktopPairingProvider: () => [pairing],
+  })
+
+  const paired = gateway.list(event(1)).find((workspace) => workspace.id === 'paired-desktop:pairing-1')
+  assert.equal(paired?.kind, 'paired_desktop')
+  assert.equal(paired?.authority, 'desktop_paired')
+  assert.equal(paired?.status, 'online')
+  assert.equal(paired?.profileName, '1 allowed session')
+  assert.equal(gateway.activate(event(1), 'paired-desktop:pairing-1').active, true)
+  assert.equal(gateway.activeWorkspaceId(event(1)), 'paired-desktop:pairing-1')
+
+  const support = await gateway.supportMatrix(event(1), 'paired-desktop:pairing-1')
+  assert.equal(supportStatus(support, 'sessions.prompt').status, 'deferred')
+  assert.equal(supportStatus(support, 'sessions.prompt').context?.authority, 'desktop_paired')
+  assert.equal(supportStatus(support, 'sessions.prompt').context?.runtimeAuthority, 'desktop_local')
+  assert.equal(supportStatus(support, 'sessions.prompt').context?.pairingState, 'paired_online')
+  assert.equal(supportStatus(support, 'localFiles').status, 'not_supported')
+  await assert.rejects(() => gateway.listCloudSessions(event(1), 'paired-desktop:pairing-1'), /Cloud workspace/)
 })
 
 test('workspace gateway keeps host paths, local stdio MCPs, and machine config out of cloud support', async () => {

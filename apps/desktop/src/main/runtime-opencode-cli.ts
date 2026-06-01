@@ -23,11 +23,26 @@ function resolveBundledNodeModuleDir(moduleName: string): string | null {
   try {
     return dirname(require.resolve(`${moduleName}/package.json`))
   } catch {
-    if (!electronApp?.isPackaged) return null
+    // pnpm can keep optional OpenCode platform packages under opencode-ai's
+    // virtual-store node_modules, so fall through to explicit lookups.
   }
 
-  const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', moduleName)
-  return existsSync(join(unpacked, 'package.json')) ? unpacked : null
+  if (electronApp?.isPackaged) {
+    const unpacked = join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', moduleName)
+    if (existsSync(join(unpacked, 'package.json'))) return unpacked
+  }
+
+  if (moduleName !== 'opencode-ai') {
+    const opencodeModuleDir = resolveBundledNodeModuleDir('opencode-ai')
+    const pnpmVirtualStoreNodeModules = opencodeModuleDir ? dirname(opencodeModuleDir) : null
+    const nested = opencodeModuleDir ? join(opencodeModuleDir, 'node_modules', moduleName) : null
+    const sibling = pnpmVirtualStoreNodeModules ? join(pnpmVirtualStoreNodeModules, moduleName) : null
+    for (const candidate of [nested, sibling]) {
+      if (candidate && existsSync(join(candidate, 'package.json'))) return candidate
+    }
+  }
+
+  return null
 }
 
 function resolveBundledNodeModuleFile(moduleName: string, relativePath: string): string | null {
@@ -72,11 +87,6 @@ function resolveBundledOpencodeWrapperPath(): string | null {
   return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
 }
 
-function resolveBundledOpencodePackageBinaryPath(): string | null {
-  return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode.exe'))
-    || resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
-}
-
 function resolveBundledOpencodeBinaryPath(): string | null {
   const platform = process.platform === 'win32' ? 'windows' : process.platform
   const arch = process.arch
@@ -87,7 +97,7 @@ function resolveBundledOpencodeBinaryPath(): string | null {
     const resolved = resolveBundledNodeModuleFile(moduleName, join('bin', binary))
     if (resolved) return resolved
   }
-  return resolveBundledOpencodePackageBinaryPath()
+  return null
 }
 
 export function getBundledOpencodeVersion(): string | null {

@@ -55,6 +55,47 @@ test('sidebar Threads button opens the indexed Threads workspace', async () => {
   }
 })
 
+test('workspace switcher lists standalone Gateway authorities without Cloud', async () => {
+  const { page, cleanup } = await launchSmokeApp({
+    seedBeforeLaunch: ({ dataRoot }) => {
+      writeFileSync(join(dataRoot, 'gateway-workspaces.json'), JSON.stringify([{
+        id: 'gateway:smoke',
+        baseUrl: 'http://127.0.0.1:8799',
+        label: 'Smoke Gateway',
+        lastSyncedAt: null,
+        createdAt: '2026-05-27T10:00:00.000Z',
+        updatedAt: '2026-05-27T10:00:00.000Z',
+      }], null, 2))
+    },
+  })
+
+  try {
+    await waitForAppShell(page, 30_000)
+    await page.getByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }).click()
+    await page.getByRole('menuitem', { name: /Smoke Gateway.*Auth required.*Standalone Gateway/i }).click()
+
+    const active = await page.evaluate(async () => {
+      const workspaces = await window.coworkApi.workspace.list()
+      const workspace = workspaces.find((entry) => entry.id === 'gateway:smoke')
+      const support = await window.coworkApi.workspace.support('gateway:smoke')
+      return {
+        kind: workspace?.kind,
+        authority: workspace?.authority,
+        active: workspace?.active,
+        sessionListStatus: support.find((entry) => entry.api === 'sessions.list')?.status,
+      }
+    })
+    assert.deepEqual(active, {
+      kind: 'gateway',
+      authority: 'gateway_standalone',
+      active: true,
+      sessionListStatus: 'deferred',
+    })
+  } finally {
+    await cleanup()
+  }
+})
+
 test('home recent-thread CTA routes through the real session activation path', async () => {
   const { page, cleanup } = await launchSmokeApp()
 

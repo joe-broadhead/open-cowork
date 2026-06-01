@@ -66,6 +66,13 @@ Workspace copy should also stay stable:
   OpenCode runtime.
 - **Cloud workspace** means synced cloud state shared with web and gateway
   clients through Open Cowork Cloud.
+- **Gateway workspace** means a private Standalone Gateway authority. Desktop
+  may show the connection and support verdicts, but Gateway session operation
+  stays deferred until the Standalone Gateway exposes a Desktop-safe session
+  projection API.
+- **Paired Desktop workspace** means a local outbound pairing connector. The
+  owning Desktop remains the runtime authority; remote paths and artifact
+  bodies stay redacted unless pairing policy explicitly allows them.
 - **Offline cached** means cached cloud state is visible, but cloud sends and
   mutations are disabled until the connection recovers.
 - **Auth required** means the desktop has a cloud connection but no usable
@@ -73,7 +80,7 @@ Workspace copy should also stay stable:
 - **Policy disabled** means the org/profile returned a support-matrix verdict
   that blocks the action.
 - **Local-only action** means the action depends on local host paths, local
-  stdio MCPs, or machine runtime config and must not run in a cloud workspace.
+  stdio MCPs, or machine runtime config and must not run in a remote workspace.
 - **Cloud-safe action** means the action can be represented through the cloud
   control plane without implicit local file, local MCP, or secret upload.
 

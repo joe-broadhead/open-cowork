@@ -1,4 +1,4 @@
-export type WorkspaceKind = 'local' | 'cloud'
+export type WorkspaceKind = 'local' | 'cloud' | 'gateway' | 'paired_desktop'
 
 export type WorkspaceStatus = 'online' | 'offline' | 'auth_required' | 'disabled' | 'error'
 
@@ -347,6 +347,12 @@ export type WorkspaceSurfaceSupport = {
 export type AddCloudWorkspaceInput = {
   baseUrl: string
   label?: string
+}
+
+export type AddGatewayWorkspaceInput = {
+  baseUrl: string
+  label?: string
+  token?: string
 }
 
 export type WorkspaceSyncResult = {

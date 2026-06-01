@@ -96,6 +96,7 @@ import type {
 } from './providers.js'
 import type {
   AddCloudWorkspaceInput,
+  AddGatewayWorkspaceInput,
   SandboxCleanupResult,
   SandboxStorageStats,
   SkillImportSelection,
@@ -159,6 +160,7 @@ export interface CoworkAPI {
     list: () => Promise<WorkspaceInfo[]>
     activate: (workspaceId: string) => Promise<WorkspaceInfo>
     addCloud: (input: AddCloudWorkspaceInput) => Promise<WorkspaceInfo>
+    addGateway: (input: AddGatewayWorkspaceInput) => Promise<WorkspaceInfo>
     remove: (workspaceId: string) => Promise<boolean>
     login: (workspaceId: string) => Promise<WorkspaceInfo>
     logout: (workspaceId: string) => Promise<WorkspaceInfo>
