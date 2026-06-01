@@ -377,6 +377,14 @@ beta, general availability, or enterprise-scale readiness. Those tiers need
 environment-specific private operations evidence for load, soak, failover,
 restore, security, support, and cost/SLO behavior.
 
+Set evidence metadata for every plan, load, soak, and failover drill run:
+
+```bash
+export OPEN_COWORK_EVIDENCE_COMMIT_SHA="$(git rev-parse HEAD)"
+export OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST=sha256:REPLACE_WITH_CLOUD_IMAGE_DIGEST
+export OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST=sha256:REPLACE_WITH_GATEWAY_IMAGE_DIGEST
+```
+
 Generate the planned route matrix:
 
 ```bash
@@ -425,8 +433,10 @@ The harness writes JSON and Markdown reports under
 `.open-cowork-test/launch-readiness/` by default. Attach those reports,
 dashboard evidence, cost notes, known limits, and final smoke results to
 `docs/runbooks/launch-readiness-report.md` or a downstream private operations
-repository. Use `pnpm deploy:launch:validate` to verify the committed gate
-artifacts stay in sync.
+repository. Each report records the command name, commit SHA, image digests,
+sanitized environment profile, dates, duration, and pass/fail or go/no-go
+status. Use `pnpm deploy:launch:validate` to verify the committed gate artifacts
+stay in sync.
 
 After the ordinary load and soak gates pass with zero unexpected quota
 rejections, run a deliberate quota-pressure pass with

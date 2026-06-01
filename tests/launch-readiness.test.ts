@@ -8,6 +8,10 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+const evidenceCommitSha = 'abcdef1234567890abcdef1234567890abcdef12'
+const cloudImageDigest = `sha256:${'1'.repeat(64)}`
+const gatewayImageDigest = `sha256:${'2'.repeat(64)}`
+const unsafeEvidenceValue = ['github', 'pat', 'privatevalue1234567890'].join('_')
 
 function readJsonFile(path: string) {
   return JSON.parse(readFileSync(path, 'utf8'))
@@ -179,6 +183,12 @@ test('launch readiness harness produces strict load report against cloud and gat
       '--include-sse',
       '--operator',
       '--strict',
+      '--commit-sha',
+      evidenceCommitSha,
+      '--cloud-image-digest',
+      cloudImageDigest,
+      '--gateway-image-digest',
+      gatewayImageDigest,
       '--output-dir',
       outputDir,
     ], { encoding: 'utf8' })
@@ -194,6 +204,18 @@ test('launch readiness harness produces strict load report against cloud and gat
     assert.ok(markdownReport)
     const report = JSON.parse(readFileSync(join(outputDir, jsonReport), 'utf8'))
     assert.equal(report.gates.overall, 'go')
+    assert.equal(report.evidence.command, 'pnpm deploy:load:strict')
+    assert.equal(report.evidence.commitSha, evidenceCommitSha)
+    assert.equal(report.evidence.imageDigests.cloud, cloudImageDigest)
+    assert.equal(report.evidence.imageDigests.gateway, gatewayImageDigest)
+    assert.equal(report.evidence.environmentProfile.profileName, 'private-beta')
+    assert.equal(report.evidence.environmentProfile.mode, 'load')
+    assert.equal(report.evidence.environmentProfile.cloudTokenProvided, true)
+    assert.equal(report.evidence.environmentProfile.gatewayAdminTokenProvided, true)
+    assert.equal(report.evidence.startedAt, report.run.startedAt)
+    assert.equal(report.evidence.finishedAt, report.run.finishedAt)
+    assert.equal(report.evidence.durationMs, report.run.durationMs)
+    assert.doesNotMatch(JSON.stringify(report), /cloud-token|gateway-admin-token/)
     assert.equal(report.summary.operations['cloud-session-create'].failures, 0)
     assert.equal(report.summary.operations['cloud-prompt-enqueue'].failures, 0)
     assert.equal(report.summary.operations['cloud-workspace-sse'].failures, 0)
@@ -203,7 +225,10 @@ test('launch readiness harness produces strict load report against cloud and gat
     assert.equal(report.summary.operations['cloud-byok-provider-validate'].failures, 0)
     assert.equal(report.metrics.delta.open_cowork_gateway_delivery_dead_letters_total, 0)
     assert.equal(report.metrics.delta.open_cowork_gateway_stream_reconnects_total, 0)
-    assert.match(readFileSync(join(outputDir, markdownReport), 'utf8'), /Open Cowork Launch Readiness Report/)
+    const markdown = readFileSync(join(outputDir, markdownReport), 'utf8')
+    assert.match(markdown, /Open Cowork Launch Readiness Report/)
+    assert.match(markdown, /Evidence Metadata/)
+    assert.match(markdown, new RegExp(evidenceCommitSha))
   } finally {
     await new Promise<void>((resolve) => cloud.server.close(() => resolve()))
     await new Promise<void>((resolve) => gateway.server.close(() => resolve()))
@@ -277,6 +302,16 @@ test('launch evidence manifest validator accepts template and completed private 
   const outputDir = mkdtempSync(join(tmpdir(), 'open-cowork-launch-evidence-'))
   try {
     const manifest = readJsonFile('deploy/private-beta/launch-evidence-record.template.json')
+    assert.deepEqual(manifest.requiredReportFields, [
+      'command',
+      'commitSha',
+      'imageDigests',
+      'sanitizedEnvironmentProfile',
+      'startedAt',
+      'finishedAt',
+      'durationMs',
+      'status',
+    ])
     for (const item of manifest.requiredEvidence) {
       item.status = 'private-pass'
       item.privateEvidenceRef = `private://evidence/${item.id}`
@@ -361,6 +396,12 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
       'exit 1',
       '--gateway-hook',
       'exit 1',
+      '--commit-sha',
+      evidenceCommitSha,
+      '--cloud-image-digest',
+      cloudImageDigest,
+      '--gateway-image-digest',
+      gatewayImageDigest,
       '--output-dir',
       outputDir,
     ], { encoding: 'utf8' })
@@ -368,6 +409,16 @@ test('launch failover drill emits redacted dry-run evidence without executing ho
     assert.equal(parsed.ok, true)
     assert.equal(parsed.report.redacted, true)
     assert.equal(parsed.report.result, 'dry-run')
+    assert.equal(parsed.report.evidence.command, 'pnpm deploy:failover:drill:dry-run')
+    assert.equal(parsed.report.evidence.commitSha, evidenceCommitSha)
+    assert.equal(parsed.report.evidence.imageDigests.cloud, cloudImageDigest)
+    assert.equal(parsed.report.evidence.imageDigests.gateway, gatewayImageDigest)
+    assert.equal(parsed.report.evidence.environmentProfile.cloudTokenProvided, false)
+    assert.equal(parsed.report.evidence.environmentProfile.workerHookConfigured, true)
+    assert.equal(parsed.report.evidence.startedAt, parsed.report.startedAt)
+    assert.equal(parsed.report.evidence.finishedAt, parsed.report.finishedAt)
+    assert.equal(parsed.report.evidence.durationMs, parsed.report.durationMs)
+    assert.equal(typeof parsed.report.durationMs, 'number')
     assert.equal(parsed.report.targets.cloudUrl, 'http://REDACTED_HOST')
     assert.equal(parsed.report.hooks[0].status, 'dry-run')
     assert.ok(parsed.report.evidenceItems.includes('workerFailover'))
@@ -389,6 +440,12 @@ test('launch readiness plan supports the local self-host beta tier', async () =>
       'plan',
       '--profile',
       'local-self-host-beta',
+      '--commit-sha',
+      evidenceCommitSha,
+      '--cloud-image-digest',
+      cloudImageDigest,
+      '--gateway-image-digest',
+      unsafeEvidenceValue,
       '--output-dir',
       outputDir,
     ], { encoding: 'utf8' })
@@ -402,6 +459,10 @@ test('launch readiness plan supports the local self-host beta tier', async () =>
     const plan = readFileSync(parsed.planPath, 'utf8')
     assert.match(plan, /local-self-host-beta/)
     assert.match(plan, /OSS self-host and local reference deployment target/)
+    assert.match(plan, /Evidence Metadata/)
+    assert.match(plan, new RegExp(evidenceCommitSha))
+    assert.match(plan, /redacted-private-value/)
+    assert.doesNotMatch(plan, new RegExp(unsafeEvidenceValue))
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

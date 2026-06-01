@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -72,6 +73,67 @@ function safeUrl(url) {
     return parsed.toString().replace(/\/$/, '')
   } catch {
     return url ? '[invalid-url]' : ''
+  }
+}
+
+function currentCommitSha() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+const PRIVATE_EVIDENCE_PATTERNS = [
+  /(?:sk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}/i,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /ya29\.[A-Za-z0-9_-]{8,}/i,
+  /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+  /(?:postgres(?:ql)?|mysql|mongodb):\/\//i,
+  /bearer\s+[A-Za-z0-9._-]{8,}/i,
+  /(?:token|secret|password|api[_-]?key)=/i,
+]
+
+function safeEvidenceText(value, fallback = 'not-provided') {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return fallback
+  if (PRIVATE_EVIDENCE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return 'redacted-private-value'
+  }
+  return text.replace(/\s+/g, ' ').slice(0, 512)
+}
+
+function commandNameFor(options) {
+  if (options.mode === 'plan') return 'pnpm deploy:load:plan'
+  if (options.mode === 'soak') return options.strict ? 'pnpm deploy:soak:strict' : 'pnpm deploy:soak'
+  return options.strict ? 'pnpm deploy:load:strict' : 'pnpm deploy:load'
+}
+
+function createEvidenceMetadata(options, status = 'plan') {
+  return {
+    command: commandNameFor(options),
+    commitSha: safeEvidenceText(options.commitSha, 'unknown'),
+    imageDigests: {
+      cloud: safeEvidenceText(options.cloudImageDigest),
+      gateway: safeEvidenceText(options.gatewayImageDigest),
+    },
+    environmentProfile: {
+      profileName: options.profileName,
+      mode: options.mode,
+      strict: options.strict,
+      cloudUrl: options.skipCloud ? 'skipped' : safeUrl(options.cloudUrl),
+      gatewayUrl: options.skipGateway ? 'skipped' : safeUrl(options.gatewayUrl),
+      cloudTokenProvided: Boolean(options.cloudToken),
+      gatewayAdminTokenProvided: Boolean(options.gatewayAdminToken),
+      includeMutations: options.includeMutations,
+      includeSse: options.includeSse,
+      includeOperator: options.includeOperator,
+      byokProvider: safeEvidenceText(options.byokProvider),
+    },
+    status,
   }
 }
 
@@ -867,8 +929,16 @@ function createPlanMarkdown(options, operations) {
   return `# Open Cowork Launch Readiness Plan
 
 Profile: \`${options.profileName}\`
+Command: \`${commandNameFor(options)}\`
+Commit SHA: \`${safeEvidenceText(options.commitSha, 'unknown')}\`
 
 ${options.profile.description}
+
+## Evidence Metadata
+
+\`\`\`json
+${JSON.stringify(createEvidenceMetadata(options), null, 2)}
+\`\`\`
 
 ## Capacity Targets
 
@@ -918,6 +988,23 @@ Generated at: ${report.generatedAt}
 Mode: \`${report.mode}\`
 Profile: \`${report.profileName}\`
 Result: **${report.gates.overall}**
+
+## Evidence Metadata
+
+- Command: \`${report.evidence.command}\`
+- Commit SHA: \`${report.evidence.commitSha}\`
+- Cloud image digest: \`${report.evidence.imageDigests.cloud}\`
+- Gateway image digest: \`${report.evidence.imageDigests.gateway}\`
+- Started at: \`${report.evidence.startedAt}\`
+- Finished at: \`${report.evidence.finishedAt}\`
+- Duration: \`${report.evidence.durationMs}ms\`
+- Status: \`${report.evidence.status}\`
+
+Sanitized environment profile:
+
+\`\`\`json
+${JSON.stringify(report.evidence.environmentProfile, null, 2)}
+\`\`\`
 
 ## Targets
 
@@ -982,6 +1069,9 @@ async function main() {
     gatewayUrl: normalizeUrl(argOrEnv('gateway-url', 'OPEN_COWORK_LOAD_GATEWAY_URL', process.env.OPEN_COWORK_SMOKE_GATEWAY_URL || 'http://127.0.0.1:8790')),
     cloudToken: argOrEnv('cloud-token', 'OPEN_COWORK_LOAD_CLOUD_TOKEN', process.env.OPEN_COWORK_SMOKE_CLOUD_TOKEN || ''),
     gatewayAdminToken: argOrEnv('gateway-admin-token', 'OPEN_COWORK_LOAD_GATEWAY_ADMIN_TOKEN', process.env.OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN || ''),
+    commitSha: argOrEnv('commit-sha', 'OPEN_COWORK_EVIDENCE_COMMIT_SHA', currentCommitSha()),
+    cloudImageDigest: argOrEnv('cloud-image-digest', 'OPEN_COWORK_EVIDENCE_CLOUD_IMAGE_DIGEST', ''),
+    gatewayImageDigest: argOrEnv('gateway-image-digest', 'OPEN_COWORK_EVIDENCE_GATEWAY_IMAGE_DIGEST', ''),
     durationMs: intArg('duration-ms', 'OPEN_COWORK_LOAD_DURATION_MS', mode === 'soak' ? profile.soakDurationMs : profile.durationMs),
     concurrency: intArg('concurrency', 'OPEN_COWORK_LOAD_CONCURRENCY', profile.concurrency),
     requestRatePerSecond: floatArg('request-rate', 'OPEN_COWORK_LOAD_REQUEST_RATE', profile.requestRatePerSecond),
@@ -1036,6 +1126,12 @@ async function main() {
     generatedAt,
     mode,
     profileName,
+    evidence: {
+      ...createEvidenceMetadata(options, gates.overall),
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      durationMs: run.durationMs,
+    },
     targets: {
       cloudUrl: options.skipCloud ? null : safeUrl(options.cloudUrl),
       gatewayUrl: options.skipGateway ? null : safeUrl(options.gatewayUrl),
