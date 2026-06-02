@@ -188,6 +188,7 @@ const requiredPrivateBetaEvidenceIds = [
   'billingEntitlementGating',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
 ]
 if (evidenceMatrix.privateBetaEvidenceItems?.requiredStatusForGo !== 'private-pass') {
   throw new Error(`${evidenceMatrixPath} must require private-pass before a private-beta go decision`)
@@ -234,6 +235,7 @@ for (const command of [
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:launch:validate',
   'pnpm deploy:launch:evidence:validate',
+  'pnpm deploy:promotion:validate -- --tier local-self-host-beta',
   'pnpm ops:validate',
   'git diff --check',
 ]) {
@@ -274,6 +276,7 @@ for (const phrase of [
   'gatewayDeliveryReplayDeadLetter',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
 ]) {
   assertIncludes(evidenceMatrixPath, phrase)
 }
@@ -381,6 +384,7 @@ for (const phrase of [
 for (const phrase of [
   'requiredReportFields',
   'commitSha',
+  'evidenceCommands',
   'imageDigests',
   'sanitizedEnvironmentProfile',
   'dates and duration',
@@ -398,7 +402,9 @@ for (const phrase of [
   'gatewayDeliveryReplayDeadLetter',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
   'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
+  'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
 ]) {
   assertIncludes(publicGoNoGoPath, phrase)
 }
@@ -415,6 +421,7 @@ for (const phrase of [
   'pnpm deploy:failover:drill',
   'pnpm deploy:launch:validate',
   'pnpm deploy:launch:evidence:validate',
+  'pnpm deploy:promotion:validate',
 ]) {
   assertIncludes(releaseChecklistPath, phrase)
 }
@@ -428,6 +435,7 @@ for (const script of [
   'deploy:failover:drill',
   'deploy:launch:validate',
   'deploy:launch:evidence:validate',
+  'deploy:promotion:validate',
 ]) {
   if (typeof packageJson.scripts?.[script] !== 'string') {
     throw new Error(`${packagePath} is missing ${script}`)

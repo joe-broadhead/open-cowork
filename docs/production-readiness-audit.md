@@ -15,9 +15,8 @@ Cloud tenant boundaries are guarded, release supply-chain controls are mature,
 and deployment templates have explicit production gates. No critical issue was
 found in the current review.
 
-The remaining work is concentrated in three areas:
+The remaining work is concentrated in two areas:
 
-- release/promotion proof for hosted production claims
 - maintainability guardrails for the largest Cloud compatibility facades and
   generated or vendored surfaces
 - shutdown and backpressure behavior for long-lived Cloud streams and queues
@@ -62,25 +61,16 @@ The remaining work is concentrated in three areas:
 - Cloud HTTP shutdown now closes replay polling and active SSE streams before
   awaiting `server.close()`, with lifecycle regressions for open streams and
   shutdown during replay loading.
+- Release promotion now has a separate tier-aware validator. CI and release
+  preflight prove the public `local-self-host-beta` claim, and hosted
+  promotion requires a private manifest with `private-pass` evidence plus
+  strict per-item report metadata for load, soak, failover, restore, BYOK,
+  support, rollback, commit SHA, image digests, and sanitized environment
+  profile.
 
 ## High Priority
 
-### Release Gates Do Not Prove Hosted Production Readiness
-
-Evidence:
-
-- CI and release validate the launch evidence manifest without the
-  `--require-private-pass` flag.
-- The public launch matrix honestly targets `local-self-host-beta`, not managed
-  SaaS, GA, or enterprise hosting.
-
-Impact: a release tag can pass while real load, soak, restore, failover, BYOK,
-support, and on-call evidence is absent. This is acceptable for the current
-public tier, but not for hosted production claims.
-
-Target state: add a separate promotion gate for private beta, public beta, and
-GA that runs the private-pass evidence validator plus strict environment
-evidence for load, soak, failover, restore, BYOK, support, and rollback.
+No open high-priority findings remain after the current audit remediations.
 
 ## Medium Priority
 

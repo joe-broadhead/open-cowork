@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 const matrixPath = 'deploy/load/launch-evidence-matrix.json'
 const defaultManifestPath = 'deploy/private-beta/launch-evidence-record.template.json'
 const publicSummaryPath = 'deploy/private-beta/private-beta-go-no-go.public.md'
 const packagePath = 'package.json'
 
-const requiredEvidenceIds = [
+export const requiredLaunchEvidenceIds = [
   'deployedDesktopWebGatewayContinuation',
   'deployedLoadTest',
   'deployedSoakTest',
@@ -21,6 +22,7 @@ const requiredEvidenceIds = [
   'billingEntitlementGating',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
 ]
 
 const statusValues = new Set([
@@ -32,6 +34,7 @@ const statusValues = new Set([
 
 const requiredReportFields = [
   'command',
+  'evidenceCommands',
   'commitSha',
   'imageDigests',
   'sanitizedEnvironmentProfile',
@@ -154,106 +157,122 @@ function assertArrayContainsAll(values, required, label) {
   }
 }
 
-const args = parseArgs(process.argv.slice(2))
-for (const path of [matrixPath, defaultManifestPath, publicSummaryPath, packagePath, args.manifest]) assertFile(path)
+export function validateLaunchEvidenceManifest(options = {}) {
+  const args = {
+    manifest: options.manifest ?? defaultManifestPath,
+    requirePrivatePass: options.requirePrivatePass === true,
+  }
+  for (const path of [matrixPath, defaultManifestPath, publicSummaryPath, packagePath, args.manifest]) assertFile(path)
 
-const packageJson = readJson(packagePath)
-const matrix = readJson(matrixPath)
-if (matrix.schemaVersion !== 1) throw new Error(`${matrixPath} must declare schemaVersion 1`)
-if (matrix.acceptedPublicTier !== 'local-self-host-beta') {
-  throw new Error(`${matrixPath} must keep local-self-host-beta as the public tier until private evidence is complete`)
-}
-if (matrix.privateBetaEvidenceItems?.requiredStatusForGo !== 'private-pass') {
-  throw new Error(`${matrixPath} must require private-pass for go decisions`)
-}
-if (matrix.privateBetaEvidenceItems?.storageRule?.includes('tokens') !== true) {
-  throw new Error(`${matrixPath} must document private evidence storage and token redaction`)
-}
+  const packageJson = readJson(packagePath)
+  const matrix = readJson(matrixPath)
+  if (matrix.schemaVersion !== 1) throw new Error(`${matrixPath} must declare schemaVersion 1`)
+  if (matrix.acceptedPublicTier !== 'local-self-host-beta') {
+    throw new Error(`${matrixPath} must keep local-self-host-beta as the public tier until private evidence is complete`)
+  }
+  if (matrix.privateBetaEvidenceItems?.requiredStatusForGo !== 'private-pass') {
+    throw new Error(`${matrixPath} must require private-pass for go decisions`)
+  }
+  if (matrix.privateBetaEvidenceItems?.storageRule?.includes('tokens') !== true) {
+    throw new Error(`${matrixPath} must document private evidence storage and token redaction`)
+  }
 
-const matrixItems = matrix.privateBetaEvidenceItems?.items ?? {}
-const matrixIds = Object.keys(matrixItems)
-for (const id of requiredEvidenceIds) {
-  const item = matrixItems[id]
-  if (!item) throw new Error(`${matrixPath} is missing private beta evidence item ${id}`)
-  if (item.requiredForPrivateBeta !== true) throw new Error(`${id} must be required for private beta`)
-  if (typeof item.passCondition !== 'string' || item.passCondition.length < 30) {
-    throw new Error(`${id} must define a concrete pass condition`)
-  }
-  if (!Array.isArray(item.publicArtifacts) || item.publicArtifacts.length === 0) {
-    throw new Error(`${id} must list public artifacts`)
-  }
-  for (const artifact of item.publicArtifacts) assertFile(artifact)
-  if (!Array.isArray(item.requiredCommands) || item.requiredCommands.length === 0) {
-    throw new Error(`${id} must list required commands`)
-  }
-  for (const command of item.requiredCommands) {
-    const script = commandScript(command)
-    if (script && typeof packageJson.scripts?.[script] !== 'string') {
-      throw new Error(`${id} references missing package script ${script}`)
+  const matrixItems = matrix.privateBetaEvidenceItems?.items ?? {}
+  const matrixIds = Object.keys(matrixItems)
+  for (const id of requiredLaunchEvidenceIds) {
+    const item = matrixItems[id]
+    if (!item) throw new Error(`${matrixPath} is missing private beta evidence item ${id}`)
+    if (item.requiredForPrivateBeta !== true) throw new Error(`${id} must be required for private beta`)
+    if (typeof item.passCondition !== 'string' || item.passCondition.length < 30) {
+      throw new Error(`${id} must define a concrete pass condition`)
+    }
+    if (!Array.isArray(item.publicArtifacts) || item.publicArtifacts.length === 0) {
+      throw new Error(`${id} must list public artifacts`)
+    }
+    for (const artifact of item.publicArtifacts) assertFile(artifact)
+    if (!Array.isArray(item.requiredCommands) || item.requiredCommands.length === 0) {
+      throw new Error(`${id} must list required commands`)
+    }
+    for (const command of item.requiredCommands) {
+      const script = commandScript(command)
+      if (script && typeof packageJson.scripts?.[script] !== 'string') {
+        throw new Error(`${id} references missing package script ${script}`)
+      }
     }
   }
-}
-for (const id of matrixIds) {
-  if (!requiredEvidenceIds.includes(id)) throw new Error(`${matrixPath} has unexpected private beta evidence item ${id}`)
-}
-
-const manifest = readJson(args.manifest)
-if (manifest.schemaVersion !== 1) throw new Error(`${args.manifest} must declare schemaVersion 1`)
-if (manifest.purpose !== 'managed-byok-private-beta-launch-evidence-record-template') {
-  throw new Error(`${args.manifest} must declare purpose managed-byok-private-beta-launch-evidence-record-template`)
-}
-if (manifest.targetTier !== 'private-beta') throw new Error(`${args.manifest} must target private-beta`)
-if (manifest.currentPublicTier !== 'local-self-host-beta') {
-  throw new Error(`${args.manifest} must keep currentPublicTier local-self-host-beta`)
-}
-if (manifest.publicPrivateBoundary?.publicSummaryStorage !== publicSummaryPath) {
-  throw new Error(`${args.manifest} must point to ${publicSummaryPath}`)
-}
-assertArrayContainsAll(
-  manifest.publicPrivateBoundary?.allowedPublicFields,
-  requiredPublicAllowedFields,
-  `${args.manifest}.publicPrivateBoundary.allowedPublicFields`,
-)
-assertArrayContainsAll(manifest.requiredReportFields, requiredReportFields, `${args.manifest}.requiredReportFields`)
-
-const manifestItems = manifest.requiredEvidence
-if (!Array.isArray(manifestItems)) throw new Error(`${args.manifest} must list requiredEvidence`)
-const seen = new Set()
-for (const item of manifestItems) {
-  if (!requiredEvidenceIds.includes(item.id)) throw new Error(`${args.manifest} has unexpected evidence id ${item.id}`)
-  if (seen.has(item.id)) throw new Error(`${args.manifest} has duplicate evidence id ${item.id}`)
-  seen.add(item.id)
-  if (item.blockingForPrivateBeta !== true) throw new Error(`${item.id} must block private beta`)
-  if (!statusValues.has(item.status)) throw new Error(`${item.id} has invalid status ${item.status}`)
-  if (typeof item.command !== 'string' || item.command.length === 0) throw new Error(`${item.id} must record command`)
-  const script = commandScript(item.command)
-  if (script && typeof packageJson.scripts?.[script] !== 'string') {
-    throw new Error(`${item.id} references missing package script ${script}`)
+  for (const id of matrixIds) {
+    if (!requiredLaunchEvidenceIds.includes(id)) throw new Error(`${matrixPath} has unexpected private beta evidence item ${id}`)
   }
-  if (args.requirePrivatePass) {
-    if (item.status !== 'private-pass') throw new Error(`${item.id} must be private-pass for private-beta go`)
-    assertCompletedValue(item, 'privateEvidenceRef', item.id)
-    assertCompletedValue(item, 'publicRedactedSummary', item.id)
-    assertCompletedValue(item, 'checksum', item.id)
-    assertCompletedValue(item, 'owner', item.id)
-    assertPublicSafeText(item.publicRedactedSummary, `${item.id}.publicRedactedSummary`)
-    assertChecksum(item.checksum, item.id)
+
+  const manifest = readJson(args.manifest)
+  if (manifest.schemaVersion !== 1) throw new Error(`${args.manifest} must declare schemaVersion 1`)
+  if (manifest.purpose !== 'managed-byok-private-beta-launch-evidence-record-template') {
+    throw new Error(`${args.manifest} must declare purpose managed-byok-private-beta-launch-evidence-record-template`)
   }
-}
-for (const id of requiredEvidenceIds) {
-  if (!seen.has(id)) throw new Error(`${args.manifest} is missing required evidence ${id}`)
+  const expectedTargetTier = options.expectedTargetTier ?? 'private-beta'
+  if (manifest.targetTier !== expectedTargetTier) throw new Error(`${args.manifest} must target ${expectedTargetTier}`)
+  if (manifest.currentPublicTier !== 'local-self-host-beta') {
+    throw new Error(`${args.manifest} must keep currentPublicTier local-self-host-beta`)
+  }
+  if (manifest.publicPrivateBoundary?.publicSummaryStorage !== publicSummaryPath) {
+    throw new Error(`${args.manifest} must point to ${publicSummaryPath}`)
+  }
+  assertArrayContainsAll(
+    manifest.publicPrivateBoundary?.allowedPublicFields,
+    requiredPublicAllowedFields,
+    `${args.manifest}.publicPrivateBoundary.allowedPublicFields`,
+  )
+  assertArrayContainsAll(manifest.requiredReportFields, requiredReportFields, `${args.manifest}.requiredReportFields`)
+
+  const manifestItems = manifest.requiredEvidence
+  if (!Array.isArray(manifestItems)) throw new Error(`${args.manifest} must list requiredEvidence`)
+  const seen = new Set()
+  for (const item of manifestItems) {
+    if (!requiredLaunchEvidenceIds.includes(item.id)) throw new Error(`${args.manifest} has unexpected evidence id ${item.id}`)
+    if (seen.has(item.id)) throw new Error(`${args.manifest} has duplicate evidence id ${item.id}`)
+    seen.add(item.id)
+    if (item.blockingForPrivateBeta !== true) throw new Error(`${item.id} must block private beta`)
+    if (!statusValues.has(item.status)) throw new Error(`${item.id} has invalid status ${item.status}`)
+    if (typeof item.command !== 'string' || item.command.length === 0) throw new Error(`${item.id} must record command`)
+    const script = commandScript(item.command)
+    if (script && typeof packageJson.scripts?.[script] !== 'string') {
+      throw new Error(`${item.id} references missing package script ${script}`)
+    }
+    if (args.requirePrivatePass) {
+      if (item.status !== 'private-pass') throw new Error(`${item.id} must be private-pass for private-beta go`)
+      assertCompletedValue(item, 'privateEvidenceRef', item.id)
+      assertCompletedValue(item, 'publicRedactedSummary', item.id)
+      assertCompletedValue(item, 'checksum', item.id)
+      assertCompletedValue(item, 'owner', item.id)
+      assertPublicSafeText(item.publicRedactedSummary, `${item.id}.publicRedactedSummary`)
+      assertChecksum(item.checksum, item.id)
+    }
+  }
+  for (const id of requiredLaunchEvidenceIds) {
+    if (!seen.has(id)) throw new Error(`${args.manifest} is missing required evidence ${id}`)
+  }
+
+  for (const path of [matrixPath, defaultManifestPath, publicSummaryPath]) {
+    assertPublicSafe(path)
+  }
+
+  for (const id of requiredLaunchEvidenceIds) {
+    assertIncludes(publicSummaryPath, id)
+  }
+  assertIncludes(publicSummaryPath, 'Decision: `no-go`')
+  assertIncludes(publicSummaryPath, 'Current public tier: `local-self-host-beta`')
+  assertIncludes(publicSummaryPath, 'pending-private-evidence')
+  assertIncludes(publicSummaryPath, 'no-go')
+
+  return { manifest, matrix, packageJson }
 }
 
-for (const path of [matrixPath, defaultManifestPath, publicSummaryPath]) {
-  assertPublicSafe(path)
+export function main(argv = process.argv.slice(2)) {
+  const args = parseArgs(argv)
+  validateLaunchEvidenceManifest(args)
+  process.stdout.write('[launch-evidence-validate] launch evidence manifest validated\n')
 }
 
-for (const id of requiredEvidenceIds) {
-  assertIncludes(publicSummaryPath, id)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
 }
-assertIncludes(publicSummaryPath, 'Decision: `no-go`')
-assertIncludes(publicSummaryPath, 'Current public tier: `local-self-host-beta`')
-assertIncludes(publicSummaryPath, 'pending-private-evidence')
-assertIncludes(publicSummaryPath, 'no-go')
-
-process.stdout.write('[launch-evidence-validate] launch evidence manifest validated\n')

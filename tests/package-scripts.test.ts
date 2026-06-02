@@ -121,6 +121,7 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:soak'), 'node scripts/launch-readiness.mjs --mode soak')
   assert.equal(requireScript('deploy:launch:validate'), 'node scripts/validate-launch-readiness.mjs')
   assert.equal(requireScript('deploy:launch:evidence:validate'), 'node scripts/validate-launch-evidence-manifest.mjs')
+  assert.equal(requireScript('deploy:promotion:validate'), 'node scripts/validate-release-promotion.mjs')
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
   assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs')
   assert.equal(requireScript('release:gates:validate'), 'node scripts/validate-release-gates.mjs')
@@ -197,6 +198,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
     'pnpm deploy:launch:evidence:validate',
+    'pnpm deploy:promotion:validate -- --tier local-self-host-beta',
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
@@ -219,6 +221,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
     'pnpm deploy:launch:evidence:validate',
+    'pnpm deploy:promotion:validate -- --tier "${OPEN_COWORK_RELEASE_CLAIM_TIER}"',
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',

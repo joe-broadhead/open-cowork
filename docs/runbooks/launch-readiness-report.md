@@ -66,6 +66,7 @@ follow-up issue id.
 | billingEntitlementGating | | | | | |
 | supportIncidentOwnershipEscalation | | | | | |
 | costSloNotes | | | | | |
+| releaseRollback | | | | | |
 
 ## Load Test Report
 

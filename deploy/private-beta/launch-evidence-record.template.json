@@ -39,6 +39,7 @@
   ],
   "requiredReportFields": [
     "command",
+    "evidenceCommands",
     "commitSha",
     "imageDigests",
     "sanitizedEnvironmentProfile",
@@ -196,6 +197,17 @@
       "blockingForPrivateBeta": true,
       "status": "pending-private-evidence",
       "command": "pnpm deploy:soak:strict",
+      "privateEvidenceRef": "{private-evidence-ref}",
+      "publicRedactedSummary": "{redacted-summary}",
+      "checksum": "{sha256-or-immutable-artifact-id}",
+      "owner": "{owner}",
+      "followUpIssue": "{issue-or-empty}"
+    },
+    {
+      "id": "releaseRollback",
+      "blockingForPrivateBeta": true,
+      "status": "pending-private-evidence",
+      "command": "pnpm deploy:launch:validate",
       "privateEvidenceRef": "{private-evidence-ref}",
       "publicRedactedSummary": "{redacted-summary}",
       "checksum": "{sha256-or-immutable-artifact-id}",

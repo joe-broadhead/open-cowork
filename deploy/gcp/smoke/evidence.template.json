@@ -74,7 +74,8 @@
     "quotaRateLimitBehavior": "PASS_OR_PENDING_PRIVATE_EVIDENCE",
     "billingEntitlementGating": "PASS_OR_PENDING_PRIVATE_EVIDENCE",
     "supportIncidentOwnershipEscalation": "PASS_OR_PENDING_PRIVATE_EVIDENCE",
-    "costSloNotes": "PASS_OR_PENDING_PRIVATE_EVIDENCE"
+    "costSloNotes": "PASS_OR_PENDING_PRIVATE_EVIDENCE",
+    "releaseRollback": "PASS_OR_PENDING_PRIVATE_EVIDENCE"
   },
   "notes": [
     "Do not replace placeholders with real project ids, account ids, domains, customer names, prices, tokens, signed URLs, or secret values in the public repo.",

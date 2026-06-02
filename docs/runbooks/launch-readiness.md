@@ -239,8 +239,21 @@ Validate committed launch-readiness artifacts:
 
 ```bash
 pnpm deploy:launch:validate
+pnpm deploy:launch:evidence:validate
+pnpm deploy:promotion:validate -- --tier local-self-host-beta
 ```
 
 This checks target profiles, harness coverage, required runbook wording, the
 launch evidence matrix, report template, package scripts, and release-checklist
 links.
+
+Hosted promotion is a separate private-operations gate. For managed private
+beta, copy the launch evidence record into private ops, complete every
+`private-pass` item with strict report metadata, then run:
+
+```bash
+pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>
+```
+
+Higher hosted tiers fail closed until the launch evidence matrix records
+explicit private-ops promotion requirements for that tier.

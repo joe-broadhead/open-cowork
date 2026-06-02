@@ -17,7 +17,8 @@ Files:
   RPO/RTO, required launch evidence, and go/no-go placeholders.
 - `launch-evidence-record.template.json`: machine-readable evidence register
   for deployed continuation, load, soak, failover, restore, BYOK redaction,
-  gateway replay, quota/billing gates, support ownership, and cost/SLO notes.
+  gateway replay, quota/billing gates, support ownership, cost/SLO notes, and
+  release rollback evidence.
 - `managed-byok-readiness-contract.template.json`: machine-readable
   public/private boundary, onboarding status/reason-code, billing, BYOK,
   diagnostics, and validation contract.
@@ -58,7 +59,9 @@ The hosted path is for an operator-managed private beta:
    operations tracker and fill them with real evidence there, not in this repo.
 9. Validate the private evidence record with
    `pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass`
-   before changing the public decision summary.
+   and promote it with `pnpm deploy:promotion:validate -- --tier
+   private-hosted-beta --manifest <private-record>` before changing the public
+   decision summary.
 
 ## OSS Self-Host
 
@@ -76,6 +79,7 @@ Run:
 ```bash
 pnpm deploy:private-beta:validate
 pnpm deploy:launch:evidence:validate
+pnpm deploy:promotion:validate -- --tier local-self-host-beta
 pnpm deploy:validate
 pnpm deploy:launch:validate
 pnpm ops:validate
