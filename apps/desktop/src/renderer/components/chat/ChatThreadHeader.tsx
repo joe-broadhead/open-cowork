@@ -49,7 +49,9 @@ export function ChatThreadHeader({
           )}
           {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (
             <span
-              title={`${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed`}
+              title={currentSession.changeSummary.synthetic
+                ? `${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed (estimated from projection data)`
+                : `${currentSession.changeSummary.files} file${currentSession.changeSummary.files === 1 ? '' : 's'} changed`}
               className="inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle"
             >
               <span style={{ color: 'var(--color-green)' }}>+{currentSession.changeSummary.additions}</span>
@@ -57,6 +59,7 @@ export function ChatThreadHeader({
               <span className="text-text-muted">
                 · {currentSession.changeSummary.files} file{currentSession.changeSummary.files === 1 ? '' : 's'}
               </span>
+              {currentSession.changeSummary.synthetic && <span className="text-text-muted">est</span>}
             </span>
           )}
           {currentSession?.revertedMessageId && (

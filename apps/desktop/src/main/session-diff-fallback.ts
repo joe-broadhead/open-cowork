@@ -40,6 +40,7 @@ function normalizeSessionFileDiff(value: unknown): SessionFileDiff | null {
     patch: typeof record.patch === 'string' ? record.patch : '',
     additions: normalizeSessionDiffNumber(record.additions),
     deletions: normalizeSessionDiffNumber(record.deletions),
+    source: 'sdk',
     ...(status ? { status } : {}),
   }
 }
@@ -116,6 +117,8 @@ function buildSyntheticDiff(rootDir: string, candidate: SessionArtifactCandidate
       additions: 0,
       deletions: 0,
       status: 'added',
+      source: 'synthetic',
+      synthetic: true,
     }
   }
 
@@ -126,6 +129,8 @@ function buildSyntheticDiff(rootDir: string, candidate: SessionArtifactCandidate
       additions: 0,
       deletions: 0,
       status: 'added',
+      source: 'synthetic',
+      synthetic: true,
     }
   }
 
@@ -136,6 +141,8 @@ function buildSyntheticDiff(rootDir: string, candidate: SessionArtifactCandidate
     additions,
     deletions: 0,
     status: 'added',
+    source: 'synthetic',
+    synthetic: true,
   }
 }
 
@@ -164,14 +171,22 @@ export function mergeSessionDiffsWithSynthetic(
 
 export function summarizeSessionDiffs(diffs: SessionFileDiff[]): SessionChangeSummary | null {
   if (diffs.length === 0) return null
+  const syntheticFiles = diffs.filter((diff) => diff.synthetic || diff.source === 'synthetic').length
 
-  return diffs.reduce<SessionChangeSummary>((summary, diff) => ({
-    additions: summary.additions + diff.additions,
-    deletions: summary.deletions + diff.deletions,
-    files: summary.files + 1,
+  const summary = diffs.reduce<SessionChangeSummary>((current, diff) => ({
+    additions: current.additions + diff.additions,
+    deletions: current.deletions + diff.deletions,
+    files: current.files + 1,
   }), {
     additions: 0,
     deletions: 0,
     files: 0,
   })
+  return syntheticFiles > 0
+    ? {
+        ...summary,
+        source: syntheticFiles === diffs.length ? 'synthetic' : 'mixed',
+        synthetic: true,
+      }
+    : summary
 }

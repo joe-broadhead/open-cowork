@@ -117,6 +117,9 @@ export function normalizeStoredSessionRecord(
           additions: typeof item.changeSummary.additions === 'number' ? item.changeSummary.additions : 0,
           deletions: typeof item.changeSummary.deletions === 'number' ? item.changeSummary.deletions : 0,
           files: typeof item.changeSummary.files === 'number' ? item.changeSummary.files : 0,
+          ...(item.changeSummary.source === 'synthetic' || item.changeSummary.source === 'mixed'
+            ? { source: item.changeSummary.source, synthetic: true }
+            : {}),
         }
       : null,
     revertedMessageId: typeof item.revertedMessageId === 'string' ? item.revertedMessageId : null,

@@ -132,6 +132,25 @@ describe('DiffViewer', () => {
     expect(await screen.findByText('No file changes in this session')).toBeInTheDocument()
   })
 
+  it('labels synthetic fallback diffs as estimated', async () => {
+    installDiffApi({
+      diffResult: [{
+        file: 'generated/report.md',
+        status: 'added',
+        additions: 2,
+        deletions: 0,
+        patch: '@@ -0,0 +1,2 @@\n+# Report\n+Hello',
+        source: 'synthetic',
+        synthetic: true,
+      }],
+    })
+
+    render(<DiffViewer sessionId="session-synthetic" onClose={vi.fn()} />)
+
+    expect(await screen.findByText('estimated')).toBeInTheDocument()
+    expect(screen.getByTitle('Estimated from projected tool output; not an authoritative OpenCode snapshot diff')).toBeInTheDocument()
+  })
+
   it('shows snippet failures inline so collapsed context can be retried', async () => {
     const user = userEvent.setup()
     installDiffApi({ snippetRejects: true })

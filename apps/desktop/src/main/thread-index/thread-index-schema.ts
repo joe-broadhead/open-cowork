@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
-export const THREAD_INDEX_SCHEMA_VERSION = 1
+export const THREAD_INDEX_SCHEMA_VERSION = 2
 
 const THREAD_INDEX_SCHEMA_VERSION_KEY = 'schema_version'
 
@@ -64,6 +64,7 @@ export function migrateThreadIndexDb(db: DatabaseSync) {
       change_files integer not null default 0,
       change_additions integer not null default 0,
       change_deletions integer not null default 0,
+      change_source text,
       indexed_at text not null,
       metadata_version integer not null
     );
@@ -128,5 +129,6 @@ export function migrateThreadIndexDb(db: DatabaseSync) {
     create index if not exists idx_thread_suggestions_session on thread_category_suggestions(session_id, status);
   `)
   ensureColumn(db, 'thread_index', 'workflow_id', 'text')
+  ensureColumn(db, 'thread_index', 'change_source', 'text')
   recordThreadIndexSchemaVersion(db)
 }

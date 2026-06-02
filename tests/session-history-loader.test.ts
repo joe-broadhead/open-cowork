@@ -930,6 +930,8 @@ test('createSessionHistoryService synthesizes changeSummary for write-only sessi
         additions: 3,
         deletions: 0,
         files: 1,
+        source: 'synthetic',
+        synthetic: true,
       },
     })
   } finally {

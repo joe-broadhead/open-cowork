@@ -165,6 +165,9 @@ function changeCounts(changeSummary?: SessionChangeSummary | null) {
     changeFiles: changeSummary?.files || 0,
     changeAdditions: changeSummary?.additions || 0,
     changeDeletions: changeSummary?.deletions || 0,
+    changeSource: changeSummary?.source === 'synthetic' || changeSummary?.source === 'mixed'
+      ? changeSummary.source
+      : null,
   }
 }
 
