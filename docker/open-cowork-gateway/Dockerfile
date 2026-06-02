@@ -2,7 +2,7 @@ FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5
 
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install --global corepack@0.35.0 && corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps ./apps
@@ -20,7 +20,7 @@ FROM node:26-bookworm-slim@sha256:79723b41edbedf595f62e943a9f8b0ba9af5b1e61045c5
 
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install --global corepack@0.35.0 && corepack enable
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps ./apps
