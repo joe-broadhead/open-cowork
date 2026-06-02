@@ -1,7 +1,7 @@
 {
   "name": "@open-cowork/cloud-client",
   "version": "0.0.0",
-  "private": false,
+  "private": true,
   "description": "Typed Open Cowork Cloud HTTP and SSE client",
   "author": "Joe Broadhead",
   "license": "MIT",
@@ -77,9 +77,6 @@
     "README.md"
   ],
   "sideEffects": false,
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

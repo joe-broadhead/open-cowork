@@ -16,8 +16,8 @@ this package instead of importing Cloud control-plane internals.
 - The client talks to Open Cowork Cloud product APIs over HTTP and SSE.
 - It does not import Electron, Desktop main-process modules, control-plane
   stores, Postgres modules, or `@opencode-ai/sdk`.
-- It may depend on `@open-cowork/shared`, which is the public package for
-  shared Open Cowork product and wire types.
+- It may depend on `@open-cowork/shared`, which is the shared workspace/source
+  package for Open Cowork product and wire types.
 - OpenCode still owns execution. The client only creates sessions, sends
   product commands, reads projections, subscribes to events, and manages
   product surfaces such as workflows, artifacts, BYOK metadata, and channel
@@ -206,13 +206,14 @@ parsing strings.
 ## Release Checklist
 
 - Build shared first: `pnpm --filter @open-cowork/shared build`.
-- Build the SDK: `pnpm --filter @open-cowork/cloud-client build`.
+- Build the client package: `pnpm --filter @open-cowork/cloud-client build`.
 - Run transport and package-boundary tests.
-- Confirm package exports only the documented public entry points.
+- Confirm package exports only the documented entry points.
 - Update README and this page when auth, timeout, SSE, or error behavior
   changes.
 - Keep examples free of private deployment URLs, org ids, tokens, provider keys,
   and project-specific values.
-- Pre-1.0 typed breaks must be called out in release notes. Do not present the
-  package as a standalone published SDK until package publication, versioning,
-  and support ownership are explicit.
+- Pre-1.0 typed breaks must be called out in release notes. Do not add
+  `publishConfig`, mark the package publishable, or present it as a standalone
+  published SDK until package publication, versioning, provenance, and support
+  ownership are explicit.
