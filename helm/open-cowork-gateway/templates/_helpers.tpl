@@ -36,6 +36,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "open-cowork-gateway.serviceAccountName" -}}
+{{- if .Values.serviceAccount.name -}}
+{{- .Values.serviceAccount.name -}}
+{{- else if .Values.serviceAccount.create -}}
+{{- include "open-cowork-gateway.fullname" . -}}
+{{- else -}}
+{{- "default" -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "open-cowork-gateway.image" -}}
 {{- if .Values.image.digest -}}
 {{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}

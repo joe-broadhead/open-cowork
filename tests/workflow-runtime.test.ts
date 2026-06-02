@@ -4,6 +4,8 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
+import { setRuntimeReady } from '../apps/desktop/src/main/runtime-status.ts'
 import {
   clearWorkflowStoreCache,
   createWorkflow,
@@ -51,12 +53,23 @@ async function withWorkflowRuntimeStore(name: string, run: (userDataDir: string)
     stopWorkflowService()
     stopWorkflowWebhookServer()
     stopWorkflowToolBridge()
+    runtimeState.resetRuntimeSessionState()
+    setRuntimeReady(false)
     clearWorkflowStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
     else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
     rmSync(userDataDir, { recursive: true, force: true })
   }
+}
+
+async function waitForCondition(assertion: () => boolean, timeoutMs = 2_500) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    if (assertion()) return
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  assert.equal(assertion(), true)
 }
 
 async function fetchWorkflowWebhookWithRetry(url: string, init: RequestInit) {
@@ -127,6 +140,56 @@ test('workflow scheduler coalesces overlapping ticks', async () => {
     const detail = getWorkflow(workflow.id)
     assert.equal(detail?.runs.length, 1)
     assert.equal(detail?.runs[0]?.triggerType, 'schedule')
+  })
+})
+
+test('workflow run completion reconciles through session status when idle event is missed', async () => {
+  await withWorkflowRuntimeStore('status-reconcile', async () => {
+    const workflow = createWorkflow(dueScheduledWorkflowDraft, null, { now: new Date('2026-05-14T12:00:00.000Z') })
+    const sessionId = 'ses_workflow_reconcile'
+    const prompts: unknown[] = []
+    let statusCalls = 0
+    runtimeState.setClient({
+      session: {
+        create: async () => ({
+          data: {
+            id: sessionId,
+            title: 'Workflow session',
+            time: { created: 1_700_000_000, updated: 1_700_000_001 },
+          },
+        }),
+        promptAsync: async (input: unknown) => {
+          prompts.push(input)
+          return { data: {} }
+        },
+        status: async () => {
+          statusCalls += 1
+          return { data: { [sessionId]: { type: 'idle' } } }
+        },
+        messages: async () => ({
+          data: [{
+            id: 'msg_done',
+            role: 'assistant',
+            time: { created: 1_700_000_002 },
+            parts: [{ type: 'text', text: 'Workflow finished through status reconciliation.' }],
+          }],
+        }),
+      },
+    } as never)
+    setRuntimeReady(true)
+    configureWorkflowService({ getMainWindow: () => null })
+
+    await runWorkflowSchedulerTick(new Date('2026-05-15T12:00:00.000Z'))
+
+    assert.equal(prompts.length, 1)
+    assert.equal(getWorkflow(workflow.id)?.latestRunStatus, 'running')
+
+    await waitForCondition(() => getWorkflow(workflow.id)?.latestRunStatus === 'completed')
+
+    const detail = getWorkflow(workflow.id)
+    assert.equal(statusCalls, 1)
+    assert.equal(detail?.latestRunStatus, 'completed')
+    assert.equal(detail?.latestRunSummary, 'Workflow finished through status reconciliation.')
   })
 })
 

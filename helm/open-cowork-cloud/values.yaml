@@ -196,7 +196,7 @@ serviceAccount:
   create: false
   name: ""
   annotations: {}
-  automountServiceAccountToken: true
+  automountServiceAccountToken: false
 
 ingress:
   enabled: false

@@ -354,9 +354,16 @@ function assertReleaseWorkflowContract() {
     'pnpm ops:validate',
     'pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/verify-release-tag-signature.mjs',
+    'node scripts/verify-release-artifact-matrix.mjs',
   ]) {
     assertIncludes(releaseWorkflowPath, command)
   }
+
+  assertMatches(
+    releaseWorkflowPath,
+    / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
+    'release-policy checks out repository source before running the release artifact matrix script',
+  )
 
   assertOrder(releaseWorkflowPath, [
     'Build and publish cloud OCI staging image',
@@ -401,6 +408,8 @@ function assertReleaseWorkflowContract() {
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64: ${{ secrets.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 }}')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST=$manifest_path')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
+  assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-macos -type f')
+  assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-linux -type f')
   assertNotIncludes(releaseWorkflowPath, 'test:e2e:packaged:optional')
 }
 

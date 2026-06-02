@@ -401,6 +401,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Enforce macOS signing policy
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -425,16 +427,10 @@ jobs:
       - name: Verify release artifacts
         run: |
           signing_mode="${{ needs.build-macos.outputs.signing-mode }}"
-          test -d dist-artifacts/release-macos
-          test -d dist-artifacts/release-linux
-          find dist-artifacts/release-macos -type f \( -name '*.dmg' -o -name '*.zip' \) | grep -q .
-          find dist-artifacts/release-linux -type f \( -name '*.AppImage' -o -name '*.deb' \) | grep -q .
-          if [ "$signing_mode" = "signed" ]; then
-            test -s dist-artifacts/release-macos/latest-mac.yml
-          elif [ -e dist-artifacts/release-macos/latest-mac.yml ]; then
-            echo "::error::Unsigned macOS preview artifacts must not publish latest-mac.yml feed metadata."
-            exit 1
-          fi
+          node scripts/verify-release-artifact-matrix.mjs \
+            --root dist-artifacts \
+            --version "${GITHUB_REF_NAME#v}" \
+            --signing-mode "$signing_mode"
 
       - name: Enforce Linux signing policy
         env:

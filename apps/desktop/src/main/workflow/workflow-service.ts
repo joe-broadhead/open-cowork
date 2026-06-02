@@ -41,6 +41,7 @@ import { toIsoTimestamp } from '../task-run-utils.ts'
 import { log } from '../logger.ts'
 import { createKeyedPromiseChain } from '../promise-chain.ts'
 import { sdkErrorMessage } from '../sdk-error.ts'
+import { startSessionStatusReconciliation } from '../session-status-reconciler.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let schedulerTimer: NodeJS.Timeout | null = null
@@ -158,6 +159,14 @@ async function createWorkflowThread(input: {
     parts: [{ type: 'text', text: prompt }],
     agent: input.agent,
   }, { throwOnError: true })
+  if (input.kind === 'workflow_run') {
+    startSessionStatusReconciliation(session.id, {
+      getMainWindow: () => getMainWindow?.() ?? null,
+      onIdle: async (_win, reconciledSessionId) => {
+        await handleWorkflowSessionIdle(reconciledSessionId)
+      },
+    })
+  }
   return toRendererSession(record!)
 }
 

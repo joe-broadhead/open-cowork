@@ -57,6 +57,25 @@
         "src/**/*.ts"
       ]
     },
+    "apps/gateway": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "apps/standalone-gateway": {
+      "entry": [
+        "src/index.ts",
+        "src/main.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/shared": {
       "entry": [
         "src/index.ts"
@@ -73,6 +92,96 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.mjs"
+      ]
+    },
+    "packages/gateway-channel": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-cli": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-discord": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-email": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-signal": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-slack": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-telegram": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-webhook": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-provider-whatsapp": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/gateway-testing": {
+      "entry": [
+        "src/index.ts",
+        "src/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
       ]
     },
     "mcps/charts": {

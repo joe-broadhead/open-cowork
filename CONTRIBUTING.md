@@ -24,7 +24,7 @@ Bad changes usually:
 ## Development setup
 
 Requirements:
-- Node `>=22`
+- Node `>=22.12`
 - pnpm `>=10`
 - Python `>=3.11` for docs work
 
@@ -73,9 +73,10 @@ pnpm dev
   file, then falls back to `benchmarks/perf-baseline.json`. Refresh the
   baseline intentionally with `pnpm perf:baseline` after major environment
   or workload changes.
-- **Dependabot** is configured for weekly npm and GitHub Actions scans
-  (`.github/dependabot.yml`) with grouped dependency PRs so maintenance
-  stays reviewable instead of becoming a constant stream of tiny PRs.
+- **Dependabot** is configured for weekly npm and GitHub Actions scans plus
+  monthly docs Python and Docker base-image digest scans (`.github/dependabot.yml`),
+  with grouped dependency PRs so maintenance stays reviewable instead of
+  becoming a constant stream of tiny PRs.
 - **EditorConfig** is present at the repo root for consistent
   indentation and line endings across editors.
 
