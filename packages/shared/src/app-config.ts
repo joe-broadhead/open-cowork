@@ -236,6 +236,8 @@ export interface GatewayDeploymentConfig {
     adminToken?: string | null
     allowLoopbackOperatorBypass?: boolean
     maxRequestBodyBytes?: number
+    trustProxyHeaders?: boolean
+    trustedProxyCidrs?: string[]
   }
   mode?: GatewayDeploymentMode
   logging?: {

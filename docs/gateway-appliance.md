@@ -170,6 +170,9 @@ macOS and Mac mini:
 - Public reverse proxies must strip untrusted
   `x-open-cowork-gateway-admin-token` headers and either block operator
   endpoints or require the Gateway admin bearer token.
+- If Gateway is behind a reverse proxy and must use forwarded client IPs for
+  webhook abuse controls, set `OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS=true`
+  and restrict `OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS` to the proxy hops.
 - Route public `/webhooks/*` only for providers with provider-native signing or
   shared-secret verification enabled. Webhook auth is provider auth, not the
   Gateway operator token.

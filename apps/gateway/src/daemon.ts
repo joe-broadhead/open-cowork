@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
+import { resolveHttpClientSource } from '@open-cowork/shared'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
 import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText, resolveGatewayCloudConnection } from './config.js'
@@ -290,7 +291,7 @@ async function handleRequest(
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
     const providerId = decodeURIComponent(webhookMatch[1])
-    const source = webhookSource(req)
+    const source = webhookSource(req, config.server.trustProxyHeaders, config.server.trustedProxyCidrs)
     enforceGatewayWebhookLimit(webhookLimiter, `request:${source}:${providerId}`)
     enforceGatewayWebhookAuthBackoff(webhookLimiter, `auth:${source}:${providerId}`)
     const body = await readRequestBody(req, config.server.maxRequestBodyBytes)
@@ -366,8 +367,19 @@ function recordGatewayWebhookAuthFailure(limiter: GatewayWebhookRateLimiter | un
   })
 }
 
-function webhookSource(req: IncomingMessage) {
-  return req.socket.remoteAddress || 'unknown'
+function webhookSource(
+  req: IncomingMessage,
+  trustProxyHeaders = false,
+  trustedProxyCidrs: readonly string[] | null | undefined = null,
+) {
+  return resolveHttpClientSource({
+    socketAddress: req.socket.remoteAddress,
+    headers: req.headers,
+    policy: {
+      trustProxyHeaders,
+      trustedProxyCidrs,
+    },
+  })
 }
 
 function retryAfterSeconds(ms: number) {

@@ -704,7 +704,8 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_ALLOW_SELF_SERVICE_SIGNUP` | Explicitly allows first-login OIDC org membership creation. Keep disabled for invite-only managed deployments. |
 | `OPEN_COWORK_CLOUD_API_TOKEN_DEFAULT_TTL_MS` / `OPEN_COWORK_CLOUD_API_TOKEN_MAX_TTL_MS` | Default and maximum TTLs for desktop/gateway API tokens. Defaults are 90 days and 365 days. |
 | `OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES` | Comma-separated API token scopes operators allow admins to mint. Defaults to `desktop,gateway,admin,operator`; `worker-internal` is reserved for managed worker credential flows. |
-| `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS` | Allows `x-forwarded-for` for rate-limit attribution only when the deployment is behind a trusted proxy. |
+| `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS` | Allows `Forwarded`/`x-forwarded-for` for rate-limit attribution only when the request socket is in `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS`; if both headers are present they must resolve to the same client or the socket address is used. |
+| `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` | Comma-separated CIDR/address allowlist for trusted reverse proxies whose forwarded client headers may be used. Leave empty unless `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true`. |
 | `OPEN_COWORK_CLOUD_SERVICE_NAME` | Service name included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_SERVICE_VERSION` | Optional version string included in structured logs and OTLP resource attributes. |
 | `OPEN_COWORK_CLOUD_LOG_FORMAT` | `json`, `pretty`, or `silent`; defaults to JSON for cloud logs. |
@@ -752,6 +753,8 @@ Gateway variables:
 | `OPEN_COWORK_GATEWAY_PUBLIC_URL` | Public HTTPS gateway URL for channel webhook registration. Non-HTTPS and loopback values fail closed. |
 | `OPEN_COWORK_GATEWAY_INSTANCE_ID` | Optional stable gateway instance/shard id used as Cloud delivery claimant. Kubernetes sets it from the pod name. |
 | `OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES` | Maximum inbound webhook/body size. Bridge/email file limits default to this cap. |
+| `OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS` | Allows `Forwarded`/`x-forwarded-for` for webhook abuse controls only when the request socket is in `OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS`; if both headers are present they must resolve to the same client or the socket address is used. |
+| `OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS` | Comma-separated CIDR/address allowlist for reverse proxies whose forwarded client headers may be used. Leave empty unless `OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS=true`. |
 | `OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS` | Deadline for cloud HTTP API calls made by the gateway. |
 | `OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS` | Deadline for outbound bridge/webhook delivery and Slack API calls. |
 | `OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS` | Deadline for SMTP connection/read/write operations. |

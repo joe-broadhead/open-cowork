@@ -186,6 +186,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED: 'true',
     OPEN_COWORK_CLOUD_COOKIE_SECURE: 'false',
     OPEN_COWORK_CLOUD_PUBLIC_URL: 'https://cloud.example.test',
+    OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS: '127.0.0.0/8, ::1',
     OPEN_COWORK_CLOUD_DEPLOYMENT_TIER: 'private_beta',
   }), {
     deploymentTier: 'private_beta',
@@ -203,6 +204,7 @@ test('cloud bootstrap parses env options and role helpers', () => {
     cookieSecure: false,
     publicUrl: 'https://cloud.example.test',
     trustProxyHeaders: false,
+    trustedProxyCidrs: ['127.0.0.0/8', '::1'],
   })
 
   assert.equal(shouldRunCloudWeb('all-in-one'), true)

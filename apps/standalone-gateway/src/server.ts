@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { resolveHttpClientSource } from "@open-cowork/shared";
 
 import { renderStandaloneGatewayDashboard, renderStandaloneGatewayMetrics } from "./dashboard.js";
 import { runStandaloneGatewayDoctor } from "./doctor.js";
@@ -164,7 +165,7 @@ async function handleRequest(input: {
   }
   if (req.method === "POST" && url.pathname.startsWith("/webhooks/")) {
     const providerId = decodeURIComponent(url.pathname.slice("/webhooks/".length));
-    const source = webhookSource(req);
+    const source = webhookSource(req, input.config.server.trustProxyHeaders, input.config.server.trustedProxyCidrs);
     enforceWebhookLimit(webhookLimiter, `request:${source}:${providerId}`);
     enforceWebhookAuthBackoff(webhookLimiter, `auth:${source}:${providerId}`);
     const rawBody = await readBody(req);
@@ -213,8 +214,16 @@ function recordWebhookAuthFailure(limiter: WebhookRateLimiter, key: string): voi
   limiter.backoff(key, Date.now(), webhookAuthBackoffWindowMs, webhookAuthBackoffMaxFailures, webhookAuthBackoffMs);
 }
 
-function webhookSource(req: IncomingMessage): string {
-  return req.socket.remoteAddress || "unknown";
+function webhookSource(
+  req: IncomingMessage,
+  trustProxyHeaders = false,
+  trustedProxyCidrs: readonly string[] | null | undefined = null,
+): string {
+  return resolveHttpClientSource({
+    socketAddress: req.socket.remoteAddress,
+    headers: req.headers,
+    policy: { trustProxyHeaders, trustedProxyCidrs },
+  });
 }
 
 function retryAfterSeconds(ms: number): string {

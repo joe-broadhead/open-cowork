@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { isChannelProviderKind, normalizeChannelProviderIdentity, type ChannelProviderKind } from '@open-cowork/gateway-channel'
-import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode } from '@open-cowork/shared'
+import { jsonConfigCandidates, parseJsoncText, resolveGatewayProductMode, splitTrustedProxyCidrs } from '@open-cowork/shared'
 import type { GatewayDeploymentConfig, GatewayProductMode, PublicBrandingConfig } from '@open-cowork/shared'
 
 import {
@@ -35,6 +35,8 @@ export type GatewayConfig = {
     adminToken: string | null
     allowLoopbackOperatorBypass: boolean
     maxRequestBodyBytes: number
+    trustProxyHeaders: boolean
+    trustedProxyCidrs: string[]
   }
   mode: GatewayMode
   logging: {
@@ -147,6 +149,8 @@ export function resolveGatewayConfig(raw: GatewayRawConfig = {}, env: GatewayEnv
       adminToken: readNullableString(env.OPEN_COWORK_GATEWAY_ADMIN_TOKEN) ?? readNullableString(raw.server?.adminToken),
       allowLoopbackOperatorBypass: readBoolean(env.OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS, raw.server?.allowLoopbackOperatorBypass ?? false),
       maxRequestBodyBytes: serverMaxRequestBodyBytes,
+      trustProxyHeaders: readBoolean(env.OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS, raw.server?.trustProxyHeaders ?? false),
+      trustedProxyCidrs: splitTrustedProxyCidrs(env.OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS ?? raw.server?.trustedProxyCidrs),
     },
     mode,
     logging: {

@@ -59,6 +59,7 @@ cloud:
   cookieSecure: true
   publicUrl: ""
   trustProxyHeaders: false
+  trustedProxyCidrs: []
   branding:
     productName: Open Cowork Cloud
     shortName: OC

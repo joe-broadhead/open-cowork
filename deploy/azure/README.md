@@ -85,8 +85,9 @@ AKS secret-store CSI. The names below are runtime keys, not committed values:
 2. Confirm Azure PostgreSQL PITR, Blob versioning/lifecycle, Azure Monitor JSON
    logs, and OTLP export or collector wiring are enabled.
 3. Route HTTPS through Container Apps ingress, Application Gateway, Front Door,
-   or AKS ingress and set `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` only
-   behind trusted Azure forwarding headers.
+   or AKS ingress and set `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` plus
+   `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only for trusted Azure forwarding
+   hops.
 4. Run the shared gates:
 
    ```bash

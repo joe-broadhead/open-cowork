@@ -117,6 +117,8 @@ function staticComposeChecks() {
   assertIncludes('docker-compose.cloud.split.yml', 'OPEN_COWORK_CLOUD_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'open-cowork-gateway:')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_CLOUD_IMAGE')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS')
+  assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_IMAGE')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_ENABLE_FAKE_PROVIDER')
   assertIncludes('docker-compose.cloud-gateway.yml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
@@ -263,6 +265,7 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_SIGNUP_MODE')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_ALLOW_UNSIGNED')
   assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_API_TOKEN_ALLOWED_SCOPES')
+  assertIncludes('helm/open-cowork-cloud/templates/configmap.yaml', 'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS')
   assertIncludes('helm/open-cowork-cloud/templates/secret.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET')
   assertIncludes('helm/open-cowork-cloud/templates/secret.yaml', 'OPEN_COWORK_CLOUD_HEADER_AUTH_SECRET_REF')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'terminationGracePeriodSeconds')
@@ -271,6 +274,8 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'publicUrl: ""')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'allowLoopbackOperatorBypass: false')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'maxRequestBodyBytes: 1048576')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'trustProxyHeaders: false')
+  assertIncludes('helm/open-cowork-gateway/values.yaml', 'trustedProxyCidrs: []')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'experimentalDistributedOwnership: false')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_PATH')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_CONFIG_DIR')
@@ -278,6 +283,8 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_ALLOW_LOOPBACK_OPERATOR_BYPASS')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_MAX_REQUEST_BODY_BYTES')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS')
+  assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_CLOUD_REQUEST_TIMEOUT_MS')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_TIMEOUT_MS')
   assertIncludes('helm/open-cowork-gateway/templates/configmap.yaml', 'OPEN_COWORK_GATEWAY_SMTP_TIMEOUT_MS')
@@ -1131,6 +1138,8 @@ function validateSetupHealthCenter() {
     'mode: 0o600',
     'Refusing to print secret arguments',
     'must point at loopback or private network OpenCode',
+    'OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false',
+    'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS=',
     'pnpm --filter @open-cowork/standalone-gateway doctor',
     'pnpm deploy:standalone-gateway:smoke',
   ]) {
@@ -1522,6 +1531,7 @@ function validateDocs() {
       'ECS/Fargate',
       'ACCOUNT.dkr.ecr.REGION.amazonaws.com/open-cowork-cloud',
       'aws-sm://open-cowork/cloud-secret-key?region=REGION',
+      'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     ],
     'deploy/azure/README.md': [
       'Azure Database for PostgreSQL',
@@ -1531,6 +1541,7 @@ function validateDocs() {
       'Azure Container Apps',
       'REGISTRY.azurecr.io/open-cowork-cloud',
       'azure-kv://VAULT_NAME/secrets/open-cowork-cloud-key/VERSION',
+      'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     ],
     'deploy/digitalocean/README.md': [
       'Managed PostgreSQL',
@@ -1539,6 +1550,7 @@ function validateDocs() {
       'App Platform',
       'registry.digitalocean.com/REGISTRY/open-cowork-cloud',
       'cloud.objectStore.kind=digitalocean-spaces',
+      'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     ],
     'deploy/kubernetes/README.md': [
       'Generic Kubernetes Recipe',
@@ -1547,6 +1559,7 @@ function validateDocs() {
       'open-cowork-cloud-secrets',
       'open-cowork-gateway-secrets',
       'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
+      'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     ],
     'deploy/gateway-appliance/README.md': [
       'VPS/Local Compose Recipe',
@@ -1632,7 +1645,14 @@ function validateDocs() {
   }
 
   const gatewaySetup = read('scripts/gateway-appliance-setup.mjs')
-  for (const phrase of ['--mode remote', '--mode local', '--telegram-mode polling|webhook', 'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL']) {
+  for (const phrase of [
+    '--mode remote',
+    '--mode local',
+    '--telegram-mode polling|webhook',
+    'OPEN_COWORK_GATEWAY_TELEGRAM_PUBLIC_URL',
+    'OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS=false',
+    'OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS=',
+  ]) {
     if (!gatewaySetup.includes(phrase)) {
       throw new Error(`scripts/gateway-appliance-setup.mjs must include ${phrase}`)
     }
@@ -1755,6 +1775,7 @@ function validateGcpReference() {
     'kubectl apply -f deploy/gcp/gke/external-secret.example.yaml',
     'kubectl apply -f deploy/gcp/gke/managed-certificate.example.yaml',
     'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true',
+    'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS',
     'Rollback order',
     'GCP configuration is adapter wiring only',
   ]) {
@@ -1771,6 +1792,9 @@ function validateGcpReference() {
     'mode: oidc',
     'publicUrl: https://cowork.example.com',
     'trustProxyHeaders: true',
+    'trustedProxyCidrs:',
+    '130.211.0.0/22',
+    '35.191.0.0/16',
     'kind: gcs',
     'enabled: true',
     'replicas: 2',

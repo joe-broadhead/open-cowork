@@ -118,6 +118,25 @@ test('gateway config separates product mode from deployment mode', () => {
   }, cloudEnv), /Unsupported gateway productMode/)
 })
 
+test('gateway config resolves trusted proxy policy from config and env', () => {
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+      trustProxyHeaders: true,
+      trustedProxyCidrs: ['10.0.0.0/8'],
+    },
+    providers: [{
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS: '127.0.0.0/8, ::1',
+  })
+
+  assert.equal(config.server.trustProxyHeaders, true)
+  assert.deepEqual(config.server.trustedProxyCidrs, ['127.0.0.0/8', '::1'])
+})
+
 test('gateway config loads explicit provider credentials and redacts secrets', () => {
   const config = resolveGatewayConfig({
     cloud: {

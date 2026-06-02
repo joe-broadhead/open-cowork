@@ -28,6 +28,7 @@ data:
   OPEN_COWORK_CLOUD_COOKIE_SECURE: {{ .Values.cloud.cookieSecure | quote }}
   OPEN_COWORK_CLOUD_PUBLIC_URL: {{ .Values.cloud.publicUrl | quote }}
   OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS: {{ .Values.cloud.trustProxyHeaders | quote }}
+  OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS: {{ join "," .Values.cloud.trustedProxyCidrs | quote }}
   OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: {{ .Values.cloud.branding | toJson | quote }}
   OPEN_COWORK_CLOUD_SERVICE_NAME: {{ .Values.cloud.observability.serviceName | quote }}
   OPEN_COWORK_CLOUD_SERVICE_VERSION: {{ .Values.cloud.observability.serviceVersion | quote }}

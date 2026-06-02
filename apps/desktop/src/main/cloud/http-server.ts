@@ -5,6 +5,7 @@ import {
   emptySessionImportItemCounts,
   isCloudSessionEventType,
   normalizeCloudProjectSource,
+  resolveHttpClientSource,
   type CloudSessionEventType,
   type CloudProjectSourceInput,
   type PublicBrandingConfig,
@@ -101,6 +102,7 @@ export type CloudHttpServerOptions = {
   sseReplayHub?: CloudSseReplayHub
   sseStreamRegistry?: CloudSseStreamRegistry
   trustProxyHeaders?: boolean
+  trustedProxyCidrs?: readonly string[] | null
   readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
 }
 
@@ -564,15 +566,16 @@ function workflowScopeKey(workflowId: string) {
   return createHash('sha256').update(workflowId || 'unknown-workflow').digest('hex').slice(0, 16)
 }
 
-function webhookSource(req: IncomingMessage) {
-  return req.socket.remoteAddress || 'unknown'
-}
-
-function requestSource(req: IncomingMessage, trustProxyHeaders = false) {
-  const forwardedFor = trustProxyHeaders
-    ? firstHeader(req.headers['x-forwarded-for']).split(',')[0]?.trim()
-    : ''
-  return forwardedFor || req.socket.remoteAddress || 'unknown'
+function requestSource(
+  req: IncomingMessage,
+  trustProxyHeaders = false,
+  trustedProxyCidrs: readonly string[] | null | undefined = null,
+) {
+  return resolveHttpClientSource({
+    socketAddress: req.socket.remoteAddress,
+    headers: req.headers,
+    policy: { trustProxyHeaders, trustedProxyCidrs },
+  })
 }
 
 function requestCorsOrigin(req: IncomingMessage, configuredOrigin: string | null | undefined) {
@@ -590,8 +593,12 @@ function requestHeaderRecord(req: IncomingMessage): Record<string, string | unde
   return headers
 }
 
-function authFailureScopes(req: IncomingMessage, trustProxyHeaders = false) {
-  const source = requestSource(req, trustProxyHeaders)
+function authFailureScopes(
+  req: IncomingMessage,
+  trustProxyHeaders = false,
+  trustedProxyCidrs: readonly string[] | null | undefined = null,
+) {
+  const source = requestSource(req, trustProxyHeaders, trustedProxyCidrs)
   const authorization = firstHeader(req.headers.authorization).trim()
   const scopes = [`ip:${source}`]
   if (!authorization) return scopes
@@ -706,7 +713,7 @@ async function handleCloudWorkflowWebhook(
     return
   }
 
-  const source = webhookSource(req)
+  const source = requestSource(req, options.trustProxyHeaders, options.trustedProxyCidrs)
   const startedAt = Date.now()
   const workflowId = decodeURIComponent(match[1] || '')
   const scope = webhookAuthScope(source, workflowId)
@@ -768,7 +775,7 @@ async function handleBillingWebhook(
     return
   }
 
-  const source = `billing:${requestSource(req, options.trustProxyHeaders)}`
+  const source = `billing:${requestSource(req, options.trustProxyHeaders, options.trustedProxyCidrs)}`
   const startedAt = Date.now()
   const securityStore = options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore()
   let replayClaim: Awaited<ReturnType<WorkflowWebhookSecurityStore['claimSignature']>> | null = null
@@ -1784,7 +1791,7 @@ export class CloudHttpServer {
   private async enforceIpRateLimit(req: IncomingMessage) {
     await this.options.service.claimHttpRateLimit({
       scope: 'ip',
-      source: requestSource(req, this.options.trustProxyHeaders),
+      source: requestSource(req, this.options.trustProxyHeaders, this.options.trustedProxyCidrs),
     })
   }
 
@@ -1802,8 +1809,8 @@ export class CloudHttpServer {
   }
 
   private async resolvePrincipal(req: IncomingMessage, auth: CloudAuthResolver) {
-    const source = requestSource(req, this.options.trustProxyHeaders)
-    const scopes = authFailureScopes(req, this.options.trustProxyHeaders)
+    const source = requestSource(req, this.options.trustProxyHeaders, this.options.trustedProxyCidrs)
+    const scopes = authFailureScopes(req, this.options.trustProxyHeaders, this.options.trustedProxyCidrs)
     await Promise.all(scopes.map((scope) => (
       this.options.service.checkCloudAuthBackoff({ scope, source })
     )))

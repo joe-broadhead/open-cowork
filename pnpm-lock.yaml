@@ -243,6 +243,9 @@ importers:
       '@open-cowork/gateway-testing':
         specifier: workspace:*
         version: link:../../packages/gateway-testing
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@opencode-ai/sdk':
         specifier: 1.15.5
         version: 1.15.5

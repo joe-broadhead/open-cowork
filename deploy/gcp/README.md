@@ -188,9 +188,11 @@ they must not be injected as process env vars.
     ```
 
     The reference GKE values disable plain HTTP on the public Ingress and set
-    `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` so auth backoff and request
-    auditing use the client IP forwarded by the GCP load balancer. Keep those
-    settings enabled for public GCE Ingress deployments.
+    `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` with
+    `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` set to the GCE Ingress/load
+    balancer proxy ranges so auth backoff and request auditing use the client
+    IP forwarded by the GCP load balancer. Keep those settings enabled for
+    public GCE Ingress deployments.
 
 12. Run the GCP infra smoke after Cloud Storage and Secret Manager are wired:
 

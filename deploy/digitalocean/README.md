@@ -82,8 +82,8 @@ committed values:
 2. Confirm Managed PostgreSQL backups, Spaces versioning/lifecycle, JSON logs,
    and OTLP export or collector wiring are enabled.
 3. Route HTTPS through App Platform or DOKS ingress and set
-   `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` only behind trusted forwarding
-   headers.
+   `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` plus
+   `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only for trusted forwarding hops.
 4. Run the shared gates:
 
    ```bash

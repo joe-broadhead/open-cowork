@@ -40,6 +40,17 @@ test("standalone gateway config rejects public OpenCode and placeholder admin se
   }), /placeholder/);
 });
 
+test("standalone gateway config resolves trusted proxy policy", () => {
+  const config = loadStandaloneGatewayConfig({
+    ...baseEnv,
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS: "true",
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS: "127.0.0.0/8, ::1",
+  });
+
+  assert.equal(config.server.trustProxyHeaders, true);
+  assert.deepEqual(config.server.trustedProxyCidrs, ["127.0.0.0/8", "::1"]);
+});
+
 test("standalone gateway supports multiple provider instances without Cloud", () => {
   const config = loadStandaloneGatewayConfig({
     ...baseEnv,

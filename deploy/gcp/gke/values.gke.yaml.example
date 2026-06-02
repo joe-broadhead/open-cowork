@@ -30,6 +30,11 @@ cloud:
   cookieSecure: true
   publicUrl: https://cowork.example.com
   trustProxyHeaders: true
+  # Replace with the exact GCE Ingress/load-balancer proxy source ranges for
+  # your cluster; do not trust broad private-network ranges.
+  trustedProxyCidrs:
+    - 130.211.0.0/22
+    - 35.191.0.0/16
   branding:
     productName: Open Cowork Cloud
     shortName: OC

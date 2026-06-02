@@ -156,7 +156,8 @@ Create `open-cowork-gateway-secrets` separately:
 3. Install Cloud, wait for `web`, `worker`, and `scheduler` readiness, then
    install Gateway.
 4. Route HTTPS traffic and keep `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true`
-   only behind a trusted ingress or reverse proxy.
+   plus `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only behind trusted ingress or
+   reverse proxy hops.
 5. Run the shared deployment gates:
 
    ```bash

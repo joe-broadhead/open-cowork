@@ -54,6 +54,10 @@ pnpm --filter @open-cowork/standalone-gateway start
 - `OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL` must point to durable Postgres.
 - Dashboard access requires `OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN`.
 - Provider webhook ingress must use shared-secret/HMAC verification.
+- If webhook ingress is reverse-proxied and forwarded client IPs are needed for
+  abuse controls, set `OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=true`
+  with `OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS` restricted to those
+  proxy hops.
 - Backups must cover Postgres and artifact storage.
 - Retention windows must be explicit for sessions, artifacts, and audit events.
 
