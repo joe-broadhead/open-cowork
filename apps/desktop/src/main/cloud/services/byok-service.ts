@@ -4,6 +4,7 @@ import type {
   ByokSecretStore,
 } from '../byok-secret-store.ts'
 import { CloudServiceError } from '../cloud-service-error.ts'
+import { principalHasOrgAdminRole, principalHasPrivilegedTokenScope } from '../principal-access.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
 export type ByokEntitlementVerdict = {
@@ -56,14 +57,10 @@ export type CloudByokServiceOptions = {
   }) => Promise<void> | void
 }
 
-function hasAdminTokenScope(principal: CloudPrincipal) {
-  return principal.tokenScopes?.includes('admin') || false
-}
-
 function principalCanManageByok(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasAdminTokenScope(principal)
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
+  return principalHasOrgAdminRole(principal)
 }
 
 function normalizeByokProviderIdForPolicy(value: string) {

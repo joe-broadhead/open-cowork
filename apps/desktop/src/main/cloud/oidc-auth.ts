@@ -235,9 +235,9 @@ function validateClaims(
   if (input.nonce && claims.nonce !== input.nonce) {
     unauthorized('Cloud authentication token nonce is invalid.')
   }
-  const email = normalizeEmail(claims.email || claims.preferred_username)
+  const email = normalizeEmail(claims.email)
   if (!email) unauthorized('Cloud authentication token email is missing.')
-  if (claims.email_verified === false) unauthorized('Cloud authentication token email is not verified.')
+  if (claims.email_verified !== true) unauthorized('Cloud authentication token email is not verified.')
   const allowedDomains = input.allowedEmailDomains.map((domain) => domain.toLowerCase())
   if (allowedDomains.length > 0 && !allowedDomains.includes(emailDomain(email))) {
     unauthorized('Cloud authentication token email domain is not allowed.')
