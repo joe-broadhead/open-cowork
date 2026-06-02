@@ -61,3 +61,15 @@ test('compareReports fails when a baseline benchmark disappears from the current
     'engine.stream.mixed is present in the baseline but missing from the current report',
   ])
 })
+
+test('compareReports fails when a current benchmark is missing from the baseline', () => {
+  const baseline = {
+    ...makeReport(1.5, 0.94),
+    benchmarks: [],
+  }
+  const current = makeReport(1.5, 0.94)
+
+  assert.deepEqual(compareReports(current, baseline), [
+    'engine.stream.mixed is present in the current report but missing from the baseline',
+  ])
+})

@@ -2024,6 +2024,8 @@ function validateReleaseSupplyChain() {
     'dist-artifacts/release-oci-supply-chain/*',
     'open-cowork-cloud.image.sbom.cdx.json',
     'open-cowork-gateway.image.scan.grype.json',
+    "jq -er '.versionTag'",
+    'version_tag_digest',
   ]) {
     assertIncludes('.github/workflows/release.yml', phrase)
   }
@@ -2031,8 +2033,13 @@ function validateReleaseSupplyChain() {
   const scanIndex = releaseWorkflow.indexOf('name: Scan cloud image vulnerabilities')
   const attestIndex = releaseWorkflow.indexOf('name: Attest cloud image provenance')
   const finalTagIndex = releaseWorkflow.indexOf('name: Publish final OCI release tags')
+  const publishJobIndex = releaseWorkflow.indexOf('\n  publish:')
+  const verifyReleaseArtifactsIndex = releaseWorkflow.indexOf('name: Verify OCI supply-chain release artifacts')
   if (scanIndex < 0 || attestIndex < 0 || finalTagIndex < 0 || finalTagIndex < attestIndex || finalTagIndex < scanIndex) {
     throw new Error('release workflow must publish final OCI tags only after image scan and attestation steps')
+  }
+  if (publishJobIndex < 0 || verifyReleaseArtifactsIndex < 0 || finalTagIndex < publishJobIndex || finalTagIndex < verifyReleaseArtifactsIndex) {
+    throw new Error('release workflow must publish final OCI tags from the final publish job after release artifact validation')
   }
   if (releaseWorkflow.includes('docker push "${image}:${GITHUB_REF_NAME}"')) {
     throw new Error('release workflow must not push final OCI release tags before supply-chain evidence succeeds')

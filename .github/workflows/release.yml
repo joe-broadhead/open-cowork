@@ -646,24 +646,10 @@ jobs:
           sbom-path: dist-oci/open-cowork-gateway.image.sbom.cdx.json
           push-to-registry: true
 
-      - name: Publish final OCI release tags
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          docker buildx imagetools create --prefer-index=false \
-            -t "${{ steps.cloud-meta.outputs.image }}:${GITHUB_REF_NAME}" \
-            -t "${{ steps.cloud-meta.outputs.image }}:${version}" \
-            "${{ steps.cloud-meta.outputs.digest_ref }}"
-          docker buildx imagetools create --prefer-index=false \
-            -t "${{ steps.gateway-meta.outputs.image }}:${GITHUB_REF_NAME}" \
-            -t "${{ steps.gateway-meta.outputs.image }}:${version}" \
-            "${{ steps.gateway-meta.outputs.digest_ref }}"
-
       - name: Verify OCI supply-chain evidence
         run: |
-          cloud_tag_digest="$(docker buildx imagetools inspect "${{ steps.cloud-meta.outputs.image }}:${GITHUB_REF_NAME}" --format '{{.Manifest.Digest}}')"
-          gateway_tag_digest="$(docker buildx imagetools inspect "${{ steps.gateway-meta.outputs.image }}:${GITHUB_REF_NAME}" --format '{{.Manifest.Digest}}')"
-          test "$cloud_tag_digest" = "${{ steps.cloud-meta.outputs.digest }}"
-          test "$gateway_tag_digest" = "${{ steps.gateway-meta.outputs.digest }}"
+          docker buildx imagetools inspect "${{ steps.cloud-meta.outputs.digest_ref }}" > /dev/null
+          docker buildx imagetools inspect "${{ steps.gateway-meta.outputs.digest_ref }}" > /dev/null
           jq empty dist-oci/open-cowork-cloud.image.json
           jq empty dist-oci/open-cowork-gateway.image.json
           jq empty dist-oci/open-cowork-cloud.image.sbom.cdx.json
@@ -694,6 +680,7 @@ jobs:
       name: release-publish
     permissions:
       contents: write
+      packages: write
       attestations: write
       id-token: write
     steps:
@@ -850,6 +837,35 @@ jobs:
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: dist-artifacts/release-macos/latest-mac.yml
+
+      - name: Log in to GHCR for final OCI tag promotion
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Publish final OCI release tags
+        run: |
+          for component in open-cowork-cloud open-cowork-gateway; do
+            image_json="dist-artifacts/release-oci-supply-chain/${component}.image.json"
+            image="$(jq -er '.image' "$image_json")"
+            tag="$(jq -er '.tag' "$image_json")"
+            version_tag="$(jq -er '.versionTag' "$image_json")"
+            digest="$(jq -er '.digest' "$image_json")"
+            digest_ref="$(jq -er '.digestRef' "$image_json")"
+            test -n "$image"
+            test -n "$tag"
+            test -n "$version_tag"
+            test -n "$digest"
+            test -n "$digest_ref"
+            docker buildx imagetools create --prefer-index=false \
+              -t "$tag" \
+              -t "$version_tag" \
+              "$digest_ref"
+            tag_digest="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+            version_tag_digest="$(docker buildx imagetools inspect "$version_tag" --format '{{.Manifest.Digest}}')"
+            test "$tag_digest" = "$digest"
+            test "$version_tag_digest" = "$digest"
+          done
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0

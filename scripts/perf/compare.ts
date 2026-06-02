@@ -42,7 +42,10 @@ export function compareReports(current: BenchmarkReport, baseline: BenchmarkRepo
 
   for (const currentEntry of current.benchmarks) {
     const baselineEntry = baselineByName.get(currentEntry.name)
-    if (!baselineEntry) continue
+    if (!baselineEntry) {
+      failures.push(`${currentEntry.name} is present in the current report but missing from the baseline`)
+      continue
+    }
 
     const avgLimit = round(Math.max(
       baselineEntry.avgMs * avgMultiplier,
