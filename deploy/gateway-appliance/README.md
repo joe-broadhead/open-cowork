@@ -90,6 +90,12 @@ OPEN_COWORK_CONTINUATION_SMOKE_CLOUD_URL=https://cowork.example.com \
 OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
 OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
 pnpm deploy:continuation:smoke
+
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:smoke:strict
 ```
 
 For local all-in-one smoke checks, use localhost URLs and keep

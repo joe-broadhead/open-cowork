@@ -1101,6 +1101,7 @@ function validateSetupHealthCenter() {
     'gateway:setup',
     'deploy:standalone-gateway:smoke',
     'deploy:gateway:smoke',
+    'deploy:smoke:strict',
     'deploy:validate',
     'ops:validate',
   ]) {
@@ -1578,6 +1579,7 @@ function validateDocs() {
       'provider-config only',
       'pnpm deploy:validate',
       'pnpm deploy:smoke',
+      'pnpm deploy:smoke:strict',
       'pnpm deploy:gateway:smoke',
       'pnpm deploy:continuation:smoke',
       ...providerPhrases,
@@ -1743,6 +1745,7 @@ function validateGcpReference() {
     'scripts/desktop-cloud-sync-smoke.mjs',
     'scripts/gateway-cloud-smoke.mjs',
     'scripts/cloud-continuation-smoke.mjs',
+    'scripts/strict-deployment-smoke.mjs',
   ]
   for (const path of requiredGcpFiles) {
     if (!existsSync(path)) {
@@ -1854,6 +1857,11 @@ function validateGcpReference() {
     'OPEN_COWORK_GCP_SQL_INSTANCE',
     'OPEN_COWORK_GCP_SKIP_RESTORE_SMOKE',
     'point-in-time recovery',
+    'OPEN_COWORK_SMOKE_ADMIN_TOKEN',
+    'OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN',
+    'pnpm deploy:smoke:strict',
+    'worker heartbeat visibility',
+    'token revocation rejection',
   ]) {
     if (!gcpSmokeDocs.includes(phrase)) {
       throw new Error(`deploy/gcp/smoke/README.md must include ${phrase}`)
@@ -1957,6 +1965,22 @@ function validateGcpReference() {
   ]) {
     if (!continuationSmoke.includes(phrase)) {
       throw new Error(`scripts/cloud-continuation-smoke.mjs must include ${phrase}`)
+    }
+  }
+
+  const strictSmoke = read('scripts/strict-deployment-smoke.mjs')
+  for (const phrase of [
+    'OPEN_COWORK_SMOKE_ADMIN_TOKEN',
+    'OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN',
+    'OPEN_COWORK_DESKTOP_SMOKE_REQUIRE_REVOCATION',
+    'OPEN_COWORK_GATEWAY_SMOKE_REQUIRE_MANAGED',
+    'OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION',
+    'cloud worker heartbeats',
+    'results.tokenRevocation.rejected',
+    'tokens?.revoked',
+  ]) {
+    if (!strictSmoke.includes(phrase)) {
+      throw new Error(`scripts/strict-deployment-smoke.mjs must include ${phrase}`)
     }
   }
 }
@@ -2070,11 +2094,15 @@ function validateReleaseSupplyChain() {
   if (!packageJson.scripts?.['deploy:soak:strict']?.includes('--strict')) {
     throw new Error('package.json deploy:soak:strict must run with --strict')
   }
+  if (packageJson.scripts?.['deploy:smoke:strict'] !== 'node scripts/strict-deployment-smoke.mjs') {
+    throw new Error('package.json deploy:smoke:strict must run the strict deployment smoke wrapper')
+  }
 
   for (const phrase of [
     'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm deploy:validate -- --require-tools',
+    'pnpm deploy:smoke:strict',
     'pnpm deploy:load:strict',
     'pnpm deploy:soak:strict',
     'GHCR Cloud and Gateway images have immutable digest metadata',

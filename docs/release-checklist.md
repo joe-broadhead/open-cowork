@@ -36,6 +36,8 @@ and linked from the release Go/No-Go report.
 - [ ] `pnpm deploy:validate -- --require-tools` has passed in an environment
       with Docker and Helm installed; static fallback output is not release
       evidence.
+- [ ] `pnpm deploy:smoke:strict` has passed against the production-candidate
+      Cloud and managed Gateway URLs with admin/operator tokens.
 - [ ] `pnpm deploy:launch:validate`
 - [ ] `pnpm deploy:launch:evidence:validate`
 - [ ] `pnpm deploy:promotion:validate -- --tier local-self-host-beta`

@@ -542,8 +542,25 @@ pnpm deploy:smoke
 The smoke script validates cloud `/healthz`/`/livez`, the Cloud Web Workbench at `GET /`,
 workbench CSP/bootstrap markers, cloud API bootstrap endpoint reachability,
 gateway `/health`, and gateway `/ready`. Operator mode also checks cloud
-runtime/heartbeat/metrics endpoints and gateway metrics when tokens are
-provided.
+runtime/heartbeat/metrics endpoints and gateway metrics, and now fails closed
+unless the required operator tokens are present.
+
+For production release evidence, use the strict wrapper:
+
+```bash
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:smoke:strict
+```
+
+Strict smoke requires HTTPS for non-loopback URLs, authenticated Cloud and
+Gateway operator checks, Cloud runtime status, worker heartbeat visibility,
+Desktop/Web mutation coverage with token revocation rejection, managed Gateway
+health/readiness plus operator coverage, Gateway mutation/retry/dead-letter
+coverage with token revocation rejection, and Continuation rich projection with
+all ephemeral tokens revoked.
 
 ## Provider Recipe Contract
 

@@ -147,6 +147,7 @@ test('contributor setup docs and dependency update governance match enforced eng
 test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:validate'), 'node scripts/validate-deployment-configs.mjs')
   assert.equal(requireScript('deploy:smoke'), 'node scripts/smoke-deployment.mjs')
+  assert.equal(requireScript('deploy:smoke:strict'), 'node scripts/strict-deployment-smoke.mjs')
   assert.deepEqual(splitScriptSteps(requireScript('deploy:desktop:smoke')), [
     'pnpm build:shared',
     'node --no-warnings --experimental-strip-types scripts/desktop-cloud-sync-smoke.mjs',

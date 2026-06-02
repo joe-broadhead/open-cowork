@@ -20,16 +20,59 @@ for (let index = 2; index < process.argv.length; index += 1) {
 
 const cloudUrl = normalizeUrl(args.get('cloud-url') ?? process.env.OPEN_COWORK_SMOKE_CLOUD_URL ?? 'http://127.0.0.1:8787')
 const gatewayUrl = normalizeUrl(args.get('gateway-url') ?? process.env.OPEN_COWORK_SMOKE_GATEWAY_URL ?? 'http://127.0.0.1:8790')
-const cloudToken = args.get('cloud-token') ?? process.env.OPEN_COWORK_SMOKE_CLOUD_TOKEN ?? ''
+const cloudToken =
+  args.get('cloud-token') ?? process.env.OPEN_COWORK_SMOKE_CLOUD_TOKEN ?? process.env.OPEN_COWORK_SMOKE_ADMIN_TOKEN ?? ''
 const gatewayAdminToken =
   args.get('gateway-admin-token') ?? process.env.OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN ?? ''
+const strict = args.has('strict') || boolEnv('OPEN_COWORK_SMOKE_STRICT')
 const skipCloud = args.has('skip-cloud') || process.env.OPEN_COWORK_SMOKE_SKIP_CLOUD === 'true'
 const skipGateway = args.has('skip-gateway') || process.env.OPEN_COWORK_SMOKE_SKIP_GATEWAY === 'true'
 const includeOperatorChecks =
-  args.has('operator') || process.env.OPEN_COWORK_SMOKE_OPERATOR_CHECKS === 'true'
+  strict || args.has('operator') || boolEnv('OPEN_COWORK_SMOKE_OPERATOR_CHECKS')
 
 function normalizeUrl(value) {
   return value.replace(/\/+$/, '')
+}
+
+function boolEnv(name) {
+  const value = (process.env[name] || '').trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
+function assertStrictUrl(name, raw) {
+  let parsed
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw new Error(`Strict deployment smoke ${name} must be a valid URL.`)
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error(`Strict deployment smoke ${name} must use HTTP or HTTPS.`)
+  }
+  const hostname = parsed.hostname.toLowerCase()
+  const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  if (parsed.protocol !== 'https:' && !loopback) {
+    throw new Error(`Strict deployment smoke ${name} must use HTTPS unless it points at loopback.`)
+  }
+}
+
+function validateSmokeMode() {
+  if (strict) {
+    if (skipCloud) throw new Error('Strict deployment smoke does not allow --skip-cloud or OPEN_COWORK_SMOKE_SKIP_CLOUD=true.')
+    if (skipGateway) throw new Error('Strict deployment smoke does not allow --skip-gateway or OPEN_COWORK_SMOKE_SKIP_GATEWAY=true.')
+    if (!cloudToken) throw new Error('Strict deployment smoke requires OPEN_COWORK_SMOKE_CLOUD_TOKEN, OPEN_COWORK_SMOKE_ADMIN_TOKEN, or --cloud-token.')
+    if (!gatewayAdminToken) throw new Error('Strict deployment smoke requires OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN or --gateway-admin-token.')
+    assertStrictUrl('Cloud URL', cloudUrl)
+    assertStrictUrl('Gateway URL', gatewayUrl)
+  }
+
+  if (includeOperatorChecks && !skipCloud && !cloudToken) {
+    throw new Error('Operator deployment smoke requires OPEN_COWORK_SMOKE_CLOUD_TOKEN, OPEN_COWORK_SMOKE_ADMIN_TOKEN, or --cloud-token.')
+  }
+
+  if (includeOperatorChecks && !skipGateway && !gatewayAdminToken) {
+    throw new Error('Operator deployment smoke requires OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN or --gateway-admin-token.')
+  }
 }
 
 async function checkJson(url, options = {}) {
@@ -134,6 +177,8 @@ async function checkHtml(url, options = {}) {
 }
 
 async function main() {
+  validateSmokeMode()
+
   const results = []
   if (!skipCloud) {
     results.push({ check: 'cloud health', url: `${cloudUrl}/healthz`, result: await checkJson(`${cloudUrl}/healthz`) })
@@ -192,7 +237,7 @@ async function main() {
       url: `${gatewayUrl}/ready`,
       result: await checkJson(`${gatewayUrl}/ready`),
     })
-    if (includeOperatorChecks && gatewayAdminToken) {
+    if (includeOperatorChecks) {
       results.push({
         check: 'gateway metrics',
         url: `${gatewayUrl}/metrics`,
@@ -204,7 +249,7 @@ async function main() {
     }
   }
 
-  process.stdout.write(`${JSON.stringify({ ok: true, results }, null, 2)}\n`)
+  process.stdout.write(`${JSON.stringify({ ok: true, strict, results }, null, 2)}\n`)
 }
 
 main().catch((error) => {
