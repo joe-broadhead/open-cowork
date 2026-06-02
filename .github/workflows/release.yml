@@ -364,7 +364,7 @@ jobs:
       - name: Install Linux packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libarchive-tools rpm
+          sudo apt-get install -y libarchive-tools rpm xvfb
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -379,6 +379,15 @@ jobs:
           APP_ID: com.opencowork.desktop
           APP_ARTIFACT_PREFIX: Open-Cowork
           APP_MAINTAINER: ${{ vars.APP_MAINTAINER || 'Open Cowork Maintainers <joe-broadhead@users.noreply.github.com>' }}
+
+      - name: Resolve Linux packaged executable
+        id: linux-packaged-executable
+        run: echo "path=$(node scripts/find-linux-packaged-executable.mjs)" >> "$GITHUB_OUTPUT"
+
+      - name: Run Linux packaged desktop smoke test
+        run: xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged
+        env:
+          OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

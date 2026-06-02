@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `a7120994ea3cf00e1f5339813a8fbb5e1e715ffe`.
+  `075bb11f8c07710be93c5e6d9853ca40d5cc812d`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -106,6 +106,10 @@ The remaining work is concentrated in two areas:
   function, and branch thresholds, and now also fails if LCOV stops
   representing at least 90% of the configured production/shipped source
   inventory for those suites.
+- Linux release artifacts now run the same packaged desktop smoke gate as CI:
+  the release workflow resolves the packaged Linux executable with the shared
+  resolver script, launches the packaged app under `xvfb`, and only uploads
+  Linux release artifacts after that smoke passes.
 
 ## High Priority
 
@@ -113,8 +117,6 @@ No open high-priority findings remain after the current audit remediations.
 
 ## Medium Priority
 
-- Linux release artifacts should run the same packaged smoke validation in the
-  release workflow that CI already runs for Linux packaged builds.
 - Production deployment smoke should have a strict authenticated mode requiring
   Cloud and Gateway tokens, operator checks, mutation flow coverage, token
   revocation, runtime status, and worker heartbeat visibility.

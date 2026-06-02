@@ -4,7 +4,7 @@ This checklist is intended for the first public tagged releases and later releas
 
 Reference workflows in the repository root:
 
-- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged + packaged smoke validation, macOS/Linux packaging validation.
+- [`.github/workflows/ci.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/ci.yml) — lint, typecheck, tests, audit, docs build, macOS unpackaged smoke validation, macOS/Linux packaged smoke validation, and macOS/Linux packaging validation.
 - [`.github/workflows/docs.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/docs.yml) — strict MkDocs build + GitHub Pages deploy.
 - [`.github/workflows/release.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/release.yml) — tag-driven release, signing preflight, checksums, provenance.
 - [`.github/workflows/monthly-maintenance.yml`](https://github.com/joe-broadhead/open-cowork/blob/master/.github/workflows/monthly-maintenance.yml) — monthly drift checks for dependencies and SDK compatibility.

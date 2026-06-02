@@ -66,6 +66,7 @@ The repository includes:
   - tests
   - desktop Electron smoke tests on macOS
   - packaged desktop smoke tests on macOS
+  - packaged desktop smoke tests on Linux under `xvfb`
   - Linux packaging validation
   - typecheck
   - perf gate
@@ -80,6 +81,8 @@ The repository includes:
 
 - `release.yml`
   - builds release artifacts for macOS and Linux
+  - runs packaged desktop smoke tests for macOS and Linux release artifacts
+    before upload
   - verifies the tag signature, allowed release actor, and required green CI
     checks before publishing
   - reruns Cloud Web, Desktop/Web/Gateway continuation, Docker/Compose,
