@@ -270,6 +270,46 @@ async function readSseUntil(
   throw new Error('Timed out waiting for SSE event.')
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+        timer.unref()
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+async function readInitialStreamChunk(response: Response) {
+  const reader = response.body?.getReader()
+  assert.ok(reader)
+  const chunk = await withTimeout(reader.read(), 1000, 'Timed out waiting for initial SSE chunk.')
+  assert.equal(chunk.done, false)
+  return reader
+}
+
+async function waitForStreamReaderClosed(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs = 1000,
+) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now())
+    try {
+      const chunk = await withTimeout(reader.read(), remaining, 'Timed out waiting for SSE reader to close.')
+      if (chunk.done) return
+    } catch {
+      return
+    }
+  }
+  throw new Error('Timed out waiting for SSE reader to close.')
+}
+
 test('cloud HTTP server exposes health, config, session create/list/get, prompt, and abort', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -3305,6 +3345,110 @@ test('cloud HTTP workspace event feed streams owned session deltas', async () =>
   } finally {
     controller.abort()
     await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server close shuts down active SSE streams without client aborts', async () => {
+  const scenarios = [
+    {
+      name: 'session events',
+      setup: async (baseUrl: string) => {
+        await fetch(`${baseUrl}/api/sessions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+      },
+      path: '/api/sessions/oc-session-1/events?after=0',
+    },
+    {
+      name: 'workspace events',
+      setup: async () => {},
+      path: '/api/events?after=0',
+    },
+    {
+      name: 'channel deliveries',
+      setup: async () => {},
+      path: '/api/channels/deliveries/stream?claimedBy=test-gateway',
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const fixture = createFixture({ ssePollMs: 10 })
+    const baseUrl = await fixture.server.listen()
+    const controller = new AbortController()
+    let closed = false
+    try {
+      await scenario.setup(baseUrl)
+      const stream = await fetch(`${baseUrl}${scenario.path}`, {
+        signal: controller.signal,
+      })
+      assert.equal(stream.status, 200, scenario.name)
+      const reader = await readInitialStreamChunk(stream)
+
+      await withTimeout(
+        fixture.server.close().then(() => {
+          closed = true
+        }),
+        1000,
+        `${scenario.name} stream blocked server shutdown.`,
+      )
+      await waitForStreamReaderClosed(reader)
+    } finally {
+      controller.abort()
+      if (!closed) await fixture.server.close().catch(() => {})
+    }
+  }
+})
+
+test('cloud HTTP server close handles workspace SSE shutdown during replay load', async () => {
+  const fixture = createFixture({ ssePollMs: 10 })
+  const originalListWorkspaceEvents = fixture.service.listWorkspaceEvents.bind(fixture.service)
+  let releaseList: (() => void) | null = null
+  const listStarted = new Promise<void>((resolve) => {
+    fixture.service.listWorkspaceEvents = async () => {
+      resolve()
+      await new Promise<void>((release) => {
+        releaseList = release
+      })
+      return [{
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        sessionId: 'oc-session-1',
+        sequence: 10,
+        entityType: 'session',
+        entityId: 'oc-session-1',
+        operation: 'update',
+        projectionVersion: 10,
+        type: 'assistant.message',
+        eventId: 'event-10',
+        payload: { content: 'retained event after a replay gap' },
+        createdAt: '2026-06-02T00:00:00.000Z',
+      }] satisfies Awaited<ReturnType<typeof originalListWorkspaceEvents>>
+    }
+  })
+  const baseUrl = await fixture.server.listen()
+  const controller = new AbortController()
+  let closed = false
+  try {
+    const stream = await fetch(`${baseUrl}/api/events?after=8`, {
+      signal: controller.signal,
+    })
+    assert.equal(stream.status, 200)
+    await listStarted
+
+    const closePromise = fixture.server.close().then(() => {
+      closed = true
+    })
+    releaseList?.()
+    await withTimeout(closePromise, 1000, 'Workspace SSE replay load blocked server shutdown.')
+    const reader = stream.body?.getReader()
+    if (reader) await waitForStreamReaderClosed(reader)
+  } finally {
+    controller.abort()
+    releaseList?.()
+    fixture.service.listWorkspaceEvents = originalListWorkspaceEvents
+    if (!closed) await fixture.server.close().catch(() => {})
   }
 })
 
