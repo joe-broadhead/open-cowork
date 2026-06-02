@@ -377,10 +377,36 @@ function assertReleaseWorkflowContract() {
     'Attest gateway image provenance',
     'Attest cloud image SBOM',
     'Attest gateway image SBOM',
-    'Publish final OCI release tags',
     'Verify OCI supply-chain evidence',
     'Upload OCI supply-chain artifacts',
   ])
+
+  assertOrder(releaseWorkflowPath, [
+    'Verify OCI supply-chain release artifacts',
+    'Generate CycloneDX SBOM',
+    'Validate SBOMs',
+    'Re-generate checksums with SBOMs included',
+    'Sign checksums',
+    'Attest build provenance',
+    'Log in to GHCR for final OCI tag promotion',
+    'Publish final OCI release tags',
+    'Publish GitHub Release',
+  ])
+
+  const releaseWorkflow = read(releaseWorkflowPath)
+  const publishOciIndex = releaseWorkflow.indexOf('\n  publish-oci-images:')
+  const publishJobIndex = releaseWorkflow.indexOf('\n  publish:')
+  const finalTagIndex = releaseWorkflow.indexOf('name: Publish final OCI release tags')
+  const githubReleaseIndex = releaseWorkflow.indexOf('name: Publish GitHub Release')
+  if (publishOciIndex < 0 || publishJobIndex < 0 || finalTagIndex < 0 || githubReleaseIndex < 0) {
+    throw new Error('release workflow must include publish-oci-images, publish, final OCI tag promotion, and GitHub Release jobs')
+  }
+  if (finalTagIndex < publishJobIndex || finalTagIndex < publishOciIndex) {
+    throw new Error('release workflow must keep final OCI tag promotion in the final publish job')
+  }
+  if (finalTagIndex > githubReleaseIndex) {
+    throw new Error('release workflow must publish final OCI tags before creating the GitHub Release')
+  }
 
   for (const evidence of [
     'open-cowork-cloud.image.json',
@@ -397,6 +423,8 @@ function assertReleaseWorkflowContract() {
     'dist-artifacts/SHA256SUMS.txt',
     'dist-artifacts/SHA256SUMS.txt.asc',
     'actions/attest-build-provenance',
+    "jq -er '.versionTag'",
+    'version_tag_digest',
   ]) {
     assertIncludes(releaseWorkflowPath, evidence)
   }

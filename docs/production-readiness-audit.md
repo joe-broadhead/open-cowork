@@ -92,6 +92,15 @@ The remaining work is concentrated in two areas:
   `x64` `.AppImage` and `.deb`, plus signed-only `latest-mac.yml` feed
   metadata. Fixture tests reject missing formats, missing architectures, and
   unexpected installer artifacts.
+- OCI images now remain on release-candidate tags until the protected final
+  publish job has downloaded and validated desktop artifacts, OCI evidence,
+  SBOMs, checksums, and attestations. Final `v*` and unprefixed version tags
+  are promoted immediately before GitHub Release creation, and both tags are
+  verified back to the signed/scanned digest.
+- Performance regression checks now require benchmark-name parity in both
+  directions. New benchmarks without checked-in baselines fail `perf:check`,
+  and the downstream catalog relationship benchmark is represented in every
+  committed baseline.
 
 ## High Priority
 
@@ -143,8 +152,6 @@ No open high-priority findings remain after the current audit remediations.
 
 - Webhook replay cache eviction is global, not source/org scoped. Add scoped
   caps plus a global cap and test cross-source eviction.
-- OCI release verification checks the `v*` image tags but should also verify
-  the unprefixed version tags it publishes.
 - Cloud compatibility facades remain near their documented budgets:
   `postgres-control-plane-store.ts`, `in-memory-control-plane-store.ts`, and
   `session-service.ts` should be decomposed further before adding major Cloud

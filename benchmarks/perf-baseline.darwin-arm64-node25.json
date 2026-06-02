@@ -77,6 +77,15 @@
       "p95Ms": 0.54
     },
     {
+      "name": "catalog.relationship.downstreamCatalog",
+      "iterations": 30,
+      "minMs": 0.08,
+      "maxMs": 0.4,
+      "avgMs": 0.11,
+      "p50Ms": 0.1,
+      "p95Ms": 0.2
+    },
+    {
       "name": "agents.preview.downstreamCatalog",
       "iterations": 30,
       "minMs": 0,

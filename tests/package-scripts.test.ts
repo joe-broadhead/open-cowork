@@ -301,6 +301,8 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'open-cowork-gateway.image.scan.grype.json',
     'open-cowork-gateway.image.cosign-verify.json',
     'release-oci-supply-chain',
+    "jq -er '.versionTag'",
+    'version_tag_digest',
   ]) {
     assert.match(releaseWorkflow, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must preserve ${evidence}`)
   }
@@ -310,6 +312,15 @@ test('ci and release workflows use canonical release gate scripts', () => {
     / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
     'release-policy must checkout source before running the repository release artifact matrix script',
   )
+
+  const publishJobIndex = releaseWorkflow.indexOf('\n  publish:')
+  const finalTagIndex = releaseWorkflow.indexOf('name: Publish final OCI release tags')
+  const releaseArtifactValidationIndex = releaseWorkflow.indexOf('name: Verify OCI supply-chain release artifacts')
+  const githubReleaseIndex = releaseWorkflow.indexOf('name: Publish GitHub Release')
+  assert.ok(publishJobIndex > 0, 'release workflow must define a final publish job')
+  assert.ok(finalTagIndex > publishJobIndex, 'release workflow must publish final OCI tags from the final publish job')
+  assert.ok(finalTagIndex > releaseArtifactValidationIndex, 'release workflow must validate release artifacts before final OCI tag promotion')
+  assert.ok(finalTagIndex < githubReleaseIndex, 'release workflow must promote final OCI tags before GitHub Release creation')
 
   assert.match(packagingDocs, /gh attestation verify "oci:\/\/\$\{digest_ref\}"/)
   assert.match(packagingDocs, /--predicate-type https:\/\/cyclonedx\.org\/bom/)

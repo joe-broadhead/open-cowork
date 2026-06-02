@@ -1045,4 +1045,12 @@ test('release workflow publishes versioned cloud and gateway OCI images', () => 
   assert.match(workflow, /Publish final OCI release tags/)
   assert.match(workflow, /docker buildx imagetools create --prefer-index=false/)
   assert.match(workflow, /dist-artifacts\/release-oci-supply-chain\/\*/)
+
+  const publishJobIndex = workflow.indexOf('\n  publish:')
+  const finalTagIndex = workflow.indexOf('name: Publish final OCI release tags')
+  const releaseArtifactValidationIndex = workflow.indexOf('name: Verify OCI supply-chain release artifacts')
+  const githubReleaseIndex = workflow.indexOf('name: Publish GitHub Release')
+  assert.ok(finalTagIndex > publishJobIndex, 'final OCI tags must be promoted by the final publish job')
+  assert.ok(finalTagIndex > releaseArtifactValidationIndex, 'release artifact validation must precede final OCI tag promotion')
+  assert.ok(finalTagIndex < githubReleaseIndex, 'final OCI tag promotion must precede GitHub Release creation')
 })
