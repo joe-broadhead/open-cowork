@@ -38,7 +38,7 @@ groups:
           summary: Managed worker command execution is failing.
           runbook: docs/runbooks/cloud-managed-operations.md#worker-backlog
       - alert: OpenCoworkWorkerLeaseRecoverySpike
-        expr: sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[10m])) > 0.5 or sum(rate(open_cowork_cloud_scheduler_expired_claims_reaped_total[10m])) > 0.5
+        expr: sum(rate(open_cowork_cloud_worker_expired_leases_reaped_total[10m])) > 0.5 or sum(rate(open_cowork_cloud_scheduler_expired_claims_reaped_total[10m])) > 0.5 or sum(rate(open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total[10m])) > 0 or sum(rate(open_cowork_cloud_scheduler_expired_claim_reaper_drain_cap_hits_total[10m])) > 0
         for: 10m
         labels:
           severity: ticket

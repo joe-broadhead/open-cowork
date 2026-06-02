@@ -10,6 +10,7 @@ const architectureDoc = readFileSync(join(root, 'docs/architecture.md'), 'utf8')
 const downstreamDoc = readFileSync(join(root, 'docs/downstream.md'), 'utf8')
 const dockerIgnore = readFileSync(join(root, '.dockerignore'), 'utf8')
 const postgresSchema = readFileSync(join(cloudRoot, 'postgres-schema.ts'), 'utf8')
+const postgresMigrations = readFileSync(join(cloudRoot, 'postgres-migrations.ts'), 'utf8')
 const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
@@ -230,7 +231,13 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assertIndexShape('cloud_session_commands_available_idx', 'cloud_session_commands', 'status, available_at, tenant_id, session_id, created_sequence')
   assertIndexShape('cloud_session_commands_runnable_idx', 'cloud_session_commands', 'status, target_lease_token, tenant_id, session_id, created_sequence', "WHERE status IN ('pending', 'running')")
   assertIndexShape('cloud_worker_leases_expiry_idx', 'cloud_worker_leases', 'tenant_id, session_id, lease_expires_at_ms')
+  assertIndexShape('cloud_worker_leases_reaper_idx', 'cloud_worker_leases', 'lease_expires_at_ms, tenant_id, session_id')
   assertIndexShape('cloud_workflow_runs_claim_idx', 'cloud_workflow_runs', 'tenant_id, status, claim_expires_at')
+  assertIndexShape('cloud_workflow_runs_reaper_idx', 'cloud_workflow_runs', 'claim_expires_at, tenant_id, workflow_id, run_id', "WHERE claim_token IS NOT NULL")
+  assert.match(postgresSchema, /cloud_workflow_runs_reaper_idx[\s\S]*AND claim_expires_at IS NOT NULL[\s\S]*AND status IN \('queued', 'running'\)/)
+  assert.match(postgresSchema, /CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID[\s\S]*transactional: false/)
+  assert.match(postgresMigrations, /SELECT pg_try_advisory_lock\(\$1, \$2\) AS locked/)
+  assert.doesNotMatch(postgresMigrations, /SELECT pg_advisory_lock\(\$1, \$2\)/)
   assertIndexShape('cloud_channel_deliveries_claim_idx', 'cloud_channel_deliveries', 'org_id, status, next_attempt_at, created_at')
   assertIndexShape('cloud_usage_events_org_created_idx', 'cloud_usage_events', 'org_id, created_at DESC')
   assertIndexShape('cloud_worker_pools_org_idx', 'cloud_worker_pools', 'org_id, updated_at DESC')
@@ -342,7 +349,7 @@ function escapeRegex(value: string) {
 
 function assertIndexShape(indexName: string, tableName: string, columns: string, predicate?: string) {
   const pattern = new RegExp(
-    `CREATE (?:UNIQUE )?INDEX IF NOT EXISTS ${escapeRegex(indexName)}\\s+ON ${escapeRegex(tableName)} \\(${escapeRegex(columns)}\\)${predicate ? `[\\s\\S]*${escapeRegex(predicate)}` : ''}`,
+    `CREATE (?:UNIQUE )?INDEX(?: CONCURRENTLY)? IF NOT EXISTS ${escapeRegex(indexName)}\\s+ON ${escapeRegex(tableName)} \\(${escapeRegex(columns)}\\)${predicate ? `[\\s\\S]*${escapeRegex(predicate)}` : ''}`,
   )
   assert.match(postgresSchema, pattern, `${indexName} must keep its indexed table, column order, and predicate`)
 }

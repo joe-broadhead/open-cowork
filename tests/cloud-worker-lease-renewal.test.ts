@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
-import type { CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
+import type { CloudMetricRecord, CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { CloudWorker, CloudWorkerLeaseLostError } from '../apps/desktop/src/main/cloud/worker.ts'
 import type {
@@ -117,6 +117,18 @@ class FailingRenewalMetricObservability implements CloudObservabilityAdapter {
     if (record.name === 'open_cowork_cloud_worker_lease_renewals_total') {
       throw new Error('simulated renewal metric failure')
     }
+  }
+
+  async span() {}
+}
+
+class RecordingObservability implements CloudObservabilityAdapter {
+  readonly metrics: CloudMetricRecord[] = []
+
+  async log() {}
+
+  async metric(record: CloudMetricRecord) {
+    this.metrics.push(record)
   }
 
   async span() {}
@@ -248,4 +260,44 @@ test('cloud worker keeps a valid cached lease when cached renewal metrics fail',
   assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
   assert.deepEqual(runtime.messageIds, ['cmd-1', 'cmd-2'])
   assert.equal(observability.metricNames.includes('open_cowork_cloud_worker_lease_renewals_total'), true)
+})
+
+test('cloud worker reaps expired leases in bounded batches and reports drain cap hits', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })
+  store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    email: 'user@example.com',
+    role: 'owner',
+  })
+  for (let index = 0; index < 1_001; index += 1) {
+    const sessionId = `expired-session-${String(index).padStart(3, '0')}`
+    store.createSession({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      sessionId,
+      opencodeSessionId: `oc-${sessionId}`,
+      profileName: 'default',
+    })
+    assert.ok(store.claimSessionLease('tenant-1', sessionId, 'stale-worker', new Date('2000-01-01T00:00:00.000Z'), 1))
+  }
+
+  const runtime = new SlowSuccessfulRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const observability = new RecordingObservability()
+  const worker = new CloudWorker(store, service, 'worker-1', 3_000, {}, null, observability)
+
+  assert.equal(await worker.processAllSessionCommands(), 0)
+  const reapedMetric = observability.metrics.find((metric) => metric.name === 'open_cowork_cloud_worker_expired_leases_reaped_total')
+  assert.equal(reapedMetric?.value, 1_000)
+  const capHitMetric = observability.metrics.find((metric) => metric.name === 'open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total')
+  assert.equal(capHitMetric?.value, 1)
+  assert.equal(capHitMetric?.attributes?.status, 'cap_hit')
 })

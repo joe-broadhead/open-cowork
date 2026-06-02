@@ -227,6 +227,9 @@ with oldest queued age and claim latency rather than as an exact backlog count.
 3. Check lease signals: `open_cowork_cloud_worker_lease_claims_total`,
    `open_cowork_cloud_worker_lease_renewals_total`, and
    `open_cowork_cloud_worker_expired_leases_reaped_total`.
+   If `open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total`
+   increases, expired-lease recovery is exhausting its bounded drain cap and
+   may need worker capacity or a stuck-owner investigation.
 4. Check stale-owner signals:
    `open_cowork_cloud_worker_stale_owner_rejections_total` should remain near
    zero outside crash/failover drills.
@@ -247,6 +250,11 @@ alert threshold.
 3. Check `open_cowork_cloud_scheduler_expired_claims_reaped_total`; any
    sustained increase means workflow start claims are expiring before session
    attachment.
+   If
+   `open_cowork_cloud_scheduler_expired_claim_reaper_drain_cap_hits_total`
+   increases, the scheduler is exhausting its bounded recovery drain cap and
+   may need more scheduler capacity or investigation of stalled workflow-start
+   claims.
 4. Confirm exactly one scheduler deployment group is active for the environment.
 5. Confirm database time and application time are not drifting.
 6. Restart scheduler only after checking logs for claim transaction failures.

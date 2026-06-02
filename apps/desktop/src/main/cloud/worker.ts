@@ -19,6 +19,8 @@ export class CloudWorkerLeaseLostError extends Error {
 
 export class CloudWorker {
   private readonly claimBatchSize = 100
+  private readonly expiredLeaseReapBatchSize = 100
+  private readonly maxExpiredLeaseReapBatches = 10
   private readonly leases = new Map<string, WorkerLeaseRecord>()
   private readonly restoredLeaseTokens = new Set<string>()
   private readonly store: ControlPlaneStore
@@ -155,13 +157,20 @@ export class CloudWorker {
     const startedAt = Date.now()
     let processed = 0
     let pendingSessionCountEstimate = 0
-    const reaped = await this.store.reapExpiredSessionLeases({ now: new Date() })
-    if (reaped.length > 0) {
+    const { reapedCount, drainCapHit } = await this.reapExpiredSessionLeases(new Date())
+    if (reapedCount > 0) {
       await recordCloudWorkerMetric(this.observability, {
         name: 'open_cowork_cloud_worker_expired_leases_reaped_total',
-        value: reaped.length,
+        value: reapedCount,
         workerId: this.workerId,
         status: 'ok',
+      })
+    }
+    if (drainCapHit) {
+      await recordCloudWorkerMetric(this.observability, {
+        name: 'open_cowork_cloud_worker_expired_lease_reaper_drain_cap_hits_total',
+        workerId: this.workerId,
+        status: 'cap_hit',
       })
     }
     while (true) {
@@ -226,6 +235,21 @@ export class CloudWorker {
     await this.checkpointHooks.saveAfterCommand?.(lease)
     this.leases.set(this.leaseKey(tenantId, sessionId), lease)
     return true
+  }
+
+  private async reapExpiredSessionLeases(now: Date) {
+    let reapedCount = 0
+    for (let batch = 0; batch < this.maxExpiredLeaseReapBatches; batch += 1) {
+      const reaped = await this.store.reapExpiredSessionLeases({
+        now,
+        limit: this.expiredLeaseReapBatchSize,
+      })
+      reapedCount += reaped.length
+      if (reaped.length < this.expiredLeaseReapBatchSize) {
+        return { reapedCount, drainCapHit: false }
+      }
+    }
+    return { reapedCount, drainCapHit: true }
   }
 
   private async restoreCheckpointOnce(lease: WorkerLeaseRecord) {

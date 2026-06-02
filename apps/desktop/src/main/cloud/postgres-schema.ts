@@ -4,6 +4,8 @@ export const CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS = [720_908_611, 1_
 export type CloudControlPlaneMigration = {
   id: string
   statements: readonly string[]
+  transactional?: boolean
+  concurrentIndexes?: readonly string[]
 }
 
 export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
@@ -671,6 +673,18 @@ export const CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS = [
     ON cloud_workflow_runs (tenant_id, status, claim_expires_at)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID = '010_managed_work_reaper_indexes'
+
+export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS = [
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_worker_leases_reaper_idx
+    ON cloud_worker_leases (lease_expires_at_ms, tenant_id, session_id)`,
+  `CREATE INDEX CONCURRENTLY IF NOT EXISTS cloud_workflow_runs_reaper_idx
+    ON cloud_workflow_runs (claim_expires_at, tenant_id, workflow_id, run_id)
+    WHERE claim_token IS NOT NULL
+      AND claim_expires_at IS NOT NULL
+      AND status IN ('queued', 'running')`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -707,5 +721,11 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_CLAIMS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS,
+    concurrentIndexes: ['cloud_worker_leases_reaper_idx', 'cloud_workflow_runs_reaper_idx'],
+    transactional: false,
   },
 ] as const

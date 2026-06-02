@@ -78,6 +78,42 @@ async function withPostgresStore<T>(fn: (store: Awaited<ReturnType<typeof create
   }
 }
 
+async function withIsolatedPostgresStore<T>(fn: (store: Awaited<ReturnType<typeof createPostgresControlPlaneStore>>, ids: {
+  tenantId: string
+  userId: string
+  sessionId: string
+}) => Promise<T>) {
+  return await withIsolatedPostgresSchema(async (connectionString) => {
+    const store = await createPostgresControlPlaneStore({ connectionString })
+    const prefix = `pg-${randomUUID()}`
+    const ids = {
+      tenantId: `${prefix}-tenant`,
+      userId: `${prefix}-user`,
+      sessionId: `${prefix}-session`,
+    }
+    try {
+      await store.createTenant({ tenantId: ids.tenantId, name: 'Postgres isolated concurrency test' })
+      await store.ensureUser({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        email: `${ids.userId}@example.test`,
+        role: 'owner',
+      })
+      await store.createSession({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        sessionId: ids.sessionId,
+        opencodeSessionId: `${prefix}-opencode`,
+        profileName: 'full',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+      return await fn(store, ids)
+    } finally {
+      await store.close?.()
+    }
+  })
+}
+
 test('real Postgres cloud store serializes concurrent schema migrations', {
   skip: POSTGRES_SKIP,
 }, async () => {
@@ -97,6 +133,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '007_scale_foundation',
         '008_managed_workers',
         '009_managed_work_claims',
+        '010_managed_work_reaper_indexes',
       ])
     } finally {
       await Promise.all(stores.map((store) => store.close?.()))
@@ -681,6 +718,48 @@ test('real Postgres cloud store reaps expired session leases with bounded retrie
   })
 })
 
+test('real Postgres cloud store limits expired session lease reaping to oldest leases', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresStore(async (store, ids) => {
+    await store.createSession({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: `${ids.tenantId}-session-2`,
+      opencodeSessionId: `${ids.tenantId}-opencode-2`,
+      profileName: 'full',
+      createdAt: new Date('2030-01-01T00:00:00.000Z'),
+    })
+    await store.createSession({
+      tenantId: ids.tenantId,
+      userId: ids.userId,
+      sessionId: `${ids.tenantId}-session-3`,
+      opencodeSessionId: `${ids.tenantId}-opencode-3`,
+      profileName: 'full',
+      createdAt: new Date('2030-01-01T00:00:00.000Z'),
+    })
+
+    assert.ok(await store.claimSessionLease(ids.tenantId, ids.sessionId, 'worker-limit', new Date('2030-01-01T00:00:00.000Z'), 1_000))
+    assert.ok(await store.claimSessionLease(ids.tenantId, `${ids.tenantId}-session-2`, 'worker-limit', new Date('2030-01-01T00:00:01.000Z'), 1_000))
+    assert.ok(await store.claimSessionLease(ids.tenantId, `${ids.tenantId}-session-3`, 'worker-limit', new Date('2030-01-01T00:00:02.000Z'), 1_000))
+
+    const first = (await store.reapExpiredSessionLeases({
+      limit: 2,
+      now: new Date('2030-01-01T00:00:05.000Z'),
+    })).filter((record) => record.tenantId === ids.tenantId)
+    assert.deepEqual(first.map((record) => record.sessionId), [
+      ids.sessionId,
+      `${ids.tenantId}-session-2`,
+    ])
+
+    const second = (await store.reapExpiredSessionLeases({
+      limit: 2,
+      now: new Date('2030-01-01T00:00:05.000Z'),
+    })).filter((record) => record.tenantId === ids.tenantId)
+    assert.deepEqual(second.map((record) => record.sessionId), [`${ids.tenantId}-session-3`])
+  })
+})
+
 test('real Postgres cloud store keeps channel identities, cursors, and delivery claims atomic', {
   skip: POSTGRES_SKIP,
 }, async () => {
@@ -913,6 +992,57 @@ test('real Postgres cloud store retries and fails expired workflow start claims'
     assert.equal(failed?.action, 'failed')
     assert.equal((await store.getWorkflowForTenant(ids.tenantId, workflowId))?.status, 'failed')
     assert.equal((await store.getWorkflowRun(ids.tenantId, retryRunId))?.status, 'failed')
+  })
+})
+
+test('real Postgres cloud store limits expired workflow claim reaping to oldest claims', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withIsolatedPostgresStore(async (store, ids) => {
+    for (const index of [1, 2, 3]) {
+      const workflowId = `${ids.tenantId}-workflow-claim-limit-${index}`
+      await store.createWorkflow({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        workflowId,
+        draft: {
+          title: `Workflow claim limit ${index}`,
+          instructions: 'Exercise bounded Postgres workflow-claim reaping.',
+          agentName: 'data-analyst',
+          skillNames: [],
+          toolIds: [],
+          projectDirectory: null,
+          draftSessionId: null,
+          triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+        },
+      })
+      const run = await store.createWorkflowRun({
+        tenantId: ids.tenantId,
+        userId: ids.userId,
+        workflowId,
+        runId: `${ids.tenantId}-workflow-run-claim-limit-${index}`,
+        triggerType: 'manual',
+        claimedBy: `scheduler-${index}`,
+        leaseTtlMs: 1,
+        createdAt: new Date(`2030-01-01T09:00:0${index}.000Z`),
+      })
+      assert.ok(run.claimToken)
+    }
+
+    const first = (await store.reapExpiredWorkflowClaims({
+      limit: 2,
+      now: new Date('2030-01-01T09:00:10.000Z'),
+    })).filter((record) => record.tenantId === ids.tenantId)
+    assert.deepEqual(first.map((record) => record.runId), [
+      `${ids.tenantId}-workflow-run-claim-limit-1`,
+      `${ids.tenantId}-workflow-run-claim-limit-2`,
+    ])
+
+    const second = (await store.reapExpiredWorkflowClaims({
+      limit: 2,
+      now: new Date('2030-01-01T09:00:10.000Z'),
+    })).filter((record) => record.tenantId === ids.tenantId)
+    assert.deepEqual(second.map((record) => record.runId), [`${ids.tenantId}-workflow-run-claim-limit-3`])
   })
 })
 

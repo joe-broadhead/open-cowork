@@ -21,6 +21,24 @@ function seededStore() {
   return store
 }
 
+function createManualWorkflow(store: InMemoryControlPlaneStore, workflowId: string) {
+  return store.createWorkflow({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    workflowId,
+    draft: {
+      title: workflowId,
+      instructions: 'Run bounded recovery work.',
+      agentName: 'data-analyst',
+      skillNames: [],
+      toolIds: [],
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
+    },
+  })
+}
+
 test('cloud control plane keeps tenant/user/session state isolated', () => {
   const store = seededStore()
   assert.equal(store.getSession('tenant-1', 'user-1', 'session-1')?.opencodeSessionId, 'oc-session-1')
@@ -475,6 +493,43 @@ test('cloud control plane reaps expired session leases with bounded retries', as
   assert.equal(failed[0]?.action, 'failed')
   assert.deepEqual(failed[0]?.failedCommandIds, ['cmd-retry'])
   assert.equal(store.getSessionForTenant('tenant-1', 'session-1')?.status, 'errored')
+})
+
+test('cloud control plane limits expired session lease reaping to oldest leases', () => {
+  const store = seededStore()
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-2',
+    opencodeSessionId: 'oc-session-2',
+    profileName: 'full',
+    createdAt: new Date('2030-01-01T00:00:00.000Z'),
+  })
+  store.createSession({
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-3',
+    opencodeSessionId: 'oc-session-3',
+    profileName: 'full',
+    createdAt: new Date('2030-01-01T00:00:00.000Z'),
+  })
+
+  assert.ok(store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date('2030-01-01T00:00:00.000Z'), 1_000))
+  assert.ok(store.claimSessionLease('tenant-1', 'session-2', 'worker-a', new Date('2030-01-01T00:00:01.000Z'), 1_000))
+  assert.ok(store.claimSessionLease('tenant-1', 'session-3', 'worker-a', new Date('2030-01-01T00:00:02.000Z'), 1_000))
+
+  const first = store.reapExpiredSessionLeases({
+    limit: 2,
+    now: new Date('2030-01-01T00:00:05.000Z'),
+  })
+  assert.deepEqual(first.map((record) => record.sessionId), ['session-1', 'session-2'])
+  assert.equal(store.getSessionForTenant('tenant-1', 'session-3')?.status, 'running')
+
+  const second = store.reapExpiredSessionLeases({
+    limit: 2,
+    now: new Date('2030-01-01T00:00:05.000Z'),
+  })
+  assert.deepEqual(second.map((record) => record.sessionId), ['session-3'])
 })
 
 test('cloud control plane claims only runnable sessions for workers', () => {
@@ -1628,6 +1683,41 @@ test('cloud control plane reaps and retries expired scheduled workflow claims', 
   assert.equal(failed[0]?.action, 'failed')
   assert.equal(store.getWorkflowForTenant('tenant-1', 'workflow-retry')?.status, 'failed')
   assert.equal(store.getWorkflowRun('tenant-1', 'workflow-run-retry')?.status, 'failed')
+})
+
+test('cloud control plane limits expired workflow claim reaping to oldest claims', () => {
+  const store = seededStore()
+  for (const index of [1, 2, 3]) {
+    const workflowId = `workflow-claim-limit-${index}`
+    createManualWorkflow(store, workflowId)
+    const run = store.createWorkflowRun({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      workflowId,
+      runId: `workflow-run-claim-limit-${index}`,
+      triggerType: 'manual',
+      claimedBy: `scheduler-${index}`,
+      leaseTtlMs: 1,
+      createdAt: new Date(`2030-01-01T09:00:0${index}.000Z`),
+    })
+    assert.ok(run.claimToken)
+  }
+
+  const first = store.reapExpiredWorkflowClaims({
+    limit: 2,
+    now: new Date('2030-01-01T09:00:10.000Z'),
+  })
+  assert.deepEqual(first.map((record) => record.runId), [
+    'workflow-run-claim-limit-1',
+    'workflow-run-claim-limit-2',
+  ])
+  assert.notEqual(store.getWorkflowRun('tenant-1', 'workflow-run-claim-limit-3')?.claimToken, null)
+
+  const second = store.reapExpiredWorkflowClaims({
+    limit: 2,
+    now: new Date('2030-01-01T09:00:10.000Z'),
+  })
+  assert.deepEqual(second.map((record) => record.runId), ['workflow-run-claim-limit-3'])
 })
 
 test('cloud control plane recovers expired webhook workflow start claims', () => {
