@@ -83,8 +83,8 @@ The repository includes:
   - verifies the tag signature, allowed release actor, and required green CI
     checks before publishing
   - reruns Cloud Web, Desktop/Web/Gateway continuation, Docker/Compose,
-    Helm, deployment, launch, private-beta, and ops readiness gates before
-    publishing a tag
+    Helm, deployment, launch, promotion, private-beta, and ops readiness gates
+    before publishing a tag
   - creates GitHub Releases automatically for version tags
   - publishes Cloud and Gateway images to GHCR using immutable release tags
     and captures their registry digests
@@ -213,6 +213,16 @@ Recommended release flow:
 3. Let `release.yml` build platform artifacts
 4. Verify the resulting GitHub Release includes checksums and provenance
 5. Smoke-test at least one macOS build and one Linux build before announcing it
+
+The default tag workflow validates the public `local-self-host-beta` promotion
+claim with `pnpm deploy:promotion:validate -- --tier local-self-host-beta`.
+Stronger hosted claims require `OPEN_COWORK_RELEASE_CLAIM_TIER` plus a private
+evidence manifest. For tag releases, set repository variable
+`OPEN_COWORK_RELEASE_CLAIM_TIER` and provide the base64-encoded private
+manifest in secret `OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64`; the workflow
+materializes it into `OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST` before running
+the gate. Local operators can pass `--manifest <private-record>` directly.
+Without completed private-pass report evidence the promotion gate fails closed.
 
 ## Signing and notarization
 

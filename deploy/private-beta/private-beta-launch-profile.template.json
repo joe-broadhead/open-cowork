@@ -93,12 +93,14 @@
       "quotaRateLimitBehavior": true,
       "billingEntitlementGating": true,
       "supportIncidentOwnershipEscalation": true,
-      "costSloNotes": true
+      "costSloNotes": true,
+      "releaseRollback": true
     },
     "requiredSmokeCommands": [
       "pnpm deploy:private-beta:validate",
       "pnpm deploy:launch:validate",
       "pnpm deploy:launch:evidence:validate",
+      "pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>",
       "pnpm ops:validate",
       "pnpm deploy:smoke",
       "pnpm deploy:desktop:smoke",

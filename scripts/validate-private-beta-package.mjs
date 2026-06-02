@@ -174,6 +174,9 @@ if (packageJson.scripts?.['deploy:private-beta:validate'] !== 'node scripts/vali
 if (packageJson.scripts?.['deploy:launch:evidence:validate'] !== 'node scripts/validate-launch-evidence-manifest.mjs') {
   throw new Error('package.json must expose deploy:launch:evidence:validate')
 }
+if (packageJson.scripts?.['deploy:promotion:validate'] !== 'node scripts/validate-release-promotion.mjs') {
+  throw new Error('package.json must expose deploy:promotion:validate')
+}
 if (packageJson.scripts?.['deploy:failover:drill'] !== 'node scripts/launch-failover-drill.mjs') {
   throw new Error('package.json must expose deploy:failover:drill')
 }
@@ -283,6 +286,15 @@ for (const evidence of [
   'desktopWebGatewayContinuation',
   'tokenRevocationProof',
   'diagnosticsRedactionProof',
+  'launchEvidenceRecord',
+  'schedulerReplicaFailover',
+  'secretAdapterResolution',
+  'byokRedactionNoPlaintext',
+  'quotaRateLimitBehavior',
+  'billingEntitlementGating',
+  'supportIncidentOwnershipEscalation',
+  'costSloNotes',
+  'releaseRollback',
 ]) {
   if (profile?.requiredEvidence?.[evidence] !== true) {
     throw new Error(`launch profile must require ${evidence}`)
@@ -292,6 +304,7 @@ for (const command of [
   'pnpm deploy:private-beta:validate',
   'pnpm deploy:launch:validate',
   'pnpm deploy:launch:evidence:validate',
+  'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
   'pnpm ops:validate',
   'pnpm deploy:continuation:smoke',
   'pnpm deploy:load:strict',
@@ -333,6 +346,7 @@ for (const evidence of [
   'billingEntitlementGating',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
 ]) {
   const record = launchEvidence.requiredEvidence.find((entry) => entry.id === evidence)
   if (!record) throw new Error(`launch evidence record must require ${evidence}`)
@@ -484,6 +498,7 @@ for (const command of [
   'pnpm deploy:validate -- --require-tools',
   'pnpm deploy:launch:validate',
   'pnpm deploy:launch:evidence:validate',
+  'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
   'pnpm ops:validate',
   'pnpm test',
   'pnpm typecheck',
@@ -532,6 +547,8 @@ for (const phrase of [
   'Cloud Channel Gateway is a channel client and delivery adapter',
   'managed-byok-readiness-contract.template.json',
   'launch-evidence-record.template.json',
+  'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
+  'releaseRollback',
   'Onboarding failures preserve machine-readable status and reason codes',
 ]) {
   assertIncludes('deploy/private-beta/go-no-go-report.template.md', phrase)
@@ -545,7 +562,9 @@ for (const phrase of [
   'gatewayDeliveryReplayDeadLetter',
   'supportIncidentOwnershipEscalation',
   'costSloNotes',
+  'releaseRollback',
   'pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass',
+  'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
 ]) {
   assertIncludes('deploy/private-beta/private-beta-go-no-go.public.md', phrase)
 }

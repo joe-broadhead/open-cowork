@@ -50,6 +50,7 @@ Until that happens, the public repo must keep the accepted claim at
 | `billingEntitlementGating` | `pending-private-evidence` | Billing/entitlement gating evidence has not been publicly summarized. | `{private-checksum}` | `{issue-or-empty}` |
 | `supportIncidentOwnershipEscalation` | `pending-private-evidence` | Support ownership and escalation evidence has not been publicly summarized. | `{private-checksum}` | `{issue-or-empty}` |
 | `costSloNotes` | `pending-private-evidence` | Cost, capacity, and SLO evidence has not been publicly summarized. | `{private-checksum}` | `{issue-or-empty}` |
+| `releaseRollback` | `pending-private-evidence` | Release rollback and customer communication evidence has not been publicly summarized. | `{private-checksum}` | `{issue-or-empty}` |
 
 ## Public/Private Boundary
 
@@ -66,6 +67,7 @@ Run these before changing this public decision summary:
 pnpm deploy:launch:validate
 pnpm deploy:launch:evidence:validate
 pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass
+pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>
 pnpm deploy:private-beta:validate
 pnpm ops:validate
 pnpm deploy:continuation:smoke

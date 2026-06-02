@@ -180,11 +180,29 @@ jobs:
             > /tmp/open-cowork-gateway-release-rendered.yaml
           test -s /tmp/open-cowork-gateway-release-rendered.yaml
 
+      - name: Materialize hosted promotion evidence manifest
+        if: vars.OPEN_COWORK_RELEASE_CLAIM_TIER != '' && vars.OPEN_COWORK_RELEASE_CLAIM_TIER != 'local-self-host-beta'
+        env:
+          OPEN_COWORK_RELEASE_CLAIM_TIER: ${{ vars.OPEN_COWORK_RELEASE_CLAIM_TIER }}
+          OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64: ${{ secrets.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 }}
+        run: |
+          if [ -z "$OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64" ]; then
+            echo "::error::Set OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 for hosted release claim tier ${OPEN_COWORK_RELEASE_CLAIM_TIER}."
+            exit 1
+          fi
+          manifest_path="${RUNNER_TEMP}/open-cowork-promotion-evidence.json"
+          printf '%s' "$OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64" | base64 --decode > "$manifest_path"
+          chmod 600 "$manifest_path"
+          echo "OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST=$manifest_path" >> "$GITHUB_ENV"
+
       - name: Deployment and launch readiness gates
+        env:
+          OPEN_COWORK_RELEASE_CLAIM_TIER: ${{ vars.OPEN_COWORK_RELEASE_CLAIM_TIER || 'local-self-host-beta' }}
         run: |
           pnpm deploy:validate -- --require-tools
           pnpm deploy:launch:validate
           pnpm deploy:launch:evidence:validate
+          pnpm deploy:promotion:validate -- --tier "${OPEN_COWORK_RELEASE_CLAIM_TIER}"
           pnpm deploy:private-beta:validate
           pnpm deploy:standalone-gateway:validate
           pnpm ops:validate

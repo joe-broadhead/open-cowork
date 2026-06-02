@@ -121,6 +121,11 @@ test('managed BYOK readiness contract encodes public-private and support boundar
   assert.ok(contract.supportBundleContract.forbiddenFields.includes('Desktop, Gateway, API, cookie, internal, or operator tokens'))
   assert.ok(contract.launchPackageContract.requiredPublicArtifacts.includes('docs/runbooks/managed-byok-saas-boundary.md'))
   assert.ok(contract.launchPackageContract.requiredValidationCommands.includes('pnpm deploy:private-beta:validate'))
+  assert.ok(
+    contract.launchPackageContract.requiredValidationCommands.includes(
+      'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
+    ),
+  )
 })
 
 test('private beta launch profile template captures launch decisions and evidence gates', () => {
@@ -167,6 +172,7 @@ test('private beta launch profile template captures launch decisions and evidenc
     'billingEntitlementGating',
     'supportIncidentOwnershipEscalation',
     'costSloNotes',
+    'releaseRollback',
   ]) {
     assert.equal(template.profile.requiredEvidence[evidence], true)
   }
@@ -174,6 +180,7 @@ test('private beta launch profile template captures launch decisions and evidenc
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:launch:validate',
     'pnpm deploy:launch:evidence:validate',
+    'pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>',
     'pnpm ops:validate',
     'pnpm deploy:continuation:smoke',
     'pnpm deploy:load:strict',
@@ -208,6 +215,7 @@ test('private beta launch evidence record and public go/no-go summary remain con
     'billingEntitlementGating',
     'supportIncidentOwnershipEscalation',
     'costSloNotes',
+    'releaseRollback',
   ]) {
     const evidence = record.requiredEvidence.find((entry: { id: string }) => entry.id === item)
     assert.ok(evidence, item)
@@ -221,6 +229,8 @@ test('private beta launch evidence record and public go/no-go summary remain con
   assert.match(publicSummary, /pending-private-evidence/)
   assert.match(publicSummary, /deploy\/private-beta\/launch-evidence-record\.template\.json/)
   assert.match(publicSummary, /pnpm deploy:launch:evidence:validate -- --manifest <private-record> --require-private-pass/)
+  assert.match(publicSummary, /pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>/)
+  assert.match(publicSummary, /releaseRollback/)
 })
 
 test('private beta onboarding and go/no-go templates force complete evidence records', () => {
@@ -326,6 +336,7 @@ test('private beta validator runs from the package script', () => {
   const packageJson = readJson('package.json')
   assert.equal(packageJson.scripts['deploy:private-beta:validate'], 'node scripts/validate-private-beta-package.mjs')
   assert.equal(packageJson.scripts['deploy:launch:evidence:validate'], 'node scripts/validate-launch-evidence-manifest.mjs')
+  assert.equal(packageJson.scripts['deploy:promotion:validate'], 'node scripts/validate-release-promotion.mjs')
   assert.equal(packageJson.scripts['deploy:failover:drill'], 'node scripts/launch-failover-drill.mjs')
   assert.equal(packageJson.scripts['deploy:failover:drill:dry-run'], 'node scripts/launch-failover-drill.mjs --dry-run')
   const output = execFileSync(process.execPath, ['scripts/validate-private-beta-package.mjs'], {

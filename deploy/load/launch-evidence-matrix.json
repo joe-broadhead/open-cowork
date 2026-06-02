@@ -196,6 +196,7 @@
         "pnpm deploy:validate",
         "pnpm deploy:launch:validate",
         "pnpm deploy:launch:evidence:validate",
+        "pnpm deploy:promotion:validate -- --tier local-self-host-beta",
         "pnpm deploy:private-beta:validate",
         "pnpm ops:validate",
         "git diff --check"
@@ -418,6 +419,19 @@
           "pnpm deploy:soak:strict"
         ],
         "passCondition": "Private evidence records observed capacity limits, p95 latency/error targets, cost notes, and known scale boundaries for the target tier."
+      },
+      "releaseRollback": {
+        "requiredForPrivateBeta": true,
+        "category": "releasePackaging",
+        "publicArtifacts": [
+          "docs/release-checklist.md",
+          "docs/runbooks/launch-readiness-report.md"
+        ],
+        "requiredCommands": [
+          "pnpm deploy:launch:validate",
+          "pnpm deploy:private-beta:validate"
+        ],
+        "passCondition": "Private evidence records the exact rollback path for the promoted release, including artifact revoke/unpublish steps, worker drain or disablement, and customer communication owner."
       }
     }
   }

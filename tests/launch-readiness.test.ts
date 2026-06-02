@@ -286,6 +286,7 @@ test('launch evidence matrix states the current accepted tier and required gates
     'billingEntitlementGating',
     'supportIncidentOwnershipEscalation',
     'costSloNotes',
+    'releaseRollback',
   ]) {
     assert.equal(matrix.privateBetaEvidenceItems.items[item].requiredForPrivateBeta, true, item)
     assert.ok(matrix.privateBetaEvidenceItems.items[item].publicArtifacts.length > 0, item)
@@ -304,6 +305,7 @@ test('launch evidence manifest validator accepts template and completed private 
     const manifest = readJsonFile('deploy/private-beta/launch-evidence-record.template.json')
     assert.deepEqual(manifest.requiredReportFields, [
       'command',
+      'evidenceCommands',
       'commitSha',
       'imageDigests',
       'sanitizedEnvironmentProfile',

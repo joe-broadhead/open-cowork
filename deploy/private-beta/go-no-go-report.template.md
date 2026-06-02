@@ -38,6 +38,7 @@ separate SHA256 value.
 | `pnpm deploy:validate` | | | | | |
 | `pnpm deploy:launch:validate` | | | | | |
 | `pnpm deploy:launch:evidence:validate` | | | | | |
+| `pnpm deploy:promotion:validate -- --tier private-hosted-beta --manifest <private-record>` | | | | | |
 | `pnpm deploy:private-beta:validate` | | | | | |
 | `pnpm ops:validate` | | | | | |
 | `pnpm deploy:smoke` | | | | | |
@@ -78,6 +79,7 @@ checksum or immutable artifact id, owner, and timestamp.
 | `billingEntitlementGating` | | | | | | |
 | `supportIncidentOwnershipEscalation` | | | | | | |
 | `costSloNotes` | | | | | | |
+| `releaseRollback` | | | | | | |
 
 ## Immutable Release Artifacts
 

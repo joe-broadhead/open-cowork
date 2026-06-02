@@ -288,6 +288,9 @@ function assertPackageScripts() {
   if (packageJson.scripts?.['deploy:launch:evidence:validate'] !== 'node scripts/validate-launch-evidence-manifest.mjs') {
     throw new Error('package.json must expose deploy:launch:evidence:validate')
   }
+  if (packageJson.scripts?.['deploy:promotion:validate'] !== 'node scripts/validate-release-promotion.mjs') {
+    throw new Error('package.json must expose deploy:promotion:validate')
+  }
 }
 
 function assertBranchProtectionContract() {
@@ -322,6 +325,7 @@ function assertCiContract() {
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
     'pnpm deploy:launch:evidence:validate',
+    'pnpm deploy:promotion:validate -- --tier local-self-host-beta',
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
@@ -344,6 +348,7 @@ function assertReleaseWorkflowContract() {
     'pnpm deploy:validate -- --require-tools',
     'pnpm deploy:launch:validate',
     'pnpm deploy:launch:evidence:validate',
+    'pnpm deploy:promotion:validate -- --tier "${OPEN_COWORK_RELEASE_CLAIM_TIER}"',
     'pnpm deploy:private-beta:validate',
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
@@ -391,6 +396,10 @@ function assertReleaseWorkflowContract() {
 
   assertIncludes(releaseWorkflowPath, 'needs.release-policy.result == \'success\'')
   assertIncludes(releaseWorkflowPath, 'publish-oci-images')
+  assertIncludes(releaseWorkflowPath, 'Materialize hosted promotion evidence manifest')
+  assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_RELEASE_CLAIM_TIER: ${{ vars.OPEN_COWORK_RELEASE_CLAIM_TIER || \'local-self-host-beta\' }}')
+  assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64: ${{ secrets.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 }}')
+  assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST=$manifest_path')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
   assertNotIncludes(releaseWorkflowPath, 'test:e2e:packaged:optional')
 }
@@ -409,6 +418,9 @@ function assertReleaseChecklistContract() {
     'BYOK redaction',
     'Gateway replay/dead-letter recovery',
     'private-value scan',
+    'deploy:promotion:validate',
+    'OPEN_COWORK_RELEASE_CLAIM_TIER',
+    'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64',
     '--require-private-pass',
     'Go/No-Go',
   ]) {

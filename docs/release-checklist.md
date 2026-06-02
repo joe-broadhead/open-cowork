@@ -38,6 +38,7 @@ and linked from the release Go/No-Go report.
       evidence.
 - [ ] `pnpm deploy:launch:validate`
 - [ ] `pnpm deploy:launch:evidence:validate`
+- [ ] `pnpm deploy:promotion:validate -- --tier local-self-host-beta`
 - [ ] `pnpm deploy:private-beta:validate`
 - [ ] `pnpm ops:validate`
 - [ ] perf baseline environment is intentional; refresh
@@ -89,6 +90,10 @@ and linked from the release Go/No-Go report.
 - [ ] release workflows point at the correct package names and scripts
 - [ ] release notes state the accepted launch tier: `v0.x` preview, private
       hosted beta, public beta, stable, or enterprise-ready
+- [ ] if the release claim tier is stronger than `local-self-host-beta`,
+      repository variable `OPEN_COWORK_RELEASE_CLAIM_TIER` is set and secret
+      `OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64` contains the base64-encoded
+      private promotion manifest for the exact tag commit.
 - [ ] Cloud Channel Gateway and Standalone Gateway are not described as the
       same product mode in release notes, docs, or deployment assets
 - [ ] any `opencode-gateway` or `opencode-agent-gateway` compatibility alias
@@ -128,7 +133,8 @@ and linked from the release Go/No-Go report.
 - [ ] private-beta evidence has been completed from
       `deploy/private-beta/launch-evidence-record.template.json`, validated
       with `pnpm deploy:launch:evidence:validate -- --manifest <private-record>
-      --require-private-pass`, and summarized in
+      --require-private-pass`, promoted with `pnpm deploy:promotion:validate
+      -- --tier private-hosted-beta --manifest <private-record>`, and summarized in
       `deploy/private-beta/private-beta-go-no-go.public.md` without private
       values.
 - [ ] worker images are pinned by release tag or digest; no deployment uses
@@ -153,6 +159,9 @@ and linked from the release Go/No-Go report.
       failover evidence or recorded explicit private operator hook evidence.
       `pnpm deploy:failover:drill:dry-run` is only a local contract check and
       is not launch evidence.
+- [ ] release rollback evidence records artifact revoke/unpublish steps, worker
+      drain or disablement, support/customer communication owner, and checksum
+      or immutable private evidence reference.
 - [ ] load and soak JSON/Markdown reports are attached to the release or
       downstream operations evidence.
 - [ ] `docs/runbooks/launch-readiness-report.md` has a completed Go/No-Go
