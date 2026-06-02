@@ -331,6 +331,7 @@ function assertCiContract() {
     'pnpm ops:validate',
     'pnpm docs:build',
     'pnpm --dir apps/desktop test:e2e:packaged',
+    'node scripts/find-linux-packaged-executable.mjs',
   ]) {
     assertIncludes(ciWorkflowPath, command)
   }
@@ -353,6 +354,8 @@ function assertReleaseWorkflowContract() {
     'pnpm deploy:standalone-gateway:validate',
     'pnpm ops:validate',
     'pnpm --dir apps/desktop test:e2e:packaged',
+    'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
+    'node scripts/find-linux-packaged-executable.mjs',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
   ]) {
@@ -364,6 +367,13 @@ function assertReleaseWorkflowContract() {
     / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
     'release-policy checks out repository source before running the release artifact matrix script',
   )
+
+  assertOrder(releaseWorkflowPath, [
+    'Build Linux release artifacts',
+    'Resolve Linux packaged executable',
+    'Run Linux packaged desktop smoke test',
+    'Upload Linux artifacts',
+  ])
 
   assertOrder(releaseWorkflowPath, [
     'Build and publish cloud OCI staging image',
@@ -436,6 +446,8 @@ function assertReleaseWorkflowContract() {
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64: ${{ secrets.OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64 }}')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST=$manifest_path')
   assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.packaged-executable.outputs.path }}')
+  assertIncludes(releaseWorkflowPath, 'OPEN_COWORK_PACKAGED_EXECUTABLE: ${{ steps.linux-packaged-executable.outputs.path }}')
+  assertIncludes(releaseWorkflowPath, 'sudo apt-get install -y libarchive-tools rpm xvfb')
   assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-macos -type f')
   assertNotIncludes(releaseWorkflowPath, 'find dist-artifacts/release-linux -type f')
   assertNotIncludes(releaseWorkflowPath, 'test:e2e:packaged:optional')
@@ -460,8 +472,18 @@ function assertReleaseChecklistContract() {
     'OPEN_COWORK_PROMOTION_EVIDENCE_MANIFEST_B64',
     '--require-private-pass',
     'Go/No-Go',
+    'macOS/Linux packaged smoke validation',
   ]) {
     assertIncludes(releaseChecklistPath, phrase)
+  }
+}
+
+function assertPackagingDocsContract() {
+  for (const phrase of [
+    'packaged desktop smoke tests on Linux under `xvfb`',
+    'runs packaged desktop smoke tests for macOS and Linux release artifacts',
+  ]) {
+    assertIncludes(packagingDocsPath, phrase)
   }
 }
 
@@ -503,6 +525,7 @@ assertBranchProtectionContract()
 assertCiContract()
 assertReleaseWorkflowContract()
 assertReleaseChecklistContract()
+assertPackagingDocsContract()
 assertGoNoGoTemplateContract()
 for (const path of collectPrivateValueScanFiles()) {
   if (relative('.', path).startsWith('..')) throw new Error(`private-value scan path escaped repository root: ${path}`)
