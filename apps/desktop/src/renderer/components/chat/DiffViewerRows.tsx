@@ -44,7 +44,7 @@ export function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (
   )
 }
 
-export const DiffFileRow = memo(function DiffFileRow({
+export const DiffFileRow = memo(function DiffFileRowComponent({
   sessionId,
   diff,
   expanded,
