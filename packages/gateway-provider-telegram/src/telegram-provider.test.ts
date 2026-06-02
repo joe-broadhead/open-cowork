@@ -258,8 +258,77 @@ describe("TelegramProvider update mapping", () => {
     expect(handled).toEqual([{ update_id: 2 }]);
   });
 
+  it("deduplicates Telegram webhook updates by update_id after authentication", async () => {
+    const handled: unknown[] = [];
+    const provider = new TelegramProvider({
+      botToken: "123:token",
+      mode: "webhook",
+      respondInGroups: "commands_only",
+      observeUnmentionedGroupMessages: false,
+      webhook: {
+        publicBaseUrl: "https://gateway.example.test",
+        path: "/telegram",
+        secretToken: "telegram-secret"
+      }
+    });
+    const internals = provider as unknown as {
+      bot: {
+        handleUpdate: (update: unknown) => Promise<void>;
+      };
+    };
+    internals.bot.handleUpdate = async (update) => {
+      handled.push(update);
+    };
+    const auth = { headers: { "x-telegram-bot-api-secret-token": "telegram-secret" } };
+
+    await provider.handleWebhookUpdate({ update_id: 42, message: { message_id: 1 } }, auth);
+    await provider.handleWebhookUpdate({ update_id: 42, message: { message_id: 1 } }, auth);
+    await provider.handleWebhookUpdate({ update_id: 43, message: { message_id: 1 } }, auth);
+
+    expect(handled).toEqual([
+      { update_id: 42, message: { message_id: 1 } },
+      { update_id: 43, message: { message_id: 1 } }
+    ]);
+  });
+
+  it("releases Telegram webhook update_id claims when handling fails", async () => {
+    const handled: unknown[] = [];
+    const provider = new TelegramProvider({
+      botToken: "123:token",
+      mode: "webhook",
+      respondInGroups: "commands_only",
+      observeUnmentionedGroupMessages: false,
+      webhook: {
+        publicBaseUrl: "https://gateway.example.test",
+        path: "/telegram",
+        secretToken: "telegram-secret"
+      }
+    });
+    let attempts = 0;
+    const internals = provider as unknown as {
+      bot: {
+        handleUpdate: (update: unknown) => Promise<void>;
+      };
+    };
+    internals.bot.handleUpdate = async (update) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("temporary handler failure");
+      }
+      handled.push(update);
+    };
+    const auth = { headers: { "x-telegram-bot-api-secret-token": "telegram-secret" } };
+
+    await expect(provider.handleWebhookUpdate({ update_id: 99, message: { message_id: 7 } }, auth))
+      .rejects.toThrow("temporary handler failure");
+    await provider.handleWebhookUpdate({ update_id: 99, message: { message_id: 7 } }, auth);
+
+    expect(handled).toEqual([{ update_id: 99, message: { message_id: 7 } }]);
+  });
+
   it("maps private text messages to incoming channel messages", () => {
     const mapped = mapTelegramMessage({
+      update: { update_id: 7001 },
       message: {
         message_id: 42,
         date: 1_700_000_000,
@@ -291,6 +360,7 @@ describe("TelegramProvider update mapping", () => {
       isCommand: false,
       attachments: []
     });
+    expect(mapped?.providerEventId).toBe("7001");
     expect(mapped?.receivedAt.toISOString()).toBe("2023-11-14T22:13:20.000Z");
   });
 
@@ -373,6 +443,7 @@ describe("TelegramProvider update mapping", () => {
 
   it("maps callback button data to channel interactions", () => {
     const mapped = mapTelegramCallback({
+      update: { update_id: 8001 },
       callbackQuery: {
         id: "callback-id",
         data: "p:abc123",
@@ -401,6 +472,7 @@ describe("TelegramProvider update mapping", () => {
         kind: "button"
       }
     });
+    expect(mapped?.providerEventId).toBe("8001");
   });
 
   it("ignores bot-authored callback interactions before they reach gateway auth", () => {

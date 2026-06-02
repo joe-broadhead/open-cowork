@@ -1,16 +1,29 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 type PackageJson = {
+  engines?: Record<string, string>
   scripts?: Record<string, string>
 }
 
+type KnipJson = {
+  workspaces?: Record<string, {
+    entry?: string[]
+    project?: string[]
+  }>
+}
+
+const repoRoot = new URL('../', import.meta.url)
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as PackageJson
 const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8')) as PackageJson
 const websitePackageJson = JSON.parse(readFileSync(new URL('../apps/website/package.json', import.meta.url), 'utf8')) as PackageJson
+const knipJson = JSON.parse(readFileSync(new URL('../knip.json', import.meta.url), 'utf8')) as KnipJson
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
+const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
+const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
+const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
@@ -21,6 +34,16 @@ function requireScript(name: string, source: PackageJson = packageJson): string 
 
 function splitScriptSteps(script: string): string[] {
   return script.split('&&').map((step) => step.trim())
+}
+
+function sourceWorkspacePackageDirs(): string[] {
+  return ['apps', 'packages', 'mcps'].flatMap((scope) => {
+    return readdirSync(new URL(`../${scope}/`, import.meta.url), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${scope}/${entry.name}`)
+      .filter((workspace) => existsSync(new URL(`${workspace}/package.json`, repoRoot)))
+      .filter((workspace) => existsSync(new URL(`${workspace}/src/`, repoRoot)))
+  }).sort()
 }
 
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
@@ -91,6 +114,34 @@ test('root lint script runs all release gate checks', () => {
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
   ])
+})
+
+test('dead-code gate covers every source workspace package', () => {
+  const workspaces = knipJson.workspaces || {}
+  const expected = sourceWorkspacePackageDirs()
+  const missing = expected.filter((workspace) => !workspaces[workspace])
+
+  assert.deepEqual(missing, [], `knip.json must cover every source workspace package: ${missing.join(', ')}`)
+
+  for (const workspace of expected) {
+    const config = workspaces[workspace]
+    assert.ok(config?.entry?.length, `knip workspace ${workspace} must declare entry files`)
+    assert.ok(config?.project?.length, `knip workspace ${workspace} must declare project files`)
+  }
+})
+
+test('contributor setup docs and dependency update governance match enforced engines', () => {
+  assert.equal(nvmrc, '22.12.0')
+  assert.equal(packageJson.engines?.node, '>=22.12')
+  assert.match(contributingDocs, /Node `>=22\.12`/)
+  assert.doesNotMatch(contributingDocs, /Node `>=22`[^.]/)
+
+  for (const directory of [
+    '/docker/open-cowork-cloud',
+    '/docker/open-cowork-gateway',
+  ]) {
+    assert.match(dependabotConfig, new RegExp(`package-ecosystem: "docker"[\\s\\S]*directory: "${directory}"`))
+  }
 })
 
 test('root deployment scripts expose provider smoke gates', () => {
@@ -229,6 +280,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
     'node scripts/verify-release-tag-signature.mjs',
+    'node scripts/verify-release-artifact-matrix.mjs',
     'node scripts/verify-release-actor.mjs',
     'node scripts/verify-release-checks.mjs',
   ]) {
@@ -252,6 +304,12 @@ test('ci and release workflows use canonical release gate scripts', () => {
   ]) {
     assert.match(releaseWorkflow, new RegExp(evidence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `release workflow must preserve ${evidence}`)
   }
+
+  assert.match(
+    releaseWorkflow,
+    / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
+    'release-policy must checkout source before running the repository release artifact matrix script',
+  )
 
   assert.match(packagingDocs, /gh attestation verify "oci:\/\/\$\{digest_ref\}"/)
   assert.match(packagingDocs, /--predicate-type https:\/\/cyclonedx\.org\/bom/)

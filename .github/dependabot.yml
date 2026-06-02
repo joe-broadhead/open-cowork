@@ -36,6 +36,24 @@ updates:
       prefix: "chore(ci)"
       include: "scope"
 
+  - package-ecosystem: "docker"
+    directory: "/docker/open-cowork-cloud"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/docker/open-cowork-gateway"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(docker)"
+      include: "scope"
+
   - package-ecosystem: "pip"
     directory: "/docs"
     schedule:

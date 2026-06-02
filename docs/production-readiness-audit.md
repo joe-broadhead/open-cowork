@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `d904f74cb97e4697294966ec0cb1743f07706f77`.
+  `9de8383f3eb945d715a731ecea93398b5ab7509a`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -67,6 +67,31 @@ The remaining work is concentrated in two areas:
   strict per-item report metadata for load, soak, failover, restore, BYOK,
   support, rollback, commit SHA, image digests, and sanitized environment
   profile.
+- Dead-code coverage now includes all source workspace packages in `knip.json`,
+  including Gateway apps, channel/provider packages, and gateway test utilities.
+  `tests/package-scripts.test.ts` derives the expected workspace list from
+  actual `apps/*`, `packages/*`, and `mcps/*` package directories so future
+  source workspaces cannot silently fall out of the dead-code gate.
+- Cloud and Gateway Helm charts now default service-account token automounting
+  to `false`; Gateway has an explicit service-account opt-in surface, and the
+  static deployment validator checks the rendered chart templates keep that
+  control wired.
+- Dependabot now governs the digest-pinned Cloud and Gateway Dockerfiles with
+  monthly Docker ecosystem updates, and contributor setup docs now match the
+  enforced Node `>=22.12` engine.
+- Telegram webhook ingress now deduplicates authenticated `update_id` values
+  before handing updates to grammy, releases the claim if handling fails, and
+  preserves Telegram `update_id` as the provider event id when mapping messages
+  and callback interactions.
+- Workflow run threads now start the same session-status reconciliation safety
+  net used by normal prompts. If a runtime `session.idle` event is missed, the
+  status poll fallback finalizes the saved workflow run instead of leaving it
+  `running` until restart recovery marks it failed.
+- Release policy now verifies the exact documented desktop artifact matrix
+  before publish eligibility: macOS `x64`/`arm64` `.dmg` and `.zip`, Linux
+  `x64` `.AppImage` and `.deb`, plus signed-only `latest-mac.yml` feed
+  metadata. Fixture tests reject missing formats, missing architectures, and
+  unexpected installer artifacts.
 
 ## High Priority
 
@@ -106,9 +131,6 @@ No open high-priority findings remain after the current audit remediations.
 - `workflows.startDraft` exposes an options contract that the bridge ignores.
   Either implement workspace-aware draft creation or remove the unused options
   surface.
-- Dead-code checks omit Gateway workspaces from `knip.json`. Add the Gateway
-  app, standalone Gateway, gateway channel, provider packages, and gateway
-  testing package, or generate Knip workspaces from `pnpm-workspace.yaml`.
 - The vendored docs Mermaid bundle is version-drifted from the locked runtime
   dependency. Add deterministic regeneration/hash checking or build the bundle
   from the locked dependency.
@@ -146,6 +168,7 @@ node scripts/validate-deployment-configs.mjs
 node scripts/lint.mjs
 node scripts/check-preload-channels.mjs
 node scripts/check-shared-dist.mjs
+node scripts/run-node-tests.mjs tests/package-scripts.test.ts
 ./apps/desktop/node_modules/.bin/tsc -p apps/desktop/tsconfig.main.json --noEmit
 ./apps/desktop/node_modules/.bin/tsc -p apps/desktop/tsconfig.preload.json --noEmit
 git diff --check
@@ -155,3 +178,8 @@ Local environment limits: `pnpm`, `corepack`, `gh`, Docker, and Helm were not
 available in this shell. Docker/Helm checks therefore used the repository's
 static deployment validators rather than live `docker compose config` or Helm
 template execution.
+
+`knip --production --files` could not execute in this macOS workspace because
+Knip's native `oxc-parser` binding was rejected by the local Node runtime
+code-signing loader. CI's Linux `pnpm lint:dead-code` job remains the
+authoritative executable proof for the dead-code gate.

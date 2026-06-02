@@ -108,6 +108,12 @@ networkPolicy:
     enabled: false
     to: []
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
 resources: {}
 
 topologySpreadConstraints: []

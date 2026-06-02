@@ -17,6 +17,8 @@ import { timingSafeEqual } from "node:crypto";
 import type { Update } from "grammy/types";
 import { withTelegramRetry, type TelegramRateLimitEvent } from "./telegram-retry.js";
 
+const MAX_TELEGRAM_WEBHOOK_DEDUPE_KEYS = 10_000;
+
 export interface TelegramProviderConfig {
   providerId?: ChannelProviderId;
   botToken: string;
@@ -78,6 +80,8 @@ export class TelegramProvider implements ChannelProvider {
   private handlersRegistered = false;
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private identity?: TelegramBotIdentity;
+  private readonly seenWebhookUpdateIds = new Set<string>();
+  private readonly seenWebhookUpdateOrder: string[] = [];
 
   constructor(private readonly config: TelegramProviderConfig) {
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
@@ -163,7 +167,16 @@ export class TelegramProvider implements ChannelProvider {
 
   async handleWebhookUpdate(update: unknown, auth: TelegramWebhookAuth): Promise<void> {
     this.assertWebhookAuthorized(auth);
-    await this.bot.handleUpdate(update as Update);
+    const updateId = telegramUpdateId(update);
+    if (updateId && !this.claimWebhookUpdate(updateId)) {
+      return;
+    }
+    try {
+      await this.bot.handleUpdate(update as Update);
+    } catch (error) {
+      if (updateId) this.releaseWebhookUpdate(updateId);
+      throw error;
+    }
   }
 
   async sendText(target: ChannelTarget, text: string, options?: SendOptions): Promise<SentMessage> {
@@ -279,6 +292,35 @@ export class TelegramProvider implements ChannelProvider {
       throw new Error("Telegram webhook secret verification failed");
     }
   }
+
+  private claimWebhookUpdate(updateId: string): boolean {
+    if (this.seenWebhookUpdateIds.has(updateId)) {
+      return false;
+    }
+    this.seenWebhookUpdateIds.add(updateId);
+    this.seenWebhookUpdateOrder.push(updateId);
+    while (this.seenWebhookUpdateOrder.length > MAX_TELEGRAM_WEBHOOK_DEDUPE_KEYS) {
+      const evicted = this.seenWebhookUpdateOrder.shift();
+      if (evicted) this.seenWebhookUpdateIds.delete(evicted);
+    }
+    return true;
+  }
+
+  private releaseWebhookUpdate(updateId: string): void {
+    if (!this.seenWebhookUpdateIds.delete(updateId)) {
+      return;
+    }
+    const index = this.seenWebhookUpdateOrder.indexOf(updateId);
+    if (index >= 0) this.seenWebhookUpdateOrder.splice(index, 1);
+  }
+}
+
+function telegramUpdateId(update: unknown): string | null {
+  if (!update || typeof update !== "object") {
+    return null;
+  }
+  const value = (update as { update_id?: unknown }).update_id;
+  return typeof value === "number" && Number.isSafeInteger(value) ? String(value) : null;
 }
 
 export function mapTelegramMessage(
@@ -303,11 +345,12 @@ export function mapTelegramMessage(
     return null;
   }
   const threadId = "message_thread_id" in message && typeof message.message_thread_id === "number" ? String(message.message_thread_id) : null;
+  const providerEventId = telegramContextUpdateId(ctx) ?? String(message.message_id);
 
   return {
     id: String(message.message_id),
     providerInstanceId: providerId,
-    providerEventId: String(message.message_id),
+    providerEventId,
     providerMessageId: String(message.message_id),
     provider: providerId,
     providerKind: "telegram",
@@ -351,11 +394,12 @@ export function mapTelegramCallback(ctx: Context, providerId: ChannelProviderId 
   }
 
   const threadId = "message_thread_id" in message && typeof message.message_thread_id === "number" ? String(message.message_thread_id) : null;
+  const providerEventId = telegramContextUpdateId(ctx) ?? query.id;
 
   return {
     id: query.id,
     providerInstanceId: providerId,
-    providerEventId: query.id,
+    providerEventId,
     providerMessageId: String(message.message_id),
     provider: providerId,
     providerKind: "telegram",
@@ -386,6 +430,10 @@ export function mapTelegramCallback(ctx: Context, providerId: ChannelProviderId 
     receivedAt: new Date(),
     raw: query
   };
+}
+
+function telegramContextUpdateId(ctx: Context): string | null {
+  return telegramUpdateId((ctx as { update?: unknown }).update);
 }
 
 export function parseTelegramCommand(text: string, botUsername?: string): { command: string; args: string } | null {
