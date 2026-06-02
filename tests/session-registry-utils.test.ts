@@ -86,3 +86,28 @@ test('normalizeStoredSessionRecord preserves session usage agent breakdowns', ()
     tokens: { input: 10, output: 20, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
   }])
 })
+
+test('normalizeStoredSessionRecord preserves synthetic diff summary provenance', () => {
+  const record = normalizeStoredSessionRecord({
+    id: 'ses_changes',
+    opencodeDirectory: '/runtime-home',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:01.000Z',
+    managedByCowork: true,
+    changeSummary: {
+      files: 2,
+      additions: 10,
+      deletions: 1,
+      source: 'mixed',
+      synthetic: true,
+    },
+  }, (value) => value, () => null)
+
+  assert.deepEqual(record?.changeSummary, {
+    files: 2,
+    additions: 10,
+    deletions: 1,
+    source: 'mixed',
+    synthetic: true,
+  })
+})

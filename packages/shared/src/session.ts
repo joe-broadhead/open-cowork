@@ -7,6 +7,8 @@ export interface SessionChangeSummary {
   additions: number
   deletions: number
   files: number
+  source?: 'synthetic' | 'mixed'
+  synthetic?: boolean
 }
 
 // Per-file diff entry, mirroring SDK SnapshotFileDiff. `patch` is a unified
@@ -17,6 +19,10 @@ export interface SessionFileDiff {
   additions: number
   deletions: number
   status?: 'added' | 'deleted' | 'modified'
+  // Synthetic entries are inferred by Open Cowork from projected tool outputs
+  // when SDK snapshot diffs are unavailable for a written file.
+  source?: 'sdk' | 'synthetic'
+  synthetic?: boolean
 }
 
 export interface SessionInfo {

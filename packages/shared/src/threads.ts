@@ -156,6 +156,7 @@ export interface ThreadIndexUpsertInput {
   changeFiles?: number
   changeAdditions?: number
   changeDeletions?: number
+  changeSource?: 'synthetic' | 'mixed' | null
   /**
    * Omit actual metadata arrays when an update is record-only and should
    * preserve the existing sidecar metadata. Pass an empty array only when the

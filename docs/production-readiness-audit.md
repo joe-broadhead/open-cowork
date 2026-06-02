@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `920d09dddf45311240a6438375208c65f4eb4aea`.
+  `854fbd0eeaf02cfd3ac5c71836b279cf605c2280`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -140,6 +140,10 @@ The remaining work is concentrated in two areas:
 - Workspace SSE reconnects now use retained-stream cursor metadata to detect
   retention gaps and replay only events newer than the client cursor. Gap
   detection no longer loads all retained workspace events from sequence `0`.
+- Product diff fallback rows and aggregate summaries now carry explicit
+  synthetic/mixed provenance when they are inferred from projected tool output
+  instead of OpenCode SDK snapshot diffs, and the diff dialog plus thread
+  summaries label those values as estimated.
 
 ## High Priority
 
@@ -157,9 +161,6 @@ No open high-priority findings remain after the current audit remediations.
   environment drill evidence for hosted promotion.
 - Queue processing needs fairness and backpressure caps across hot sessions,
   gateway deliveries, providers, and bindings.
-- Product diff fallback infers OpenCode tool semantics for write/edit tools.
-  Prefer SDK `session.diff`; if fallback remains, label synthetic summaries as
-  untrusted projection data.
 - History replay still has a large heuristic child-task binding path. Persist
   live binding decisions or require explicit child session ids, keeping
   heuristic replay quarantined as fallback.

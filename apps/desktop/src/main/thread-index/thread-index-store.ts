@@ -97,7 +97,16 @@ function changeSummaryFromRow(row: Row) {
   const files = asNumber(row.change_files)
   const additions = asNumber(row.change_additions)
   const deletions = asNumber(row.change_deletions)
-  return files > 0 || additions > 0 || deletions > 0 ? { files, additions, deletions } : null
+  if (files <= 0 && additions <= 0 && deletions <= 0) return null
+  const source: 'synthetic' | 'mixed' | null = row.change_source === 'synthetic' || row.change_source === 'mixed'
+    ? row.change_source
+    : null
+  return {
+    files,
+    additions,
+    deletions,
+    ...(source ? { source, synthetic: true } : {}),
+  }
 }
 
 export class ThreadIndexStore {
@@ -188,8 +197,8 @@ export class ThreadIndexStore {
           created_at, updated_at, parent_session_id, workflow_id, run_id, reverted_message_id,
           message_count, tool_call_count, task_run_count, cost,
           input_tokens, output_tokens, reasoning_tokens, cache_read_tokens, cache_write_tokens,
-          change_files, change_additions, change_deletions, indexed_at, metadata_version
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          change_files, change_additions, change_deletions, change_source, indexed_at, metadata_version
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         on conflict(session_id) do update set
           title = excluded.title,
           kind = excluded.kind,
@@ -216,6 +225,7 @@ export class ThreadIndexStore {
           change_files = excluded.change_files,
           change_additions = excluded.change_additions,
           change_deletions = excluded.change_deletions,
+          change_source = excluded.change_source,
           indexed_at = excluded.indexed_at,
           metadata_version = excluded.metadata_version
       `).run(
@@ -245,6 +255,7 @@ export class ThreadIndexStore {
         input.changeFiles || 0,
         input.changeAdditions || 0,
         input.changeDeletions || 0,
+        input.changeSource === 'synthetic' || input.changeSource === 'mixed' ? input.changeSource : null,
         indexedAt,
         input.metadataVersion || THREAD_INDEX_METADATA_VERSION,
       )

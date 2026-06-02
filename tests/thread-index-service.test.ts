@@ -67,7 +67,7 @@ test('thread index service reconciles registry rows and removes orphans', () => 
     opencodeDirectory: '/workspace/revenue',
     providerId: 'openrouter',
     modelId: 'openrouter/sonnet',
-    changeSummary: { files: 2, additions: 10, deletions: 1 },
+    changeSummary: { files: 2, additions: 10, deletions: 1, source: 'mixed', synthetic: true },
   }))
   const second = upsertSessionRecord(toSessionRecord({
     id: 'session-b',
@@ -86,6 +86,8 @@ test('thread index service reconciles registry rows and removes orphans', () => 
   assert.equal(result.threads.length, 2)
   assert.equal(result.threads[0]!.providerId, 'codex')
   assert.equal(result.threads[1]!.changeSummary?.files, 2)
+  assert.equal(result.threads[1]!.changeSummary?.source, 'mixed')
+  assert.equal(result.threads[1]!.changeSummary?.synthetic, true)
 
   const renamed = updateSessionRecord('session-a', { title: 'Renamed revenue', updatedAt: '2026-01-05T00:00:00.000Z' })
   assert.ok(renamed)

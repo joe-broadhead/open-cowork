@@ -342,9 +342,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                     )}
                     {session.changeSummary && session.changeSummary.files > 0 && (
                       <span
-                        title={t('diff.filesChanged', '{{count}} file(s) changed', { count: String(session.changeSummary.files) })}
+                        title={session.changeSummary.synthetic
+                          ? t('diff.estimatedFilesChanged', '{{count}} estimated file(s) changed from projection data', { count: String(session.changeSummary.files) })
+                          : t('diff.filesChanged', '{{count}} file(s) changed', { count: String(session.changeSummary.files) })}
                         className="shrink-0 inline-flex items-center gap-1 text-[9px] leading-none"
                       >
+                        {session.changeSummary.synthetic && <span className="text-text-muted">est</span>}
                         <span style={{ color: 'var(--color-green)' }}>+{session.changeSummary.additions}</span>
                         <span style={{ color: 'var(--color-red)' }}>−{session.changeSummary.deletions}</span>
                       </span>

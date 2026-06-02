@@ -64,7 +64,7 @@ test('thread index store searches, facets, and cursor-pages 5k seeded threads', 
       }
     }
   }
-  assert.equal(THREAD_INDEX_SCHEMA_VERSION, 1)
+  assert.equal(THREAD_INDEX_SCHEMA_VERSION, 2)
 }))
 
 test('thread index store keeps user tags, smart filters, and suggestions separate', () => withStore('tags', (store) => {
@@ -78,6 +78,10 @@ test('thread index store keeps user tags, smart filters, and suggestions separat
     status: 'idle',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
+    changeFiles: 1,
+    changeAdditions: 2,
+    changeDeletions: 0,
+    changeSource: 'synthetic',
     actualAgents: [{ name: 'research', count: 1 }],
     actualTools: [{ name: 'charts.create', mcpName: 'charts', count: 1 }],
   })
@@ -103,6 +107,13 @@ test('thread index store keeps user tags, smart filters, and suggestions separat
   const tagged = store.searchThreads({ tagIds: [tag.id] })
   assert.equal(tagged.threads.length, 1)
   assert.equal(tagged.threads[0]!.tags[0]!.name, 'Revenue')
+  assert.deepEqual(tagged.threads[0]!.changeSummary, {
+    files: 1,
+    additions: 2,
+    deletions: 0,
+    source: 'synthetic',
+    synthetic: true,
+  })
   assert.equal(tagged.threads[0]!.actualTools[0]!.name, 'charts.create')
   assert.equal(tagged.threads[0]!.suggestions[0]!.label, 'reporting')
 

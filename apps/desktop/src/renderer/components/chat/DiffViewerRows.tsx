@@ -62,6 +62,7 @@ export const DiffFileRow = memo(function DiffFileRowComponent({
   const hunks = useMemo(() => parseUnifiedPatch(diff.patch), [diff.patch])
   const status = inferStatus(hunks, diff.status)
   const handleClick = useCallback(() => { onToggle(filePath) }, [onToggle, filePath])
+  const isSynthetic = diff.synthetic || diff.source === 'synthetic'
 
   return (
     <div className="border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
@@ -72,6 +73,14 @@ export const DiffFileRow = memo(function DiffFileRowComponent({
         <div className="flex items-center gap-2 min-w-0">
           <StatusBadge status={status} />
           <span className="text-[12px] font-mono text-text truncate">{diff.file}</span>
+          {isSynthetic && (
+            <span
+              title={t('diff.syntheticTitle', 'Estimated from projected tool output; not an authoritative OpenCode snapshot diff')}
+              className="text-[9px] uppercase tracking-[0.04em] text-text-muted border border-border-subtle rounded px-1 py-px"
+            >
+              {t('diff.estimated', 'estimated')}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-[11px] shrink-0">
           {diff.additions > 0 && <span style={{ color: 'var(--color-green)' }}>+{diff.additions}</span>}
