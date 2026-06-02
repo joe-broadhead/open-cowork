@@ -710,6 +710,8 @@ Set these environment variables in every role:
 | `OPEN_COWORK_CLOUD_LOG_FORMAT` | `json`, `pretty`, or `silent`; defaults to JSON for cloud logs. |
 | `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` | Optional OpenTelemetry OTLP HTTP base endpoint; exports traces to `/v1/traces` and metrics to `/v1/metrics`. |
 | `OPEN_COWORK_CLOUD_OTLP_HEADERS` | Optional JSON object of OTLP HTTP headers, stored as a secret when it contains collector credentials. |
+| `OPEN_COWORK_CLOUD_OTLP_FLUSH_INTERVAL_MS` | Optional non-negative OTLP export interval in milliseconds; defaults to `30000`; `0` disables the timer and relies on explicit flush/close. |
+| `OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE` | Optional positive maximum queued spans and metrics per OTLP record type before oldest records are dropped and counted; defaults to `1000`. |
 | `OPEN_COWORK_CLOUD_CHECKPOINTS_ENABLED` | `true` enables worker runtime/workspace checkpoints in object storage. |
 
 Managed billing variables:
@@ -957,6 +959,10 @@ browser is not the only protection.
   profile, status, and duration. When `OPEN_COWORK_CLOUD_OTLP_ENDPOINT` is
   set, the same request observations are exported as OTLP HTTP traces and
   duration metrics without adding provider-specific code paths.
+- OTLP export is best-effort and bounded: collector failures do not block Cloud
+  requests or worker commands, overflow drops the oldest queued records, and
+  `open_cowork_cloud_otlp_dropped_records_total` reports queue drops by record
+  type.
 - Browser event streams use ordered durable events, so web replicas do not need
   sticky sessions for session replay.
 - Browser sessions use signed `HttpOnly`, `SameSite=Lax` cookies and require

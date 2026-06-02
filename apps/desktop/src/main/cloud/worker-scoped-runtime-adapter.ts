@@ -6,7 +6,7 @@ import {
   type CloudByokRuntimeProviderPolicy,
 } from './byok-runtime-config.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
-import type { CloudObservabilityAdapter } from './observability.ts'
+import { recordCloudMetric, type CloudObservabilityAdapter } from './observability.ts'
 import type { PathProvider } from './path-provider.ts'
 import { createCloudSessionPathProvider } from './path-provider.ts'
 import type {
@@ -115,7 +115,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
     value: number,
     attributes: Record<string, string | number | boolean | undefined> = {},
   ) {
-    await options.observability?.metric({
+    await recordCloudMetric(options.observability, {
       name,
       value,
       unit: '1',
@@ -186,7 +186,7 @@ export function createWorkerScopedRuntimeAdapter(options: WorkerScopedRuntimeAda
       })
     } catch (error) {
       if (error instanceof CloudByokRuntimeConfigError) {
-        await options.observability?.metric({
+        await recordCloudMetric(options.observability, {
           name: 'open_cowork_cloud_byok_reveal_failures_total',
           value: 1,
           unit: '1',

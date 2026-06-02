@@ -33,6 +33,8 @@ data:
   OPEN_COWORK_CLOUD_SERVICE_VERSION: {{ .Values.cloud.observability.serviceVersion | quote }}
   OPEN_COWORK_CLOUD_LOG_FORMAT: {{ .Values.cloud.observability.logFormat | quote }}
   OPEN_COWORK_CLOUD_OTLP_ENDPOINT: {{ .Values.cloud.observability.otlpEndpoint | quote }}
+  OPEN_COWORK_CLOUD_OTLP_FLUSH_INTERVAL_MS: {{ .Values.cloud.observability.otlpFlushIntervalMs | quote }}
+  OPEN_COWORK_CLOUD_OTLP_MAX_QUEUE_SIZE: {{ .Values.cloud.observability.otlpMaxQueueSize | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_KIND: {{ .Values.cloud.objectStore.kind | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_BUCKET: {{ .Values.cloud.objectStore.bucket | quote }}
   OPEN_COWORK_CLOUD_OBJECT_STORE_REGION: {{ .Values.cloud.objectStore.region | quote }}

@@ -45,7 +45,7 @@ import type {
   SessionEventRecord,
   WorkspaceEventRecord,
 } from './control-plane-store.ts'
-import { recordCloudHttpRequest } from './observability.ts'
+import { recordCloudHttpRequest, recordCloudMetric } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
 import {
   InMemoryWorkflowWebhookSecurityStore,
@@ -1720,7 +1720,7 @@ export class CloudHttpServer {
         ? 'open_cowork_cloud_auth_failures_total'
         : null
     if (!name) return
-    await this.options.observability?.metric({
+    await recordCloudMetric(this.options.observability, {
       name,
       value: 1,
       unit: '1',

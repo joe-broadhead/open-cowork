@@ -3025,6 +3025,30 @@ test('cloud HTTP server emits auth and quota denial metrics', async () => {
   assert.equal(metrics.some((metric) => (metric as Record<string, unknown>).name === 'open_cowork_cloud_quota_rejections_total'), true)
 })
 
+test('cloud HTTP policy error responses ignore failing observability sinks', async () => {
+  const observability: CloudObservabilityAdapter = {
+    log() {},
+    metric() { throw new Error('metric sink unavailable') },
+    span() {},
+  }
+  const fixture = createFixture({
+    observability,
+    auth: () => {
+      throw new CloudHttpError(401, 'Cloud authentication is required.', { policyCode: 'auth.invalid_token' })
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const rejected = await fetch(`${baseUrl}/api/workspace`, {
+      signal: AbortSignal.timeout(1_000),
+    })
+    assert.equal(rejected.status, 401)
+    await rejected.text()
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP browser session cookies use secure flags and enforce CSRF on mutating routes', async () => {
   const sessionCookies = createCloudSessionCookieManager({
     secret: TEST_COOKIE_KEY,

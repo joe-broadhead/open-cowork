@@ -92,6 +92,8 @@ cloud:
     logFormat: json
     otlpEndpoint: ""
     otlpHeaders: ""
+    otlpFlushIntervalMs: 30000
+    otlpMaxQueueSize: 1000
   checkpoints:
     enabled: false
   objectStore:
