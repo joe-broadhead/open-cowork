@@ -38,7 +38,10 @@ Use these invariants across every provider:
 - Keep billing optional for self-hosted OSS deployments. Use no billing
   provider or the stub billing provider unless you are operating managed SaaS.
 - Run `pnpm deploy:validate` before release and `pnpm deploy:smoke` against a
-  live deployment after rollout.
+  live deployment after rollout. Use `pnpm deploy:smoke:strict` for production
+  evidence because it requires authenticated Cloud/Gateway operator checks,
+  mutation coverage, token revocation, runtime status, and worker heartbeat
+  visibility.
 - For the GCP reference deployment, run `pnpm deploy:gcp:preflight` before
   rollout and `pnpm deploy:gcp:smoke` after traffic is routed.
 - Use `docs/setup-and-health-center.md` and the Desktop Health Center as the
@@ -289,6 +292,16 @@ pnpm deploy:smoke
 
 The same smoke command works for local Compose, Kubernetes/Helm, and the cloud
 provider recipes once traffic is routed to the chosen endpoints.
+
+Production evidence should use the strict wrapper:
+
+```bash
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:smoke:strict
+```
 
 Validate Desktop cloud workspace sync against the same deployment:
 

@@ -119,6 +119,23 @@ permission from Web, resolves a question from Gateway, checks artifact metadata,
 prompts the same cloud thread concurrently from Web and Desktop, verifies stale
 Desktop cursors replay from durable state, and revokes all smoke tokens.
 
+## Strict Production Smoke
+
+```bash
+OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+OPEN_COWORK_SMOKE_ADMIN_TOKEN=... \
+OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+pnpm deploy:smoke:strict
+```
+
+This is the fail-closed production evidence wrapper. It chains the baseline
+authenticated deployment smoke, Desktop cloud-sync smoke, Gateway cloud smoke,
+and Continuation parity smoke. The wrapper requires Cloud runtime status,
+worker heartbeat visibility, Gateway operator checks, Desktop/Gateway mutation
+coverage, Desktop/Gateway token revocation rejection, Continuation rich
+projection, and Continuation token cleanup before reporting success.
+
 ## Launch Load And Soak
 
 ```bash

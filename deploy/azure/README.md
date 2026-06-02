@@ -111,6 +111,12 @@ AKS secret-store CSI. The names below are runtime keys, not committed values:
    OPEN_COWORK_CONTINUATION_SMOKE_ADMIN_TOKEN=... \
    OPEN_COWORK_CONTINUATION_SMOKE_REQUIRE_RICH_PROJECTION=true \
    pnpm deploy:continuation:smoke
+
+   OPEN_COWORK_SMOKE_CLOUD_URL=https://cowork.example.com \
+   OPEN_COWORK_SMOKE_GATEWAY_URL=https://gateway.example.com \
+   OPEN_COWORK_SMOKE_ADMIN_TOKEN=... \
+   OPEN_COWORK_SMOKE_GATEWAY_ADMIN_TOKEN=... \
+   pnpm deploy:smoke:strict
    ```
 
 ## Production Notes
@@ -125,7 +131,7 @@ AKS secret-store CSI. The names below are runtime keys, not committed values:
 - Prefer workload identity for Blob and Key Vault access over long-lived static
   keys.
 - Run `pnpm deploy:smoke` after rollout with the deployed cloud and gateway
-  URLs.
+  URLs, then run `pnpm deploy:smoke:strict` for production evidence.
 
 Azure configuration is provider-config only adapter wiring. Do not add Azure
 branches to cloud sessions, gateway rendering, OpenCode runtime startup, or

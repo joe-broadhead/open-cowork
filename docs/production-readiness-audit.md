@@ -110,6 +110,11 @@ The remaining work is concentrated in two areas:
   the release workflow resolves the packaged Linux executable with the shared
   resolver script, launches the packaged app under `xvfb`, and only uploads
   Linux release artifacts after that smoke passes.
+- Production deployment smoke now has a fail-closed strict wrapper. It requires
+  authenticated Cloud and managed Gateway endpoints, verifies runtime status,
+  worker heartbeat visibility, Cloud/Gateway operator metrics, Desktop/Gateway
+  mutation coverage with token revocation rejection, and Continuation rich
+  projection with ephemeral-token cleanup.
 
 ## High Priority
 
@@ -117,9 +122,6 @@ No open high-priority findings remain after the current audit remediations.
 
 ## Medium Priority
 
-- Production deployment smoke should have a strict authenticated mode requiring
-  Cloud and Gateway tokens, operator checks, mutation flow coverage, token
-  revocation, runtime status, and worker heartbeat visibility.
 - Workspace coverage gates are too broad and low for deployable workspace code:
   `lines: 40`, `functions: 28`, and `branches: 68`. Split thresholds by
   package/service and remove generated dist noise from source coverage once the

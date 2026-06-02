@@ -56,6 +56,14 @@ Set `OPEN_COWORK_SMOKE_OPERATOR_CHECKS=true` and provide operator tokens to
 also validate cloud runtime status, worker heartbeats, cloud `/api/metrics`,
 and Gateway `/metrics`.
 
+`pnpm deploy:smoke:strict` is the production evidence wrapper. It requires
+Cloud and managed Gateway URLs plus admin/operator tokens, runs the baseline
+smoke in strict authenticated mode, then runs the Desktop, Gateway, and
+Continuation smokes with revocation, managed-gateway, and rich-projection gates
+enabled. It fails closed if any deep smoke skips mutation coverage, token
+revocation, runtime status, worker heartbeat visibility, or Gateway operator
+coverage.
+
 `pnpm ops:validate` statically validates the production operations bundle:
 metric catalog, Grafana dashboard, Prometheus alert rules, incident runbooks,
 backup/restore instructions, and restore drill report requirements.
