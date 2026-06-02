@@ -59,23 +59,11 @@ The remaining work is concentrated in three areas:
   failing sinks, worker/scheduler/HTTP record helpers suppress telemetry sink
   failures, and OTLP export uses bounded queues, drop counters, and periodic
   flush.
+- Cloud HTTP shutdown now closes replay polling and active SSE streams before
+  awaiting `server.close()`, with lifecycle regressions for open streams and
+  shutdown during replay loading.
 
 ## High Priority
-
-### Active SSE Streams Can Block Cloud Shutdown
-
-Evidence:
-
-- Cloud HTTP shutdown awaits `server.close()` before closing stream hubs.
-- SSE timers and subscriptions clean up on request `close`, but active streams
-  may keep the HTTP server open.
-
-Impact: deploys and restarts can hang while clients keep long-lived streams
-connected.
-
-Target state: track active SSE responses and sockets, close replay hubs before
-awaiting server close, end or destroy active streams on shutdown, and add a
-lifecycle test with an open stream.
 
 ### Release Gates Do Not Prove Hosted Production Readiness
 

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import type { AddressInfo, Socket } from 'node:net'
 import {
   emptySessionImportItemCounts,
   isCloudSessionEventType,
@@ -99,6 +99,7 @@ export type CloudHttpServerOptions = {
   maxBodyBytes?: number
   ssePollMs?: number
   sseReplayHub?: CloudSseReplayHub
+  sseStreamRegistry?: CloudSseStreamRegistry
   trustProxyHeaders?: boolean
   readiness?: () => Promise<CloudReadinessReport> | CloudReadinessReport
 }
@@ -146,8 +147,61 @@ type SseReplayTopic = {
   timer: ReturnType<typeof setInterval>
 }
 
+type ActiveSseStream = {
+  res: ServerResponse
+  socket: Socket | null
+  close: () => void
+}
+
+export class CloudSseStreamRegistry {
+  private readonly streams = new Set<ActiveSseStream>()
+  private closing = false
+
+  track(req: IncomingMessage, res: ServerResponse, cleanup: () => void) {
+    if (this.closing) {
+      const socket = res.socket || req.socket || null
+      cleanup()
+      if (!res.writableEnded && !res.destroyed) res.end()
+      if (!res.destroyed) res.destroy()
+      if (socket && !socket.destroyed) socket.destroy()
+      return false
+    }
+
+    let closed = false
+    const stream: ActiveSseStream = {
+      res,
+      socket: res.socket || req.socket || null,
+      close: () => {
+        if (closed) return
+        closed = true
+        this.streams.delete(stream)
+        req.off('close', stream.close)
+        res.off('close', stream.close)
+        res.off('finish', stream.close)
+        cleanup()
+      },
+    }
+    this.streams.add(stream)
+    req.once('close', stream.close)
+    res.once('close', stream.close)
+    res.once('finish', stream.close)
+    return true
+  }
+
+  closeAll() {
+    this.closing = true
+    for (const stream of Array.from(this.streams)) {
+      stream.close()
+      if (!stream.res.writableEnded && !stream.res.destroyed) stream.res.end()
+      if (!stream.res.destroyed) stream.res.destroy()
+      if (stream.socket && !stream.socket.destroyed) stream.socket.destroy()
+    }
+  }
+}
+
 export class CloudSseReplayHub {
   private readonly topics = new Map<string, SseReplayTopic>()
+  private closed = false
 
   subscribe(
     input: {
@@ -159,6 +213,7 @@ export class CloudSseReplayHub {
       onError?: (error: unknown) => void
     },
   ) {
+    if (this.closed) return () => {}
     let topic = this.topics.get(input.key)
     if (!topic) {
       topic = {
@@ -193,16 +248,22 @@ export class CloudSseReplayHub {
   }
 
   close() {
-    for (const topic of this.topics.values()) clearInterval(topic.timer)
+    this.closed = true
+    for (const topic of this.topics.values()) {
+      clearInterval(topic.timer)
+      topic.subscribers.clear()
+    }
     this.topics.clear()
   }
 
   private async poll(key: string) {
+    if (this.closed) return
     const topic = this.topics.get(key)
     if (!topic || topic.polling) return
     topic.polling = true
     try {
       const events = await topic.loadEvents(topic.lastSequence)
+      if (this.closed || this.topics.get(key) !== topic) return
       for (const event of events) {
         if (event.sequence <= topic.lastSequence) continue
         topic.lastSequence = event.sequence
@@ -215,7 +276,7 @@ export class CloudSseReplayHub {
     } catch (error) {
       for (const subscriber of topic.subscribers) subscriber.onError?.(error)
     } finally {
-      topic.polling = false
+      if (this.topics.get(key) === topic) topic.polling = false
     }
   }
 }
@@ -776,6 +837,29 @@ async function handleBillingWebhook(
   }
 }
 
+function trackSseStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: CloudHttpServerOptions,
+  cleanup: () => void,
+) {
+  if (options.sseStreamRegistry) return options.sseStreamRegistry.track(req, res, cleanup)
+
+  let closed = false
+  const close = () => {
+    if (closed) return
+    closed = true
+    req.off('close', close)
+    res.off('close', close)
+    res.off('finish', close)
+    cleanup()
+  }
+  req.once('close', close)
+  res.once('close', close)
+  res.once('finish', close)
+  return true
+}
+
 async function handleSse(
   req: IncomingMessage,
   res: ServerResponse,
@@ -794,12 +878,25 @@ async function handleSse(
   })
   res.write(': connected\n\n')
   let lastSequence = afterSequence
+  let cleaned = false
+  let unsubscribe: (() => void) | null = null
+  let replayUnsubscribe: (() => void) | null = null
+  let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    if (keepAliveTimer) clearInterval(keepAliveTimer)
+    replayUnsubscribe?.()
+    unsubscribe?.()
+  }
+  if (!trackSseStream(req, res, options, cleanup)) return
   const writeIfNew = (event: {
     sequence: number
     type: string
     eventId: string
     payload: Record<string, unknown>
   }) => {
+    if (cleaned || res.destroyed) return
     if (event.sequence <= lastSequence) return
     if (!isCloudSessionEventType(event.type)) {
       lastSequence = event.sequence
@@ -812,28 +909,25 @@ async function handleSse(
   for (const event of await options.service.listEvents(context.principal, sessionId, afterSequence)) {
     writeIfNew(event)
   }
-  const unsubscribe = options.service.eventBus.subscribe({
+  if (cleaned) return
+  unsubscribe = options.service.eventBus.subscribe({
     tenantId: context.principal.tenantId,
     sessionId,
     afterSequence,
   }, (event) => {
     writeIfNew(event)
   })
-  const replayUnsubscribe = options.sseReplayHub?.subscribe({
+  replayUnsubscribe = options.sseReplayHub?.subscribe({
     key: `session:${context.principal.tenantId}:${context.principal.userId}:${sessionId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
     loadEvents: (sequence) => options.service.listEvents(context.principal, sessionId, sequence),
     listener: (event) => writeIfNew(event as SessionEventRecord),
-  })
-  const keepAliveTimer = setInterval(() => {
+  }) ?? null
+  keepAliveTimer = setInterval(() => {
+    if (cleaned || res.destroyed) return
     res.write(': keep-alive\n\n')
   }, ssePollMs(options))
-  req.on('close', () => {
-    clearInterval(keepAliveTimer)
-    replayUnsubscribe?.()
-    unsubscribe()
-  })
 }
 
 async function handleWorkspaceSse(
@@ -852,6 +946,18 @@ async function handleWorkspaceSse(
   })
   res.write(': connected\n\n')
   let lastSequence = afterSequence
+  let cleaned = false
+  let unsubscribe: (() => void) | null = null
+  let replayUnsubscribe: (() => void) | null = null
+  let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+  const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
+    if (keepAliveTimer) clearInterval(keepAliveTimer)
+    replayUnsubscribe?.()
+    unsubscribe?.()
+  }
+  if (!trackSseStream(req, res, options, cleanup)) return
   const writeIfNew = (event: {
     tenantId?: string
     userId?: string
@@ -866,6 +972,7 @@ async function handleWorkspaceSse(
     payload: Record<string, unknown>
     createdAt?: string
   }) => {
+    if (cleaned || res.destroyed) return
     if (event.sequence <= lastSequence) return
     if (!isCloudSessionEventType(event.type)) {
       lastSequence = event.sequence
@@ -877,6 +984,7 @@ async function handleWorkspaceSse(
   }
 
   const retainedEvents = await options.service.listWorkspaceEvents(context.principal, 0)
+  if (cleaned || res.destroyed) return
   const earliestSequence = retainedEvents[0]?.sequence
   const hasReplayGap = afterSequence > 0
     && earliestSequence !== undefined
@@ -895,28 +1003,25 @@ async function handleWorkspaceSse(
     for (const event of retainedEvents) writeIfNew(event)
   }
 
-  const unsubscribe = options.service.workspaceEventBus.subscribe({
+  if (cleaned) return
+  unsubscribe = options.service.workspaceEventBus.subscribe({
     tenantId: context.principal.tenantId,
     userId: context.principal.userId,
     afterSequence: lastSequence,
   }, (event) => {
     writeIfNew(event)
   })
-  const replayUnsubscribe = options.sseReplayHub?.subscribe({
+  replayUnsubscribe = options.sseReplayHub?.subscribe({
     key: `workspace:${context.principal.tenantId}:${context.principal.userId}`,
     afterSequence: lastSequence,
     pollMs: ssePollMs(options),
     loadEvents: (sequence) => options.service.listWorkspaceEvents(context.principal, sequence),
     listener: (event) => writeIfNew(event as WorkspaceEventRecord),
-  })
-  const keepAliveTimer = setInterval(() => {
+  }) ?? null
+  keepAliveTimer = setInterval(() => {
+    if (cleaned || res.destroyed) return
     res.write(': keep-alive\n\n')
   }, ssePollMs(options))
-  req.on('close', () => {
-    clearInterval(keepAliveTimer)
-    replayUnsubscribe?.()
-    unsubscribe()
-  })
 }
 
 async function handleChannelDeliveriesSse(
@@ -940,18 +1045,25 @@ async function handleChannelDeliveriesSse(
   const ttlMs = Number.isInteger(ttlMsRaw) && ttlMsRaw > 0 ? ttlMsRaw : 30_000
   let closed = false
   let pollActive = false
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+  const cleanup = () => {
+    if (closed) return
+    closed = true
+    if (pollTimer) clearInterval(pollTimer)
+  }
+  if (!trackSseStream(req, res, options, cleanup)) return
   const poll = async () => {
-    if (pollActive || closed) return
+    if (pollActive || closed || res.destroyed) return
     pollActive = true
     try {
       let claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
-      while (claimed && !closed) {
+      while (claimed && !closed && !res.destroyed) {
         writeChannelDeliverySseEvent(res, claimed)
         claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
       }
-      if (!closed) res.write(': keep-alive\n\n')
+      if (!closed && !res.destroyed) res.write(': keep-alive\n\n')
     } catch (error) {
-      if (!closed) {
+      if (!closed && !res.destroyed) {
         const message = error instanceof CloudServiceError
           ? error.publicMessage
           : 'Channel delivery stream failed.'
@@ -962,13 +1074,10 @@ async function handleChannelDeliveriesSse(
     }
   }
   await poll()
-  const pollTimer = setInterval(() => {
+  if (closed) return
+  pollTimer = setInterval(() => {
     void poll()
   }, ssePollMs(options))
-  req.on('close', () => {
-    closed = true
-    clearInterval(pollTimer)
-  })
 }
 
 async function handleApiRequest(
@@ -1627,12 +1736,15 @@ export class CloudHttpServer {
   private readonly server: Server
   private readonly options: CloudHttpServerOptions
   private readonly sseReplayHub: CloudSseReplayHub
+  private readonly sseStreamRegistry: CloudSseStreamRegistry
 
   constructor(options: CloudHttpServerOptions) {
     this.sseReplayHub = options.sseReplayHub || new CloudSseReplayHub()
+    this.sseStreamRegistry = options.sseStreamRegistry || new CloudSseStreamRegistry()
     this.options = {
       ...options,
       sseReplayHub: this.sseReplayHub,
+      sseStreamRegistry: this.sseStreamRegistry,
       webhookSecurity: options.webhookSecurity || new InMemoryWorkflowWebhookSecurityStore(),
     }
     this.server = createServer((req, res) => {
@@ -1658,13 +1770,15 @@ export class CloudHttpServer {
   }
 
   async close() {
+    this.sseReplayHub.close()
+    this.sseStreamRegistry.closeAll()
+    this.server.closeIdleConnections?.()
     await new Promise<void>((resolve, reject) => {
       this.server.close((error) => {
         if (error) reject(error)
         else resolve()
       })
     })
-    this.sseReplayHub.close()
   }
 
   private async enforceIpRateLimit(req: IncomingMessage) {
