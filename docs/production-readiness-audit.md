@@ -115,6 +115,11 @@ The remaining work is concentrated in two areas:
   worker heartbeat visibility, Cloud/Gateway operator metrics, Desktop/Gateway
   mutation coverage with token revocation rejection, and Continuation rich
   projection with ephemeral-token cleanup.
+- The `@open-cowork/cloud-client` and `@open-cowork/shared` manifests now
+  match their documented workspace/source-package status: both are private,
+  expose no `publishConfig`, and the Cloud client boundary test prevents an
+  accidental npm-publishable state before standalone SDK publication,
+  provenance, and support ownership exist.
 
 ## High Priority
 
@@ -153,10 +158,6 @@ No open high-priority findings remain after the current audit remediations.
 - The vendored docs Mermaid bundle is version-drifted from the locked runtime
   dependency. Add deterministic regeneration/hash checking or build the bundle
   from the locked dependency.
-- Public package metadata for `@open-cowork/cloud-client` and
-  `@open-cowork/shared` conflicts with docs that describe them as workspace
-  packages. Mark them private until npm publishing exists, or add explicit
-  npm release, provenance, and support docs.
 
 ## Low Priority
 

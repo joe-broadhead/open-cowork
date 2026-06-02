@@ -31,7 +31,8 @@ APIs.
 
 The package must not import Electron, Desktop main-process modules,
 control-plane stores, or `@opencode-ai/sdk`. Its only Open Cowork package
-dependency is the public `@open-cowork/shared` wire-type package.
+dependency is the shared workspace/source `@open-cowork/shared` wire-type
+package.
 
 Modules outside the entry points above are internal implementation details.
 First-party clients and downstream deployers should not import source files,
@@ -201,7 +202,8 @@ Before publishing or treating a repo release as a cloud-client contract update:
 - Run `pnpm --filter @open-cowork/shared build`.
 - Run `pnpm --filter @open-cowork/cloud-client build`.
 - Run the cloud transport and boundary tests.
-- Confirm `packages/cloud-client/package.json` exports only public entry points.
+- Confirm `packages/cloud-client/package.json` exports only documented entry
+  points.
 - Confirm README and `docs/cloud-client.md` document new auth, timeout, SSE, and
   error behavior.
 - Do not include private deployment URLs, tokens, org ids, or provider keys in

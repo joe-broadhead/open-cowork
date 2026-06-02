@@ -11,6 +11,7 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     exports?: Record<string, unknown>
     files?: string[]
     sideEffects?: boolean
+    publishConfig?: unknown
     dependencies?: Record<string, string>
   }
   const sharedPackageJson = JSON.parse(readFileSync(join(root, 'packages/shared/package.json'), 'utf8')) as {
@@ -19,6 +20,7 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     exports?: Record<string, unknown>
     files?: string[]
     sideEffects?: boolean
+    publishConfig?: unknown
   }
   const clientSource = clientSources(join(root, 'packages/cloud-client/src')).join('\n')
   const desktopTransport = readFileSync(join(root, 'apps/desktop/src/main/cloud/transport-adapter.ts'), 'utf8')
@@ -26,10 +28,11 @@ test('cloud client package boundary and desktop transport compatibility re-expor
   const docs = readFileSync(join(root, 'docs/cloud-client.md'), 'utf8')
 
   assert.equal(packageJson.name, '@open-cowork/cloud-client')
-  assert.equal(packageJson.private, false)
+  assert.equal(packageJson.private, true)
   assert.equal(packageJson.sideEffects, false)
+  assert.equal(packageJson.publishConfig, undefined)
   assert.deepEqual(packageJson.files, ['dist', 'README.md'])
-  const publicExports = [
+  const documentedExports = [
     '.',
     './adapter',
     './domains/artifacts',
@@ -46,16 +49,17 @@ test('cloud client package boundary and desktop transport compatibility re-expor
     './domains/workflows',
     './package.json',
   ].sort()
-  assert.deepEqual(Object.keys(packageJson.exports || {}).sort(), publicExports)
+  assert.deepEqual(Object.keys(packageJson.exports || {}).sort(), documentedExports)
   assert.equal(sharedPackageJson.name, '@open-cowork/shared')
-  assert.equal(sharedPackageJson.private, false)
+  assert.equal(sharedPackageJson.private, true)
+  assert.equal(sharedPackageJson.publishConfig, undefined)
   assert.deepEqual(Object.keys(sharedPackageJson.exports || {}).sort(), ['.', './package.json'])
   assert.deepEqual(sharedPackageJson.files, ['dist'])
   assert.equal(sharedPackageJson.sideEffects, false)
   for (const dependencyName of Object.keys(packageJson.dependencies || {})) {
     if (!dependencyName.startsWith('@open-cowork/')) continue
     const dependencyPackage = JSON.parse(readFileSync(join(root, `packages/${dependencyName.replace('@open-cowork/', '')}/package.json`), 'utf8')) as { private?: boolean }
-    assert.equal(dependencyPackage.private, false, `${dependencyName} must be publishable because cloud-client is public`)
+    assert.equal(dependencyPackage.private, true, `${dependencyName} must remain a private workspace package until standalone SDK publication is explicit`)
   }
   assert.doesNotMatch(clientSource, /apps\/desktop|control-plane-store|session-service|@opencode-ai\/sdk/)
   assert.equal(desktopTransport.trim(), "export * from '../../../../../packages/cloud-client/src/index.ts'")
