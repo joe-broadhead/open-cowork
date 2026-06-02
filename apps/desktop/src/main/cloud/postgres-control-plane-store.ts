@@ -105,10 +105,7 @@ import type {
   WorkflowWebhookReplayClaim,
   WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
-import {
-  CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS,
-  CLOUD_CONTROL_PLANE_MIGRATIONS,
-} from './postgres-schema.ts'
+import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
 import { usageEventFromRow, billingSubscriptionFromRow } from './postgres-domains/billing.ts'
 import { byokSecretFromRow } from './postgres-domains/byok.ts'
 import {
@@ -341,21 +338,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async runMigrations() {
-    await this.withTransaction(async (client) => {
-      await client.query(
-        'SELECT pg_advisory_xact_lock($1, $2)',
-        [...CLOUD_CONTROL_PLANE_MIGRATION_ADVISORY_LOCK_KEYS],
-      )
-      for (const migration of CLOUD_CONTROL_PLANE_MIGRATIONS) {
-        for (const statement of migration.statements) await client.query(statement)
-        await client.query(
-          `INSERT INTO cloud_schema_migrations (id, applied_at)
-           VALUES ($1, $2)
-           ON CONFLICT (id) DO NOTHING`,
-          [migration.id, nowIso(undefined)],
-        )
-      }
-    })
+    await runPostgresControlPlaneMigrations(this.pool, (fn) => this.withTransaction(fn))
   }
 
   async createTenant(input: { tenantId: string, name: string, createdAt?: Date }) {
@@ -2652,14 +2635,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const nowMs = now.getTime()
     const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     return this.withTransaction(async (client) => {
       const expired = await client.query(
         `SELECT *
          FROM cloud_worker_leases
          WHERE lease_expires_at_ms <= $1
          ORDER BY lease_expires_at_ms ASC, tenant_id, session_id
+         LIMIT $2
          FOR UPDATE SKIP LOCKED`,
-        [nowMs],
+        [nowMs, limit],
       )
       const reaped: ReapedSessionLeaseRecord[] = []
       for (const row of expired.rows) {
@@ -3306,6 +3291,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const now = input.now || new Date()
     const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     return this.withTransaction(async (client) => {
       const expired = await client.query(
         `SELECT *
@@ -3327,8 +3313,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
              )
            )
          ORDER BY claim_expires_at ASC, tenant_id, workflow_id, run_id
+         LIMIT $2
          FOR UPDATE SKIP LOCKED`,
-        [nowIsoValue],
+        [nowIsoValue, limit],
       )
       const reaped: ReapedWorkflowClaimRecord[] = []
       for (const row of expired.rows) {

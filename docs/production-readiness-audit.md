@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `c5fbb5a2987f995390ede95cfd3596c5b011348e`.
+  `2389992f05c6852a2e04a9e2f2b15e19a5a92c45`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -131,6 +131,12 @@ The remaining work is concentrated in two areas:
 - Webhook and Slack replay caches now enforce both per-source and global caps.
   A hot bridge target or Slack team cannot evict another source's replay claim
   before the signature window expires.
+- Expired session lease and workflow claim reapers now process bounded batches
+  per transaction, use expiry-leading Postgres indexes for global recovery
+  scans, build those indexes concurrently outside the startup migration
+  transaction, drain only a capped number of batches per worker/scheduler tick,
+  and emit drain-cap-hit metrics when a tick exhausts the configured recovery
+  cap.
 
 ## High Priority
 
@@ -149,9 +155,6 @@ No open high-priority findings remain after the current audit remediations.
 - Workspace SSE reconnect replay loads retained events from sequence `0`.
   Add paged replay and earliest/latest event metadata so gap detection does not
   require loading all retained events.
-- Expired lease and workflow claim reapers process unbounded expired rows in a
-  single transaction. Batch reaping with limits, loop outside the transaction,
-  and emit backlog metrics.
 - Queue processing needs fairness and backpressure caps across hot sessions,
   gateway deliveries, providers, and bindings.
 - Product diff fallback infers OpenCode tool semantics for write/edit tools.

@@ -471,6 +471,7 @@ export type RunnableSessionClaimRecord = {
 export type ReapExpiredSessionLeasesInput = {
   now?: Date
   maxCommandAttempts?: number | null
+  limit?: number | null
 }
 
 export type ReapedSessionLeaseRecord = {
@@ -487,6 +488,7 @@ export type ReapedSessionLeaseRecord = {
 export type ReapExpiredWorkflowClaimsInput = {
   now?: Date
   maxAttempts?: number | null
+  limit?: number | null
 }
 
 export type ReapedWorkflowClaimRecord = {
@@ -3299,10 +3301,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const nowMs = now.getTime()
     const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxCommandAttempts ?? 3))
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     const reaped: ReapedSessionLeaseRecord[] = []
-    for (const session of this.sessions.values()) {
-      const lease = session.lease
-      if (!lease || lease.leaseExpiresAt > nowMs) continue
+    const candidates = Array.from(this.sessions.values())
+      .filter((session) => Boolean(session.lease) && session.lease!.leaseExpiresAt <= nowMs)
+      .sort((left, right) => left.lease!.leaseExpiresAt - right.lease!.leaseExpiresAt || left.record.tenantId.localeCompare(right.record.tenantId) || left.record.sessionId.localeCompare(right.record.sessionId))
+      .slice(0, limit)
+    for (const session of candidates) {
+      const lease = session.lease!
       const runningCommands = session.commands.filter((command) => (
         command.status === 'running'
         && command.claimedLeaseToken === lease.leaseToken
@@ -3752,16 +3758,23 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const now = input.now || new Date()
     const nowIsoValue = now.toISOString()
     const maxAttempts = Math.max(1, Math.floor(input.maxAttempts ?? 3))
+    const limit = Math.max(1, Math.min(1_000, Math.floor(input.limit ?? 100)))
     const reaped: ReapedWorkflowClaimRecord[] = []
-    for (const run of this.workflowRuns.values()) {
-      if (!run.claimToken || !run.claimExpiresAt || Date.parse(run.claimExpiresAt) > now.getTime()) continue
-      if (
-        !(run.status === 'queued' && run.sessionId === null)
-        && !(run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId))
-      ) continue
-      const workflow = this.workflows.get(key(run.tenantId, run.workflowId))
-      if (!workflow) continue
+    const candidates = Array.from(this.workflowRuns.values())
+      .filter((run) => (
+        Boolean(run.claimToken) && Boolean(run.claimExpiresAt)
+        && Date.parse(run.claimExpiresAt || '') <= now.getTime()
+        && ((run.status === 'queued' && run.sessionId === null) || (run.status === 'running' && run.sessionId !== null && !this.sessionHasCommands(run.tenantId, run.sessionId)))
+      ))
+      .sort((left, right) => (
+        Date.parse(left.claimExpiresAt || '') - Date.parse(right.claimExpiresAt || '')
+        || left.tenantId.localeCompare(right.tenantId) || left.workflowId.localeCompare(right.workflowId) || left.id.localeCompare(right.id)
+      ))
+      .slice(0, limit)
+    for (const run of candidates) {
       const claimToken = run.claimToken
+      const workflow = this.workflows.get(key(run.tenantId, run.workflowId))
+      if (!workflow || !claimToken) continue
       const claimedBy = run.claimedBy || 'unknown'
       const action: WorkReaperAction = run.attemptCount >= maxAttempts ? 'failed' : 'retried'
       if (action === 'failed') {
