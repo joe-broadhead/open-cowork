@@ -3594,6 +3594,8 @@ test('cloud HTTP workspace event feed replays one ordered user stream across ses
     userId: 'user-1',
     email: 'user@example.test',
   }
+  const originalListWorkspaceEvents = fixture.service.listWorkspaceEvents.bind(fixture.service)
+  const replayListCalls: number[] = []
   try {
     await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
@@ -3628,6 +3630,10 @@ test('cloud HTTP workspace event feed replays one ordered user stream across ses
 
     const firstAssistant = events.find((event) => event.type === 'assistant.message' && event.sessionId === 'oc-session-1')
     assert.ok(firstAssistant)
+    fixture.service.listWorkspaceEvents = async (eventPrincipal, afterSequence = 0) => {
+      replayListCalls.push(afterSequence)
+      return originalListWorkspaceEvents(eventPrincipal, afterSequence)
+    }
     const stream = await fetch(`${baseUrl}/api/events?after=${firstAssistant.sequence}`, {
       signal: controller.signal,
     })
@@ -3636,8 +3642,11 @@ test('cloud HTTP workspace event feed replays one ordered user stream across ses
       entry.type === 'assistant.message' && entry.sessionId === 'oc-session-2'
     ))
     assert.equal(asRecord(replayed.payload).content, 'echo: second session')
+    assert.equal(replayListCalls.includes(0), false)
+    assert.equal(replayListCalls.includes(firstAssistant.sequence), true)
   } finally {
     controller.abort()
+    fixture.service.listWorkspaceEvents = originalListWorkspaceEvents
     await fixture.server.close()
   }
 })
@@ -3685,25 +3694,20 @@ test('cloud HTTP workspace event feed asks clients to refresh snapshots after re
   const baseUrl = await fixture.server.listen()
   const controller = new AbortController()
   const originalListWorkspaceEvents = fixture.service.listWorkspaceEvents.bind(fixture.service)
+  const originalGetWorkspaceEventCursor = fixture.service.getWorkspaceEventCursor.bind(fixture.service)
+  const replayListCalls: number[] = []
   try {
     await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
     })
+    fixture.service.getWorkspaceEventCursor = async () => ({
+      earliestSequence: 10,
+      latestSequence: 10,
+    })
     fixture.service.listWorkspaceEvents = async (principal, afterSequence = 0) => {
-      if (afterSequence === 0) {
-        return [{
-          tenantId: 'tenant-1',
-          userId: 'user-1',
-          sessionId: 'oc-session-1',
-          eventId: 'oc-session-1:retained-event-10',
-          sequence: 10,
-          type: 'assistant.message',
-          payload: { content: 'retained only' },
-          createdAt: '2026-01-01T00:00:00.000Z',
-        }]
-      }
+      replayListCalls.push(afterSequence)
       return originalListWorkspaceEvents(principal, afterSequence)
     }
 
@@ -3717,8 +3721,11 @@ test('cloud HTTP workspace event feed asks clients to refresh snapshots after re
     assert.equal(asRecord(event.payload).afterSequence, 1)
     assert.equal(asRecord(event.payload).earliestSequence, 10)
     assert.equal(asRecord(event.payload).latestSequence, 10)
+    assert.equal(replayListCalls.includes(0), false)
   } finally {
     controller.abort()
+    fixture.service.getWorkspaceEventCursor = originalGetWorkspaceEventCursor
+    fixture.service.listWorkspaceEvents = originalListWorkspaceEvents
     await fixture.server.close()
   }
 })

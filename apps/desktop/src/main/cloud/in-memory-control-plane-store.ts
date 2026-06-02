@@ -37,10 +37,8 @@ import {
   plaintextMatchesCloudApiTokenId,
   verifyCloudApiTokenHash,
 } from './control-plane-tokens.ts'
-import {
-  decodeSessionPageCursor,
-  encodeSessionPageCursor,
-} from './session-page-cursor.ts'
+import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
+import { workspaceEventCursor, type WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -436,7 +434,6 @@ export type WorkspaceEventRecord = {
   payload: Record<string, unknown>
   createdAt: string
 }
-
 export type SessionProjectionRecord = {
   tenantId: string
   sessionId: string
@@ -1236,6 +1233,7 @@ export type ControlPlaneStore = {
   appendSessionEvent(input: AppendEventInput): MaybePromise<SessionEventRecord>
   listSessionEvents(tenantId: string, sessionId: string, afterSequence?: number): MaybePromise<SessionEventRecord[]>
   appendWorkspaceEvent(input: AppendWorkspaceEventInput): MaybePromise<WorkspaceEventRecord>
+  getWorkspaceEventCursor(tenantId: string, userId: string): MaybePromise<WorkspaceEventCursorRecord>
   listWorkspaceEvents(tenantId: string, userId: string, afterSequence?: number): MaybePromise<WorkspaceEventRecord[]>
   writeSessionProjection(input: WriteProjectionInput): MaybePromise<SessionProjectionRecord>
   getSessionProjection(tenantId: string, sessionId: string): MaybePromise<SessionProjectionRecord | null>
@@ -3191,7 +3189,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .filter((event) => event.sequence > afterSequence)
       .map((event) => clone(event))
   }
-
+  getWorkspaceEventCursor(tenantId: string, userId: string): WorkspaceEventCursorRecord {
+    this.requireTenantUser(tenantId, userId)
+    return workspaceEventCursor(this.workspaceEvents.get(`${tenantId}:${userId}`)?.events || [])
+  }
   writeSessionProjection(input: WriteProjectionInput): SessionProjectionRecord {
     const session = this.requireSession(input.tenantId, input.sessionId)
     if (session.lease && session.lease.leaseToken !== input.leaseToken) {

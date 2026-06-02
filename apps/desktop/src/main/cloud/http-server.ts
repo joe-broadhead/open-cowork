@@ -990,15 +990,15 @@ async function handleWorkspaceSse(
     lastSequence = event.sequence
   }
 
-  const retainedEvents = await options.service.listWorkspaceEvents(context.principal, 0)
+  const cursor = await options.service.getWorkspaceEventCursor(context.principal)
   if (cleaned || res.destroyed) return
-  const earliestSequence = retainedEvents[0]?.sequence
+  const earliestSequence = cursor.earliestSequence
   const hasReplayGap = afterSequence > 0
-    && earliestSequence !== undefined
+    && earliestSequence !== null
     && earliestSequence > afterSequence + 1
 
   if (hasReplayGap) {
-    const latestSequence = retainedEvents[retainedEvents.length - 1]?.sequence || afterSequence
+    const latestSequence = cursor.latestSequence || afterSequence
     writeSnapshotRequiredEvent(res, afterSequence, {
       reason: 'event_retention_gap',
       afterSequence,
@@ -1007,6 +1007,7 @@ async function handleWorkspaceSse(
     })
     lastSequence = Math.max(lastSequence, latestSequence)
   } else {
+    const retainedEvents = await options.service.listWorkspaceEvents(context.principal, afterSequence)
     for (const event of retainedEvents) writeIfNew(event)
   }
 
