@@ -14,6 +14,7 @@ export type SessionControlPlaneStore = Pick<ControlPlaneStore,
   | 'appendSessionEvent'
   | 'listSessionEvents'
   | 'appendWorkspaceEvent'
+  | 'getWorkspaceEventCursor'
   | 'listWorkspaceEvents'
   | 'writeSessionProjection'
   | 'getSessionProjection'

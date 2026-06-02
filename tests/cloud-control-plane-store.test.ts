@@ -301,7 +301,15 @@ test('cloud control plane appends user-scoped workspace events across sessions',
     store.listWorkspaceEvents('tenant-1', 'user-1', 1).map((event) => [event.sequence, event.sessionId]),
     [[2, 'session-2']],
   )
+  assert.deepEqual(store.getWorkspaceEventCursor('tenant-1', 'user-1'), {
+    earliestSequence: 1,
+    latestSequence: 2,
+  })
   assert.deepEqual(store.listWorkspaceEvents('tenant-1', 'user-2', 0), [])
+  assert.deepEqual(store.getWorkspaceEventCursor('tenant-1', 'user-2'), {
+    earliestSequence: null,
+    latestSequence: 0,
+  })
   assert.throws(() => store.appendWorkspaceEvent({
     tenantId: 'tenant-1',
     userId: 'user-1',

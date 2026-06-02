@@ -96,6 +96,7 @@ import type {
   UpsertMembershipInput,
   WorkerLeaseRecord,
   WorkerRole,
+  WorkspaceEventCursorRecord,
   WorkspaceEventRecord,
   CreateManagedWorkerPoolInput,
   RegisterManagedWorkerInput,
@@ -106,6 +107,7 @@ import type {
   WorkflowWebhookSecurityStore,
 } from '../workflow/workflow-webhook-server.ts'
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
+import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'
 import { usageEventFromRow, billingSubscriptionFromRow } from './postgres-domains/billing.ts'
 import { byokSecretFromRow } from './postgres-domains/byok.ts'
 import {
@@ -2462,6 +2464,17 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [tenantId, userId, afterSequence],
     )
     return result.rows.map(workspaceEventFromRow)
+  }
+
+  async getWorkspaceEventCursor(tenantId: string, userId: string): Promise<WorkspaceEventCursorRecord> {
+    await this.requireTenantUser(tenantId, userId)
+    const result = await this.pool.query(
+      `SELECT min(sequence) AS earliest_sequence, max(sequence) AS latest_sequence
+       FROM cloud_workspace_events
+       WHERE tenant_id = $1 AND user_id = $2`,
+      [tenantId, userId],
+    )
+    return workspaceEventCursorFromRow(result.rows[0])
   }
 
   async writeSessionProjection(input: {

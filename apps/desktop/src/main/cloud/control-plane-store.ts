@@ -22,5 +22,6 @@ export {
   generateManagedWorkerCredential,
   hashManagedWorkerCredential,
 } from './in-memory-domains/workers.ts'
+export type { WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 export type * from './in-memory-control-plane-store.ts'
 export type * from './managed-worker-types.ts'

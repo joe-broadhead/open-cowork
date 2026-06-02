@@ -1370,6 +1370,11 @@ export class CloudSessionService {
     return this.store.listWorkspaceEvents(principal.tenantId, principal.userId, afterSequence)
   }
 
+  async getWorkspaceEventCursor(principal: CloudPrincipal) {
+    await this.ensurePrincipal(principal)
+    return this.store.getWorkspaceEventCursor(principal.tenantId, principal.userId)
+  }
+
   async listWorkerHeartbeats(principal: CloudPrincipal) {
     await this.ensurePrincipal(principal)
     if (!principalCanViewOperations(principal)) {

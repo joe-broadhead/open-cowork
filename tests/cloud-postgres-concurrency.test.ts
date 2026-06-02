@@ -613,6 +613,10 @@ test('real Postgres cloud store assigns one ordered workspace stream across sess
       (await store.listWorkspaceEvents(ids.tenantId, ids.userId, 0)).map((event) => event.sequence),
       [1, 2, 3],
     )
+    assert.deepEqual(await store.getWorkspaceEventCursor(ids.tenantId, ids.userId), {
+      earliestSequence: 1,
+      latestSequence: 3,
+    })
   })
 })
 

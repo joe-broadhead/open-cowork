@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `2389992f05c6852a2e04a9e2f2b15e19a5a92c45`.
+  `920d09dddf45311240a6438375208c65f4eb4aea`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -137,6 +137,9 @@ The remaining work is concentrated in two areas:
   transaction, drain only a capped number of batches per worker/scheduler tick,
   and emit drain-cap-hit metrics when a tick exhausts the configured recovery
   cap.
+- Workspace SSE reconnects now use retained-stream cursor metadata to detect
+  retention gaps and replay only events newer than the client cursor. Gap
+  detection no longer loads all retained workspace events from sequence `0`.
 
 ## High Priority
 
@@ -152,9 +155,6 @@ No open high-priority findings remain after the current audit remediations.
 - Recovery and failover drills are currently evidence wrappers for public CI.
   Add an executable local compose recovery drill and require private
   environment drill evidence for hosted promotion.
-- Workspace SSE reconnect replay loads retained events from sequence `0`.
-  Add paged replay and earliest/latest event metadata so gap detection does not
-  require loading all retained events.
 - Queue processing needs fairness and backpressure caps across hot sessions,
   gateway deliveries, providers, and bindings.
 - Product diff fallback infers OpenCode tool semantics for write/edit tools.
