@@ -349,7 +349,7 @@ export interface CoworkAPI {
   workflows: {
     list: (options?: WorkspaceOptions) => Promise<WorkflowListPayload>
     get: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
-    startDraft: (directory?: string | null, options?: WorkspaceOptions) => Promise<SessionInfo>
+    startDraft: (directory?: string | null) => Promise<SessionInfo>
     runNow: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowRun | null>
     pause: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>
     resume: (workflowId: string, options?: WorkspaceOptions) => Promise<WorkflowDetail | null>

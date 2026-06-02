@@ -120,6 +120,7 @@ describe('WorkflowsPage', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Add workflow' })[0]!)
 
     expect(api.workflows?.startDraft).toHaveBeenCalledTimes(1)
+    expect(api.workflows?.startDraft).toHaveBeenCalledWith()
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_new'))
   })
 

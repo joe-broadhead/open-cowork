@@ -120,6 +120,10 @@ The remaining work is concentrated in two areas:
   expose no `publishConfig`, and the Cloud client boundary test prevents an
   accidental npm-publishable state before standalone SDK publication,
   provenance, and support ownership exist.
+- Workflow draft creation is now explicitly local-only across the renderer and
+  shared preload contract: `workflows.startDraft` no longer advertises
+  workspace options that the IPC handler intentionally rejects for non-local
+  workspaces.
 
 ## High Priority
 
@@ -152,9 +156,6 @@ No open high-priority findings remain after the current audit remediations.
 - Workflow setup policy is duplicated across kickoff prompt, generated agent
   config, and skill text. Centralize policy in a typed source and generate
   downstream text from it.
-- `workflows.startDraft` exposes an options contract that the bridge ignores.
-  Either implement workspace-aware draft creation or remove the unused options
-  surface.
 - The vendored docs Mermaid bundle is version-drifted from the locked runtime
   dependency. Add deterministic regeneration/hash checking or build the bundle
   from the locked dependency.
