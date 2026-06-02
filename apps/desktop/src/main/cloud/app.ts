@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
-import type { PublicBrandingConfig } from '@open-cowork/shared'
+import { splitTrustedProxyCidrs, type PublicBrandingConfig } from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
@@ -533,6 +533,7 @@ export function resolveCloudBootstrapOptionsFromEnv(env: Env = process.env) {
     cookieSecure: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_COOKIE_SECURE'), true),
     publicUrl: envValue(env, 'OPEN_COWORK_CLOUD_PUBLIC_URL'),
     trustProxyHeaders: parseBoolean(envValue(env, 'OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS'), false),
+    trustedProxyCidrs: splitTrustedProxyCidrs(envValue(env, 'OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS')),
   }
 }
 
@@ -1593,6 +1594,7 @@ export async function startCloudApp(options: CloudAppOptions = {}): Promise<Clou
         corsOrigin: options.corsOrigin ?? envOptions.corsOrigin,
         strictTransportSecurity: publicUrlEnablesStrictTransportSecurity(envOptions.publicUrl),
         trustProxyHeaders: envOptions.trustProxyHeaders,
+        trustedProxyCidrs: envOptions.trustedProxyCidrs,
         readiness: createCloudReadinessCheck({
           policy,
           store,

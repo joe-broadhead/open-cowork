@@ -36,6 +36,8 @@ test('standalone gateway setup writes deployable env without echoing secrets', (
     }
     assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=gateway-admin-token/)
     assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN=telegram-bot-token/)
+    assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false/)
+    assert.match(env, /OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS=/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

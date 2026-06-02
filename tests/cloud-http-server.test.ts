@@ -28,7 +28,10 @@ import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
 } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
-import { signWorkflowWebhookPayload } from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
+import {
+  signWorkflowWebhookPayload,
+  type WorkflowWebhookSecurityStore,
+} from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
 
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
@@ -93,19 +96,22 @@ function createFixture(options: {
   autoProcessCommands?: boolean
   ssePollMs?: number
   policy?: CloudRuntimePolicy
-    sessionCookies?: ReturnType<typeof createCloudSessionCookieManager> | null
-    auth?: CloudAuthResolver
-    browserAuth?: CloudBrowserAuthProvider | null
-    desktopAuth?: CloudDesktopAuthConfig | null
-    observability?: CloudObservabilityAdapter | null
-    internalToken?: string | null
-    byokPolicy?: ByokManagementPolicy
-    abuse?: CloudAbuseConfig
-    billing?: CloudBillingConfig | null
-    billingAdapter?: BillingAdapter | null
-    identityPolicy?: CloudIdentityPolicy
-    byokSecretStoreOptions?: Omit<ByokSecretStoreOptions, 'ids'>
-  } = {}) {
+  sessionCookies?: ReturnType<typeof createCloudSessionCookieManager> | null
+  auth?: CloudAuthResolver
+  browserAuth?: CloudBrowserAuthProvider | null
+  desktopAuth?: CloudDesktopAuthConfig | null
+  observability?: CloudObservabilityAdapter | null
+  internalToken?: string | null
+  byokPolicy?: ByokManagementPolicy
+  abuse?: CloudAbuseConfig
+  billing?: CloudBillingConfig | null
+  billingAdapter?: BillingAdapter | null
+  identityPolicy?: CloudIdentityPolicy
+  byokSecretStoreOptions?: Omit<ByokSecretStoreOptions, 'ids'>
+  webhookSecurity?: WorkflowWebhookSecurityStore | null
+  trustProxyHeaders?: boolean
+  trustedProxyCidrs?: readonly string[] | null
+} = {}) {
   const runtime = new FakeRuntimeAdapter()
   const store = new InMemoryControlPlaneStore()
   const objectStore = createInMemoryObjectStore()
@@ -132,24 +138,27 @@ function createFixture(options: {
     autoProcessCommands: options.autoProcessCommands ?? true,
     ssePollMs: options.ssePollMs,
     sessionCookies: options.sessionCookies,
-      browserAuth: options.browserAuth,
-      desktopAuth: options.desktopAuth,
-      observability: options.observability,
-      internalToken: options.internalToken,
-      auth: options.auth || (async (req) => {
-        const authorization = String(req.headers.authorization || '')
-        if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
-        return {
-          tenantId: 'tenant-1',
-          tenantName: 'Tenant 1',
-          orgId: 'tenant-1',
-          userId: 'user-1',
-          accountId: 'user-1',
-          email: 'user@example.test',
-          role: 'owner',
-          authSource: 'local',
-        }
-      }),
+    browserAuth: options.browserAuth,
+    desktopAuth: options.desktopAuth,
+    observability: options.observability,
+    internalToken: options.internalToken,
+    webhookSecurity: options.webhookSecurity,
+    trustProxyHeaders: options.trustProxyHeaders,
+    trustedProxyCidrs: options.trustedProxyCidrs,
+    auth: options.auth || (async (req) => {
+      const authorization = String(req.headers.authorization || '')
+      if (authorization.startsWith('Bearer ocw_')) return workerAuth(req)
+      return {
+        tenantId: 'tenant-1',
+        tenantName: 'Tenant 1',
+        orgId: 'tenant-1',
+        userId: 'user-1',
+        accountId: 'user-1',
+        email: 'user@example.test',
+        role: 'owner',
+        authSource: 'local',
+      }
+    }),
   })
   return { runtime, store, objectStore, policy, service, artifacts, worker, server }
 }
@@ -4316,6 +4325,83 @@ test('cloud HTTP public workflow webhooks require HMAC signatures and reject rep
       body: rawBody,
     })
     assert.equal(replay.status, 401)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud workflow webhook security keys honor trusted proxy client attribution', async () => {
+  const requestSources: string[] = []
+  const authScopes: string[] = []
+  const signatureKeys: string[] = []
+  const securityStore: WorkflowWebhookSecurityStore = {
+    claimRequest(input) {
+      requestSources.push(input.source)
+      return true
+    },
+    checkAuthBackoff(input) {
+      authScopes.push(input.scope)
+      return true
+    },
+    recordAuthFailure() {
+      throw new Error('recordAuthFailure should not run for an accepted webhook.')
+    },
+    claimSignature(input) {
+      signatureKeys.push(input.key)
+      return { accept() {}, release() {} }
+    },
+    clear() {},
+  }
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    webhookSecurity: securityStore,
+    trustProxyHeaders: true,
+    trustedProxyCidrs: ['127.0.0.0/8'],
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        webhooks: true,
+      },
+    },
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const createResponse = await fetch(`${baseUrl}/api/workflows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Webhook proxy source',
+        instructions: 'Run from a trusted proxy.',
+        agentName: 'data-analyst',
+        triggers: [{
+          id: 'webhook-1',
+          type: 'webhook',
+          enabled: true,
+          webhookSecret: 'cloud-webhook-secret',
+        }],
+      }),
+    })
+    assert.equal(createResponse.status, 201)
+    const workflowId = String(asRecord((await readJson(createResponse)).workflow).id)
+    const rawBody = JSON.stringify({ source: 'trusted-proxy-test' })
+    const timestamp = new Date().toISOString()
+    const signature = signWorkflowWebhookPayload('cloud-webhook-secret', rawBody, timestamp)
+
+    const accepted = await fetch(`${baseUrl}/webhooks/workflows/${workflowId}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.8, 127.0.0.2',
+        'x-open-cowork-timestamp': timestamp,
+        'x-open-cowork-signature': signature,
+      },
+      body: rawBody,
+    })
+    assert.equal(accepted.status, 202)
+    assert.deepEqual(requestSources, ['203.0.113.8'])
+    assert.equal(authScopes[0]?.startsWith('203.0.113.8:'), true)
+    assert.equal(signatureKeys.length, 1)
   } finally {
     await fixture.server.close()
   }

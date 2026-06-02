@@ -833,6 +833,120 @@ test('gateway webhooks apply a source rate limit before provider dispatch', asyn
   }
 })
 
+test('gateway webhook source limits honor trusted proxy client addresses', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS: 'true',
+    OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS: '127.0.0.0/8',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    const firstClientHeaders = {
+      'content-type': 'application/json',
+      'x-forwarded-for': '203.0.113.10, 127.0.0.2',
+    }
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/missing`, {
+        method: 'POST',
+        headers: firstClientHeaders,
+        body: '{}',
+      })
+      assert.equal(response.status, 404)
+    }
+    const blocked = await fetch(`${url}/webhooks/missing`, {
+      method: 'POST',
+      headers: firstClientHeaders,
+      body: '{}',
+    })
+    assert.equal(blocked.status, 429)
+
+    const nextClient = await fetch(`${url}/webhooks/missing`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.11, 127.0.0.2',
+      },
+      body: '{}',
+    })
+    assert.equal(nextClient.status, 404)
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway webhook source limits ignore spoofed proxy headers from untrusted peers', async () => {
+  const cloud = {
+    subscribeDeliveries() { return { close() {} } },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+    OPEN_COWORK_GATEWAY_TRUST_PROXY_HEADERS: 'true',
+    OPEN_COWORK_GATEWAY_TRUSTED_PROXY_CIDRS: '10.0.0.0/8',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+  await runtime.start()
+  const http = createGatewayHttpServer(config, runtime, cloud)
+  const url = await http.listen()
+
+  try {
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/missing`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-forwarded-for': '203.0.113.10',
+        },
+        body: '{}',
+      })
+      assert.equal(response.status, 404)
+    }
+    const blocked = await fetch(`${url}/webhooks/missing`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': '203.0.113.11',
+      },
+      body: '{}',
+    })
+    assert.equal(blocked.status, 429)
+  } finally {
+    await http.close()
+    await runtime.stop()
+  }
+})
+
 test('gateway daemon exposes admin delivery backlog controls', async () => {
   const calls: string[] = []
   const cloud = {

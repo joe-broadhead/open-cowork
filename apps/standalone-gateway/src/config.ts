@@ -1,4 +1,5 @@
 import { normalizeChannelProviderIdentity, type ChannelProviderKind } from "@open-cowork/gateway-channel";
+import { splitTrustedProxyCidrs } from "@open-cowork/shared";
 
 import { assertPrivateBindHost, assertPrivateOpenCodeEndpoint } from "./network-policy.js";
 import type { StandaloneGatewayConfig, StandaloneGatewayProviderConfig } from "./types.js";
@@ -23,6 +24,8 @@ export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.
       port: readPort(env.OPEN_COWORK_STANDALONE_GATEWAY_PORT, defaultPort),
       adminToken,
       publicBaseUrl,
+      trustProxyHeaders: readBoolean(env.OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS, false),
+      trustedProxyCidrs: splitTrustedProxyCidrs(env.OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS),
     },
     database: {
       url: databaseUrl,

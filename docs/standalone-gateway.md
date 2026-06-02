@@ -109,6 +109,11 @@ curl -H "Authorization: Bearer $OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN" \
 Telegram polling is the simplest private-server setup. Webhook mode requires a
 public HTTPS reverse proxy and a Telegram webhook secret.
 
+When the Standalone Gateway sits behind a reverse proxy and should use
+forwarded client IPs for webhook abuse controls, set
+`OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=true` and restrict
+`OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS` to the proxy hops.
+
 The signed webhook provider can bridge custom channels. It requires
 `OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET` and validates incoming
 provider payloads before they can prompt private OpenCode.

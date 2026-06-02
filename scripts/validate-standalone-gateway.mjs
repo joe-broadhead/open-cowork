@@ -24,7 +24,7 @@ if (cloudGatewayPackage.includes('@opencode-ai/sdk') || cloudGatewayPackage.incl
 }
 
 const standalonePackage = read('apps/standalone-gateway/package.json')
-for (const dependency of ['@opencode-ai/sdk', 'pg', '@open-cowork/gateway-provider-telegram', '@open-cowork/gateway-provider-webhook']) {
+for (const dependency of ['@opencode-ai/sdk', 'pg', '@open-cowork/shared', '@open-cowork/gateway-provider-telegram', '@open-cowork/gateway-provider-webhook']) {
   if (!standalonePackage.includes(dependency)) throw new Error(`Standalone Gateway package must declare ${dependency}`)
 }
 
@@ -46,6 +46,7 @@ for (const phrase of [
   'smoke',
   'backup',
   'retention',
+  'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS',
 ]) {
   if (!standaloneDocs.includes(phrase)) throw new Error(`Standalone Gateway docs must mention: ${phrase}`)
 }
@@ -64,6 +65,15 @@ function read(file) {
 }
 
 function assertPublicSafeStandaloneEnv(contents) {
+  for (const variable of [
+    'OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS=false',
+    'OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS=',
+  ]) {
+    if (!contents.includes(variable)) {
+      throw new Error(`deploy/standalone-gateway/standalone.env.example must include ${variable}`)
+    }
+  }
+
   const forbiddenPatterns = [
     /\bAKIA[0-9A-Z]{16}\b/,
     /\bghp_[A-Za-z0-9_]{20,}\b/,

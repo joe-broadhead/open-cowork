@@ -40,6 +40,8 @@ export interface StandaloneGatewayConfig {
     port: number;
     adminToken: string;
     publicBaseUrl: string | null;
+    trustProxyHeaders: boolean;
+    trustedProxyCidrs: string[];
   };
   database: {
     url: string;

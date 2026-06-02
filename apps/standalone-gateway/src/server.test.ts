@@ -169,3 +169,99 @@ test("standalone server rate-limits repeated webhook requests by source", async 
     await server.close();
   }
 });
+
+test("standalone server webhook limits honor trusted proxy client addresses", async () => {
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_PORT: "0",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS: "true",
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS: "127.0.0.0/8",
+  });
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const providers = createStandaloneProviderRegistry(config);
+  const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
+  await server.listen();
+  try {
+    const url = server.url();
+    assert.ok(url);
+    const firstClientHeaders = {
+      "content-type": "application/json",
+      "x-forwarded-for": "203.0.113.10, 127.0.0.2",
+    };
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/webhook`, {
+        method: "POST",
+        headers: firstClientHeaders,
+        body: "{",
+      });
+      assert.equal(response.status, 400);
+    }
+    const blocked = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: firstClientHeaders,
+      body: "{",
+    });
+    assert.equal(blocked.status, 429);
+
+    const nextClient = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.11, 127.0.0.2",
+      },
+      body: "{",
+    });
+    assert.equal(nextClient.status, 400);
+  } finally {
+    await server.close();
+  }
+});
+
+test("standalone server webhook limits ignore spoofed proxy headers from untrusted peers", async () => {
+  const config = loadStandaloneGatewayConfig({
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
+    OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN: "standalone-admin-token",
+    OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL: "http://127.0.0.1:4096",
+    OPEN_COWORK_STANDALONE_GATEWAY_PORT: "0",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET: "standalone-webhook-secret",
+    OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUST_PROXY_HEADERS: "true",
+    OPEN_COWORK_STANDALONE_GATEWAY_TRUSTED_PROXY_CIDRS: "10.0.0.0/8",
+  });
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const providers = createStandaloneProviderRegistry(config);
+  const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
+  await server.listen();
+  try {
+    const url = server.url();
+    assert.ok(url);
+    for (let index = 0; index < 120; index += 1) {
+      const response = await fetch(`${url}/webhooks/webhook`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.10",
+        },
+        body: "{",
+      });
+      assert.equal(response.status, 400);
+    }
+    const blocked = await fetch(`${url}/webhooks/webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": "203.0.113.11",
+      },
+      body: "{",
+    });
+    assert.equal(blocked.status, 429);
+  } finally {
+    await server.close();
+  }
+});

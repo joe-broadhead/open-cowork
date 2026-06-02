@@ -86,8 +86,9 @@ or ECS task secrets. The names below are runtime keys, not committed values:
 2. Confirm RDS PITR, S3 versioning/lifecycle, CloudWatch JSON logs, and OTLP
    export or collector wiring are enabled.
 3. Route HTTPS through ALB, CloudFront, or ingress and set
-   `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` only behind trusted AWS
-   forwarding headers.
+   `OPEN_COWORK_CLOUD_TRUST_PROXY_HEADERS=true` plus
+   `OPEN_COWORK_CLOUD_TRUSTED_PROXY_CIDRS` only for trusted AWS forwarding
+   hops.
 4. Run the shared gates:
 
    ```bash

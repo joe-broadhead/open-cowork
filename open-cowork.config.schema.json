@@ -468,7 +468,13 @@
           ]
         },
         "allowLoopbackOperatorBypass": { "type": "boolean" },
-        "maxRequestBodyBytes": { "type": "integer", "minimum": 1024, "maximum": 67108864 }
+        "maxRequestBodyBytes": { "type": "integer", "minimum": 1024, "maximum": 67108864 },
+        "trustProxyHeaders": { "type": "boolean" },
+        "trustedProxyCidrs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
     "gatewayTimeouts": {

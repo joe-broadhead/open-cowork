@@ -22,6 +22,8 @@ gateway:
   publicUrl: ""
   adminToken: ""
   allowLoopbackOperatorBypass: false
+  trustProxyHeaders: false
+  trustedProxyCidrs: []
   maxRequestBodyBytes: 1048576
   experimentalDistributedOwnership: false
   logLevel: info

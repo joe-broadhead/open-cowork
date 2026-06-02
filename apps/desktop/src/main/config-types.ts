@@ -639,6 +639,8 @@ const DEFAULT_GATEWAY_CONFIG: GatewayDeploymentConfig = {
     port: 8790,
     publicBaseUrl: null,
     adminToken: null,
+    trustProxyHeaders: false,
+    trustedProxyCidrs: [],
   },
   mode: 'self-host',
   logging: {
