@@ -28,6 +28,8 @@ export interface WebhookProviderConfig {
   sleep?: (ms: number) => Promise<void>;
   deliveryTimeoutMs?: number;
   legacySharedSecretHeader?: boolean;
+  maxSeenIngressSignatures?: number;
+  maxSeenIngressSignaturesPerScope?: number;
 }
 
 export interface WebhookIncomingPayload {
@@ -75,6 +77,13 @@ const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 const defaultDeliveryTimeoutMs = 15_000;
 const maxWebhookRetryAttempts = 5;
 const maxWebhookRetryDelayMs = 10_000;
+const defaultMaxSeenIngressSignatures = 5_000;
+const defaultMaxSeenIngressSignaturesPerScope = 1_000;
+
+type SeenWebhookSignature = {
+  expiresAt: number;
+  scope: string;
+};
 
 export interface MapWebhookPayloadOptions {
   maxAttachmentBytes?: number;
@@ -86,7 +95,7 @@ export class WebhookProvider implements ChannelProvider {
   readonly capabilities: ChannelCapabilities;
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
-  private readonly seenIngressSignatures = new Map<string, number>();
+  private readonly seenIngressSignatures = new Map<string, SeenWebhookSignature>();
 
   constructor(private readonly config: WebhookProviderConfig) {
     validateWebhookDeliveryUrl(config.deliveryUrl);
@@ -299,16 +308,42 @@ export class WebhookProvider implements ChannelProvider {
     }
     this.purgeSeenIngressSignatures(nowMs);
     const replayKey = `${timestamp}:${signature}`;
-    const existingExpiresAt = this.seenIngressSignatures.get(replayKey);
-    if (existingExpiresAt && existingExpiresAt > nowMs) {
+    const existing = this.seenIngressSignatures.get(replayKey);
+    if (existing && existing.expiresAt > nowMs) {
       throw new Error("Webhook signature replay rejected");
     }
-    this.seenIngressSignatures.set(replayKey, nowMs + maxAgeMs);
+    const scope = webhookReplayScopeFromRawBody(rawBody, this.id);
+    this.seenIngressSignatures.set(replayKey, { expiresAt: nowMs + maxAgeMs, scope });
+    this.enforceSeenIngressSignatureScopeLimit(scope);
+    this.enforceSeenIngressSignatureGlobalLimit();
   }
 
   private purgeSeenIngressSignatures(nowMs: number): void {
-    for (const [key, expiresAt] of this.seenIngressSignatures) {
+    for (const [key, { expiresAt }] of this.seenIngressSignatures) {
       if (expiresAt <= nowMs) this.seenIngressSignatures.delete(key);
+    }
+  }
+
+  private enforceSeenIngressSignatureScopeLimit(scope: string): void {
+    const limit = normalizeReplayCacheLimit(this.config.maxSeenIngressSignaturesPerScope, defaultMaxSeenIngressSignaturesPerScope);
+    const scopedKeys: string[] = [];
+    for (const [key, entry] of this.seenIngressSignatures) {
+      if (entry.scope !== scope) continue;
+      scopedKeys.push(key);
+    }
+    while (scopedKeys.length > limit) {
+      const oldest = scopedKeys.shift();
+      if (!oldest) return;
+      this.seenIngressSignatures.delete(oldest);
+    }
+  }
+
+  private enforceSeenIngressSignatureGlobalLimit(): void {
+    const limit = normalizeReplayCacheLimit(this.config.maxSeenIngressSignatures, defaultMaxSeenIngressSignatures);
+    while (this.seenIngressSignatures.size > limit) {
+      const oldest = this.seenIngressSignatures.keys().next().value;
+      if (!oldest) return;
+      this.seenIngressSignatures.delete(oldest);
     }
   }
 }
@@ -604,6 +639,13 @@ function normalizeTimeoutOrByteLimit(value: number | undefined): number | undefi
   return Math.floor(value);
 }
 
+function normalizeReplayCacheLimit(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.max(1, Math.floor(value));
+}
+
 function normalizeDeliveryTimeoutMs(value: number | undefined): number {
   if (value === undefined) {
     return defaultDeliveryTimeoutMs;
@@ -648,6 +690,34 @@ function isLocalHttpHost(hostname: string): boolean {
     normalized === "127.0.0.1" ||
     normalized === "::1" ||
     normalized === "[::1]";
+}
+
+function webhookReplayScopeFromRawBody(rawBody: string, providerId: ChannelProviderId): string {
+  const fallback = replayScopeSegment(providerId);
+  try {
+    const value = JSON.parse(rawBody) as unknown;
+    if (!isRecord(value)) return fallback;
+    const target = isRecord(value.target) ? value.target : null;
+    const chatId = replayScopeSegment(optionalString(target?.chatId));
+    if (!chatId) return fallback;
+    const threadId = replayScopeSegment(optionalString(target?.threadId));
+    return threadId ? `${fallback}:${chatId}:${threadId}` : `${fallback}:${chatId}`;
+  } catch {
+    return fallback;
+  }
+}
+
+function replayScopeSegment(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  let sanitized = "";
+  for (const character of trimmed) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    sanitized += codePoint < 32 || codePoint === 127 || character === ":" ? "_" : character;
+    if (sanitized.length >= 256) break;
+  }
+  return sanitized;
 }
 
 function validateHeaderValue(value: string, label: string): void {

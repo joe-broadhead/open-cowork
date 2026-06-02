@@ -103,6 +103,104 @@ describe("SlackProvider", () => {
     expect(messages).toHaveLength(1);
   });
 
+  it("keeps replay eviction scoped by Slack team", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      now: () => fixedNow,
+      maxSeenWebhookSignatures: 10,
+      maxSeenWebhookSignaturesPerScope: 2,
+    });
+    await provider.start(async (message) => {
+      messages.push(message);
+    });
+    const preservedPayload = slackMessagePayload("T-B", "C-B", "1716984000.000100", "team b");
+    const preservedRawBody = JSON.stringify(preservedPayload);
+    const preservedHeaders = signedHeaders(preservedRawBody);
+
+    await provider.handleWebhookPayload(preservedPayload, {
+      headers: preservedHeaders,
+      rawBody: preservedRawBody,
+    });
+
+    let newestFloodPayload: ReturnType<typeof slackMessagePayload> | null = null;
+    let newestFloodRawBody: string | null = null;
+    let newestFloodHeaders: ReturnType<typeof signedHeaders> | null = null;
+    for (let index = 0; index < 3; index += 1) {
+      const payload = slackMessagePayload("T-A", "C-A", `171698400${index}.000100`, `team a ${index}`);
+      const rawBody = JSON.stringify(payload);
+      const headers = signedHeaders(rawBody);
+      await provider.handleWebhookPayload(payload, {
+        headers,
+        rawBody,
+      });
+      newestFloodPayload = payload;
+      newestFloodRawBody = rawBody;
+      newestFloodHeaders = headers;
+    }
+
+    if (!newestFloodPayload || !newestFloodRawBody || !newestFloodHeaders) throw new Error("missing newest flood request");
+    await expect(provider.handleWebhookPayload(newestFloodPayload, {
+      headers: newestFloodHeaders,
+      rawBody: newestFloodRawBody,
+    })).rejects.toThrow("replay");
+    await expect(provider.handleWebhookPayload(preservedPayload, {
+      headers: preservedHeaders,
+      rawBody: preservedRawBody,
+    })).rejects.toThrow("replay");
+    expect(messages).toHaveLength(4);
+  });
+
+  it("keeps form-encoded Slack interaction replay eviction scoped by team", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      now: () => fixedNow,
+      maxSeenWebhookSignatures: 10,
+      maxSeenWebhookSignaturesPerScope: 2,
+    });
+    await provider.start(async (message) => {
+      messages.push(message);
+    });
+    const preservedPayload = slackInteractionPayload("T-B", "C-B", "trigger-b", "1716984001.000100");
+    const preservedRawBody = slackFormBody(preservedPayload);
+    const preservedHeaders = signedHeaders(preservedRawBody);
+
+    await provider.handleWebhookPayload(preservedPayload, {
+      headers: preservedHeaders,
+      rawBody: preservedRawBody,
+    });
+
+    let newestFloodPayload: ReturnType<typeof slackInteractionPayload> | null = null;
+    let newestFloodRawBody: string | null = null;
+    let newestFloodHeaders: ReturnType<typeof signedHeaders> | null = null;
+    for (let index = 0; index < 3; index += 1) {
+      const payload = slackInteractionPayload("T-A", "C-A", `trigger-a-${index}`, `171698400${index}.000100`);
+      const rawBody = slackFormBody(payload);
+      const headers = signedHeaders(rawBody);
+      await provider.handleWebhookPayload(payload, {
+        headers,
+        rawBody,
+      });
+      newestFloodPayload = payload;
+      newestFloodRawBody = rawBody;
+      newestFloodHeaders = headers;
+    }
+
+    if (!newestFloodPayload || !newestFloodRawBody || !newestFloodHeaders) throw new Error("missing newest flood request");
+    await expect(provider.handleWebhookPayload(newestFloodPayload, {
+      headers: newestFloodHeaders,
+      rawBody: newestFloodRawBody,
+    })).rejects.toThrow("replay");
+    await expect(provider.handleWebhookPayload(preservedPayload, {
+      headers: preservedHeaders,
+      rawBody: preservedRawBody,
+    })).rejects.toThrow("replay");
+    expect(messages).toHaveLength(4);
+  });
+
   it("maps Slack button actions to provider-neutral interactions", async () => {
     const messages: IncomingChannelMessage[] = [];
     const provider = new SlackProvider({
@@ -171,6 +269,36 @@ describe("SlackProvider", () => {
     ]);
   });
 });
+
+function slackMessagePayload(teamId: string, channel: string, ts: string, text: string) {
+  return {
+    type: "event_callback",
+    team_id: teamId,
+    event: {
+      type: "message",
+      user: "U123",
+      channel,
+      text,
+      ts,
+    },
+  };
+}
+
+function slackInteractionPayload(teamId: string, channel: string, triggerId: string, actionTs: string) {
+  return {
+    type: "block_actions",
+    trigger_id: triggerId,
+    team: { id: teamId },
+    user: { id: "U123", username: "alice", name: "Alice" },
+    channel: { id: channel },
+    message: { ts: "1716984000.000100" },
+    actions: [{ action_ts: actionTs, value: "p:token-1" }],
+  };
+}
+
+function slackFormBody(payload: unknown) {
+  return `payload=${encodeURIComponent(JSON.stringify(payload))}`;
+}
 
 function signedHeaders(rawBody: string) {
   const timestamp = Math.floor(fixedNow.getTime() / 1000).toString();
