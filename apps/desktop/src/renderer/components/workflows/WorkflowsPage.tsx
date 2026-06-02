@@ -155,9 +155,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     setBusyId('new')
     setFeedback(null)
     try {
-      const session = activeWorkspaceIsLocal
-        ? await window.coworkApi.workflows.startDraft()
-        : await window.coworkApi.workflows.startDraft(null, workspaceOptions)
+      const session = await window.coworkApi.workflows.startDraft()
       onOpenThread(session.id)
       await refresh()
     } catch (error) {
