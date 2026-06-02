@@ -1,4 +1,9 @@
 import type { CloudPrincipal } from '../session-service.ts'
+import {
+  principalHasOrgAdminRole,
+  principalHasPrivilegedTokenScope,
+  principalHasTokenScope,
+} from '../principal-access.ts'
 
 export type GatewayRouteAccessInput = {
   resource: string | undefined
@@ -11,15 +16,15 @@ export type GatewayRouteAccessInput = {
 export function principalHasGatewayAccess(principal: CloudPrincipal) {
   if (principal.authSource === 'local' || principal.authSource === 'header') return true
   if (principal.authSource === 'api_token') {
-    return principal.tokenScopes?.includes('gateway') || principal.tokenScopes?.includes('admin') || false
+    return principalHasPrivilegedTokenScope(principal, 'gateway')
   }
-  return principal.role === 'owner' || principal.role === 'admin'
+  return principalHasOrgAdminRole(principal)
 }
 
 export function principalHasDesktopApiAccess(principal: CloudPrincipal) {
   if (principal.authSource === 'worker') return false
   if (principal.authSource === 'api_token') {
-    return principal.tokenScopes?.includes('desktop') || principal.tokenScopes?.includes('admin') || false
+    return principalHasTokenScope(principal, 'desktop')
   }
   return true
 }
@@ -37,7 +42,8 @@ export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {
 
 export function routeAllowsOperationalToken(principal: CloudPrincipal, input: GatewayRouteAccessInput) {
   if (principal.authSource !== 'api_token') return false
-  const operational = principal.tokenScopes?.includes('operator') || principal.tokenScopes?.includes('worker-internal')
+  const operational = (principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator')))
+    || Boolean(principal.tokenScopes?.includes('worker-internal'))
   if (!operational || input.method !== 'GET') return false
   if (input.resource === 'metrics' || input.resource === 'diagnostics') return true
   if (input.resource === 'workers' && input.sessionId === 'heartbeats' && !input.action) return true

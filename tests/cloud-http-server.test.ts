@@ -1743,6 +1743,68 @@ test('cloud HTTP server authenticates bearer API tokens and rejects revoked toke
   }
 })
 
+test('cloud HTTP server rejects user-bound admin API token privileges after role demotion', async () => {
+  const store = new InMemoryControlPlaneStore()
+  store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = store.ensureOrgForTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const account = store.createAccount({
+    accountId: 'account-1',
+    idpSubject: 'subject-1',
+    email: 'member@example.test',
+  })
+  store.ensureUser({ tenantId: 'tenant-1', userId: account.accountId, email: account.email })
+  store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const issued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Admin token',
+    scopes: ['admin'],
+  })
+
+  const runtime = new FakeRuntimeAdapter()
+  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const service = new CloudSessionService(store, runtime, policy)
+  const server = createCloudHttpServer({
+    service,
+    policy,
+    auth: createApiTokenCloudAuthResolver(store),
+    autoProcessCommands: true,
+  })
+  const baseUrl = await server.listen()
+  const headers = { authorization: `Bearer ${issued.plaintext}` }
+  try {
+    const beforeDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    assert.equal(beforeDemotion.status, 200)
+
+    store.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: 'member',
+      status: 'active',
+    })
+
+    const afterDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    assert.equal(afterDemotion.status, 403)
+
+    const issueAfterDemotion = await fetch(`${baseUrl}/api/api-tokens`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Blocked admin token', scopes: ['desktop'] }),
+    })
+    assert.equal(issueAfterDemotion.status, 403)
+  } finally {
+    await server.close()
+  }
+})
+
 test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
@@ -3166,6 +3228,67 @@ test('cloud HTTP browser session cookies use secure flags and enforce CSRF on mu
     })
     assert.equal(logout.status, 200)
     assert.equal(setCookieHeaders(logout).every((cookie) => /Max-Age=0/.test(cookie)), true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP browser session cookies refresh membership role before admin authorization', async () => {
+  const sessionCookies = createCloudSessionCookieManager({
+    secret: TEST_COOKIE_KEY,
+    now: () => new Date('2026-05-26T12:00:00.000Z'),
+  })
+  const fixture = createFixture({
+    sessionCookies,
+    auth: () => {
+      throw new CloudHttpError(401, 'Fallback auth should not be used for cookie requests.')
+    },
+  })
+  fixture.store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
+  const org = fixture.store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'tenant-1', name: 'Tenant 1' })
+  const account = fixture.store.createAccount({
+    accountId: 'admin-1',
+    idpSubject: 'subject-admin-1',
+    email: 'admin@example.test',
+  })
+  fixture.store.ensureUser({
+    tenantId: 'tenant-1',
+    userId: account.accountId,
+    email: account.email,
+    role: 'admin',
+  })
+  fixture.store.upsertMembership({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    role: 'admin',
+    status: 'active',
+  })
+  const staleAdminCookie = sessionCookies.issue({
+    tenantId: 'tenant-1',
+    orgId: org.orgId,
+    tenantName: 'Tenant 1',
+    userId: account.accountId,
+    accountId: account.accountId,
+    email: account.email,
+    role: 'admin',
+    authSource: 'user',
+  })
+  const headers = { cookie: cookieHeader(staleAdminCookie.setCookieHeaders) }
+  const baseUrl = await fixture.server.listen()
+
+  try {
+    const beforeDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    assert.equal(beforeDemotion.status, 200)
+
+    fixture.store.upsertMembership({
+      orgId: org.orgId,
+      accountId: account.accountId,
+      role: 'member',
+      status: 'active',
+    })
+
+    const afterDemotion = await fetch(`${baseUrl}/api/admin/members`, { headers })
+    assert.equal(afterDemotion.status, 403)
   } finally {
     await fixture.server.close()
   }

@@ -135,6 +135,10 @@ import {
   type UpdateManagedWorkerPoolRequest,
 } from './services/managed-worker-service.ts'
 import { CloudUsageGovernanceService } from './services/usage-governance-service.ts'
+import {
+  principalHasOrgAdminRole,
+  principalHasPrivilegedTokenScope,
+} from './principal-access.ts'
 import { computeNextWorkflowRunAt, validateWorkflowSchedule } from '../workflow/workflow-schedule.ts'
 import {
   verifyWorkflowWebhookAuth,
@@ -457,36 +461,32 @@ function channelRoleCanApprove(role: ChannelIdentityRole) {
   return role === 'owner' || role === 'admin' || role === 'member' || role === 'approver'
 }
 
-function hasTokenScope(principal: CloudPrincipal, scope: ApiTokenScope) {
-  return principal.tokenScopes?.includes(scope) || principal.tokenScopes?.includes('admin') || false
-}
-
 function stableCloudId(prefix: string, ...parts: string[]) {
   return `${prefix}_${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`
 }
 
 function principalCanManageChannels(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
+  return principalHasOrgAdminRole(principal)
 }
 
 function principalCanManageBilling(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
+  return principalHasOrgAdminRole(principal)
 }
 
 function principalCanManageApiTokens(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
+  return principalHasOrgAdminRole(principal)
 }
 
 function principalCanManageOrg(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'admin')
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'admin')
+  return principalHasOrgAdminRole(principal)
 }
 
 function principalEmailDomain(email: string | null | undefined) {
@@ -497,21 +497,26 @@ function principalEmailDomain(email: string | null | undefined) {
 
 function principalCanUseGatewayRoutes(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return hasTokenScope(principal, 'gateway')
-  return principal.role === 'owner' || principal.role === 'admin'
+  if (principal.authSource === 'api_token') return principalHasPrivilegedTokenScope(principal, 'gateway')
+  return principalHasOrgAdminRole(principal)
 }
 
 function principalCanViewOperations(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
   if (principal.authSource === 'api_token') {
-    return Boolean(principal.tokenScopes?.includes('operator') || principal.tokenScopes?.includes('worker-internal'))
+    return Boolean(
+      principal.tokenScopes?.includes('worker-internal')
+      || (principalHasOrgAdminRole(principal) && principal.tokenScopes?.includes('operator'))
+    )
   }
   return false
 }
 
 function principalCanViewDiagnostics(principal: CloudPrincipal) {
   if (principal.authSource === 'local') return true
-  if (principal.authSource === 'api_token') return Boolean(principal.tokenScopes?.includes('operator'))
+  if (principal.authSource === 'api_token') {
+    return principalHasOrgAdminRole(principal) && Boolean(principal.tokenScopes?.includes('operator'))
+  }
   return false
 }
 
@@ -795,28 +800,39 @@ export class CloudSessionService {
       accountId: account.accountId,
       email: account.email,
     })
+    let effectiveRole: ControlPlaneRole
     if (!membership) {
       if (requiresExistingMembership) {
         throw new CloudServiceError(403, 'Cloud membership is not active.')
       }
-      await this.store.upsertMembership({
+      const createdMembership = await this.store.upsertMembership({
         orgId: org.orgId,
         accountId: account.accountId,
         role: principal.role || user.role,
         status: 'active',
         actor: { actorType: 'system', actorId: 'principal.bootstrap' },
       })
+      effectiveRole = createdMembership.role
     } else if (membership.membership.status === 'invited' && principal.authSource === 'user' && signupMode === 'invite') {
-      await this.store.upsertMembership({
+      const activatedMembership = await this.store.upsertMembership({
         orgId: org.orgId,
         accountId: account.accountId,
         role: membership.membership.role,
         status: 'active',
         actor: { actorType: 'system', actorId: 'membership.invite.accepted' },
       })
+      effectiveRole = activatedMembership.role
     } else if (membership.membership.status !== 'active') {
       throw new CloudServiceError(403, 'Cloud membership is not active.')
+    } else {
+      effectiveRole = membership.membership.role
     }
+    principal.tenantId = org.tenantId
+    principal.orgId = org.orgId
+    principal.tenantName = org.name
+    principal.accountId = account.accountId
+    principal.email = account.email
+    principal.role = effectiveRole
   }
 
   async getWorkspaceOverview(principal: CloudPrincipal): Promise<CloudWorkspaceOverview> {

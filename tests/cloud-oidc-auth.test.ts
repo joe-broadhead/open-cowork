@@ -159,6 +159,30 @@ test('cloud OIDC auth rejects missing, invalid-audience, and disallowed-domain t
   )
 })
 
+test('cloud OIDC auth requires a verified email claim for account linking', async () => {
+  const fixture = createJwtFixture()
+  const resolver = createOidcCloudAuthResolver(oidcConfig().cloud.auth, {
+    fetch: oidcFetch(fixture.jwk),
+    now: () => new Date('2026-05-26T12:00:00.000Z'),
+  })
+
+  await assert.rejects(
+    () => resolver(requestWithBearer(fixture.token({ email_verified: false }))),
+    /not verified/,
+  )
+  await assert.rejects(
+    () => resolver(requestWithBearer(fixture.token({ email_verified: undefined }))),
+    /not verified/,
+  )
+  await assert.rejects(
+    () => resolver(requestWithBearer(fixture.token({
+      email: undefined,
+      preferred_username: 'analyst@example.test',
+    }))),
+    /email is missing/,
+  )
+})
+
 test('cloud OIDC auth fails closed for tampered signatures and expired tokens', async () => {
   const fixture = createJwtFixture()
   const resolver = createOidcCloudAuthResolver(oidcConfig().cloud.auth, {
