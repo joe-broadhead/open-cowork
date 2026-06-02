@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DEFAULT_INPUTS, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
+import { DEFAULT_INPUTS, NODE_COVERAGE_INPUT, SHARED_COVERAGE_INPUT, WORKSPACE_NODE_COVERAGE_INPUT, parseLcovFilePaths, parseLcovInfo, renderCoverageMarkdown, summarizeCoverage } from '../scripts/coverage-summary.mjs'
 
 test('coverage summary parses lcov totals and renders a PR-safe table', () => {
   const totals = parseLcovInfo([
@@ -136,6 +136,75 @@ test('coverage summary normalizes absolute and platform-specific scoped paths', 
   })
 })
 
+test('coverage summary normalizes lcov source file paths for inventory checks', () => {
+  const paths = parseLcovFilePaths([
+    'TN:',
+    `SF:${join(process.cwd(), 'apps/desktop/src/main/runtime.ts')}`,
+    'DA:1,1',
+    'end_of_record',
+    'SF:/home/runner/work/open-cowork/open-cowork/packages/shared/src/index.ts',
+    'DA:1,1',
+    'end_of_record',
+    String.raw`SF:C:\a\open-cowork\packages\shared\src\providers.ts`,
+    'DA:1,1',
+    'end_of_record',
+  ].join('\n'), { includePathPrefixes: ['packages/shared/'] })
+
+  assert.deepEqual([...paths].sort(), [
+    'packages/shared/src/index.ts',
+    'packages/shared/src/providers.ts',
+  ])
+
+  assert.deepEqual([...parseLcovFilePaths([
+    'TN:',
+    `SF:${join(process.cwd(), 'apps/desktop/src/main/runtime.ts')}`,
+    'DA:1,1',
+    'end_of_record',
+  ].join('\n'))], ['apps/desktop/src/main/runtime.ts'])
+})
+
+test('coverage summary reports source inventory representation ratchets', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'open-cowork-coverage-inventory-'))
+  const src = join(dir, 'src')
+  const lcovPath = join(dir, 'lcov.info')
+  try {
+    mkdirSync(src, { recursive: true })
+    writeFileSync(join(src, 'covered.ts'), 'export const covered = true\n')
+    writeFileSync(join(src, 'missing.ts'), 'export const missing = true\n')
+    writeFileSync(join(src, 'covered.test.ts'), 'test("ignored", () => {})\n')
+    writeFileSync(join(src, 'types.d.ts'), 'export type Ignored = string\n')
+    writeFileSync(lcovPath, [
+      'TN:',
+      `SF:${join(src, 'covered.ts')}`,
+      'FN:1,covered',
+      'FNDA:1,covered',
+      'DA:1,1',
+      'end_of_record',
+    ].join('\n'))
+
+    const [summary] = summarizeCoverage([{
+      name: 'Inventory',
+      path: lcovPath,
+      sourceInventory: {
+        minimumPercent: 75,
+        roots: [{ path: src, extensions: ['.ts'] }],
+      },
+      thresholds: { lines: 1, functions: 1, branches: 1 },
+    }])
+
+    assert.deepEqual(summary.inventory, {
+      covered: 1,
+      total: 2,
+      percent: 50,
+      threshold: 75,
+      status: 'fail',
+    })
+    assert.match(renderCoverageMarkdown([summary]), /Inventory: 1\/2 files represented \(50\.0% \/ 75\.0%\)/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('coverage summary refuses scoped input with zero matched files', () => {
   const dir = mkdtempSync(join(tmpdir(), 'open-cowork-coverage-summary-'))
   const lcovPath = join(dir, 'lcov.info')
@@ -189,6 +258,20 @@ test('coverage summary reports the enforced renderer ratchet', () => {
   })
 })
 
+test('coverage summary reports the enforced node source inventory ratchet', () => {
+  assert.equal(NODE_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
+  for (const expectedRoot of [
+    'apps/desktop/src/main',
+    'apps/desktop/src/lib',
+    'packages/shared/dist',
+  ]) {
+    assert.ok(
+      NODE_COVERAGE_INPUT.sourceInventory.roots.some((root) => root.path === expectedRoot),
+      `node coverage inventory includes ${expectedRoot}`,
+    )
+  }
+})
+
 test('coverage summary reports the enforced shared-package ratchet', () => {
   assert.deepEqual(SHARED_COVERAGE_INPUT.thresholds, {
     lines: 90,
@@ -196,6 +279,8 @@ test('coverage summary reports the enforced shared-package ratchet', () => {
     branches: 75,
   })
   assert.deepEqual(SHARED_COVERAGE_INPUT.includePathPrefixes, ['packages/shared/'])
+  assert.equal(SHARED_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
+  assert.deepEqual(SHARED_COVERAGE_INPUT.sourceInventory.roots.map((root) => root.path), ['packages/shared/dist'])
 })
 
 test('coverage summary reports the enforced shipped workspace ratchet', () => {
@@ -205,6 +290,7 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
     branches: 68,
   })
   assert.ok(DEFAULT_INPUTS.includes(WORKSPACE_NODE_COVERAGE_INPUT))
+  assert.equal(WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
   for (const expectedPrefix of [
     'apps/gateway/dist/',
     'apps/standalone-gateway/dist/',
