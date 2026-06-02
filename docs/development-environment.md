@@ -53,9 +53,10 @@ developers can understand test fixtures, not so users can set them manually.
 
 `pnpm docs:build` is self-contained for contributors. It creates or reuses
 `.venv-docs/`, installs the pinned packages from `docs/requirements.txt`, and
-runs `mkdocs build --strict`. `pnpm docs:serve` uses the same virtual
-environment for local preview. Do not commit `.venv-docs/` or the generated
-`site/` directory.
+checks the vendored Mermaid docs bundle before running `mkdocs build --strict`.
+`pnpm docs:serve` uses the same virtual environment for local preview and the
+same vendor check. Do not commit `.venv-docs/` or the generated `site/`
+directory.
 
 If Python is not on `PATH`, set `DOCS_PYTHON` to an explicit Python 3
 executable before running either command.

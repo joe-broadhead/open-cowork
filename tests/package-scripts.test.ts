@@ -20,6 +20,7 @@ const desktopPackageJson = JSON.parse(readFileSync(new URL('../apps/desktop/pack
 const websitePackageJson = JSON.parse(readFileSync(new URL('../apps/website/package.json', import.meta.url), 'utf8')) as PackageJson
 const knipJson = JSON.parse(readFileSync(new URL('../knip.json', import.meta.url), 'utf8')) as KnipJson
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+const docsWorkflow = readFileSync(new URL('../.github/workflows/docs.yml', import.meta.url), 'utf8')
 const releaseWorkflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8')
 const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', import.meta.url), 'utf8')
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
@@ -111,9 +112,13 @@ test('root lint script runs all release gate checks', () => {
   assert.deepEqual(splitScriptSteps(requireScript('lint')), [
     'eslint . --max-warnings 0',
     'node scripts/lint.mjs',
+    'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
     'node scripts/check-shared-dist.mjs',
   ])
+  assert.equal(requireScript('docs:vendor:build'), 'node scripts/build-docs-mermaid-vendor.mjs')
+  assert.equal(requireScript('docs:vendor:check'), 'node scripts/build-docs-mermaid-vendor.mjs --check')
+  assert.match(requireScript('docs:build'), /node scripts\/docs-build\.mjs build/)
 })
 
 test('dead-code gate covers every source workspace package', () => {
@@ -237,6 +242,11 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {
+  const ciDocsJob = ciWorkflow.match(/\n {2}docs:\n[\s\S]*?\n {2}coverage:/)?.[0] || ''
+  assert.notEqual(ciDocsJob, '', 'CI workflow must contain a docs job')
+  assert.match(ciDocsJob, /pnpm install --frozen-lockfile/, 'CI docs job must install the locked dependency graph')
+  assert.match(ciDocsJob, /pnpm docs:build/, 'CI docs job must use pnpm docs:build')
+
   for (const command of [
     'pnpm lint',
     'pnpm test',
@@ -261,6 +271,14 @@ test('ci and release workflows use canonical release gate scripts', () => {
   ]) {
     assert.match(ciWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `CI must run ${command}`)
   }
+
+  for (const command of [
+    'pnpm install --frozen-lockfile',
+    'pnpm docs:build',
+  ]) {
+    assert.match(docsWorkflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `docs workflow must run ${command}`)
+  }
+  assert.doesNotMatch(docsWorkflow, /mkdocs build --strict/, 'docs workflow must use pnpm docs:build so vendor gates run before Pages deploy')
 
   for (const command of [
     'pnpm lint',
