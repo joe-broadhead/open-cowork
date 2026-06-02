@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `9de8383f3eb945d715a731ecea93398b5ab7509a`.
+  `a7120994ea3cf00e1f5339813a8fbb5e1e715ffe`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -101,6 +101,11 @@ The remaining work is concentrated in two areas:
   directions. New benchmarks without checked-in baselines fail `perf:check`,
   and the downstream catalog relationship benchmark is represented in every
   committed baseline.
+- Coverage summary now has source-inventory ratchets for Node, Shared Package,
+  and Workspace Node coverage inputs. CI still enforces the existing line,
+  function, and branch thresholds, and now also fails if LCOV stops
+  representing at least 90% of the configured production/shipped source
+  inventory for those suites.
 
 ## High Priority
 
@@ -115,8 +120,9 @@ No open high-priority findings remain after the current audit remediations.
   revocation, runtime status, and worker heartbeat visibility.
 - Workspace coverage gates are too broad and low for deployable workspace code:
   `lines: 40`, `functions: 28`, and `branches: 68`. Split thresholds by
-  package/service, remove generated dist noise from source coverage, and fail
-  when workspace packages are not represented in coverage inputs.
+  package/service and remove generated dist noise from source coverage once the
+  deployable workspaces have enough direct source-level coverage to support
+  that stricter ratchet.
 - Recovery and failover drills are currently evidence wrappers for public CI.
   Add an executable local compose recovery drill and require private
   environment drill evidence for hosted promotion.
@@ -176,6 +182,8 @@ node scripts/lint.mjs
 node scripts/check-preload-channels.mjs
 node scripts/check-shared-dist.mjs
 node scripts/run-node-tests.mjs tests/package-scripts.test.ts
+node --no-warnings --experimental-strip-types --test tests/coverage-summary.test.ts tests/package-scripts.test.ts
+node scripts/coverage-summary.mjs --check --no-write
 ./apps/desktop/node_modules/.bin/tsc -p apps/desktop/tsconfig.main.json --noEmit
 ./apps/desktop/node_modules/.bin/tsc -p apps/desktop/tsconfig.preload.json --noEmit
 git diff --check
