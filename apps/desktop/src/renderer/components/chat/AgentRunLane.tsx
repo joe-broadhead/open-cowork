@@ -52,7 +52,7 @@ function statusLabel(status: TaskRun['status']): string {
   }
 }
 
-export const AgentRunLane = memo(function AgentRunLane({
+export const AgentRunLane = memo(function AgentRunLaneComponent({
   taskRun,
   agentVisual = null,
   groupMaxElapsedMs,

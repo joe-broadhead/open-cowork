@@ -70,7 +70,7 @@ const activityOptions: Array<{ id: AgentRunActivityFilter; label: string }> = [
   { id: 'errors', label: 'Errors' },
 ]
 
-export const AgentRunPanel = memo(function AgentRunPanel({
+export const AgentRunPanel = memo(function AgentRunPanelComponent({
   taskRuns,
   agentVisuals,
   expanded,

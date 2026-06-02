@@ -84,7 +84,7 @@ function reportTaskAbortError(rootSessionId: string, taskSessionId: string, erro
   }
 }
 
-export const TaskDrillIn = memo(function TaskDrillIn({
+export const TaskDrillIn = memo(function TaskDrillInComponent({
   rootTask,
   allTaskRuns,
   agentVisuals,

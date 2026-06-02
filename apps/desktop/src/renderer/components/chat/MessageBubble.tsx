@@ -56,7 +56,7 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({
+export const MessageBubble = memo(function MessageBubbleComponent({
   message,
   streaming = false,
   actionsEnabled = true,
