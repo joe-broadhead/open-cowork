@@ -24,7 +24,7 @@ The remaining work is concentrated in two areas:
 ## Verified Baseline
 
 - GitHub code scanning: 0 open alerts on `master` at
-  `075bb11f8c07710be93c5e6d9853ca40d5cc812d`.
+  `c5fbb5a2987f995390ede95cfd3596c5b011348e`.
 - Dependabot alerts: 0 open alerts at the same point-in-time check.
 - GitHub Actions checks on that `master` SHA were green for deploy, CodeQL,
   build, coverage, validate, docs, cloud-gates, macos-build, and linux-package.
@@ -128,6 +128,9 @@ The remaining work is concentrated in two areas:
   `mermaid@11.15.0` dependency, recorded in a version/hash manifest, and
   checked by lint so the self-hosted docs bundle cannot drift silently from the
   package lock.
+- Webhook and Slack replay caches now enforce both per-source and global caps.
+  A hot bridge target or Slack team cannot evict another source's replay claim
+  before the signature window expires.
 
 ## High Priority
 
@@ -163,8 +166,6 @@ No open high-priority findings remain after the current audit remediations.
 
 ## Low Priority
 
-- Webhook replay cache eviction is global, not source/org scoped. Add scoped
-  caps plus a global cap and test cross-source eviction.
 - Cloud compatibility facades remain near their documented budgets:
   `postgres-control-plane-store.ts`, `in-memory-control-plane-store.ts`, and
   `session-service.ts` should be decomposed further before adding major Cloud

@@ -25,6 +25,8 @@ export interface SlackProviderConfig {
   now?: () => Date;
   maxSignatureAgeMs?: number;
   requestTimeoutMs?: number;
+  maxSeenWebhookSignatures?: number;
+  maxSeenWebhookSignaturesPerScope?: number;
 }
 
 export interface SlackWebhookAuth {
@@ -55,7 +57,13 @@ type SlackApiResponse = {
 const defaultSlackApiBaseUrl = "https://slack.com/api";
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 const defaultSlackRequestTimeoutMs = 15_000;
-const maxSeenSlackSignatures = 5_000;
+const defaultMaxSeenSlackSignatures = 5_000;
+const defaultMaxSeenSlackSignaturesPerScope = 1_000;
+
+type SeenSlackWebhookSignature = {
+  expiresAt: number;
+  scope: string;
+};
 
 export class SlackProvider implements ChannelProvider {
   readonly kind: ChannelProviderKind = "slack";
@@ -85,7 +93,7 @@ export class SlackProvider implements ChannelProvider {
   };
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
-  private readonly seenWebhookSignatures = new Map<string, number>();
+  private readonly seenWebhookSignatures = new Map<string, SeenSlackWebhookSignature>();
 
   constructor(private readonly config: SlackProviderConfig) {
     this.id = normalizeChannelProviderIdentity(this.kind, config.providerId).providerId;
@@ -221,24 +229,45 @@ export class SlackProvider implements ChannelProvider {
     if (!constantTimeStringEqual(signature, expected)) {
       throw new Error("Slack webhook signature verification failed.");
     }
-    this.claimWebhookSignature(`${timestamp}:${signature}`, nowMs, maxAgeMs);
+    this.claimWebhookSignature(`${timestamp}:${signature}`, slackReplayScopeFromRawBody(rawBody, this.id), nowMs, maxAgeMs);
   }
 
-  private claimWebhookSignature(replayKey: string, nowMs: number, maxAgeMs: number): void {
+  private claimWebhookSignature(replayKey: string, scope: string, nowMs: number, maxAgeMs: number): void {
     this.purgeSeenWebhookSignatures(nowMs);
-    const existingExpiresAt = this.seenWebhookSignatures.get(replayKey);
-    if (existingExpiresAt && existingExpiresAt > nowMs) {
+    const existing = this.seenWebhookSignatures.get(replayKey);
+    if (existing && existing.expiresAt > nowMs) {
       throw new Error("Slack webhook signature replay rejected.");
     }
-    this.seenWebhookSignatures.set(replayKey, nowMs + maxAgeMs);
-    if (this.seenWebhookSignatures.size > maxSeenSlackSignatures) {
+    this.seenWebhookSignatures.set(replayKey, { expiresAt: nowMs + maxAgeMs, scope });
+    this.enforceSeenWebhookSignatureScopeLimit(scope);
+    this.enforceSeenWebhookSignatureGlobalLimit();
+  }
+
+  private enforceSeenWebhookSignatureScopeLimit(scope: string): void {
+    const limit = normalizeReplayCacheLimit(this.config.maxSeenWebhookSignaturesPerScope, defaultMaxSeenSlackSignaturesPerScope);
+    const scopedKeys: string[] = [];
+    for (const [key, entry] of this.seenWebhookSignatures) {
+      if (entry.scope !== scope) continue;
+      scopedKeys.push(key);
+    }
+    while (scopedKeys.length > limit) {
+      const oldest = scopedKeys.shift();
+      if (!oldest) return;
+      this.seenWebhookSignatures.delete(oldest);
+    }
+  }
+
+  private enforceSeenWebhookSignatureGlobalLimit(): void {
+    const limit = normalizeReplayCacheLimit(this.config.maxSeenWebhookSignatures, defaultMaxSeenSlackSignatures);
+    while (this.seenWebhookSignatures.size > limit) {
       const oldest = this.seenWebhookSignatures.keys().next().value;
-      if (oldest) this.seenWebhookSignatures.delete(oldest);
+      if (!oldest) return;
+      this.seenWebhookSignatures.delete(oldest);
     }
   }
 
   private purgeSeenWebhookSignatures(nowMs: number): void {
-    for (const [key, expiresAt] of this.seenWebhookSignatures) {
+    for (const [key, { expiresAt }] of this.seenWebhookSignatures) {
       if (expiresAt <= nowMs) this.seenWebhookSignatures.delete(key);
     }
   }
@@ -293,6 +322,50 @@ function normalizeRequestTimeoutMs(value: number | undefined): number {
     return defaultSlackRequestTimeoutMs;
   }
   return Math.min(120_000, Math.max(100, Math.floor(value)));
+}
+
+function normalizeReplayCacheLimit(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.max(1, Math.floor(value));
+}
+
+function slackReplayScopeFromRawBody(rawBody: string, providerId: ChannelProviderId): string {
+  const fallback = replayScopeSegment(providerId);
+  try {
+    const value = parseSlackReplayScopeBody(rawBody);
+    if (!isRecord(value)) return fallback;
+    return replayScopeSegment(value.team_id)
+      || replayScopeSegment(isRecord(value.team) ? value.team.id : undefined)
+      || replayScopeSegment(value.enterprise_id)
+      || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseSlackReplayScopeBody(rawBody: string): unknown {
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch {
+    const params = new URLSearchParams(rawBody);
+    const payload = params.get("payload");
+    return payload ? JSON.parse(payload) as unknown : Object.fromEntries(params.entries());
+  }
+}
+
+function replayScopeSegment(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  let sanitized = "";
+  for (const character of trimmed) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    sanitized += codePoint < 32 || codePoint === 127 || character === ":" ? "_" : character;
+    if (sanitized.length >= 256) break;
+  }
+  return sanitized;
 }
 
 function mapSlackPayload(payload: Record<string, unknown>, now: Date, providerId: ChannelProviderId = "slack"): IncomingChannelMessage | null {
@@ -479,6 +552,10 @@ function constantTimeStringEqual(left: string | null | undefined, right: string 
 
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function stringField(value: Record<string, unknown>, key: string): string | null {

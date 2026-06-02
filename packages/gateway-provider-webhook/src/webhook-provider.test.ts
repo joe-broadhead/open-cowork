@@ -572,6 +572,54 @@ describe("WebhookProvider", () => {
     await provider.stop();
   });
 
+  it("keeps signed ingress replay eviction scoped by bridge target", async () => {
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z"),
+      maxSeenIngressSignatures: 10,
+      maxSeenIngressSignaturesPerScope: 2
+    });
+    const seen: string[] = [];
+    await provider.start(async (message) => {
+      seen.push(message.id);
+    });
+
+    const preservedPayload = {
+      id: "team-b-first",
+      target: { chatId: "team-b" },
+      sender: { userId: "bob" },
+      text: "preserve replay claim"
+    };
+    const preservedAuth = signedAuth(preservedPayload, "secret", "1772280001");
+    await provider.handleWebhookPayload(preservedPayload, preservedAuth);
+
+    let newestFloodPayload: { id: string, target: { chatId: string }, sender: { userId: string }, text: string } | null = null;
+    let newestFloodAuth: ReturnType<typeof signedAuth> | null = null;
+    for (let index = 0; index < 3; index += 1) {
+      const payload = {
+        id: `team-a-${index}`,
+        target: { chatId: "team-a" },
+        sender: { userId: "alice" },
+        text: `flood ${index}`
+      };
+      const auth = signedAuth(payload, "secret", String(1772280002 + index));
+      await provider.handleWebhookPayload(payload, auth);
+      newestFloodPayload = payload;
+      newestFloodAuth = auth;
+    }
+
+    if (!newestFloodPayload || !newestFloodAuth) throw new Error("missing newest flood request");
+    await expect(provider.handleWebhookPayload(newestFloodPayload, newestFloodAuth)).rejects.toThrow(
+      "Webhook signature replay rejected",
+    );
+    await expect(provider.handleWebhookPayload(preservedPayload, preservedAuth)).rejects.toThrow(
+      "Webhook signature replay rejected",
+    );
+    expect(seen).toHaveLength(4);
+    await provider.stop();
+  });
+
   it("rejects ingress when no shared secret has been configured", async () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway"
