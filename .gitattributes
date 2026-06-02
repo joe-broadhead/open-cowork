@@ -11,3 +11,5 @@
 *.dmg binary
 *.AppImage binary
 *.deb binary
+
+docs/javascripts/vendor/mermaid.min.js whitespace=-trailing-space

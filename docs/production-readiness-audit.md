@@ -124,6 +124,10 @@ The remaining work is concentrated in two areas:
   shared preload contract: `workflows.startDraft` no longer advertises
   workspace options that the IPC handler intentionally rejects for non-local
   workspaces.
+- The docs Mermaid runtime is now regenerated from the locked
+  `mermaid@11.15.0` dependency, recorded in a version/hash manifest, and
+  checked by lint so the self-hosted docs bundle cannot drift silently from the
+  package lock.
 
 ## High Priority
 
@@ -156,9 +160,6 @@ No open high-priority findings remain after the current audit remediations.
 - Workflow setup policy is duplicated across kickoff prompt, generated agent
   config, and skill text. Centralize policy in a typed source and generate
   downstream text from it.
-- The vendored docs Mermaid bundle is version-drifted from the locked runtime
-  dependency. Add deterministic regeneration/hash checking or build the bundle
-  from the locked dependency.
 
 ## Low Priority
 

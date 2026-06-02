@@ -72,6 +72,10 @@ function ensureRequirements() {
   run(venvPython, ['-m', 'pip', 'install', '-r', requirementsPath])
 }
 
+function checkDocsVendorBundles() {
+  run(process.execPath, ['scripts/build-docs-mermaid-vendor.mjs', '--check'])
+}
+
 function runMkdocs() {
   const mkdocs = venvMkdocsPath()
   if (command === 'build') {
@@ -87,4 +91,5 @@ function runMkdocs() {
 
 ensureVenv()
 ensureRequirements()
+checkDocsVendorBundles()
 runMkdocs()

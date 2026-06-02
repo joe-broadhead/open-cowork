@@ -1,0 +1,12 @@
+{
+  "package": "mermaid",
+  "packageVersion": "11.15.0",
+  "packageDependency": "^11.15.0",
+  "source": "apps/desktop/node_modules/mermaid/dist/mermaid.esm.min.mjs",
+  "bundle": "docs/javascripts/vendor/mermaid.min.js",
+  "generatedBy": "node scripts/build-docs-mermaid-vendor.mjs",
+  "bundler": "esbuild",
+  "bundlerVersion": "0.28.0",
+  "bytes": 3271412,
+  "sha256": "fcc66ac550d28f5944d5a562f23230399808c7f4d9cf7b88e2e9f6d9849f9b53"
+}
