@@ -121,6 +121,7 @@ nav:
       - Gateway Provider Readiness: gateway-provider-readiness.md
       - Downstream Customization: downstream.md
       - Downstream Contract: downstream-contract.md
+      - Design Tokens: design-tokens.md
       - OpenCode SDK Boundary: opencode-sdk-v2-boundary.md
       - Development Environment: development-environment.md
       - Performance: performance.md

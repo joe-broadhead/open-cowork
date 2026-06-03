@@ -33,7 +33,6 @@ const THREAD_MAX_WIDTH = 900
 
 export function ChatView() {
   const currentView = useSessionStore((s) => s.currentView)
-  const globalErrors = useSessionStore((s) => s.globalErrors)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -65,8 +64,8 @@ export function ChatView() {
     [sessions, currentSession?.parentSessionId],
   )
   const visibleErrors = useMemo(
-    () => [...currentView.errors, ...globalErrors].filter((error) => !error.sessionId || error.sessionId === currentSessionId),
-    [currentView.errors, globalErrors, currentSessionId],
+    () => currentView.errors.filter((error) => !error.sessionId || error.sessionId === currentSessionId),
+    [currentView.errors, currentSessionId],
   )
   const latestAssistantOrder = useMemo(
     () => messages.reduce((max, message) => message.role === 'assistant' ? Math.max(max, message.order) : max, 0),

@@ -4,13 +4,13 @@
   --color-base: #1b1b26;
   --color-surface: rgba(141, 164, 245, 0.04);
   --color-surface-hover: rgba(141, 164, 245, 0.08);
-  --color-surface-active: rgba(141, 164, 245, 0.13);
+  --color-surface-active: rgba(141, 164, 245, 0.15);
   --color-elevated: #23232f;
-  --color-border: rgba(180, 194, 250, 0.035);
-  --color-border-subtle: rgba(180, 194, 250, 0.018);
+  --color-border: rgba(180, 194, 250, 0.07);
+  --color-border-subtle: rgba(180, 194, 250, 0.035);
   --color-text: #e8e9f3;
   --color-text-secondary: #b0b3c6;
-  --color-text-muted: #75788a;
+  --color-text-muted: #8a8da0;
   --color-accent: #8da4f5;
   --color-accent-hover: #a7b6f8;
   --color-green: #7fcfa0;
@@ -20,12 +20,112 @@
   --color-accent-foreground: #0f0f18;
 }
 
+@theme inline {
+  --text-2xs: var(--text-2xs);
+  --text-2xs--line-height: var(--lh-2xs);
+  --text-xs: var(--text-xs);
+  --text-xs--line-height: var(--lh-xs);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--lh-sm);
+  --text-md: var(--text-md);
+  --text-md--line-height: var(--lh-md);
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: var(--lh-lg);
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: var(--lh-xl);
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: var(--lh-2xl);
+  --text-3xl: var(--text-3xl);
+  --text-3xl--line-height: var(--lh-3xl);
+  --text-hero: var(--text-hero);
+  --text-hero--line-height: var(--lh-hero);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-5: var(--space-5);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-10: var(--space-10);
+  --spacing-12: var(--space-12);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+  --ease-out: var(--ease-out);
+  --ease-emphasized: var(--ease-emphasized);
+  --duration-1: var(--dur-1);
+  --duration-2: var(--dur-2);
+  --duration-3: var(--dur-3);
+}
+
 :root {
   --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  --text-2xs: 11px;
+  --lh-2xs: 14px;
+  --text-xs: 12px;
+  --lh-xs: 16px;
+  --text-sm: 13px;
+  --lh-sm: 18px;
+  --text-md: 14px;
+  --lh-md: 21px;
+  --text-lg: 16px;
+  --lh-lg: 24px;
+  --text-xl: 19px;
+  --lh-xl: 26px;
+  --text-2xl: 24px;
+  --lh-2xl: 30px;
+  --text-3xl: 30px;
+  --lh-3xl: 36px;
+  --text-hero: 38px;
+  --lh-hero: 42px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18);
   --shadow-elevated: 0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24);
   --bg-image: radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%);
+  --elevation-popover: var(--shadow-elevated);
+  --ring-focus: 0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent);
+  --ring-selected: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+  --z-sticky: 10;
+  --z-dropdown: 40;
+  --z-overlay: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-command: 80;
+  --z-tooltip: 90;
+  --control-h-sm: 28px;
+  --control-h-md: 32px;
+  --control-h-lg: 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+  }
 }
 
 html, body, #root {
@@ -144,6 +244,19 @@ body {
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-loadout-snap { animation: none; }
+}
+
+@keyframes toast-slide-in {
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.toast-enter {
+  animation: toast-slide-in var(--dur-2) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter { animation: none; }
 }
 
 /* Agent run lane status pulse — the dot next to "running" lanes

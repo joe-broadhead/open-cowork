@@ -527,6 +527,19 @@ describe('App', () => {
     expect(api.runtime.status).toHaveBeenCalled()
   })
 
+  it('mounts global error toasts outside the chat view', async () => {
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    act(() => {
+      useSessionStore.getState().addGlobalError('Settings could not be saved.')
+    })
+
+    expect(await screen.findByRole('alert', { name: 'App error: Settings could not be saved.' })).toBeInTheDocument()
+  })
+
   it('surfaces transient runtime status IPC failures without blocking the shell', async () => {
     const { api } = installAppApi()
     vi.mocked(api.runtime.status).mockRejectedValueOnce(new Error('ipc down'))

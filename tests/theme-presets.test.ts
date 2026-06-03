@@ -13,7 +13,9 @@ test('built-in Matrix theme uses the OpenCode Matrix palette', () => {
   assert.equal(matrix.dark.info, '#30b3ff')
   assert.equal(matrix.light.base, '#eef3ea')
   assert.equal(matrix.light.text, '#203022')
-  assert.equal(matrix.light.accent, '#1cc24b')
+  assert.equal(matrix.light.accent, '#127f31')
+  assert.equal(matrix.light.green, '#1cc24b')
+  assert.equal(matrix.light.accentForeground, '#ffffff')
 })
 
 test('built-in Matrix theme is included in the preset seed order', () => {

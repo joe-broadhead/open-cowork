@@ -7,17 +7,8 @@ import type { PendingApproval } from '../stores/session'
 import { SettingsPanel } from './sidebar/SettingsPanel'
 import { configureI18n } from '../helpers/i18n'
 
-const axeOptions = {
-  rules: {
-    // jsdom cannot compute the CSS custom-property palette reliably. Static
-    // contrast still lives in design review; this smoke gate covers DOM a11y
-    // regressions such as missing labels, landmarks, and ARIA contracts.
-    'color-contrast': { enabled: false },
-  },
-}
-
 async function expectNoA11yViolations(container: HTMLElement) {
-  const result = await axe(container, axeOptions)
+  const result = await axe(container)
   expect(result.violations).toEqual([])
 }
 
