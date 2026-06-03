@@ -1,4 +1,8 @@
 import type {
+  ChannelActorInput,
+  ChannelInteractionResolutionInput,
+} from './channel-domain-context.ts'
+import type {
   ChannelCursorUpdateResult,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
@@ -60,11 +64,26 @@ export type CloudChannelServiceDelegate = {
     status?: ChannelIdentityStatus
     metadata?: Record<string, unknown>
   }): Promise<ChannelIdentityRecord>
-  bindChannelSession(principal: CloudPrincipal, input: Record<string, unknown>): Promise<{
+  bindChannelSession(principal: CloudPrincipal, input: ChannelActorInput & {
+    channelBindingId: string
+    provider: ChannelProviderId
+    externalChatId: string
+    externalThreadId: string
+    sessionId?: string | null
+    title?: string | null
+    lastEventSequence?: number
+    lastWorkspaceSequence?: number
+    lastChatMessageId?: string | null
+  }): Promise<{
     binding: ChannelSessionBindingRecord
     session: CloudSessionView
   }>
-  getChannelSessionByThread(principal: CloudPrincipal, input: Record<string, unknown>): Promise<{
+  getChannelSessionByThread(principal: CloudPrincipal, input: {
+    provider: ChannelProviderId
+    externalWorkspaceId?: string | null
+    externalChatId: string
+    externalThreadId: string
+  }): Promise<{
     binding: ChannelSessionBindingRecord
     session: CloudSessionView
   } | null>
@@ -74,22 +93,59 @@ export type CloudChannelServiceDelegate = {
     lastWorkspaceSequence: number
     lastChatMessageId?: string | null
   }): Promise<ChannelCursorUpdateResult>
-  enqueueChannelPrompt(principal: CloudPrincipal, input: Record<string, unknown>): Promise<{
+  enqueueChannelPrompt(principal: CloudPrincipal, input: ChannelActorInput & {
+    bindingId: string
+    text: string
+    agent?: string | null
+  }): Promise<{
     binding: ChannelSessionBindingRecord
     command: SessionCommandRecord
+    beforeProjectionSequence: number
   }>
-  createChannelInteraction(principal: CloudPrincipal, input: Record<string, unknown>): Promise<IssuedChannelInteractionRecord>
-  resolveChannelInteraction(principal: CloudPrincipal, input: Record<string, unknown>): Promise<{
+  createChannelInteraction(principal: CloudPrincipal, input: {
+    agentId: string
+    sessionId: string
+    provider: ChannelProviderId
+    kind: ChannelInteractionRecord['kind']
+    targetId: string
+    externalInteractionId?: string | null
+    createdByIdentityId?: string | null
+    expiresAt?: Date | null
+    interactionId?: string | null
+    tokenSecret?: string | null
+  }): Promise<IssuedChannelInteractionRecord>
+  resolveChannelInteraction(principal: CloudPrincipal, input: ChannelInteractionResolutionInput): Promise<{
     interaction: ChannelInteractionRecord
     command: SessionCommandRecord
-    processed: number
+    beforeProjectionSequence: number
   }>
-  createChannelDelivery(principal: CloudPrincipal, input: Record<string, unknown>): Promise<PublicChannelDeliveryRecord>
-  listChannelDeliveries(principal: CloudPrincipal, input?: Record<string, unknown>): Promise<PublicChannelDeliveryRecord[]>
+  createChannelDelivery(principal: CloudPrincipal, input: {
+    agentId: string
+    channelBindingId: string
+    sessionBindingId?: string | null
+    provider: ChannelProviderId
+    target: Record<string, unknown>
+    eventType: string
+    payload: Record<string, unknown>
+    status?: ChannelDeliveryRecord['status']
+    nextAttemptAt?: Date | null
+    deliveryId?: string | null
+  }): Promise<PublicChannelDeliveryRecord>
+  listChannelDeliveries(principal: CloudPrincipal, input?: {
+    status?: ChannelDeliveryRecord['status'] | null
+    channelBindingId?: string | null
+    limit?: number | null
+  }): Promise<PublicChannelDeliveryRecord[]>
   retryChannelDelivery(principal: CloudPrincipal, deliveryId: string): Promise<PublicChannelDeliveryRecord | null>
-  deadLetterChannelDelivery(principal: CloudPrincipal, deliveryId: string, input?: { lastError?: string | null }): Promise<PublicChannelDeliveryRecord | null>
-  claimNextChannelDelivery(input: { orgId: string, claimedBy: string, now?: Date, ttlMs?: number }): Promise<ChannelDeliveryRecord | null>
-  ackChannelDelivery(deliveryId: string, input: Record<string, unknown>): Promise<PublicChannelDeliveryRecord | null>
+  deadLetterChannelDelivery(principal: CloudPrincipal, input: { deliveryId: string, lastError?: string | null }): Promise<PublicChannelDeliveryRecord | null>
+  claimNextChannelDelivery(principal: CloudPrincipal, input: { claimedBy: string, now?: Date, ttlMs?: number }): Promise<ChannelDeliveryRecord | null>
+  ackChannelDelivery(principal: CloudPrincipal, input: {
+    deliveryId: string
+    claimedBy?: string | null
+    status: Extract<ChannelDeliveryRecord['status'], 'sent' | 'failed' | 'dead'>
+    lastError?: string | null
+    nextAttemptAt?: Date | null
+  }): Promise<PublicChannelDeliveryRecord | null>
 }
 
 export class CloudChannelService {
@@ -118,40 +174,40 @@ export class CloudChannelService {
   resolveIdentity(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['resolveChannelIdentity']>[1]) {
     return this.delegate.resolveChannelIdentity(principal, input)
   }
-  bindSession(principal: CloudPrincipal, input: Record<string, unknown>) {
+  bindSession(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['bindChannelSession']>[1]) {
     return this.delegate.bindChannelSession(principal, input)
   }
-  getSessionByThread(principal: CloudPrincipal, input: Record<string, unknown>) {
+  getSessionByThread(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['getChannelSessionByThread']>[1]) {
     return this.delegate.getChannelSessionByThread(principal, input)
   }
   updateCursor(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['updateChannelCursor']>[1]) {
     return this.delegate.updateChannelCursor(principal, input)
   }
-  enqueuePrompt(principal: CloudPrincipal, input: Record<string, unknown>) {
+  enqueuePrompt(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['enqueueChannelPrompt']>[1]) {
     return this.delegate.enqueueChannelPrompt(principal, input)
   }
-  createInteraction(principal: CloudPrincipal, input: Record<string, unknown>) {
+  createInteraction(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['createChannelInteraction']>[1]) {
     return this.delegate.createChannelInteraction(principal, input)
   }
-  resolveInteraction(principal: CloudPrincipal, input: Record<string, unknown>) {
+  resolveInteraction(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['resolveChannelInteraction']>[1]) {
     return this.delegate.resolveChannelInteraction(principal, input)
   }
-  createDelivery(principal: CloudPrincipal, input: Record<string, unknown>) {
+  createDelivery(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['createChannelDelivery']>[1]) {
     return this.delegate.createChannelDelivery(principal, input)
   }
-  listDeliveries(principal: CloudPrincipal, input?: Record<string, unknown>) {
+  listDeliveries(principal: CloudPrincipal, input?: Parameters<CloudChannelServiceDelegate['listChannelDeliveries']>[1]) {
     return this.delegate.listChannelDeliveries(principal, input)
   }
   retryDelivery(principal: CloudPrincipal, deliveryId: string) {
     return this.delegate.retryChannelDelivery(principal, deliveryId)
   }
-  deadLetterDelivery(principal: CloudPrincipal, deliveryId: string, input?: { lastError?: string | null }) {
-    return this.delegate.deadLetterChannelDelivery(principal, deliveryId, input)
+  deadLetterDelivery(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['deadLetterChannelDelivery']>[1]) {
+    return this.delegate.deadLetterChannelDelivery(principal, input)
   }
-  claimNextDelivery(input: { orgId: string, claimedBy: string, now?: Date, ttlMs?: number }) {
-    return this.delegate.claimNextChannelDelivery(input)
+  claimNextDelivery(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['claimNextChannelDelivery']>[1]) {
+    return this.delegate.claimNextChannelDelivery(principal, input)
   }
-  ackDelivery(deliveryId: string, input: Record<string, unknown>) {
-    return this.delegate.ackChannelDelivery(deliveryId, input)
+  ackDelivery(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['ackChannelDelivery']>[1]) {
+    return this.delegate.ackChannelDelivery(principal, input)
   }
 }

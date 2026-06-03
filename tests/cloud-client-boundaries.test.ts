@@ -125,6 +125,75 @@ test('cloud API token policy is extracted from the monolithic session service', 
   assert.doesNotMatch(sessionService, /function enforceApiTokenScopePolicy/)
 })
 
+test('cloud client adapter delegates concrete operations to domain clients', () => {
+  const root = process.cwd()
+  const adapter = readFileSync(join(root, 'packages/cloud-client/src/adapter.ts'), 'utf8')
+  const contracts = readFileSync(join(root, 'packages/cloud-client/src/contracts.ts'), 'utf8')
+  const expectedFactories: Record<string, string> = {
+    artifacts: 'createCloudArtifactsClient',
+    billing: 'createCloudBillingClient',
+    byok: 'createCloudByokClient',
+    capabilities: 'createCloudCapabilitiesClient',
+    channels: 'createCloudChannelsClient',
+    config: 'createCloudConfigClient',
+    identity: 'createCloudIdentityClient',
+    sessions: 'createCloudSessionsClient',
+    settings: 'createCloudSettingsClient',
+    threads: 'createCloudThreadsClient',
+    transport: 'createCloudTransportEventClient',
+    workflows: 'createCloudWorkflowsClient',
+  }
+
+  for (const [domain, factory] of Object.entries(expectedFactories)) {
+    const source = readFileSync(join(root, `packages/cloud-client/src/domains/${domain}.ts`), 'utf8')
+    assert.equal(source.includes(factory), true, `${domain} must expose a concrete client factory`)
+  }
+
+  for (const route of [
+    '/api/sessions',
+    '/api/channels',
+    '/api/workflows',
+    '/api/threads',
+    '/api/capabilities',
+    '/api/settings',
+    '/api/byok',
+    '/api/billing',
+    '/api/admin',
+  ]) {
+    assert.doesNotMatch(adapter, new RegExp(route.replaceAll('/', '\\\\/')), `adapter should not own concrete ${route} routes`)
+  }
+  assert.match(adapter, /createCloudSessionsClient\(domainContext\)/)
+  assert.match(adapter, /createCloudChannelsClient\(\{/)
+  assert.match(adapter, /createCloudTransportEventClient\(sseContext\)/)
+  assert.equal(adapter.split('\n').length < 400, true, 'adapter must remain a thin compatibility wrapper')
+  assert.match(adapter, /export type \* from '\.\/contracts\.js'/)
+  assert.doesNotMatch(adapter, /export type CloudClientSessionStatus/)
+  assert.match(contracts, /export type CloudTransportAdapter = \{/)
+})
+
+test('cloud session service delegates channel behavior to the extracted domain service', () => {
+  const root = process.cwd()
+  const sessionService = readFileSync(join(root, 'apps/desktop/src/main/cloud/session-service.ts'), 'utf8')
+  const channelDomainService = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-domain-service.ts'), 'utf8')
+  const channelContext = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-domain-context.ts'), 'utf8')
+  const channelSessionActions = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-session-actions.ts'), 'utf8')
+  const channelInteractionActions = readFileSync(join(root, 'apps/desktop/src/main/cloud/services/channel-interaction-actions.ts'), 'utf8')
+
+  assert.match(channelDomainService, /export class CloudChannelDomainService/)
+  assert.match(channelDomainService, /return sessionActions\.bindChannelSession\(this\.options, principal, input\)/)
+  assert.match(channelSessionActions, /export async function bindChannelSession\(/)
+  assert.match(channelContext, /export async function requireChannelActor\(/)
+  assert.match(channelInteractionActions, /assertRemoteInteractionAllowed\(principal/)
+  assert.match(sessionService, /private readonly channelDomain: CloudChannelDomainService/)
+  assert.match(sessionService, /new CloudChannelDomainService\(/)
+  assert.match(sessionService, /return this\.channelDomain\.bindChannelSession\(principal, input\)/)
+  assert.match(sessionService, /return this\.channelDomain\.resolveChannelInteraction\(principal, input\)/)
+  assert.doesNotMatch(sessionService, /function channelRoleCanPrompt/)
+  assert.doesNotMatch(sessionService, /function principalCanManageChannels/)
+  assert.doesNotMatch(sessionService, /private async requireChannelActor/)
+  assert.doesNotMatch(sessionService, /findChannelSessionBindingByThread\(\{/)
+})
+
 function clientSources(directory: string): string[] {
   const sources: string[] = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
