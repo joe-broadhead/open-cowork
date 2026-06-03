@@ -228,6 +228,34 @@ test('makeInteractiveVegaSpecResponsive gives dense horizontal bar charts more v
   assert.equal(yAxis.labelPadding, 10)
 })
 
+test('makeInteractiveVegaSpecResponsive does not mutate nested encoding structures', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    mark: 'bar',
+    data: {
+      values: [
+        { category: 'A', total: 2, region: 'North' },
+        { category: 'B', total: 4, region: 'South' },
+      ],
+    },
+    encoding: {
+      x: { field: 'total', type: 'quantitative', axis: { title: 'Total' } },
+      y: { field: 'category', type: 'nominal', axis: { title: 'Category' } },
+      color: { field: 'region', type: 'nominal', legend: { title: 'Region' } },
+    },
+  }
+  const original = JSON.parse(JSON.stringify(spec))
+
+  const responsive = makeInteractiveVegaSpecResponsive(spec)
+  const yAxis = (responsive.encoding as Record<string, any>).y.axis
+  const colorLegend = (responsive.encoding as Record<string, any>).color.legend
+
+  assert.deepEqual(spec, original)
+  assert.equal(yAxis.labelLimit, 320)
+  assert.equal(colorLegend.orient, 'right')
+  assert.equal(colorLegend.title, 'Region')
+})
+
 test('makeInteractiveVegaSpecResponsive keeps arc legends readable in chat layouts', () => {
   const spec = {
     $schema: 'https://vega.github.io/schema/vega-lite/v6.json',

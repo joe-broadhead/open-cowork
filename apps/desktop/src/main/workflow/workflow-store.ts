@@ -12,10 +12,8 @@ import type {
   WorkflowRunStatus,
   WorkflowStatus,
   WorkflowSummary,
-  WorkflowToolPreview,
   WorkflowTrigger,
   WorkflowTriggerType,
-  WorkflowValidationGap,
 } from '@open-cowork/shared'
 import {
   createCloudProjectionCheckpoint,
@@ -25,21 +23,31 @@ import { getAppDataDir } from '../config-loader.ts'
 import {
   readSafeStorageBackendForPolicy,
   resolveSecretStorageMode,
-  type SecretStorageMode,
 } from '../secure-storage-policy.ts'
-import { computeNextWorkflowRunAt, validateWorkflowSchedule } from './workflow-schedule.ts'
+import { computeNextWorkflowRunAt } from './workflow-schedule.ts'
+import {
+  assertWorkflowCapabilities,
+  isWorkflowTriggerType,
+  MAX_WORKFLOW_LIST_ITEMS,
+  normalizeWorkflowDraft,
+  previewWorkflowDraft as previewWorkflowDraftCalculation,
+  type WorkflowDraftNormalizationOptions,
+} from './workflow-normalization.ts'
+import {
+  parseWorkflowTriggersFromStorageWithAdapter,
+  serializeWorkflowTriggersForStorageWithAdapter,
+  type WorkflowSecretStorageAdapter,
+} from './workflow-secret-storage.ts'
 
 const WORKFLOW_DB_SCHEMA_VERSION = 1
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
-const MAX_TEXT = 32 * 1024
-const MAX_LIST_ITEMS = 50
 const VALID_STATUS = new Set<WorkflowStatus>(['active', 'paused', 'running', 'failed', 'archived'])
 const VALID_RUN_STATUS = new Set<WorkflowRunStatus>(['queued', 'running', 'completed', 'failed', 'cancelled'])
-const VALID_TRIGGER_TYPES = new Set<WorkflowTriggerType>(['manual', 'schedule', 'webhook'])
 
 let workflowDb: DatabaseSync | null = null
+let workflowDbForTests: DatabaseSync | null = null
 let transactionCounter = 0
 let workflowSecretStorageForTests: WorkflowSecretStorageAdapter | null = null
 
@@ -48,32 +56,11 @@ const electronSafeStorage = (electron as { safeStorage?: typeof import('electron
 const electronSafeStorageBackend = electronSafeStorage as (typeof import('electron').safeStorage & {
   getSelectedStorageBackend?: () => string
 }) | undefined
-const LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX = 'enc:v1:'
-const ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION = 2
 
 type DbRow = Record<string, unknown>
-type WorkflowWriteOptions = {
-  now?: Date
-  capabilities?: WorkflowCapabilityValidationContext
-}
-type WorkflowDraftOptions = {
-  now?: Date
-  capabilities?: WorkflowCapabilityValidationContext
-}
-export type WorkflowCapabilityValidationContext = {
-  agentNames?: readonly string[]
-  skillNames?: readonly string[]
-  toolIds?: readonly string[]
-}
-type WorkflowSecretStorageAdapter = {
-  mode: SecretStorageMode
-  encryptString?: (value: string) => Buffer
-  decryptString?: (value: Buffer) => string
-}
-type EncryptedWebhookSecretRecord = {
-  __openCoworkEncryptedWebhookSecret: typeof ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION
-  value: string
-}
+type WorkflowWriteOptions = WorkflowDraftNormalizationOptions
+type WorkflowDraftOptions = WorkflowDraftNormalizationOptions
+export type { WorkflowCapabilityValidationContext } from './workflow-normalization.ts'
 
 function workflowDbPath() {
   const dir = getAppDataDir()
@@ -87,23 +74,6 @@ function ensureWorkflowDbFileModes(dbPath = workflowDbPath()) {
     if (!existsSync(path)) continue
     chmodSync(path, 0o600)
   }
-}
-
-function boundedText(value: unknown, label: string, max = MAX_TEXT) {
-  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
-  const trimmed = value.trim()
-  if (!trimmed) throw new Error(`${label} is required.`)
-  if (Buffer.byteLength(trimmed, 'utf8') > max) throw new Error(`${label} is too large.`)
-  return trimmed
-}
-
-function boundedOptionalText(value: unknown, label: string, max = MAX_TEXT) {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  if (Buffer.byteLength(trimmed, 'utf8') > max) throw new Error(`${label} is too large.`)
-  return trimmed
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -131,101 +101,32 @@ function getWorkflowSecretStorage(): WorkflowSecretStorageAdapter {
   }
 }
 
-function isEncryptedWebhookSecretRecord(value: unknown): value is EncryptedWebhookSecretRecord {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && !Array.isArray(value)
-    && (value as Partial<EncryptedWebhookSecretRecord>).__openCoworkEncryptedWebhookSecret === ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION
-    && typeof (value as Partial<EncryptedWebhookSecretRecord>).value === 'string',
-  )
-}
-
-function encryptWebhookSecretValue(storage: WorkflowSecretStorageAdapter, secret: string): EncryptedWebhookSecretRecord {
-  if (!storage.encryptString) throw new Error('Electron safeStorage is unavailable')
-  return {
-    __openCoworkEncryptedWebhookSecret: ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION,
-    value: Buffer.from(storage.encryptString(secret)).toString('base64'),
-  }
-}
-
-function tryDecryptWebhookSecretPayload(storage: WorkflowSecretStorageAdapter, payload: string) {
-  if (!storage.decryptString) return null
-  try {
-    return storage.decryptString(Buffer.from(payload, 'base64'))
-  } catch {
-    return null
-  }
-}
-
-function encodeWebhookSecretForStorage(secret: unknown): string | EncryptedWebhookSecretRecord | null {
-  if (isEncryptedWebhookSecretRecord(secret)) return secret
-  if (typeof secret !== 'string' || !secret) return null
-  const storage = getWorkflowSecretStorage()
-  if (storage.mode === 'encrypted') {
-    return encryptWebhookSecretValue(storage, secret)
-  }
-  if (storage.mode === 'plaintext') return secret
-  throw new Error('Secure storage unavailable on this system. Open Cowork cannot persist workflow webhook secrets in production without OS-backed secret storage.')
-}
-
-function decodeWebhookSecretFromStorage(secret: unknown) {
-  const storage = getWorkflowSecretStorage()
-  if (isEncryptedWebhookSecretRecord(secret)) {
-    return tryDecryptWebhookSecretPayload(storage, secret.value) ?? secret
-  }
-
-  if (typeof secret !== 'string' || !secret.trim()) return null
-  if (!secret.startsWith(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX)) return secret
-
-  const legacyPayload = secret.slice(LEGACY_ENCRYPTED_WEBHOOK_SECRET_PREFIX.length)
-  const decrypted = tryDecryptWebhookSecretPayload(storage, legacyPayload)
-  // Older builds stored encrypted webhook secrets as strings prefixed with
-  // enc:v1:. If decryption fails, preserve the original value so an imported
-  // plaintext secret with that literal prefix still round-trips.
-  return decrypted ?? secret
-}
-
 export function serializeWorkflowTriggersForStorage(triggers: WorkflowTrigger[]) {
-  return JSON.stringify(triggers.map((trigger) => trigger.type === 'webhook'
-    ? { ...trigger, webhookSecret: encodeWebhookSecretForStorage(trigger.webhookSecret) }
-    : trigger))
+  return serializeWorkflowTriggersForStorageWithAdapter(triggers, getWorkflowSecretStorage())
 }
 
 export function parseWorkflowTriggersFromStorage(value: unknown) {
-  const parsed = parseJson<unknown>(value, [])
-  if (!Array.isArray(parsed)) return []
-  return parsed.flatMap((raw): WorkflowTrigger[] => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
-    const trigger = raw as Partial<WorkflowTrigger>
-    if (!VALID_TRIGGER_TYPES.has(trigger.type as WorkflowTriggerType)) return []
-    return [trigger.type === 'webhook'
-      ? { ...trigger, webhookSecret: decodeWebhookSecretFromStorage(trigger.webhookSecret) } as WorkflowTrigger
-      : trigger as WorkflowTrigger]
-  })
+  return parseWorkflowTriggersFromStorageWithAdapter(value, getWorkflowSecretStorage())
 }
 
 export function setWorkflowSecretStorageForTests(adapter: WorkflowSecretStorageAdapter | null) {
   workflowSecretStorageForTests = adapter
 }
 
-function normalizeStringList(value: unknown, label: string) {
-  if (value === null || value === undefined) return []
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
-  return Array.from(new Set(value.map((item) => boundedText(item, `${label} entry`, 256)))).slice(0, MAX_LIST_ITEMS)
-}
-
-function randomSecret() {
-  return crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
+export function setWorkflowDatabaseForTests(db: DatabaseSync | null) {
+  workflowDb?.close()
+  workflowDb = null
+  workflowDbForTests = db
+  transactionCounter = 0
+  if (db) initDb(db)
 }
 
 function writeNow(options?: WorkflowWriteOptions) {
   return options?.now ?? new Date()
 }
 
-function hasCapabilityReference(value: string, available?: readonly string[]) {
-  if (!available) return true
-  return available.includes(value)
+function randomWebhookSecret() {
+  return crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
 }
 
 function projectDirectoryExists(directory: string) {
@@ -236,113 +137,11 @@ function projectDirectoryExists(directory: string) {
   }
 }
 
-export function validateWorkflowDraftCapabilities(
-  draft: WorkflowDraft,
-  capabilities?: WorkflowCapabilityValidationContext,
-): WorkflowValidationGap[] {
-  const gaps: WorkflowValidationGap[] = []
-
-  if (!hasCapabilityReference(draft.agentName, capabilities?.agentNames)) {
-    gaps.push({
-      severity: 'required',
-      field: 'agentName',
-      value: draft.agentName,
-      message: `Workflow agent "${draft.agentName}" is not available.`,
-    })
-  }
-
-  for (const skillName of draft.skillNames || []) {
-    if (hasCapabilityReference(skillName, capabilities?.skillNames)) continue
-    gaps.push({
-      severity: 'optional',
-      field: 'skillNames',
-      value: skillName,
-      message: `Workflow skill "${skillName}" is not available.`,
-    })
-  }
-
-  for (const toolId of draft.toolIds || []) {
-    if (hasCapabilityReference(toolId, capabilities?.toolIds)) continue
-    gaps.push({
-      severity: 'optional',
-      field: 'toolIds',
-      value: toolId,
-      message: `Workflow tool "${toolId}" is not available.`,
-    })
-  }
-
-  if (draft.projectDirectory && !projectDirectoryExists(draft.projectDirectory)) {
-    gaps.push({
-      severity: 'required',
-      field: 'projectDirectory',
-      value: draft.projectDirectory,
-      message: `Workflow project directory "${draft.projectDirectory}" is not available.`,
-    })
-  }
-
-  return gaps
-}
-
-function requiredWorkflowGaps(gaps: WorkflowValidationGap[]) {
-  return gaps.filter((gap) => gap.severity === 'required')
-}
-
-function assertWorkflowCapabilities(draft: WorkflowDraft, capabilities?: WorkflowCapabilityValidationContext) {
-  const gaps = validateWorkflowDraftCapabilities(draft, capabilities)
-  const required = requiredWorkflowGaps(gaps)
-  if (required.length > 0) throw new Error(required[0]!.message)
-  return gaps
-}
-
-export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftOptions): WorkflowDraft {
-  const title = boundedText(draft.title, 'Workflow title', 512)
-  const instructions = boundedText(draft.instructions, 'Workflow instructions', MAX_TEXT)
-  const agentName = boundedText(draft.agentName || 'build', 'Workflow agent', 256)
-  const triggers = normalizeWorkflowTriggers(draft.triggers, options?.now ?? new Date())
-  if (!triggers.some((trigger) => trigger.type === 'manual')) {
-    triggers.unshift({ id: crypto.randomUUID(), type: 'manual', enabled: true })
-  }
+function workflowDraftOptions(options?: WorkflowDraftOptions): WorkflowDraftNormalizationOptions {
   return {
-    title,
-    instructions,
-    agentName,
-    skillNames: normalizeStringList(draft.skillNames, 'Workflow skillNames'),
-    toolIds: normalizeStringList(draft.toolIds, 'Workflow toolIds'),
-    projectDirectory: boundedOptionalText(draft.projectDirectory, 'Workflow projectDirectory', 4096),
-    draftSessionId: boundedOptionalText(draft.draftSessionId, 'Workflow draftSessionId', 256),
-    triggers,
+    ...options,
+    projectDirectoryExists: options?.projectDirectoryExists ?? projectDirectoryExists,
   }
-}
-
-function normalizeWorkflowTriggers(value: unknown, now: Date): WorkflowTrigger[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error('Workflow requires at least one trigger.')
-  }
-  return value.slice(0, 8).map((raw) => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Workflow trigger must be an object.')
-    const trigger = raw as Partial<WorkflowTrigger>
-    const type = String(trigger.type || '')
-    if (!VALID_TRIGGER_TYPES.has(type as WorkflowTriggerType)) throw new Error('Workflow trigger type is invalid.')
-    const normalized: WorkflowTrigger = {
-      id: typeof trigger.id === 'string' && trigger.id.trim() ? trigger.id.trim() : crypto.randomUUID(),
-      type: type as WorkflowTriggerType,
-      enabled: trigger.enabled !== false,
-      schedule: null,
-      webhookSecret: null,
-    }
-    if (normalized.type === 'schedule') {
-      if (!trigger.schedule) throw new Error('Scheduled workflow trigger requires a schedule.')
-      const scheduleError = validateWorkflowSchedule(trigger.schedule, now)
-      if (scheduleError) throw new Error(scheduleError)
-      normalized.schedule = trigger.schedule
-    }
-    if (normalized.type === 'webhook') {
-      normalized.webhookSecret = typeof trigger.webhookSecret === 'string' && trigger.webhookSecret.trim()
-        ? trigger.webhookSecret.trim()
-        : randomSecret()
-    }
-    return normalized
-  })
 }
 
 function initDb(db: DatabaseSync) {
@@ -396,6 +195,7 @@ function initDb(db: DatabaseSync) {
 }
 
 export function getWorkflowDb() {
+  if (workflowDbForTests) return workflowDbForTests
   if (workflowDb) return workflowDb
   const dbPath = workflowDbPath()
   const db = new DatabaseSync(dbPath)
@@ -418,14 +218,14 @@ function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
   try {
     const result = callback(db)
     db.exec(`release savepoint ${savepoint}`)
-    ensureWorkflowDbFileModes()
+    if (!workflowDbForTests) ensureWorkflowDbFileModes()
     return result
   } catch (error) {
     try {
       db.exec(`rollback to savepoint ${savepoint}`)
     } finally {
       db.exec(`release savepoint ${savepoint}`)
-      ensureWorkflowDbFileModes()
+      if (!workflowDbForTests) ensureWorkflowDbFileModes()
     }
     throw error
   }
@@ -526,8 +326,9 @@ function rowToWorkflow(row: DbRow, webhookBaseUrl?: string | null): WorkflowSumm
 
 function rowToRun(row: DbRow): WorkflowRun {
   const status = VALID_RUN_STATUS.has(String(row.status) as WorkflowRunStatus) ? String(row.status) as WorkflowRunStatus : 'queued'
-  const triggerType = VALID_TRIGGER_TYPES.has(String(row.trigger_type) as WorkflowTriggerType)
-    ? String(row.trigger_type) as WorkflowTriggerType
+  const rawTriggerType = String(row.trigger_type)
+  const triggerType = isWorkflowTriggerType(rawTriggerType)
+    ? rawTriggerType
     : 'manual'
   return {
     id: String(row.id || ''),
@@ -551,35 +352,8 @@ function listRunsForWorkflow(workflowId: string, limit = 25) {
   return rows.map(rowToRun)
 }
 
-export function previewWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftOptions): WorkflowToolPreview {
-  try {
-    const now = options?.now ?? new Date()
-    const normalizedDraft = normalizeWorkflowDraft(draft, { ...options, now })
-    const gaps = validateWorkflowDraftCapabilities(normalizedDraft, options?.capabilities)
-    const missing = requiredWorkflowGaps(gaps).map((gap) => gap.message)
-    return {
-      ok: missing.length === 0,
-      title: normalizedDraft.title,
-      summary: normalizedDraft.instructions.slice(0, 500),
-      missing,
-      gaps,
-      normalizedDraft,
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Workflow draft is invalid.'
-    return {
-      ok: false,
-      title: typeof draft.title === 'string' ? draft.title : 'Workflow draft',
-      summary: message,
-      missing: [message],
-      gaps: [{
-        severity: 'required',
-        field: 'draft',
-        value: '',
-        message,
-      }],
-    }
-  }
+export function previewWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftOptions) {
+  return previewWorkflowDraftCalculation(draft, workflowDraftOptions(options))
 }
 
 export function listWorkflows(webhookBaseUrl?: string | null): WorkflowListPayload {
@@ -601,8 +375,8 @@ export function getWorkflow(workflowId: string, webhookBaseUrl?: string | null):
 
 export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | null, options?: WorkflowWriteOptions): WorkflowDetail {
   const nowDate = writeNow(options)
-  const normalized = normalizeWorkflowDraft(draft, { ...options, now: nowDate })
-  assertWorkflowCapabilities(normalized, options?.capabilities)
+  const normalized = normalizeWorkflowDraft(draft, workflowDraftOptions({ ...options, now: nowDate }))
+  assertWorkflowCapabilities(normalized, workflowDraftOptions(options))
   const now = nowDate.toISOString()
   const id = crypto.randomUUID()
   const nextRunAt = computeNextWorkflowRunAt(normalized.triggers, nowDate)
@@ -652,7 +426,7 @@ export function regenerateWorkflowWebhookSecret(workflowId: string, webhookBaseU
   const detail = getWorkflow(workflowId, webhookBaseUrl)
   if (!detail) return null
   const triggers = detail.triggers.map((trigger) => trigger.type === 'webhook'
-    ? { ...trigger, webhookSecret: randomSecret() }
+    ? { ...trigger, webhookSecret: randomWebhookSecret() }
     : trigger)
   const now = new Date().toISOString()
   withTransaction((db) => {
@@ -703,7 +477,7 @@ export function createWorkflowRun(workflowId: string, triggerType: WorkflowTrigg
 export function claimDueWorkflowRun(now = new Date()) {
   const claimedAt = now.toISOString()
   return withTransaction((db) => {
-    for (let attempt = 0; attempt < MAX_LIST_ITEMS; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_WORKFLOW_LIST_ITEMS; attempt += 1) {
       const row = db.prepare(`
         select * from workflows
         where status = 'active'
@@ -872,4 +646,6 @@ export function recoverInterruptedWorkflowRuns(error = 'Workflow run was interru
 export function clearWorkflowStoreCache() {
   workflowDb?.close()
   workflowDb = null
+  workflowDbForTests = null
+  transactionCounter = 0
 }
