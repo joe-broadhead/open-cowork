@@ -28,6 +28,7 @@ import {
   normalizeAgentName,
 } from './task-run-utils.ts'
 import { log } from './logger.ts'
+import { nextSessionScopedFallbackId } from './runtime-fallback-ids.ts'
 
 const MAX_PENDING_TEXT_EVENTS_PER_SESSION = 500
 const MAX_TOTAL_PENDING_TEXT_EVENTS = 10_000
@@ -850,7 +851,7 @@ function handleUpdatedToolPart(ctx: MessagePartUpdatedContext) {
     sessionId: ctx.rootSessionId,
     data: {
       type: 'tool_call',
-      id: ctx.part.callId || ctx.part.id || `${ctx.rootSessionId}:tool:${Date.now()}`,
+      id: ctx.part.callId || ctx.part.id || nextSessionScopedFallbackId(ctx.rootSessionId, 'tool'),
       name: displayName,
       input: toolInput,
       status,

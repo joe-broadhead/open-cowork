@@ -8,6 +8,7 @@ import { closeLogger } from '../apps/desktop/src/main/logger.ts'
 import {
   clearSessionRegistryCache,
   flushSessionRegistryWrites,
+  getSessionRecord,
   listSessionRecords,
   removeSessionRecord,
   toSessionRecord,
@@ -113,6 +114,83 @@ test('session composer preferences persist separately from last-used model', () 
     assert.equal(record?.modelId, 'openrouter/model-last-used-after-prompt')
     assert.equal(record?.composerModelId, 'openrouter/model-composer')
     assert.equal(record?.composerReasoningVariant, 'xhigh')
+  } finally {
+    clearSessionRegistryCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+})
+
+test('session registry returns defensive copies from public boundaries', () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir('defensive-copy')
+  const sessionId = `session-copy-${Date.now()}`
+
+  try {
+    resetRegistryTestState(userDataDir)
+
+    const inserted = upsertSessionRecord(toSessionRecord({
+      id: sessionId,
+      title: 'Cached state',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      opencodeDirectory: userDataDir,
+      summary: {
+        messages: 1,
+        userMessages: 1,
+        assistantMessages: 0,
+        toolCalls: 0,
+        taskRuns: 1,
+        cost: 0.25,
+        tokens: {
+          input: 10,
+          output: 0,
+          reasoning: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+        },
+        agentBreakdown: [{
+          agent: 'research',
+          taskRuns: 1,
+          cost: 0.25,
+          tokens: {
+            input: 10,
+            output: 0,
+            reasoning: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          },
+        }],
+      },
+    }))
+    assert.ok(inserted)
+
+    inserted.title = 'Mutated insert result'
+    inserted.summary!.tokens.input = 999
+    inserted.summary!.agentBreakdown![0]!.tokens.input = 999
+
+    const listed = listSessionRecords().find((record) => record.id === sessionId)
+    assert.ok(listed)
+    listed.title = 'Mutated list result'
+    listed.summary!.tokens.input = 500
+
+    const updated = updateSessionRecord(sessionId, {
+      changeSummary: {
+        additions: 2,
+        deletions: 1,
+        files: 1,
+      },
+    })
+    assert.ok(updated)
+    updated.changeSummary!.additions = 999
+
+    const fresh = getSessionRecord(sessionId)
+    assert.equal(fresh?.title, 'Cached state')
+    assert.equal(fresh?.summary?.tokens.input, 10)
+    assert.equal(fresh?.summary?.agentBreakdown?.[0]?.tokens.input, 10)
+    assert.equal(fresh?.changeSummary?.additions, 2)
   } finally {
     clearSessionRegistryCache()
     clearConfigCaches()

@@ -18,6 +18,7 @@ import {
   resolveRootSession,
   trackParentSession,
 } from '../apps/desktop/src/main/event-task-state.ts'
+import { resetSessionScopedFallbackIdsForTests } from '../apps/desktop/src/main/runtime-fallback-ids.ts'
 
 function createDispatchCollector() {
   const events: unknown[] = []
@@ -46,6 +47,7 @@ function createWindowSendCollector(options?: { destroyed?: boolean; webContentsD
 test.afterEach(() => {
   resetEventTaskState()
   resetRuntimeEventStateForTests()
+  resetSessionScopedFallbackIdsForTests()
 })
 
 test('returns false for events outside the runtime side-effect handler scope', () => {
@@ -481,6 +483,62 @@ test('child tool errors do not terminalize a still-running subagent task', () =>
       sourceSessionId: 'child-session',
     },
   })
+})
+
+test('message.part.updated fallback tool ids do not collide within one session', () => {
+  const collector = createDispatchCollector()
+  const win = {
+    webContents: { send: () => undefined },
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow
+  const messageState = createSessionScopedMessageState()
+
+  trackParentSession('root-session')
+
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-1',
+      part: {
+        type: 'tool',
+        tool: 'read',
+        state: {
+          status: 'running',
+          input: { path: 'README.md' },
+        },
+      },
+    },
+    messageState,
+    'openai/gpt-5.5',
+  )
+  handleMessagePartUpdatedEvent(
+    win,
+    collector.dispatch,
+    {
+      sessionID: 'root-session',
+      messageID: 'message-2',
+      part: {
+        type: 'tool',
+        tool: 'write',
+        state: {
+          status: 'running',
+          input: { path: 'notes.md' },
+        },
+      },
+    },
+    messageState,
+    'openai/gpt-5.5',
+  )
+
+  const ids = collector.events.map((event) => {
+    return (event as { data?: { id?: string } }).data?.id
+  })
+  assert.deepEqual(ids, [
+    'root-session:tool:fallback:1',
+    'root-session:tool:fallback:2',
+  ])
 })
 
 test('message.part.updated reads SDK part-scoped ids for child transcript text', () => {

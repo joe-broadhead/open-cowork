@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_SEEN_COST_EVENT_IDS_PER_SESSION, SessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { MAX_WARM_SESSION_DETAILS } from '../apps/desktop/src/lib/session-view-model.ts'
+import { resetSessionScopedFallbackIdsForTests } from '../apps/desktop/src/main/runtime-fallback-ids.ts'
 
 function apply(engine: SessionEngine, sessionId: string, data: Record<string, unknown>) {
   engine.applyStreamEvent({
@@ -274,6 +275,30 @@ test('session engine defensively copies SDK tool payloads', () => {
   const tool = engine.getSessionView(sessionId).toolCalls[0]
   assert.deepEqual(tool?.input, { nested: { path: 'before.md' } })
   assert.deepEqual(tool?.output, { result: { ok: true } })
+})
+
+test('session engine fallback tool ids do not collide within one session', () => {
+  resetSessionScopedFallbackIdsForTests()
+  const engine = new SessionEngine({ nowMs: () => 1_700_000_000_000 })
+  const sessionId = 'session-tool-fallback'
+
+  engine.activateSession(sessionId)
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    name: 'read',
+    status: 'running',
+  })
+  apply(engine, sessionId, {
+    type: 'tool_call',
+    name: 'write',
+    status: 'running',
+  })
+
+  const ids = engine.getSessionView(sessionId).toolCalls.map((tool) => tool.id)
+  assert.deepEqual(ids, [
+    'session-tool-fallback:tool:fallback:1',
+    'session-tool-fallback:tool:fallback:2',
+  ])
 })
 
 test('session engine accepts deterministic id and clock dependencies for action-owned fields', () => {
