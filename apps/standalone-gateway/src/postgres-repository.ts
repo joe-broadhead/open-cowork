@@ -97,39 +97,52 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
   async findOrCreateSession(input: StandalonePromptInput & { title?: string; now?: Date }): Promise<StandaloneGatewaySessionRecord> {
     const now = (input.now || new Date()).toISOString();
     const externalThreadId = input.target.threadId || input.target.chatId;
-    const result = await this.pool.query<SessionRow>(
-      `INSERT INTO standalone_gateway_sessions (
-         session_id, title, status, provider, provider_kind, channel_binding_id,
-         external_user_id, external_chat_id, external_thread_id, created_at, updated_at
-       )
-       VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8, $9, $9)
-       ON CONFLICT (provider, external_chat_id, external_thread_id) DO UPDATE
-       SET updated_at = standalone_gateway_sessions.updated_at
-       RETURNING *`,
-      [
-        randomUUID(),
-        input.title || input.text.slice(0, 80) || "Standalone Gateway session",
-        input.provider,
-        input.providerKind,
-        input.channelBindingId,
-        input.externalUserId,
-        input.target.chatId,
-        externalThreadId,
-        now,
-      ],
-    );
-    const session = sessionFromRow(result.rows[0]!);
-    if (session.lastEventSequence === 0) {
-      await this.appendEvent({ sessionId: session.sessionId, type: "session.created", payload: { title: session.title }, now: input.now });
-      return await this.getSession(session.sessionId) || session;
-    }
-    return session;
+    return this.withTransaction(async (client) => {
+      const result = await client.query<SessionRow>(
+        `INSERT INTO standalone_gateway_sessions (
+           session_id, title, status, provider, provider_kind, channel_binding_id,
+           external_user_id, external_chat_id, external_thread_id, created_at, updated_at
+         )
+         VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8, $9, $9)
+         ON CONFLICT (provider, external_chat_id, external_thread_id) DO UPDATE
+         SET updated_at = standalone_gateway_sessions.updated_at
+         RETURNING *`,
+        [
+          randomUUID(),
+          input.title || input.text.slice(0, 80) || "Standalone Gateway session",
+          input.provider,
+          input.providerKind,
+          input.channelBindingId,
+          input.externalUserId,
+          input.target.chatId,
+          externalThreadId,
+          now,
+        ],
+      );
+      let session = sessionFromRow(result.rows[0]!);
+      if (session.lastEventSequence !== 0) return session;
+      await client.query<EventRow>(
+        `INSERT INTO standalone_gateway_events (event_id, session_id, sequence, type, payload, created_at)
+         VALUES ($1, $2, 1, 'session.created', $3::jsonb, $4)
+         ON CONFLICT (session_id, sequence) DO NOTHING`,
+        [randomUUID(), session.sessionId, JSON.stringify(redactRecord({ title: session.title })), now],
+      );
+      const updated = await client.query<SessionRow>(
+        `UPDATE standalone_gateway_sessions
+         SET last_event_sequence = 1, updated_at = $2
+         WHERE session_id = $1 AND last_event_sequence = 0
+         RETURNING *`,
+        [session.sessionId, now],
+      );
+      session = updated.rows[0] ? sessionFromRow(updated.rows[0]) : session;
+      return session;
+    });
   }
 
   async updateSessionRuntime(input: { sessionId: string; opencodeSessionId: string | null; status?: StandaloneGatewaySessionRecord["status"]; now?: Date }): Promise<StandaloneGatewaySessionRecord> {
     const result = await this.pool.query<SessionRow>(
       `UPDATE standalone_gateway_sessions
-       SET opencode_session_id = $2,
+       SET opencode_session_id = COALESCE(standalone_gateway_sessions.opencode_session_id, $2),
            status = COALESCE($3, status),
            updated_at = $4
        WHERE session_id = $1

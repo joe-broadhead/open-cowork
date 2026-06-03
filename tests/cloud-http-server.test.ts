@@ -163,6 +163,19 @@ function createFixture(options: {
   return { runtime, store, objectStore, policy, service, artifacts, worker, server }
 }
 
+async function processOneSessionCommand(fixture: ReturnType<typeof createFixture>, tenantId: string, sessionId: string) {
+  const lease = await fixture.store.claimSessionLease(tenantId, sessionId, 'single-command-worker')
+  if (!lease) return 0
+  try {
+    const command = await fixture.store.claimNextSessionCommand(lease)
+    if (!command) return 0
+    await fixture.service.executeCommand(lease, command)
+    return 1
+  } finally {
+    await fixture.store.releaseSessionLease(lease)
+  }
+}
+
 async function readJson(response: Response) {
   const text = await response.text()
   return JSON.parse(text) as Record<string, unknown>
@@ -409,6 +422,53 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(asRecord(abort.projectionFence).sequence, asRecord(asRecord(abort.view).projection).sequence)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
   } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP command projection fences require the submitted command event', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const originalProcessSessionCommands = fixture.worker.processSessionCommands.bind(fixture.worker)
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    fixture.worker.processSessionCommands = async () => 0
+    const oldPromptResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'older queued command' }),
+    })
+    assert.equal(oldPromptResponse.status, 202)
+    const oldPrompt = await readJson(oldPromptResponse)
+    assert.equal(oldPrompt.processed, 0)
+    assert.equal(oldPrompt.projectionFence, null)
+
+    fixture.worker.processSessionCommands = async (tenantId, targetSessionId) => {
+      return processOneSessionCommand(fixture, tenantId, targetSessionId)
+    }
+    const newPromptResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'new command still pending' }),
+    })
+    assert.equal(newPromptResponse.status, 202)
+    const newPrompt = await readJson(newPromptResponse)
+    assert.equal(newPrompt.processed, 1)
+    assert.equal(newPrompt.projectionFence, null)
+    assert.notEqual(asRecord(oldPrompt.command).commandId, asRecord(newPrompt.command).commandId)
+
+    const projectedMessages = asArray(asRecord(asRecord(asRecord(newPrompt.view).projection).view).messages)
+    assert.equal(projectedMessages.some((message) => asRecord(message).content === 'older queued command'), true)
+    assert.equal(projectedMessages.some((message) => asRecord(message).content === 'new command still pending'), false)
+    assert.deepEqual(fixture.runtime.prompts.map((prompt) => (prompt.parts[0] as { text?: string } | undefined)?.text), ['older queued command'])
+  } finally {
+    fixture.worker.processSessionCommands = originalProcessSessionCommands
     await fixture.server.close()
   }
 })

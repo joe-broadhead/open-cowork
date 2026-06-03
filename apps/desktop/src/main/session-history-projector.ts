@@ -89,6 +89,7 @@ type ProjectSessionHistoryInput = {
   children: ChildSessionRecord[]
   statuses: Record<string, { type: string | null }>
   loadChildSnapshot: (childId: string) => Promise<{ messages: unknown[]; todos: unknown[] }>
+  fallbackTimestampMs?: number
   generateId?: () => string
 }
 
@@ -164,17 +165,18 @@ function isDelegationPart(part: NormalizedMessagePart) {
 
 function messageCreatedSortTime(msg: NonNullable<ReturnType<typeof normalizeSessionMessages>[number]>) {
   const created = msg.info.time.created || msg.time.created
-  return created ? toHistorySortTime(created) : null
+  return created ? toHistorySortTime(created, 0) : null
 }
 
 function childCreatedSortTime(child: ChildSessionRecord) {
   const created = child.time?.created
-  return created === null || created === undefined ? null : toHistorySortTime(created)
+  return created === null || created === undefined ? null : toHistorySortTime(created, 0)
 }
 
 export async function projectSessionHistory(input: ProjectSessionHistoryInput): Promise<ProjectedHistoryItem[]> {
   const { sessionId, cachedModelId, rootMessages, rootTodos, statuses, loadChildSnapshot } = input
   const generateId = input.generateId || crypto.randomUUID
+  const fallbackSortTime = toHistorySortTime(input.fallbackTimestampMs, 0)
   const normalizedRootMessages = rootMessages
     .map((rawMsg) => normalizeSessionMessages([rawMsg])[0])
     .filter((msg): msg is NonNullable<ReturnType<typeof normalizeSessionMessages>[number]> => Boolean(msg))
@@ -429,7 +431,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (parentSessionId && !childBelongsToParent(child, parentSessionId)) continue
       const taskId = `child:${child.id}`
       const agent = extractAgentName(child.title)
-      const sortTime = toHistorySortTime(child.time?.created || Date.now())
+      const sortTime = toHistorySortTime(child.time?.created, fallbackSortTime)
       const childStatus = getTaskStatus(child.id)
       const timing = timingFromChild(child, childStatus)
       addTaskRun({
@@ -485,7 +487,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     const info = msg.info
     const parts = msg.parts
     const childBindingAfter = messageCreatedSortTime(msg)
-    const tsMs = childBindingAfter ?? Date.now()
+    const tsMs = childBindingAfter ?? fallbackSortTime
     const ts = toIsoTimestamp(tsMs)
     const msgId = info.id || msg.id || generateId()
     const role = info.role || msg.role || 'assistant'
@@ -665,7 +667,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
   if (rootTodos.length > 0) {
     const todos = normalizeTodoItems(rootTodos)
     if (todos.length > 0) {
-      const todosTs = Date.now()
+      const todosTs = fallbackSortTime
       pushItem({
         type: 'todos',
         id: `todos:${sessionId}`,
@@ -700,7 +702,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
       if (!msg) continue
       const info = msg.info
       const parts = msg.parts
-      const tsMs = toHistorySortTime(info.time.created || msg.time.created || Date.now())
+      const tsMs = toHistorySortTime(info.time.created || msg.time.created, fallbackSortTime)
       const ts = toIsoTimestamp(tsMs)
       const role = info.role || msg.role || 'assistant'
       const modelMeta = getHistoryModelMeta(msg)
@@ -877,7 +879,7 @@ export async function projectSessionHistory(input: ProjectSessionHistoryInput): 
     }
 
     if (normalizedChildTodos.length > 0) {
-      const todoSortTime = toHistorySortTime(child.time?.updated || child.time?.created || Date.now())
+      const todoSortTime = toHistorySortTime(child.time?.updated || child.time?.created, fallbackSortTime)
       pushItem({
         type: 'task_todos',
         id: `${taskId}:todos`,

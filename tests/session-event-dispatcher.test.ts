@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   dispatchRuntimeSessionEvent,
+  dropSessionFromDispatcherQueues,
   getRuntimeNotification,
   getSessionPatch,
   publishSessionView,
@@ -128,6 +129,65 @@ test('dispatcher batches text patches in event order', async () => {
     sent.filter((entry) => entry.channel === 'session:patch').map((entry) => (entry.payload as { content?: string }).content),
     ['first', 'second'],
   )
+})
+
+test('dispatcher drops queued local and workspace-scoped session patches on deletion', async () => {
+  const { win, sent } = createWindowCollector(55)
+
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-delete-queued',
+    data: {
+      type: 'text',
+      messageId: 'message-delete-local',
+      partId: 'part-delete-local',
+      content: 'local stale',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-delete-queued',
+    workspaceId: 'workspace-remote',
+    data: {
+      type: 'text',
+      messageId: 'message-delete-remote',
+      partId: 'part-delete-remote',
+      content: 'remote stale',
+      mode: 'append',
+    },
+  })
+  dispatchRuntimeSessionEvent(win as any, {
+    type: 'text',
+    sessionId: 'session-delete-neighbor',
+    workspaceId: 'workspace-remote',
+    data: {
+      type: 'text',
+      messageId: 'message-neighbor',
+      partId: 'part-neighbor',
+      content: 'neighbor stays',
+      mode: 'append',
+    },
+  })
+
+  dropSessionFromDispatcherQueues('session-delete-queued')
+  await wait(30)
+
+  const patchPayloads = sent
+    .filter((entry) => entry.channel === 'session:patch')
+    .map((entry) => {
+      const payload = entry.payload as { sessionId?: string; workspaceId?: string; content?: string }
+      return {
+        sessionId: payload.sessionId,
+        workspaceId: payload.workspaceId,
+        content: payload.content,
+      }
+    })
+  assert.deepEqual(patchPayloads, [{
+    sessionId: 'session-delete-neighbor',
+    workspaceId: 'workspace-remote',
+    content: 'neighbor stays',
+  }])
 })
 
 test('dispatcher bounds queued patches and schedules full-view catch-up on overflow', async () => {
