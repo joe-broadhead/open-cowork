@@ -9,6 +9,14 @@ test('cloud gateway wraps all required channel and session operations', async ()
   const calls: string[] = []
   let sessionClosed = false
   let deliveriesClosed = false
+  const fence = (commandId: string, sessionId = 'session-1') => ({
+    version: 1,
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId,
+    commandId,
+    issuedAt: '2026-05-27T10:00:00.000Z',
+  })
   const adapter = {
     async resolveChannelIdentity(input: unknown) {
       calls.push(`identity:${JSON.stringify(input)}`)
@@ -28,27 +36,54 @@ test('cloud gateway wraps all required channel and session operations', async ()
     },
     async promptChannelSession(input: unknown) {
       calls.push(`prompt:${JSON.stringify(input)}`)
-      return { binding: { bindingId: 'binding-1' }, command: { commandId: 'cmd-1' }, processed: 1 }
+      return {
+        binding: { bindingId: 'binding-1' },
+        command: { commandId: 'cmd-1' },
+        processed: 1,
+        projectionFence: fence('cmd-1'),
+      }
     },
     async abortSession(sessionId: string) {
       calls.push(`abort:${sessionId}`)
-      return { command: { commandId: 'cmd-abort' }, processed: 1, view: { session: { sessionId }, projection: null } }
+      return {
+        command: { commandId: 'cmd-abort' },
+        processed: 1,
+        view: { session: { sessionId }, projection: null },
+        projectionFence: fence('cmd-abort', sessionId),
+      }
     },
     async respondToPermission(sessionId: string, input: unknown) {
       calls.push(`permission:${sessionId}:${JSON.stringify(input)}`)
-      return { command: { commandId: 'cmd-permission' }, processed: 1 }
+      return {
+        command: { commandId: 'cmd-permission' },
+        processed: 1,
+        projectionFence: fence('cmd-permission', sessionId),
+      }
     },
     async replyToQuestion(sessionId: string, input: unknown) {
       calls.push(`question-reply:${sessionId}:${JSON.stringify(input)}`)
-      return { command: { commandId: 'cmd-reply' }, processed: 1 }
+      return {
+        command: { commandId: 'cmd-reply' },
+        processed: 1,
+        projectionFence: fence('cmd-reply', sessionId),
+      }
     },
     async rejectQuestion(sessionId: string, input: unknown) {
       calls.push(`question-reject:${sessionId}:${JSON.stringify(input)}`)
-      return { command: { commandId: 'cmd-reject' }, processed: 1 }
+      return {
+        command: { commandId: 'cmd-reject' },
+        processed: 1,
+        projectionFence: fence('cmd-reject', sessionId),
+      }
     },
     async resolveChannelInteraction(input: unknown) {
       calls.push(`interaction:${JSON.stringify(input)}`)
-      return { interaction: { interactionId: 'interaction-1' }, command: { commandId: 'cmd-interaction' }, processed: 1 }
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        command: { commandId: 'cmd-interaction' },
+        processed: 1,
+        projectionFence: fence('cmd-interaction'),
+      }
     },
     async createChannelInteraction(input: unknown) {
       calls.push(`interaction-create:${JSON.stringify(input)}`)
@@ -90,12 +125,12 @@ test('cloud gateway wraps all required channel and session operations', async ()
   await gateway.bindSession({ channelBindingId: 'channel-1', provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
   await gateway.findSessionByThread({ provider: 'telegram', externalChatId: 'chat-1', externalThreadId: 'thread-1' })
   await gateway.getSession('session-1')
-  await gateway.prompt({ bindingId: 'binding-1', text: 'hello' })
-  await gateway.abortSession('session-1')
-  await gateway.respondToPermission('session-1', { permissionId: 'permission-1', response: { allowed: true } })
-  await gateway.replyToQuestion('session-1', { requestId: 'question-1', answers: ['yes'] })
-  await gateway.rejectQuestion('session-1', { requestId: 'question-2' })
-  await gateway.resolveChannelInteraction({ token: 'token-1', response: { allowed: true } })
+  const prompt = await gateway.prompt({ bindingId: 'binding-1', text: 'hello' })
+  const abort = await gateway.abortSession('session-1')
+  const permission = await gateway.respondToPermission('session-1', { permissionId: 'permission-1', response: { allowed: true } })
+  const reply = await gateway.replyToQuestion('session-1', { requestId: 'question-1', answers: ['yes'] })
+  const reject = await gateway.rejectQuestion('session-1', { requestId: 'question-2' })
+  const interaction = await gateway.resolveChannelInteraction({ token: 'token-1', response: { allowed: true } })
   await gateway.createChannelInteraction({
     agentId: 'agent-1',
     sessionId: 'session-1',
@@ -114,6 +149,12 @@ test('cloud gateway wraps all required channel and session operations', async ()
 
   assert.equal(sessionClosed, true)
   assert.equal(deliveriesClosed, true)
+  assert.equal(prompt.projectionFence?.commandId, 'cmd-1')
+  assert.equal(abort.projectionFence?.commandId, 'cmd-abort')
+  assert.equal(permission.projectionFence?.commandId, 'cmd-permission')
+  assert.equal(reply.projectionFence?.commandId, 'cmd-reply')
+  assert.equal(reject.projectionFence?.commandId, 'cmd-reject')
+  assert.equal(interaction.projectionFence?.commandId, 'cmd-interaction')
   assert.deepEqual(calls.map((call) => call.split(':')[0]), [
     'identity',
     'bind',

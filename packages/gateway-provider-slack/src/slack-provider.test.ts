@@ -103,6 +103,71 @@ describe("SlackProvider", () => {
     expect(messages).toHaveLength(1);
   });
 
+  it("releases replay claims when message handler dispatch fails", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      now: () => fixedNow,
+    });
+    let attempts = 0;
+    await provider.start(async (message) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("store offline");
+      messages.push(message);
+    });
+    const payload = slackMessagePayload("T123", "C123", "1716984000.000200", "hello");
+    const rawBody = JSON.stringify(payload);
+    const headers = signedHeaders(rawBody);
+
+    await expect(provider.handleWebhookPayload(payload, { headers, rawBody })).rejects.toThrow("store offline");
+    await provider.handleWebhookPayload(payload, { headers, rawBody });
+    await expect(provider.handleWebhookPayload(payload, { headers, rawBody })).rejects.toThrow("replay");
+
+    expect(attempts).toBe(2);
+    expect(messages).toHaveLength(1);
+  });
+
+  it("does not release newer replay claims from older handler failures", async () => {
+    const messages: IncomingChannelMessage[] = [];
+    const provider = new SlackProvider({
+      botToken: "xoxb-test",
+      signingSecret,
+      now: () => fixedNow,
+      maxSeenWebhookSignatures: 1,
+    });
+    let firstAttempts = 0;
+    let failOriginalFirst: (error: Error) => void = () => {};
+    await provider.start(async (message) => {
+      if (message.text === "first") {
+        firstAttempts += 1;
+        if (firstAttempts === 1) {
+          await new Promise<void>((_, reject) => {
+            failOriginalFirst = reject;
+          });
+          return;
+        }
+      }
+      messages.push(message);
+    });
+    const firstPayload = slackMessagePayload("T123", "C123", "1716984000.000200", "first");
+    const secondPayload = slackMessagePayload("T123", "C123", "1716984000.000201", "second");
+    const firstRawBody = JSON.stringify(firstPayload);
+    const firstHeaders = signedHeaders(firstRawBody);
+
+    const originalFirst = provider.handleWebhookPayload(firstPayload, { headers: firstHeaders, rawBody: firstRawBody });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const secondRawBody = JSON.stringify(secondPayload);
+    await provider.handleWebhookPayload(secondPayload, { headers: signedHeaders(secondRawBody), rawBody: secondRawBody });
+    await provider.handleWebhookPayload(firstPayload, { headers: firstHeaders, rawBody: firstRawBody });
+    failOriginalFirst(new Error("store offline"));
+    await expect(originalFirst).rejects.toThrow("store offline");
+    await expect(provider.handleWebhookPayload(firstPayload, { headers: firstHeaders, rawBody: firstRawBody })).rejects.toThrow("replay");
+
+    expect(messages.map((message) => message.text)).toEqual(["second", "first"]);
+  });
+
   it("keeps replay eviction scoped by Slack team", async () => {
     const messages: IncomingChannelMessage[] = [];
     const provider = new SlackProvider({

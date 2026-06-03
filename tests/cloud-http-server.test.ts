@@ -481,6 +481,119 @@ test('cloud HTTP direct question responses require explicit remote approval opt-
   }
 })
 
+test('cloud HTTP channel approval responses fail closed unless the profile opts in', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  const baseUrl = await fixture.server.listen()
+  const headers = { 'content-type': 'application/json' }
+  try {
+    const agentResponse = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        agentId: 'agent-1',
+        name: 'Gateway agent',
+      }),
+    })
+    assert.equal(agentResponse.status, 201)
+
+    const bindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        bindingId: 'telegram-binding',
+        agentId: 'agent-1',
+        provider: 'telegram',
+        displayName: 'Telegram',
+        externalWorkspaceId: 'bot-1',
+        credentialRef: 'secret/telegram',
+      }),
+    })
+    assert.equal(bindingResponse.status, 201)
+    const channelBinding = asRecord((await readJson(bindingResponse)).binding)
+
+    const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-1',
+        externalUserId: 'tg-user-1',
+        accountId: 'user-1',
+        role: 'member',
+        status: 'active',
+      }),
+    })
+    assert.equal(identityResponse.status, 200)
+    const identity = asRecord((await readJson(identityResponse)).identity)
+
+    const bindResponse = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: channelBinding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'chat-1',
+        externalThreadId: 'thread-1',
+        title: 'Telegram thread',
+      }),
+    })
+    assert.equal(bindResponse.status, 200)
+    const bound = await readJson(bindResponse)
+    const cloudSession = asRecord(asRecord(bound.session).session)
+
+    const interactionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        interactionId: 'interaction-policy-denied',
+        agentId: 'agent-1',
+        sessionId: cloudSession.sessionId,
+        provider: 'telegram',
+        kind: 'permission',
+        targetId: 'permission-1',
+        tokenSecret: 'test-secret',
+      }),
+    })
+    assert.equal(interactionResponse.status, 201)
+    const issuedInteraction = await readJson(interactionResponse)
+
+    const denied = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        token: issuedInteraction.plaintextToken,
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(denied.status, 403)
+    const body = await readJson(denied)
+    assert.equal(asRecord(body.verdict).policyCode, 'gateway-remote-approval-disabled')
+
+    assert.equal(await fixture.worker.processAllSessionCommands(), 0)
+    assert.deepEqual(fixture.runtime.permissions, [])
+    const pending = fixture.store.findChannelInteraction({
+      orgId: 'tenant-1',
+      token: String(issuedInteraction.plaintextToken),
+      provider: 'telegram',
+    })
+    assert.equal(pending?.status, 'pending')
+
+    const auditEvents = await fixture.store.listAuditEvents('tenant-1')
+    const deniedAudit = auditEvents.find((event) => event.eventType === 'channel_interaction.remote_policy.denied')
+    assert.ok(deniedAudit)
+    assert.equal(deniedAudit.targetType, 'channel_interaction')
+    assert.equal(deniedAudit.targetId, 'interaction-policy-denied')
+    assert.equal(asRecord(deniedAudit.metadata).policyReasonCode, 'gateway-remote-approval-disabled')
+    assert.equal(asRecord(deniedAudit.metadata).interaction, 'permission-approval')
+    assert.equal(asRecord(deniedAudit.metadata).authority, 'cloud-channel-gateway')
+    assert.equal(asRecord(deniedAudit.metadata).actorWorkspaceMember, true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server paginates session lists with scoped cursors and filters', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()

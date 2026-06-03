@@ -85,6 +85,11 @@ type SeenWebhookSignature = {
   scope: string;
 };
 
+type WebhookIngressReplayClaim = {
+  key: string;
+  entry: SeenWebhookSignature;
+};
+
 export interface MapWebhookPayloadOptions {
   maxAttachmentBytes?: number;
 }
@@ -133,10 +138,16 @@ export class WebhookProvider implements ChannelProvider {
     if (!this.handler) {
       throw new Error("Webhook provider is not started");
     }
-    this.assertIngressAuthorized(auth);
-    await this.handler(mapWebhookPayload(payload, this.config.now?.() ?? new Date(), this.id, this.kind, {
+    const replayClaim = this.assertIngressAuthorized(auth);
+    const message = mapWebhookPayload(payload, this.config.now?.() ?? new Date(), this.id, this.kind, {
       maxAttachmentBytes: this.config.maxAttachmentBytes
-    }));
+    });
+    try {
+      await this.handler(message);
+    } catch (error) {
+      if (replayClaim) this.releaseIngressReplayClaim(replayClaim);
+      throw error;
+    }
   }
 
   async sendText(target: ChannelTarget, text: string, options?: SendOptions): Promise<SentMessage> {
@@ -276,10 +287,10 @@ export class WebhookProvider implements ChannelProvider {
     };
   }
 
-  private assertIngressAuthorized(auth: WebhookIngressAuth): void {
+  private assertIngressAuthorized(auth: WebhookIngressAuth): WebhookIngressReplayClaim | null {
     const expectedSecret = this.config.sharedSecret;
     if (auth.verified === true) {
-      return;
+      return null;
     }
     if (!expectedSecret) {
       throw new Error("Webhook shared secret is required for ingress");
@@ -313,9 +324,17 @@ export class WebhookProvider implements ChannelProvider {
       throw new Error("Webhook signature replay rejected");
     }
     const scope = webhookReplayScopeFromRawBody(rawBody, this.id);
-    this.seenIngressSignatures.set(replayKey, { expiresAt: nowMs + maxAgeMs, scope });
+    const entry = { expiresAt: nowMs + maxAgeMs, scope };
+    this.seenIngressSignatures.set(replayKey, entry);
     this.enforceSeenIngressSignatureScopeLimit(scope);
     this.enforceSeenIngressSignatureGlobalLimit();
+    return { key: replayKey, entry };
+  }
+
+  private releaseIngressReplayClaim(claim: WebhookIngressReplayClaim): void {
+    if (this.seenIngressSignatures.get(claim.key) === claim.entry) {
+      this.seenIngressSignatures.delete(claim.key);
+    }
   }
 
   private purgeSeenIngressSignatures(nowMs: number): void {

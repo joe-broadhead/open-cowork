@@ -572,6 +572,89 @@ describe("WebhookProvider", () => {
     await provider.stop();
   });
 
+  it("releases signed ingress replay claims when handler dispatch fails", async () => {
+    const payload = {
+      id: "retry-message",
+      target: { chatId: "team-chat" },
+      sender: { userId: "alice" },
+      text: "hello"
+    };
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z")
+    });
+    const seen: string[] = [];
+    let attempts = 0;
+    await provider.start(async (message) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("store offline");
+      seen.push(message.id);
+    });
+
+    const auth = signedAuth(payload);
+    await expect(provider.handleWebhookPayload(payload, auth)).rejects.toThrow("store offline");
+    await provider.handleWebhookPayload(payload, auth);
+    await expect(provider.handleWebhookPayload(payload, auth)).rejects.toThrow(
+      "Webhook signature replay rejected",
+    );
+
+    expect(attempts).toBe(2);
+    expect(seen).toEqual(["retry-message"]);
+    await provider.stop();
+  });
+
+  it("does not release newer signed ingress replay claims from older handler failures", async () => {
+    const firstPayload = {
+      id: "first-message",
+      target: { chatId: "team-chat" },
+      sender: { userId: "alice" },
+      text: "first"
+    };
+    const secondPayload = {
+      id: "second-message",
+      target: { chatId: "team-chat" },
+      sender: { userId: "alice" },
+      text: "second"
+    };
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
+      now: () => new Date("2026-02-28T12:00:00.000Z"),
+      maxSeenIngressSignatures: 1
+    });
+    const seen: string[] = [];
+    let firstAttempts = 0;
+    let failOriginalFirst: (error: Error) => void = () => {};
+    await provider.start(async (message) => {
+      if (message.id === "first-message") {
+        firstAttempts += 1;
+        if (firstAttempts === 1) {
+          await new Promise<void>((_, reject) => {
+            failOriginalFirst = reject;
+          });
+          return;
+        }
+      }
+      seen.push(message.id);
+    });
+
+    const firstAuth = signedAuth(firstPayload);
+    const originalFirst = provider.handleWebhookPayload(firstPayload, firstAuth);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await provider.handleWebhookPayload(secondPayload, signedAuth(secondPayload, "secret", "1772280001"));
+    await provider.handleWebhookPayload(firstPayload, firstAuth);
+    failOriginalFirst(new Error("store offline"));
+    await expect(originalFirst).rejects.toThrow("store offline");
+    await expect(provider.handleWebhookPayload(firstPayload, firstAuth)).rejects.toThrow(
+      "Webhook signature replay rejected",
+    );
+
+    expect(seen).toEqual(["second-message", "first-message"]);
+    await provider.stop();
+  });
+
   it("keeps signed ingress replay eviction scoped by bridge target", async () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
