@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { lstat, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 export type FileSessionPurpose =
@@ -174,6 +175,8 @@ function auditPathFor(path: string) {
 
 function fileSessionReasonCodeForError(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'ELOOP') return 'symlink-denied'
   const message = error.message.toLowerCase()
   if (message.includes('relative')) return 'absolute-path-denied'
   if (message.includes('null byte')) return 'invalid-path'
@@ -282,6 +285,60 @@ function assertActive(session: FileSession, now = new Date()) {
 
 function sessionBytes(session: FileSession) {
   return (session.bytesRead || 0) + (session.bytesWritten || 0)
+}
+
+function noFollowOpenFlag() {
+  return typeof fsConstants.O_NOFOLLOW === 'number' ? fsConstants.O_NOFOLLOW : 0
+}
+
+async function readResolvedSessionFile(
+  session: FileSession,
+  absolute: string,
+  batchBytes: number,
+) {
+  const handle = await open(absolute, fsConstants.O_RDONLY | noFollowOpenFlag())
+  try {
+    const info = await handle.stat()
+    if (!info.isFile()) {
+      return { ok: false as const, reasonCode: 'not-a-file' }
+    }
+    if (info.size > session.policy.limits.maxFileBytes) {
+      return { ok: false as const, reasonCode: 'file-too-large' }
+    }
+    if (batchBytes + info.size > session.policy.limits.maxBatchBytes) {
+      return { ok: false as const, reasonCode: 'batch-too-large' }
+    }
+    if (sessionBytes(session) + info.size > session.policy.limits.maxSessionBytes) {
+      return { ok: false as const, reasonCode: 'session-byte-limit-exceeded' }
+    }
+
+    const remainingBytes = Math.max(0, Math.min(
+      session.policy.limits.maxFileBytes,
+      session.policy.limits.maxBatchBytes - batchBytes,
+      session.policy.limits.maxSessionBytes - sessionBytes(session),
+    ))
+    const buffer = Buffer.allocUnsafe(remainingBytes + 1)
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0)
+    if (bytesRead > session.policy.limits.maxFileBytes) {
+      return { ok: false as const, reasonCode: 'file-too-large' }
+    }
+    if (batchBytes + bytesRead > session.policy.limits.maxBatchBytes) {
+      return { ok: false as const, reasonCode: 'batch-too-large' }
+    }
+    if (sessionBytes(session) + bytesRead > session.policy.limits.maxSessionBytes) {
+      return { ok: false as const, reasonCode: 'session-byte-limit-exceeded' }
+    }
+
+    const content = buffer.subarray(0, bytesRead).toString('utf8')
+    return {
+      ok: true as const,
+      content,
+      bytes: bytesRead,
+      size: bytesRead,
+    }
+  } finally {
+    await handle.close()
+  }
 }
 
 async function resolveSessionPath(session: FileSession, relativePath: string) {
@@ -464,25 +521,12 @@ export async function readFileSessionBatch(
         deny('sensitive-path-denied')
         continue
       }
-      const info = await stat(resolved.absolute)
-      if (!info.isFile()) {
-        deny('not-a-file')
+      const read = await readResolvedSessionFile(session, resolved.absolute, batchBytes)
+      if (!read.ok) {
+        deny(read.reasonCode)
         continue
       }
-      if (info.size > session.policy.limits.maxFileBytes) {
-        deny('file-too-large')
-        continue
-      }
-      if (batchBytes + info.size > session.policy.limits.maxBatchBytes) {
-        deny('batch-too-large')
-        continue
-      }
-      if (sessionBytes(session) + info.size > session.policy.limits.maxSessionBytes) {
-        deny('session-byte-limit-exceeded')
-        continue
-      }
-      const content = await readFile(resolved.absolute, 'utf8')
-      const bytes = Buffer.byteLength(content)
+      const { content, bytes, size } = read
       batchBytes += bytes
       session.bytesRead = (session.bytesRead || 0) + bytes
       const revision = revisionForContent(content)
@@ -490,7 +534,7 @@ export async function readFileSessionBatch(
         path: resolved.relativePath,
         ok: true,
         content,
-        size: info.size,
+        size,
         revision,
       })
       auditEvents.push(auditEvent(session, {

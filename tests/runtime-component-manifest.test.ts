@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { RUNTIME_COMPONENT_MANIFEST_FORMAT, type RuntimeComponentManifest } from '../packages/shared/src/runtime.ts'
@@ -162,6 +162,33 @@ test('runtime component manifest builder records observed component versions and
     assert.equal(cli?.sourcePolicy, 'development')
     assert.equal(cli?.observedSha256, createHash('sha256').update('opencode-binary').digest('hex'))
     assert.equal(observedManifest.components.some((component) => component.id === 'semantic-ui-mcp'), true)
+  } finally {
+    rmSync(dir, { force: true, recursive: true })
+  }
+})
+
+test('runtime component manifest builder does not hash symlinked component paths', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-components-'))
+  const targetPath = join(dir, 'target-opencode')
+  const symlinkPath = join(dir, 'opencode-link')
+
+  try {
+    writeFileSync(targetPath, 'opencode-binary')
+    symlinkSync(targetPath, symlinkPath)
+
+    const observedManifest = await buildRuntimeComponentManifest({
+      componentPaths: {
+        'opencode-cli': symlinkPath,
+      },
+      componentVersions: {
+        'opencode-cli': 'opencode 1.15.5',
+      },
+      generatedAt: '2026-06-02T00:00:00.000Z',
+      isPackaged: false,
+    })
+
+    const cli = observedManifest.components.find((component) => component.id === 'opencode-cli')
+    assert.equal(cli?.observedSha256, undefined)
   } finally {
     rmSync(dir, { force: true, recursive: true })
   }

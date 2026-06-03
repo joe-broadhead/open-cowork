@@ -6,7 +6,7 @@ import type {
 } from '@open-cowork/shared'
 import electron from 'electron'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'fs'
+import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { sanitizeForExport } from './log-sanitizer.ts'
 import {
@@ -139,12 +139,17 @@ function normalizeComponentVersion(value: string | null | undefined) {
 
 function hashFileSha256(path: string | null | undefined) {
   if (!path) return undefined
+  let fd: number | null = null
   try {
-    const stat = statSync(path)
+    const noFollow = typeof fsConstants.O_NOFOLLOW === 'number' ? fsConstants.O_NOFOLLOW : 0
+    fd = openSync(path, fsConstants.O_RDONLY | noFollow)
+    const stat = fstatSync(fd)
     if (!stat.isFile()) return undefined
-    return createHash('sha256').update(readFileSync(path)).digest('hex')
+    return createHash('sha256').update(readFileSync(fd)).digest('hex')
   } catch {
     return undefined
+  } finally {
+    if (fd !== null) closeSync(fd)
   }
 }
 
