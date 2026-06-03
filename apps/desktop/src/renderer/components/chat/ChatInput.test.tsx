@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
-import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
+import { WORKSPACE_SUPPORT_APIS, unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { ChatInput } from './ChatInput'
 
@@ -348,6 +348,26 @@ describe('ChatInput', () => {
       )
     })
     expect(api.session.setComposerPreferences).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for cloud prompt submission when workspace support cannot load', async () => {
+    const api = installModelRuntime()
+    seedCloudSession()
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: { 'cloud:test': unavailableWorkspaceSupport('support failed') },
+      loadedByWorkspace: { 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: { 'cloud:test': 'support failed' },
+    })
+
+    render(<ChatInput />)
+
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Continue in cloud' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    expect(api.session.prompt).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('support failed')
   })
 
   it('does not let a stale failed composer save roll back the latest reasoning choice', async () => {

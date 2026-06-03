@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionArtifact, SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
+import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
+import { unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { COMPOSER_COMPOSE_EVENT } from './composer-events'
 import { SessionInspector } from './SessionInspector'
@@ -103,6 +105,7 @@ function resetStore(options: {
   artifacts?: SessionArtifact[]
 } = {}) {
   useSessionStore.setState({
+    activeWorkspaceId: 'local',
     sessions: [
       {
         id: 'session-1',
@@ -179,6 +182,12 @@ function installInspectorApi() {
 beforeEach(() => {
   vi.clearAllMocks()
   resetStore()
+  useWorkspaceSupportStore.setState({
+    supportByWorkspace: {},
+    loadedByWorkspace: {},
+    loadingByWorkspace: {},
+    errorByWorkspace: {},
+  })
   installInspectorApi()
 })
 
@@ -301,5 +310,48 @@ describe('SessionInspector', () => {
       suggestedName: 'chart.png',
     })
     window.removeEventListener(COMPOSER_COMPOSE_EVENT, onComposerEvent)
+  })
+
+  it('fails closed for artifact actions when workspace support cannot load', async () => {
+    const user = userEvent.setup()
+    const chartArtifact: SessionArtifact = {
+      id: 'chart-artifact',
+      toolId: 'tool-chart',
+      toolName: 'chart',
+      filePath: '/tmp/chart.png',
+      filename: 'chart.png',
+      order: 10,
+      mime: 'image/png',
+      chart: {
+        format: 'vega-lite',
+        spec: { mark: 'bar' },
+        title: 'Revenue',
+      },
+    }
+    useSessionStore.setState({
+      activeWorkspaceId: 'cloud:test',
+      chartArtifactsBySession: {
+        [sessionWorkspaceKey('cloud:test', 'session-1')]: [chartArtifact],
+      },
+    })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: { 'cloud:test': unavailableWorkspaceSupport('support failed') },
+      loadedByWorkspace: { 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: { 'cloud:test': 'support failed' },
+    })
+    const api = installInspectorApi()
+
+    render(<SessionInspector onClose={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'Artifacts' }))
+    expect(await screen.findByText('chart.png')).toBeInTheDocument()
+    expect(screen.getByText('Preview disabled')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send to thread' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Rerender' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save As…' })).toBeDisabled()
+    expect(screen.getByText('Reveal disabled')).toHaveAttribute('title', 'support failed')
+    expect(api.artifact.readAttachment).not.toHaveBeenCalled()
+    expect(api.artifact.export).not.toHaveBeenCalled()
   })
 })

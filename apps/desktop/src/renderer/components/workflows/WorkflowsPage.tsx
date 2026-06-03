@@ -85,6 +85,8 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
+  const workflowListBlocked = !workspaceSupport.flags.canListWorkflows
+  const workflowListReason = workflowListBlocked ? workspaceSupport.flags.reasons.listWorkflows : null
 
   const activeWorkflows = useMemo(
     () => payload.workflows.filter((workflow) => workflow.status !== 'archived'),
@@ -95,6 +97,10 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const refresh = async () => {
     setLoading(true)
     try {
+      if (workflowListBlocked) {
+        setPayload(EMPTY_PAYLOAD)
+        return
+      }
       setPayload(activeWorkspaceIsLocal
         ? await window.coworkApi.workflows.list()
         : await window.coworkApi.workflows.list(workspaceOptions))
@@ -116,7 +122,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     return window.coworkApi.on.workflowUpdated(() => {
       void refresh()
     })
-  }, [workspaceOptions?.workspaceId])
+  }, [workflowListBlocked, workspaceOptions?.workspaceId])
   const workflowDraftBlocked = !activeWorkspaceIsLocal || runtimeConfigSource === 'machine'
   const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow
   const workflowActionReason = workflowActionBlocked ? workspaceSupport.flags.reasons.runWorkflow : null
@@ -211,7 +217,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
             <div>
               <h2 className="text-lg font-semibold text-primary">No workflows yet</h2>
               <p className="mt-2 max-w-md text-sm text-muted">
-                {workflowDraftBlocked
+                {workflowListBlocked && workflowListReason
+                  ? workflowListReason
+                  : workflowDraftBlocked
                   ? activeWorkspaceIsLocal
                     ? 'Workflow setup requires the in-app OpenCode config source because it uses Cowork’s Workflow Designer agent and Workflows tool.'
                     : 'Cloud workflow creation is managed by the cloud workspace. Existing workflows will appear here when available.'

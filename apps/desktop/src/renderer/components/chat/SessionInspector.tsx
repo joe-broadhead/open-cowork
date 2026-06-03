@@ -394,6 +394,8 @@ export function SessionInspector({ onClose }: InspectorProps) {
                 sessionId={currentSessionId}
                 artifacts={artifacts}
                 workspaceId={activeWorkspaceIsLocal ? undefined : activeWorkspaceId}
+                canDownloadArtifact={workspaceSupport.flags.canDownloadArtifact}
+                downloadDisabledReason={workspaceSupport.flags.reasons.downloadArtifact}
                 canRevealArtifact={workspaceSupport.flags.canRevealArtifact}
                 revealDisabledReason={workspaceSupport.flags.reasons.revealArtifact}
               />

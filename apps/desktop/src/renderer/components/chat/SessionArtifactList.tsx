@@ -26,12 +26,16 @@ export function SessionArtifactList({
   sessionId,
   artifacts,
   workspaceId,
+  canDownloadArtifact = true,
+  downloadDisabledReason = 'Artifact downloads are disabled by this workspace policy.',
   canRevealArtifact = true,
   revealDisabledReason = 'Cloud artifacts cannot be revealed in the local filesystem.',
 }: {
   sessionId: string
   artifacts: ReturnType<typeof listSessionArtifacts>
   workspaceId?: string
+  canDownloadArtifact?: boolean
+  downloadDisabledReason?: string
   canRevealArtifact?: boolean
   revealDisabledReason?: string
 }) {
@@ -65,6 +69,13 @@ export function SessionArtifactList({
 
   useEffect(() => {
     let cancelled = false
+
+    if (!canDownloadArtifact) {
+      setPreviewStates({})
+      return () => {
+        cancelled = true
+      }
+    }
 
     for (const artifact of artifacts) {
       if (!isPreviewableArtifact(artifact)) continue
@@ -103,7 +114,7 @@ export function SessionArtifactList({
     return () => {
       cancelled = true
     }
-  }, [artifacts, sessionId])
+  }, [artifacts, canDownloadArtifact, sessionId, workspaceId])
 
   if (artifacts.length === 0) {
     return (
@@ -118,6 +129,9 @@ export function SessionArtifactList({
       {artifacts.map((artifact) => {
         const previewState = previewStates[artifact.id]
         const showPreview = isPreviewableArtifact(artifact)
+        const bodyActionsBlocked = !canDownloadArtifact
+        const bodyActionTitle = bodyActionsBlocked ? downloadDisabledReason : undefined
+        const actionClassName = 'px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary'
 
         return (
           <div
@@ -135,7 +149,7 @@ export function SessionArtifactList({
                     />
                   ) : (
                     <div className="flex h-16 w-full items-center justify-center px-2 text-center text-[10px] font-medium text-text-muted">
-                      {previewState?.status === 'failed' ? 'Preview unavailable' : 'Loading preview…'}
+                      {bodyActionsBlocked ? 'Preview disabled' : previewState?.status === 'failed' ? 'Preview unavailable' : 'Loading preview…'}
                     </div>
                   )}
                 </div>
@@ -156,6 +170,7 @@ export function SessionArtifactList({
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={async () => {
+                  if (bodyActionsBlocked) return
                   try {
                     setComposerAction({ artifactId: artifact.id, mode: 'send' })
                     const payload = await window.coworkApi.artifact.readAttachment({
@@ -170,7 +185,9 @@ export function SessionArtifactList({
                     setComposerAction(null)
                   }
                 }}
-                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                disabled={bodyActionsBlocked || composerAction !== null}
+                title={bodyActionTitle}
+                className={actionClassName}
               >
                 {composerAction?.artifactId === artifact.id && composerAction.mode === 'send' ? 'Sending…' : 'Send to thread'}
               </button>
@@ -178,6 +195,7 @@ export function SessionArtifactList({
               {artifact.chart ? (
                 <button
                   onClick={async () => {
+                    if (bodyActionsBlocked) return
                     try {
                       setComposerAction({ artifactId: artifact.id, mode: 'rerender' })
                       const payload = await window.coworkApi.artifact.readAttachment({
@@ -193,7 +211,9 @@ export function SessionArtifactList({
                       setComposerAction(null)
                     }
                   }}
-                  className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                  disabled={bodyActionsBlocked || composerAction !== null}
+                  title={bodyActionTitle}
+                  className={actionClassName}
                 >
                   {composerAction?.artifactId === artifact.id && composerAction.mode === 'rerender' ? 'Preparing…' : 'Rerender'}
                 </button>
@@ -220,6 +240,7 @@ export function SessionArtifactList({
 
               <button
                 onClick={async () => {
+                  if (bodyActionsBlocked) return
                   try {
                     setExportingId(artifact.id)
                     await window.coworkApi.artifact.export({
@@ -232,7 +253,9 @@ export function SessionArtifactList({
                     setExportingId(null)
                   }
                 }}
-                className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap"
+                disabled={bodyActionsBlocked || exportingId === artifact.id}
+                title={bodyActionTitle}
+                className={actionClassName}
               >
                 {exportingId === artifact.id ? 'Saving...' : 'Save As…'}
               </button>
