@@ -449,6 +449,7 @@ export function handleRuntimeSideEffectEvent(input: {
         const updated = updateSessionRecord(info.id, patch)
         win.webContents.send('session:updated', {
           id: info.id,
+          workspaceId: 'local',
           title: info.title || null,
           parentSessionId: info.parentID,
           changeSummary: info.summary,
@@ -471,7 +472,7 @@ export function handleRuntimeSideEffectEvent(input: {
       // client sharing the same OpenCode server, etc). Only broadcast for
       // top-level sessions — child / sub-agent deletions are internal.
       if (!info.parentID) {
-        win.webContents.send('session:deleted', { id: info.id })
+        win.webContents.send('session:deleted', { id: info.id, workspaceId: 'local' })
       }
       return true
     }

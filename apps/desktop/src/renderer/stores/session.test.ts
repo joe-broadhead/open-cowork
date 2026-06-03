@@ -138,6 +138,29 @@ describe('useSessionStore', () => {
     expect(localState.currentView.isAwaitingQuestion).toBe(false)
   })
 
+  it('routes metadata and deletes to exact workspace buckets', () => {
+    const store = useSessionStore.getState()
+
+    store.setSessions([session('shared', 'Local shared')])
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+    useSessionStore.getState().setSessions([session('shared', 'Cloud shared')])
+
+    useSessionStore.getState().applySessionMetadata({
+      id: 'shared',
+      title: 'Local renamed',
+    }, 'local')
+    expect(useSessionStore.getState().sessions[0]?.title).toBe('Cloud shared')
+
+    useSessionStore.getState().setActiveWorkspace('local')
+    expect(useSessionStore.getState().sessions[0]?.title).toBe('Local renamed')
+
+    useSessionStore.getState().removeSession('shared', 'cloud:acme')
+    expect(useSessionStore.getState().sessions.map((entry) => entry.id)).toEqual(['shared'])
+
+    useSessionStore.getState().setActiveWorkspace('cloud:acme')
+    expect(useSessionStore.getState().sessions).toEqual([])
+  })
+
   it('applies message and task text patches to the visible session', () => {
     const store = useSessionStore.getState()
     store.setCurrentSession('ses_1')

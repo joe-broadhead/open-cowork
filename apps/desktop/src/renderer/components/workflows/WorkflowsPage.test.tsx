@@ -100,6 +100,16 @@ function installApi(
   }
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('WorkflowsPage', () => {
   beforeEach(() => {
     useSessionStore.setState({ activeWorkspaceId: 'local' })
@@ -182,6 +192,78 @@ describe('WorkflowsPage', () => {
 
     expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1', { workspaceId: 'cloud:test' })
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
+  })
+
+  it('ignores stale workflow list refreshes from a previous workspace', async () => {
+    const firstWorkspaceList = createDeferred<WorkflowListPayload>()
+    const secondWorkspaceList = createDeferred<WorkflowListPayload>()
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:first' })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {
+        'cloud:first': WORKSPACE_SUPPORT_APIS.map((api) => ({
+          api,
+          status: api === 'workflows.list' || api === 'workflows.run' ? 'supported' : 'not_supported',
+          verdict: {
+            allowed: api === 'workflows.list' || api === 'workflows.run',
+            reason: api.startsWith('workflows') ? null : 'Blocked by cloud policy.',
+          },
+        })),
+        'cloud:second': WORKSPACE_SUPPORT_APIS.map((api) => ({
+          api,
+          status: api === 'workflows.list' || api === 'workflows.run' ? 'supported' : 'not_supported',
+          verdict: {
+            allowed: api === 'workflows.list' || api === 'workflows.run',
+            reason: api.startsWith('workflows') ? null : 'Blocked by cloud policy.',
+          },
+        })),
+      },
+      loadedByWorkspace: {
+        'cloud:first': true,
+        'cloud:second': true,
+      },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+    const { api } = installApi(payload({ workflows: [] }))
+    vi.mocked(api.workflows!.list)
+      .mockImplementation((options?: { workspaceId?: string }) => {
+        if (options?.workspaceId === 'cloud:first') return firstWorkspaceList.promise
+        if (options?.workspaceId === 'cloud:second') return secondWorkspaceList.promise
+        return Promise.resolve(payload({ workflows: [] }))
+      })
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(api.workflows?.list).toHaveBeenCalledWith({ workspaceId: 'cloud:first' })
+    })
+
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:second' })
+    await waitFor(() => {
+      expect(api.workflows?.list).toHaveBeenCalledWith({ workspaceId: 'cloud:second' })
+    })
+
+    secondWorkspaceList.resolve(payload({
+      workflows: [{
+        ...payload().workflows[0]!,
+        id: 'workflow-second',
+        title: 'Second workspace workflow',
+      }],
+    }))
+    expect(await screen.findByText('Second workspace workflow')).toBeInTheDocument()
+
+    firstWorkspaceList.resolve(payload({
+      workflows: [{
+        ...payload().workflows[0]!,
+        id: 'workflow-first',
+        title: 'First workspace workflow',
+      }],
+    }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Second workspace workflow')).toBeInTheDocument()
+      expect(screen.queryByText('First workspace workflow')).not.toBeInTheDocument()
+    })
   })
 
   it('fails closed for cloud workflow access when workspace support cannot load', async () => {

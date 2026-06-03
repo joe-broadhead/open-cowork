@@ -66,6 +66,7 @@ export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
+  const [submitInFlight, setSubmitInFlight] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputChromeRef = useRef<HTMLDivElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
@@ -73,6 +74,7 @@ export function ChatInput() {
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
+  const submitInFlightRef = useRef(false)
   const composerSaveVersionByKeyRef = useRef(new Map<string, number>())
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
@@ -168,6 +170,7 @@ export function ChatInput() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim()
     if ((!text && attachments.length === 0) || !currentSessionId) return
+    if (submitInFlightRef.current) return
     if (!workspaceSupport.flags.canPrompt) {
       addGlobalError(workspaceSupport.flags.reasons.prompt)
       return
@@ -183,6 +186,8 @@ export function ChatInput() {
     recordPrompt(text)
 
     const currentAttachments = [...attachments]
+    submitInFlightRef.current = true
+    setSubmitInFlight(true)
     try {
       const files = currentAttachments.map(a => ({ mime: a.mime, url: a.url, filename: a.filename }))
       if (!promptText && files.length === 0) {
@@ -208,6 +213,9 @@ export function ChatInput() {
         err,
         addGlobalError,
       )
+    } finally {
+      submitInFlightRef.current = false
+      setSubmitInFlight(false)
     }
   }, [input, attachments, currentSessionId, workspaceSupport.flags, specialistAgents, recordPrompt, agentMode, runtimeControlsManaged, workspaceOptions, reasoningSelection.promptOptions, addGlobalError])
 
@@ -418,7 +426,7 @@ export function ChatInput() {
     : attachments.length > 0 && !workspaceSupport.flags.canAttachFiles
       ? workspaceSupport.flags.reasons.attachFiles
       : null
-  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion && !sendBlockedReason
+  const canSend = (input.trim() || attachments.length > 0) && currentSessionId && !submitInFlight && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion && !sendBlockedReason
   const currentModelLabel = (availableModels[provider] || []).find((model) => model.id === currentModel)?.label || currentModel
   const inlineMenuWidth = 260
   // Anchor the menu to the outer input chrome (the whole composer block)

@@ -127,12 +127,16 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.match(html, /"api":/)
   assert.match(html, /"routeMatrix":/)
   assert.match(cloudWebsiteClientScript(), /endpoint\(id, fallback\)/)
+  assert.match(cloudWebsiteClientScript(), /sessionSelectionGeneration/)
+  assert.match(cloudWebsiteClientScript(), /isCurrentSessionSelection/)
+  assert.match(cloudWebsiteClientScript(), /selectionGeneration/)
   const stateContract: CloudWebClientStateContract = {
     authStatus: 'loading',
     activeRoute: DEFAULT_CLOUD_WEB_ROUTE,
     workspace: null,
     csrfToken: null,
     selectedSessionId: null,
+    sessionSelectionGeneration: 0,
     sessions: [],
     sessionList: {
       nextCursor: null,

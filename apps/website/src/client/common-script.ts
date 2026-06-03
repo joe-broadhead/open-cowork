@@ -29,6 +29,7 @@ const state = {
   },
   sessionViews: {},
   selectedSessionId: null,
+  sessionSelectionGeneration: 0,
   runtimeActions: {},
   threadLimit: ${CLOUD_WEB_THREAD_PAGE_SIZE},
   threadFilters: {
@@ -277,6 +278,7 @@ function renderSignedOut() {
   };
   state.sessionViews = {};
   state.selectedSessionId = null;
+  state.sessionSelectionGeneration += 1;
   state.runtimeActions = {};
   state.artifactPanel = {
     sessionId: null,

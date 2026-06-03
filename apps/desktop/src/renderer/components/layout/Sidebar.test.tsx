@@ -2,16 +2,118 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
 import { installRendererTestCoworkApi } from '../../test/setup'
+import { useSessionStore } from '../../stores/session'
 import { useWorkspaceSupportStore } from '../../stores/workspace-support'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    useSessionStore.setState(useSessionStore.getInitialState(), true)
     useWorkspaceSupportStore.setState({
       supportByWorkspace: {},
       loadedByWorkspace: {},
       loadingByWorkspace: {},
       errorByWorkspace: {},
     })
+  })
+
+  it('ignores stale workspace activation responses', async () => {
+    const slowActivation = deferred<{
+      id: string
+      kind: 'cloud'
+      label: string
+      status: 'online'
+      active: boolean
+      baseUrl: string
+      lastSyncedAt: null
+    }>()
+    let activeWorkspaceId = 'local'
+    const workspace = (id: string) => ({
+      id,
+      kind: id === 'local' ? 'local' as const : 'cloud' as const,
+      label: id === 'local' ? 'Local' : id === 'cloud:slow' ? 'Slow Cloud' : 'Fast Cloud',
+      status: 'online' as const,
+      active: activeWorkspaceId === id,
+      ...(id === 'local' ? {} : { baseUrl: `https://${id.replace(':', '-')}.test` }),
+      lastSyncedAt: null,
+    })
+    const sessionList = vi.fn(async (options?: { workspaceId?: string }) => (
+      options?.workspaceId === 'cloud:fast'
+        ? [{
+            id: 'fast-session',
+            title: 'Fast session',
+            createdAt: '2026-05-27T10:00:00.000Z',
+            updatedAt: '2026-05-27T10:00:00.000Z',
+          }]
+        : [{
+            id: 'slow-session',
+            title: 'Slow session',
+            createdAt: '2026-05-27T10:00:00.000Z',
+            updatedAt: '2026-05-27T10:00:00.000Z',
+          }]
+    ))
+    const activate = vi.fn(async (workspaceId: string) => {
+      if (workspaceId === 'cloud:slow') {
+        const activated = await slowActivation.promise
+        activeWorkspaceId = workspaceId
+        return activated
+      }
+      activeWorkspaceId = workspaceId
+      return workspace(workspaceId)
+    })
+    installRendererTestCoworkApi({
+      workspace: {
+        list: vi.fn(async () => [workspace('local'), workspace('cloud:slow'), workspace('cloud:fast')]),
+        activate,
+        support: vi.fn(async () => [{
+          api: 'sessions.list',
+          status: 'supported',
+          verdict: { allowed: true, reason: null },
+        }]),
+      },
+      session: {
+        list: sessionList,
+      },
+    })
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Slow Cloud.*Online/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Local.*Online.*Local workspace - private on this device/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Fast Cloud.*Online/i }))
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().activeWorkspaceId).toBe('cloud:fast')
+      expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['fast-session'])
+    })
+
+    slowActivation.resolve({
+      id: 'cloud:slow',
+      kind: 'cloud',
+      label: 'Slow Cloud',
+      status: 'online',
+      active: true,
+      baseUrl: 'https://cloud-slow.test',
+      lastSyncedAt: null,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(useSessionStore.getState().activeWorkspaceId).toBe('cloud:fast')
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['fast-session'])
+    expect(sessionList).not.toHaveBeenCalledWith({ workspaceId: 'cloud:slow' })
   })
 
   it('keeps the upstream sidebar layout when no branding config is provided', () => {

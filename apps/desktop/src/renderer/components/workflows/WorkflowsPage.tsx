@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSummary, WorkflowTrigger } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
@@ -82,6 +82,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   const [feedback, setFeedback] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [runtimeConfigSource, setRuntimeConfigSource] = useState<EffectiveAppSettings['runtimeConfigSource']>('app')
+  const refreshGenerationRef = useRef(0)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
@@ -94,34 +95,44 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   )
   const archivedCount = payload.workflows.length - activeWorkflows.length
 
-  const refresh = async () => {
+  const refresh = async (generation = refreshGenerationRef.current + 1) => {
+    refreshGenerationRef.current = generation
+    const isCurrentRefresh = () => refreshGenerationRef.current === generation
     setLoading(true)
     try {
       if (workflowListBlocked) {
-        setPayload(EMPTY_PAYLOAD)
+        if (isCurrentRefresh()) setPayload(EMPTY_PAYLOAD)
         return
       }
-      setPayload(activeWorkspaceIsLocal
+      const nextPayload = activeWorkspaceIsLocal
         ? await window.coworkApi.workflows.list()
-        : await window.coworkApi.workflows.list(workspaceOptions))
+        : await window.coworkApi.workflows.list(workspaceOptions)
+      if (isCurrentRefresh()) setPayload(nextPayload)
     } finally {
-      setLoading(false)
+      if (isCurrentRefresh()) setLoading(false)
     }
   }
 
   useEffect(() => {
-    void refresh()
+    const generation = refreshGenerationRef.current + 1
+    refreshGenerationRef.current = generation
+    const isCurrentRefresh = () => refreshGenerationRef.current === generation
+    void refresh(generation)
     const settingsRequest = activeWorkspaceIsLocal
       ? window.coworkApi.settings.get()
       : window.coworkApi.settings.get(workspaceOptions)
     void settingsRequest.then((settings) => {
-      setRuntimeConfigSource(settings.runtimeConfigSource === 'machine' ? 'machine' : 'app')
+      if (isCurrentRefresh()) setRuntimeConfigSource(settings.runtimeConfigSource === 'machine' ? 'machine' : 'app')
     }).catch(() => {
-      setRuntimeConfigSource('app')
+      if (isCurrentRefresh()) setRuntimeConfigSource('app')
     })
-    return window.coworkApi.on.workflowUpdated(() => {
+    const unsubscribe = window.coworkApi.on.workflowUpdated(() => {
       void refresh()
     })
+    return () => {
+      refreshGenerationRef.current += 1
+      unsubscribe()
+    }
   }, [workflowListBlocked, workspaceOptions?.workspaceId])
   const workflowDraftBlocked = !activeWorkspaceIsLocal || runtimeConfigSource === 'machine'
   const workflowActionBlocked = !workspaceSupport.flags.canRunWorkflow

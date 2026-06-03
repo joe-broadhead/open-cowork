@@ -116,6 +116,7 @@ export function setupIpcHandlers(
     getThreadIndexService().refreshThreadMetadata(sessionId)
     win.webContents.send('session:updated', {
       id: record.id,
+      workspaceId: 'local',
       title: record.title || null,
       parentSessionId: record.parentSessionId,
       changeSummary: record.changeSummary,

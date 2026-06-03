@@ -235,10 +235,55 @@ describe('ChatInput', () => {
       'build',
     ))
     expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not send the prompt. Please try again.')
+    expect(textarea).toHaveValue('Summarize this')
     expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('provider offline'),
       view: 'chat',
     }))
+  })
+
+  it('serializes rapid prompt submissions while a send is in flight', async () => {
+    const pendingPrompt = createDeferred<null>()
+    const prompt = vi.fn(() => pendingPrompt.promise)
+    installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({
+          appId: 'com.opencowork.desktop',
+          name: 'Open Cowork',
+          helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+          defaultModel: null,
+          providers: { available: [] },
+          auth: { mode: 'none' },
+        })),
+      },
+      on: {
+        runtimeReady: vi.fn(() => () => undefined),
+      },
+      session: {
+        prompt,
+      },
+    })
+    seedCurrentSession()
+
+    render(<ChatInput />)
+
+    const textarea = screen.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Run the task' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await waitFor(() => expect(prompt).toHaveBeenCalledTimes(1))
+    expect(prompt).toHaveBeenCalledWith(
+      'session-1',
+      'Run the task',
+      undefined,
+      'build',
+    )
+    expect(textarea).toHaveValue('Run the task')
+
+    pendingPrompt.resolve(null)
+
+    await waitFor(() => expect(textarea).toHaveValue(''))
   })
 
   it('surfaces chat settings load failures through the chat error channel and diagnostics', async () => {
