@@ -1,8 +1,20 @@
-import type { RuntimeInputDiagnostics } from '@open-cowork/shared'
-import { getAppConfig, getPublicAppConfig, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader.ts'
+import type {
+  RuntimeCapabilityConflictRecord,
+  RuntimeCapabilityProvenanceRecord,
+  RuntimeCapabilityStatus,
+  RuntimeCompatibilityReport,
+  RuntimeInputDiagnostics,
+} from '@open-cowork/shared'
+import { getAppConfig, getConfiguredMcpsFromConfig, getConfiguredSkillsFromConfig, getPublicAppConfig, getProviderDescriptor, resolveCustomProviderConfig } from './config-loader.ts'
+import { getOpencodeCompatibilityReport } from './opencode-compatibility.ts'
 import { getEffectiveSettings } from './settings.ts'
 import { buildEffectiveProviderRuntimeConfig } from './runtime-config-builder.ts'
 import { getBundledOpencodeVersion } from './runtime-opencode-cli.ts'
+import { evaluateBuiltInMcp } from './runtime-mcp.ts'
+import { listCustomMcps, listCustomSkills } from './native-customizations.ts'
+import { validateCustomMcpStdioCommand } from './mcp-stdio-policy.ts'
+import { evaluateHttpMcpUrl } from './mcp-url-policy.ts'
+import { listEffectiveSkillsSync } from './effective-skills.ts'
 
 function isSensitiveOptionKey(key: string) {
   return /(token|secret|password|authorization|headers?|cookie|api[-_]?key|private[-_]?key)/i.test(key)
@@ -38,6 +50,264 @@ function getModelSource(selectedModelId: string | null, effectiveModelId: string
   return 'fallback'
 }
 
+function mcpSkipStatus(reason: string): RuntimeCapabilityStatus {
+  if (reason === 'disabled-by-user') return 'disabled'
+  if (reason === 'not-signed-in-google' || reason === 'awaiting-oauth-opt-in') return 'auth-pending'
+  return 'missing'
+}
+
+function buildBuiltInMcpCapabilityRecords(settings: ReturnType<typeof getEffectiveSettings>): RuntimeCapabilityProvenanceRecord[] {
+  return getConfiguredMcpsFromConfig().map((mcp): RuntimeCapabilityProvenanceRecord => {
+    const resolution = evaluateBuiltInMcp(mcp, settings)
+    const configuredCredentialKeys = Object.entries(settings.integrationCredentials?.[mcp.name] || {})
+      .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+      .map(([key]) => key)
+      .sort()
+    const credentialKeys = (mcp.credentials || []).map((credential) => credential.key).sort()
+
+    if (resolution.status === 'ready') {
+      return {
+        id: mcp.name,
+        kind: 'mcp',
+        status: 'active',
+        reasonCode: 'mcp.configured',
+        source: 'builtin',
+        productMode: 'desktop-local',
+        evidence: {
+          type: mcp.type,
+          authMode: mcp.authMode,
+          credentialKeys,
+          configuredCredentialKeys,
+        },
+        redacted: true,
+      }
+    }
+
+    if (resolution.status === 'skipped') {
+      return {
+        id: mcp.name,
+        kind: 'mcp',
+        status: mcpSkipStatus(resolution.reason),
+        reasonCode: `mcp.${resolution.reason}`,
+        source: 'builtin',
+        productMode: 'desktop-local',
+        evidence: {
+          type: mcp.type,
+          authMode: mcp.authMode,
+          credentialKeys,
+          configuredCredentialKeys,
+        },
+        redacted: true,
+      }
+    }
+
+    return {
+      id: mcp.name,
+      kind: 'mcp',
+      status: 'blocked',
+      reasonCode: 'mcp.invalid',
+      source: 'builtin',
+      productMode: 'desktop-local',
+      evidence: {
+        type: mcp.type,
+        authMode: mcp.authMode,
+      },
+      redacted: true,
+    }
+  })
+}
+
+function buildCompatibilityCapabilityRecords(compatibility: RuntimeCompatibilityReport): RuntimeCapabilityProvenanceRecord[] {
+  return compatibility.assumptions
+    .filter((assumption) => assumption.category === 'plugin')
+    .map((assumption): RuntimeCapabilityProvenanceRecord => ({
+      id: assumption.id,
+      kind: 'opencode-plugin',
+      status: assumption.status === 'blocked' ? 'unsupported' : 'available',
+      reasonCode: assumption.status === 'blocked'
+        ? 'plugin.product-mode-unsupported'
+        : `plugin.${assumption.status}`,
+      source: 'opencode-compatibility-registry',
+      productMode: assumption.productModes?.join(',') || 'desktop-local',
+      evidence: {
+        owner: assumption.owner,
+        sourceVersion: assumption.sourceVersion,
+        tests: assumption.tests,
+      },
+      redacted: true,
+    }))
+}
+
+function buildCustomMcpCapabilityRecords(): RuntimeCapabilityProvenanceRecord[] {
+  return listCustomMcps().map((mcp): RuntimeCapabilityProvenanceRecord => {
+    if (mcp.type === 'stdio') {
+      try {
+        validateCustomMcpStdioCommand(mcp)
+      } catch {
+        return {
+          id: mcp.name,
+          kind: 'mcp',
+          status: 'blocked',
+          reasonCode: 'mcp.stdio-policy-blocked',
+          source: 'custom',
+          productMode: 'desktop-local',
+          evidence: {
+            type: mcp.type,
+            scope: mcp.scope,
+            permissionMode: mcp.permissionMode || 'ask',
+          },
+          redacted: true,
+        }
+      }
+      return {
+        id: mcp.name,
+        kind: 'mcp',
+        status: 'active',
+        reasonCode: 'mcp.custom-stdio-configured',
+        source: 'custom',
+        productMode: 'desktop-local',
+        evidence: {
+          type: mcp.type,
+          scope: mcp.scope,
+          permissionMode: mcp.permissionMode || 'ask',
+        },
+        redacted: true,
+      }
+    }
+
+    const verdict = evaluateHttpMcpUrl(mcp.url || '', {
+      allowPrivateNetwork: mcp.allowPrivateNetwork,
+    })
+    if (!verdict.ok) {
+      return {
+        id: mcp.name,
+        kind: 'mcp',
+        status: 'blocked',
+        reasonCode: 'mcp.url-policy-blocked',
+        source: 'custom',
+        productMode: 'desktop-local',
+        evidence: {
+          type: mcp.type,
+          scope: mcp.scope,
+          permissionMode: mcp.permissionMode || 'ask',
+        },
+        redacted: true,
+      }
+    }
+
+    return {
+      id: mcp.name,
+      kind: 'mcp',
+      status: 'active',
+      reasonCode: 'mcp.custom-http-configured',
+      source: 'custom',
+      productMode: 'desktop-local',
+      evidence: {
+        type: mcp.type,
+        scope: mcp.scope,
+        permissionMode: mcp.permissionMode || 'ask',
+        host: verdict.url.hostname,
+      },
+      redacted: true,
+    }
+  })
+}
+
+function buildSkillCapabilityRecords(): RuntimeCapabilityProvenanceRecord[] {
+  const activeSkills = listEffectiveSkillsSync()
+  const activeNames = new Set(activeSkills.map((skill) => skill.name))
+  const active = activeSkills.map((skill): RuntimeCapabilityProvenanceRecord => ({
+    id: skill.name,
+    kind: 'skill',
+    status: 'active',
+    reasonCode: `skill.${skill.source}`,
+    source: skill.source,
+    productMode: 'desktop-local',
+    evidence: {
+      origin: skill.origin,
+      scope: skill.scope || 'runtime',
+      toolIds: skill.toolIds || [],
+    },
+    redacted: true,
+  }))
+  const missing = getConfiguredSkillsFromConfig()
+    .filter((skill) => !activeNames.has(skill.sourceName))
+    .map((skill): RuntimeCapabilityProvenanceRecord => ({
+      id: skill.sourceName,
+      kind: 'skill',
+      status: 'missing',
+      reasonCode: 'skill.configured-missing',
+      source: 'builtin',
+      productMode: 'desktop-local',
+      evidence: {
+        toolIds: skill.toolIds || [],
+      },
+      redacted: true,
+    }))
+  return [...active, ...missing]
+}
+
+function buildCapabilityConflictRecords(input: {
+  providerId: string | null
+  modelId: string | null
+  providerSource: RuntimeInputDiagnostics['providerSource']
+  modelSource: RuntimeInputDiagnostics['modelSource']
+  defaultProviderId: string | null
+  defaultModelId: string | null
+}): RuntimeCapabilityConflictRecord[] {
+  const conflicts: RuntimeCapabilityConflictRecord[] = []
+
+  if (input.providerId && input.defaultProviderId && input.providerId !== input.defaultProviderId) {
+    conflicts.push({
+      id: input.providerId,
+      kind: 'provider',
+      winnerSource: input.providerSource,
+      loserSources: [`default:${input.defaultProviderId}`],
+      reasonCode: 'provider.source-conflict-winner',
+      redacted: true,
+    })
+  }
+
+  if (input.modelId && input.defaultModelId && input.modelId !== input.defaultModelId) {
+    conflicts.push({
+      id: input.modelId,
+      kind: 'model',
+      winnerSource: input.modelSource,
+      loserSources: [`default:${input.defaultModelId}`],
+      reasonCode: 'model.source-conflict-winner',
+      redacted: true,
+    })
+  }
+
+  const configuredSkillNames = new Set(getConfiguredSkillsFromConfig().map((skill) => skill.sourceName))
+  for (const customSkill of listCustomSkills()) {
+    if (!configuredSkillNames.has(customSkill.name)) continue
+    conflicts.push({
+      id: customSkill.name,
+      kind: 'skill',
+      winnerSource: `custom:${customSkill.scope}`,
+      loserSources: ['builtin:open-cowork'],
+      reasonCode: 'skill.custom-overrides-managed',
+      redacted: true,
+    })
+  }
+
+  const builtinMcpNames = new Set(getConfiguredMcpsFromConfig().map((mcp) => mcp.name))
+  for (const customMcp of listCustomMcps()) {
+    if (!builtinMcpNames.has(customMcp.name)) continue
+    conflicts.push({
+      id: customMcp.name,
+      kind: 'mcp',
+      winnerSource: `custom:${customMcp.scope}`,
+      loserSources: ['builtin'],
+      reasonCode: 'mcp.custom-overrides-builtin',
+      redacted: true,
+    })
+  }
+
+  return conflicts
+}
+
 export function getRuntimeInputDiagnostics(): RuntimeInputDiagnostics {
   const publicConfig = getPublicAppConfig()
   const settings = getEffectiveSettings()
@@ -59,6 +329,9 @@ export function getRuntimeInputDiagnostics(): RuntimeInputDiagnostics {
       .map(([key]) => key)
       .sort()
     : []
+  const providerSource = getProviderSource(settings.selectedProviderId, providerId, publicConfig.providers.defaultProvider)
+  const modelSource = getModelSource(settings.selectedModelId, modelId, publicConfig.providers.defaultModel)
+  const compatibility = getOpencodeCompatibilityReport()
 
   return {
     opencodeVersion: getBundledOpencodeVersion(),
@@ -69,9 +342,64 @@ export function getRuntimeInputDiagnostics(): RuntimeInputDiagnostics {
     runtimeModel: providerId && modelId ? `${providerId}/${modelId}` : (providerId || null),
     defaultProviderId: publicConfig.providers.defaultProvider,
     defaultModelId: publicConfig.providers.defaultModel,
-    providerSource: getProviderSource(settings.selectedProviderId, providerId, publicConfig.providers.defaultProvider),
-    modelSource: getModelSource(settings.selectedModelId, modelId, publicConfig.providers.defaultModel),
+    providerSource,
+    modelSource,
     providerOptions,
     credentialOverrideKeys,
+    capabilities: [
+      {
+        id: providerId || 'provider',
+        kind: 'provider',
+        status: providerId ? 'active' : 'missing',
+        reasonCode: providerId ? `provider.${providerSource}` : 'provider.missing',
+        source: providerSource,
+        productMode: 'desktop-local',
+        evidence: {
+          providerName: providerDescriptor?.name || null,
+          providerPackage: isBuiltinProvider ? null : (customProviderConfig?.npm || null),
+          credentialOverrideKeys,
+        },
+        redacted: true,
+      },
+      {
+        id: modelId || 'model',
+        kind: 'model',
+        status: modelId ? 'active' : 'missing',
+        reasonCode: modelId ? `model.${modelSource}` : 'model.missing',
+        source: modelSource,
+        productMode: 'desktop-local',
+        evidence: {
+          runtimeModel: providerId && modelId ? `${providerId}/${modelId}` : null,
+          defaultModelId: publicConfig.providers.defaultModel,
+        },
+        redacted: true,
+      },
+      ...buildBuiltInMcpCapabilityRecords(settings),
+      ...buildCustomMcpCapabilityRecords(),
+      ...buildSkillCapabilityRecords(),
+      ...buildCompatibilityCapabilityRecords(compatibility),
+      {
+        id: 'subagent-delegation',
+        kind: 'agent',
+        status: 'ask-gated',
+        reasonCode: 'agent.delegation-parent-permission-gated',
+        source: 'agent-config',
+        productMode: 'desktop-local',
+        evidence: {
+          parentDenyRulesInherited: true,
+          delegatedRemoteApproval: 'policy-gated',
+        },
+        redacted: true,
+      },
+    ],
+    conflicts: buildCapabilityConflictRecords({
+      providerId,
+      modelId,
+      providerSource,
+      modelSource,
+      defaultProviderId: publicConfig.providers.defaultProvider,
+      defaultModelId: publicConfig.providers.defaultModel,
+    }),
+    compatibility,
   }
 }

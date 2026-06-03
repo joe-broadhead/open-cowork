@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   cleanupSmokePaths,
   createSmokePaths,
+  launchPackagedLinuxProbe,
   launchPackagedMacProbe,
   launchSmokeSession,
   type SmokeSession,
@@ -48,8 +49,13 @@ test(
     let session: SmokeSession | null = null
 
     try {
-      if (process.platform === 'darwin') {
-        const probe = await launchPackagedMacProbe(paths, executablePath, { timeoutMs: packagedLaunchTimeoutMs })
+      const launchPackagedProbe = process.platform === 'darwin'
+        ? launchPackagedMacProbe
+        : process.platform === 'linux'
+          ? launchPackagedLinuxProbe
+          : null
+      if (launchPackagedProbe) {
+        const probe = await launchPackagedProbe(paths, executablePath, { timeoutMs: packagedLaunchTimeoutMs })
         assert.deepEqual(probe.surface, {
           sessionCreate: 'function',
           settingsSet: 'function',

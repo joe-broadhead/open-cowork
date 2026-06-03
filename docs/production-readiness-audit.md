@@ -144,6 +144,38 @@ The remaining work is concentrated in two areas:
   synthetic/mixed provenance when they are inferred from projected tool output
   instead of OpenCode SDK snapshot diffs, and the diff dialog plus thread
   summaries label those values as estimated.
+- Runtime status now exposes a typed readiness/doctor timeline while preserving
+  the existing `ready`/`error` status API. Diagnostics export includes redacted
+  doctor JSON and sanitizes status, JSON sections, log output, and log-path
+  headings.
+- Shared projection contracts now include exact-identity fence tokens,
+  checkpoints, fence-observed checks, and versioned automation event envelopes.
+- Cloud session command mutation responses, including Gateway/channel prompt
+  and approval/question routes, now return a `projectionFence` only when the
+  refreshed response view proves the session projection advanced after a
+  processed command; queued or unobserved commands return `null`.
+- Capability bundle manifests now have shared validation, install/update
+  dry-run, and uninstall planners that fail closed for unsupported product modes,
+  unclassified OpenCode plugins, dangerous MCP URL/stdio settings, and
+  user-owned resource conflicts while preserving user-owned resources on
+  uninstall.
+- Runtime diagnostics now export provider, model, MCP, and skill provenance
+  with stable reason codes while redacting credential values, raw headers, env
+  values, and local command payloads.
+- OpenCode compatibility now has a release-grade proof command and fixture:
+  `pnpm proof:opencode:compatibility` validates the runtime diagnostics
+  registry, exact bundled source version, proving tests, blocked plugin policy,
+  and shim/private-assumption removal discipline before release.
+- Canonical resource identity, remote approval policy, semantic UI status/action
+  bridge/MCP tools, delegated permission inheritance checks, scoped file
+  sessions with revision-checked writes and audit events, loopback-only
+  headless check/start/status/doctor/stop state, sandbox mount/component policy,
+  Docker/Apple Container lifecycle planning, and a strict sandboxed no-reply
+  OpenCode session proof command now have typed contracts and focused
+  fail-closed tests.
+- Local release scenario evidence now has a six-scenario suite and runner wired
+  into CI/release gates; it writes redacted JSON/Markdown evidence without
+  replacing deterministic tests.
 
 ## High Priority
 

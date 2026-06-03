@@ -59,6 +59,11 @@ import { sdkErrorMessage } from './sdk-error.ts'
 import { createWorkspaceGateway } from './workspace-gateway.ts'
 import { createDesktopPairingService } from './desktop-pairing/service.ts'
 import { createDesktopPairingLocalExecutor } from './desktop-pairing/local-executor.ts'
+import { configureSemanticUiBridge } from './semantic-ui-bridge.ts'
+import {
+  createSemanticUiLocalActionList,
+  executeSemanticUiLocalAction,
+} from './semantic-ui-local-actions.ts'
 
 export { invalidateRuntimeToolCache } from './runtime-tool-cache.ts'
 
@@ -365,6 +370,11 @@ export function setupIpcHandlers(
     approvedSkillImportDirectories,
     capabilityToolMethodCache,
   }
+
+  configureSemanticUiBridge({
+    actionListProvider: () => createSemanticUiLocalActionList('desktop-local'),
+    actionExecutor: (actionId, input) => executeSemanticUiLocalAction(context, actionId, input),
+  })
 
   registerIpcInvoke(context, 'confirm:request-destructive', objectArg<DestructiveConfirmationRequest>('destructive confirmation request', validateDestructiveConfirmationRequest), async (_event, request) => {
     const confirmed = await showNativeConfirmation(getMainWindow(), destructiveConfirmationPrompt(request))

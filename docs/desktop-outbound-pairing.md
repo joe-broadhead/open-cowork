@@ -89,6 +89,15 @@ and execution. Commands after the last durable sequence can be replayed safely
 because Desktop acknowledges each command id and persists the last observed
 sequence.
 
+Paired Desktop command acknowledgements are lease-fenced, not projection-fenced.
+The command result envelope includes `projectionFence: null` and
+`projectionFenceStatus.reasonCode:
+desktop_pairing_projection_fence_unsupported` so remote callers do not mistake
+the absence of a cloud projection checkpoint for an observed UI state. Callers
+that need consistency must use the command ack/fail result, durable command
+sequence, and redacted event stream; a paired Desktop projection fence can only
+be added after a durable paired projection checkpoint exists.
+
 Supported commands:
 
 - `create_session`

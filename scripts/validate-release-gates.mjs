@@ -279,8 +279,14 @@ function assertPackageScripts() {
   if (packageJson.scripts?.['release:gates:validate'] !== 'node scripts/validate-release-gates.mjs') {
     throw new Error('package.json must expose release:gates:validate')
   }
-  if (packageJson.scripts?.['ops:validate'] !== 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs') {
-    throw new Error('package.json ops:validate must run operations and release-gate validators')
+  if (packageJson.scripts?.['ops:validate'] !== 'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts && node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs') {
+    throw new Error('package.json ops:validate must run OpenCode compatibility, operations, and release-gate validators')
+  }
+  if (packageJson.scripts?.['proof:opencode:compatibility'] !== 'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts') {
+    throw new Error('package.json must expose proof:opencode:compatibility')
+  }
+  if (packageJson.scripts?.['proof:sandbox:opencode-session'] !== 'node --no-warnings --experimental-strip-types scripts/sandbox-opencode-session-smoke.ts') {
+    throw new Error('package.json must expose proof:sandbox:opencode-session')
   }
   if (packageJson.scripts?.['deploy:standalone-gateway:validate'] !== 'node scripts/validate-standalone-gateway.mjs') {
     throw new Error('package.json must expose deploy:standalone-gateway:validate')
@@ -317,6 +323,7 @@ function assertCiContract() {
     'pnpm perf:check',
     'pnpm build',
     'pnpm proof:cloud:opencode-portability --json',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm test:cloud-continuation',
     'node --no-warnings --experimental-strip-types --test tests/cloud-postgres-concurrency.test.ts',
     'docker build -f docker/open-cowork-cloud/Dockerfile',
@@ -356,6 +363,7 @@ function assertReleaseWorkflowContract() {
     'pnpm --dir apps/desktop test:e2e:packaged',
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'node scripts/verify-release-tag-signature.mjs',
     'node scripts/verify-release-artifact-matrix.mjs',
   ]) {

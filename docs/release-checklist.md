@@ -42,6 +42,7 @@ and linked from the release Go/No-Go report.
 - [ ] `pnpm deploy:launch:evidence:validate`
 - [ ] `pnpm deploy:promotion:validate -- --tier local-self-host-beta`
 - [ ] `pnpm deploy:private-beta:validate`
+- [ ] `pnpm proof:opencode:compatibility`
 - [ ] `pnpm ops:validate`
 - [ ] perf baseline environment is intentional; refresh
       the environment-specific `benchmarks/perf-baseline.*.json` on the
@@ -83,6 +84,24 @@ and linked from the release Go/No-Go report.
 - [ ] custom MCP add/test flow works
 - [ ] custom agent flow works
 - [ ] Linux smoke walkthrough has been run locally or covered by CI for this release
+- [ ] `pnpm test:live-scenarios` passes and its redacted evidence has been
+      reviewed for the release claim tier
+- [ ] `pnpm headless:host check`, foreground `pnpm headless:host start`/`stop`
+      lifecycle, and `pnpm headless:host doctor` pass without
+      exposing raw tokens, auth headers, provider keys, or local home paths
+- [ ] portable sandbox policy/lifecycle tests pass for Docker and Apple
+      Container command planning without raw local mount paths in diagnostics
+- [ ] `pnpm proof:cloud:opencode-portability --json` passes with redacted
+      OpenCode portability evidence and an explicit sandbox engine preflight
+      result (`sandbox-runtime-engine-available`,
+      `sandbox-runtime-engine-unavailable`, or
+      `sandbox-runtime-engine-check-failed`)
+- [ ] if sandboxed execution is part of the release claim, `pnpm
+      proof:sandbox:opencode-session -- --json --strict --image
+      <sandbox-image> --image-sha256 <sha256:...>` passes with
+      `sandbox-opencode-session-passed`; missing engine/image, blocked policy,
+      or command failure evidence is reviewed but not counted as a successful
+      sandbox session proof
 
 ### Release configuration
 

@@ -64,9 +64,21 @@ enabled. It fails closed if any deep smoke skips mutation coverage, token
 revocation, runtime status, worker heartbeat visibility, or Gateway operator
 coverage.
 
-`pnpm ops:validate` statically validates the production operations bundle:
-metric catalog, Grafana dashboard, Prometheus alert rules, incident runbooks,
-backup/restore instructions, and restore drill report requirements.
+`pnpm proof:opencode:compatibility` validates the OpenCode compatibility
+registry used by runtime diagnostics. It fails closed on missing bundled
+OpenCode version metadata, undocumented private assumptions, unknown
+compatibility states, missing proving tests, and source-version drift.
+
+`pnpm proof:sandbox:opencode-session -- --json` records redacted sandbox
+OpenCode session proof evidence. Without a configured sandbox image or engine it
+reports typed prerequisite failures and exits successfully for CI evidence. Use
+`--strict --image <sandbox-image> --image-sha256 <sha256:...>` when a release
+claim requires a successful sandboxed no-reply OpenCode session.
+
+`pnpm ops:validate` runs the OpenCode compatibility proof, then statically
+validates the production operations bundle: metric catalog, Grafana dashboard,
+Prometheus alert rules, incident runbooks, backup/restore instructions, and
+restore drill report requirements.
 
 `pnpm deploy:desktop:smoke` validates the Desktop cloud-workspace path against
 a running cloud deployment. It uses the same main-process cloud adapter and

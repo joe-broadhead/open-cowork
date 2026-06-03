@@ -11,6 +11,7 @@ import { log } from './logger.ts'
 import { getAgentToolBridgeEnvironment } from './agent-tool-bridge.ts'
 import { evaluateHttpMcpUrl, evaluateHttpMcpUrlResolved, type McpUrlResolutionOptions } from './mcp-url-policy.ts'
 import { getWorkflowToolBridgeEnvironment } from './workflow/workflow-tool-bridge.ts'
+import { getSemanticUiBridgeEnvironment } from './semantic-ui-bridge.ts'
 
 const electronApp = (electron as { app?: typeof import('electron').app }).app
 
@@ -29,6 +30,10 @@ function mcpPath(name: string) {
     if (existsSync(downstreamMcp)) return downstreamMcp
   }
   return resourcePath('mcps', name, 'dist', 'index.js')
+}
+
+export function resolveBundledMcpScriptPath(name: string) {
+  return mcpPath(name)
 }
 
 export function resolveBundledMcpNodeCommand(scriptPath: string, options: {
@@ -127,6 +132,10 @@ function isOAuthMcp(builtin: BundleMcp): boolean {
 }
 
 export function evaluateBuiltInMcp(builtin: BundleMcp, settings: CoworkSettings): BuiltInMcpResolution {
+  if (builtin.name === 'semantic-ui' && process.env.OPEN_COWORK_DISABLE_SEMANTIC_UI_MCP === '1') {
+    return { status: 'skipped', reason: 'disabled-by-user' }
+  }
+
   const explicit = getExplicitEnabledState(builtin, settings)
   if (explicit === false) {
     return { status: 'skipped', reason: 'disabled-by-user' }
@@ -217,6 +226,9 @@ function buildBuiltInMcpEntry(builtin: BundleMcp, settings: CoworkSettings): Res
     }
     if (builtin.name === 'workflows') {
       Object.assign(env, getWorkflowToolBridgeEnvironment())
+    }
+    if (builtin.name === 'semantic-ui') {
+      Object.assign(env, getSemanticUiBridgeEnvironment())
     }
 
     Object.assign(env, googleAuthEnv(builtin.name, builtin.googleAuth))

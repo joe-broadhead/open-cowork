@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { tailLogFile } from '../apps/desktop/src/main/diagnostics-export.ts'
+import { buildDiagnosticsBundle, tailLogFile } from '../apps/desktop/src/main/diagnostics-export.ts'
+import { verifyRuntimeComponentManifest } from '../apps/desktop/src/main/runtime-component-manifest.ts'
+import { recordRuntimeComponentVerification, resetRuntimeStatus } from '../apps/desktop/src/main/runtime-status.ts'
+import { RUNTIME_COMPONENT_MANIFEST_FORMAT } from '../packages/shared/src/runtime.ts'
 
 function testTempDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), prefix))
@@ -43,4 +46,33 @@ test('tailLogFile handles missing paths and directories without throwing', () =>
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test('diagnostics bundle includes redacted runtime component verification', () => {
+  resetRuntimeStatus()
+  const report = verifyRuntimeComponentManifest({
+    manifest: {
+      format: RUNTIME_COMPONENT_MANIFEST_FORMAT,
+      generatedAt: '2026-06-02T00:00:00.000Z',
+      components: [{
+        id: 'semantic-ui-mcp',
+        kind: 'semantic-ui-mcp',
+        version: '1.0.0',
+        path: '/Users/alice/acme-private/mcps/semantic-ui',
+        sha256: `sha256:${'a'.repeat(64)}`,
+        observedSha256: `${'a'.repeat(64)}`,
+        sourcePolicy: 'bundled',
+        compatibilityStatus: 'supported',
+      }],
+    },
+  })
+  recordRuntimeComponentVerification(report)
+
+  const bundle = buildDiagnosticsBundle()
+
+  assert.match(bundle, /Runtime Doctor JSON/)
+  assert.match(bundle, /semantic-ui-mcp/)
+  assert.doesNotMatch(bundle, /alice/)
+  assert.doesNotMatch(bundle, /acme-private/)
+  assert.match(bundle, /\/Users\/\[REDACTED_HOME\]/)
 })

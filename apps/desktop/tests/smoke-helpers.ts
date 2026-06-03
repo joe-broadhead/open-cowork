@@ -366,6 +366,17 @@ async function waitForCdp(port: number, timeoutMs = 30_000) {
   throw new Error(`Timed out waiting for packaged app CDP endpoint on 127.0.0.1:${port}`)
 }
 
+async function getCdpAppPageDiagnostics(browser: Browser) {
+  const diagnostics = []
+  for (const context of browser.contexts()) {
+    for (const page of context.pages()) {
+      if (page.url().startsWith('devtools://')) continue
+      diagnostics.push(await getAppShellDiagnostics(page))
+    }
+  }
+  return diagnostics
+}
+
 async function waitForCdpPage(browser: Browser, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -375,7 +386,8 @@ async function waitForCdpPage(browser: Browser, timeoutMs = 30_000) {
     }
     await delay(100)
   }
-  throw new Error('Timed out waiting for packaged app renderer page')
+  const diagnostics = await getCdpAppPageDiagnostics(browser)
+  throw new Error(`Timed out waiting for packaged app renderer page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
 }
 
 async function appBridgeIsReady(page: Page) {
@@ -401,10 +413,11 @@ async function waitForCdpAppPage(browser: Browser, timeoutMs = 30_000) {
     }
     await delay(100)
   }
-  throw new Error('Timed out waiting for packaged app shell page')
+  const diagnostics = await getCdpAppPageDiagnostics(browser)
+  throw new Error(`Timed out waiting for packaged app shell page\nDiagnostics: ${JSON.stringify(diagnostics)}`)
 }
 
-async function waitForPackagedMacProbeFile(targetPath: string, timeoutMs = 90_000): Promise<PackagedMacProbe> {
+async function waitForPackagedProbeFile(targetPath: string, timeoutMs = 90_000): Promise<PackagedMacProbe> {
   const deadline = Date.now() + timeoutMs
   let lastReadError: string | null = null
   while (Date.now() < deadline) {
@@ -423,7 +436,7 @@ async function waitForPackagedMacProbeFile(targetPath: string, timeoutMs = 90_00
     }
     await delay(250)
   }
-  throw new Error(`Timed out waiting for packaged macOS probe file ${targetPath}${lastReadError ? `; last error: ${lastReadError}` : ''}`)
+  throw new Error(`Timed out waiting for packaged probe file ${targetPath}${lastReadError ? `; last error: ${lastReadError}` : ''}`)
 }
 
 function runCommand(command: string, args: string[], timeoutMs = 10_000) {
@@ -509,10 +522,67 @@ export async function launchPackagedMacProbe(
         '-j',
         macAppBundlePath,
       ])
-      return await waitForPackagedMacProbeFile(readyFile, options?.timeoutMs ?? 90_000)
+      return await waitForPackagedProbeFile(readyFile, options?.timeoutMs ?? 90_000)
     })
   } finally {
     await runCommand('osascript', ['-e', 'tell application id "com.opencowork.desktop" to quit']).catch(() => {})
+    await delay(1_000)
+  }
+}
+
+export async function launchPackagedLinuxProbe(
+  paths: SmokePaths,
+  executablePath: string,
+  options?: { action?: 'surface' | 'create-session' | 'list-sessions'; timeoutMs?: number },
+): Promise<PackagedMacProbe> {
+  if (process.platform !== 'linux') {
+    throw new Error('launchPackagedLinuxProbe is only supported on Linux')
+  }
+
+  const port = await getAvailablePort()
+  const action = options?.action || 'surface'
+  const readyFile = join(paths.tempRoot, `packaged-linux-probe-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
+  const probeEnvironment = getLaunchServicesEnvironment(paths, {
+    OPEN_COWORK_E2E_ALLOW_SETTINGS_MUTATION: '1',
+    OPEN_COWORK_E2E_PROBE_ACTION: action,
+    OPEN_COWORK_E2E_READY_FILE: readyFile,
+    OPEN_COWORK_E2E_REMOTE_DEBUGGING_PORT: String(port),
+  })
+  const childArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    ...buildE2EArgEnvironment(probeEnvironment),
+  ]
+  const child = spawn(executablePath, childArgs, {
+    cwd: desktopAppDir,
+    env: {
+      ...getSmokeEnvironment(paths),
+      ...probeEnvironment,
+    },
+    stdio: 'ignore',
+  })
+  let clearEarlyExit: () => void = () => undefined
+  const earlyExit = new Promise<never>((_resolve, reject) => {
+    const onError = (error: Error) => reject(error)
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      reject(new Error(`Packaged Linux probe app exited before writing ready file: ${signal || code}`))
+    }
+    child.once('error', onError)
+    child.once('exit', onExit)
+    clearEarlyExit = () => {
+      child.off('error', onError)
+      child.off('exit', onExit)
+    }
+  })
+
+  try {
+    return await Promise.race([
+      waitForPackagedProbeFile(readyFile, options?.timeoutMs ?? 90_000),
+      earlyExit,
+    ])
+  } finally {
+    clearEarlyExit()
+    await stopSpawnedSmokeProcess(child)
     await delay(1_000)
   }
 }
@@ -692,10 +762,10 @@ export async function launchSmokeSession(
 
     let browser: Browser | null = null
     try {
-      await waitForCdp(port)
+      await waitForCdp(port, appShellTimeoutMs)
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      await waitForCdpPage(browser)
-      const page = await waitForCdpAppPage(browser)
+      await waitForCdpPage(browser, appShellTimeoutMs)
+      const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {
@@ -742,11 +812,11 @@ export async function launchSmokeSession(
 
     let browser: Browser | null = null
     try {
-      await Promise.race([waitForCdp(port), earlyExit])
+      await Promise.race([waitForCdp(port, appShellTimeoutMs), earlyExit])
       clearEarlyExit()
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      await waitForCdpPage(browser)
-      const page = await waitForCdpAppPage(browser)
+      await waitForCdpPage(browser, appShellTimeoutMs)
+      const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {

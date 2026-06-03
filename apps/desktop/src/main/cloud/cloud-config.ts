@@ -30,6 +30,7 @@ export type CloudRuntimePolicy = {
   allowMachineRuntimeConfig: boolean
   allowLocalStdioMcps: boolean
   allowHostProjectDirectories: boolean
+  allowRemoteApprovalResponses: boolean
   projectSources: CloudProjectSourcePolicyConfig
   allowedAgents: string[] | null
   allowedTools: string[] | null
@@ -142,6 +143,7 @@ export function resolveCloudRuntimePolicy(
     allowMachineRuntimeConfig: runtime.allowMachineRuntimeConfig === true,
     allowLocalStdioMcps: runtime.allowLocalStdioMcps === true,
     allowHostProjectDirectories: runtime.allowHostProjectDirectories === true,
+    allowRemoteApprovalResponses: runtime.allowRemoteApprovalResponses === true,
     projectSources: cloud.projectSources,
     allowedAgents: allowlist(profile.agents),
     allowedTools: allowlist(profile.tools),

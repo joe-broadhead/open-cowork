@@ -172,6 +172,30 @@ function asArray(value: unknown): unknown[] {
   return value as unknown[]
 }
 
+function cloudConfigWithRemoteApprovalResponses() {
+  return {
+    ...DEFAULT_CONFIG,
+    cloud: {
+      ...DEFAULT_CONFIG.cloud,
+      runtime: {
+        ...DEFAULT_CONFIG.cloud.runtime,
+        allowRemoteApprovalResponses: true,
+      },
+      profiles: {
+        ...DEFAULT_CONFIG.cloud.profiles,
+        full: {
+          ...DEFAULT_CONFIG.cloud.profiles.full,
+          runtime: {
+            ...DEFAULT_CONFIG.cloud.runtime,
+            ...(DEFAULT_CONFIG.cloud.profiles.full.runtime || {}),
+            allowRemoteApprovalResponses: true,
+          },
+        },
+      },
+    },
+  }
+}
+
 test('cloud bootstrap parses env options and role helpers', () => {
   assert.deepEqual(resolveCloudBootstrapOptionsFromEnv({
     OPEN_COWORK_CLOUD_ROOT: '/tmp/open-cowork-cloud',
@@ -1198,8 +1222,9 @@ test('cloud worker reclaims stale running commands after worker lease expiry', a
 test('cloud worker applies durable question replies and permission responses to OpenCode', async () => {
   const store = new InMemoryControlPlaneStore()
   const runtime = new FakeRuntime()
+  const config = cloudConfigWithRemoteApprovalResponses()
   const web = await startCloudApp({
-    config: DEFAULT_CONFIG,
+    config,
     store,
     env: {
         OPEN_COWORK_CLOUD_ROLE: 'web',
@@ -1210,7 +1235,7 @@ test('cloud worker applies durable question replies and permission responses to 
     port: 0,
   })
   const worker = await startCloudApp({
-    config: DEFAULT_CONFIG,
+    config,
     store,
     runtime,
     env: {

@@ -31,8 +31,18 @@ import { applyAppearancePreferences } from './helpers/theme'
 import { registerExtraStarterTemplates } from './components/agents/starter-templates'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from './stores/session-workspace-keys'
+import {
+  parseResourceNavigationEventDetail,
+  resolveDesktopResourceNavigationAction,
+  type ResourceNavigationAction,
+} from './resource-navigation'
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
+
+type ResourceNavigationNotice = {
+  status: ResourceNavigationAction['status'] | 'invalid'
+  message: string
+}
 
 function previewDismissed(version: string) {
   try {
@@ -82,6 +92,7 @@ export function App() {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
+  const setActiveWorkspace = useSessionStore((s) => s.setActiveWorkspace)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const setSessions = useSessionStore((s) => s.setSessions)
   const [config, setConfig] = useState<PublicAppConfig | null>(null)
@@ -97,6 +108,7 @@ export function App() {
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
   const [sidebarSearchNonce, setSidebarSearchNonce] = useState(0)
   const [sidebarSettingsNonce, setSidebarSettingsNonce] = useState(0)
+  const [resourceNavigationNotice, setResourceNavigationNotice] = useState<ResourceNavigationNotice | null>(null)
   // Force the whole tree to re-render when the active locale changes.
   // Every `t(key, fallback)` is resolved at render time from the i18n
   // module's module-level cache, so bumping this counter is enough to
@@ -172,9 +184,13 @@ export function App() {
     }
   }, [addSession, reportAppError, setCurrentSession])
 
-  const openExistingThread = useCallback(async (sessionId: string) => {
+  const openExistingThread = useCallback(async (sessionId: string, workspaceId?: string) => {
     setView('chat')
-    await loadSessionMessages(sessionId)
+    if (workspaceId) {
+      await loadSessionMessages(sessionId, { workspaceId })
+    } else {
+      await loadSessionMessages(sessionId)
+    }
   }, [])
 
   const ensureSidebarVisible = useCallback(() => {
@@ -191,6 +207,84 @@ export function App() {
     ensureSidebarVisible()
     setSidebarSettingsNonce((current) => current + 1)
   }, [ensureSidebarVisible])
+
+  const activateExactWorkspace = useCallback(async (workspaceId: string) => {
+    const normalized = normalizeWorkspaceId(workspaceId)
+    const activated = await window.coworkApi.workspace.activate(normalized)
+    const activeId = normalizeWorkspaceId(activated?.id || normalized)
+    setActiveWorkspace(activeId)
+    await useWorkspaceSupportStore.getState().loadWorkspaceSupport(activeId, { force: true })
+    await loadSessions()
+    return activeId
+  }, [loadSessions, setActiveWorkspace])
+
+  const applyResourceNavigationAction = useCallback(async (action: ResourceNavigationAction) => {
+    if (action.status !== 'open') {
+      setResourceNavigationNotice({
+        status: action.status,
+        message: action.message || 'Resource is not available in this Open Cowork surface.',
+      })
+      return
+    }
+
+    const workspaceId = action.routeParams.workspaceId
+    if (workspaceId) {
+      await activateExactWorkspace(workspaceId)
+    }
+
+    setResourceNavigationNotice(null)
+
+    if (action.routeKey === 'workspace') {
+      setView('home')
+      return
+    }
+
+    if (action.routeKey === 'session' || action.routeKey === 'artifact') {
+      const sessionId = action.routeParams.sessionId
+      if (sessionId) await openExistingThread(sessionId, workspaceId)
+      return
+    }
+
+    if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
+      setView('workflows')
+      return
+    }
+
+    if (action.routeKey === 'settings') {
+      openSidebarSettings()
+      return
+    }
+
+    if (action.routeKey === 'diagnostics') {
+      setView('health')
+      return
+    }
+
+    if (action.routeKey === 'capability') {
+      setView('capabilities')
+      return
+    }
+
+    setResourceNavigationNotice({
+      status: 'unavailable',
+      message: action.message || 'Exact navigation for this resource is not available yet.',
+    })
+  }, [activateExactWorkspace, openExistingThread, openSidebarSettings])
+
+  const openResourceNavigationTarget = useCallback(async (detail: unknown) => {
+    try {
+      const identity = parseResourceNavigationEventDetail(detail)
+      const action = await resolveDesktopResourceNavigationAction(window.coworkApi, identity)
+      await applyResourceNavigationAction(action)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setResourceNavigationNotice({
+        status: 'invalid',
+        message,
+      })
+      reportAppError('Could not open this Open Cowork link.', error, 'resource-navigation')
+    }
+  }, [applyResourceNavigationAction, reportAppError])
 
   // Home composer path: create + activate a fresh session, switch to the
   // chat view, then fire the prompt straight at the runtime. We
@@ -256,6 +350,14 @@ export function App() {
     setAuthenticated,
     setShowCommandPalette,
   })
+
+  useEffect(() => {
+    const listener = (event: Event) => {
+      void openResourceNavigationTarget((event as CustomEvent).detail)
+    }
+    window.addEventListener('open-cowork:open-resource', listener)
+    return () => window.removeEventListener('open-cowork:open-resource', listener)
+  }, [openResourceNavigationTarget])
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
@@ -453,6 +555,26 @@ export function App() {
             type="button"
             className="no-drag rounded border border-red-300/25 px-2 py-1 text-[11px] text-red-50 hover:bg-red-200/10"
             onClick={() => setRendererErrorNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+      {resourceNavigationNotice ? (
+        <div
+          role="alert"
+          data-testid="resource-navigation-notice"
+          data-status={resourceNavigationNotice.status}
+          className="mx-3 mt-3 flex items-start gap-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-50 shadow-card"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Resource unavailable</div>
+            <div className="mt-0.5 text-amber-100/85">{resourceNavigationNotice.message}</div>
+          </div>
+          <button
+            type="button"
+            className="no-drag rounded border border-amber-300/25 px-2 py-1 text-[11px] text-amber-50 hover:bg-amber-200/10"
+            onClick={() => setResourceNavigationNotice(null)}
           >
             Dismiss
           </button>

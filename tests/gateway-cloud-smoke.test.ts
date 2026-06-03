@@ -12,6 +12,13 @@ import { CloudSessionService } from '../apps/desktop/src/main/cloud/session-serv
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
 
+function gatewayPolicy() {
+  return {
+    ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    allowRemoteApprovalResponses: true,
+  }
+}
+
 class FakeRuntime implements CloudRuntimeAdapter {
   prompts: Array<{ sessionId: string, parts: CloudRuntimePromptPart[], agent: string }> = []
   aborted: string[] = []
@@ -169,7 +176,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
   })
 
   const runtime = new FakeRuntime()
-  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = gatewayPolicy()
   const service = new CloudSessionService(store, runtime, policy)
   const worker = new CloudWorker(store, service, 'worker-1')
   const cloud = createCloudHttpServer({
@@ -440,7 +447,7 @@ test('gateway cloud smoke script validates self-host gateway against deployed cl
   })
 
   const runtime = new FakeRuntime()
-  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = gatewayPolicy()
   const service = new CloudSessionService(store, runtime, policy)
   const worker = new CloudWorker(store, service, 'worker-smoke')
   const cloud = createCloudHttpServer({

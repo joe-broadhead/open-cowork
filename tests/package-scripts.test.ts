@@ -26,6 +26,7 @@ const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', impor
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
 const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
+const smokeHelpers = readFileSync(new URL('../apps/desktop/tests/smoke-helpers.ts', import.meta.url), 'utf8')
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
   const script = source.scripts?.[name]
@@ -180,8 +181,12 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:launch:evidence:validate'), 'node scripts/validate-launch-evidence-manifest.mjs')
   assert.equal(requireScript('deploy:promotion:validate'), 'node scripts/validate-release-promotion.mjs')
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
-  assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs')
+  assert.equal(
+    requireScript('ops:validate'),
+    'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts && node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs',
+  )
   assert.equal(requireScript('release:gates:validate'), 'node scripts/validate-release-gates.mjs')
+  assert.equal(requireScript('proof:opencode:compatibility'), 'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {
@@ -239,6 +244,30 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional', desktopPackageJson)), [
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
+
+  for (const expectedCall of [
+    'waitForCdp(port, appShellTimeoutMs)',
+    'waitForCdpPage(browser, appShellTimeoutMs)',
+    'waitForCdpAppPage(browser, appShellTimeoutMs)',
+  ]) {
+    const matches = [...smokeHelpers.matchAll(new RegExp(expectedCall.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))]
+    assert.equal(
+      matches.length,
+      2,
+      `both packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
+    )
+  }
+
+  assert.match(
+    smokeHelpers,
+    /export async function launchPackagedLinuxProbe/,
+    'Linux packaged smoke must use the E2E ready-file probe for preload and persistence contracts',
+  )
+  assert.match(
+    smokeHelpers,
+    /OPEN_COWORK_E2E_READY_FILE: readyFile/,
+    'packaged probe launch must pass an isolated ready file into the packaged process',
+  )
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {
@@ -250,6 +279,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
   for (const command of [
     'pnpm lint',
     'pnpm test',
+    'pnpm test:live-scenarios',
     'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
@@ -266,6 +296,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm ops:validate',
     'node scripts/find-linux-packaged-executable.mjs',
     'pnpm proof:cloud:opencode-portability --json',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
   ]) {
@@ -284,6 +315,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm lint',
     'pnpm typecheck',
     'pnpm test',
+    'pnpm test:live-scenarios',
     'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
@@ -299,6 +331,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm --dir apps/desktop test:e2e:packaged',
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
     'node scripts/verify-release-tag-signature.mjs',

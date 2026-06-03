@@ -5,6 +5,7 @@ import { existsSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { cloudProjectionFenceObserved } from '../packages/shared/src/cloud-session-contract.ts'
 import {
   attachWorkflowRunSession,
   claimDueWorkflowRun,
@@ -13,6 +14,7 @@ import {
   createWorkflowRun,
   getWorkflow,
   getWorkflowRun,
+  getWorkflowRunProjectionCheckpoint,
   listDueWorkflows,
   listWorkflows,
   markWorkflowRunCompleted,
@@ -196,14 +198,22 @@ test('workflow store tracks run lifecycle and next scheduled run', () => withWor
   const workflow = createWorkflow(draft)
   const run = createWorkflowRun(workflow.id, 'manual', { source: 'test' })
   assert.equal(run?.status, 'queued')
+  assert.equal(run?.projectionFence?.scope, 'workflow-run')
+  assert.equal(run?.projectionFence?.workflowId, workflow.id)
+  assert.equal(run?.projectionFence?.runId, run?.id)
+  assert.equal(cloudProjectionFenceObserved(run!.projectionFence!, getWorkflowRunProjectionCheckpoint(run!.id)!), true)
   assert.throws(() => createWorkflowRun(workflow.id, 'manual', null), /already running/)
 
   const attached = attachWorkflowRunSession(workflow.id, run!.id, 'ses_run')
   assert.equal(attached?.status, 'running')
+  assert.equal(cloudProjectionFenceObserved(attached!.projectionFence!, getWorkflowRunProjectionCheckpoint(run!.id)!), true)
+  assert.ok((attached?.projectionFence?.projectionVersion || 0) > (run?.projectionFence?.projectionVersion || 0))
   assert.equal(getWorkflow(workflow.id)?.latestRunSessionId, 'ses_run')
 
   const completed = markWorkflowRunCompleted(run!.id, 'Sent summary.')
   assert.equal(completed?.status, 'completed')
+  assert.equal(cloudProjectionFenceObserved(completed!.projectionFence!, getWorkflowRunProjectionCheckpoint(run!.id)!), true)
+  assert.ok((completed?.projectionFence?.projectionVersion || 0) > (attached?.projectionFence?.projectionVersion || 0))
   const failedAfterComplete = markWorkflowRunFailed(run!.id, 'Late model error.')
   assert.equal(failedAfterComplete?.status, 'completed')
   const afterComplete = getWorkflow(workflow.id)
@@ -253,6 +263,7 @@ test('workflow store recovers interrupted queued and running runs without keepin
   const recoveredRunning = recoverInterruptedWorkflowRuns('Recovered running session.', new Date('2026-05-15T11:00:00.000Z'))
 
   assert.deepEqual(recoveredRunning.map((run) => run.id), [running!.id])
+  assert.equal(cloudProjectionFenceObserved(recoveredRunning[0]!.projectionFence!, getWorkflowRunProjectionCheckpoint(running!.id)!), true)
   assert.equal(getWorkflowRun(running!.id)?.status, 'failed')
   assert.equal(getWorkflowRun(running!.id)?.finishedAt, '2026-05-15T11:00:00.000Z')
   assert.equal(getWorkflow(workflow.id)?.status, 'active')
@@ -276,6 +287,7 @@ test('workflow store atomically claims a due scheduled workflow and creates its 
   assert.equal(claimed?.workflowId, workflow.id)
   assert.equal(claimed?.triggerType, 'schedule')
   assert.equal(claimed?.status, 'queued')
+  assert.equal(cloudProjectionFenceObserved(claimed!.projectionFence!, getWorkflowRunProjectionCheckpoint(claimed!.id)!), true)
   assert.deepEqual(claimed?.triggerPayload, {
     source: 'schedule',
     scheduledFor: dueAt.toISOString(),

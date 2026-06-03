@@ -69,9 +69,11 @@ these are true:
   artifact bodies unless policy explicitly allows them.
 
 For `cloud-worker`, Cloud membership, role, profile policy, subscription/quota
-state, and runtime policy decide approval and question authority. Pending
-permissions and questions must be present in durable projection state so late
-join clients can recover after restart.
+state, and runtime policy decide approval and question authority. Remote
+approval and question responses require `allowRemoteApprovalResponses: true` in
+the effective cloud runtime policy. Pending permissions and questions must be
+present in durable projection state so late-join clients can recover after
+restart.
 
 For `standalone-gateway`, the channel actor must resolve to Gateway RBAC before
 approvals or questions can be answered. Approval tokens are single-use and

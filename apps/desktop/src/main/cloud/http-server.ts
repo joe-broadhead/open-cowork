@@ -1,11 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import type { AddressInfo, Socket } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import {
   emptySessionImportItemCounts,
+  createCloudProjectionFenceToken,
   isCloudSessionEventType,
   normalizeCloudProjectSource,
   resolveHttpClientSource,
+  type CloudProjectionFenceToken,
   type CloudSessionEventType,
   type CloudProjectSourceInput,
   type PublicBrandingConfig,
@@ -33,17 +35,19 @@ import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
-import { CloudServiceError, type CloudPrincipal, type CloudSessionService } from './session-service.ts'
+import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
 import { cloudSessionViewToSessionView } from './session-view-contract.ts'
 import type { CloudWorker } from './worker.ts'
 import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
+import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
 import type {
   ApiTokenScope,
   ChannelProviderId,
   ControlPlaneSessionStatus,
   SessionEventRecord,
+  SessionCommandRecord,
   WorkspaceEventRecord,
 } from './control-plane-store.ts'
 import { recordCloudHttpRequest, recordCloudMetric } from './observability.ts'
@@ -132,156 +136,7 @@ type RouteContext = {
   segments: string[]
 }
 
-type SequencedSseEvent = { sequence: number }
 const CHANNEL_DELIVERY_SSE_EVENT_TYPE = 'channel.delivery' satisfies CloudSessionEventType
-
-type SseReplaySubscriber = {
-  lastSequence: number
-  listener: (event: SequencedSseEvent) => void
-  onError?: (error: unknown) => void
-}
-
-type SseReplayTopic = {
-  subscribers: Set<SseReplaySubscriber>
-  loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
-  lastSequence: number
-  polling: boolean
-  timer: ReturnType<typeof setInterval>
-}
-
-type ActiveSseStream = {
-  res: ServerResponse
-  socket: Socket | null
-  close: () => void
-}
-
-export class CloudSseStreamRegistry {
-  private readonly streams = new Set<ActiveSseStream>()
-  private closing = false
-
-  track(req: IncomingMessage, res: ServerResponse, cleanup: () => void) {
-    if (this.closing) {
-      const socket = res.socket || req.socket || null
-      cleanup()
-      if (!res.writableEnded && !res.destroyed) res.end()
-      if (!res.destroyed) res.destroy()
-      if (socket && !socket.destroyed) socket.destroy()
-      return false
-    }
-
-    let closed = false
-    const stream: ActiveSseStream = {
-      res,
-      socket: res.socket || req.socket || null,
-      close: () => {
-        if (closed) return
-        closed = true
-        this.streams.delete(stream)
-        req.off('close', stream.close)
-        res.off('close', stream.close)
-        res.off('finish', stream.close)
-        cleanup()
-      },
-    }
-    this.streams.add(stream)
-    req.once('close', stream.close)
-    res.once('close', stream.close)
-    res.once('finish', stream.close)
-    return true
-  }
-
-  closeAll() {
-    this.closing = true
-    for (const stream of Array.from(this.streams)) {
-      stream.close()
-      if (!stream.res.writableEnded && !stream.res.destroyed) stream.res.end()
-      if (!stream.res.destroyed) stream.res.destroy()
-      if (stream.socket && !stream.socket.destroyed) stream.socket.destroy()
-    }
-  }
-}
-
-export class CloudSseReplayHub {
-  private readonly topics = new Map<string, SseReplayTopic>()
-  private closed = false
-
-  subscribe(
-    input: {
-      key: string
-      afterSequence: number
-      pollMs: number
-      loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
-      listener: (event: SequencedSseEvent) => void
-      onError?: (error: unknown) => void
-    },
-  ) {
-    if (this.closed) return () => {}
-    let topic = this.topics.get(input.key)
-    if (!topic) {
-      topic = {
-        subscribers: new Set(),
-        loadEvents: input.loadEvents,
-        lastSequence: input.afterSequence,
-        polling: false,
-        timer: setInterval(() => {
-          void this.poll(input.key)
-        }, input.pollMs),
-      }
-      this.topics.set(input.key, topic)
-    }
-    const subscriber: SseReplaySubscriber = {
-      lastSequence: input.afterSequence,
-      listener: input.listener,
-      onError: input.onError,
-    }
-    topic.subscribers.add(subscriber)
-    return () => {
-      const current = this.topics.get(input.key)
-      if (!current) return
-      current.subscribers.delete(subscriber)
-      if (current.subscribers.size > 0) return
-      clearInterval(current.timer)
-      this.topics.delete(input.key)
-    }
-  }
-
-  get topicCount() {
-    return this.topics.size
-  }
-
-  close() {
-    this.closed = true
-    for (const topic of this.topics.values()) {
-      clearInterval(topic.timer)
-      topic.subscribers.clear()
-    }
-    this.topics.clear()
-  }
-
-  private async poll(key: string) {
-    if (this.closed) return
-    const topic = this.topics.get(key)
-    if (!topic || topic.polling) return
-    topic.polling = true
-    try {
-      const events = await topic.loadEvents(topic.lastSequence)
-      if (this.closed || this.topics.get(key) !== topic) return
-      for (const event of events) {
-        if (event.sequence <= topic.lastSequence) continue
-        topic.lastSequence = event.sequence
-        for (const subscriber of topic.subscribers) {
-          if (event.sequence <= subscriber.lastSequence) continue
-          subscriber.listener(event)
-          subscriber.lastSequence = event.sequence
-        }
-      }
-    } catch (error) {
-      for (const subscriber of topic.subscribers) subscriber.onError?.(error)
-    } finally {
-      if (this.topics.get(key) === topic) topic.polling = false
-    }
-  }
-}
 
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
   tenantId: 'default',
@@ -691,6 +546,57 @@ async function processSessionCommandIfConfigured(
 ) {
   if (!options.worker || !options.autoProcessCommands) return 0
   return options.worker.processSessionCommands(tenantId, sessionId)
+}
+
+function sessionProjectionFenceForView(
+  principal: CloudPrincipal,
+  command: SessionCommandRecord,
+  view: CloudSessionView,
+  minimumProjectionSequence: number,
+): CloudProjectionFenceToken | null {
+  const observedSequence = typeof view.projection?.sequence === 'number' && Number.isInteger(view.projection.sequence) && view.projection.sequence > 0
+    ? view.projection.sequence
+    : null
+  if (observedSequence === null || observedSequence < minimumProjectionSequence) return null
+  return createCloudProjectionFenceToken({
+    scope: 'session',
+    tenantId: principal.tenantId,
+    sessionId: view.session.sessionId,
+    commandId: command.commandId,
+    sequence: observedSequence,
+    projectionVersion: observedSequence,
+  })
+}
+
+async function writeSessionCommandMutationResponse(
+  res: ServerResponse,
+  options: CloudHttpServerOptions,
+  principal: CloudPrincipal,
+  sessionId: string,
+  command: SessionCommandRecord,
+  processed: number,
+  beforeProjectionSequence: number,
+  extraBody: Record<string, unknown> = {},
+) {
+  const view = await options.service.getSessionView(principal, sessionId)
+  writeJson(res, 202, {
+    ...extraBody,
+    command,
+    processed,
+    view,
+    projectionFence: processed > 0
+      ? sessionProjectionFenceForView(principal, command, view, beforeProjectionSequence + 1)
+      : null,
+  }, options.corsOrigin)
+}
+
+async function currentSessionProjectionSequence(
+  options: CloudHttpServerOptions,
+  principal: CloudPrincipal,
+  sessionId: string,
+) {
+  const view = await options.service.getSessionView(principal, sessionId)
+  return view.projection?.sequence || 0
 }
 
 async function handleCloudWorkflowWebhook(
@@ -1302,6 +1208,7 @@ async function handleApiRequest(
         writeJson,
         writeError,
         processSessionCommandIfConfigured,
+        writeSessionCommandMutationResponse,
         handleChannelDeliveriesSse,
       },
     })
@@ -1582,27 +1489,21 @@ async function handleApiRequest(
       writeError(res, 400, 'Prompt text is required.', options.corsOrigin)
       return
     }
+    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueuePrompt(context.principal, sessionId, {
       text,
       agent: readString(body.agent),
     })
     const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    writeJson(res, 202, {
-      command,
-      processed,
-      view: await options.service.getSessionView(context.principal, sessionId),
-    }, options.corsOrigin)
+    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return
   }
 
   if (action === 'abort' && req.method === 'POST') {
+    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueueAbort(context.principal, sessionId)
     const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    writeJson(res, 202, {
-      command,
-      processed,
-      view: await options.service.getSessionView(context.principal, sessionId),
-    }, options.corsOrigin)
+    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return
   }
 
@@ -1613,12 +1514,13 @@ async function handleApiRequest(
       writeError(res, 400, 'Question reply requires requestId and answers.', options.corsOrigin)
       return
     }
+    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueueQuestionReply(context.principal, sessionId, {
       requestId,
       answers: body.answers,
     })
     const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    writeJson(res, 202, { command, processed }, options.corsOrigin)
+    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return
   }
 
@@ -1629,11 +1531,12 @@ async function handleApiRequest(
       writeError(res, 400, 'Question rejection requires requestId.', options.corsOrigin)
       return
     }
+    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueueQuestionReject(context.principal, sessionId, {
       requestId,
     })
     const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    writeJson(res, 202, { command, processed }, options.corsOrigin)
+    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return
   }
 
@@ -1644,12 +1547,13 @@ async function handleApiRequest(
       writeError(res, 400, 'Permission response requires permissionId.', options.corsOrigin)
       return
     }
+    const beforeProjectionSequence = await currentSessionProjectionSequence(options, context.principal, sessionId)
     const command = await options.service.enqueuePermissionResponse(context.principal, sessionId, {
       permissionId,
       response: body.response ?? null,
     })
     const processed = await processCommandIfConfigured(options, context.principal, sessionId)
-    writeJson(res, 202, { command, processed }, options.corsOrigin)
+    await writeSessionCommandMutationResponse(res, options, context.principal, sessionId, command, processed, beforeProjectionSequence)
     return
   }
 

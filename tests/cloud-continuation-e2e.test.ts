@@ -358,7 +358,10 @@ async function createContinuationFixture() {
     scopes: ['gateway', 'admin'],
   }).plaintext
   const runtime = new ContinuationRuntime()
-  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = {
+    ...resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    allowRemoteApprovalResponses: true,
+  }
   const service = new CloudSessionService(store, runtime, policy)
   const worker = new CloudWorker(store, service, 'continuation-worker')
   const cloud = createCloudHttpServer({

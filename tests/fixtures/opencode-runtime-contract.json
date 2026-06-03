@@ -1,0 +1,98 @@
+{
+  "formatVersion": 1,
+  "opencodeVersion": "1.15.5",
+  "requiredAssumptionIds": [
+    "cloud-session-event-projection-contract",
+    "opencode-plugin-remote-fail-closed",
+    "opencode-sdk-v2-import-boundary",
+    "permission-question-roundtrip-contract",
+    "runtime-config-builder-sdk-native-config"
+  ],
+  "runtimeConfig": [
+    {
+      "id": "runtime-config-provider-models",
+      "owner": "desktop-runtime",
+      "key": "provider",
+      "evidence": "Open Cowork emits provider/model settings through the SDK-native runtime config builder.",
+      "tests": ["tests/runtime-config-builder.test.ts"]
+    },
+    {
+      "id": "runtime-config-agent-permissions",
+      "owner": "desktop-runtime",
+      "key": "agent.permission",
+      "evidence": "Built-in and custom agents retain OpenCode-native permission config instead of app-side runtime mirroring.",
+      "tests": ["tests/permission-config.test.ts", "tests/permission-inheritance.test.ts"]
+    },
+    {
+      "id": "runtime-config-mcp-skills",
+      "owner": "capabilities",
+      "key": "mcp",
+      "evidence": "Managed MCP and skill discovery is curated by Open Cowork and emitted into OpenCode config.",
+      "tests": ["tests/runtime-config-builder.test.ts", "tests/capability-bundle-runtime-preflight.test.ts"]
+    }
+  ],
+  "sdkEvents": [
+    {
+      "id": "sdk-event-projection-fixture",
+      "owner": "cloud-projection",
+      "fixturePath": "tests/fixtures/opencode-sdk-v2-events.json",
+      "events": [
+        "assistant-text",
+        "tool-completed",
+        "permission-requested",
+        "question-asked",
+        "todos-updated",
+        "status-idle",
+        "step-cost",
+        "runtime-error"
+      ],
+      "tests": ["tests/opencode-sdk-event-projection.test.ts", "tests/cloud-session-projection-contract.test.ts"]
+    }
+  ],
+  "httpRoutes": [
+    {
+      "id": "opencode-session-create-route",
+      "owner": "desktop-runtime",
+      "method": "POST",
+      "path": "/session",
+      "tests": ["tests/cloud-opencode-runtime-adapter.test.ts"]
+    },
+    {
+      "id": "opencode-session-prompt-route",
+      "owner": "desktop-runtime",
+      "method": "POST",
+      "path": "/session/{sessionID}/prompt_async",
+      "tests": ["tests/cloud-opencode-runtime-adapter.test.ts"]
+    },
+    {
+      "id": "opencode-session-events-route",
+      "owner": "desktop-runtime",
+      "method": "GET",
+      "path": "/event",
+      "tests": ["tests/cloud-opencode-runtime-adapter.test.ts", "tests/opencode-sdk-event-projection.test.ts"]
+    }
+  ],
+  "clientMethods": [
+    {
+      "id": "client-method-question-reply",
+      "owner": "desktop-runtime",
+      "method": "question.reply",
+      "evidence": "Open Cowork preserves OpenCode-native question replies at execution while projecting user-facing state.",
+      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
+    },
+    {
+      "id": "client-method-question-reject",
+      "owner": "desktop-runtime",
+      "method": "question.reject",
+      "evidence": "Open Cowork forwards rejections through durable commands without replacing OpenCode question handling.",
+      "tests": ["tests/question-normalization.test.ts", "tests/cloud-app.test.ts"]
+    },
+    {
+      "id": "client-method-permission-respond",
+      "owner": "desktop-runtime",
+      "method": "permission.reply",
+      "evidence": "Open Cowork gates remote approval responses but leaves permission execution semantics with OpenCode.",
+      "tests": ["tests/permission-config.test.ts", "tests/cloud-app.test.ts"]
+    }
+  ]
+}

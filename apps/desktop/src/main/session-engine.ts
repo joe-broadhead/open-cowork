@@ -247,6 +247,18 @@ export class SessionEngine {
     return buildSessionUsageSummary(this.getSessionView(sessionId))
   }
 
+  getPendingApprovals(): Array<{ sessionId: string; approval: PendingApproval }> {
+    return Object.entries(this.sessionStateById).flatMap(([sessionId, state]) =>
+      state.pendingApprovals.map((approval) => ({ sessionId, approval })),
+    )
+  }
+
+  getPendingQuestions(): Array<{ sessionId: string; question: PendingQuestion }> {
+    return Object.entries(this.sessionStateById).flatMap(([sessionId, state]) =>
+      state.pendingQuestions.map((question) => ({ sessionId, question })),
+    )
+  }
+
   removeSession(sessionId: string) {
     const next = { ...this.sessionStateById }
     delete next[sessionId]

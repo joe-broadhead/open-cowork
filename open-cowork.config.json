@@ -149,6 +149,18 @@
       "patterns": ["mcp__workflows__*"],
       "allowPatterns": ["mcp__workflows__preview_workflow"],
       "askPatterns": ["mcp__workflows__create_workflow"]
+    },
+    {
+      "id": "semantic-ui",
+      "name": "UI Status",
+      "icon": "monitor",
+      "description": "Read high-level Open Cowork app status and visible product state through the local semantic UI bridge.",
+      "kind": "built-in",
+      "namespace": "semantic-ui",
+      "writeAccess": true,
+      "patterns": ["mcp__semantic-ui__*"],
+      "allowPatterns": ["mcp__semantic-ui__ui_status", "mcp__semantic-ui__ui_snapshot", "mcp__semantic-ui__ui_list_actions"],
+      "askPatterns": ["mcp__semantic-ui__ui_execute_action"]
     }
   ],
   "skills": [
@@ -230,6 +242,13 @@
       "description": "Preview and save Open Cowork workflows from Workflow Designer setup threads.",
       "authMode": "none",
       "packageName": "workflows"
+    },
+    {
+      "name": "semantic-ui",
+      "type": "local",
+      "description": "Read high-level Open Cowork UI status and visible product state.",
+      "authMode": "none",
+      "packageName": "semantic-ui"
     }
   ],
   "agents": [

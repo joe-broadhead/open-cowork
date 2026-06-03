@@ -36,7 +36,8 @@ Gateway paths point users to deployer-owned setup, doctor, and smoke commands.
 The Desktop Health Center reads existing product APIs:
 
 - `runtime.status()` for Desktop runtime readiness.
-- `app.runtimeInputs()` for provider/model metadata without raw secret values.
+- `app.runtimeInputs()` for provider/model metadata, capability provenance,
+  conflicts, and stable reason codes without raw secret values.
 - `workspace.list()` and `workspace.support()` for workspace authority and
   policy verdicts.
 - `desktopPairing.list()` for outbound pairing status.
@@ -52,6 +53,14 @@ It shows these states:
 The page intentionally shows metadata, not raw credentials. It must not render
 provider API keys, OAuth tokens, gateway service tokens, desktop pairing tokens,
 MCP secrets, local file bodies, or env files.
+
+Runtime capability provenance rows show why provider, model, MCP, skill, agent,
+tool, workflow, and OpenCode-plugin capabilities are active or unavailable.
+Rows include source, product mode, status, reason code, and redacted evidence.
+Conflict rows show the winning source and losing sources. This is the
+operator-facing view for reason codes such as `mcp.awaiting-oauth-opt-in`,
+`mcp.stdio-policy-blocked`, `plugin.product-mode-unsupported`, and
+`model.source-conflict-winner`.
 
 ## Recovery Actions
 
@@ -138,6 +147,7 @@ The setup and health contract is covered by:
 ```bash
 node --no-warnings --experimental-strip-types --test tests/setup-health-contract.test.ts
 node --no-warnings --experimental-strip-types --test tests/standalone-gateway-setup.test.ts
+node --no-warnings --experimental-strip-types --test tests/runtime-input-diagnostics.test.ts
 pnpm test:renderer -- HealthCenterPage
 pnpm deploy:validate
 pnpm ops:validate

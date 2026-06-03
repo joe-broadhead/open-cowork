@@ -3,6 +3,8 @@ import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import electron from 'electron'
 import type {
+  CloudProjectionCheckpoint,
+  CloudProjectionFenceToken,
   WorkflowDetail,
   WorkflowDraft,
   WorkflowListPayload,
@@ -14,6 +16,10 @@ import type {
   WorkflowTrigger,
   WorkflowTriggerType,
 } from '@open-cowork/shared'
+import {
+  createCloudProjectionCheckpoint,
+  createCloudProjectionFenceToken,
+} from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
 import {
   readSafeStorageBackendForPolicy,
@@ -24,6 +30,8 @@ import { computeNextWorkflowRunAt, validateWorkflowSchedule } from './workflow-s
 
 const WORKFLOW_DB_SCHEMA_VERSION = 1
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
+const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
+const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
 const MAX_TEXT = 32 * 1024
 const MAX_LIST_ITEMS = 50
 const VALID_STATUS = new Set<WorkflowStatus>(['active', 'paused', 'running', 'failed', 'archived'])
@@ -341,6 +349,58 @@ function withTransaction<T>(callback: (db: DatabaseSync) => T): T {
   }
 }
 
+function readWorkflowProjectionVersion(db = getWorkflowDb()) {
+  const row = db.prepare('select value from workflow_meta where key = ?').get(WORKFLOW_PROJECTION_VERSION_KEY) as { value?: unknown } | undefined
+  const version = Number.parseInt(String(row?.value || '0'), 10)
+  return Number.isFinite(version) && version >= 0 ? version : 0
+}
+
+function bumpWorkflowProjectionVersion(db: DatabaseSync) {
+  const next = readWorkflowProjectionVersion(db) + 1
+  db.prepare(`
+    insert into workflow_meta (key, value)
+    values (?, ?)
+    on conflict(key) do update set value = excluded.value
+  `).run(WORKFLOW_PROJECTION_VERSION_KEY, String(next))
+  return next
+}
+
+function workflowRunProjectionFence(run: Pick<WorkflowRun, 'id' | 'workflowId'>, projectionVersion = readWorkflowProjectionVersion()): CloudProjectionFenceToken {
+  return createCloudProjectionFenceToken({
+    scope: 'workflow-run',
+    tenantId: LOCAL_WORKFLOW_PROJECTION_TENANT_ID,
+    workflowId: run.workflowId,
+    runId: run.id,
+    sequence: projectionVersion,
+    projectionVersion,
+    checkpointVersion: projectionVersion,
+  })
+}
+
+function withWorkflowRunProjectionFence<T extends WorkflowRun | null>(run: T, projectionVersion?: number): T {
+  if (!run) return run
+  return {
+    ...run,
+    projectionFence: workflowRunProjectionFence(run, projectionVersion),
+  }
+}
+
+export function getWorkflowRunProjectionCheckpoint(runId: string): CloudProjectionCheckpoint | null {
+  const run = getWorkflowRun(runId)
+  if (!run) return null
+  const projectionVersion = readWorkflowProjectionVersion()
+  return createCloudProjectionCheckpoint({
+    scope: 'workflow-run',
+    tenantId: LOCAL_WORKFLOW_PROJECTION_TENANT_ID,
+    workflowId: run.workflowId,
+    runId: run.id,
+    sequence: projectionVersion,
+    projectionVersion,
+    checkpointVersion: projectionVersion,
+    updatedAt: run.finishedAt || run.startedAt || run.createdAt || new Date().toISOString(),
+  })
+}
+
 function webhookUrlForWorkflow(workflow: WorkflowSummary, webhookBaseUrl?: string | null) {
   if (!webhookBaseUrl) return null
   const webhook = workflow.triggers.find((trigger) => (
@@ -475,6 +535,7 @@ export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | n
       now,
       nextRunAt,
     )
+    bumpWorkflowProjectionVersion(db)
   })
   return getWorkflow(id, webhookBaseUrl)!
 }
@@ -489,6 +550,7 @@ export function updateWorkflowStatus(workflowId: string, status: WorkflowStatus,
     const nextRunAt = status === 'active' ? computeNextWorkflowRunAt(triggers, nowDate) : null
     db.prepare('update workflows set status = ?, updated_at = ?, next_run_at = ? where id = ?')
       .run(status, now, nextRunAt, workflowId)
+    bumpWorkflowProjectionVersion(db)
   })
   return getWorkflow(workflowId, webhookBaseUrl)
 }
@@ -503,6 +565,7 @@ export function regenerateWorkflowWebhookSecret(workflowId: string, webhookBaseU
   withTransaction((db) => {
     db.prepare('update workflows set triggers_json = ?, updated_at = ? where id = ?')
       .run(serializeWorkflowTriggersForStorage(triggers), now, workflowId)
+    bumpWorkflowProjectionVersion(db)
   })
   return getWorkflow(workflowId, webhookBaseUrl)
 }
@@ -526,6 +589,7 @@ export function createWorkflowRun(workflowId: string, triggerType: WorkflowTrigg
   if (workflow.status === 'running') throw new Error('Workflow is already running.')
   const now = new Date().toISOString()
   const id = crypto.randomUUID()
+  let projectionVersion = 0
   withTransaction((db) => {
     db.prepare(`
       insert into workflow_runs (
@@ -538,8 +602,9 @@ export function createWorkflowRun(workflowId: string, triggerType: WorkflowTrigg
       set status = 'running', latest_run_id = ?, latest_run_status = 'queued', updated_at = ?
       where id = ?
     `).run(id, now, workflowId)
+    projectionVersion = bumpWorkflowProjectionVersion(db)
   })
-  return getWorkflowRun(id)
+  return withWorkflowRunProjectionFence(getWorkflowRun(id), projectionVersion)
 }
 
 export function claimDueWorkflowRun(now = new Date()) {
@@ -587,7 +652,8 @@ export function claimDueWorkflowRun(now = new Date()) {
         ) values (?, ?, null, 'schedule', ?, 'queued', ?, null, null, ?, null, null)
       `).run(runId, workflow.id, JSON.stringify(payload), `Run ${workflow.title}`, claimedAt)
 
-      return getWorkflowRun(runId)
+      const projectionVersion = bumpWorkflowProjectionVersion(db)
+      return withWorkflowRunProjectionFence(getWorkflowRun(runId), projectionVersion)
     }
     return null
   })
@@ -600,6 +666,7 @@ export function getWorkflowRun(runId: string) {
 
 export function attachWorkflowRunSession(workflowId: string, runId: string, sessionId: string) {
   const now = new Date().toISOString()
+  let projectionVersion = 0
   withTransaction((db) => {
     db.prepare('update workflow_runs set session_id = ?, status = ?, started_at = coalesce(started_at, ?) where id = ?')
       .run(sessionId, 'running', now, runId)
@@ -608,8 +675,9 @@ export function attachWorkflowRunSession(workflowId: string, runId: string, sess
       set latest_run_id = ?, latest_run_status = ?, latest_run_session_id = ?, updated_at = ?, status = ?
       where id = ?
     `).run(runId, 'running', sessionId, now, 'running', workflowId)
+    projectionVersion = bumpWorkflowProjectionVersion(db)
   })
-  return getWorkflowRun(runId)
+  return withWorkflowRunProjectionFence(getWorkflowRun(runId), projectionVersion)
 }
 
 export function markWorkflowRunCompleted(runId: string, summary: string | null) {
@@ -624,6 +692,7 @@ export function markWorkflowRunCompleted(runId: string, summary: string | null) 
   const nextRunAt = nextStatus === 'active' && workflow
     ? computeNextWorkflowRunAt(workflow.triggers, new Date(now))
     : null
+  let projectionVersion = 0
   withTransaction((db) => {
     db.prepare('update workflow_runs set status = ?, summary = ?, finished_at = ? where id = ?')
       .run('completed', summary, now, runId)
@@ -633,8 +702,9 @@ export function markWorkflowRunCompleted(runId: string, summary: string | null) 
         latest_run_summary = ?, last_run_at = ?, next_run_at = ?, updated_at = ?
       where id = ?
     `).run(nextStatus, runId, summary, now, nextRunAt, now, run.workflowId)
+    projectionVersion = bumpWorkflowProjectionVersion(db)
   })
-  return getWorkflowRun(runId)
+  return withWorkflowRunProjectionFence(getWorkflowRun(runId), projectionVersion)
 }
 
 export function markWorkflowRunFailed(runId: string, error: string) {
@@ -647,6 +717,7 @@ export function markWorkflowRunFailed(runId: string, error: string) {
   const nextStatus = workflow?.status === 'paused' || workflow?.status === 'archived'
     ? workflow.status
     : 'active'
+  let projectionVersion = 0
   withTransaction((db) => {
     db.prepare('update workflow_runs set status = ?, error = ?, finished_at = ? where id = ?')
       .run('failed', error, now, runId)
@@ -656,8 +727,9 @@ export function markWorkflowRunFailed(runId: string, error: string) {
         latest_run_summary = ?, next_run_at = ?, updated_at = ?
       where id = ?
     `).run(nextStatus, runId, error, nextRunAt, now, run.workflowId)
+    projectionVersion = bumpWorkflowProjectionVersion(db)
   })
-  return getWorkflowRun(runId)
+  return withWorkflowRunProjectionFence(getWorkflowRun(runId), projectionVersion)
 }
 
 export function recoverInterruptedWorkflowRuns(error = 'Workflow run was interrupted before completion.', now = new Date()) {
@@ -692,12 +764,13 @@ export function recoverInterruptedWorkflowRuns(error = 'Workflow run was interru
         `).run(nextStatus, run.id, error, nextRunAt, finishedAt, run.workflowId, run.id)
       }
 
-      recovered.push(rowToRun({
+      const projectionVersion = bumpWorkflowProjectionVersion(db)
+      recovered.push(withWorkflowRunProjectionFence(rowToRun({
         ...row,
         status: 'failed',
         error,
         finished_at: finishedAt,
-      }))
+      }), projectionVersion))
     }
     return recovered
   })

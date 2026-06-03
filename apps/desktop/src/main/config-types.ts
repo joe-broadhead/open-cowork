@@ -2,6 +2,7 @@ import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/sha
 import type {
   AgentStarterTemplate,
   BrandingConfig,
+  CapabilityBundleManifest,
   CloudProjectSourceInput,
   CredentialField,
   GatewayDeploymentConfig,
@@ -227,6 +228,7 @@ export type CloudRuntimePolicyConfig = {
   allowMachineRuntimeConfig: boolean
   allowLocalStdioMcps: boolean
   allowHostProjectDirectories: boolean
+  allowRemoteApprovalResponses: boolean
   allowedLocalMcpNames: string[]
   allowedHostProjectDirectories: string[]
 }
@@ -431,6 +433,11 @@ export type OpenCoworkConfig = {
   skills: ConfiguredSkill[]
   mcps: BundleMcp[]
   agents: ConfiguredAgent[]
+  // Reviewed capability-bundle manifests that may contribute runtime-visible
+  // skills, MCPs, providers, workflows, native helpers, or OpenCode plugins.
+  // Startup runs a fail-closed product-mode preflight before these resources
+  // are allowed anywhere near the OpenCode runtime.
+  capabilityBundles?: CapabilityBundleManifest[]
   // Per-built-in overrides keyed by agent name (build / plan / general /
   // explore). Lets a downstream disable an agent or retune its model/
   // prompt/inference without modifying the upstream app.
@@ -516,6 +523,7 @@ const DEFAULT_CLOUD_RUNTIME: CloudRuntimePolicyConfig = {
   allowMachineRuntimeConfig: false,
   allowLocalStdioMcps: false,
   allowHostProjectDirectories: false,
+  allowRemoteApprovalResponses: false,
   allowedLocalMcpNames: [],
   allowedHostProjectDirectories: [],
 }
@@ -686,6 +694,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
   skills: [],
   mcps: [],
   agents: [],
+  capabilityBundles: [],
   toolTrace: {
     rules: DEFAULT_TOOL_TRACE_RULES,
     additionalRules: [],

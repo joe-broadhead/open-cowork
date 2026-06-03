@@ -23,7 +23,7 @@ nearly every non-trivial capability in the desktop app.</p>
 
 ## What ships in the box
 
-Five bundled MCPs and six bundled skills, used as worked examples below.
+Six bundled MCPs and six bundled skills, used as worked examples below.
 When an agent calls a bundled MCP tool through OpenCode, the runtime tool id
 uses `mcp__<server>__<tool>` form, for example
 `mcp__charts__bar_chart`. Source MCP code and tests may still refer to the
@@ -80,6 +80,19 @@ short tool name such as `bar_chart`.
     `mcp__workflows__preview_workflow` and
     `mcp__workflows__create_workflow`. Source:
     `mcps/workflows/src/index.ts`.
+
+-   :material-monitor-dashboard: **`semantic-ui` MCP** <span class="status-badge stable">stable</span>
+
+    ---
+
+    Reads high-level Open Cowork app status and visible product state, lists
+    allowlisted semantic actions, and can execute approval-gated redacted
+    diagnostics export through a loopback-only, tokenized bridge. Runtime ids:
+    `mcp__semantic-ui__ui_status`, `mcp__semantic-ui__ui_snapshot`,
+    `mcp__semantic-ui__ui_list_actions`, and
+    `mcp__semantic-ui__ui_execute_action`. It does not expose DOM selectors,
+    screenshots, hidden secrets, local MCP process details, or artifact bodies.
+    Source: `mcps/semantic-ui/src/index.ts`.
 
 -   :material-school: **`chart-creator` skill** <span class="status-badge stable">stable</span>
 
@@ -300,6 +313,54 @@ For HTTP MCPs, prefer pinned hostnames you control. Loopback and private
 network ranges are blocked unless you explicitly opt in with
 `allowPrivateNetwork: true`. See [Custom MCPs](custom-mcps.md) for the
 app walkthrough, trust model, and approval-mode guidance.
+
+Runtime diagnostics include machine-readable capability provenance for
+configured providers, models, MCPs, and skills. MCP records are derived from
+the same bundled-MCP evaluator and custom-MCP policy checks used during runtime
+config composition, and skill records come from the effective skill resolver.
+The evidence includes names, source, scope, auth mode, permission mode,
+credential key names, and stable reason codes, never credential values, raw
+headers, env values, or local command payloads.
+
+### Capability bundles
+
+Capability bundles are reviewed product-layer manifests for skills, MCPs,
+agents, providers, workflows, commands, native helpers, and OpenCode-native
+plugins. The shared manifest format is
+`open-cowork-capability-bundle-v1`; validation and dry-run planning live in
+`packages/shared/src/capabilities.ts`.
+
+Bundle review is explicit by design:
+
+- product-mode compatibility is declared up front, and unsupported modes fail
+  closed;
+- OpenCode plugins must declare a compatibility tier before they can be
+  planned;
+- local/private MCP URLs and hazardous stdio commands are blocked by the dry-run
+  planner;
+- provider, filesystem, MCP, shell, workflow, plugin, network, and credential
+  permissions appear as review actions with a risk summary;
+- existing user-owned resources are preserved unless the bundle explicitly owns
+  them.
+- uninstall planning removes only bundle-owned resources and preserves
+  user-owned or explicitly preserved resources with a deterministic review
+  plan.
+- accepted install/update/uninstall operations are recorded in the app-owned
+  capability-bundle registry, including bundle ownership, user-owned resources,
+  reviewed permissions, and audit events.
+- configured bundle manifests are checked again before desktop runtime startup;
+  installed registry manifests are checked the same way. Unsupported product
+  modes, remote/cloud plugins without explicit supported compatibility, local
+  stdio MCPs in cloud modes, corrupt registry state, and invalid manifests fail
+  closed before OpenCode config is composed.
+
+Installing a bundle must not silently grant provider, filesystem, MCP, shell,
+workflow, plugin, network, or credential authority. UI review explains the plan;
+uninstall review explains what will be removed or preserved; runtime config,
+product policy, and OpenCode permissions remain the enforcement surfaces.
+Rollback is the inverse lifecycle action: uninstall removes only resources that
+the registry marks as bundle-owned, leaving preserved and user-owned resources
+in place.
 
 ### Recommendations
 

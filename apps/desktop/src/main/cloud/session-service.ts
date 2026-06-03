@@ -21,6 +21,7 @@ import {
   type CloudProjectSource,
   type CloudProjectSourceInput,
   type CloudProjectSourcePolicyVerdict,
+  type RemoteInteractionKind,
   type SessionImportItemCounts,
   type SessionImportRequest,
   normalizeCloudProjectSource,
@@ -117,6 +118,10 @@ import {
   type QuestionRejectPayload,
   type QuestionReplyPayload,
 } from './services/session-command-service.ts'
+import {
+  assertRemoteApprovalInteractionAllowed,
+  type RemoteInteractionPolicyInput,
+} from './services/remote-approval-policy.ts'
 import {
   enforceApiTokenScopePolicy,
   normalizeApiTokenExpiresAt,
@@ -216,6 +221,7 @@ export type CloudAdminPolicyOverview = {
     machineRuntimeConfig: 'disabled' | 'allowlisted'
     localStdioMcps: 'disabled' | 'allowlisted'
     hostProjectDirectories: 'disabled' | 'allowlisted'
+    remoteApprovalResponses: 'disabled' | 'allowlisted'
   }
   projectSources: CloudRuntimePolicy['projectSources']
   gateway: {
@@ -902,6 +908,7 @@ export class CloudSessionService {
         machineRuntimeConfig: this.policy.allowMachineRuntimeConfig ? 'allowlisted' : 'disabled',
         localStdioMcps: this.policy.allowLocalStdioMcps || this.policy.allowedLocalMcpNames.length ? 'allowlisted' : 'disabled',
         hostProjectDirectories: this.policy.allowHostProjectDirectories || this.policy.allowedHostProjectDirectories.length ? 'allowlisted' : 'disabled',
+        remoteApprovalResponses: this.policy.allowRemoteApprovalResponses ? 'allowlisted' : 'disabled',
       },
       projectSources: this.policy.projectSources,
       gateway: {
@@ -1775,7 +1782,7 @@ export class CloudSessionService {
       text: string
       agent?: string | null
     },
-  ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord }> {
+  ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     const binding = await this.store.getChannelSessionBinding(this.principalOrgId(principal), input.bindingId)
@@ -1788,6 +1795,7 @@ export class CloudSessionService {
     })
     const session = await this.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
     if (!session) throw new CloudServiceError(403, 'Channel prompt requires a session owned by the gateway principal.')
+    const beforeProjectionSequence = (await this.store.getSessionProjection(principal.tenantId, binding.sessionId))?.sequence || 0
     await this.assertBillingAllowed({
       orgId: this.principalOrgId(principal),
       action: 'prompt.enqueue',
@@ -1864,7 +1872,7 @@ export class CloudSessionService {
         provider: actor.provider,
       },
     })
-    return { binding, command }
+    return { binding, command, beforeProjectionSequence }
   }
 
   async createChannelInteraction(
@@ -1907,7 +1915,7 @@ export class CloudSessionService {
   async resolveChannelInteraction(
     principal: CloudPrincipal,
     input: ChannelInteractionResolutionInput,
-  ): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord }> {
+  ): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     const pendingInteraction = await this.store.findChannelInteraction({
@@ -1920,6 +1928,12 @@ export class CloudSessionService {
     const actor = await this.requireChannelActorForSession(principal, input, 'approve', pendingInteraction.sessionId, pendingInteraction.provider)
     const session = await this.store.getSession(principal.tenantId, principal.userId, pendingInteraction.sessionId)
     if (!session) throw new CloudServiceError(403, 'Channel interaction requires a session owned by the gateway principal.')
+    const beforeProjectionSequence = (await this.store.getSessionProjection(principal.tenantId, pendingInteraction.sessionId))?.sequence || 0
+    const interactionKind: RemoteInteractionKind = pendingInteraction.kind === 'permission'
+      ? 'permission-approval'
+      : input.reject
+        ? 'question-reject'
+        : 'question-reply'
     const command = {
       commandId: this.ids.randomUUID(),
       tenantId: principal.tenantId,
@@ -1944,6 +1958,18 @@ export class CloudSessionService {
               answers: Array.isArray(input.answers) ? input.answers : [],
             },
     }
+    const policyDecision = await this.assertRemoteInteractionAllowed(principal, {
+      authority: 'cloud-channel-gateway',
+      actorWorkspaceMember: true,
+      recordAllowedAudit: false,
+      deniedEventType: 'channel_interaction.remote_policy.denied',
+      targetType: 'channel_interaction',
+      auditTargetId: pendingInteraction.interactionId,
+      sessionId: pendingInteraction.sessionId,
+      commandId: command.commandId,
+      interaction: interactionKind,
+      targetId: pendingInteraction.targetId,
+    })
     const resolved = await this.store.resolveChannelInteractionWithCommand({
       orgId: this.principalOrgId(principal),
       token: input.token,
@@ -1971,9 +1997,13 @@ export class CloudSessionService {
         sessionId: resolved.interaction.sessionId,
         targetId: resolved.interaction.targetId,
         commandId: resolved.command.commandId,
+        policyVersion: policyDecision.version,
+        policyMode: policyDecision.mode,
+        policyReasonCode: policyDecision.reasonCode,
+        authority: 'cloud-channel-gateway',
       },
     })
-    return resolved
+    return { ...resolved, beforeProjectionSequence }
   }
 
   async createChannelDelivery(
@@ -3053,8 +3083,15 @@ export class CloudSessionService {
     payload: QuestionReplyPayload,
   ): Promise<SessionCommandRecord> {
     await this.getSessionView(principal, sessionId)
+    const commandId = this.ids.randomUUID()
+    await this.assertRemoteInteractionAllowed(principal, {
+      sessionId,
+      commandId,
+      interaction: 'question-reply',
+      targetId: payload.requestId,
+    })
     return this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
+      commandId,
       tenantId: principal.tenantId,
       userId: principal.userId,
       sessionId,
@@ -3069,8 +3106,15 @@ export class CloudSessionService {
     payload: QuestionRejectPayload,
   ): Promise<SessionCommandRecord> {
     await this.getSessionView(principal, sessionId)
+    const commandId = this.ids.randomUUID()
+    await this.assertRemoteInteractionAllowed(principal, {
+      sessionId,
+      commandId,
+      interaction: 'question-reject',
+      targetId: payload.requestId,
+    })
     return this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
+      commandId,
       tenantId: principal.tenantId,
       userId: principal.userId,
       sessionId,
@@ -3085,8 +3129,15 @@ export class CloudSessionService {
     payload: PermissionRespondPayload,
   ): Promise<SessionCommandRecord> {
     await this.getSessionView(principal, sessionId)
+    const commandId = this.ids.randomUUID()
+    await this.assertRemoteInteractionAllowed(principal, {
+      sessionId,
+      commandId,
+      interaction: 'permission-approval',
+      targetId: payload.permissionId,
+    })
     return this.store.enqueueSessionCommand({
-      commandId: this.ids.randomUUID(),
+      commandId,
       tenantId: principal.tenantId,
       userId: principal.userId,
       sessionId,
@@ -3831,6 +3882,28 @@ export class CloudSessionService {
 
   private principalOrgId(principal: CloudPrincipal) {
     return principal.orgId || principal.tenantId
+  }
+
+  private async principalIsActiveWorkspaceMember(principal: CloudPrincipal) {
+    const membership = await this.store.resolvePrincipalMembership({
+      tenantId: principal.tenantId,
+      accountId: principal.accountId || principal.userId,
+      idpSubject: principal.userId,
+      email: principal.email,
+    })
+    return membership?.membership.status === 'active'
+  }
+
+  private assertRemoteInteractionAllowed(principal: CloudPrincipal, input: RemoteInteractionPolicyInput) {
+    return assertRemoteApprovalInteractionAllowed({
+      store: this.store,
+      policy: this.policy,
+      principal,
+      orgId: this.principalOrgId(principal),
+      actor: this.auditActor(principal),
+      input,
+      resolveActorWorkspaceMember: () => this.principalIsActiveWorkspaceMember(principal),
+    })
   }
 
   private assertChannelSetupAllowed(principal: CloudPrincipal) {

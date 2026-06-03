@@ -21,8 +21,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { RuntimePortabilityProofStore } from './support/runtime-portability-proof-store.ts'
 import {
   buildPortableRuntimeManifest,
+  checkSandboxRuntimeEngine,
   isRuntimeSnapshotSecretBearingPath,
   runtimePathsForPortability,
+  type SandboxEngine,
   type PortableRuntimeEntry,
 } from '../apps/desktop/src/main/cloud/runtime-portability.ts'
 import { createManagedOpencodeServerAuth } from '../apps/desktop/src/main/runtime-managed-server-core.ts'
@@ -35,6 +37,7 @@ type ProofCliOptions = {
   json: boolean
   opencodeBinPath: string
   root: string
+  sandboxEngine: SandboxEngine | 'none'
   timeoutMs: number
 }
 
@@ -74,6 +77,7 @@ function parseArgs(argv: string[]): ProofCliOptions {
     json: false,
     opencodeBinPath: defaultOpencodeBinPath,
     root: mkdtempSync(join(tmpdir(), 'open-cowork-portability-proof-')),
+    sandboxEngine: 'docker',
     timeoutMs: 60_000,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -82,6 +86,13 @@ function parseArgs(argv: string[]): ProofCliOptions {
     else if (arg === '--json') options.json = true
     else if (arg === '--opencode-bin') options.opencodeBinPath = resolve(argv[++index] || '')
     else if (arg === '--root') options.root = resolve(argv[++index] || '')
+    else if (arg === '--sandbox-engine') {
+      const value = argv[++index]
+      if (value !== 'docker' && value !== 'apple-container' && value !== 'none') {
+        throw new Error('--sandbox-engine must be docker, apple-container, or none.')
+      }
+      options.sandboxEngine = value
+    }
     else if (arg === '--timeout-ms') options.timeoutMs = Number.parseInt(argv[++index] || '', 10)
     else if (arg === '--help') {
       printHelp()
@@ -97,7 +108,7 @@ function parseArgs(argv: string[]): ProofCliOptions {
 }
 
 function printHelp() {
-  writeStdout(`Usage: pnpm proof:cloud:opencode-portability [--json] [--keep] [--root DIR] [--opencode-bin PATH] [--timeout-ms MS]
+  writeStdout(`Usage: pnpm proof:cloud:opencode-portability [--json] [--keep] [--root DIR] [--opencode-bin PATH] [--sandbox-engine docker|apple-container|none] [--timeout-ms MS]
 
 Runs the OpenCode portability proof with isolated runtime homes:
   1. start OpenCode runtime A through the Node RuntimeLauncher
@@ -106,6 +117,7 @@ Runs the OpenCode portability proof with isolated runtime homes:
   4. restore that snapshot to a separate runtime/workspace path
   5. start OpenCode runtime B through the Node RuntimeLauncher
   6. verify SDK session, messages, todos, children, permissions, and questions match
+  7. report sandbox engine preflight availability without leaking local paths
 `)
 }
 
@@ -389,6 +401,15 @@ function copyPortableManifest(input: {
   return results
 }
 
+function redactProofPath(path: string, root: string) {
+  const resolvedRoot = resolve(root)
+  const resolvedPath = resolve(path)
+  if (resolvedPath === resolvedRoot) return '[proof-root]'
+  const rel = relative(resolvedRoot, resolvedPath)
+  if (!rel.startsWith('..') && !isAbsolute(rel)) return join('[proof-root]', rel)
+  return '[outside-proof-root]'
+}
+
 function extractMessageText(message: unknown) {
   const parts = Array.isArray((message as { parts?: unknown[] }).parts)
     ? (message as { parts: unknown[] }).parts
@@ -608,17 +629,29 @@ export async function runOpencodePortabilityProof(options: ProofCliOptions) {
     await delay(2000)
   }
 
+  const redactedCopied = copied.map((entry) => ({
+    ...entry,
+    source: redactProofPath(entry.source, options.root),
+    target: redactProofPath(entry.target, options.root),
+  }))
+
   return {
     ok: true,
-    root: options.root,
+    root: options.keep ? options.root : '[proof-root]',
+    redacted: !options.keep,
     sessionId,
+    sandboxEnginePreflight: options.sandboxEngine === 'none'
+      ? null
+      : await checkSandboxRuntimeEngine(options.sandboxEngine),
     nodeRuntimeLauncher: true,
     runtimeConfigSource: 'app-managed',
     machineNativeRuntimeConfigDisabled: true,
     promptMode: 'noReply',
-    copied,
+    copied: redactedCopied,
     omittedOptionalKinds: ['opencode-cache'],
-    secretBearingPaths: copied.filter((entry) => entry.secretBearing).map((entry) => entry.source),
+    secretBearingPaths: copied
+      .filter((entry) => entry.secretBearing)
+      .map((entry) => redactProofPath(entry.source, options.root)),
     before: digestSdkSnapshot(before!),
     after: digestSdkSnapshot(after!),
     controlPlane: runControlPlaneProof(sessionId),
