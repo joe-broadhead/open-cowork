@@ -17,6 +17,46 @@ test('root open-cowork.config.json validates against the public schema', () => {
   assert.doesNotThrow(() => validateResolvedConfig(config, 'open-cowork.config.json'))
 })
 
+test('capability bundle schema requires collections and accepts kind-qualified uninstall selectors', () => {
+  const config = cloneConfig()
+  config.capabilityBundles = [{
+    format: 'open-cowork-capability-bundle-v1',
+    name: 'schema-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+    permissions: [],
+    uninstall: {
+      removes: [{ kind: 'skill', id: 'shared-id' }],
+      preserves: ['shared-id', { kind: 'workflow', id: 'shared-id' }],
+    },
+  }]
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'capability bundle config'))
+
+  const missingResources = cloneConfig()
+  missingResources.capabilityBundles = [{
+    format: 'open-cowork-capability-bundle-v1',
+    name: 'schema-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+    permissions: [],
+  }]
+  assert.throws(() => validateResolvedConfig(missingResources, 'capability bundle config'), /capabilityBundles/)
+
+  const missingPermissions = cloneConfig()
+  missingPermissions.capabilityBundles = [{
+    format: 'open-cowork-capability-bundle-v1',
+    name: 'schema-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+    resources: [],
+  }]
+  assert.throws(() => validateResolvedConfig(missingPermissions, 'capability bundle config'), /capabilityBundles/)
+})
+
 test('downstream contract version is required and fixed for this schema', () => {
   const config = cloneConfig()
   assert.equal(config.contractVersion, 1)

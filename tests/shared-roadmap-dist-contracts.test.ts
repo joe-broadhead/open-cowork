@@ -144,6 +144,31 @@ test('dist capability manifest normalization reports invalid object, resource, a
   ]))
 })
 
+test('dist capability manifest normalization requires schema collections unless legacy defaults are explicit', () => {
+  const result = normalizeCapabilityBundleManifest({
+    format: CAPABILITY_BUNDLE_FORMAT,
+    name: 'dist-schema-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+  })
+
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.issues.some((issue) => issue.code === 'resources_required'), true)
+  assert.equal(result.issues.some((issue) => issue.code === 'permissions_required'), true)
+
+  const legacy = normalizeCapabilityBundleManifest({
+    format: CAPABILITY_BUNDLE_FORMAT,
+    name: 'dist-legacy-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+  }, { allowMissingCollections: true })
+  assert.equal(legacy.ok, true)
+  if (!legacy.ok) return
+  assert.deepEqual(legacy.manifest.resources, [])
+  assert.deepEqual(legacy.manifest.permissions, [])
+})
+
 test('dist capability planning blocks unsafe remote resources and reviews native helpers', () => {
   const installPlan = planCapabilityBundleInstall(bundle({
     resources: [
@@ -212,6 +237,42 @@ test('dist capability lifecycle applies install, update fallback, duplicate inst
   const missingUninstall = applyCapabilityBundleUninstall(createEmptyCapabilityBundleLifecycleState(), 'missing-pack')
   assert.equal(missingUninstall.applied, false)
   assert.equal(missingUninstall.plan.blockers[0]?.code, 'bundle_not_installed')
+})
+
+test('dist capability lifecycle uses kind-qualified resource identity', () => {
+  const installPlan = planCapabilityBundleInstall(bundle({
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+  }), {
+    productMode: 'desktop-local',
+    existingResourceIds: [{ kind: 'workflow', id: 'shared-id' }],
+  })
+
+  assert.deepEqual(installPlan.actions.map((action) => `${action.action}:${action.kind}:${action.id}`), [
+    'install:skill:shared-id',
+    'preserve_user_resource:workflow:shared-id',
+  ])
+
+  const installed = applyCapabilityBundleInstall(createEmptyCapabilityBundleLifecycleState(), bundle({
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+    uninstall: {
+      removes: [{ kind: 'skill', id: 'shared-id' }],
+      preserves: [{ kind: 'workflow', id: 'shared-id' }],
+    },
+  }), {
+    productMode: 'desktop-local',
+    now: '2026-06-03T00:00:00.000Z',
+  })
+  const uninstalled = applyCapabilityBundleUninstall(installed.state, 'dist-pack')
+
+  assert.deepEqual(uninstalled.state.resources.map((resource) => `${resource.owner}:${resource.kind}:${resource.id}`), [
+    'user:workflow:shared-id',
+  ])
 })
 
 test('dist capability lifecycle removes and preserves installed resources across uninstall and update', () => {

@@ -169,6 +169,13 @@ export interface CapabilityBundleResource {
   command?: string
 }
 
+export interface CapabilityBundleResourceIdentity {
+  kind: CapabilityBundleResourceKind
+  id: string
+}
+
+export type CapabilityBundleResourceSelector = string | CapabilityBundleResourceIdentity
+
 export interface CapabilityBundlePermission {
   kind: CapabilityBundlePermissionKind
   id: string
@@ -188,8 +195,8 @@ export interface CapabilityBundleManifest {
   resources: CapabilityBundleResource[]
   permissions: CapabilityBundlePermission[]
   uninstall?: {
-    removes?: string[]
-    preserves?: string[]
+    removes?: CapabilityBundleResourceSelector[]
+    preserves?: CapabilityBundleResourceSelector[]
   }
 }
 
@@ -197,6 +204,15 @@ export interface CapabilityBundleIssue {
   code: string
   message: string
   resourceId?: string
+}
+
+export interface CapabilityBundleManifestNormalizeOptions {
+  /**
+   * Compatibility mode for legacy manifests written before the public schema
+   * required explicit resources/permissions arrays. Runtime callers should
+   * leave this false so normalization matches the schema contract.
+   */
+  allowMissingCollections?: boolean
 }
 
 export interface CapabilityBundleInstallPlanAction {
@@ -352,6 +368,81 @@ function readExactId(value: unknown) {
   return id && EXACT_BUNDLE_ID_PATTERN.test(id) ? id : null
 }
 
+function resourceIdentityKey(identity: Pick<CapabilityBundleResourceIdentity, 'kind' | 'id'>) {
+  return `${identity.kind}:${identity.id}`
+}
+
+function cloneResourceSelector(selector: CapabilityBundleResourceSelector): CapabilityBundleResourceSelector {
+  return typeof selector === 'string' ? selector : { ...selector }
+}
+
+function resourceIdentity(resource: CapabilityBundleResource | CapabilityBundleLifecycleResource): CapabilityBundleResourceIdentity {
+  return { kind: resource.kind, id: resource.id }
+}
+
+function isResourceKind(value: unknown): value is CapabilityBundleResourceKind {
+  return typeof value === 'string' && RESOURCE_KINDS.has(value as CapabilityBundleResourceKind)
+}
+
+type ResourceIdentitySet = {
+  exact: Set<string>
+  legacyIds: Set<string>
+}
+
+function createResourceIdentitySet(identities: CapabilityBundleResourceSelector[] = []): ResourceIdentitySet {
+  const exact = new Set<string>()
+  const legacyIds = new Set<string>()
+  for (const identity of identities) {
+    if (typeof identity === 'string') legacyIds.add(identity)
+    else exact.add(resourceIdentityKey(identity))
+  }
+  return { exact, legacyIds }
+}
+
+function resourceIdentitySetIsEmpty(set: ResourceIdentitySet) {
+  return set.exact.size === 0 && set.legacyIds.size === 0
+}
+
+function resourceIdentitySetHasResource(set: ResourceIdentitySet, resource: Pick<CapabilityBundleResourceIdentity, 'kind' | 'id'>) {
+  return set.exact.has(resourceIdentityKey(resource)) || set.legacyIds.has(resource.id)
+}
+
+type CapabilityBundleResourceCandidate = {
+  kind: CapabilityBundleResourceKind | 'bundle'
+  id: string
+  resource: CapabilityBundleResource | null
+}
+
+function candidateKey(candidate: CapabilityBundleResourceCandidate) {
+  return `${candidate.kind}:${candidate.id}`
+}
+
+function resourceCandidateFromSelector(
+  selector: CapabilityBundleResourceSelector,
+  resources: CapabilityBundleResource[],
+): CapabilityBundleResourceCandidate[] {
+  if (typeof selector !== 'string') {
+    const resource = resources.find((entry) => resourceIdentityKey(entry) === resourceIdentityKey(selector)) || null
+    return [{ kind: resource?.kind || selector.kind, id: selector.id, resource }]
+  }
+
+  const matches = resources.filter((resource) => resource.id === selector)
+  if (matches.length > 0) {
+    return matches.map((resource) => ({ kind: resource.kind, id: resource.id, resource }))
+  }
+  return [{ kind: 'bundle', id: selector, resource: null }]
+}
+
+function resourceIdentitySetHasCandidate(set: ResourceIdentitySet, candidate: CapabilityBundleResourceCandidate) {
+  if (candidate.resource) return resourceIdentitySetHasResource(set, candidate.resource)
+  if (candidate.kind !== 'bundle' && set.exact.has(resourceIdentityKey({ kind: candidate.kind, id: candidate.id }))) return true
+  return set.legacyIds.has(candidate.id)
+}
+
+function installActionResourceKey(action: CapabilityBundleInstallPlanAction) {
+  return isResourceKind(action.kind) ? resourceIdentityKey({ kind: action.kind, id: action.id }) : null
+}
+
 function maxRisk(left: CapabilityRiskLevel, right: CapabilityRiskLevel): CapabilityRiskLevel {
   return RISK_RANK[right] > RISK_RANK[left] ? right : left
 }
@@ -418,7 +509,41 @@ function normalizePermission(value: unknown, issues: CapabilityBundleIssue[], in
   }
 }
 
-export function normalizeCapabilityBundleManifest(input: unknown): { ok: true; manifest: CapabilityBundleManifest } | { ok: false; issues: CapabilityBundleIssue[] } {
+function normalizeResourceSelector(value: unknown, issues: CapabilityBundleIssue[], field: string, index: number): CapabilityBundleResourceSelector | null {
+  if (typeof value === 'string') {
+    const id = readExactId(value)
+    if (!id) {
+      pushIssue(issues, 'invalid_uninstall_resource_id', `Bundle uninstall ${field}[${index}] must use an exact canonical id.`)
+      return null
+    }
+    return id
+  }
+
+  const record = asRecord(value)
+  const kind = readNonEmptyString(record.kind)
+  const id = readExactId(record.id)
+  const label = id || `${field}[${index}]`
+  if (!kind || !RESOURCE_KINDS.has(kind as CapabilityBundleResourceKind)) {
+    pushIssue(issues, 'invalid_uninstall_resource_kind', `Bundle uninstall resource ${label} has an unsupported kind.`, id || undefined)
+    return null
+  }
+  if (!id) {
+    pushIssue(issues, 'invalid_uninstall_resource_id', `Bundle uninstall ${field}[${index}] must use an exact canonical id.`)
+    return null
+  }
+  return { kind: kind as CapabilityBundleResourceKind, id }
+}
+
+function normalizeResourceSelectors(value: unknown, issues: CapabilityBundleIssue[], field: string) {
+  return Array.isArray(value)
+    ? value.map((entry, index) => normalizeResourceSelector(entry, issues, field, index)).filter((entry): entry is CapabilityBundleResourceSelector => Boolean(entry))
+    : []
+}
+
+export function normalizeCapabilityBundleManifest(
+  input: unknown,
+  options: CapabilityBundleManifestNormalizeOptions = {},
+): { ok: true; manifest: CapabilityBundleManifest } | { ok: false; issues: CapabilityBundleIssue[] } {
   const issues: CapabilityBundleIssue[] = []
   const record = asRecord(input)
   if (Object.keys(record).length === 0) {
@@ -434,12 +559,23 @@ export function normalizeCapabilityBundleManifest(input: unknown): { ok: true; m
   if (!version) pushIssue(issues, 'version_required', 'Capability bundle version is required.')
   if (!owner) pushIssue(issues, 'owner_required', 'Capability bundle owner is required.')
 
-  const resources = Array.isArray(record.resources)
-    ? record.resources.map((entry, index) => normalizeResource(entry, issues, index)).filter((entry): entry is CapabilityBundleResource => Boolean(entry))
-    : []
-  const permissions = Array.isArray(record.permissions)
-    ? record.permissions.map((entry, index) => normalizePermission(entry, issues, index)).filter((entry): entry is CapabilityBundlePermission => Boolean(entry))
-    : []
+  let resources: CapabilityBundleResource[] = []
+  if (Array.isArray(record.resources)) {
+    resources = record.resources.map((entry, index) => normalizeResource(entry, issues, index)).filter((entry): entry is CapabilityBundleResource => Boolean(entry))
+  } else if (record.resources === undefined) {
+    if (!options.allowMissingCollections) pushIssue(issues, 'resources_required', 'Capability bundle resources must be declared as an array.')
+  } else {
+    pushIssue(issues, 'invalid_resources', 'Capability bundle resources must be an array.')
+  }
+
+  let permissions: CapabilityBundlePermission[] = []
+  if (Array.isArray(record.permissions)) {
+    permissions = record.permissions.map((entry, index) => normalizePermission(entry, issues, index)).filter((entry): entry is CapabilityBundlePermission => Boolean(entry))
+  } else if (record.permissions === undefined) {
+    if (!options.allowMissingCollections) pushIssue(issues, 'permissions_required', 'Capability bundle permissions must be declared as an array.')
+  } else {
+    pushIssue(issues, 'invalid_permissions', 'Capability bundle permissions must be an array.')
+  }
   const compatibilityRecord = asRecord(record.compatibility)
   const rawProductModes = asRecord(compatibilityRecord.productModes)
   const productModes = Object.fromEntries(Object.entries(rawProductModes).flatMap(([mode, tier]) => {
@@ -447,6 +583,8 @@ export function normalizeCapabilityBundleManifest(input: unknown): { ok: true; m
     return [[mode, tier]]
   })) as Partial<Record<CapabilityBundleProductMode, CapabilityBundleCompatibilityTier>>
   const uninstallRecord = asRecord(record.uninstall)
+  const uninstallRemoves = normalizeResourceSelectors(uninstallRecord.removes, issues, 'removes')
+  const uninstallPreserves = normalizeResourceSelectors(uninstallRecord.preserves, issues, 'preserves')
 
   if (issues.length > 0) return { ok: false, issues }
   return {
@@ -463,8 +601,8 @@ export function normalizeCapabilityBundleManifest(input: unknown): { ok: true; m
       resources,
       permissions,
       uninstall: {
-        removes: Array.isArray(uninstallRecord.removes) ? uninstallRecord.removes.filter((entry): entry is string => typeof entry === 'string') : [],
-        preserves: Array.isArray(uninstallRecord.preserves) ? uninstallRecord.preserves.filter((entry): entry is string => typeof entry === 'string') : [],
+        removes: uninstallRemoves,
+        preserves: uninstallPreserves,
       },
     },
   }
@@ -639,13 +777,13 @@ export function planCapabilityBundleInstall(
   manifest: CapabilityBundleManifest,
   options: {
     productMode: CapabilityBundleProductMode
-    existingResourceIds?: string[]
+    existingResourceIds?: CapabilityBundleResourceSelector[]
   },
 ): CapabilityBundleInstallPlan {
   const blockers: CapabilityBundleIssue[] = []
   const actions: CapabilityBundleInstallPlanAction[] = []
   const reasons: string[] = []
-  const existingResourceIds = new Set(options.existingResourceIds || [])
+  const existingResourceIds = createResourceIdentitySet(options.existingResourceIds)
   let level: CapabilityRiskLevel = 'low'
   const modeTier = manifest.compatibility?.productModes?.[options.productMode] || 'unsupported'
   if (modeTier === 'unsupported' || modeTier === 'blocked') {
@@ -664,7 +802,7 @@ export function planCapabilityBundleInstall(
       level = 'high'
       continue
     }
-    if (existingResourceIds.has(resource.id)) {
+    if (resourceIdentitySetHasResource(existingResourceIds, resource)) {
       actions.push({ action: 'preserve_user_resource', kind: resource.kind, id: resource.id, reason: 'Existing resource is preserved; bundle cannot overwrite it during install.' })
       level = maxRisk(level, 'medium')
       continue
@@ -737,48 +875,56 @@ export function planCapabilityBundleInstall(
 export function planCapabilityBundleUninstall(
   manifest: CapabilityBundleManifest,
   options: {
-    installedResourceIds?: string[]
-    userOwnedResourceIds?: string[]
+    installedResourceIds?: CapabilityBundleResourceSelector[]
+    userOwnedResourceIds?: CapabilityBundleResourceSelector[]
   } = {},
 ): CapabilityBundleUninstallPlan {
-  const resourceById = new Map(manifest.resources.map((resource) => [resource.id, resource]))
-  const installedResourceIds = new Set(options.installedResourceIds || [])
-  const userOwnedResourceIds = new Set(options.userOwnedResourceIds || [])
-  const explicitRemoves = new Set(manifest.uninstall?.removes || [])
-  const explicitPreserves = new Set(manifest.uninstall?.preserves || [])
-  const candidateIds = new Set([
-    ...manifest.resources.filter((resource) => resource.ownedByBundle).map((resource) => resource.id),
-    ...explicitRemoves,
-    ...explicitPreserves,
-    ...userOwnedResourceIds,
-  ])
+  const installedResourceIds = createResourceIdentitySet(options.installedResourceIds)
+  const userOwnedResourceIds = createResourceIdentitySet(options.userOwnedResourceIds)
+  const explicitPreserves = createResourceIdentitySet(manifest.uninstall?.preserves)
+  const candidates = new Map<string, CapabilityBundleResourceCandidate>()
+  const addCandidate = (candidate: CapabilityBundleResourceCandidate) => {
+    candidates.set(candidateKey(candidate), candidate)
+  }
+  for (const resource of manifest.resources.filter((entry) => entry.ownedByBundle)) {
+    addCandidate({ kind: resource.kind, id: resource.id, resource })
+  }
+  for (const selector of [
+    ...(manifest.uninstall?.removes || []),
+    ...(manifest.uninstall?.preserves || []),
+    ...(options.userOwnedResourceIds || []),
+  ]) {
+    for (const candidate of resourceCandidateFromSelector(selector, manifest.resources)) {
+      addCandidate(candidate)
+    }
+  }
   const actions: CapabilityBundleInstallPlanAction[] = []
   const reasons: string[] = []
   let level: CapabilityRiskLevel = 'low'
 
-  for (const id of Array.from(candidateIds).sort()) {
-    const resource = resourceById.get(id)
-    const kind = resource?.kind || 'bundle'
-    const installed = installedResourceIds.size === 0 || installedResourceIds.has(id)
-    const mustPreserve = explicitPreserves.has(id) || userOwnedResourceIds.has(id) || (resource ? !resource.ownedByBundle : false)
+  for (const candidate of Array.from(candidates.values()).sort((left, right) => `${left.id}:${left.kind}`.localeCompare(`${right.id}:${right.kind}`))) {
+    const resource = candidate.resource
+    const installed = resourceIdentitySetIsEmpty(installedResourceIds) || resourceIdentitySetHasCandidate(installedResourceIds, candidate)
+    const explicitPreserve = resourceIdentitySetHasCandidate(explicitPreserves, candidate)
+    const mustPreserve = explicitPreserve || resourceIdentitySetHasCandidate(userOwnedResourceIds, candidate) || (resource ? !resource.ownedByBundle : false)
     if (mustPreserve) {
       actions.push({
         action: 'preserve_user_resource',
-        kind,
-        id,
-        reason: explicitPreserves.has(id)
+        kind: candidate.kind,
+        id: candidate.id,
+        reason: explicitPreserve
           ? 'Manifest marks this resource as preserved during uninstall.'
           : 'User-owned resource is preserved during bundle uninstall.',
       })
-      reasons.push(`Resource ${id} is preserved during uninstall.`)
+      reasons.push(`Resource ${candidate.id} is preserved during uninstall.`)
       level = maxRisk(level, 'medium')
       continue
     }
     if (!installed) continue
     actions.push({
       action: 'remove_bundle_resource',
-      kind,
-      id,
+      kind: candidate.kind,
+      id: candidate.id,
       reason: 'Bundle-owned resource can be removed by bundle uninstall.',
     })
   }
@@ -803,9 +949,9 @@ export function planCapabilityBundleUpdate(
   next: CapabilityBundleManifest,
   options: {
     productMode: CapabilityBundleProductMode
-    existingResourceIds?: string[]
-    installedResourceIds?: string[]
-    userOwnedResourceIds?: string[]
+    existingResourceIds?: CapabilityBundleResourceSelector[]
+    installedResourceIds?: CapabilityBundleResourceSelector[]
+    userOwnedResourceIds?: CapabilityBundleResourceSelector[]
   },
 ): CapabilityBundleUpdatePlan {
   const blockers: CapabilityBundleIssue[] = []
@@ -819,16 +965,16 @@ export function planCapabilityBundleUpdate(
     level = 'high'
   }
 
-  const nextResourceIds = new Set(next.resources.map((resource) => resource.id))
-  const installedResourceIds = new Set(options.installedResourceIds || [])
-  const userOwnedResourceIds = new Set(options.userOwnedResourceIds || [])
-  const previousResourceById = new Map(previous.resources.map((resource) => [resource.id, resource]))
+  const nextResourceIds = new Set(next.resources.map((resource) => resourceIdentityKey(resource)))
+  const installedResourceIds = createResourceIdentitySet(options.installedResourceIds)
+  const userOwnedResourceIds = createResourceIdentitySet(options.userOwnedResourceIds)
+  const previousResourceByKey = new Map(previous.resources.map((resource) => [resourceIdentityKey(resource), resource]))
 
   for (const resource of [...previous.resources].sort((left, right) => `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`))) {
-    if (nextResourceIds.has(resource.id)) continue
-    const installed = installedResourceIds.size === 0 || installedResourceIds.has(resource.id)
+    if (nextResourceIds.has(resourceIdentityKey(resource))) continue
+    const installed = resourceIdentitySetIsEmpty(installedResourceIds) || resourceIdentitySetHasResource(installedResourceIds, resource)
     if (!installed) continue
-    if (!resource.ownedByBundle || userOwnedResourceIds.has(resource.id)) {
+    if (!resource.ownedByBundle || resourceIdentitySetHasResource(userOwnedResourceIds, resource)) {
       actions.push({
         action: 'preserve_user_resource',
         kind: resource.kind,
@@ -856,10 +1002,12 @@ export function planCapabilityBundleUpdate(
   level = maxRisk(level, installPlan.risk.level)
 
   for (const action of installPlan.actions) {
+    const actionResourceKey = installActionResourceKey(action)
     if (
       action.action === 'install'
-      && previousResourceById.has(action.id)
-      && !userOwnedResourceIds.has(action.id)
+      && actionResourceKey
+      && previousResourceByKey.has(actionResourceKey)
+      && !resourceIdentitySetHasResource(userOwnedResourceIds, { kind: action.kind as CapabilityBundleResourceKind, id: action.id })
     ) {
       actions.push({
         ...action,
@@ -900,8 +1048,8 @@ function cloneCapabilityBundleLifecycleState(
           resources: [...bundle.manifest.resources],
           permissions: [...bundle.manifest.permissions],
           uninstall: {
-            removes: [...(bundle.manifest.uninstall?.removes || [])],
-            preserves: [...(bundle.manifest.uninstall?.preserves || [])],
+            removes: (bundle.manifest.uninstall?.removes || []).map(cloneResourceSelector),
+            preserves: (bundle.manifest.uninstall?.preserves || []).map(cloneResourceSelector),
           },
         },
         resources: [...bundle.resources],
@@ -973,8 +1121,9 @@ function upsertLifecycleResource(
     now: string
   },
 ) {
-  const next = resources.filter((entry) => entry.id !== resource.id)
-  const previous = resources.find((entry) => entry.id === resource.id)
+  const key = resourceIdentityKey(resource)
+  const next = resources.filter((entry) => resourceIdentityKey(entry) !== key)
+  const previous = resources.find((entry) => resourceIdentityKey(entry) === key)
   next.push({
     kind: resource.kind,
     id: resource.id,
@@ -993,12 +1142,12 @@ function removeBundleOwnedLifecycleResources(
   ids: Set<string>,
 ) {
   return sortedLifecycleResources(resources.filter((resource) => {
-    if (!ids.has(resource.id)) return true
+    if (!ids.has(resourceIdentityKey(resource))) return true
     return resource.owner !== 'bundle' || resource.bundleName !== bundleName
   }))
 }
 
-function installActionsByResourceId(actions: CapabilityBundleInstallPlanAction[]) {
+function installActionsByResourceKey(actions: CapabilityBundleInstallPlanAction[]) {
   const map = new Map<string, CapabilityBundleInstallPlanAction>()
   for (const action of actions) {
     if (
@@ -1006,7 +1155,8 @@ function installActionsByResourceId(actions: CapabilityBundleInstallPlanAction[]
       || action.action === 'preserve_user_resource'
       || action.action === 'remove_bundle_resource'
     ) {
-      map.set(action.id, action)
+      const key = installActionResourceKey(action)
+      if (key) map.set(key, action)
     }
   }
   return map
@@ -1015,19 +1165,19 @@ function installActionsByResourceId(actions: CapabilityBundleInstallPlanAction[]
 function lifecycleResourceIdsExcludingBundle(state: CapabilityBundleLifecycleState, bundleName: string) {
   return state.resources
     .filter((resource) => resource.bundleName !== bundleName)
-    .map((resource) => resource.id)
+    .map(resourceIdentity)
 }
 
 function lifecycleUserOwnedResourceIds(state: CapabilityBundleLifecycleState) {
   return state.resources
     .filter((resource) => resource.owner === 'user')
-    .map((resource) => resource.id)
+    .map(resourceIdentity)
 }
 
 function lifecycleInstalledResourceIdsForBundle(state: CapabilityBundleLifecycleState, bundleName: string) {
   return state.resources
     .filter((resource) => resource.bundleName === bundleName || resource.owner === 'user')
-    .map((resource) => resource.id)
+    .map(resourceIdentity)
 }
 
 export function createEmptyCapabilityBundleLifecycleState(): CapabilityBundleLifecycleState {
@@ -1045,7 +1195,7 @@ export function applyCapabilityBundleInstall(
   const current = cloneCapabilityBundleLifecycleState(state)
   const plan = planCapabilityBundleInstall(manifest, {
     productMode: options.productMode,
-    existingResourceIds: current.resources.map((resource) => resource.id),
+    existingResourceIds: current.resources.map(resourceIdentity),
   })
 
   if (current.bundles.some((bundle) => bundle.name === manifest.name)) {
@@ -1068,12 +1218,12 @@ export function applyCapabilityBundleInstall(
   }
 
   const now = options.now || new Date().toISOString()
-  const actionById = installActionsByResourceId(plan.actions)
+  const actionByKey = installActionsByResourceKey(plan.actions)
   let resources = current.resources
   const bundleResources: CapabilityBundleLifecycleBundle['resources'] = []
 
   for (const resource of [...manifest.resources].sort((left, right) => `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`))) {
-    const action = actionById.get(resource.id)
+    const action = actionByKey.get(resourceIdentityKey(resource))
     if (action?.action === 'preserve_user_resource') continue
     if (action?.action !== 'install') continue
     const owner: CapabilityBundleLifecycleOwner = resource.ownedByBundle ? 'bundle' : 'user'
@@ -1147,15 +1297,17 @@ export function applyCapabilityBundleUninstall(
   })
   const removals = new Set(plan.actions
     .filter((action) => action.action === 'remove_bundle_resource')
-    .map((action) => action.id))
+    .map(installActionResourceKey)
+    .filter((key): key is string => Boolean(key)))
   const preserves = new Set(plan.actions
     .filter((action) => action.action === 'preserve_user_resource')
-    .map((action) => action.id))
+    .map(installActionResourceKey)
+    .filter((key): key is string => Boolean(key)))
   const resources = removeBundleOwnedLifecycleResources(current.resources, bundleName, removals)
   const next: CapabilityBundleLifecycleState = {
     bundles: sortedLifecycleBundles(current.bundles.filter((bundle) => bundle.name !== bundleName)),
     resources: sortedLifecycleResources(resources.map((resource) => {
-      if (preserves.has(resource.id) && resource.owner === 'bundle' && resource.bundleName === bundleName) {
+      if (preserves.has(resourceIdentityKey(resource)) && resource.owner === 'bundle' && resource.bundleName === bundleName) {
         return {
           ...resource,
           owner: 'user',
@@ -1227,13 +1379,14 @@ export function applyCapabilityBundleUpdate(
   const now = options.now || new Date().toISOString()
   const removals = new Set(plan.actions
     .filter((action) => action.action === 'remove_bundle_resource')
-    .map((action) => action.id))
-  const actionById = installActionsByResourceId(plan.actions)
+    .map(installActionResourceKey)
+    .filter((key): key is string => Boolean(key)))
+  const actionByKey = installActionsByResourceKey(plan.actions)
   let resources = removeBundleOwnedLifecycleResources(current.resources, manifest.name, removals)
   const bundleResources: CapabilityBundleLifecycleBundle['resources'] = []
 
   for (const resource of [...manifest.resources].sort((left, right) => `${left.kind}:${left.id}`.localeCompare(`${right.kind}:${right.id}`))) {
-    const action = actionById.get(resource.id)
+    const action = actionByKey.get(resourceIdentityKey(resource))
     if (action?.action === 'preserve_user_resource') continue
     if (action?.action !== 'install') continue
     const owner: CapabilityBundleLifecycleOwner = resource.ownedByBundle ? 'bundle' : 'user'
