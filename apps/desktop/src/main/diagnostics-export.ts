@@ -43,7 +43,11 @@ export function tailLogFile(path: string, lines: number, maxBytes: number): stri
 }
 
 function section(title: string, body: string) {
-  return `=== ${title} ===\n${body.trimEnd()}\n`
+  return `=== ${sanitizeForExport(title)} ===\n${body.trimEnd()}\n`
+}
+
+function jsonForDiagnostics(value: unknown) {
+  return sanitizeForExport(JSON.stringify(value, null, 2))
 }
 
 export function buildDiagnosticsBundle(): string {
@@ -66,15 +70,16 @@ export function buildDiagnosticsBundle(): string {
     `Platform: ${process.platform} ${process.arch} node ${process.version}`,
     `Electron: ${process.versions.electron || 'n/a'}`,
     `OpenCode CLI: ${getBundledOpencodeVersion() || 'n/a'}`,
-    `Runtime ready: ${runtimeStatus.ready}${runtimeStatus.error ? ` (error: ${runtimeStatus.error})` : ''}`,
+    `Runtime ready: ${runtimeStatus.ready}${runtimeStatus.error ? ` (error: ${sanitizeForExport(runtimeStatus.error)})` : ''}`,
   ].join('\n')
 
   const parts = [
     section('Header', header),
-    section('Effective Config (public, credentials redacted)', JSON.stringify(config, null, 2)),
-    section('Effective Settings (credentials masked)', JSON.stringify(settings, null, 2)),
-    section('Runtime Inputs', JSON.stringify(runtimeInputs, null, 2)),
-    section('Perf Snapshot', JSON.stringify(perf, null, 2)),
+    section('Effective Config (public, credentials redacted)', jsonForDiagnostics(config)),
+    section('Effective Settings (credentials masked)', jsonForDiagnostics(settings)),
+    section('Runtime Inputs', jsonForDiagnostics(runtimeInputs)),
+    section('Runtime Doctor JSON', jsonForDiagnostics(runtimeStatus)),
+    section('Perf Snapshot', jsonForDiagnostics(perf)),
     section(`Log Tail (last ${LOG_TAIL_LINES} lines, ${getLogFilePath()})`, logTail),
   ]
 

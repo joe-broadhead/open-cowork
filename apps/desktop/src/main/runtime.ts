@@ -16,6 +16,7 @@ import {
 import { log } from './logger.ts'
 import { ensureAgentToolBridge, stopAgentToolBridge } from './agent-tool-bridge.ts'
 import { ensureWorkflowToolBridge, stopWorkflowToolBridge } from './workflow/workflow-tool-bridge.ts'
+import { ensureSemanticUiBridge, stopSemanticUiBridge } from './semantic-ui-bridge.ts'
 import { normalizeProviderListResponse } from './provider-utils.ts'
 import { buildModelInfoSnapshot } from './model-info-utils.ts'
 import { prepareShellEnvironment } from './shell-env.ts'
@@ -35,6 +36,8 @@ import {
 } from './runtime-opencode-cli.ts'
 import { clearProjectOverlayCopies } from './runtime-project-overlay.ts'
 import { buildRuntimeConfigForRuntime } from './runtime-config-builder.ts'
+import { preflightConfiguredCapabilityBundlesForRuntime } from './capability-bundle-runtime-preflight.ts'
+import { recordCurrentRuntimeComponentVerification } from './runtime-component-manifest.ts'
 import { copySkillsAndAgents } from './runtime-content.ts'
 import { getOrCreateDirectoryClient } from './runtime-client-cache.ts'
 import { syncRuntimeHomeToolingBridge } from './runtime-home-bridge.ts'
@@ -441,6 +444,7 @@ async function buildRuntimeConfigForStartup(
   if (plan.useMachineOpenCodeConfig) return undefined
   await ensureAgentToolBridge()
   await ensureWorkflowToolBridge()
+  await ensureSemanticUiBridge()
   return buildRuntimeConfigForRuntime(projectDirectory)
 }
 
@@ -533,8 +537,13 @@ export async function startRuntime(
     const plan = computeRuntimeStartupPlan()
     await prepareRuntimeSandbox(plan)
     const bundledOpencodeEnv = applyBundledOpencodeCliEnvironment()
+    await recordCurrentRuntimeComponentVerification({ bundledOpencodeEnv })
     await cleanupRuntimeOrphansOnce()
     await configureRuntimeTokenRefresh(plan)
+
+    if (!plan.useMachineOpenCodeConfig) {
+      preflightConfiguredCapabilityBundlesForRuntime({ productMode: 'desktop-local' })
+    }
 
     const config = await buildRuntimeConfigForStartup(plan, projectDirectory)
 
@@ -623,6 +632,7 @@ export async function stopRuntime() {
   runtimeState.stopTokenRefreshTimer()
   stopAgentToolBridge()
   stopWorkflowToolBridge()
+  stopSemanticUiBridge()
   const serverClose = runtimeState.takeServerClose()
   if (serverClose) serverClose()
   const currentRuntimePid = runtimeState.takeCurrentRuntimePid()

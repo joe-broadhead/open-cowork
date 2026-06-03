@@ -382,10 +382,6 @@ export function buildOpenCoworkAgentConfig(options: {
             'mcp__agents__preview_agent',
           ],
           askPatterns: [
-            'bash',
-            'edit',
-            'write',
-            'apply_patch',
             'mcp__skills__save_skill_bundle',
             'mcp__skills__delete_skill_bundle',
             'mcp__agents__save_agent',

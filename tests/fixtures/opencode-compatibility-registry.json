@@ -1,0 +1,20 @@
+{
+  "formatVersion": 1,
+  "requiredCategories": [
+    "config",
+    "event",
+    "permission",
+    "plugin",
+    "sdk-import"
+  ],
+  "assumptionIds": [
+    "cloud-session-event-projection-contract",
+    "opencode-plugin-remote-fail-closed",
+    "opencode-sdk-v2-import-boundary",
+    "permission-question-roundtrip-contract",
+    "runtime-config-builder-sdk-native-config"
+  ],
+  "blockedPolicyIds": [
+    "opencode-plugin-remote-fail-closed"
+  ]
+}

@@ -1,7 +1,18 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { workspaceApiSupportContextForAuthority, type AuthState, type EffectiveAppSettings, type PublicAppConfig, type RuntimeStatus, type SessionInfo, type WorkspaceApiSupport } from '@open-cowork/shared'
+import {
+  createResourceDeepLink,
+  createResourceIdentity,
+  workspaceApiSupportContextForAuthority,
+  type AuthState,
+  type EffectiveAppSettings,
+  type PublicAppConfig,
+  type RuntimeStatus,
+  type SessionInfo,
+  type WorkspaceApiSupport,
+  type WorkspaceInfo,
+} from '@open-cowork/shared'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
@@ -307,6 +318,14 @@ const newSession: SessionInfo = {
   directory: '/tmp/project',
   createdAt: '2026-05-07T00:00:00.000Z',
   updatedAt: '2026-05-07T00:00:00.000Z',
+}
+
+function resourceEvent(identity: ReturnType<typeof createResourceIdentity>) {
+  return new CustomEvent('open-cowork:open-resource', {
+    detail: {
+      deepLink: createResourceDeepLink(identity),
+    },
+  })
 }
 
 function resetSessionStore() {
@@ -649,5 +668,278 @@ describe('App', () => {
 
     expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
     expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session')
+  })
+
+  it('opens exact local session resource links without falling back across workspaces', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.session.get).mockResolvedValueOnce({
+      id: 'existing-session',
+      title: 'Existing thread',
+      directory: '/tmp/project',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    })
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'session',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      sessionId: 'existing-session',
+    })))
+
+    await waitFor(() => expect(api.session.get).toHaveBeenCalledWith('existing-session', undefined))
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(api.workspace.activate).toHaveBeenCalledWith(LOCAL_WORKSPACE_ID)
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('resource-navigation-notice')).not.toBeInTheDocument()
+  })
+
+  it('opens exact artifact resource links to the containing thread', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.artifact.list).mockResolvedValueOnce([{
+      id: 'artifact-1',
+      toolId: 'tool-1',
+      toolName: 'chart',
+      filename: 'chart.png',
+      filePath: '/tmp/chart.png',
+      order: 0,
+      mime: 'image/png',
+    }])
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'artifact',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      sessionId: 'existing-session',
+      artifactId: 'artifact-1',
+    })))
+
+    await waitFor(() => expect(api.artifact.list).toHaveBeenCalledWith({ sessionId: 'existing-session' }))
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('existing-session', { workspaceId: LOCAL_WORKSPACE_ID }))
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+    expect(screen.queryByTestId('resource-navigation-notice')).not.toBeInTheDocument()
+  })
+
+  it('opens exact cloud session resource links with workspace-scoped activation', async () => {
+    const cloudWorkspace: WorkspaceInfo = {
+      id: 'cloud:test',
+      kind: 'cloud',
+      authority: 'cloud_worker',
+      label: 'Cloud Test',
+      status: 'online',
+      active: false,
+      lastSyncedAt: null,
+    }
+    const { api } = installAppApi()
+    vi.mocked(api.workspace.list).mockResolvedValue([{
+      id: LOCAL_WORKSPACE_ID,
+      kind: 'local',
+      label: 'Local',
+      status: 'online',
+      active: true,
+      lastSyncedAt: null,
+    }, cloudWorkspace])
+    vi.mocked(api.workspace.activate).mockResolvedValue({
+      ...cloudWorkspace,
+      active: true,
+    })
+    vi.mocked(api.workspace.support).mockResolvedValue([{
+      api: 'sessions.list',
+      status: 'deferred',
+      verdict: { allowed: false, reason: 'Cloud listing is deferred.' },
+      context: workspaceApiSupportContextForAuthority('cloud_worker', {
+        surface: 'desktop_cloud',
+        onlineState: 'online',
+        status: 'deferred',
+      }),
+    }])
+    vi.mocked(api.session.get).mockResolvedValueOnce({
+      id: 'cloud-session',
+      title: 'Cloud thread',
+      directory: null,
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    })
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-cloud',
+      kind: 'session',
+      workspaceId: 'cloud:test',
+      sessionId: 'cloud-session',
+    })))
+
+    await waitFor(() => expect(api.session.get).toHaveBeenCalledWith('cloud-session', { workspaceId: 'cloud:test' }))
+    await waitFor(() => expect(mockLoadSessionMessages).toHaveBeenCalledWith('cloud-session', { workspaceId: 'cloud:test' }))
+    expect(api.workspace.activate).toHaveBeenCalledWith('cloud:test')
+    expect(useSessionStore.getState().activeWorkspaceId).toBe('cloud:test')
+  })
+
+  it('shows not-found state for missing resources without opening a stale thread', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.session.get).mockResolvedValueOnce(null)
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'session',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      sessionId: 'missing-session',
+    })))
+
+    const notice = await screen.findByTestId('resource-navigation-notice')
+    expect(notice).toHaveAttribute('data-status', 'not-found')
+    expect(notice).toHaveTextContent('missing-session')
+    expect(mockLoadSessionMessages).not.toHaveBeenCalled()
+  })
+
+  it('refuses unsupported cloud-web deep links instead of falling back to Desktop Cloud', async () => {
+    const cloudWorkspace: WorkspaceInfo = {
+      id: 'cloud:test',
+      kind: 'cloud',
+      authority: 'cloud_worker',
+      label: 'Cloud Test',
+      status: 'online',
+      active: false,
+      lastSyncedAt: null,
+    }
+    const { api } = installAppApi()
+    vi.mocked(api.workspace.list).mockResolvedValue([cloudWorkspace])
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'cloud-web',
+      kind: 'session',
+      workspaceId: 'cloud:test',
+      sessionId: 'cloud-session',
+    })))
+
+    const notice = await screen.findByTestId('resource-navigation-notice')
+    expect(notice).toHaveAttribute('data-status', 'unsupported-authority')
+    expect(notice).toHaveTextContent('cloud-web')
+    expect(api.workspace.activate).not.toHaveBeenCalled()
+    expect(mockLoadSessionMessages).not.toHaveBeenCalled()
+  })
+
+  it('reports Gateway session resource links as unavailable while auth is pending', async () => {
+    const gatewayWorkspace: WorkspaceInfo = {
+      id: 'gateway:test',
+      kind: 'gateway',
+      authority: 'gateway_standalone',
+      label: 'Gateway Test',
+      status: 'auth_required',
+      active: false,
+      lastSyncedAt: null,
+    }
+    const { api } = installAppApi()
+    vi.mocked(api.workspace.list).mockResolvedValue([gatewayWorkspace])
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'standalone-gateway',
+      kind: 'session',
+      workspaceId: 'gateway:test',
+      sessionId: 'gateway-session',
+    })))
+
+    const notice = await screen.findByTestId('resource-navigation-notice')
+    expect(notice).toHaveAttribute('data-status', 'unavailable')
+    expect(notice).toHaveTextContent('auth required')
+    expect(api.session.get).not.toHaveBeenCalledWith('gateway-session', expect.anything())
+  })
+
+  it('activates exact paired Desktop workspace links without rewriting authority', async () => {
+    const pairedWorkspace: WorkspaceInfo = {
+      id: 'paired-desktop:device-1',
+      kind: 'paired_desktop',
+      authority: 'desktop_paired',
+      label: 'Paired Desktop',
+      status: 'offline',
+      active: false,
+      lastSyncedAt: null,
+    }
+    const { api } = installAppApi()
+    vi.mocked(api.workspace.list).mockResolvedValue([pairedWorkspace])
+    vi.mocked(api.workspace.activate).mockResolvedValue({ ...pairedWorkspace, active: true })
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'paired-desktop',
+      kind: 'workspace',
+      workspaceId: 'paired-desktop:device-1',
+    })))
+
+    await waitFor(() => expect(api.workspace.activate).toHaveBeenCalledWith('paired-desktop:device-1'))
+    expect(useSessionStore.getState().activeWorkspaceId).toBe('paired-desktop:device-1')
+    expect(screen.queryByTestId('resource-navigation-notice')).not.toBeInTheDocument()
+  })
+
+  it('opens exact workflow-run resource links to the workflow surface', async () => {
+    const { api } = installAppApi()
+    vi.mocked(api.workflows.get).mockResolvedValueOnce({
+      id: 'workflow-1',
+      title: 'Workflow',
+      instructions: 'Run it',
+      agentName: 'build',
+      skillNames: [],
+      toolIds: [],
+      status: 'active',
+      projectDirectory: null,
+      draftSessionId: null,
+      triggers: [],
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z',
+      nextRunAt: null,
+      lastRunAt: null,
+      latestRunId: 'run-1',
+      latestRunStatus: 'completed',
+      latestRunSessionId: 'run-session',
+      latestRunSummary: null,
+      webhookUrl: null,
+      runs: [{
+        id: 'run-1',
+        workflowId: 'workflow-1',
+        sessionId: 'run-session',
+        triggerType: 'manual',
+        triggerPayload: null,
+        status: 'completed',
+        title: 'Run 1',
+        summary: null,
+        error: null,
+        createdAt: '2026-05-06T00:00:00.000Z',
+        startedAt: null,
+        finishedAt: null,
+      }],
+    })
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    fireEvent(window, resourceEvent(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'workflow-run',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      workflowId: 'workflow-1',
+      runId: 'run-1',
+    })))
+
+    await waitFor(() => expect(api.workflows.get).toHaveBeenCalledWith('workflow-1', undefined))
+    expect(await screen.findByTestId('workflows-page')).toBeInTheDocument()
   })
 })

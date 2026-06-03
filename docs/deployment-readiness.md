@@ -446,6 +446,17 @@ worker crashes, or gateway delivery wedges.
 
 ## Runtime Smoke Checks
 
+Before promoting a build, run the OpenCode compatibility proof:
+
+```bash
+pnpm proof:opencode:compatibility
+```
+
+The proof validates the same compatibility registry exported in runtime
+diagnostics and fails closed on missing bundled OpenCode version metadata,
+unknown/private assumptions, source-version drift, missing proving tests, and
+undocumented shim or blocked-policy entries.
+
 For a local Compose deployment:
 
 ```bash
@@ -561,6 +572,75 @@ Desktop/Web mutation coverage with token revocation rejection, managed Gateway
 health/readiness plus operator coverage, Gateway mutation/retry/dead-letter
 coverage with token revocation rejection, and Continuation rich projection with
 all ephemeral tokens revoked.
+
+For local release scenario evidence, run:
+
+```bash
+pnpm test:live-scenarios
+```
+
+This writes redacted JSON and Markdown evidence under
+`.open-cowork-test/live-scenarios/`. The default suite lives in
+`deploy/scenarios/local-desktop-scenarios.json` and covers six stable local
+scenarios: runtime doctor/diagnostics, cloud projection fence contracts,
+capability bundle dry-run policy, desktop pairing command safety, and workspace
+sandbox portability policy and lifecycle planning, plus control-plane identity,
+permission, file-session, headless loopback, and semantic UI status/action
+contracts. Scenario evidence is additive to deterministic tests; it does not replace unit,
+projection, boundary, smoke, or deployment checks. Logs, command output,
+command argv, paths, and token-like values are redacted before evidence is
+written.
+
+CI and release preflight run this stable suite so evidence paths are produced
+for every release-eligible build.
+
+For OpenCode runtime portability evidence, run:
+
+```bash
+pnpm proof:cloud:opencode-portability --json
+```
+
+The proof starts two isolated app-managed OpenCode runtimes, creates a no-reply
+session, copies the portable runtime/workspace/artifact metadata, verifies the
+restored SDK view, and emits a redacted `sandboxEnginePreflight` result. A
+missing local Docker or Apple Container engine is reported as
+`sandbox-runtime-engine-unavailable`; it is not treated as a successful sandbox
+runtime start.
+
+For a real sandboxed OpenCode session proof, configure an OpenCode runtime
+image and run:
+
+```bash
+OPEN_COWORK_SANDBOX_IMAGE=open-cowork/opencode:local \
+pnpm proof:sandbox:opencode-session -- --json --strict --image-sha256 sha256:...
+```
+
+The proof mounts only a temp proof harness, workspace, and runtime home, starts
+OpenCode inside the sandbox, creates a no-reply session through the OpenCode
+HTTP API, verifies the prompt message was recorded, then exits. Without
+`--strict`, CI and release preflight record typed redacted evidence for missing
+engine/image prerequisites. `sandbox-runtime-engine-unavailable`,
+`sandbox-runtime-image-not-configured`, and `sandbox-runtime-policy-blocked`
+are not successful sandbox session proofs.
+
+For local operator runtime checks without launching the Desktop renderer, run:
+
+```bash
+pnpm headless:host check
+pnpm headless:host start
+pnpm headless:host start --detached
+pnpm headless:host status
+pnpm headless:host doctor
+```
+
+The headless host command is loopback-only in the public repo. Remote, LAN,
+tunnel behavior must fail closed until the matching topology authority,
+pairing, recovery, and audit evidence exists. `start` is foreground by default;
+`start --detached` returns only after a child process has written recoverable
+state, and `status` clears stale `start` state when that process no longer
+exists.
+`stop` signals a running loopback start process by recorded PID when needed and
+clears the redacted product state.
 
 ## Provider Recipe Contract
 

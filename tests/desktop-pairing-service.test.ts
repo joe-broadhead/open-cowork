@@ -11,6 +11,7 @@ import type {
   DesktopPairingRemoteEvent,
   SessionInfo,
 } from '@open-cowork/shared'
+import { DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED } from '../packages/shared/src/desktop-pairing.ts'
 import {
   DesktopPairingService,
   type DesktopPairingCommandExecutor,
@@ -234,6 +235,8 @@ test('desktop pairing claims a remote prompt with lease, executes locally, acks,
   assert.equal(transport.acks[0]?.leaseToken, 'lease-1')
   assert.equal(transport.acks[0]?.result.session?.directory, null)
   assert.equal(transport.acks[0]?.result.session?.title, 'Local [local-path] thread')
+  assert.equal(transport.acks[0]?.result.projectionFence, null)
+  assert.deepEqual(transport.acks[0]?.result.projectionFenceStatus, DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED)
   assert.equal(pairingService.get(pairing.record.id)?.lastCommandSequence, 1)
   assert.equal(pairingService.auditLog(pairing.record.id).some((entry) => entry.action === 'command.completed'), true)
 })
@@ -392,7 +395,11 @@ test('desktop pairing blocks non-local workspace commands and remote approvals b
 
   assert.equal(transport.failures.length, 2)
   assert.equal(transport.failures[0]?.result.status, 'blocked_by_policy')
+  assert.equal(transport.failures[0]?.result.projectionFence, null)
+  assert.deepEqual(transport.failures[0]?.result.projectionFenceStatus, DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED)
   assert.equal(transport.failures[1]?.result.status, 'requires_local_confirmation')
+  assert.equal(transport.failures[1]?.result.projectionFence, null)
+  assert.deepEqual(transport.failures[1]?.result.projectionFenceStatus, DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED)
   assert.equal(pairingService.auditLog(pairing.record.id).some((entry) => entry.action === 'command.blocked'), true)
 })
 

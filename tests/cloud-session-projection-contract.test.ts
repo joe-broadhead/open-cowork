@@ -3,17 +3,29 @@ import assert from 'node:assert/strict'
 
 import {
   CLOUD_PROJECTED_SESSION_EVENT_TYPES,
+  CLOUD_AUTOMATION_EVENT_STREAM_VERSION,
+  CLOUD_PROJECTION_SYNC_CONTRACT_VERSION,
   CLOUD_SESSION_EVENT_CONTRACT,
   CLOUD_SESSION_EVENT_TYPES,
   CLOUD_SESSION_PROJECTION_CONTRACT_VERSION,
+  cloudProjectionFenceIdentityKey,
+  cloudProjectionFenceObserved,
   cloudSessionEventContractFor,
   cloudSessionEventHasFacet,
   cloudSessionViewToSessionView,
+  createCloudAutomationEventEnvelope,
+  createCloudAutomationTerminalStatusRecord,
+  createCloudProjectionCheckpoint,
+  createCloudProjectionFenceToken,
   createCloudSessionProjectionView,
   emptySessionView,
+  evaluateCloudProjectionFenceCheckpoint,
+  formatCloudAutomationTerminalStatusLine,
   normalizeCloudSessionProjectionView,
+  parseCloudAutomationTerminalStatusLine,
   readCloudSessionProjection,
   reduceCloudSessionProjectionEvent,
+  waitForCloudProjectionFence,
 } from '../packages/shared/dist/cloud-session-projection.js'
 
 function baseSession(overrides = {}) {
@@ -112,6 +124,222 @@ test('cloud session event vocabulary is versioned and reducer-backed', () => {
   assert.equal(cloudSessionEventHasFacet('artifact.created', 'artifacts'), true)
   assert.equal(cloudSessionEventHasFacet('assistant.message', 'messages'), true)
   assert.equal(cloudSessionEventHasFacet('snapshot.required', 'control'), true)
+})
+
+test('projection sync contract uses exact identities for fences and checkpoints', () => {
+  assert.equal(CLOUD_PROJECTION_SYNC_CONTRACT_VERSION, 1)
+  assert.equal(CLOUD_AUTOMATION_EVENT_STREAM_VERSION, 1)
+
+  const fence = createCloudProjectionFenceToken({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    commandId: 'command-1',
+    sequence: 42,
+    projectionVersion: 42,
+    issuedAt: '2026-05-28T10:01:00.000Z',
+  })
+  const staleCheckpoint = createCloudProjectionCheckpoint({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 41,
+    projectionVersion: 41,
+    updatedAt: '2026-05-28T10:01:01.000Z',
+  })
+  const observedCheckpoint = createCloudProjectionCheckpoint({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 42,
+    projectionVersion: 43,
+    updatedAt: '2026-05-28T10:01:02.000Z',
+  })
+
+  assert.equal(fence.version, 1)
+  assert.equal(cloudProjectionFenceIdentityKey(fence), 'session:tenant-1:session-1')
+  assert.equal(cloudProjectionFenceObserved(fence, staleCheckpoint), false)
+  assert.equal(cloudProjectionFenceObserved(fence, observedCheckpoint), true)
+
+  assert.throws(() => createCloudProjectionFenceToken({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session*',
+    sequence: 1,
+  }), /canonical identifier/)
+  assert.throws(() => createCloudProjectionFenceToken({
+    scope: 'workflow-run',
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    sequence: 1,
+  }), /runId is required/)
+  assert.throws(() => createCloudProjectionCheckpoint({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: undefined as unknown as number,
+    projectionVersion: 1,
+    updatedAt: '2026-05-28T10:01:03.000Z',
+  }), /sequence is required/)
+})
+
+test('projection fences expose actionable wait states and timeout codes', async () => {
+  const fence = createCloudProjectionFenceToken({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 3,
+    projectionVersion: 3,
+    issuedAt: '2026-05-28T10:01:00.000Z',
+  })
+  const staleCheckpoint = createCloudProjectionCheckpoint({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 2,
+    projectionVersion: 2,
+    updatedAt: '2026-05-28T10:01:01.000Z',
+  })
+  const observedCheckpoint = createCloudProjectionCheckpoint({
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 3,
+    projectionVersion: 3,
+    updatedAt: '2026-05-28T10:01:02.000Z',
+  })
+
+  assert.deepEqual(
+    evaluateCloudProjectionFenceCheckpoint({ fence, checkpoint: null }).code,
+    'projection_fence_checkpoint_missing',
+  )
+  assert.deepEqual(
+    evaluateCloudProjectionFenceCheckpoint({ fence, checkpoint: staleCheckpoint }).code,
+    'projection_fence_stale',
+  )
+  assert.deepEqual(
+    evaluateCloudProjectionFenceCheckpoint({ fence, checkpoint: observedCheckpoint }).code,
+    'projection_fence_observed',
+  )
+
+  let attempts = 0
+  let nowMs = 0
+  const observed = await waitForCloudProjectionFence({
+    fence,
+    timeoutMs: 30,
+    intervalMs: 10,
+    nowMs: () => nowMs,
+    sleep: async (duration) => {
+      nowMs += duration
+    },
+    readCheckpoint: async () => {
+      attempts += 1
+      return attempts >= 2 ? observedCheckpoint : staleCheckpoint
+    },
+  })
+  assert.equal(observed.ok, true)
+  assert.equal(observed.code, 'projection_fence_observed')
+  assert.equal(attempts, 2)
+
+  attempts = 0
+  nowMs = 0
+  const timedOut = await waitForCloudProjectionFence({
+    fence,
+    timeoutMs: 10,
+    intervalMs: 10,
+    nowMs: () => nowMs,
+    sleep: async (duration) => {
+      nowMs += duration
+    },
+    readCheckpoint: async () => {
+      attempts += 1
+      return staleCheckpoint
+    },
+  })
+  assert.equal(timedOut.ok, false)
+  assert.equal(timedOut.code, 'projection_fence_timeout')
+  assert.equal(timedOut.error.retryable, true)
+
+  const expired = evaluateCloudProjectionFenceCheckpoint({
+    fence: createCloudProjectionFenceToken({
+      scope: 'session',
+      tenantId: 'tenant-1',
+      sessionId: 'session-1',
+      sequence: 3,
+      expiresAt: '2026-05-28T10:01:00.000Z',
+    }),
+    checkpoint: staleCheckpoint,
+    nowMs: Date.parse('2026-05-28T10:01:01.000Z'),
+  })
+  assert.equal(expired.ok, false)
+  assert.equal(expired.code, 'projection_fence_expired')
+  assert.equal(expired.error.retryable, false)
+})
+
+test('automation event envelopes are versioned and fence-bound', () => {
+  const fence = createCloudProjectionFenceToken({
+    scope: 'workflow-run',
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    runId: 'run-1',
+    projectionVersion: 7,
+    issuedAt: '2026-05-28T10:02:00.000Z',
+  })
+  const envelope = createCloudAutomationEventEnvelope({
+    eventId: 'event-1',
+    type: 'workflow.run.completed',
+    source: 'workflow',
+    scope: 'workflow-run',
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    runId: 'run-1',
+    sequence: 8,
+    projectionVersion: 8,
+    fence,
+    payload: { status: 'complete' },
+    createdAt: '2026-05-28T10:02:01.000Z',
+  })
+
+  assert.equal(envelope.version, 1)
+  assert.equal(envelope.fence?.projectionVersion, 7)
+  assert.deepEqual(envelope.payload, { status: 'complete' })
+
+  assert.throws(() => createCloudAutomationEventEnvelope({
+    eventId: 'event-2',
+    type: 'workflow.run.completed',
+    source: 'workflow',
+    scope: 'workflow-run',
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    runId: 'run-2',
+    sequence: 8,
+    fence,
+    payload: {},
+  }), /fence identity/)
+})
+
+test('automation terminal status lines are structured JSON and parseable by consumers', () => {
+  const envelope = createCloudAutomationEventEnvelope({
+    eventId: 'event-1',
+    type: 'workflow.run.completed',
+    source: 'workflow',
+    scope: 'workflow-run',
+    tenantId: 'tenant-1',
+    workflowId: 'workflow-1',
+    runId: 'run-1',
+    sequence: 8,
+    payload: { status: 'complete' },
+    createdAt: '2026-05-28T10:02:01.000Z',
+  })
+  const record = createCloudAutomationTerminalStatusRecord(envelope, '2026-05-28T10:02:02.000Z')
+  const line = formatCloudAutomationTerminalStatusLine(envelope, '2026-05-28T10:02:02.000Z')
+  const parsed = parseCloudAutomationTerminalStatusLine(line)
+
+  assert.equal(record.kind, 'open-cowork.automation.event')
+  assert.equal(parsed?.kind, 'open-cowork.automation.event')
+  assert.equal(parsed?.event.eventId, 'event-1')
+  assert.equal(parsed?.redacted, true)
+  assert.equal(parseCloudAutomationTerminalStatusLine('not json'), null)
 })
 
 test('shared cloud projection reducer feeds desktop SessionView contract', () => {

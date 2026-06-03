@@ -1,7 +1,11 @@
 import {
+  createCloudProjectionCheckpoint,
+  waitForCloudProjectionFence,
   isCloudProjectedSessionEventType,
   normalizeCloudSessionProjectionView,
   reduceCloudSessionProjectionEvent,
+  type CloudProjectionFenceToken,
+  type CloudProjectionFenceWaitResult,
   type CloudProjectedSessionEventType,
 } from '@open-cowork/shared'
 import type { SessionEventRecord } from './control-plane-store.ts'
@@ -32,6 +36,14 @@ export type RepairSessionProjectionResult = {
   priorProjectionSequence: number
   projectionSequence: number
   lag: number
+}
+
+export type WaitForSessionProjectionFenceInput = {
+  fence: CloudProjectionFenceToken
+  timeoutMs: number
+  intervalMs?: number
+  nowMs?: () => number
+  sleep?: (durationMs: number) => Promise<void>
 }
 
 function readString(value: unknown, fallback = '') {
@@ -171,5 +183,43 @@ export class CloudSessionProjectionService {
       projectionSequence: projection.sequence,
       lag: Math.max(0, latestEventSequence - projection.sequence),
     }
+  }
+
+  async waitForProjectionFence(input: WaitForSessionProjectionFenceInput): Promise<CloudProjectionFenceWaitResult> {
+    if (input.fence.scope !== 'session') {
+      return {
+        ok: false,
+        code: 'projection_fence_identity_mismatch',
+        fence: input.fence,
+        checkpoint: null,
+        error: {
+          kind: 'projection',
+          code: 'projection_fence_identity_mismatch',
+          message: 'CloudSessionProjectionService can only wait for session-scoped fences.',
+          retryable: false,
+        },
+        waitedMs: 0,
+      }
+    }
+
+    return waitForCloudProjectionFence({
+      fence: input.fence,
+      timeoutMs: input.timeoutMs,
+      intervalMs: input.intervalMs,
+      nowMs: input.nowMs,
+      sleep: input.sleep,
+      readCheckpoint: async () => {
+        const projection = await this.store.getSessionProjection(input.fence.tenantId, input.fence.sessionId || '')
+        if (!projection) return null
+        return createCloudProjectionCheckpoint({
+          scope: 'session',
+          tenantId: input.fence.tenantId,
+          sessionId: input.fence.sessionId,
+          sequence: projection.sequence,
+          projectionVersion: projection.sequence,
+          updatedAt: projection.updatedAt,
+        })
+      },
+    })
   }
 }

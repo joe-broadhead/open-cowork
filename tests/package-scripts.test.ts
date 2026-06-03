@@ -180,8 +180,12 @@ test('root deployment scripts expose provider smoke gates', () => {
   assert.equal(requireScript('deploy:launch:evidence:validate'), 'node scripts/validate-launch-evidence-manifest.mjs')
   assert.equal(requireScript('deploy:promotion:validate'), 'node scripts/validate-release-promotion.mjs')
   assert.equal(requireScript('deploy:private-beta:validate'), 'node scripts/validate-private-beta-package.mjs')
-  assert.equal(requireScript('ops:validate'), 'node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs')
+  assert.equal(
+    requireScript('ops:validate'),
+    'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts && node scripts/validate-ops-readiness.mjs && node scripts/validate-release-gates.mjs',
+  )
   assert.equal(requireScript('release:gates:validate'), 'node scripts/validate-release-gates.mjs')
+  assert.equal(requireScript('proof:opencode:compatibility'), 'node --no-warnings --experimental-strip-types scripts/check-opencode-compatibility.ts')
 })
 
 test('root build and dist scripts preserve release build prerequisites', () => {
@@ -250,6 +254,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
   for (const command of [
     'pnpm lint',
     'pnpm test',
+    'pnpm test:live-scenarios',
     'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
@@ -266,6 +271,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm ops:validate',
     'node scripts/find-linux-packaged-executable.mjs',
     'pnpm proof:cloud:opencode-portability --json',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
   ]) {
@@ -284,6 +290,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm lint',
     'pnpm typecheck',
     'pnpm test',
+    'pnpm test:live-scenarios',
     'pnpm test:cloud-web',
     'pnpm test:cloud-continuation',
     'pnpm test:renderer',
@@ -299,6 +306,7 @@ test('ci and release workflows use canonical release gate scripts', () => {
     'pnpm --dir apps/desktop test:e2e:packaged',
     'xvfb-run -a pnpm --dir apps/desktop test:e2e:packaged',
     'node scripts/find-linux-packaged-executable.mjs',
+    'pnpm proof:sandbox:opencode-session -- --json',
     'pnpm audit --prod --audit-level moderate',
     'pnpm audit --audit-level high',
     'node scripts/verify-release-tag-signature.mjs',

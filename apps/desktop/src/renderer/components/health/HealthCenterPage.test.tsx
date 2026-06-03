@@ -18,6 +18,53 @@ const runtimeInputs: RuntimeInputDiagnostics = {
   modelSource: 'settings',
   providerOptions: {},
   credentialOverrideKeys: ['apiKey'],
+  capabilities: [
+    {
+      id: 'openrouter',
+      kind: 'provider',
+      status: 'active',
+      reasonCode: 'provider.settings',
+      source: 'settings',
+      productMode: 'desktop-local',
+      evidence: {
+        providerName: 'OpenRouter',
+        credentialOverrideKeys: ['apiKey'],
+      },
+      redacted: true,
+    },
+    {
+      id: 'oauth-example',
+      kind: 'mcp',
+      status: 'auth-pending',
+      reasonCode: 'mcp.awaiting-oauth-opt-in',
+      source: 'builtin',
+      productMode: 'desktop-local',
+      evidence: {
+        authMode: 'oauth',
+        credentialKeys: ['account'],
+      },
+      redacted: true,
+    },
+    {
+      id: 'opencode-plugin-remote-fail-closed',
+      kind: 'opencode-plugin',
+      status: 'unsupported',
+      reasonCode: 'plugin.product-mode-unsupported',
+      source: 'opencode-compatibility-registry',
+      productMode: 'cloud-worker,desktop-local',
+      redacted: true,
+    },
+  ],
+  conflicts: [
+    {
+      id: 'anthropic/claude-sonnet-4',
+      kind: 'model',
+      winnerSource: 'settings',
+      loserSources: ['default:openrouter/gpt-5-mini'],
+      reasonCode: 'model.source-conflict-winner',
+      redacted: true,
+    },
+  ],
 }
 
 const workspaces: WorkspaceInfo[] = [
@@ -120,6 +167,12 @@ describe('HealthCenterPage', () => {
     expect(screen.getByText('Laptop Pairing')).toBeTruthy()
     expect(screen.getByText('Desktop runtime ready')).toBeTruthy()
     expect(screen.getByText('Cloud workspace authenticated')).toBeTruthy()
+    expect(screen.getByText('Runtime Capability Provenance')).toBeTruthy()
+    expect(screen.getByTestId('runtime-capability-mcp-oauth-example')).toBeTruthy()
+    expect(screen.getByText('mcp.awaiting-oauth-opt-in')).toBeTruthy()
+    expect(screen.getByText('plugin.product-mode-unsupported')).toBeTruthy()
+    expect(screen.getByText('model.source-conflict-winner')).toBeTruthy()
+    expect(screen.getByText(/winner settings/)).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     await waitFor(() => expect(login).toHaveBeenCalledWith('cloud:acme'))

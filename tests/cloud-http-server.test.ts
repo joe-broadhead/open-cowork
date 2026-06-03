@@ -201,6 +201,13 @@ function headerValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || '' : value || ''
 }
 
+function policyWithRemoteApprovalResponses(basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)): CloudRuntimePolicy {
+  return {
+    ...basePolicy,
+    allowRemoteApprovalResponses: true,
+  }
+}
+
 function testAbuseConfig(overrides: Partial<CloudAbuseConfig> = {}): CloudAbuseConfig {
   return {
     ...DEFAULT_CONFIG.cloud.abuse,
@@ -374,6 +381,10 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     const prompt = await readJson(promptResponse)
     assert.equal(asRecord(prompt.command).status, 'pending')
     assert.equal(prompt.processed, 1)
+    assert.equal(asRecord(prompt.projectionFence).scope, 'session')
+    assert.equal(asRecord(prompt.projectionFence).tenantId, 'tenant-1')
+    assert.equal(asRecord(prompt.projectionFence).sessionId, 'oc-session-1')
+    assert.equal(asRecord(prompt.projectionFence).commandId, asRecord(prompt.command).commandId)
     assert.equal(fixture.runtime.prompts[0]?.agent, 'data-analyst')
     const promptMessages = asArray(asRecord(asRecord(asRecord(prompt.view).projection).view).messages)
     assert.equal(promptMessages.length, 2)
@@ -394,7 +405,77 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.equal(abortResponse.status, 202)
     const abort = await readJson(abortResponse)
     assert.equal(abort.processed, 1)
+    assert.equal(asRecord(abort.projectionFence).commandId, asRecord(abort.command).commandId)
+    assert.equal(asRecord(abort.projectionFence).sequence, asRecord(asRecord(abort.view).projection).sequence)
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP direct question and approval responses fail closed unless the profile opts in', async () => {
+  const fixture = createFixture({ autoProcessCommands: false })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    const denied = await fetch(`${baseUrl}/api/sessions/${sessionId}/permission-respond`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ permissionId: 'permission-1', response: { allowed: true } }),
+    })
+    assert.equal(denied.status, 403)
+    const body = await readJson(denied)
+    assert.equal(asRecord(body.verdict).policyCode, 'cloud-remote-approval-disabled')
+
+    assert.equal(await fixture.worker.processAllSessionCommands(), 0)
+    const auditEvents = await fixture.store.listAuditEvents('tenant-1')
+    const deniedAudit = auditEvents.find((event) => event.eventType === 'cloud_interaction.remote_policy.denied')
+    assert.ok(deniedAudit)
+    assert.equal(asRecord(deniedAudit.metadata).policyReasonCode, 'cloud-remote-approval-disabled')
+    assert.equal(asRecord(deniedAudit.metadata).interaction, 'permission-approval')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP direct question responses require explicit remote approval opt-in', async () => {
+  const fixture = createFixture({
+    autoProcessCommands: false,
+    policy: policyWithRemoteApprovalResponses(),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+
+    const allowed = await fetch(`${baseUrl}/api/sessions/${sessionId}/question-reply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ requestId: 'question-1', answers: [{ value: 'yes' }] }),
+    })
+    assert.equal(allowed.status, 202)
+    const body = await readJson(allowed)
+    assert.equal(asRecord(body.command).kind, 'question.reply')
+
+    assert.equal(await fixture.worker.processAllSessionCommands(), 1)
+    assert.deepEqual(fixture.runtime.questionReplies, [{
+      requestId: 'question-1',
+      answers: [{ value: 'yes' }],
+    }])
+    const auditEvents = await fixture.store.listAuditEvents('tenant-1')
+    const allowedAudit = auditEvents.find((event) => event.eventType === 'cloud_interaction.question.replied')
+    assert.ok(allowedAudit)
+    assert.equal(asRecord(allowedAudit.metadata).policyReasonCode, 'cloud-rbac-workspace-membership-required')
   } finally {
     await fixture.server.close()
   }
@@ -877,6 +958,7 @@ test('cloud HTTP server blocks worker execution when worker-minute quota is exha
     assert.equal(prompt.status, 202)
     const body = await readJson(prompt)
     assert.equal(body.processed, 0)
+    assert.equal(body.projectionFence, null)
     assert.equal(fixture.runtime.prompts.length, 0)
 
     const summary = await readJson(await fetch(`${baseUrl}/api/usage/summary?limit=50`))
@@ -2596,7 +2678,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   })
 
   const runtime = new FakeRuntimeAdapter()
-  const policy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const policy = policyWithRemoteApprovalResponses()
   let nextId = 0
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `channel-id-${nextId += 1}`,
@@ -2804,7 +2886,11 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
       }),
     })
     assert.equal(promptResponse.status, 202)
-    assert.equal((await readJson(promptResponse)).processed, 1)
+    const channelPrompt = await readJson(promptResponse)
+    assert.equal(channelPrompt.processed, 1)
+    assert.equal(asRecord(channelPrompt.projectionFence).scope, 'session')
+    assert.equal(asRecord(channelPrompt.projectionFence).sessionId, cloudSession.sessionId)
+    assert.equal(asRecord(channelPrompt.projectionFence).commandId, asRecord(channelPrompt.command).commandId)
     assert.equal(runtime.prompts[0]?.agent, 'data-analyst')
 
     const interactionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
@@ -2859,6 +2945,8 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const approval = await readJson(approvalResponse)
     assert.equal(asRecord(approval.command).kind, 'permission.respond')
     assert.equal(approval.processed, 1)
+    assert.equal(asRecord(approval.projectionFence).commandId, asRecord(approval.command).commandId)
+    assert.equal(asRecord(approval.projectionFence).sessionId, cloudSession.sessionId)
     assert.deepEqual(runtime.permissions, [{ permissionId: 'permission-1', allowed: true }])
 
     const questionInteractionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
@@ -2890,6 +2978,9 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(questionResponse.status, 202)
     const question = await readJson(questionResponse)
     assert.equal(asRecord(question.command).kind, 'question.reply')
+    assert.equal(question.processed, 1)
+    assert.equal(asRecord(question.projectionFence).commandId, asRecord(question.command).commandId)
+    assert.equal(asRecord(question.projectionFence).sessionId, cloudSession.sessionId)
     assert.deepEqual(runtime.questionReplies, [{ requestId: 'question-1', answers: ['Ship it'] }])
 
     const auditPayload = JSON.stringify(await store.listAuditEvents('tenant-1'))

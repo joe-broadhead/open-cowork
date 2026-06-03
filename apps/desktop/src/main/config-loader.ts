@@ -676,6 +676,7 @@ function normalizeConfig(raw: OpenCoworkConfig): OpenCoworkConfig {
     skills: Array.isArray(raw.skills) ? raw.skills : [],
     mcps: Array.isArray(raw.mcps) ? raw.mcps : [],
     agents: Array.isArray(raw.agents) ? raw.agents : [],
+    capabilityBundles: Array.isArray(raw.capabilityBundles) ? raw.capabilityBundles : [],
     permissions: {
       ...DEFAULT_CONFIG.permissions,
       ...(raw.permissions || {}),
@@ -895,6 +896,10 @@ export function getConfiguredMcpsFromConfig() {
 
 export function getConfiguredAgentsFromConfig() {
   return getAppConfig().agents || []
+}
+
+export function getConfiguredCapabilityBundlesFromConfig() {
+  return getAppConfig().capabilityBundles || []
 }
 
 export function clearConfigCaches() {

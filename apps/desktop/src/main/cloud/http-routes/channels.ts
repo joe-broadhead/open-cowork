@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ChannelProviderId } from '../control-plane-store.ts'
+import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
 import type { CloudHttpServerOptions } from '../http-server.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
@@ -20,6 +20,16 @@ export type ChannelRouteTools = {
   writeJson(res: ServerResponse, status: number, body: unknown, origin?: string | null): void
   writeError(res: ServerResponse, status: number, message: string, origin?: string | null): void
   processSessionCommandIfConfigured(options: CloudHttpServerOptions, tenantId: string, sessionId: string): Promise<number>
+  writeSessionCommandMutationResponse(
+    res: ServerResponse,
+    options: CloudHttpServerOptions,
+    principal: CloudPrincipal,
+    sessionId: string,
+    command: SessionCommandRecord,
+    processed: number,
+    beforeProjectionSequence: number,
+    extraBody?: Record<string, unknown>,
+  ): Promise<void>
   handleChannelDeliveriesSse(
     req: IncomingMessage,
     res: ServerResponse,
@@ -229,7 +239,16 @@ export async function handleChannelsApiRoute(input: {
         externalUserId: tools.readString(body.externalUserId),
       })
       const processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.binding.sessionId)
-      tools.writeJson(res, 202, { ...result, processed }, options.corsOrigin)
+      await tools.writeSessionCommandMutationResponse(
+        res,
+        options,
+        context.principal,
+        result.binding.sessionId,
+        result.command,
+        processed,
+        result.beforeProjectionSequence,
+        { binding: result.binding },
+      )
       return true
     }
   }
@@ -299,11 +318,16 @@ export async function handleChannelsApiRoute(input: {
         reject: body.reject === true,
       })
       const processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
-      tools.writeJson(res, 202, {
-        interaction: tools.publicChannelInteraction(result.interaction),
-        command: result.command,
+      await tools.writeSessionCommandMutationResponse(
+        res,
+        options,
+        context.principal,
+        result.interaction.sessionId,
+        result.command,
         processed,
-      }, options.corsOrigin)
+        result.beforeProjectionSequence,
+        { interaction: tools.publicChannelInteraction(result.interaction) },
+      )
       return true
     }
   }

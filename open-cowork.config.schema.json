@@ -160,6 +160,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/configuredAgent" }
     },
+    "capabilityBundles": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capabilityBundleManifest" }
+    },
     "agentStarterTemplates": {
       "type": "array",
       "items": { "$ref": "#/$defs/agentStarterTemplate" }
@@ -687,6 +691,7 @@
         "allowMachineRuntimeConfig": { "type": "boolean" },
         "allowLocalStdioMcps": { "type": "boolean" },
         "allowHostProjectDirectories": { "type": "boolean" },
+        "allowRemoteApprovalResponses": { "type": "boolean" },
         "allowedLocalMcpNames": { "$ref": "#/$defs/cloudStringList" },
         "allowedHostProjectDirectories": { "$ref": "#/$defs/cloudStringList" }
       }
@@ -1016,6 +1021,121 @@
         "suggestionLabel": { "type": "string", "maxLength": 48 },
         "statusReadyLabel": { "type": "string", "maxLength": 48 }
       }
+    },
+    "capabilityBundleId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "capabilityBundleProductMode": {
+      "type": "string",
+      "enum": [
+        "desktop-local",
+        "desktop-cloud",
+        "cloud-web",
+        "cloud-channel-gateway",
+        "standalone-gateway",
+        "paired-desktop",
+        "headless-host"
+      ]
+    },
+    "capabilityBundleCompatibilityTier": {
+      "type": "string",
+      "enum": ["supported", "experimental", "blocked", "unsupported"]
+    },
+    "capabilityBundleProductModeMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "desktop-local": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "desktop-cloud": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "cloud-web": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "cloud-channel-gateway": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "standalone-gateway": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "paired-desktop": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "headless-host": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" }
+      }
+    },
+    "capabilityBundleResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["opencode-plugin", "skill", "agent", "mcp", "provider", "workflow", "command", "native-helper"]
+        },
+        "id": { "$ref": "#/$defs/capabilityBundleId" },
+        "title": { "type": "string", "maxLength": 160 },
+        "source": { "type": "string", "maxLength": 2048 },
+        "ownedByBundle": { "type": "boolean" },
+        "productModes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityBundleProductMode" },
+          "uniqueItems": true
+        },
+        "compatibilityTier": { "$ref": "#/$defs/capabilityBundleCompatibilityTier" },
+        "url": { "type": "string", "maxLength": 2048 },
+        "command": { "type": "string", "maxLength": 2048 }
+      },
+      "required": ["kind", "id"]
+    },
+    "capabilityBundlePermission": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["provider", "filesystem", "mcp", "shell", "workflow", "plugin", "network", "credential"]
+        },
+        "id": { "$ref": "#/$defs/capabilityBundleId" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "required": { "type": "boolean" }
+      },
+      "required": ["kind", "id", "reason"]
+    },
+    "capabilityBundleManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "const": "open-cowork-capability-bundle-v1" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "opencode": { "type": "string", "maxLength": 160 },
+            "productModes": { "$ref": "#/$defs/capabilityBundleProductModeMap" }
+          }
+        },
+        "resources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityBundleResource" }
+        },
+        "permissions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityBundlePermission" }
+        },
+        "uninstall": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "removes": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/capabilityBundleId" },
+              "uniqueItems": true
+            },
+            "preserves": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/capabilityBundleId" },
+              "uniqueItems": true
+            }
+          }
+        }
+      },
+      "required": ["format", "name", "version", "owner", "resources", "permissions"]
     },
     "credentialField": {
       "type": "object",

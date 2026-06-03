@@ -10,6 +10,22 @@ The repository enforces that boundary with package-boundary tests. New OpenCode
 SDK imports must be intentional, documented here, and limited to runtime
 composition or SDK-event normalization code.
 
+OpenCode compatibility assumptions that intentionally ship with Open Cowork are
+listed in `apps/desktop/src/main/opencode-compatibility.ts`. Each entry names
+its category, owner, source version, product modes, tests, and removal condition
+when it is a shim or blocked policy. Runtime diagnostics export this registry
+beside provider, model, MCP, and skill provenance so SDK drift, capability
+state, and plugin policy are visible before release.
+
+Run `pnpm proof:opencode:compatibility` before release and after every
+OpenCode SDK/runtime bump. The command validates the same registry exported by
+diagnostics and fails closed on missing bundled OpenCode version metadata,
+unknown compatibility states, private assumptions, source-version drift,
+missing proving tests, and shim/blocked entries that do not name removal
+conditions. The fixture in
+`tests/fixtures/opencode-compatibility-registry.json` records the intentional
+registry shape; changing it is a compatibility review, not a snapshot refresh.
+
 ## Import Rules
 
 - Cloud Channel Gateway packages must not import `@opencode-ai/sdk`,
@@ -76,6 +92,16 @@ OpenCode subprocess handles. If a Cloud Channel Gateway feature needs more
 detail, add that detail to the shared cloud event contract and projection tests
 rather than importing the SDK.
 
+Projection causality is modeled in the same shared contract, not in SDK event
+objects. Use `createCloudProjectionFenceToken`,
+`createCloudProjectionCheckpoint`, `cloudProjectionFenceObserved`, and
+`createCloudAutomationEventEnvelope` from
+`packages/shared/src/cloud-session-projection.ts` when a Cloud, Gateway,
+workflow, paired Desktop, or automation path needs to prove that a mutation has
+been observed by product projection. Fence identities must use exact
+tenant/workspace/session/workflow-run/client ids; fuzzy or suffix matching is
+not part of the contract.
+
 Standalone Gateway has its own private OpenCode runtime boundary. SDK client
 objects and raw SDK events must stay inside
 `apps/standalone-gateway/src/opencode.ts`; the rest of the standalone app
@@ -88,6 +114,8 @@ Use this checklist for every OpenCode SDK or `opencode-ai` runtime bump:
 
 - Confirm `apps/desktop/package.json` pins both `@opencode-ai/sdk` and
   `opencode-ai`, then update `pnpm-lock.yaml`.
+- Run `pnpm proof:opencode:compatibility` and resolve any registry drift before
+  accepting the bump.
 - Run `pnpm typecheck` first. SDK type drift in runtime config, client calls, or
   server options is treated as real drift.
 - Verify `apps/desktop/src/main/runtime-config-builder.ts` still emits

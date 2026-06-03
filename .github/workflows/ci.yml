@@ -81,6 +81,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Live scenario evidence
+        run: pnpm test:live-scenarios
+
       - name: Cloud Web Workbench browser readiness gates
         run: pnpm test:cloud-web
 
@@ -130,6 +133,9 @@ jobs:
 
       - name: Run OpenCode portability proof
         run: pnpm proof:cloud:opencode-portability --json
+
+      - name: Run sandbox OpenCode session proof preflight
+        run: pnpm proof:sandbox:opencode-session -- --json
 
       - name: Run Desktop Web Gateway continuation gates
         run: pnpm test:cloud-continuation

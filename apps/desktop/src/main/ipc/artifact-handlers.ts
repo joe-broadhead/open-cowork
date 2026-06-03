@@ -81,7 +81,9 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
 
   registerIpcInvoke(context, 'artifact:list', objectArg<SessionArtifactListRequest>('artifact list request', validateSessionArtifactListRequest), async (event, request): Promise<SessionArtifact[]> => {
     const workspaceId = readWorkspaceIdOption(request)
-    if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) return []
+    if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return sessionEngine.getSessionView(request.sessionId)?.artifacts || []
+    }
     return context.workspaceGateway.listCloudArtifacts(event, request.sessionId, workspaceId)
   })
 

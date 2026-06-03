@@ -4,6 +4,7 @@ import {
   SETUP_INTENTS,
   workspaceAuthorityContract,
   type DesktopPairingPublicRecord,
+  type RuntimeCapabilityStatus,
   type RuntimeInputDiagnostics,
   type RuntimeStatus,
   type SetupHealthStatus,
@@ -42,6 +43,38 @@ function statusTone(status: SetupHealthStatus | WorkspaceInfo['status']) {
 
 function statusLabel(status: SetupHealthStatus | WorkspaceInfo['status']) {
   return status.replace(/_/g, ' ')
+}
+
+function capabilityTone(status: RuntimeCapabilityStatus) {
+  if (status === 'active' || status === 'available') return 'border-green-500/30 text-green-200'
+  if (status === 'auth-pending' || status === 'ask-gated') return 'border-sky-400/30 text-sky-200'
+  if (status === 'disabled' || status === 'missing' || status === 'unknown') return 'border-amber-500/30 text-amber-200'
+  return 'border-red-400/30 text-red-200'
+}
+
+function capabilityStatusPriority(status: RuntimeCapabilityStatus) {
+  switch (status) {
+    case 'blocked':
+    case 'runtime-failure':
+    case 'unsupported':
+      return 0
+    case 'auth-pending':
+    case 'ask-gated':
+    case 'disabled':
+    case 'missing':
+      return 1
+    case 'unknown':
+      return 2
+    case 'active':
+    case 'available':
+      return 3
+  }
+}
+
+function formatEvidenceValue(value: string | number | boolean | string[] | null) {
+  if (value === null) return 'null'
+  if (Array.isArray(value)) return value.join(', ') || 'none'
+  return String(value)
 }
 
 function workspaceAuthority(workspace: WorkspaceInfo): WorkspaceExecutionAuthority {
@@ -106,6 +139,14 @@ function StatusPill({ status }: { status: SetupHealthStatus | WorkspaceInfo['sta
   )
 }
 
+function CapabilityPill({ status }: { status: RuntimeCapabilityStatus }) {
+  return (
+    <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium ${capabilityTone(status)}`}>
+      {status.replace(/-/g, ' ')}
+    </span>
+  )
+}
+
 export function HealthCenterPage() {
   const [snapshot, setSnapshot] = useState<HealthSnapshot>(INITIAL_SNAPSHOT)
   const [loading, setLoading] = useState(true)
@@ -150,6 +191,16 @@ export function HealthCenterPage() {
       status: checkStatus(check.id, snapshot),
     }))
   ), [snapshot])
+  const runtimeCapabilities = useMemo(() => (
+    [...(snapshot.runtimeInputs?.capabilities || [])]
+      .sort((left, right) => (
+        capabilityStatusPriority(left.status) - capabilityStatusPriority(right.status)
+        || left.kind.localeCompare(right.kind)
+        || left.id.localeCompare(right.id)
+      ))
+      .slice(0, 12)
+  ), [snapshot.runtimeInputs])
+  const runtimeConflicts = snapshot.runtimeInputs?.conflicts || []
 
   const runWorkspaceAction = async (workspace: WorkspaceInfo) => {
     const action = workspaceAction(workspace)
@@ -257,6 +308,63 @@ export function HealthCenterPage() {
               >
                 {busyAction === 'runtime:restart' ? 'Restarting...' : 'Restart runtime'}
               </button>
+            </Card>
+
+            <Card>
+              <h2 className="text-[14px] font-semibold text-text">Runtime Capability Provenance</h2>
+              <p className="mt-1 text-[11px] text-text-muted">Source, winner, and reason-code diagnostics for runtime inputs. Evidence is redacted before it reaches the renderer.</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {runtimeCapabilities.length === 0 ? (
+                  <div className="rounded border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-muted">
+                    No runtime capability diagnostics returned.
+                  </div>
+                ) : runtimeCapabilities.map((capability) => {
+                  const evidence = Object.entries(capability.evidence || {}).slice(0, 4)
+                  return (
+                    <div
+                      key={`${capability.kind}:${capability.id}:${capability.reasonCode}`}
+                      data-testid={`runtime-capability-${capability.kind}-${capability.id}`}
+                      className="rounded border border-border-subtle bg-base px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-[12px] font-medium text-text">{capability.id}</div>
+                          <div className="mt-0.5 text-[10px] text-text-muted">{capability.kind} · {capability.source} · {capability.productMode}</div>
+                        </div>
+                        <CapabilityPill status={capability.status} />
+                      </div>
+                      <div className="mt-2 break-all rounded border border-border-subtle px-2 py-1 font-mono text-[10px] text-text-muted">
+                        {capability.reasonCode}
+                      </div>
+                      {evidence.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {evidence.map(([key, value]) => (
+                            <span key={key} className="max-w-full truncate rounded border border-border-subtle px-2 py-0.5 text-[10px] text-text-muted">
+                              {key}: {formatEvidenceValue(value)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+              {runtimeConflicts.length > 0 ? (
+                <div className="mt-4">
+                  <div className="text-[11px] font-semibold text-text-secondary">Conflicts</div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {runtimeConflicts.map((conflict) => (
+                      <div key={`${conflict.kind}:${conflict.id}:${conflict.reasonCode}`} className="rounded border border-amber-500/25 bg-amber-500/10 px-3 py-2">
+                        <div className="text-[11px] font-medium text-amber-100">{conflict.kind}: {conflict.id}</div>
+                        <div className="mt-1 text-[10px] text-amber-100/80">
+                          winner {conflict.winnerSource} · losers {conflict.loserSources.join(', ')}
+                        </div>
+                        <div className="mt-1 break-all font-mono text-[10px] text-amber-100/80">{conflict.reasonCode}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </Card>
 
             <Card>

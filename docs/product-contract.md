@@ -208,6 +208,39 @@ for status and capability visibility. These rows are not a second local
 workspace and do not make local sessions sync implicitly. Remote session
 operation remains gated by the outbound broker and pairing policy.
 
+### Headless Host Operator Surface
+
+Headless host is an operator lifecycle surface over existing Open Cowork
+composition. It is not a new execution authority and it must not expose Desktop
+or OpenCode publicly by default.
+
+The current supported command surface is local loopback `check`, foreground or
+detached `start`, `status`, `doctor`, and `stop` through:
+
+```bash
+pnpm headless:host check
+pnpm headless:host start
+pnpm headless:host start --detached
+pnpm headless:host status
+pnpm headless:host doctor
+pnpm headless:host stop
+```
+
+`check` starts the existing managed Desktop Local runtime composition path,
+records redacted readiness/doctor status in an explicit product-owned
+headless state file, stops the runtime, and exits. `start` uses the same
+runtime composition path, records redacted state while it runs in the
+foreground, and stops on SIGINT, SIGTERM, or `pnpm headless:host stop`.
+`start --detached` is still loopback-only: it launches a foreground child
+process through the same managed runtime path, waits until that child writes
+product-owned state, and then returns so later `status`, `doctor`, and `stop`
+commands can recover that state after a shell restart. `status` reads that
+redacted state plus the current process runtime status and clears stale
+`start` state when the recorded process is no longer alive.
+`doctor` returns the same redacted diagnostics bundle used by Desktop support
+flows. LAN, remote, and tunnel start modes remain fail-closed until their
+topology, pairing, recovery, and audit contracts are implemented.
+
 ## Active Workspace And Routing
 
 `workspaceId` scopes every workspace-owned API. When omitted, clients use the
@@ -228,6 +261,62 @@ Workspace switching must not merge or leak:
 - custom agents, skills, or MCP metadata
 - cached Cloud cursors
 - errors or status banners
+
+## Canonical Resource Identity
+
+Addressable resources use the shared
+`open-cowork-resource-identity-v1` contract in
+`packages/shared/src/resource-identity.ts`.
+
+The identity is authority-scoped and exact. It covers workspaces, sessions,
+task runs, workflows, workflow runs, artifacts, settings surfaces, diagnostics
+bundles, and capability details. Unsupported authorities or missing resources
+must render explicit unavailable/not-found state; they must not fall back to
+Desktop Local, the active workspace, suffix matches, or best-effort lookups.
+
+Projection fences, automation event streams, notifications, and future semantic
+UI actions should carry the same serialized identity shape. Deep links use the
+`open-cowork://resource/<encoded-identity>` wrapper from the shared identity
+module and must not add search/hash state, suffix matching, active-workspace
+fallbacks, or route-specific id shortcuts.
+
+Cloud session command mutation responses, including Gateway/channel prompt and
+approval/question responses, include `projectionFence` only when the response
+view proves the session projection advanced after that command was processed. A
+`null` fence is an explicit queued/unobserved state; clients must wait for
+session/workspace events or refresh before treating the mutation as projected.
+
+Desktop Local workflow-run mutations also return a `workflow-run` scoped
+`projectionFence` when the durable workflow SQLite transaction has advanced the
+product workflow projection. That fence is a consistency token for Open Cowork
+workflow state only; it does not replace or reinterpret OpenCode session,
+approval, question, tool, or event-stream semantics.
+
+Paired Desktop command results are lease-fenced by the broker command sequence
+and explicitly return `projectionFence: null` with
+`projectionFenceStatus.reasonCode:
+desktop_pairing_projection_fence_unsupported`. They are not waitable projection
+fences until paired Desktop has a durable projection checkpoint.
+
+## Approval And Question Authority
+
+Remote approval and question replies use the shared remote approval policy in
+`packages/shared/src/remote-approval-policy.ts`.
+
+Defaults are fail-closed:
+
+- Desktop Local requires local user confirmation.
+- Paired Desktop requires explicit remote approval enablement plus local
+  confirmation.
+- Cloud Web and Desktop Cloud require `allowRemoteApprovalResponses: true` in
+  the effective cloud runtime policy plus Cloud RBAC.
+- Cloud Channel Gateway and Standalone Gateway require
+  `allowRemoteApprovalResponses: true` in the effective cloud runtime policy
+  plus gateway actor RBAC.
+
+Renderer disabled states and remote UI hints are never authorization
+boundaries. Main, Cloud, Gateway, and pairing APIs must enforce the same policy
+and emit audit events for accepted and denied decisions.
 
 ## Cloud Offline And Degraded Behavior
 
@@ -360,6 +449,79 @@ A valid import flow must:
 - create a new Cloud thread or artifact records in the target Cloud workspace
 
 Import does not change the original Local thread's ownership.
+
+## Sandbox Portability
+
+Portable sandbox execution is a product policy wrapper around OpenCode-owned
+runtime execution. The policy must declare the sandbox engine, exact component
+ids, allowlisted mounts, and the component manifest format before startup.
+
+Non-development sandbox components must be verified and carry release evidence:
+a valid SHA-256 digest or a signature. A development override may bypass
+component trust only when it is explicitly enabled and includes a reason. Mounts
+must remain inside allowlisted source roots, use valid container targets, and
+reject secret-bearing paths unless a reasoned development override also allows
+secret mounts.
+
+Startup, status, stop, and cleanup must be derived from the accepted policy
+plan. Open Cowork may build Docker or Apple Container command plans with
+network disabled, dropped Linux capabilities, no-new-privileges where the
+engine supports it, and exact bind mounts, but it must not shell-expand user
+input or run when the policy plan has blockers. Command args, runner output,
+and lifecycle state exported to diagnostics or release evidence must redact
+local mount sources and token-like values. The one-call sandbox smoke helper
+runs start, status, and stop from the same accepted plan and returns structured
+redacted evidence for release gates.
+
+The stronger sandbox OpenCode session proof must be one-shot and
+engine-backed: a configured runtime image mounts only temp proof, workspace,
+and runtime-home directories, starts OpenCode inside the sandbox, creates a
+no-reply session through OpenCode's HTTP API, verifies the prompt message was
+recorded, and exits. Missing engine, missing image, policy-blocked mounts, and
+command failures must produce typed redacted evidence and must not be counted
+as a successful sandbox session proof.
+
+## Scoped File Sessions
+
+Just-in-time file sessions are product access-control surfaces for support,
+paired clients, semantic UI automation, and previews. They do not replace
+OpenCode tools or loosen OpenCode execution permissions.
+
+A file session must declare workspace, actor, purpose, workspace root,
+allowlisted relative paths, absolute TTL, idle TTL, file-count limits,
+per-file, per-batch, and total session byte limits, and sensitive path policy.
+Catalogs, reads, and writes must reject traversal, symlink escapes,
+out-of-scope paths, expired sessions, idle sessions, secret-looking paths, and
+oversized files before content leaves or mutates the local authority.
+Remote/cloud clients never receive ambient host filesystem access.
+
+Writes require exact content revision checks: existing files must match their
+current bounded content hash, and new files must explicitly use
+`expectedRevision: null`. Files too large to hash within the session limit are
+not writable through this surface. Accepted and denied reads, writes, and
+expiration attempts emit redacted audit events with actor, purpose, path, bytes,
+revision, and reason code metadata.
+
+## Semantic UI Automation
+
+The semantic UI control surface is a local, tokenized, policy-gated bridge over
+app-owned state. The shared read-only contract lives in
+`packages/shared/src/semantic-ui.ts`.
+
+Main/renderer state should enter this surface through the typed semantic UI app
+state contract and bridge update function, then be exposed as canonical
+resource identities plus redacted labels. MCP tools must not receive DOM
+selectors, CSS classes, coordinates, screenshots, hidden secrets, artifact
+bodies, or local host paths.
+
+The initial tools are `ui_status`, `ui_snapshot`, `ui_list_actions`, and
+`ui_execute_action`. Status and snapshot expose structured status and
+high-level visible state, not DOM selectors, CSS classes, coordinates,
+screenshots, artifact bodies, hidden secrets, or local MCP process details.
+Action execution is allowlist-only and approval-gated through OpenCode
+permissions; the first action is `diagnostics.export`, which returns the
+redacted diagnostics bundle and emits a main-process audit log without logging
+the bundle body.
 
 ## Shared Status Vocabulary
 

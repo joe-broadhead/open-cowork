@@ -130,12 +130,23 @@ export type DesktopPairingCommandClaimResult = {
   remoteStatus?: 'online' | 'offline' | 'revoked' | 'draining'
 }
 
+export const DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED = {
+  supported: false,
+  reasonCode: 'desktop_pairing_projection_fence_unsupported',
+  message: 'Paired Desktop command results are lease-fenced but do not expose a projection checkpoint.',
+  waitable: false,
+} as const
+
+export type DesktopPairingProjectionFenceStatus = typeof DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED
+
 export type DesktopPairingCommandResult = {
   ok: boolean
   status: 'completed' | 'queued' | 'blocked_by_policy' | 'requires_local_confirmation' | 'failed'
   session?: SessionInfo | null
   sessions?: SessionInfo[]
   message?: string | null
+  projectionFence?: null
+  projectionFenceStatus?: DesktopPairingProjectionFenceStatus
   data?: Record<string, unknown>
 }
 

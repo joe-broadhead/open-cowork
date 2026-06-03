@@ -191,6 +191,7 @@ test('cloud deployment config validates role, profile, storage, and runtime poli
       allowMachineRuntimeConfig: false,
       allowLocalStdioMcps: false,
       allowHostProjectDirectories: false,
+      allowRemoteApprovalResponses: false,
       allowedLocalMcpNames: [],
       allowedHostProjectDirectories: [],
     },

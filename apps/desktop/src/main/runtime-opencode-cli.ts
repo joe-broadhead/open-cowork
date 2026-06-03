@@ -83,11 +83,11 @@ function resolveDevelopmentPackageJsonPath(moduleName: string): string | null {
   return existsSync(candidate) ? candidate : null
 }
 
-function resolveBundledOpencodeWrapperPath(): string | null {
+export function resolveBundledOpencodeWrapperPath(): string | null {
   return resolveBundledNodeModuleFile('opencode-ai', join('bin', 'opencode'))
 }
 
-function resolveBundledOpencodeBinaryPath(): string | null {
+export function resolveBundledOpencodeBinaryPath(): string | null {
   const platform = process.platform === 'win32' ? 'windows' : process.platform
   const arch = process.arch
   const binary = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
@@ -100,8 +100,18 @@ function resolveBundledOpencodeBinaryPath(): string | null {
   return null
 }
 
+export function resolveBundledOpencodePackageJsonPath(): string | null {
+  return resolveBundledPackageJsonPath('opencode-ai')
+}
+
+export function resolveBundledOpencodeSdkPackageJsonPath(): string | null {
+  return resolveBundledPackageJsonPath('@opencode-ai/sdk')
+    || resolvePackageJsonFromEntry('@opencode-ai/sdk')
+    || resolveDevelopmentPackageJsonPath('@opencode-ai/sdk')
+}
+
 export function getBundledOpencodeVersion(): string | null {
-  const packageJsonPath = resolveBundledPackageJsonPath('opencode-ai')
+  const packageJsonPath = resolveBundledOpencodePackageJsonPath()
   if (!packageJsonPath) return null
 
   try {
@@ -115,9 +125,7 @@ export function getBundledOpencodeVersion(): string | null {
 }
 
 export function getBundledOpencodeSdkVersion(): string | null {
-  const packageJsonPath = resolveBundledPackageJsonPath('@opencode-ai/sdk')
-    || resolvePackageJsonFromEntry('@opencode-ai/sdk')
-    || resolveDevelopmentPackageJsonPath('@opencode-ai/sdk')
+  const packageJsonPath = resolveBundledOpencodeSdkPackageJsonPath()
   if (!packageJsonPath) return null
 
   try {

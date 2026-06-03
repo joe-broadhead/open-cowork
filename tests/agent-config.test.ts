@@ -561,8 +561,10 @@ test('configured built-in agent prompts instruct the model to load attached skil
     /Load the autoresearch skill first/i,
   )
   assert.equal(agents.autoresearch.permission.bash, 'ask')
-  assert.equal(agents.autoresearch.permission.write, 'ask')
-  assert.equal(agents.autoresearch.permission.apply_patch, 'ask')
+  assert.equal(agents.autoresearch.permission.write, 'allow')
+  assert.equal(agents.autoresearch.permission.apply_patch, 'allow')
+  assert.equal(agents.autoresearch.permission['mcp__skills__save_skill_bundle'], 'ask')
+  assert.equal(agents.autoresearch.permission['mcp__agents__save_agent'], 'ask')
   assert.equal(
     agents.charts.permission.external_directory['/tmp/chart-project/.opencowork/skill-bundles/chart-creator/*'],
     undefined,

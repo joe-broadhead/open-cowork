@@ -14,7 +14,10 @@ import type {
   DesktopPairingUpdateInput,
   SessionInfo,
 } from '@open-cowork/shared'
-import { DESKTOP_PAIRING_COMMAND_KINDS } from '@open-cowork/shared'
+import {
+  DESKTOP_PAIRING_COMMAND_KINDS,
+  DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED,
+} from '@open-cowork/shared'
 import type { RuntimeSessionEvent } from '../session-event-dispatcher.ts'
 import {
   redactDesktopPairingSessionInfo,
@@ -127,6 +130,14 @@ function normalizeAttachments(value: unknown) {
       ...(typeof record.filename === 'string' ? { filename: record.filename } : {}),
     }
   })
+}
+
+function withDesktopPairingProjectionFenceStatus(result: DesktopPairingCommandResult): DesktopPairingCommandResult {
+  return {
+    ...result,
+    projectionFence: null,
+    projectionFenceStatus: DESKTOP_PAIRING_PROJECTION_FENCE_UNSUPPORTED,
+  }
 }
 
 function publicRecord(
@@ -624,11 +635,12 @@ export class DesktopPairingService {
     result: DesktopPairingCommandResult,
     leaseToken?: string | null,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const deliveredResult = withDesktopPairingProjectionFenceStatus(result)
     try {
       if (result.ok) {
-        await transport.ackCommand(context, command.id, result, leaseToken)
+        await transport.ackCommand(context, command.id, deliveredResult, leaseToken)
       } else {
-        await transport.failCommand(context, command.id, result, leaseToken)
+        await transport.failCommand(context, command.id, deliveredResult, leaseToken)
       }
       return { ok: true }
     } catch (error) {

@@ -2,11 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
+import {
+  createResourceDeepLink,
+  createResourceIdentity,
+} from '../../../packages/shared/src/resource-identity.ts'
 import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 
 const RECENT_SOURCE_TITLE = 'Navigation source thread'
 const RECENT_TARGET_TITLE = 'Navigation target thread'
 const RECENT_THREAD_MARKER = 'navigation-regression-marker'
+const DEEP_LINK_THREAD_MARKER = 'canonical-resource-deep-link-marker'
 
 function makeThreadIndexFixture(index: number) {
   const createdAt = new Date(Date.UTC(2026, 1, index + 1, 10, 0, 0)).toISOString()
@@ -172,6 +177,46 @@ test('home recent-thread CTA routes through the real session activation path', a
 
     const markerCount = await page.getByText(RECENT_THREAD_MARKER, { exact: false }).count()
     assert.equal(markerCount, 0, 'switching via Home recent threads should hydrate the selected thread, not keep the prior transcript visible')
+  } finally {
+    await cleanup()
+  }
+})
+
+test('canonical local session deep link opens the exact thread', async () => {
+  const { page, cleanup } = await launchSmokeApp()
+
+  try {
+    await waitForAppShell(page, 30_000)
+
+    const sessionId = await page.evaluate(async ({ marker }) => {
+      const session = await window.coworkApi.session.create()
+      await window.coworkApi.session.rename(session.id, 'Deep link target thread')
+      try {
+        await window.coworkApi.session.prompt(session.id, marker)
+      } catch {
+        // The smoke harness has fake provider credentials. The optimistic
+        // user turn is enough to prove the exact session was hydrated.
+      }
+      return session.id
+    }, { marker: DEEP_LINK_THREAD_MARKER })
+
+    const deepLink = createResourceDeepLink(createResourceIdentity({
+      authority: 'desktop-local',
+      kind: 'session',
+      workspaceId: 'local',
+      sessionId,
+    }))
+
+    await page.getByRole('button', { name: 'Home', exact: true }).first().click()
+    await page.evaluate((link) => {
+      window.dispatchEvent(new CustomEvent('open-cowork:open-resource', {
+        detail: { deepLink: link },
+      }))
+    }, deepLink)
+
+    await page.getByText(DEEP_LINK_THREAD_MARKER, { exact: false }).waitFor({ timeout: 15_000 })
+    const noticeCount = await page.getByTestId('resource-navigation-notice').count()
+    assert.equal(noticeCount, 0)
   } finally {
     await cleanup()
   }

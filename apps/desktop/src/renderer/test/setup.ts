@@ -264,10 +264,22 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       regenerateWebhookSecret: vi.fn(async () => null),
     },
     artifact: {
+      list: vi.fn(async () => []),
       cleanup: vi.fn(async (mode) => ({
         mode,
         removedWorkspaces: 0,
         removedBytes: 0,
+      })),
+      upload: vi.fn(async (request) => ({
+        id: 'uploaded-artifact',
+        toolId: 'upload',
+        toolName: 'upload',
+        filename: request.filename,
+        filePath: `cloud-artifact://uploaded-artifact/${request.filename}`,
+        order: 0,
+        source: 'cloud',
+        cloudArtifactId: 'uploaded-artifact',
+        mime: request.contentType || undefined,
       })),
       export: vi.fn(async () => null),
       readAttachment: vi.fn(async () => ({

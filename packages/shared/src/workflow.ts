@@ -1,3 +1,5 @@
+import type { CloudProjectionFenceToken } from './cloud-session-contract.js'
+
 export type WorkflowSurface = 'chat' | 'workflow' | 'both'
 
 export type WorkflowStatus = 'active' | 'paused' | 'running' | 'failed' | 'archived'
@@ -69,6 +71,7 @@ export interface WorkflowRun {
   createdAt: string
   startedAt: string | null
   finishedAt: string | null
+  projectionFence?: CloudProjectionFenceToken | null
 }
 
 export interface WorkflowDetail extends WorkflowSummary {
