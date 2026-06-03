@@ -14,6 +14,12 @@ describe('useOpenCodeEvents', () => {
   let notify: ((event: RuntimeNotification) => void) | null = null
   let sessionPatch: ((event: SessionPatch) => void) | null = null
   let sessionView: ((event: { sessionId: string; view: SessionView }) => void) | null = null
+  let sessionUpdated: ((event: {
+    id: string
+    workspaceId?: string | null
+    title: string | null
+  }) => void) | null = null
+  let sessionDeleted: ((event: { id: string; workspaceId?: string | null }) => void) | null = null
   let workspaceSessionsUpdated: ((event: WorkspaceSessionsUpdatedEvent) => void) | null = null
   let closeAudioContext: ReturnType<typeof vi.fn>
 
@@ -78,6 +84,8 @@ describe('useOpenCodeEvents', () => {
     notify = null
     sessionPatch = null
     sessionView = null
+    sessionUpdated = null
+    sessionDeleted = null
     workspaceSessionsUpdated = null
     closeAudioContext = vi.fn(async () => undefined)
     resetSessionStore()
@@ -129,12 +137,18 @@ describe('useOpenCodeEvents', () => {
           return vi.fn()
         }),
         permissionRequest: vi.fn(() => vi.fn()),
-        sessionDeleted: vi.fn(() => vi.fn()),
+        sessionDeleted: vi.fn((callback: (event: { id: string; workspaceId?: string | null }) => void) => {
+          sessionDeleted = callback
+          return vi.fn()
+        }),
         sessionPatch: vi.fn((callback: (event: SessionPatch) => void) => {
           sessionPatch = callback
           return vi.fn()
         }),
-        sessionUpdated: vi.fn(() => vi.fn()),
+        sessionUpdated: vi.fn((callback: (event: { id: string; workspaceId?: string | null; title: string | null }) => void) => {
+          sessionUpdated = callback
+          return vi.fn()
+        }),
         sessionView: vi.fn((callback: (event: { sessionId: string; view: SessionView }) => void) => {
           sessionView = callback
           return vi.fn()
@@ -265,6 +279,54 @@ describe('useOpenCodeEvents', () => {
     })
 
     expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['active-session'])
+  })
+
+  it('routes session metadata and delete events by workspace identity', () => {
+    render(<Harness />)
+    useSessionStore.getState().setSessions([{
+      id: 'shared-session',
+      title: 'Local title',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }])
+    useSessionStore.getState().setActiveWorkspace('cloud:active')
+    useSessionStore.getState().setSessions([{
+      id: 'shared-session',
+      title: 'Cloud title',
+      createdAt: '2026-05-27T10:00:00.000Z',
+      updatedAt: '2026-05-27T10:00:00.000Z',
+    }])
+
+    act(() => {
+      sessionUpdated?.({
+        id: 'shared-session',
+        workspaceId: 'local',
+        title: 'Local renamed',
+      })
+      sessionUpdated?.({
+        id: 'shared-session',
+        workspaceId: 'cloud:active',
+        title: 'Cloud renamed',
+      })
+    })
+
+    expect(useSessionStore.getState().sessions[0]?.title).toBe('Cloud renamed')
+    useSessionStore.getState().setActiveWorkspace('local')
+    expect(useSessionStore.getState().sessions[0]?.title).toBe('Local renamed')
+    useSessionStore.getState().setActiveWorkspace('cloud:active')
+
+    act(() => {
+      sessionDeleted?.({ id: 'shared-session', workspaceId: 'local' })
+    })
+    expect(useSessionStore.getState().sessions.map((session) => session.id)).toEqual(['shared-session'])
+    useSessionStore.getState().setActiveWorkspace('local')
+    expect(useSessionStore.getState().sessions).toEqual([])
+    useSessionStore.getState().setActiveWorkspace('cloud:active')
+
+    act(() => {
+      sessionDeleted?.({ id: 'shared-session', workspaceId: 'cloud:active' })
+    })
+    expect(useSessionStore.getState().sessions).toEqual([])
   })
 
   it('flushes older buffered text before immediately committing a newer task patch', () => {

@@ -431,6 +431,7 @@ export interface CoworkAPI {
     runtimeLoadingStatus: (callback: (status: RuntimeLoadingStatus) => void) => () => void
     sessionUpdated: (callback: (data: {
       id: string
+      workspaceId?: string | null
       title: string | null
       parentSessionId?: string | null
       changeSummary?: SessionChangeSummary | null
@@ -438,7 +439,7 @@ export interface CoworkAPI {
       composerModelId?: string | null
       composerReasoningVariant?: string | null
     }) => void) => () => void
-    sessionDeleted: (callback: (data: { id: string }) => void) => () => void
+    sessionDeleted: (callback: (data: { id: string; workspaceId?: string | null }) => void) => () => void
     workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void
   }

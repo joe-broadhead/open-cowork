@@ -50,6 +50,30 @@ export type { HistoryItem, SessionViewState } from '../../lib/session-view-model
 
 export type Session = SessionInfo
 
+type SessionMetadataPatch = {
+  id: string
+  title: string | null
+  parentSessionId?: string | null
+  changeSummary?: SessionChangeSummary | null
+  revertedMessageId?: string | null
+  composerModelId?: string | null
+  composerReasoningVariant?: string | null
+}
+
+function applySessionMetadataPatch(session: Session, patch: SessionMetadataPatch): Session {
+  if (session.id !== patch.id) return session
+  const next: Session = { ...session }
+  if (patch.title !== null && patch.title !== undefined) next.title = patch.title
+  // parentSessionId is stable once set. SDK refresh events occasionally
+  // arrive with parentID=null; guard against erasing a real fork linkage.
+  if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
+  if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
+  if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
+  if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
+  if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
+  return next
+}
+
 export interface McpConnection {
   name: string
   connected: boolean
@@ -73,16 +97,8 @@ export interface SessionStore {
     modelId?: string | null
     reasoningVariant?: string | null
   }) => void
-  applySessionMetadata: (patch: {
-    id: string
-    title: string | null
-    parentSessionId?: string | null
-    changeSummary?: SessionChangeSummary | null
-    revertedMessageId?: string | null
-    composerModelId?: string | null
-    composerReasoningVariant?: string | null
-  }) => void
-  removeSession: (id: string) => void
+  applySessionMetadata: (patch: SessionMetadataPatch, workspaceId?: string | null) => void
+  removeSession: (id: string, workspaceId?: string | null) => void
   setSessionView: (sessionId: string, view: SessionView, workspaceId?: string | null) => void
   applySessionPatch: (patch: SessionPatch) => void
   applySessionPatches: (patches: SessionPatch[]) => void
@@ -234,37 +250,26 @@ export const useSessionStore = create<SessionStore>((set) => ({
       }),
     },
   })),
-  applySessionMetadata: (patch) => set((state) => ({
-    sessions: state.sessions.map((session) => {
-      if (session.id !== patch.id) return session
-      const next: Session = { ...session }
-      if (patch.title !== null && patch.title !== undefined) next.title = patch.title
-      // parentSessionId is stable once set. SDK refresh events occasionally
-      // arrive with parentID=null; guard against erasing a real fork linkage.
-      if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
-      if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
-      if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
-      if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
-      if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
-      return next
-    }),
-    sessionsByWorkspace: {
-      ...state.sessionsByWorkspace,
-      [normalizeWorkspaceId(state.activeWorkspaceId)]: state.sessions.map((session) => {
-        if (session.id !== patch.id) return session
-        const next: Session = { ...session }
-        if (patch.title !== null && patch.title !== undefined) next.title = patch.title
-        if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
-        if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
-        if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
-        if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
-        if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
-        return next
-      }),
-    },
-  })),
-  removeSession: (id) => set((state) => {
-    const sessionKey = activeSessionWorkspaceKey(state, id)
+  applySessionMetadata: (patch, workspaceId) => set((state) => {
+    const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
+    const currentSessions = targetWorkspaceId === activeWorkspaceId
+      ? state.sessions
+      : state.sessionsByWorkspace[targetWorkspaceId] || []
+    const nextSessions = currentSessions.map((session) => applySessionMetadataPatch(session, patch))
+    return {
+      sessions: targetWorkspaceId === activeWorkspaceId ? nextSessions : state.sessions,
+      sessionsByWorkspace: {
+        ...state.sessionsByWorkspace,
+        [targetWorkspaceId]: nextSessions,
+      },
+    }
+  }),
+  removeSession: (id, workspaceId) => set((state) => {
+    const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
+    const targetIsActive = targetWorkspaceId === activeWorkspaceId
+    const sessionKey = sessionWorkspaceKey(targetWorkspaceId, id)
     const sessionStateById = { ...state.sessionStateById }
     delete sessionStateById[sessionKey]
     const chartArtifactsBySession = { ...state.chartArtifactsBySession }
@@ -283,13 +288,16 @@ export const useSessionStore = create<SessionStore>((set) => ({
     const nextAwaitingQuestion = state.awaitingQuestionSessions.has(sessionKey)
       ? new Set(Array.from(state.awaitingQuestionSessions).filter((sid) => sid !== sessionKey))
       : state.awaitingQuestionSessions
-    const nextSessions = state.sessions.filter((session) => session.id !== id)
+    const currentSessions = targetIsActive
+      ? state.sessions
+      : state.sessionsByWorkspace[targetWorkspaceId] || []
+    const nextSessions = currentSessions.filter((session) => session.id !== id)
 
     const patch: Partial<SessionStore> = {
-      sessions: nextSessions,
+      sessions: targetIsActive ? nextSessions : state.sessions,
       sessionsByWorkspace: {
         ...state.sessionsByWorkspace,
-        [normalizeWorkspaceId(state.activeWorkspaceId)]: nextSessions,
+        [targetWorkspaceId]: nextSessions,
       },
       sessionStateById,
       totalCost: sumSessionCosts(sessionStateById),
@@ -299,7 +307,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       chartArtifactsBySession,
     }
 
-    if (state.currentSessionId === id) {
+    if (targetIsActive && state.currentSessionId === id) {
       Object.assign(patch, {
         currentSessionId: null,
         currentView: deriveVisibleSessionPatch(

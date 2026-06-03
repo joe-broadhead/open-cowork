@@ -239,6 +239,7 @@ export function publishSessionMetadata(win: BrowserWindow | null | undefined, se
   if (!record) return
   win.webContents.send('session:updated', {
     id: record.id,
+    workspaceId: 'local',
     title: record.title || null,
     parentSessionId: record.parentSessionId,
     changeSummary: record.changeSummary,

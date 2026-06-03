@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
@@ -119,6 +119,7 @@ export function App() {
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const workspaceActivationGenerationRef = useRef(0)
 
   const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
     setRendererErrorNotice(notice)
@@ -209,12 +210,18 @@ export function App() {
   }, [ensureSidebarVisible])
 
   const activateExactWorkspace = useCallback(async (workspaceId: string) => {
+    const generation = workspaceActivationGenerationRef.current + 1
+    workspaceActivationGenerationRef.current = generation
+    const isCurrentActivation = () => workspaceActivationGenerationRef.current === generation
     const normalized = normalizeWorkspaceId(workspaceId)
     const activated = await window.coworkApi.workspace.activate(normalized)
+    if (!isCurrentActivation()) return null
     const activeId = normalizeWorkspaceId(activated?.id || normalized)
     setActiveWorkspace(activeId)
     await useWorkspaceSupportStore.getState().loadWorkspaceSupport(activeId, { force: true })
+    if (!isCurrentActivation()) return null
     await loadSessions()
+    if (!isCurrentActivation()) return null
     return activeId
   }, [loadSessions, setActiveWorkspace])
 
@@ -229,7 +236,8 @@ export function App() {
 
     const workspaceId = action.routeParams.workspaceId
     if (workspaceId) {
-      await activateExactWorkspace(workspaceId)
+      const activeId = await activateExactWorkspace(workspaceId)
+      if (!activeId) return
     }
 
     setResourceNavigationNotice(null)

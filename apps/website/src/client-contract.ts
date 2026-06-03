@@ -76,6 +76,7 @@ export type CloudWebClientStateContract = {
   workspace: unknown | null
   csrfToken: string | null
   selectedSessionId: string | null
+  sessionSelectionGeneration: number
   sessions: unknown[]
   sessionList: {
     nextCursor: string | null

@@ -658,10 +658,18 @@ function readSseEvent(event) {
 
 async function refreshSelectedSession() {
   if (!state.selectedSessionId) return;
-  await loadSessionView(state.selectedSessionId, { render: true });
+  await loadSessionView(state.selectedSessionId, {
+    render: true,
+    selectionGeneration: state.sessionSelectionGeneration,
+  });
 }
 
-function openSessionEvents(sessionId, afterSequence = 0) {
+function isCurrentSessionSelection(sessionId, selectionGeneration) {
+  return state.selectedSessionId === sessionId
+    && state.sessionSelectionGeneration === selectionGeneration;
+}
+
+function openSessionEvents(sessionId, afterSequence = 0, selectionGeneration = state.sessionSelectionGeneration) {
   closeEventSource(state.sessionEvents);
   state.sessionEvents = {
     source: null,
@@ -671,6 +679,7 @@ function openSessionEvents(sessionId, afterSequence = 0) {
     error: null,
   };
   if (!window.EventSource) {
+    if (!isCurrentSessionSelection(sessionId, selectionGeneration)) return;
     state.sessionEvents.status = 'closed';
     renderChat();
     return;
@@ -678,14 +687,17 @@ function openSessionEvents(sessionId, afterSequence = 0) {
   const source = new EventSource(sseUrl(endpointPath('sessionEvents', '/api/sessions/:sessionId/events', { sessionId }), afterSequence), { withCredentials: true });
   state.sessionEvents.source = source;
   source.onopen = () => {
+    if (!isCurrentSessionSelection(sessionId, selectionGeneration)) return;
     state.sessionEvents.status = 'open';
     renderChat();
   };
   source.onerror = () => {
+    if (!isCurrentSessionSelection(sessionId, selectionGeneration)) return;
     state.sessionEvents.status = 'retrying';
     renderChat();
   };
   bindCloudEventListeners(source, (event) => {
+    if (!isCurrentSessionSelection(sessionId, selectionGeneration)) return;
     const payload = readSseEvent(event);
     if (payload?.sequence) state.sessionEvents.cursor = Math.max(state.sessionEvents.cursor, payload.sequence);
     if (payload?.type === 'snapshot.required') {
@@ -724,6 +736,12 @@ function openWorkspaceEvents(afterSequence = 0) {
 
 async function loadSessionView(sessionId, options = {}) {
   const view = await api(endpointPath('sessionView', '/api/sessions/:sessionId/view', { sessionId }));
+  if (
+    typeof options.selectionGeneration === 'number'
+    && !isCurrentSessionSelection(sessionId, options.selectionGeneration)
+  ) {
+    return null;
+  }
   state.sessionViews[sessionId] = view;
   if (options.render !== false) {
     renderThreadList();
@@ -734,10 +752,24 @@ async function loadSessionView(sessionId, options = {}) {
 }
 
 async function selectSession(sessionId) {
+  const selectionGeneration = state.sessionSelectionGeneration + 1;
+  state.sessionSelectionGeneration = selectionGeneration;
   state.selectedSessionId = sessionId;
-  const view = await loadSessionView(sessionId, { render: false });
+  closeEventSource(state.sessionEvents);
+  state.sessionEvents = {
+    source: null,
+    sessionId,
+    cursor: 0,
+    status: 'connecting',
+    error: null,
+  };
+  renderThreadList();
+  renderChat();
+  renderArtifacts();
+  const view = await loadSessionView(sessionId, { render: false, selectionGeneration });
+  if (!view || !isCurrentSessionSelection(sessionId, selectionGeneration)) return;
   const afterSequence = typeof view?.projection?.sequence === 'number' ? view.projection.sequence : 0;
-  openSessionEvents(sessionId, afterSequence);
+  openSessionEvents(sessionId, afterSequence, selectionGeneration);
   setRoute('chat', true);
   renderThreadList();
   renderChat();

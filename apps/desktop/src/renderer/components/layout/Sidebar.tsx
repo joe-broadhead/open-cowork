@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type {
   BrandingSidebarConfig,
   BrandingSidebarLowerConfig,
@@ -308,6 +308,7 @@ function WorkspaceSwitcher() {
   const [gatewayUrl, setGatewayUrl] = useState('')
   const [gatewayToken, setGatewayToken] = useState('')
   const [gatewayLabel, setGatewayLabel] = useState('')
+  const activationGenerationRef = useRef(0)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.active) || workspaces[0] || LOCAL_WORKSPACE_FALLBACK
 
@@ -358,36 +359,51 @@ function WorkspaceSwitcher() {
   }, [loadWorkspaceSupport, setActiveWorkspace, setSessions])
 
   const activateWorkspace = async (workspace: WorkspaceInfo) => {
+    const generation = activationGenerationRef.current + 1
+    activationGenerationRef.current = generation
+    const isCurrentActivation = () => activationGenerationRef.current === generation
     const previousId = activeWorkspace.id
     setOpen(false)
     try {
       if (workspace.kind === 'cloud' && workspace.status === 'auth_required') {
         await window.coworkApi.workspace.login(workspace.id)
+        if (!isCurrentActivation()) return
       }
       let activated = await window.coworkApi.workspace.activate(workspace.id)
+      if (!isCurrentActivation()) return
       if (activated.kind === 'cloud' && activated.status === 'auth_required') {
         await window.coworkApi.workspace.login(activated.id)
+        if (!isCurrentActivation()) return
         activated = await window.coworkApi.workspace.activate(activated.id)
+        if (!isCurrentActivation()) return
       }
       const nextWorkspaces = await window.coworkApi.workspace.list()
+      if (!isCurrentActivation()) return
       setWorkspaces(nextWorkspaces.length > 0 ? nextWorkspaces : [activated])
-      const supportEntries = await refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [activated], () => false)
+      const supportEntries = await refreshSupport(nextWorkspaces.length > 0 ? nextWorkspaces : [activated], () => !isCurrentActivation())
+      if (!isCurrentActivation()) return
       const activeSupport = supportEntries?.find((entry) => entry.workspace.id === activated.id)?.support
       if (activated.id !== previousId) {
         setActiveWorkspace(activated.id)
         setCurrentSession(null)
       }
-      setSessions(await loadSessionsForWorkspace(activated, activeSupport))
+      const sessions = await loadSessionsForWorkspace(activated, activeSupport)
+      if (isCurrentActivation()) setSessions(sessions)
     } catch (error) {
+      if (!isCurrentActivation()) return
       const message = error instanceof Error ? error.message : String(error)
       try {
         const restored = await window.coworkApi.workspace.activate(previousId)
+        if (!isCurrentActivation()) return
         const restoredWorkspaces = await window.coworkApi.workspace.list()
+        if (!isCurrentActivation()) return
         setWorkspaces(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored])
-        const supportEntries = await refreshSupport(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored], () => false)
+        const supportEntries = await refreshSupport(restoredWorkspaces.length > 0 ? restoredWorkspaces : [restored], () => !isCurrentActivation())
+        if (!isCurrentActivation()) return
         const restoredSupport = supportEntries?.find((entry) => entry.workspace.id === restored.id)?.support
         setActiveWorkspace(restored.id)
-        setSessions(await loadSessionsForWorkspace(restored, restoredSupport))
+        const sessions = await loadSessionsForWorkspace(restored, restoredSupport)
+        if (isCurrentActivation()) setSessions(sessions)
       } catch {
         // Leave the visible workspace unchanged if rollback also fails; the
         // original login error is still the actionable user-facing failure.

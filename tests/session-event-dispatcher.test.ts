@@ -534,6 +534,7 @@ test('history refresh publishes SDK-owned session metadata after registry sync',
       sent.find((entry) => entry.channel === 'session:updated')?.payload,
       {
         id: 'session-title-sync',
+        workspaceId: 'local',
         title: 'SDK generated title',
         parentSessionId: null,
         changeSummary: null,

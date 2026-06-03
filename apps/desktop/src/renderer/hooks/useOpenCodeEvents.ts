@@ -194,7 +194,7 @@ export function useOpenCodeEvents() {
     })
 
     const unsubSessionUpdate = window.coworkApi.on.sessionUpdated((data) => {
-      useSessionStore.getState().applySessionMetadata(data)
+      useSessionStore.getState().applySessionMetadata(data, data.workspaceId)
     })
 
     // Externally-triggered session deletions (SDK cleanup, another client
@@ -203,7 +203,7 @@ export function useOpenCodeEvents() {
     // refreshed. The main handler only broadcasts for top-level sessions,
     // so this is safe to dispatch directly into `removeSession`.
     const unsubSessionDelete = window.coworkApi.on.sessionDeleted((data) => {
-      useSessionStore.getState().removeSession(data.id)
+      useSessionStore.getState().removeSession(data.id, data.workspaceId)
     })
 
     const unsubWorkspaceSessions = window.coworkApi.on.workspaceSessionsUpdated((data) => {
