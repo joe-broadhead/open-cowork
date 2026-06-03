@@ -692,10 +692,10 @@ export async function launchSmokeSession(
 
     let browser: Browser | null = null
     try {
-      await waitForCdp(port)
+      await waitForCdp(port, appShellTimeoutMs)
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      await waitForCdpPage(browser)
-      const page = await waitForCdpAppPage(browser)
+      await waitForCdpPage(browser, appShellTimeoutMs)
+      const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {
@@ -742,11 +742,11 @@ export async function launchSmokeSession(
 
     let browser: Browser | null = null
     try {
-      await Promise.race([waitForCdp(port), earlyExit])
+      await Promise.race([waitForCdp(port, appShellTimeoutMs), earlyExit])
       clearEarlyExit()
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
-      await waitForCdpPage(browser)
-      const page = await waitForCdpAppPage(browser)
+      await waitForCdpPage(browser, appShellTimeoutMs)
+      const page = await waitForCdpAppPage(browser, appShellTimeoutMs)
       await bootstrapSmokeSettings(page, appShellTimeoutMs)
 
       return {

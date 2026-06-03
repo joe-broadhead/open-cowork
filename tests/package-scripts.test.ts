@@ -26,6 +26,7 @@ const dependabotConfig = readFileSync(new URL('../.github/dependabot.yml', impor
 const contributingDocs = readFileSync(new URL('../CONTRIBUTING.md', import.meta.url), 'utf8')
 const nvmrc = readFileSync(new URL('../.nvmrc', import.meta.url), 'utf8').trim()
 const packagingDocs = readFileSync(new URL('../docs/packaging-and-releases.md', import.meta.url), 'utf8')
+const smokeHelpers = readFileSync(new URL('../apps/desktop/tests/smoke-helpers.ts', import.meta.url), 'utf8')
 
 function requireScript(name: string, source: PackageJson = packageJson): string {
   const script = source.scripts?.[name]
@@ -243,6 +244,19 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
   assert.deepEqual(splitScriptSteps(requireScript('test:e2e:packaged:optional', desktopPackageJson)), [
     'node ../../scripts/run-desktop-smoke-tests.mjs --pattern "tests/*.packaged.test.ts" --timeout=240000 --retries=1',
   ])
+
+  for (const expectedCall of [
+    'waitForCdp(port, appShellTimeoutMs)',
+    'waitForCdpPage(browser, appShellTimeoutMs)',
+    'waitForCdpAppPage(browser, appShellTimeoutMs)',
+  ]) {
+    const matches = [...smokeHelpers.matchAll(new RegExp(expectedCall.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))]
+    assert.equal(
+      matches.length,
+      2,
+      `both packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
+    )
+  }
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {
