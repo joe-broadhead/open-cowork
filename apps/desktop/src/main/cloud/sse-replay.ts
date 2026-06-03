@@ -14,6 +14,7 @@ type SseReplayTopic = {
   loadEvents: (afterSequence: number) => Promise<SequencedSseEvent[]>
   lastSequence: number
   polling: boolean
+  pollRequested: boolean
   timer: ReturnType<typeof setInterval>
 }
 
@@ -91,13 +92,12 @@ export class CloudSseReplayHub {
         loadEvents: input.loadEvents,
         lastSequence: input.afterSequence,
         polling: false,
+        pollRequested: false,
         timer: setInterval(() => {
-          void this.poll(input.key)
+          this.requestPoll(input.key)
         }, input.pollMs),
       }
       this.topics.set(input.key, topic)
-    } else if (input.afterSequence < topic.lastSequence) {
-      topic.lastSequence = input.afterSequence
     }
     const subscriber: SseReplaySubscriber = {
       lastSequence: input.afterSequence,
@@ -105,6 +105,7 @@ export class CloudSseReplayHub {
       onError: input.onError,
     }
     topic.subscribers.add(subscriber)
+    this.requestPoll(input.key)
     return () => {
       const current = this.topics.get(input.key)
       if (!current) return
@@ -128,18 +129,43 @@ export class CloudSseReplayHub {
     this.topics.clear()
   }
 
+  private requestPoll(key: string) {
+    if (this.closed) return
+    const topic = this.topics.get(key)
+    if (!topic) return
+    if (topic.polling) {
+      topic.pollRequested = true
+      return
+    }
+    void this.poll(key)
+  }
+
+  private replayAfterSequence(topic: SseReplayTopic) {
+    let afterSequence = topic.lastSequence
+    for (const subscriber of topic.subscribers) {
+      afterSequence = Math.min(afterSequence, subscriber.lastSequence)
+    }
+    return afterSequence
+  }
+
   private async poll(key: string) {
     if (this.closed) return
     const topic = this.topics.get(key)
     if (!topic || topic.polling) return
     topic.polling = true
+    topic.pollRequested = false
     try {
-      const events = await topic.loadEvents(topic.lastSequence)
+      const afterSequence = this.replayAfterSequence(topic)
+      const events = await topic.loadEvents(afterSequence)
       if (this.closed || this.topics.get(key) !== topic) return
       for (const event of events) {
-        if (event.sequence <= topic.lastSequence) continue
-        topic.lastSequence = event.sequence
+        if (event.sequence <= afterSequence) continue
+        topic.lastSequence = Math.max(topic.lastSequence, event.sequence)
         for (const subscriber of topic.subscribers) {
+          if (subscriber.lastSequence < afterSequence) {
+            topic.pollRequested = true
+            continue
+          }
           if (event.sequence <= subscriber.lastSequence) continue
           subscriber.listener(event)
           subscriber.lastSequence = event.sequence
@@ -148,7 +174,13 @@ export class CloudSseReplayHub {
     } catch (error) {
       for (const subscriber of topic.subscribers) subscriber.onError?.(error)
     } finally {
-      if (this.topics.get(key) === topic) topic.polling = false
+      if (this.topics.get(key) === topic) {
+        topic.polling = false
+        if (topic.pollRequested && topic.subscribers.size > 0) {
+          topic.pollRequested = false
+          this.requestPoll(key)
+        }
+      }
     }
   }
 }

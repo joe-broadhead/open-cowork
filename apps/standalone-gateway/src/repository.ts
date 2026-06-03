@@ -104,14 +104,14 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     };
     this.sessions.set(session.sessionId, session);
     await this.appendEvent({ sessionId: session.sessionId, type: "session.created", payload: { title: session.title }, now: input.now });
-    return { ...session };
+    return { ...this.requireSession(session.sessionId) };
   }
 
   async updateSessionRuntime(input: { sessionId: string; opencodeSessionId: string | null; status?: StandaloneGatewaySessionRecord["status"]; now?: Date }): Promise<StandaloneGatewaySessionRecord> {
     const current = this.requireSession(input.sessionId);
     const updated = {
       ...current,
-      opencodeSessionId: input.opencodeSessionId,
+      opencodeSessionId: current.opencodeSessionId || input.opencodeSessionId,
       status: input.status || current.status,
       updatedAt: (input.now || new Date()).toISOString(),
     };

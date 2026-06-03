@@ -425,6 +425,7 @@ export function createSessionHistoryService(
         children,
         statuses,
         loadChildSnapshot: childSnapshotLoader.load,
+        fallbackTimestampMs: record ? Date.parse(record.createdAt) : 0,
       })
       const latestModeledItem = [...items]
         .reverse()

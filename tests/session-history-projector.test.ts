@@ -44,6 +44,54 @@ test('history projector keeps child task running when the child is idle but has 
   assert.equal(taskRun.taskRun?.status, 'running')
 })
 
+test('history projector uses a stable fallback timestamp for incomplete history', async () => {
+  const fallbackTimestampMs = Date.parse('2026-02-03T04:05:06.000Z')
+  const input = {
+    sessionId: 'root-incomplete',
+    cachedModelId: 'databricks-claude-sonnet-4',
+    rootMessages: [
+      {
+        info: { id: 'root-msg-incomplete', role: 'assistant', time: {} },
+        parts: [
+          { id: 'root-text-incomplete', type: 'text', text: 'Starting' },
+          { id: 'root-task-incomplete', type: 'subtask', agent: 'general', description: 'Check missing times' },
+        ],
+      },
+    ],
+    rootTodos: [],
+    children: [{ id: 'child-incomplete', title: 'Missing child timestamps' }],
+    statuses: {
+      'root-incomplete': { type: 'busy' },
+      'child-incomplete': { type: 'idle' },
+    },
+    fallbackTimestampMs,
+    loadChildSnapshot: async () => ({
+      messages: [
+        {
+          info: { id: 'child-msg-incomplete', role: 'assistant', time: {} },
+          parts: [
+            { id: 'child-text-incomplete', type: 'text', text: 'Still missing times' },
+          ],
+        },
+      ],
+      todos: [],
+    }),
+  }
+
+  const first = await projectSessionHistory(input)
+  const originalDateNow = Date.now
+  Date.now = () => Date.parse('2036-02-03T04:05:06.000Z')
+  try {
+    assert.deepEqual(await projectSessionHistory(input), first)
+  } finally {
+    Date.now = originalDateNow
+  }
+
+  assert.equal(first.find((item) => item.type === 'message')?.timestamp, '2026-02-03T04:05:06.000Z')
+  assert.equal(first.find((item) => item.type === 'task_run')?.timestamp, '2026-02-03T04:05:06.000Z')
+  assert.equal(first.find((item) => item.type === 'task_text')?.timestamp, '2026-02-03T04:05:06.000Z')
+})
+
 test('history projector marks child task complete after a terminal step-finish stop', async () => {
   const created = 1_713_714_000
   const updated = created + 3

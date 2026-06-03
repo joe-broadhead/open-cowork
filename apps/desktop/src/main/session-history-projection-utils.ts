@@ -4,7 +4,7 @@ import type {
   NormalizedSessionMessage,
 } from './opencode-adapter.ts'
 
-export const toHistorySortTime = (value?: number, fallback = Date.now()) => {
+export const toHistorySortTime = (value?: number, fallback = 0) => {
   const raw = typeof value === 'number' && Number.isFinite(value) ? value : fallback
   return raw < 1_000_000_000_000 ? raw * 1000 : raw
 }

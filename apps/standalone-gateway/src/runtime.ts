@@ -14,63 +14,81 @@ export function createStandaloneGatewayRuntime(input: {
   opencode: StandaloneOpenCodeAdapter;
 }): StandaloneGatewayRuntime {
   const { repository, opencode } = input;
+  const sessionQueues = new Map<string, Promise<void>>();
+
+  function runSerialized<T>(key: string, action: () => Promise<T>): Promise<T> {
+    const previous = sessionQueues.get(key) || Promise.resolve();
+    const run = previous.catch(() => undefined).then(action);
+    const tracked = run.then(() => undefined, () => undefined);
+    sessionQueues.set(key, tracked);
+    void tracked.finally(() => {
+      if (sessionQueues.get(key) === tracked) sessionQueues.delete(key);
+    });
+    return run;
+  }
+
   return {
     async handleMessage(provider, providerConfig, message) {
       const text = message.text.trim();
       if (!text) return;
-      const session = await repository.findOrCreateSession({
-        provider: provider.id,
-        providerKind: provider.kind,
-        channelBindingId: providerConfig.channelBindingId,
-        target: message.target,
-        externalUserId: message.sender.providerUserId,
-        text,
-      });
-      await repository.appendEvent({ sessionId: session.sessionId, type: "user.message", payload: { text, providerMessageId: message.providerMessageId } });
-      const runtimeSession = session.opencodeSessionId
-        ? session
-        : await repository.updateSessionRuntime({
-            sessionId: session.sessionId,
-            opencodeSessionId: (await opencode.createSession({ title: session.title })).opencodeSessionId,
-            status: "running",
-          });
-      try {
-        await opencode.prompt({
-          opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
+      const externalThreadId = message.target.threadId || message.target.chatId;
+      const sessionQueueKey = `${provider.id}\0${message.target.chatId}\0${externalThreadId}`;
+      await runSerialized(sessionQueueKey, async () => {
+        const session = await repository.findOrCreateSession({
+          provider: provider.id,
+          providerKind: provider.kind,
+          channelBindingId: providerConfig.channelBindingId,
+          target: message.target,
+          externalUserId: message.sender.providerUserId,
           text,
-          onEvent: (event) => appendRuntimeEvent(repository, session.sessionId, event),
         });
-        await repository.updateSessionRuntime({
-          sessionId: session.sessionId,
-          opencodeSessionId: runtimeSession.opencodeSessionId,
-          status: "idle",
-        });
-        await repository.recordAudit("standalone.prompt", message.sender.providerUserId, {
-          provider: provider.id,
-          providerKind: provider.kind,
-          channelBindingId: providerConfig.channelBindingId,
-          sessionId: session.sessionId,
-        });
-      } catch (error) {
-        await repository.appendEvent({
-          sessionId: session.sessionId,
-          type: "session.error",
-          payload: { message: error instanceof Error ? error.message : String(error) },
-        });
-        await repository.updateSessionRuntime({
-          sessionId: session.sessionId,
-          opencodeSessionId: runtimeSession.opencodeSessionId,
-          status: "failed",
-        });
-        await repository.recordAudit("standalone.prompt.failed", message.sender.providerUserId, {
-          provider: provider.id,
-          providerKind: provider.kind,
-          channelBindingId: providerConfig.channelBindingId,
-          sessionId: session.sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
+        await repository.appendEvent({ sessionId: session.sessionId, type: "user.message", payload: { text, providerMessageId: message.providerMessageId } });
+        let runtimeSession = session;
+        try {
+          if (!runtimeSession.opencodeSessionId) {
+            runtimeSession = await repository.updateSessionRuntime({
+              sessionId: session.sessionId,
+              opencodeSessionId: (await opencode.createSession({ title: session.title })).opencodeSessionId,
+              status: "running",
+            });
+          }
+          await opencode.prompt({
+            opencodeSessionId: runtimeSession.opencodeSessionId || session.sessionId,
+            text,
+            onEvent: (event) => appendRuntimeEvent(repository, session.sessionId, event),
+          });
+          await repository.updateSessionRuntime({
+            sessionId: session.sessionId,
+            opencodeSessionId: runtimeSession.opencodeSessionId,
+            status: "idle",
+          });
+          await repository.recordAudit("standalone.prompt", message.sender.providerUserId, {
+            provider: provider.id,
+            providerKind: provider.kind,
+            channelBindingId: providerConfig.channelBindingId,
+            sessionId: session.sessionId,
+          });
+        } catch (error) {
+          await repository.appendEvent({
+            sessionId: session.sessionId,
+            type: "session.error",
+            payload: { message: error instanceof Error ? error.message : String(error) },
+          });
+          await repository.updateSessionRuntime({
+            sessionId: session.sessionId,
+            opencodeSessionId: runtimeSession.opencodeSessionId,
+            status: "failed",
+          });
+          await repository.recordAudit("standalone.prompt.failed", message.sender.providerUserId, {
+            provider: provider.id,
+            providerKind: provider.kind,
+            channelBindingId: providerConfig.channelBindingId,
+            sessionId: session.sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+      });
     },
     async runDueJobs(claimedBy) {
       let processed = 0;

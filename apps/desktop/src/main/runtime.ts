@@ -547,12 +547,6 @@ export async function startRuntime(
 
     const config = await buildRuntimeConfigForStartup(plan, projectDirectory)
 
-    // Global CWD is part of the OpenCode runtime contract: the managed server
-    // discovers config relative to the same root it receives at spawn time.
-    // Keep unrelated app filesystem access on explicit paths; do not add new
-    // product-layer behavior that depends on process.cwd().
-    process.chdir(getRuntimeWorkingDirectoryForSource(plan.runtimeConfigSource))
-
     try {
       const result = await createManagedOpencode(
         buildManagedServerOptions(config),

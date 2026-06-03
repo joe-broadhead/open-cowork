@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { fork, type ChildProcess } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -82,14 +82,19 @@ test('managed opencode server resolves from stdout and closes the child process'
   const pidFile = join(root, 'pid')
   const envFile = join(root, 'env')
   const argsFile = join(root, 'args')
+  const cwdFile = join(root, 'cwd')
+  const runtimeCwd = join(root, 'runtime-cwd')
+  mkdirSync(runtimeCwd, { recursive: true })
   const executable = writeExecutable(root, 'fake-opencode', `
 printf '%s' "$$" > ${JSON.stringify(pidFile)}
 printf '%s\\n' "$@" > ${JSON.stringify(argsFile)}
+pwd > ${JSON.stringify(cwdFile)}
 printf '%s\\n%s\\n%s\\n' "$OPENCODE_SERVER_USERNAME" "$OPENCODE_SERVER_PASSWORD" "$OPENCODE_DISABLE_EMBEDDED_WEB_UI" > ${JSON.stringify(envFile)}
 printf '%s\\n' 'opencode server listening on http://127.0.0.1:43210'
 while true; do sleep 1; done
 `)
 
+  const mainProcessCwd = process.cwd()
   const server = await createManagedOpencodeServer({
     env: {
       PATH: process.env.PATH || '',
@@ -101,6 +106,7 @@ while true; do sleep 1; done
     config: { logLevel: 'warn' },
     forkUtilityProcess: forkTestSupervisor,
     opencodeBinPath: executable,
+    cwd: runtimeCwd,
     port: 0,
     timeout: 5000,
   })
@@ -110,7 +116,9 @@ while true; do sleep 1; done
       assert.equal(server.url, 'http://127.0.0.1:43210')
       assert.equal(existsSync(pidFile), true)
       assert.match(readFileSync(argsFile, 'utf8'), /--log-level=WARN/)
+      assert.equal(readFileSync(cwdFile, 'utf8').trim(), realpathSync(runtimeCwd))
       assert.equal(readFileSync(envFile, 'utf8'), 'opencode\nruntime-password\ntrue\n')
+      assert.equal(process.cwd(), mainProcessCwd)
       const childPid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10)
       assert.ok(childPid > 0)
       return childPid

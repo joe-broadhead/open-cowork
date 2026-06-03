@@ -58,7 +58,7 @@ export type RuntimeSessionEvent = {
 
 type PendingViewFlush = {
   win: BrowserWindow
-  sessions: Map<string, { sessionId: string; workspaceId?: string | null }>
+  sessions: Map<string, SessionFlushIdentity>
   queuedAt: number
   timer: ReturnType<typeof setTimeout> | null
 }
@@ -66,10 +66,15 @@ type PendingViewFlush = {
 type PendingPatchFlush = {
   win: BrowserWindow
   patches: SessionPatch[]
-  overflowSessionIds: Set<string>
+  overflowSessionIds: Map<string, SessionFlushIdentity>
   droppedPatches: number
   queuedAt: number
   timer: ReturnType<typeof setTimeout> | null
+}
+
+type SessionFlushIdentity = {
+  sessionId: string
+  workspaceId?: string | null
 }
 
 const SESSION_PATCH_FLUSH_INTERVAL_MS = 8
@@ -78,7 +83,7 @@ const MAX_SESSION_PATCHES_PER_FLUSH = 128
 
 const pendingViewFlushByWindowId = new Map<number, PendingViewFlush>()
 const pendingPatchFlushByWindowId = new Map<number, PendingPatchFlush>()
-const patchViewRecoverySessionIdsByWindowId = new Map<number, Set<string>>()
+const patchViewRecoverySessionIdsByWindowId = new Map<number, Map<string, SessionFlushIdentity>>()
 let sessionHistoryRefreshHandler: ((sessionId: string) => Promise<void>) | null = null
 const runtimeSessionEventObservers = new Set<(event: RuntimeSessionEvent) => void>()
 const historyRefreshQueue = new Map<string, {
@@ -87,8 +92,12 @@ const historyRefreshQueue = new Map<string, {
   promise: Promise<void>
 }>()
 
-function sessionFlushKey(sessionId: string, workspaceId?: string | null) {
-  return `${workspaceId || 'local'}:${sessionId}`
+function sessionFlushIdentity(sessionId: string, workspaceId?: string | null): SessionFlushIdentity {
+  return { sessionId, workspaceId }
+}
+
+function sessionFlushKey(identity: SessionFlushIdentity) {
+  return `${identity.workspaceId || 'local'}:${identity.sessionId}`
 }
 
 function getEventType(event: RuntimeSessionEvent) {
@@ -250,29 +259,30 @@ export function publishSessionPatch(
 
 function markSessionPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
   const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
-  const key = sessionFlushKey(sessionId, workspaceId)
+  const identity = sessionFlushIdentity(sessionId, workspaceId)
+  const key = sessionFlushKey(identity)
   if (existing) {
-    existing.add(key)
+    existing.set(key, identity)
     return
   }
-  patchViewRecoverySessionIdsByWindowId.set(windowId, new Set([key]))
+  patchViewRecoverySessionIdsByWindowId.set(windowId, new Map([[key, identity]]))
 }
 
 function clearSessionPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
   const existing = patchViewRecoverySessionIdsByWindowId.get(windowId)
   if (!existing) return
-  existing.delete(sessionFlushKey(sessionId, workspaceId))
+  existing.delete(sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId)))
   if (existing.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
 }
 
 function sessionNeedsPatchViewRecovery(windowId: number, sessionId: string, workspaceId?: string | null) {
-  return patchViewRecoverySessionIdsByWindowId.get(windowId)?.has(sessionFlushKey(sessionId, workspaceId)) === true
+  return patchViewRecoverySessionIdsByWindowId.get(windowId)?.has(sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId))) === true
 }
 
 function dropQueuedSessionPatches(pending: PendingPatchFlush, sessionId: string, workspaceId?: string | null) {
-  const key = sessionFlushKey(sessionId, workspaceId)
+  const key = sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId))
   const before = pending.patches.length
-  pending.patches = pending.patches.filter((queuedPatch) => sessionFlushKey(queuedPatch.sessionId, queuedPatch.workspaceId) !== key)
+  pending.patches = pending.patches.filter((queuedPatch) => sessionFlushKey(sessionFlushIdentity(queuedPatch.sessionId, queuedPatch.workspaceId)) !== key)
   return before - pending.patches.length
 }
 
@@ -281,11 +291,12 @@ function recoverSessionWithViewOnlyCatchUp(windowId: number, sessionId: string, 
   if (!pending) return
   const dropped = dropQueuedSessionPatches(pending, sessionId, workspaceId)
   if (dropped > 0) pending.droppedPatches += dropped
-  pending.overflowSessionIds.add(sessionFlushKey(sessionId, workspaceId))
+  const identity = sessionFlushIdentity(sessionId, workspaceId)
+  pending.overflowSessionIds.set(sessionFlushKey(identity), identity)
 }
 
 function sessionHasQueuedView(windowId: number, sessionId: string, workspaceId?: string | null) {
-  return pendingViewFlushByWindowId.get(windowId)?.sessions.has(sessionFlushKey(sessionId, workspaceId)) === true
+  return pendingViewFlushByWindowId.get(windowId)?.sessions.has(sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId))) === true
 }
 
 function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: string, workspaceId?: string | null) {
@@ -296,9 +307,9 @@ function flushQueuedSessionPatchesBeforeView(win: BrowserWindow, sessionId: stri
   if (!pending || pending.patches.length === 0) return
 
   const queuedForSession: SessionPatch[] = []
-  const key = sessionFlushKey(sessionId, workspaceId)
+  const key = sessionFlushKey(sessionFlushIdentity(sessionId, workspaceId))
   pending.patches = pending.patches.filter((patch) => {
-    if (sessionFlushKey(patch.sessionId, patch.workspaceId) !== key) return true
+    if (sessionFlushKey(sessionFlushIdentity(patch.sessionId, patch.workspaceId)) !== key) return true
     queuedForSession.push(patch)
     return false
   })
@@ -360,7 +371,7 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
       pending = {
         win,
         patches: [],
-        overflowSessionIds: new Set(),
+        overflowSessionIds: new Map(),
         droppedPatches: 0,
         queuedAt: Date.now(),
         timer: null,
@@ -371,7 +382,8 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
       pendingPatchFlushByWindowId.set(windowId, pending)
     }
     pending.droppedPatches += 1
-    pending.overflowSessionIds.add(sessionFlushKey(patch.sessionId, patch.workspaceId))
+    const identity = sessionFlushIdentity(patch.sessionId, patch.workspaceId)
+    pending.overflowSessionIds.set(sessionFlushKey(identity), identity)
     return
   }
 
@@ -385,7 +397,7 @@ function queueSessionPatchPublish(win: BrowserWindow, patch: SessionPatch | null
     pending = {
       win,
       patches: [],
-      overflowSessionIds: new Set(),
+      overflowSessionIds: new Map(),
       droppedPatches: 0,
       queuedAt: Date.now(),
       timer: null,
@@ -441,16 +453,17 @@ function queueSessionViewPublish(win: BrowserWindow, sessionId: string, workspac
   if (!sessionNeedsPatchViewRecovery(windowId, sessionId, workspaceId)) {
     flushQueuedSessionPatchesBeforeView(win, sessionId, workspaceId)
   }
-  const key = sessionFlushKey(sessionId, workspaceId)
+  const identity = sessionFlushIdentity(sessionId, workspaceId)
+  const key = sessionFlushKey(identity)
   const existing = pendingViewFlushByWindowId.get(windowId)
   if (existing) {
-    existing.sessions.set(key, { sessionId, workspaceId })
+    existing.sessions.set(key, identity)
     return
   }
 
   const pending: PendingViewFlush = {
     win,
-    sessions: new Map([[key, { sessionId, workspaceId }]]),
+    sessions: new Map([[key, identity]]),
     queuedAt: Date.now(),
     timer: null,
   }
@@ -517,19 +530,25 @@ function queueSessionHistoryRefresh(win: BrowserWindow, sessionId: string) {
 export function dropSessionFromDispatcherQueues(sessionId: string) {
   historyRefreshQueue.delete(sessionId)
   for (const [windowId, recoverySessionIds] of patchViewRecoverySessionIdsByWindowId.entries()) {
-    recoverySessionIds.delete(sessionFlushKey(sessionId))
+    for (const [key, identity] of recoverySessionIds.entries()) {
+      if (identity.sessionId === sessionId) recoverySessionIds.delete(key)
+    }
     if (recoverySessionIds.size === 0) patchViewRecoverySessionIdsByWindowId.delete(windowId)
   }
   for (const [windowId, pending] of pendingPatchFlushByWindowId.entries()) {
-    dropQueuedSessionPatches(pending, sessionId)
-    pending.overflowSessionIds.delete(sessionFlushKey(sessionId))
+    pending.patches = pending.patches.filter((patch) => patch.sessionId !== sessionId)
+    for (const [key, identity] of pending.overflowSessionIds.entries()) {
+      if (identity.sessionId === sessionId) pending.overflowSessionIds.delete(key)
+    }
     if (pending.patches.length === 0 && pending.overflowSessionIds.size === 0) {
       if (pending.timer) clearTimeout(pending.timer)
       pendingPatchFlushByWindowId.delete(windowId)
     }
   }
   for (const [windowId, pending] of pendingViewFlushByWindowId.entries()) {
-    if (!pending.sessions.delete(sessionFlushKey(sessionId))) continue
+    for (const [key, identity] of pending.sessions.entries()) {
+      if (identity.sessionId === sessionId) pending.sessions.delete(key)
+    }
     if (pending.sessions.size === 0) {
       if (pending.timer) clearTimeout(pending.timer)
       pendingViewFlushByWindowId.delete(windowId)
