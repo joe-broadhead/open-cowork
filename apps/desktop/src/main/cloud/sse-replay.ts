@@ -96,6 +96,8 @@ export class CloudSseReplayHub {
         }, input.pollMs),
       }
       this.topics.set(input.key, topic)
+    } else if (input.afterSequence < topic.lastSequence) {
+      topic.lastSequence = input.afterSequence
     }
     const subscriber: SseReplaySubscriber = {
       lastSequence: input.afterSequence,
