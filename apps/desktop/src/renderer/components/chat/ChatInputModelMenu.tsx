@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
 import type { ChatInputModelEntry } from './chat-input-types'
+import { Badge, Card, Icon, Input } from '../ui'
 
 type ChatInputModelMenuProps = {
   visible: boolean
@@ -124,23 +125,18 @@ export function ChatInputModelMenu({
     <>
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
-        className="fixed z-50 rounded-xl border shadow-xl overflow-hidden flex flex-col"
+        className="chat-menu-panel fixed z-50 flex flex-col"
         role="listbox"
         aria-label={t('chatModelMenu.selectModel', 'Select model')}
         onKeyDown={handleKeyDown}
         style={{
-          background: 'var(--color-base)',
-          borderColor: 'var(--color-border)',
           width: MENU_WIDTH,
           maxHeight: desiredHeight,
           left,
           top,
         }}
       >
-        <div
-          className="px-3 py-2 text-[11px] text-text-muted font-medium border-b flex items-center justify-between"
-          style={{ borderColor: 'var(--color-border-subtle)' }}
-        >
+        <div className="chat-menu-header">
           <span>{t('settings.models.model', 'Model')}</span>
           <span className="text-[10px] text-text-muted font-normal">
             {filtered.length === models.length
@@ -149,15 +145,18 @@ export function ChatInputModelMenu({
           </span>
         </div>
         {useSearch && (
-          <div className="px-2 py-2 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
-            <input
+          <div className="chat-menu-search">
+            <Input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('chatModelMenu.search', 'Search models…')}
               aria-label={t('chatModelMenu.search', 'Search models…')}
-              className="w-full px-2 py-1 rounded-md text-[12px] bg-elevated border border-border-subtle text-text outline-none focus:border-accent"
+              size="sm"
+              leftIcon="search"
+              clearable
+              onClear={() => setQuery('')}
             />
           </div>
         )}
@@ -173,43 +172,28 @@ export function ChatInputModelMenu({
               return (
                 <div key={model.id}>
                   {showFeaturedBoundary && (
-                    <div
-                      className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted"
-                      style={{ background: 'var(--color-surface-hover)' }}
-                    >
+                    <div className="chat-menu-featured-boundary">
                       All models
                     </div>
                   )}
-                  <button
-                    type="button"
+                  <Card
+                    interactive
+                    padding="sm"
                     role="option"
                     aria-selected={isActive}
                     data-model-index={index}
+                    data-highlighted={isHighlighted || undefined}
                     onClick={() => void onSelect(model.id)}
                     onMouseEnter={() => setHighlightIndex(index)}
-                    className="w-full text-start px-3 py-2 text-[12px] cursor-pointer transition-colors flex items-center justify-between gap-2"
-                    style={{
-                      color: 'var(--color-text)',
-                      background: isHighlighted
-                        ? 'var(--color-surface-hover)'
-                        : isActive
-                          ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
-                          : 'transparent',
-                    }}
+                    className="chat-menu-option text-[12px]"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate">{model.label}</span>
                         {model.featured && (
-                          <span
-                            className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
-                            style={{
-                              color: 'var(--color-accent)',
-                              background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-                            }}
-                          >
+                          <Badge tone="accent" className="shrink-0">
                             Featured
-                          </span>
+                          </Badge>
                         )}
                       </span>
                       {model.id !== model.label && (
@@ -219,11 +203,9 @@ export function ChatInputModelMenu({
                       )}
                     </span>
                     {isActive ? (
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                        <polyline points="3,7.5 6,10.5 11,4" />
-                      </svg>
+                      <Icon name="check" size={16} className="shrink-0" />
                     ) : null}
-                  </button>
+                  </Card>
                 </div>
               )
             })

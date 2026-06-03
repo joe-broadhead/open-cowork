@@ -8,6 +8,7 @@ import { ChatInputInlinePicker } from './ChatInputInlinePicker'
 import { ChatInputModelMenu } from './ChatInputModelMenu'
 import { ChatInputReasoningMenu, formatReasoningVariantLabel } from './ChatInputReasoningMenu'
 import { ChatInputToolbar } from './ChatInputToolbar'
+import { IconButton, Kbd, Textarea } from '../ui'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat-input-types'
 import {
   detectInlineTrigger,
@@ -23,6 +24,7 @@ function describeComposerError(error: unknown) {
 
 const COMPOSER_TEXTAREA_MAX_LINES = 8
 const COMPOSER_PREFERENCE_KEYS = ['modelId', 'reasoningVariant'] as const
+const CHAT_KEYBOARD_HINTS_DISMISSED_KEY = 'open-cowork-chat-keyboard-hints-dismissed'
 
 type ComposerPreferencePatch = {
   modelId?: string | null
@@ -62,11 +64,20 @@ function readComposerPreference(session: Session | undefined, key: ComposerPrefe
   return session.composerReasoningVariant ?? null
 }
 
+function readKeyboardHintsDismissed() {
+  try {
+    return window.localStorage.getItem(CHAT_KEYBOARD_HINTS_DISMISSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
 export function ChatInput() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [submitInFlight, setSubmitInFlight] = useState(false)
+  const [keyboardHintsDismissed, setKeyboardHintsDismissed] = useState(readKeyboardHintsDismissed)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputChromeRef = useRef<HTMLDivElement>(null)
   const inlinePickerRef = useRef<HTMLDivElement>(null)
@@ -358,6 +369,12 @@ export function ChatInput() {
       }
     }
 
+    if (e.key === 'Escape' && isGenerating) {
+      e.preventDefault()
+      void handleStop()
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); return }
 
     const textarea = textareaRef.current
@@ -421,6 +438,15 @@ export function ChatInput() {
     }
   }
 
+  const dismissKeyboardHints = () => {
+    setKeyboardHintsDismissed(true)
+    try {
+      window.localStorage.setItem(CHAT_KEYBOARD_HINTS_DISMISSED_KEY, 'true')
+    } catch {
+      // Hint dismissal is cosmetic; ignore storage failures.
+    }
+  }
+
   const sendBlockedReason = !workspaceSupport.flags.canPrompt
     ? workspaceSupport.flags.reasons.prompt
     : attachments.length > 0 && !workspaceSupport.flags.canAttachFiles
@@ -457,25 +483,47 @@ export function ChatInput() {
           onRemove={(id) => setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))}
         />
 
+        {!keyboardHintsDismissed && (
+          <div className="chat-keyboard-hints mb-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1"><Kbd>Enter</Kbd>{t('chat.hint.send', 'Send')}</span>
+              <span className="inline-flex items-center gap-1"><Kbd>Shift</Kbd><Kbd>Enter</Kbd>{t('chat.hint.newLine', 'New line')}</span>
+              <span className="inline-flex items-center gap-1"><Kbd>Shift</Kbd><Kbd>Tab</Kbd>{t('chat.hint.mode', 'Plan/Build')}</span>
+              <span className="inline-flex items-center gap-1"><Kbd>Esc</Kbd>{t('chat.hint.stop', 'Stop')}</span>
+              <span className="inline-flex items-center gap-1"><Kbd>Up</Kbd>{t('chat.hint.history', 'History')}</span>
+            </div>
+            <IconButton
+              icon="x"
+              label={t('chat.dismissKeyboardHints', 'Dismiss keyboard hints')}
+              size="sm"
+              onClick={dismissKeyboardHints}
+            />
+          </div>
+        )}
+
         {/* Codex-style input card. The drag/drop handlers are a
             pointer-only affordance for file attachments — keyboard
             users use the paperclip button next to the textarea. The
-            `<textarea>` child is the actual interactive element; this
+            `Textarea` primitive is the actual interactive element; this
             container is just the drop target + visual shell. */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           ref={inputChromeRef}
           role="group"
           aria-label={t('chat.composerAriaLabel', 'Message composer (drop files to attach)')}
-          className={`rounded-2xl border transition-colors overflow-hidden ${dragOver ? 'border-accent' : 'border-border'}`}
-          style={{ background: 'var(--color-elevated)' }}
+          className={`chat-composer-shell ${dragOver ? 'chat-composer-shell--drag' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
           {/* Textarea area */}
           <div className="px-4 pt-3 pb-2">
-            <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown} onPaste={handlePaste}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onSelect={(event) => {
                 const target = event.currentTarget
                 const cursor = target.selectionStart ?? target.value.length
@@ -495,9 +543,11 @@ export function ChatInput() {
                 : currentSessionId
                   ? (agentMode === 'plan' ? t('chat.placeholder.askPlan', 'Ask Plan to analyze or structure the work...') : t('chat.placeholder.askBuild', 'Ask Build to work on this...'))
                   : t('chat.placeholder.noThread', 'Start a new thread first')}
-              disabled={!currentSessionId || isAwaitingQuestion} rows={1}
-              className="w-full bg-transparent resize-none text-[13px] text-text placeholder:text-text-muted leading-relaxed"
-              style={{ maxHeight: `${COMPOSER_TEXTAREA_MAX_LINES}lh`, outline: 'none' }} />
+              disabled={!currentSessionId || isAwaitingQuestion}
+              rows={1}
+              className="chat-composer-textarea"
+              maxHeight={`${COMPOSER_TEXTAREA_MAX_LINES}lh`}
+            />
           </div>
 
           <ChatInputToolbar

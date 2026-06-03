@@ -30,14 +30,23 @@ vi.mock('./MessageBubble', () => ({
 vi.mock('./ToolTrace', () => ({
   ToolTrace: ({ tools }: { tools: ToolCall[] }) => (
     <section data-testid="tool-trace">
-      {tools.map((tool) => <span key={tool.id}>{tool.name}</span>)}
+      {tools.map((tool) => <span key={tool.id} data-tool-call-id={tool.id}>{tool.name}</span>)}
     </section>
   ),
 }))
 
 vi.mock('./ApprovalCard', () => ({
-  ApprovalCard: ({ approval }: { approval: PendingApproval }) => (
-    <section data-testid="approval-card">Approval {approval.id}: {approval.tool}</section>
+  ApprovalCard: ({
+    approval,
+    onOpenSource,
+  }: {
+    approval: PendingApproval
+    onOpenSource?: () => void
+  }) => (
+    <section data-testid="approval-card">
+      Approval {approval.id}: {approval.tool}
+      {onOpenSource ? <button type="button" onClick={onOpenSource}>Open source {approval.id}</button> : null}
+    </section>
   ),
 }))
 
@@ -96,7 +105,7 @@ vi.mock('./AgentRunPanel', () => ({
     <section data-testid="agent-run-panel">
       <button type="button" onClick={onToggle}>{expanded ? 'Collapse tasks' : 'Expand tasks'}</button>
       {taskRuns.map((task) => (
-        <button key={task.id} type="button" onClick={() => onFocusTask(task)}>
+        <button key={task.id} type="button" data-task-run-id={task.id} onClick={() => onFocusTask(task)}>
           Focus {task.title}
         </button>
       ))}
@@ -249,6 +258,10 @@ function seedCurrentSession(view: SessionView = emptySessionView()) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: undefined,
+  })
   resetSessionStore()
 })
 
@@ -347,6 +360,75 @@ describe('ChatView', () => {
     expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show Context' }))
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
+  })
+
+  it('scrolls from an approval card to its source tool when available', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      toolCalls: [
+        { id: 'tool-approval-1', name: 'shell.run', input: {}, status: 'running', order: 1 },
+      ],
+      pendingApprovals: [
+        { id: 'tool-approval-1', sessionId: 'session-1', tool: 'shell.run', input: {}, description: 'Run command', order: 2 },
+      ],
+    }))
+
+    render(<ChatView />)
+    const sourceTool = document.querySelector('[data-tool-call-id="tool-approval-1"]')
+    expect(sourceTool).toBeInstanceOf(HTMLElement)
+    Object.defineProperty(sourceTool, 'scrollIntoView', {
+      value: scrollIntoView,
+      configurable: true,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Open source tool-approval-1' }))
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    })
+  })
+
+  it('respects reduced motion when scrolling from an approval to its source tool', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    })
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      toolCalls: [
+        { id: 'tool-approval-1', name: 'shell.run', input: {}, status: 'running', order: 1 },
+      ],
+      pendingApprovals: [
+        { id: 'tool-approval-1', sessionId: 'session-1', tool: 'shell.run', input: {}, description: 'Run command', order: 2 },
+      ],
+    }))
+
+    render(<ChatView />)
+    const sourceTool = document.querySelector('[data-tool-call-id="tool-approval-1"]')
+    expect(sourceTool).toBeInstanceOf(HTMLElement)
+    Object.defineProperty(sourceTool, 'scrollIntoView', {
+      value: scrollIntoView,
+      configurable: true,
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Open source tool-approval-1' }))
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'auto' })
+    })
   })
 
   it('opens and closes task drill-in from mission control', async () => {
@@ -526,5 +608,37 @@ describe('ChatView', () => {
     }))
 
     expect(transcript.scrollTop).toBe(100)
+  })
+
+  it('shows a jump-to-latest control when auto-follow is paused and resumes at the bottom', async () => {
+    installChatViewApi()
+    seedCurrentSession(emptySessionView({
+      messages: [
+        { id: 'message-user', role: 'user', content: 'Start', order: 1 },
+        { id: 'message-assistant', role: 'assistant', content: 'Update', order: 2 },
+      ],
+    }))
+
+    render(<ChatView />)
+
+    const transcript = screen.getByRole('log', { name: 'Chat transcript' }) as HTMLDivElement
+    const scrollTo = vi.fn()
+    Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 1000 })
+    Object.defineProperty(transcript, 'scrollTop', { configurable: true, value: 100 })
+    Object.defineProperty(transcript, 'clientHeight', { configurable: true, value: 300 })
+    Object.defineProperty(transcript, 'scrollTo', { configurable: true, value: scrollTo })
+
+    fireEvent.scroll(transcript)
+    expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to latest' }))
+
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 1000,
+        behavior: 'smooth',
+      })
+    })
+    expect(screen.queryByRole('button', { name: 'Jump to latest' })).not.toBeInTheDocument()
   })
 })

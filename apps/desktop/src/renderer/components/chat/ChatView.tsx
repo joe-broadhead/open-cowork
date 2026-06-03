@@ -16,6 +16,7 @@ import {
 } from './agent-run-filter-model'
 import { ChatThreadHeader } from './ChatThreadHeader'
 import { ChatTimelineItem } from './ChatTimelineItem'
+import { Button } from '../ui'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -50,6 +51,7 @@ export function ChatView() {
   const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null)
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
+  const [autoFollowPaused, setAutoFollowPaused] = useState(false)
   const agentRunFiltersEnabled = useMemo(() => isAgentRunFiltersEnabled(), [])
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
@@ -98,7 +100,9 @@ export function ChatView() {
     if (!scroller) return undefined
     const handler = () => {
       const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-      isAutoFollowing.current = distanceFromBottom <= AUTO_FOLLOW_PX
+      const following = distanceFromBottom <= AUTO_FOLLOW_PX
+      isAutoFollowing.current = following
+      setAutoFollowPaused(!following)
     }
     scroller.addEventListener('scroll', handler, { passive: true })
     return () => scroller.removeEventListener('scroll', handler)
@@ -162,6 +166,8 @@ export function ChatView() {
     setFocusedTaskContextIds([])
     setFocusedQuestionId(null)
     setExpandedTaskGroups({})
+    isAutoFollowing.current = true
+    setAutoFollowPaused(false)
   }, [currentSessionId])
 
   useEffect(() => {
@@ -217,7 +223,44 @@ export function ChatView() {
       }
       const selector = `[data-task-run-id="${escapeAttributeSelector(taskRun.id)}"], [data-agent-run-task-ids~="${escapeAttributeSelector(taskRun.id)}"]`
       const target = scrollRef.current?.querySelector<HTMLElement>(selector)
-      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      target?.scrollIntoView({ block: 'center', behavior: preferredScrollBehavior() })
+    })
+  }
+
+  const approvalSourceTask = (approval: PendingApproval) => {
+    if (!approval.taskRunId) return null
+    return taskRuns.find((task) => task.id === approval.taskRunId) || null
+  }
+
+  const approvalHasSource = (approval: PendingApproval) => {
+    if (toolCalls.some((tool) => tool.id === approval.id)) return true
+    if (taskRuns.some((task) => task.toolCalls.some((tool) => tool.id === approval.id))) return true
+    return Boolean(approvalSourceTask(approval))
+  }
+
+  const scrollApprovalSourceIntoView = (approval: PendingApproval) => {
+    setFocusedTaskRunId(null)
+    const toolTimelineIndex = timeline.findIndex((item) => {
+      if (item.kind === 'tools') return item.data.some((tool) => tool.id === approval.id)
+      if (item.kind === 'task') return item.data.toolCalls.some((tool) => tool.id === approval.id)
+      if (item.kind === 'task_group') return item.data.some((task) => task.toolCalls.some((tool) => tool.id === approval.id))
+      return false
+    })
+
+    requestAnimationFrame(() => {
+      const toolTarget = scrollRef.current?.querySelector<HTMLElement>(`[data-tool-call-id="${escapeAttributeSelector(approval.id)}"]`)
+      if (toolTarget) {
+        toolTarget.scrollIntoView({ block: 'center', behavior: preferredScrollBehavior() })
+        return
+      }
+
+      if (virtualize && toolTimelineIndex >= 0) {
+        virtualizerRef.current.scrollToIndex(toolTimelineIndex, { align: 'center' })
+        return
+      }
+
+      const task = approvalSourceTask(approval)
+      if (task) scrollTaskRunIntoView(task)
     })
   }
 
@@ -230,7 +273,7 @@ export function ChatView() {
         return
       }
       const target = scrollRef.current?.querySelector<HTMLElement>(`[data-approval-id="${escapeAttributeSelector(approval.id)}"]`)
-      target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      target?.scrollIntoView({ block: 'center', behavior: preferredScrollBehavior() })
     })
   }
 
@@ -241,9 +284,32 @@ export function ChatView() {
       const scroller = scrollRef.current
       if (!scroller) return
       if (typeof scroller.scrollTo === 'function') {
-        scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: preferredScrollBehavior() })
       } else {
         scroller.scrollTop = scroller.scrollHeight
+      }
+    })
+  }
+
+  const scrollToLatest = () => {
+    isAutoFollowing.current = true
+    setAutoFollowPaused(false)
+    const scroller = scrollRef.current
+
+    requestAnimationFrame(() => {
+      if (virtualize) {
+        const last = timeline.length - 1
+        if (last >= 0) virtualizerRef.current.scrollToIndex(last, { align: 'end' })
+      }
+      const currentScroller = scroller || scrollRef.current
+      if (!currentScroller) return
+      if (typeof currentScroller.scrollTo === 'function') {
+        currentScroller.scrollTo({
+          top: currentScroller.scrollHeight,
+          behavior: preferredScrollBehavior(),
+        })
+      } else {
+        currentScroller.scrollTop = currentScroller.scrollHeight
       }
     })
   }
@@ -271,6 +337,8 @@ export function ChatView() {
         isTaskGroupExpanded={isTaskGroupExpanded}
         toggleTaskGroupExpanded={toggleTaskGroupExpanded}
         taskGroupKey={taskGroupKey}
+        onOpenApprovalSource={scrollApprovalSourceIntoView}
+        approvalHasSource={approvalHasSource}
       />
     )
   }
@@ -317,17 +385,18 @@ export function ChatView() {
           }}
         />
 
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto"
-          role="log"
-          aria-live="polite"
-          aria-atomic="false"
-          aria-label={t('chat.transcriptAriaLabel', 'Chat transcript')}
-        >
-          {virtualize ? (
-            <div
-              style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
+        <div className="relative flex-1 min-h-0">
+          <div
+            ref={scrollRef}
+            className="h-full overflow-y-auto"
+            role="log"
+            aria-live="polite"
+            aria-atomic="false"
+            aria-label={t('chat.transcriptAriaLabel', 'Chat transcript')}
+          >
+            {virtualize ? (
+              <div
+                style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
             >
               {virtualizer.getVirtualItems().map((vRow) => {
                 const item = timeline[vRow.index]
@@ -356,15 +425,23 @@ export function ChatView() {
                   <ThinkingIndicator />
                 </div>
               ) : null}
+              </div>
+            ) : (
+              <div className="mx-auto px-6 py-4 flex flex-col gap-2.5" style={{ maxWidth: transcriptMaxWidth }}>
+                {timeline.map((item) => (
+                  <div key={timelineItemKey(item)}>{renderTimelineItem(item)}</div>
+                ))}
+                {isGenerating && <ThinkingIndicator />}
+              </div>
+            )}
+          </div>
+          {autoFollowPaused ? (
+            <div className="chat-jump-latest">
+              <Button size="sm" variant="secondary" rightIcon="arrow-down" onClick={scrollToLatest}>
+                {t('chat.jumpToLatest', 'Jump to latest')}
+              </Button>
             </div>
-          ) : (
-            <div className="mx-auto px-6 py-4 flex flex-col gap-2.5" style={{ maxWidth: transcriptMaxWidth }}>
-              {timeline.map((item) => (
-                <div key={timelineItemKey(item)}>{renderTimelineItem(item)}</div>
-              ))}
-              {isGenerating && <ThinkingIndicator />}
-            </div>
-          )}
+          ) : null}
         </div>
         {activePendingQuestion && (
           <SessionQuestionDock
@@ -399,6 +476,12 @@ export function ChatView() {
 function escapeAttributeSelector(value: string) {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
   return value.replace(/["\\]/g, '\\$&')
+}
+
+function preferredScrollBehavior(): ScrollBehavior {
+  const reduce = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  return reduce ? 'auto' : 'smooth'
 }
 
 function timelineItemKey(item: TimelineItem) {

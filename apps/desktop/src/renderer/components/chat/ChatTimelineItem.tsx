@@ -7,6 +7,7 @@ import { AgentRunPanel } from './AgentRunPanel'
 import { CompactionNoticeCard } from './CompactionNoticeCard'
 import { ApprovalCard } from './ApprovalCard'
 import { agentRunFilterStorageKey } from './agent-run-filter-model'
+import { Icon } from '../ui'
 
 type ChatTimelineItemProps = {
   item: TimelineItem
@@ -22,6 +23,8 @@ type ChatTimelineItemProps = {
   isTaskGroupExpanded: (groupedTaskRuns: TaskRun[]) => boolean
   toggleTaskGroupExpanded: (groupedTaskRuns: TaskRun[]) => void
   taskGroupKey: (groupedTaskRuns: TaskRun[]) => string
+  onOpenApprovalSource?: (approval: PendingApproval) => void
+  approvalHasSource?: (approval: PendingApproval) => boolean
 }
 
 export function ChatTimelineItem({
@@ -38,6 +41,8 @@ export function ChatTimelineItem({
   isTaskGroupExpanded,
   toggleTaskGroupExpanded,
   taskGroupKey,
+  onOpenApprovalSource,
+  approvalHasSource,
 }: ChatTimelineItemProps) {
   switch (item.kind) {
     case 'message':
@@ -85,16 +90,18 @@ export function ChatTimelineItem({
     case 'approval':
       return (
         <div data-approval-id={item.data.id}>
-          <ApprovalCard approval={item.data} />
+          <ApprovalCard
+            approval={item.data}
+            queueCount={pendingApprovals.length}
+            onOpenSource={approvalHasSource?.(item.data) ? () => onOpenApprovalSource?.(item.data) : undefined}
+          />
         </div>
       )
     case 'error':
       return (
-        <div className="flex items-start gap-2.5 px-4 py-2.5 rounded-lg border text-[12px]" style={{ borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border))', background: 'color-mix(in srgb, var(--color-red) 5%, transparent)' }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-red)" strokeWidth="1.3" strokeLinecap="round" className="shrink-0 mt-0.5">
-            <circle cx="7" cy="7" r="5.5" /><line x1="7" y1="4.5" x2="7" y2="7.5" /><circle cx="7" cy="9.5" r="0.5" fill="var(--color-red)" />
-          </svg>
-          <span style={{ color: 'var(--color-red)' }}>{item.data.message}</span>
+        <div className="chat-error-card">
+          <Icon name="alert-circle" size={16} className="mt-0.5 shrink-0" />
+          <span>{item.data.message}</span>
         </div>
       )
   }

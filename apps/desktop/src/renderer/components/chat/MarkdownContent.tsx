@@ -221,7 +221,7 @@ export function MarkdownContent({
     <div
       ref={rootRef}
       data-component="markdown"
-      className={`text-[13px] prose prose-p:my-1 prose-p:last:mb-0 prose-headings:my-2 prose-headings:last:mb-0 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-text leading-relaxed ${className}`.trim()}
+      className={`chat-markdown-content prose prose-p:my-1 prose-p:last:mb-0 prose-headings:my-2 prose-headings:last:mb-0 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 text-text ${className}`.trim()}
     />
   )
 }

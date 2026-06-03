@@ -611,31 +611,31 @@ export function Sidebar({
           <div className="px-2 pt-2 pb-1">
             <button onClick={() => onViewChange('home')}
               aria-current={currentView === 'home' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="home" size={16} />
               {t('sidebar.home', 'Home')}
             </button>
             <button onClick={() => onViewChange('agents')}
               aria-current={currentView === 'agents' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="bot" size={16} />
               {t('sidebar.agents', 'Agents')}
             </button>
             <button onClick={() => onViewChange('workflows')}
               aria-current={currentView === 'workflows' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'workflows' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'workflows' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="workflow" size={16} />
               {t('sidebar.workflows', 'Workflows')}
             </button>
             <button onClick={() => onViewChange('capabilities')}
               aria-current={currentView === 'capabilities' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="blocks" size={16} />
               {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="heart-pulse" size={16} />
               {t('sidebar.healthCenter', 'Health Center')}
             </button>
@@ -649,7 +649,7 @@ export function Sidebar({
               type="button"
               onClick={() => onViewChange('threads')}
               aria-current={currentView === 'threads' ? 'page' : undefined}
-              className={`mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'threads' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
+              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'threads' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
             >
               {t('sidebar.threads', 'Threads')}
             </button>
