@@ -18,6 +18,7 @@ const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 const HealthCenterPage = lazy(() => import('./components/health/HealthCenterPage').then((m) => ({ default: m.HealthCenterPage })))
+const PrimitiveGallery = lazy(() => import('./components/ui/PrimitiveGallery').then((m) => ({ default: m.PrimitiveGallery })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
 import { useOpenCodeEvents } from './hooks/useOpenCodeEvents'
@@ -39,6 +40,13 @@ import {
 } from './resource-navigation'
 
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
+
+const UI_PRIMITIVES_HASH = '#/ui-primitives'
+
+function initialAppView(): AppView {
+  if (typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
+  return 'home'
+}
 
 type ResourceNavigationNotice = {
   status: ResourceNavigationAction['status'] | 'invalid'
@@ -103,7 +111,7 @@ export function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [userEmail, setUserEmail] = useState('')
-  const [view, setView] = useState<AppView>('home')
+  const [view, setView] = useState<AppView>(initialAppView)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [agentBuilderSeed, setAgentBuilderSeed] = useState<AgentBuilderSeed>(null)
   const [pendingComposerInsert, setPendingComposerInsert] = useState<string | null>(null)
@@ -367,6 +375,14 @@ export function App() {
     window.addEventListener('open-cowork:open-resource', listener)
     return () => window.removeEventListener('open-cowork:open-resource', listener)
   }, [openResourceNavigationTarget])
+
+  useEffect(() => {
+    const listener = () => {
+      if (window.location.hash === UI_PRIMITIVES_HASH) setView('ui-primitives')
+    }
+    window.addEventListener('hashchange', listener)
+    return () => window.removeEventListener('hashchange', listener)
+  }, [])
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
@@ -661,6 +677,11 @@ export function App() {
             {view === 'health' && (
               <Suspense fallback={null}>
                 <HealthCenterPage />
+              </Suspense>
+            )}
+            {view === 'ui-primitives' && (
+              <Suspense fallback={null}>
+                <PrimitiveGallery />
               </Suspense>
             )}
           </ViewErrorBoundary>

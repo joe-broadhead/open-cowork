@@ -198,7 +198,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
       <div className="border-b border-border px-6 py-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-[22px] font-semibold tracking-normal text-primary">Workflows</h1>
+            <h1 className="font-display text-role-page-title font-bold text-primary">Workflows</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">
               Save repeatable work from a Workflow Designer setup thread, then run it manually, on a schedule, or from a webhook.
             </p>
@@ -226,7 +226,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
         ) : activeWorkflows.length === 0 ? (
           <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-surface/40 px-6 text-center">
             <div>
-              <h2 className="text-lg font-semibold text-primary">No workflows yet</h2>
+              <h2 className="font-display text-role-section-title font-bold text-primary">No workflows yet</h2>
               <p className="mt-2 max-w-md text-sm text-muted">
                 {workflowListBlocked && workflowListReason
                   ? workflowListReason
@@ -254,7 +254,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 text-base font-semibold text-primary">{workflow.title}</h2>
+                      <h2 className="min-w-0 font-display text-role-card-title font-bold text-primary">{workflow.title}</h2>
                       <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${statusTone(workflow.status)}`}>
                         {workflow.status}
                       </span>

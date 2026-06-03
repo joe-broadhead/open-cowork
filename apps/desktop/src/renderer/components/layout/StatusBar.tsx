@@ -135,7 +135,7 @@ export function StatusBar() {
         <div className="flex items-center gap-3">
           <McpStatusBadge />
           {showContext && (
-            <div className="flex items-center gap-1.5 min-w-[96px]">
+            <div className="tabular flex items-center gap-1.5 min-w-[96px]">
               <span style={{ color: contextColor }}>{contextLabel}</span>
               <span
                 className="relative inline-flex w-12 h-1.5 rounded-full overflow-hidden"
@@ -159,7 +159,7 @@ export function StatusBar() {
           {totalTokens > 0 && (
             <button
               onClick={() => setShowDetail(!showDetail)}
-              className="flex items-center gap-1.5 cursor-pointer hover:text-text-secondary transition-colors"
+              className="tabular flex items-center gap-1.5 cursor-pointer hover:text-text-secondary transition-colors"
             >
               <span>{t('statusbar.tokensCount', '{{count}} tokens', { count: formatTokens(totalTokens) })}</span>
               <span className="text-border">|</span>
@@ -174,7 +174,7 @@ export function StatusBar() {
       {showDetail && totalTokens > 0 && (
         <>
           <ModalBackdrop onDismiss={() => setShowDetail(false)} className="fixed inset-0 z-40" />
-          <div className="absolute bottom-8 end-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
+          <div className="tabular absolute bottom-8 end-4 z-50 w-56 p-3 rounded-xl bg-elevated border border-border shadow-lg">
             <div className="text-[11px] font-semibold text-text mb-2">{t('statusbar.sessionUsage', 'Session Usage')}</div>
             <div className="flex flex-col gap-1.5 text-[11px]">
               <div className="flex justify-between">

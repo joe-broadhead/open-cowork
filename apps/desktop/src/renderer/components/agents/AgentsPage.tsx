@@ -235,7 +235,7 @@ export function AgentsPage({
       <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text">{t('agentsPage.title', 'Agents')}</h1>
+            <h1 className="font-display text-role-page-title font-bold text-text">{t('agentsPage.title', 'Agents')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
               {t('agentsPage.subtitle', 'Compose specialists from skills, tools, and instructions. Click any card to open it in the builder.')}
             </p>
@@ -436,7 +436,7 @@ function ListSection({
   return (
     <section className="mb-8">
       <div className="mb-3">
-        <h2 className="text-[14px] font-semibold text-text">{label}</h2>
+        <h2 className="font-display text-role-section-title font-bold text-text">{label}</h2>
         <p className="text-[12px] text-text-muted mt-0.5">{sublabel}</p>
       </div>
       {empty ? (

@@ -168,7 +168,7 @@ describe('HomePage', () => {
     )
 
     expect(await screen.findByRole('button', { name: /Claude Sonnet 4/ })).toBeTruthy()
-    expect(screen.getByTitle('Attach file')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Attach file' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Build' }))
     expect(screen.getByRole('button', { name: 'Plan' })).toBeTruthy()
 

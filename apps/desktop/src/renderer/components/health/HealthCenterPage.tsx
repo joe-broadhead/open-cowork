@@ -230,7 +230,7 @@ export function HealthCenterPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-5 py-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-[20px] font-semibold text-text">Health Center</h1>
+            <h1 className="font-display text-role-page-title font-bold text-text">Health Center</h1>
             <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-text-muted">
               Setup paths, execution authority, sync state, and operator recovery checks for Desktop, Cloud, and Gateway.
             </p>
@@ -274,7 +274,7 @@ export function HealthCenterPage() {
             <Card>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-[14px] font-semibold text-text">Desktop Runtime</h2>
+                  <h2 className="font-display text-role-card-title font-bold text-text">Desktop Runtime</h2>
                   <p className="mt-1 text-[11px] text-text-muted">
                     Local execution authority and provider selection. No raw credential values are shown.
                   </p>
@@ -311,7 +311,7 @@ export function HealthCenterPage() {
             </Card>
 
             <Card>
-              <h2 className="text-[14px] font-semibold text-text">Runtime Capability Provenance</h2>
+              <h2 className="font-display text-role-card-title font-bold text-text">Runtime Capability Provenance</h2>
               <p className="mt-1 text-[11px] text-text-muted">Source, winner, and reason-code diagnostics for runtime inputs. Evidence is redacted before it reaches the renderer.</p>
               <div className="mt-3 flex flex-col gap-2">
                 {runtimeCapabilities.length === 0 ? (
@@ -368,7 +368,7 @@ export function HealthCenterPage() {
             </Card>
 
             <Card>
-              <h2 className="text-[14px] font-semibold text-text">Pairings</h2>
+              <h2 className="font-display text-role-card-title font-bold text-text">Pairings</h2>
               <p className="mt-1 text-[11px] text-text-muted">Outbound Desktop pairings stay local-authority unless remote policy explicitly allows more.</p>
               <div className="mt-3 flex flex-col gap-2">
                 {snapshot.pairings.length === 0 ? (
@@ -392,7 +392,7 @@ export function HealthCenterPage() {
 
           <div className="flex flex-col gap-4">
             <Card>
-              <h2 className="text-[14px] font-semibold text-text">Workspaces And Authorities</h2>
+              <h2 className="font-display text-role-card-title font-bold text-text">Workspaces And Authorities</h2>
               <p className="mt-1 text-[11px] text-text-muted">Each thread must belong to exactly one workspace and one execution authority.</p>
               <div className="mt-3 grid gap-2">
                 {snapshot.workspaces.length === 0 ? (
@@ -440,7 +440,7 @@ export function HealthCenterPage() {
             </Card>
 
             <Card>
-              <h2 className="text-[14px] font-semibold text-text">Operator Checks</h2>
+              <h2 className="font-display text-role-card-title font-bold text-text">Operator Checks</h2>
               <p className="mt-1 text-[11px] text-text-muted">Doctor, smoke, durability, and recovery checks before routing real users or public webhooks.</p>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {visibleChecks.map(({ check, status }) => (

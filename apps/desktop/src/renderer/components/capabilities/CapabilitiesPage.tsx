@@ -303,7 +303,7 @@ export function CapabilitiesPage({
       <div className="max-w-[1200px] mx-auto px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[18px] font-semibold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
+            <h1 className="font-display text-role-page-title font-bold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
               {t('capabilities.subtitle', 'Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.')}
             </p>
@@ -505,7 +505,7 @@ function CapabilitySectionHeading({
   return (
     <div className="flex flex-wrap items-end justify-between gap-2 px-0.5">
       <div>
-        <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-muted">{section.label}</h2>
+        <h2 className="font-display text-role-card-title font-bold text-text">{section.label}</h2>
         <p className="mt-0.5 text-[11px] text-text-muted">{section.description}</p>
       </div>
       <span className="text-[10px] text-text-muted">

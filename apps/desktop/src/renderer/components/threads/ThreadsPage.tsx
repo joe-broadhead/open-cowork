@@ -165,7 +165,7 @@ function FacetButton({
     >
       {color ? <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} /> : null}
       <span className="min-w-0 flex-1 truncate">{bucket.label}</span>
-      <span className="shrink-0 text-[10px] text-text-muted">{bucket.count}</span>
+      <span className="tabular shrink-0 text-[10px] text-text-muted">{bucket.count}</span>
     </button>
   )
 }

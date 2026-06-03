@@ -684,7 +684,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
       <HomeBackdrop />
       <div className="relative max-w-[760px] mx-auto px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <HomeEyebrow brandName={brandName} />
-        <h1 className="text-[30px] sm:text-[38px] leading-[1.08] font-semibold text-text text-center">
+        <h1 className="font-display text-role-hero font-bold text-text text-center">
           {greeting}
         </h1>
         <p className="mt-3 text-[13px] text-text-muted text-center">

@@ -377,7 +377,7 @@ describe('ChatInput', () => {
     render(<ChatInput />)
 
     expect(await screen.findByRole('button', { name: /Model A/ })).toBeDisabled()
-    expect(screen.getByTitle('Cloud workspaces do not implicitly upload local files.')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cloud workspaces do not implicitly upload local files.' })).toBeDisabled()
 
     const textarea = screen.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Continue in cloud' } })
