@@ -25,4 +25,8 @@ export type ChannelControlPlaneStore = Pick<ControlPlaneStore,
   | 'listChannelDeliveries'
   | 'claimNextChannelDelivery'
   | 'ackChannelDelivery'
+  | 'getSession'
+  | 'getSessionProjection'
+  | 'enqueueSessionCommand'
+  | 'recordAuditEvent'
 >

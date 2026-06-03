@@ -13,4 +13,13 @@ export type {
   CloudChannelProviderKind,
   HeadlessAgentRecord,
   IssuedChannelInteractionRecord,
-} from '../adapter.js'
+} from '../contracts.js'
+
+export {
+  createCloudChannelsClient,
+} from '../domain-clients/channels.js'
+
+export type {
+  CloudChannelsClient,
+  CloudChannelsClientContext,
+} from '../domain-clients/channels.js'

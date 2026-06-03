@@ -7,4 +7,12 @@ export type {
   ThreadSmartFilterInput,
   ThreadTag,
   ThreadTagInput,
-} from '../adapter.js'
+} from '../contracts.js'
+
+export {
+  createCloudThreadsClient,
+} from '../domain-clients/threads.js'
+
+export type {
+  CloudThreadsClient,
+} from '../domain-clients/threads.js'

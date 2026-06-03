@@ -9,9 +9,13 @@ import {
   CloudQuotaService,
   CloudWorkflowService,
 } from '../apps/desktop/src/main/cloud/services/index.ts'
+import { CloudChannelDomainService } from '../apps/desktop/src/main/cloud/services/channel-domain-service.ts'
 import { CloudServiceError } from '../apps/desktop/src/main/cloud/cloud-service-error.ts'
 import type { ByokSecretMetadata, ByokSecretStore } from '../apps/desktop/src/main/cloud/byok-secret-store.ts'
 import type { CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
+import type { HeadlessAgentRecord } from '../apps/desktop/src/main/cloud/control-plane-store.ts'
+import type { ChannelControlPlaneStore } from '../apps/desktop/src/main/cloud/control-plane-domains/channels.ts'
+import type { CloudUsageGovernanceService } from '../apps/desktop/src/main/cloud/services/usage-governance-service.ts'
 
 const principal: CloudPrincipal = {
   tenantId: 'tenant-1',
@@ -49,6 +53,44 @@ function byokStore(overrides: Partial<ByokSecretStore> = {}): ByokSecretStore {
     async activateWithoutValidation(input) { return metadata(input.providerId) },
     async validateActiveSecret(input) { return metadata(input.providerId) },
     async revealActiveSecret() { return 'plaintext-key' },
+    ...overrides,
+  }
+}
+
+function unusedStoreAction(): Promise<never> {
+  throw new Error('not used')
+}
+
+function channelStore(overrides: Partial<ChannelControlPlaneStore> = {}): ChannelControlPlaneStore {
+  return {
+    createHeadlessAgent: unusedStoreAction,
+    updateHeadlessAgent: unusedStoreAction,
+    getHeadlessAgent: unusedStoreAction,
+    listHeadlessAgents: unusedStoreAction,
+    createChannelBinding: unusedStoreAction,
+    updateChannelBinding: unusedStoreAction,
+    getChannelBinding: unusedStoreAction,
+    listChannelBindings: unusedStoreAction,
+    upsertChannelIdentity: unusedStoreAction,
+    getChannelIdentity: unusedStoreAction,
+    findChannelIdentity: unusedStoreAction,
+    bindChannelSession: unusedStoreAction,
+    getChannelSessionBinding: unusedStoreAction,
+    findChannelSessionBindingByThread: unusedStoreAction,
+    listChannelSessionBindingsForSession: unusedStoreAction,
+    updateChannelCursor: unusedStoreAction,
+    createChannelInteraction: unusedStoreAction,
+    findChannelInteraction: unusedStoreAction,
+    resolveChannelInteraction: unusedStoreAction,
+    resolveChannelInteractionWithCommand: unusedStoreAction,
+    createChannelDelivery: unusedStoreAction,
+    listChannelDeliveries: unusedStoreAction,
+    claimNextChannelDelivery: unusedStoreAction,
+    ackChannelDelivery: unusedStoreAction,
+    getSession: unusedStoreAction,
+    getSessionProjection: unusedStoreAction,
+    enqueueSessionCommand: unusedStoreAction,
+    recordAuditEvent: unusedStoreAction,
     ...overrides,
   }
 }
@@ -304,6 +346,74 @@ test('cloud BYOK service enforces storage, provider, KMS, billing, and audit bou
       },
       createdByAccountId: 'account-1',
     },
+  ])
+})
+
+test('cloud channel domain service owns channel agent listing behind explicit dependencies', async () => {
+  const calls: unknown[] = []
+  const agents: HeadlessAgentRecord[] = [
+    {
+      agentId: 'agent-1',
+      orgId: 'org-1',
+      tenantId: 'tenant-1',
+      profileName: 'default',
+      name: 'Agent 1',
+      status: 'active',
+      managed: true,
+      createdByAccountId: 'account-1',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+    {
+      agentId: 'agent-2',
+      orgId: 'org-1',
+      tenantId: 'tenant-1',
+      profileName: 'default',
+      name: 'Agent 2',
+      status: 'disabled',
+      managed: false,
+      createdByAccountId: 'account-1',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  ]
+  const service = new CloudChannelDomainService({
+    store: channelStore({
+      async listHeadlessAgents(orgId: string) {
+        calls.push({ kind: 'listHeadlessAgents', orgId })
+        return agents
+      },
+    }),
+    policy: { profileName: 'default', profile: {}, features: {} } as never,
+    ids: { randomUUID: () => 'id-1' },
+    abuse: {} as never,
+    usageGovernance: {} as CloudUsageGovernanceService,
+    async ensurePrincipal(input) {
+      calls.push({ kind: 'ensurePrincipal', tenantId: input.tenantId })
+      input.orgId = 'org-1'
+      input.accountId = 'account-1'
+    },
+    principalOrgId: (input) => input.orgId || input.tenantId,
+    assertBillingAllowed: async () => { throw new Error('not used') },
+    normalizeAndValidateProjectSource: () => { throw new Error('not used') },
+    createCloudSessionRecord: async () => { throw new Error('not used') },
+    bindSessionProjectSource: async () => { throw new Error('not used') },
+    getTenantSessionView: async () => { throw new Error('not used') },
+    assertRemoteInteractionAllowed: async () => { throw new Error('not used') },
+    auditActor: (input) => ({
+      actorType: 'user',
+      actorId: input.userId,
+      accountId: input.accountId || null,
+    }),
+    stableCloudId: (prefix) => `${prefix}_stable`,
+  })
+
+  const listed = await service.listHeadlessAgents({ ...principal }, { limit: 1 })
+
+  assert.deepEqual(listed.map((agent) => agent.agentId), ['agent-1'])
+  assert.deepEqual(calls, [
+    { kind: 'ensurePrincipal', tenantId: 'tenant-1' },
+    { kind: 'listHeadlessAgents', orgId: 'org-1' },
   ])
 })
 

@@ -6,9 +6,21 @@ export type {
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
+  CloudSessionCommandAckResponse,
+  CloudSessionCommandMutationResponse,
   CloudSessionView,
+  ListSessionsInput,
   SessionCommandRecord,
   SessionImportRequest,
+  SessionListPage,
   SessionProjectionRecord,
   SessionRecord,
-} from '../adapter.js'
+} from '../contracts.js'
+
+export {
+  createCloudSessionsClient,
+} from '../domain-clients/sessions.js'
+
+export type {
+  CloudSessionsClient,
+} from '../domain-clients/sessions.js'
