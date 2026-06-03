@@ -16,7 +16,7 @@ The server talks only to the app-owned localhost bridge started by the Electron 
   the desktop bridge.
 - Saving a workflow remains approval-gated by the agent policy; the MCP tool
   description tells agents to call `create_workflow` only after explicit user
-  confirmation.
+  confirmation, using the `previewToken` returned by `preview_workflow`.
 
 ## Development
 

@@ -36,6 +36,15 @@ export interface WorkflowDraft {
   triggers: WorkflowTrigger[]
 }
 
+export type WorkflowValidationGapSeverity = 'required' | 'optional'
+
+export interface WorkflowValidationGap {
+  severity: WorkflowValidationGapSeverity
+  field: string
+  value: string
+  message: string
+}
+
 export interface WorkflowSummary {
   id: string
   title: string
@@ -88,7 +97,13 @@ export interface WorkflowToolPreview {
   title: string
   summary: string
   missing: string[]
+  gaps?: WorkflowValidationGap[]
   normalizedDraft?: WorkflowDraft
+  previewToken?: string
+}
+
+export interface WorkflowToolCreateRequest {
+  previewToken: string
 }
 
 export interface WorkflowToolCreateResult {
@@ -177,34 +192,60 @@ function isValidTimeZone(timeZone: string) {
   }
 }
 
-export function validateWorkflowSchedule(schedule: WorkflowSchedule) {
+function isIntegerInRange(value: unknown, min: number, max: number) {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+}
+
+function parseScheduleStartAt(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) ? parsed : null
+}
+
+export function validateWorkflowSchedule(schedule: WorkflowSchedule, from?: Date) {
   if (!schedule?.type) return 'Schedule type is required.'
   if (!VALID_SCHEDULE_TYPES.has(schedule.type)) return 'Schedule type is invalid.'
   if (!schedule.timezone) return 'Schedule timezone is required.'
   if (!isValidTimeZone(schedule.timezone)) return 'Schedule timezone is invalid.'
-  if (schedule.type === 'weekly' && (typeof schedule.dayOfWeek !== 'number' || schedule.dayOfWeek < 0 || schedule.dayOfWeek > 6)) {
+  if (schedule.runAtHour !== null && schedule.runAtHour !== undefined && !isIntegerInRange(schedule.runAtHour, 0, 23)) {
+    return 'Schedule runAtHour must be an integer between 0 and 23.'
+  }
+  if (schedule.runAtMinute !== null && schedule.runAtMinute !== undefined && !isIntegerInRange(schedule.runAtMinute, 0, 59)) {
+    return 'Schedule runAtMinute must be an integer between 0 and 59.'
+  }
+  if (schedule.type === 'weekly' && !isIntegerInRange(schedule.dayOfWeek, 0, 6)) {
     return 'Weekly schedules require dayOfWeek between 0 and 6.'
   }
-  if (schedule.type === 'monthly' && (typeof schedule.dayOfMonth !== 'number' || schedule.dayOfMonth < 1 || schedule.dayOfMonth > 31)) {
+  if (schedule.type === 'monthly' && !isIntegerInRange(schedule.dayOfMonth, 1, 31)) {
     return 'Monthly schedules require dayOfMonth between 1 and 31.'
   }
   if (schedule.type === 'one_time' && !schedule.startAt) return 'One-time schedules require startAt.'
+  if (schedule.startAt) {
+    const startAt = parseScheduleStartAt(schedule.startAt)
+    if (!startAt) return 'Schedule startAt must be a valid ISO timestamp.'
+    if (from && startAt.getTime() <= from.getTime()) return 'Schedule startAt must be in the future.'
+  }
   return null
 }
 
 export function computeNextWorkflowScheduleRunAt(schedule: WorkflowSchedule, from = new Date()) {
   const runAtHour = schedule.runAtHour ?? 9
   const runAtMinute = schedule.runAtMinute ?? 0
-  const zonedNow = getZonedParts(from, schedule.timezone)
 
   if (schedule.type === 'one_time') {
     const at = schedule.startAt ? new Date(schedule.startAt) : null
     return at && !Number.isNaN(at.getTime()) && at.getTime() > from.getTime() ? at.toISOString() : null
   }
 
+  const startAt = parseScheduleStartAt(schedule.startAt)
+  const recurrenceFrom = startAt && startAt.getTime() > from.getTime()
+    ? new Date(startAt.getTime() - 1)
+    : from
+  const zonedNow = getZonedParts(recurrenceFrom, schedule.timezone)
+
   if (schedule.type === 'daily') {
     let candidate = zonedDateTimeToUtc(schedule.timezone, zonedNow.year, zonedNow.month, zonedNow.day, runAtHour, runAtMinute)
-    if (candidate.getTime() <= from.getTime()) {
+    if (candidate.getTime() <= recurrenceFrom.getTime()) {
       const tomorrow = addDays(zonedNow, 1)
       candidate = zonedDateTimeToUtc(schedule.timezone, tomorrow.year, tomorrow.month, tomorrow.day, runAtHour, runAtMinute)
     }
@@ -218,7 +259,7 @@ export function computeNextWorkflowScheduleRunAt(schedule: WorkflowSchedule, fro
     if (delta < 0) delta += 7
     let target = addDays(zonedNow, delta)
     let candidate = zonedDateTimeToUtc(schedule.timezone, target.year, target.month, target.day, runAtHour, runAtMinute)
-    if (candidate.getTime() <= from.getTime()) {
+    if (candidate.getTime() <= recurrenceFrom.getTime()) {
       target = addDays(target, 7)
       candidate = zonedDateTimeToUtc(schedule.timezone, target.year, target.month, target.day, runAtHour, runAtMinute)
     }
@@ -228,7 +269,7 @@ export function computeNextWorkflowScheduleRunAt(schedule: WorkflowSchedule, fro
   const requestedDay = schedule.dayOfMonth ?? 1
   const day = clampDayOfMonth(zonedNow.year, zonedNow.month, requestedDay)
   let candidate = zonedDateTimeToUtc(schedule.timezone, zonedNow.year, zonedNow.month, day, runAtHour, runAtMinute)
-  if (candidate.getTime() <= from.getTime()) {
+  if (candidate.getTime() <= recurrenceFrom.getTime()) {
     const nextMonth = zonedNow.month === 12
       ? { year: zonedNow.year + 1, month: 1 }
       : { year: zonedNow.year, month: zonedNow.month + 1 }

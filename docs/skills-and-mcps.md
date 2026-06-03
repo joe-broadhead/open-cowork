@@ -78,7 +78,8 @@ short tool name such as `bar_chart`.
     Lets a Workflow Designer setup thread preview and save repeatable Open Cowork
     workflows with manual, scheduled, or webhook triggers. Runtime ids:
     `mcp__workflows__preview_workflow` and
-    `mcp__workflows__create_workflow`. Source:
+    `mcp__workflows__create_workflow`; create accepts the preview token returned
+    by the confirmed preview. Source:
     `mcps/workflows/src/index.ts`.
 
 -   :material-monitor-dashboard: **`semantic-ui` MCP** <span class="status-badge stable">stable</span>
@@ -388,8 +389,8 @@ create custom agents through the same validation path as the UI. The bundled
 that teaches the model how to use a paired MCP" pattern. The `clock` skill +
 `clock` MCP pair uses the same pattern for calendar reasoning. The
 `workflow-creator` + `workflows` MCP pair applies it to workflow setup: the
-skill teaches the conversational checklist, while the MCP previews and saves
-the confirmed workflow. The `autoresearch` skill extends the pattern by
+skill teaches the conversational checklist, while the MCP previews, validates,
+and saves only from a confirmed preview token. The `autoresearch` skill extends the pattern by
 composing `charts`, `skills`, and `agents`: charts show experiment progress,
 while the Skills and Agents MCPs can apply approved custom improvements.
 

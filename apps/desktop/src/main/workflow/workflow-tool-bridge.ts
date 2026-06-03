@@ -1,7 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import type { WorkflowDraft } from '@open-cowork/shared'
-import { createWorkflowFromTool, previewWorkflowFromTool } from './workflow-tool-actions.ts'
+import type { WorkflowDraft, WorkflowToolCreateRequest } from '@open-cowork/shared'
+import {
+  createWorkflowFromTool,
+  previewWorkflowFromTool,
+  WorkflowToolActionError,
+} from './workflow-tool-actions.ts'
 import { log } from '../logger.ts'
 
 const MAX_TOOL_BODY_BYTES = 256 * 1024
@@ -74,19 +78,24 @@ async function handleToolRequest(req: IncomingMessage, res: ServerResponse) {
     assertAuthorized(req)
     const body = await readJsonBody(req)
     if (req.url === '/preview') {
-      writeJson(res, 200, previewWorkflowFromTool(body as unknown as WorkflowDraft) as unknown as Record<string, unknown>)
+      const result = await previewWorkflowFromTool(body as unknown as WorkflowDraft)
+      writeJson(res, 200, result as unknown as Record<string, unknown>)
       return
     }
     if (req.url === '/create') {
-      const result = createWorkflowFromTool(body as unknown as WorkflowDraft)
+      const result = await createWorkflowFromTool(body as unknown as WorkflowToolCreateRequest)
       writeJson(res, 200, result as unknown as Record<string, unknown>)
       return
     }
     writeJson(res, 404, { ok: false, error: 'Workflow tool route not found.' })
   } catch (error) {
     const status = error instanceof ToolBridgeHttpError ? error.status : 400
-    const message = error instanceof ToolBridgeHttpError ? error.publicMessage : 'Workflow tool request failed.'
-    if (!(error instanceof ToolBridgeHttpError)) {
+    const message = error instanceof ToolBridgeHttpError
+      ? error.publicMessage
+      : error instanceof WorkflowToolActionError
+        ? error.message
+        : 'Workflow tool request failed.'
+    if (!(error instanceof ToolBridgeHttpError) && !(error instanceof WorkflowToolActionError)) {
       log('error', `Workflow tool request failed: ${error instanceof Error ? error.message : String(error)}`)
     }
     writeJson(res, status, { ok: false, error: message })

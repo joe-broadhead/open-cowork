@@ -4439,6 +4439,66 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
   }
 })
 
+test('cloud HTTP validates workflow schedules at the create boundary', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const postWorkflow = (triggers: unknown[]) => fetch(`${baseUrl}/api/workflows`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Scheduled revenue',
+      instructions: 'Summarize scheduled revenue.',
+      agentName: 'data-analyst',
+      triggers,
+    }),
+  })
+
+  try {
+    const invalidHour = await postWorkflow([{
+      id: 'daily',
+      type: 'schedule',
+      enabled: true,
+      schedule: {
+        type: 'daily',
+        timezone: 'UTC',
+        runAtHour: 24,
+      },
+    }])
+    assert.equal(invalidHour.status, 400)
+    assert.match(String((await readJson(invalidHour)).error), /runAtHour/)
+
+    const pastOneTime = await postWorkflow([{
+      id: 'once',
+      type: 'schedule',
+      enabled: true,
+      schedule: {
+        type: 'one_time',
+        timezone: 'UTC',
+        startAt: '2000-01-01T00:00:00.000Z',
+      },
+    }])
+    assert.equal(pastOneTime.status, 400)
+    assert.match(String((await readJson(pastOneTime)).error), /future/)
+
+    const futureStartAt = '2099-01-01T00:00:00.000Z'
+    const valid = await postWorkflow([{
+      id: 'once',
+      type: 'schedule',
+      enabled: true,
+      schedule: {
+        type: 'one_time',
+        timezone: 'UTC',
+        startAt: futureStartAt,
+      },
+    }])
+    assert.equal(valid.status, 201)
+    const workflow = asRecord((await readJson(valid)).workflow)
+    assert.equal(workflow.nextRunAt, futureStartAt)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP gates managed workflow runs by concurrency and hourly quotas', async () => {
   const createWorkflow = async (baseUrl: string, suffix: string) => {
     const response = await fetch(`${baseUrl}/api/workflows`, {

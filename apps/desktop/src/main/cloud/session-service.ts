@@ -2391,9 +2391,14 @@ export class CloudSessionService {
   async createWorkflow(principal: CloudPrincipal, draft: WorkflowDraft): Promise<WorkflowDetail> {
     await this.ensurePrincipal(principal)
     this.assertWorkflowsEnabled()
-    const normalized = this.normalizeWorkflowDraft(draft)
-    this.assertWorkflowDraftAllowed(normalized)
     const now = new Date()
+    let normalized: WorkflowDraft
+    try {
+      normalized = this.normalizeWorkflowDraft(draft, now)
+    } catch (error) {
+      throw new CloudServiceError(400, error instanceof Error ? error.message : 'Workflow draft is invalid.')
+    }
+    this.assertWorkflowDraftAllowed(normalized)
     const workflow = await this.store.createWorkflow({
       tenantId: principal.tenantId,
       userId: principal.userId,
@@ -3596,8 +3601,8 @@ export class CloudSessionService {
     }
   }
 
-  private normalizeWorkflowDraft(draft: WorkflowDraft): WorkflowDraft {
-    const triggers = this.normalizeWorkflowTriggers(draft.triggers)
+  private normalizeWorkflowDraft(draft: WorkflowDraft, now = new Date()): WorkflowDraft {
+    const triggers = this.normalizeWorkflowTriggers(draft.triggers, now)
     if (!triggers.some((trigger) => trigger.type === 'manual')) {
       triggers.unshift({ id: this.ids.randomUUID(), type: 'manual', enabled: true })
     }
@@ -3613,7 +3618,7 @@ export class CloudSessionService {
     }
   }
 
-  private normalizeWorkflowTriggers(value: unknown): WorkflowTrigger[] {
+  private normalizeWorkflowTriggers(value: unknown, now: Date): WorkflowTrigger[] {
     if (!Array.isArray(value) || value.length === 0) {
       throw new Error('Workflow requires at least one trigger.')
     }
@@ -3631,7 +3636,7 @@ export class CloudSessionService {
       if (type === 'schedule') {
         const schedule = asRecord(trigger.schedule) as unknown as WorkflowTrigger['schedule']
         if (!schedule) throw new Error('Scheduled workflow trigger requires a schedule.')
-        const scheduleError = validateWorkflowSchedule(schedule)
+        const scheduleError = validateWorkflowSchedule(schedule, now)
         if (scheduleError) throw new Error(scheduleError)
         normalized.schedule = schedule
       }

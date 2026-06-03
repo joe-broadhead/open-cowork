@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import electron from 'electron'
 import type {
@@ -15,6 +15,7 @@ import type {
   WorkflowToolPreview,
   WorkflowTrigger,
   WorkflowTriggerType,
+  WorkflowValidationGap,
 } from '@open-cowork/shared'
 import {
   createCloudProjectionCheckpoint,
@@ -53,6 +54,16 @@ const ENCRYPTED_WEBHOOK_SECRET_RECORD_VERSION = 2
 type DbRow = Record<string, unknown>
 type WorkflowWriteOptions = {
   now?: Date
+  capabilities?: WorkflowCapabilityValidationContext
+}
+type WorkflowDraftOptions = {
+  now?: Date
+  capabilities?: WorkflowCapabilityValidationContext
+}
+export type WorkflowCapabilityValidationContext = {
+  agentNames?: readonly string[]
+  skillNames?: readonly string[]
+  toolIds?: readonly string[]
 }
 type WorkflowSecretStorageAdapter = {
   mode: SecretStorageMode
@@ -212,11 +223,82 @@ function writeNow(options?: WorkflowWriteOptions) {
   return options?.now ?? new Date()
 }
 
-export function normalizeWorkflowDraft(draft: WorkflowDraft): WorkflowDraft {
+function hasCapabilityReference(value: string, available?: readonly string[]) {
+  if (!available) return true
+  return available.includes(value)
+}
+
+function projectDirectoryExists(directory: string) {
+  try {
+    return statSync(directory).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+export function validateWorkflowDraftCapabilities(
+  draft: WorkflowDraft,
+  capabilities?: WorkflowCapabilityValidationContext,
+): WorkflowValidationGap[] {
+  const gaps: WorkflowValidationGap[] = []
+
+  if (!hasCapabilityReference(draft.agentName, capabilities?.agentNames)) {
+    gaps.push({
+      severity: 'required',
+      field: 'agentName',
+      value: draft.agentName,
+      message: `Workflow agent "${draft.agentName}" is not available.`,
+    })
+  }
+
+  for (const skillName of draft.skillNames || []) {
+    if (hasCapabilityReference(skillName, capabilities?.skillNames)) continue
+    gaps.push({
+      severity: 'optional',
+      field: 'skillNames',
+      value: skillName,
+      message: `Workflow skill "${skillName}" is not available.`,
+    })
+  }
+
+  for (const toolId of draft.toolIds || []) {
+    if (hasCapabilityReference(toolId, capabilities?.toolIds)) continue
+    gaps.push({
+      severity: 'optional',
+      field: 'toolIds',
+      value: toolId,
+      message: `Workflow tool "${toolId}" is not available.`,
+    })
+  }
+
+  if (draft.projectDirectory && !projectDirectoryExists(draft.projectDirectory)) {
+    gaps.push({
+      severity: 'required',
+      field: 'projectDirectory',
+      value: draft.projectDirectory,
+      message: `Workflow project directory "${draft.projectDirectory}" is not available.`,
+    })
+  }
+
+  return gaps
+}
+
+function requiredWorkflowGaps(gaps: WorkflowValidationGap[]) {
+  return gaps.filter((gap) => gap.severity === 'required')
+}
+
+function assertWorkflowCapabilities(draft: WorkflowDraft, capabilities?: WorkflowCapabilityValidationContext) {
+  const gaps = validateWorkflowDraftCapabilities(draft, capabilities)
+  const required = requiredWorkflowGaps(gaps)
+  if (required.length > 0) throw new Error(required[0]!.message)
+  return gaps
+}
+
+export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftOptions): WorkflowDraft {
   const title = boundedText(draft.title, 'Workflow title', 512)
   const instructions = boundedText(draft.instructions, 'Workflow instructions', MAX_TEXT)
   const agentName = boundedText(draft.agentName || 'build', 'Workflow agent', 256)
-  const triggers = normalizeWorkflowTriggers(draft.triggers)
+  const triggers = normalizeWorkflowTriggers(draft.triggers, options?.now ?? new Date())
   if (!triggers.some((trigger) => trigger.type === 'manual')) {
     triggers.unshift({ id: crypto.randomUUID(), type: 'manual', enabled: true })
   }
@@ -232,7 +314,7 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft): WorkflowDraft {
   }
 }
 
-function normalizeWorkflowTriggers(value: unknown): WorkflowTrigger[] {
+function normalizeWorkflowTriggers(value: unknown, now: Date): WorkflowTrigger[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error('Workflow requires at least one trigger.')
   }
@@ -250,7 +332,7 @@ function normalizeWorkflowTriggers(value: unknown): WorkflowTrigger[] {
     }
     if (normalized.type === 'schedule') {
       if (!trigger.schedule) throw new Error('Scheduled workflow trigger requires a schedule.')
-      const scheduleError = validateWorkflowSchedule(trigger.schedule)
+      const scheduleError = validateWorkflowSchedule(trigger.schedule, now)
       if (scheduleError) throw new Error(scheduleError)
       normalized.schedule = trigger.schedule
     }
@@ -469,23 +551,33 @@ function listRunsForWorkflow(workflowId: string, limit = 25) {
   return rows.map(rowToRun)
 }
 
-export function previewWorkflowDraft(draft: WorkflowDraft): WorkflowToolPreview {
-  const missing: string[] = []
+export function previewWorkflowDraft(draft: WorkflowDraft, options?: WorkflowDraftOptions): WorkflowToolPreview {
   try {
-    const normalizedDraft = normalizeWorkflowDraft(draft)
+    const now = options?.now ?? new Date()
+    const normalizedDraft = normalizeWorkflowDraft(draft, { ...options, now })
+    const gaps = validateWorkflowDraftCapabilities(normalizedDraft, options?.capabilities)
+    const missing = requiredWorkflowGaps(gaps).map((gap) => gap.message)
     return {
       ok: missing.length === 0,
       title: normalizedDraft.title,
       summary: normalizedDraft.instructions.slice(0, 500),
       missing,
+      gaps,
       normalizedDraft,
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Workflow draft is invalid.'
     return {
       ok: false,
       title: typeof draft.title === 'string' ? draft.title : 'Workflow draft',
-      summary: error instanceof Error ? error.message : 'Workflow draft is invalid.',
-      missing: [error instanceof Error ? error.message : 'Workflow draft is invalid.'],
+      summary: message,
+      missing: [message],
+      gaps: [{
+        severity: 'required',
+        field: 'draft',
+        value: '',
+        message,
+      }],
     }
   }
 }
@@ -508,8 +600,9 @@ export function getWorkflow(workflowId: string, webhookBaseUrl?: string | null):
 }
 
 export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | null, options?: WorkflowWriteOptions): WorkflowDetail {
-  const normalized = normalizeWorkflowDraft(draft)
   const nowDate = writeNow(options)
+  const normalized = normalizeWorkflowDraft(draft, { ...options, now: nowDate })
+  assertWorkflowCapabilities(normalized, options?.capabilities)
   const now = nowDate.toISOString()
   const id = crypto.randomUUID()
   const nextRunAt = computeNextWorkflowRunAt(normalized.triggers, nowDate)
