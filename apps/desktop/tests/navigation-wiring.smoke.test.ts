@@ -248,7 +248,8 @@ test('settings shortcut reveals the sidebar settings when the sidebar is collaps
     await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ state: 'hidden', timeout: 10_000 })
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:open-settings')))
-    await page.getByRole('button', { name: /Done/i }).waitFor({ timeout: 10_000 })
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Close dialog' }).waitFor({ timeout: 10_000 })
   } finally {
     await cleanup()
   }

@@ -145,7 +145,7 @@ describe('WorkflowsPage', () => {
 
     expect(api.workflows?.startDraft).not.toHaveBeenCalled()
     expect(onOpenThread).not.toHaveBeenCalled()
-    expect(screen.getByText(/requires the in-app OpenCode config source/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/requires the in-app OpenCode config source/i).length).toBeGreaterThan(0)
   })
 
   it('renders saved workflows and opens runs from actions', async () => {

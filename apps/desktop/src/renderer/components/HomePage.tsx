@@ -799,7 +799,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
   return (
     <div className="relative flex-1 min-h-0 overflow-y-auto" data-testid="home-view">
       <HomeBackdrop />
-      <div className="relative max-w-[760px] mx-auto px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
+      <div className="measure-column relative px-6 pt-[clamp(72px,13vh,142px)] pb-16 flex flex-col items-center">
         <HomeEyebrow brandName={brandName} />
         <h1 className="font-display text-role-hero font-bold text-text text-center">
           {greeting}

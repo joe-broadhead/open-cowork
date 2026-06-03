@@ -127,11 +127,11 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: 'New Thread' })).toBeTruthy()
     expect(screen.getByText('Workflows')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
-    expect(screen.getByText('Health Center')).toBeTruthy()
+    expect(screen.getByText('Diagnostics')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 
-  it('navigates to the Health Center from the primary nav', () => {
+  it('navigates to the Health Center from the secondary diagnostics entry', () => {
     const onViewChange = vi.fn()
     render(
       <Sidebar
@@ -140,7 +140,7 @@ describe('Sidebar', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Health Center' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnostics' }))
     expect(onViewChange).toHaveBeenCalledWith('health')
   })
 

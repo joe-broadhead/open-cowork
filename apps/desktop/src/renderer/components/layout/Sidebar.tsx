@@ -564,18 +564,11 @@ export function Sidebar({
   }, [settingsRequestNonce])
 
   return (
-    <aside
-      className={`flex flex-col shrink-0 border-e border-border-subtle transition-[width] duration-200 ${showSettings ? 'w-[640px]' : 'w-[252px]'}`}
-      style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
-    >
-      {showSettings ? (
-        <Suspense fallback={<div className="p-4 text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
-          <SettingsPanel
-            onClose={() => setShowSettings(false)}
-          />
-        </Suspense>
-      ) : (
-        <>
+    <>
+      <aside
+        className="flex w-[252px] flex-col shrink-0 border-e border-border-subtle transition-[width] duration-200"
+        style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
+      >
           <SidebarBrandTop top={branding?.top} />
           <WorkspaceSwitcher />
           <div className="p-3 pb-1 flex gap-2">
@@ -633,12 +626,6 @@ export function Sidebar({
               <Icon name="blocks" size={16} />
               {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
-            <button onClick={() => onViewChange('health')}
-              aria-current={currentView === 'health' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="heart-pulse" size={16} />
-              {t('sidebar.healthCenter', 'Health Center')}
-            </button>
           </div>
 
           {/* Threads — ThreadList owns its own scroll container so it
@@ -659,18 +646,32 @@ export function Sidebar({
           {/* Tool status */}
           <div className="border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
+            <button onClick={() => onViewChange('health')}
+              aria-current={currentView === 'health' ? 'page' : undefined}
+              title={t('sidebar.diagnostics', 'Diagnostics')}
+              className={`sidebar-nav-item mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-[12px] transition-colors ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
+              <Icon name="heart-pulse" size={16} />
+              {t('sidebar.diagnostics', 'Diagnostics')}
+            </button>
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
           </div>
 
           {/* Settings */}
           <button onClick={() => setShowSettings(true)}
+            aria-expanded={showSettings}
             className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle">
             <Icon name="settings-2" size={16} />
             {t('sidebar.settings', 'Settings')}
           </button>
-        </>
-      )}
-    </aside>
+      </aside>
+      {showSettings ? (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] grid place-items-center text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+          />
+        </Suspense>
+      ) : null}
+    </>
   )
 }

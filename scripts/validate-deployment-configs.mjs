@@ -1131,7 +1131,7 @@ function validateSetupHealthCenter() {
     }
   }
 
-  assertIncludes(sidebarPath, 'Health Center')
+  assertIncludes(sidebarPath, 'Diagnostics')
   assertIncludes(appTypesPath, "'health'")
 
   const standaloneSetup = read(standaloneSetupPath)

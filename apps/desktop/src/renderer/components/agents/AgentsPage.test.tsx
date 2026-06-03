@@ -188,22 +188,22 @@ describe('AgentsPage', () => {
     expect(screen.queryByText('plugin-helper')).not.toBeInTheDocument()
 
     await user.clear(screen.getByPlaceholderText('Search agents, skills, tools, or instructions…'))
-    await user.click(screen.getByRole('button', { name: 'Built-in' }))
+    await user.click(screen.getByRole('tab', { name: 'Built-in' }))
     expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.queryByText('Build')).not.toBeInTheDocument()
     expect(screen.queryByText('market-analyst')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'OpenCode' }))
+    await user.click(screen.getByRole('tab', { name: 'OpenCode' }))
     expect(screen.getByText('Build')).toBeInTheDocument()
     expect(screen.queryByText('Workflow Designer')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'all' }))
+    await user.click(screen.getByRole('tab', { name: 'All' }))
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('market-analyst')).toBeInTheDocument()
   })
 
-  it('opens the starter picker before creating a new agent and cleans up runtime listeners', async () => {
+  it('opens the builder with starter choices before creating a new agent and cleans up runtime listeners', async () => {
     const user = userEvent.setup()
     const api = renderAgentsPage()
 

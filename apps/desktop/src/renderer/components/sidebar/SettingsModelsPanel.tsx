@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SMALL_MODEL_USE_MAIN, type EffectiveAppSettings, type PublicAppConfig } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { Badge, Button, Card, Input } from '../ui'
 import { credentialFieldIsSecret, isCredentialMask } from '../provider/credential-merge'
 import { ProviderAuthControls } from '../provider/ProviderAuthControls'
 import {
   fieldLabelCls,
-  inputCls,
   panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
@@ -26,6 +26,7 @@ export function ModelsPanel({
   updateProviderCredential,
   onConfigRefreshed,
   onPersistSettings,
+  mode = 'model',
 }: {
   config: PublicAppConfig
   settings: EffectiveAppSettings
@@ -33,6 +34,7 @@ export function ModelsPanel({
   updateProviderCredential: (providerId: string, key: string, value: string) => void
   onConfigRefreshed: (next: PublicAppConfig) => void
   onPersistSettings: () => Promise<boolean>
+  mode?: 'model' | 'advanced'
 }) {
   const provider = config.providers.available.find((entry) => entry.id === settings.effectiveProviderId) || null
   const models = provider?.models || []
@@ -113,7 +115,7 @@ export function ModelsPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {config.auth.enabled ? (
+      {mode === 'advanced' && config.auth.enabled ? (
         <div className={panelCardCls}>
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -122,227 +124,248 @@ export function ModelsPanel({
                 {t('settings.models.googleSignInDescription', 'Sign out to force a fresh Google consent flow when this build adds new Workspace or Gemini scopes.')}
               </div>
             </div>
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="secondary"
+              loading={signingOutGoogle}
               onClick={() => void handleGoogleSignOut()}
-              disabled={signingOutGoogle}
-              className="shrink-0 px-3 py-2 rounded-xl border border-border-subtle text-[12px] font-semibold text-text cursor-pointer transition-colors hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
+              className="shrink-0"
             >
               {signingOutGoogle
                 ? t('settings.models.signingOutGoogle', 'Signing out...')
                 : t('settings.models.signOutGoogle', 'Sign out')}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3">
-        <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
-        <div className="grid grid-cols-2 gap-3">
-          {config.providers.available.map((entry) => {
-            const nextModelId = entry.id === settings.effectiveProviderId
-              ? settings.selectedModelId || settings.effectiveModel || entry.defaultModel || entry.models[0]?.id || ''
-              : entry.defaultModel || entry.models[0]?.id || ''
-            return (
-              <button
-                key={entry.id}
-                onClick={() => update({
-                  selectedProviderId: entry.id,
-                  selectedModelId: nextModelId,
-                  selectedSmallModelId: smallModelFollowsMainModel ? SMALL_MODEL_USE_MAIN : null,
-                  effectiveProviderId: entry.id,
-                  effectiveModel: nextModelId,
-                  effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
-                })}
-                className="text-start rounded-2xl border p-3 transition-colors cursor-pointer"
-                style={{
-                  background: settings.effectiveProviderId === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
-                  borderColor: settings.effectiveProviderId === entry.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-                }}
-              >
-                <div className="text-[12px] font-semibold text-text">{entry.name}</div>
-                <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
-                {typeof entry.connected === 'boolean' ? (
-                  <div className="text-[10px] text-text-muted mt-2">
-                    {entry.connected ? t('settings.models.connected', 'Signed in') : t('settings.models.notConnected', 'Not signed in')}
-                  </div>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {provider ? (
-        <div className="flex flex-col gap-3">
-          <span className={sectionLabelCls}>{t('settings.models.authentication', 'Authentication')}</span>
-          <ProviderAuthControls
-            providerId={provider.id}
-            providerName={provider.name}
-            connected={provider.connected}
-            onBeforeAuthorize={persistBeforeProviderAuth}
-            onAuthUpdated={async () => {
-              const nextConfig = await window.coworkApi.app.config()
-              onConfigRefreshed(nextConfig)
-              const refreshedProvider = nextConfig.providers.available.find((entry) => entry.id === provider.id) || null
-              if (refreshedProvider?.defaultModel) {
-                update({
-                  selectedModelId: refreshedProvider.defaultModel,
-                  effectiveModel: refreshedProvider.defaultModel,
-                })
-              }
-            }}
-          />
-
-          {provider.credentials.length ? (
-            <div className={panelCardCls}>
-              {provider.credentials.map((credential) => {
-                const credentialIsSecret = credentialFieldIsSecret(credential)
+      {mode === 'model' ? (
+        <>
+          <div id="settings-model-provider" className="flex flex-col gap-3 scroll-mt-4">
+            <span className={sectionLabelCls}>{t('settings.models.provider', 'Provider')}</span>
+            <div className="grid grid-cols-2 gap-3">
+              {config.providers.available.map((entry) => {
+                const active = settings.effectiveProviderId === entry.id
+                const nextModelId = entry.id === settings.effectiveProviderId
+                  ? settings.selectedModelId || settings.effectiveModel || entry.defaultModel || entry.models[0]?.id || ''
+                  : entry.defaultModel || entry.models[0]?.id || ''
                 return (
-                  <label key={credential.key} className="flex flex-col gap-1.5">
-                    <span className={fieldLabelCls}>{credential.label}</span>
-                    <input
-                      type={credentialIsSecret ? 'password' : 'text'}
-                      value={providerCredentials[credential.key] || ''}
-                      onFocus={() => {
-                        if (credentialIsSecret && isCredentialMask(providerCredentials[credential.key])) {
-                          updateProviderCredential(provider.id, credential.key, '')
-                        }
-                      }}
-                      onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
-                      placeholder={credential.placeholder}
-                      className={inputCls}
-                    />
-                    <span className="text-[10px] text-text-muted">{credential.description}</span>
-                  </label>
+                  <Card
+                    key={entry.id}
+                    interactive
+                    padding="sm"
+                    aria-pressed={active}
+                    className="settings-choice-card"
+                    onClick={() => update({
+                      selectedProviderId: entry.id,
+                      selectedModelId: nextModelId,
+                      selectedSmallModelId: smallModelFollowsMainModel ? SMALL_MODEL_USE_MAIN : null,
+                      effectiveProviderId: entry.id,
+                      effectiveModel: nextModelId,
+                      effectiveSmallModel: smallModelFollowsMainModel ? nextModelId : entry.smallModel || nextModelId,
+                    })}
+                  >
+                    <div className="text-[12px] font-semibold text-text">{entry.name}</div>
+                    <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
+                    {typeof entry.connected === 'boolean' ? (
+                      <div className="text-[10px] text-text-muted mt-2">
+                        {entry.connected ? t('settings.models.connected', 'Signed in') : t('settings.models.notConnected', 'Not signed in')}
+                      </div>
+                    ) : null}
+                  </Card>
                 )
               })}
             </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {provider && models.length === 0 && (
-        <div className="flex flex-col gap-3">
-          <span className={sectionLabelCls}>{t('settings.models.model', 'Model')}</span>
-          <input
-            type="text"
-            value={settings.effectiveModel || settings.selectedModelId || ''}
-            onChange={(event) => updateMainModel(event.target.value)}
-            placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
-            className={inputCls}
-          />
-          <span className="text-[10px] text-text-muted px-1">
-            {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
-          </span>
-        </div>
-      )}
-
-      {models.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className={sectionLabelCls}>
-              {t('settings.models.model', 'Model')}
-              <span className="ms-2 text-text-muted font-normal">
-                {filteredModels.length === models.length
-                  ? `${models.length}`
-                  : `${filteredModels.length} / ${models.length}`}
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={handleRefreshCatalog}
-              disabled={refreshingProviderId === provider?.id}
-              className="text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-              title={t('settings.models.refreshTitle', 'Refresh the dynamic model catalog')}
-            >
-              {refreshingProviderId === provider?.id ? t('settings.models.refreshing', 'Refreshing…') : t('settings.models.refresh', 'Refresh')}
-            </button>
           </div>
-          {useListView && (
-            <input
-              type="text"
-              value={modelQuery}
-              onChange={(event) => setModelQuery(event.target.value)}
-              placeholder={t('settings.models.search', 'Search {{count}} models…', { count: String(models.length) })}
-              className={inputCls}
-            />
-          )}
-          {useListView ? (
-            <div className="rounded-2xl border border-border-subtle overflow-hidden max-h-[420px] overflow-y-auto">
-              {filteredModels.length === 0 ? (
-                <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('settings.models.noMatches', 'No models match this search.')}</div>
-              ) : (
-                filteredModels.map((model, index) => {
-                  const isActive = settings.effectiveModel === model.id
-                  const showFeaturedBoundary =
-                    hasFeatured && index > 0 && filteredModels[index - 1].featured && !model.featured
-                  return (
-                    <div key={model.id}>
-                      {showFeaturedBoundary && (
-                        <div className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
-                          {t('settings.models.allModels', 'All models')}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => updateMainModel(model.id)}
-                        className="w-full text-start px-3 py-2 border-b border-border-subtle last:border-b-0 cursor-pointer transition-colors"
-                        style={{
-                          background: isActive ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
-                        }}
-                      >
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[12px] font-medium text-text truncate">{model.name}</span>
-                          {model.featured && (
-                            <span
-                              className="shrink-0 text-[9px] uppercase tracking-[0.04em] px-1 py-px rounded"
-                              style={{
-                                color: 'var(--color-accent)',
-                                background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-                              }}
-                            >
-                              {t('settings.models.featured', 'Featured')}
-                            </span>
-                          )}
-                          {formatContextLength(model.contextLength) && (
-                            <span className="shrink-0 text-[10px] text-text-muted">
-                              {formatContextLength(model.contextLength)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-text-muted font-mono truncate">{model.id}</div>
-                        {model.description && (
-                          <div className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{model.description}</div>
-                        )}
-                      </button>
+
+          {provider ? (
+            <div className="flex flex-col gap-3">
+              <span className={sectionLabelCls}>{t('settings.models.authentication', 'Authentication')}</span>
+              <ProviderAuthControls
+                providerId={provider.id}
+                providerName={provider.name}
+                connected={provider.connected}
+                onBeforeAuthorize={persistBeforeProviderAuth}
+                onAuthUpdated={async () => {
+                  const nextConfig = await window.coworkApi.app.config()
+                  onConfigRefreshed(nextConfig)
+                  const refreshedProvider = nextConfig.providers.available.find((entry) => entry.id === provider.id) || null
+                  if (refreshedProvider?.defaultModel) {
+                    update({
+                      selectedModelId: refreshedProvider.defaultModel,
+                      effectiveModel: refreshedProvider.defaultModel,
+                    })
+                  }
+                }}
+              />
+
+              {provider.credentials.length ? (
+                <div className={panelCardCls}>
+                  {provider.credentials.map((credential) => {
+                    const credentialIsSecret = credentialFieldIsSecret(credential)
+                    return (
+                      <div key={credential.key} className="flex flex-col gap-1.5">
+                        <span className={fieldLabelCls}>{credential.label}</span>
+                        <Input
+                          size="sm"
+                          type={credentialIsSecret ? 'password' : 'text'}
+                          aria-label={credential.label}
+                          value={providerCredentials[credential.key] || ''}
+                          onFocus={() => {
+                            if (credentialIsSecret && isCredentialMask(providerCredentials[credential.key])) {
+                              updateProviderCredential(provider.id, credential.key, '')
+                            }
+                          }}
+                          onChange={(event) => updateProviderCredential(provider.id, credential.key, event.target.value)}
+                          placeholder={credential.placeholder}
+                        />
+                        <span className="text-[10px] text-text-muted">{credential.description}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+              <div id="settings-model-test" className={`${panelCardCls} scroll-mt-4`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[12px] font-semibold text-text">{t('settings.models.testConnection', 'Test connection')}</div>
+                    <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                      {t('settings.models.testConnectionDescription', 'Validate the selected provider credentials before restarting the app runtime.')}
                     </div>
-                  )
-                })
+                  </div>
+                  <Button
+                    size="sm"
+                    disabledReason={t('settings.models.testConnectionPending', 'Connection testing is wired in the onboarding validation work.')}
+                  >
+                    {t('settings.models.testConnection', 'Test connection')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {provider && models.length === 0 && (
+            <div id="settings-model-primary" className="flex flex-col gap-3 scroll-mt-4">
+              <span className={sectionLabelCls}>{t('settings.models.model', 'Model')}</span>
+              <Input
+                size="sm"
+                type="text"
+                aria-label={t('settings.models.model', 'Model')}
+                value={settings.effectiveModel || settings.selectedModelId || ''}
+                onChange={(event) => updateMainModel(event.target.value)}
+                placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
+              />
+              <span className="text-[10px] text-text-muted px-1">
+                {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
+              </span>
+            </div>
+          )}
+
+          {models.length > 0 && (
+            <div id="settings-model-primary" className="flex flex-col gap-3 scroll-mt-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className={sectionLabelCls}>
+                  {t('settings.models.model', 'Model')}
+                  <span className="ms-2 text-text-muted font-normal">
+                    {filteredModels.length === models.length
+                      ? `${models.length}`
+                      : `${filteredModels.length} / ${models.length}`}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  loading={refreshingProviderId === provider?.id}
+                  onClick={() => void handleRefreshCatalog()}
+                  title={t('settings.models.refreshTitle', 'Refresh the dynamic model catalog')}
+                >
+                  {refreshingProviderId === provider?.id ? t('settings.models.refreshing', 'Refreshing...') : t('settings.models.refresh', 'Refresh')}
+                </Button>
+              </div>
+              {useListView && (
+                <Input
+                  size="sm"
+                  type="text"
+                  leftIcon="search"
+                  clearable
+                  value={modelQuery}
+                  onClear={() => setModelQuery('')}
+                  onChange={(event) => setModelQuery(event.target.value)}
+                  placeholder={t('settings.models.search', 'Search {{count}} models...', { count: String(models.length) })}
+                />
+              )}
+              {useListView ? (
+                <div className="settings-model-list">
+                  {filteredModels.length === 0 ? (
+                    <div className="px-3 py-6 text-[12px] text-text-muted text-center">{t('settings.models.noMatches', 'No models match this search.')}</div>
+                  ) : (
+                    filteredModels.map((model, index) => {
+                      const isActive = settings.effectiveModel === model.id
+                      const showFeaturedBoundary =
+                        hasFeatured && index > 0 && filteredModels[index - 1].featured && !model.featured
+                      return (
+                        <div key={model.id}>
+                          {showFeaturedBoundary && (
+                            <div className="px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-text-muted bg-surface-hover">
+                              {t('settings.models.allModels', 'All models')}
+                            </div>
+                          )}
+                          <Card
+                            interactive
+                            padding="sm"
+                            aria-pressed={isActive}
+                            className="settings-model-list-option"
+                            onClick={() => updateMainModel(model.id)}
+                          >
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[12px] font-medium text-text truncate">{model.name}</span>
+                              {model.featured ? (
+                                <Badge tone="accent" className="settings-featured-badge">
+                                  {t('settings.models.featured', 'Featured')}
+                                </Badge>
+                              ) : null}
+                              {formatContextLength(model.contextLength) ? (
+                                <span className="shrink-0 text-[10px] text-text-muted">
+                                  {formatContextLength(model.contextLength)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-[10px] text-text-muted font-mono truncate">{model.id}</div>
+                            {model.description ? (
+                              <div className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{model.description}</div>
+                            ) : null}
+                          </Card>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {filteredModels.map((model) => (
+                    <Card
+                      key={model.id}
+                      interactive
+                      padding="sm"
+                      aria-pressed={settings.effectiveModel === model.id}
+                      className="settings-choice-card"
+                      onClick={() => updateMainModel(model.id)}
+                    >
+                      <div className="text-[12px] font-semibold text-text">{model.name}</div>
+                      {model.description ? <div className="text-[11px] text-text-muted mt-1">{model.description}</div> : null}
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {filteredModels.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => updateMainModel(model.id)}
-                  className="rounded-2xl border px-3 py-3 text-start transition-colors cursor-pointer"
-                  style={{
-                    background: settings.effectiveModel === model.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-elevated)',
-                    borderColor: settings.effectiveModel === model.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-                  }}
-                >
-                  <div className="text-[12px] font-semibold text-text">{model.name}</div>
-                  {model.description ? <div className="text-[11px] text-text-muted mt-1">{model.description}</div> : null}
-                </button>
-              ))}
-            </div>
           )}
-        </div>
-      )}
+        </>
+      ) : null}
 
-      {provider ? (
-        <div className="flex flex-col gap-3">
+      {mode === 'advanced' && provider ? (
+        <div id="settings-advanced-small-model" className="flex flex-col gap-3 scroll-mt-4">
           <div>
             <span className={sectionLabelCls}>{t('settings.models.smallModel', 'Small model')}</span>
             <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
@@ -351,17 +374,18 @@ export function ModelsPanel({
           </div>
           <div className={panelCardCls}>
             <div className="flex flex-col gap-2">
-              <label className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className={fieldLabelCls}>{t('settings.models.smallModelId', 'Model ID')}</span>
-                <input
+                <Input
+                  size="sm"
                   type="text"
                   list={models.length > 0 ? 'open-cowork-small-model-options' : undefined}
+                  aria-label={t('settings.models.smallModelId', 'Model ID')}
                   value={selectedSmallModelId}
                   onChange={(event) => updateSmallModel(event.target.value)}
                   placeholder={providerSmallModelId || mainModelId || t('settings.models.sameAsMainModel', 'Same as main model')}
-                  className={inputCls}
                 />
-              </label>
+              </div>
               {models.length > 0 ? (
                 <datalist id="open-cowork-small-model-options">
                   {models.map((model) => (
@@ -377,13 +401,15 @@ export function ModelsPanel({
                       ? t('settings.models.smallModelUsingProviderDefault', 'Using provider default {{model}} for lightweight SDK calls.', { model: effectiveSmallModel })
                       : t('settings.models.smallModelUsingCustom', 'Using {{model}} for lightweight SDK calls.', { model: effectiveSmallModel })}
                 </div>
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant="ghost"
                   onClick={useMainModelForSmallModel}
-                  className="shrink-0 text-[11px] px-2 py-1 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                  className="shrink-0"
                 >
                   {t('settings.models.useMainModel', 'Use main model')}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

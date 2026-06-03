@@ -130,6 +130,19 @@ export function App() {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const workspaceActivationGenerationRef = useRef(0)
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(max-width: 860px)')
+    const collapseForNarrowWindow = () => {
+      if (!media.matches) return
+      const state = useSessionStore.getState()
+      if (!state.sidebarCollapsed) state.toggleSidebar()
+    }
+    collapseForNarrowWindow()
+    media.addEventListener('change', collapseForNarrowWindow)
+    return () => media.removeEventListener('change', collapseForNarrowWindow)
+  }, [])
+
   const reportAppError = useCallback((notice: string, error: unknown, viewName = 'app') => {
     setRendererErrorNotice(notice)
     try {

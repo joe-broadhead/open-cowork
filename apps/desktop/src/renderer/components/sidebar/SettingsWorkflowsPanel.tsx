@@ -1,8 +1,8 @@
 import type { EffectiveAppSettings } from '@open-cowork/shared'
 import { t } from '../../helpers/i18n'
+import { Input } from '../ui'
 import {
   fieldLabelCls,
-  inputCls,
   panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
@@ -50,16 +50,9 @@ export function WorkflowSettingsPanel({
                 aria-checked={enabled}
                 aria-label={toggle.title}
                 onClick={() => update({ [toggle.key]: !enabled } as Partial<EffectiveAppSettings>)}
-                className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer"
-                style={{ background: enabled ? 'var(--color-accent)' : 'var(--color-border)' }}
+                className={`settings-switch shrink-0 ${enabled ? 'settings-switch--on' : ''}`}
               >
-                <div
-                  className="w-3.5 h-3.5 rounded-full absolute top-[3px] transition-all border border-border-subtle"
-                  style={{
-                    left: enabled ? 20 : 3,
-                    background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
-                  }}
-                />
+                <span className="settings-switch__thumb" />
               </button>
             </div>
           )
@@ -72,24 +65,26 @@ export function WorkflowSettingsPanel({
           {t('settings.workflows.quietHoursDescription', 'Desktop notifications are suppressed during this window. Scheduled and webhook runs can still start.')}
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <label className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <span className={fieldLabelCls}>{t('settings.workflows.quietHoursStart', 'Start')}</span>
-            <input
+            <Input
+              size="sm"
               type="time"
+              aria-label={t('settings.workflows.quietHoursStart', 'Start')}
               value={settings.workflowQuietHoursStart || ''}
               onChange={(event) => update({ workflowQuietHoursStart: event.target.value || null })}
-              className={inputCls}
             />
-          </label>
-          <label className="flex flex-col gap-2">
+          </div>
+          <div className="flex flex-col gap-2">
             <span className={fieldLabelCls}>{t('settings.workflows.quietHoursEnd', 'End')}</span>
-            <input
+            <Input
+              size="sm"
               type="time"
+              aria-label={t('settings.workflows.quietHoursEnd', 'End')}
               value={settings.workflowQuietHoursEnd || ''}
               onChange={(event) => update({ workflowQuietHoursEnd: event.target.value || null })}
-              className={inputCls}
             />
-          </label>
+          </div>
         </div>
       </div>
     </div>

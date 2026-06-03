@@ -119,7 +119,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
 
   return (
     <div className="px-6 pt-2">
-      <div className="max-w-[900px] mx-auto">
+      <div className="measure-column">
         <div
           className="rounded-2xl border border-border p-4"
           style={{ background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-elevated) 12%)' }}

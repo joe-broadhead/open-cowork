@@ -4,6 +4,7 @@ import type {
   CustomAgentConfig,
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
+import { AgentAvatar } from './AgentAvatar'
 import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { AgentCapabilitiesTab } from './AgentCapabilitiesTab'
@@ -11,10 +12,14 @@ import { InstructionsTab } from './InstructionsTab'
 import { InferenceTab, ScopeRow, WorkbenchTabs, type WorkbenchTab } from './AgentBuilderPrimitives'
 import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
 import {
+  applyTemplate,
   augmentCatalogForBuiltIn,
   linkedSkillNamesForTool,
   validateAgentDraft,
+  type AgentTemplate,
 } from './agent-builder-utils'
+import { Badge, Button, Card, Icon } from '../ui'
+import { getStarterTemplates } from './starter-templates'
 
 type Props = {
   target: BuilderTarget
@@ -152,6 +157,21 @@ export function AgentBuilderPage({
     setDraft((current) => ({ ...current, scope: 'project', directory: selected }))
   }
 
+  const startBlank = () => {
+    if (target.kind !== 'new') return
+    setDraft(buildInitialAgentDraft({ kind: 'new', seed: null }))
+    setTab('instructions')
+  }
+
+  const applyStarter = (template: AgentTemplate) => {
+    if (target.kind !== 'new') return
+    setDraft(buildInitialAgentDraft({
+      kind: 'new',
+      seed: applyTemplate(template, effectiveCatalog),
+    }))
+    setTab('instructions')
+  }
+
   const handleSave = async (options: { testAfterSave?: boolean } = {}) => {
     if (readOnly || issues.length > 0) return
     setSaving(true)
@@ -184,77 +204,69 @@ export function AgentBuilderPage({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-6">
+      <div className="feature-page-shell">
         <div className="flex items-center justify-between mb-5">
-          <button
+          <Button
             onClick={onCancel}
-            className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer"
+            variant="ghost"
+            size="sm"
+            leftIcon="chevron-left"
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <polyline points="7,2 3,6 7,10" />
-            </svg>
             Agents
-          </button>
+          </Button>
           {!readOnly && (
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={onCancel}
-                className="px-3 py-1.5 rounded-lg text-[12px] text-text-secondary bg-surface-hover cursor-pointer"
+                variant="ghost"
+                size="sm"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => void handleSave()}
-                disabled={saving || issues.length > 0}
-                className="px-4 py-2 rounded-lg text-[13px] font-medium transition-colors cursor-pointer disabled:opacity-40"
-                style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
+                disabled={issues.length > 0}
+                loading={saving}
+                variant="primary"
+                size="md"
               >
-                {saving ? 'Saving…' : target.kind === 'custom' ? 'Save changes' : 'Create agent'}
-              </button>
-              <button
+                {target.kind === 'custom' ? 'Save changes' : 'Create agent'}
+              </Button>
+              <Button
                 onClick={() => void handleSave({ testAfterSave: true })}
                 disabled={saving || issues.length > 0 || draft.enabled === false}
-                className="px-3 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer disabled:opacity-40 border border-border-subtle text-text-secondary hover:bg-surface-hover"
+                variant="secondary"
+                size="md"
                 title={draft.enabled === false ? 'Enable this agent before testing it in chat.' : 'Save and insert an @mention into a new thread.'}
               >
                 Save & Test
-              </button>
+              </Button>
             </div>
           )}
           {readOnly && (
             <div className="flex items-center gap-2">
               {onTestAgent && canTestReadOnlyAgent && draft.enabled !== false && (
-                <button
+                <Button
                   onClick={() => onTestAgent(draft.name, projectTargetDirectory)}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border-subtle text-accent hover:bg-surface-hover cursor-pointer"
+                  variant="secondary"
+                  size="sm"
                   title="Insert this agent as an @mention in a fresh chat thread."
                 >
                   Test in chat
-                </button>
+                </Button>
               )}
-              <div
-                className="text-[11px] px-3 py-1.5 rounded-full"
-                style={{
-                  color: 'var(--color-text-muted)',
-                  background: 'color-mix(in srgb, var(--color-text-muted) 10%, transparent)',
-                }}
-              >
+              <Badge tone="neutral">
                 {target.kind === 'builtin'
                   ? 'Built-in — tune via the builtInAgents config block'
                   : 'Runtime-registered — managed by SDK plugin'}
-              </div>
+              </Badge>
             </div>
           )}
         </div>
 
         {error && (
           <div
-            className="mb-4 rounded-xl border px-4 py-3 text-[12px]"
-            style={{
-              color: 'var(--color-red)',
-              background: 'color-mix(in srgb, var(--color-red) 8%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--color-red) 30%, var(--color-border-subtle))',
-            }}
+            className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-[12px] text-red-100"
           >
             {error}
           </div>
@@ -269,6 +281,14 @@ export function AgentBuilderPage({
               ))}
             </div>
           </div>
+        )}
+
+        {target.kind === 'new' && (
+          <StarterTemplatePanel
+            catalog={effectiveCatalog}
+            onStartBlank={startBlank}
+            onApplyTemplate={applyStarter}
+          />
         )}
 
         {!readOnly && (
@@ -295,12 +315,9 @@ export function AgentBuilderPage({
             onEnabledChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
           />
 
-          <div
-            className="rounded-2xl border bg-surface flex flex-col overflow-hidden"
-            style={{ borderColor: 'var(--color-border-subtle)' }}
-          >
+          <div className="flex flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface">
             <WorkbenchTabs tab={tab} onChange={setTab} />
-            <div className="p-4 overflow-y-auto" style={{ maxHeight: 640 }}>
+            <div className="max-h-[640px] overflow-y-auto p-4">
               {tab === 'capabilities' && (
                 <AgentCapabilitiesTab
                   catalog={effectiveCatalog}
@@ -334,17 +351,16 @@ export function AgentBuilderPage({
               )}
             </div>
             {!readOnly && (
-              <div
-                className="border-t px-4 py-2 text-[10px] text-text-muted flex items-center justify-between"
-                style={{ borderColor: 'var(--color-border-subtle)' }}
-              >
+              <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 text-[10px] text-text-muted">
                 <span>{t('agents.openCapabilities', 'Need more tools or skills?')}</span>
-                <button
+                <Button
                   onClick={onOpenCapabilities}
-                  className="text-accent hover:underline cursor-pointer"
+                  variant="ghost"
+                  size="sm"
+                  rightIcon="chevron-right"
                 >
                   Open Tools & Skills
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -352,5 +368,70 @@ export function AgentBuilderPage({
 
       </div>
     </div>
+  )
+}
+
+function StarterTemplatePanel({
+  catalog,
+  onStartBlank,
+  onApplyTemplate,
+}: {
+  catalog: AgentCatalog
+  onStartBlank: () => void
+  onApplyTemplate: (template: AgentTemplate) => void
+}) {
+  const templates = getStarterTemplates()
+  return (
+    <section className="mb-5">
+      <div className="mb-3">
+        <h2 className="font-display text-role-section-title font-bold text-text">{t('agentTemplate.title', 'Start a new agent')}</h2>
+        <p className="mt-1 text-[12px] text-text-muted">
+          {t('agentTemplate.inlineSubtitle', 'Pick a starter or keep the blank draft; everything remains editable below.')}
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card interactive padding="md" className="text-start" onClick={onStartBlank}>
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-subtle text-text-muted">
+              <Icon name="plus" size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold text-text">{t('agentTemplate.startBlank', 'Start from blank')}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions — design the agent from scratch.')}
+              </div>
+            </div>
+          </div>
+        </Card>
+        {templates.map((template) => {
+          const seed = applyTemplate(template, catalog)
+          const availableHints = [
+            seed.toolIds?.length ? t('agentTemplate.toolHints', '{{count}} tool hint(s)', { count: String(seed.toolIds.length) }) : null,
+            seed.skillNames?.length ? t('agentTemplate.skillHints', '{{count}} skill hint(s)', { count: String(seed.skillNames.length) }) : null,
+          ].filter(Boolean)
+          return (
+            <Card key={template.id} interactive padding="md" className="text-start" onClick={() => onApplyTemplate(template)}>
+              <div className="flex items-start gap-3">
+                <AgentAvatar name={template.label} color={template.color} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-text">{template.label}</div>
+                  <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-text-muted">{template.description}</div>
+                  {availableHints.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-muted">
+                      {availableHints.map((hint) => <span key={hint}>{hint}</span>)}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+      <div className="mt-3">
+        <Button variant="ghost" size="sm" onClick={onStartBlank} leftIcon="plus">
+          {t('agentTemplate.keepBlank', 'Keep blank draft')}
+        </Button>
+      </div>
+    </section>
   )
 }

@@ -1,6 +1,7 @@
 import { getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type MonoFont, type UiFont, type UiTheme, UI_FONT_OPTIONS } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
-import { fieldLabelCls, inputCls, sectionLabelCls } from './settings-panel-styles'
+import { Badge, Card, SegmentedControl, Select } from '../ui'
+import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
 
 function ThemePreviewCard({
   themeId,
@@ -55,17 +56,16 @@ export function AppearancePreview({
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-3">
         <span className={sectionLabelCls}>{t('settings.appearance.colorScheme', 'Color Scheme')}</span>
-        <div className="rounded-2xl border border-border-subtle p-1.5 flex gap-1.5 bg-surface">
-          {(['system', 'dark', 'light'] as ColorScheme[]).map((scheme) => (
-            <button
-              key={scheme}
-              onClick={() => onUpdate({ colorScheme: scheme })}
-              className={`flex-1 px-3 py-2 rounded-xl text-[12px] font-medium capitalize transition-colors cursor-pointer ${appearance.colorScheme === scheme ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
-            >
-              {scheme}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label={t('settings.appearance.colorScheme', 'Color Scheme')}
+          value={appearance.colorScheme}
+          onChange={(value) => onUpdate({ colorScheme: value as ColorScheme })}
+          className="settings-wide-control"
+          options={(['system', 'dark', 'light'] as ColorScheme[]).map((scheme) => ({
+            value: scheme,
+            label: scheme.slice(0, 1).toUpperCase() + scheme.slice(1),
+          }))}
+        />
       </div>
 
       <div className="flex flex-col gap-3">
@@ -75,68 +75,56 @@ export function AppearancePreview({
             const active = appearance.uiTheme === theme.id
             const previewScheme = appearance.colorScheme === 'light' ? 'light' : 'dark'
             return (
-              <button
+              <Card
+                interactive
+                padding="sm"
                 key={theme.id}
+                aria-pressed={active}
                 onClick={() => onUpdate({ uiTheme: theme.id })}
-                className="text-start rounded-2xl border p-3 transition-all cursor-pointer hover:scale-[1.01]"
-                style={{
-                  borderColor: active ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-                  background: active
-                    ? 'color-mix(in srgb, var(--color-accent) 10%, var(--color-elevated))'
-                    : 'var(--color-elevated)',
-                  boxShadow: active
-                    ? '0 0 0 1px var(--color-accent), 0 6px 20px color-mix(in srgb, var(--color-accent) 14%, transparent)'
-                    : 'none',
-                }}
+                className="settings-choice-card settings-theme-card"
               >
                 <ThemePreviewCard themeId={theme.id} scheme={previewScheme} />
                 <div className="mt-2.5 flex items-center justify-between gap-2">
                   <div className="text-[12px] font-semibold text-text truncate">{theme.label}</div>
                   {active ? (
-                    <span
-                      className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md"
-                      style={{
-                        color: 'var(--color-accent)',
-                        background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
-                      }}
-                    >
+                    <Badge tone="accent" className="settings-mini-badge">
                       {t('settings.appearance.themeActive', 'Active')}
-                    </span>
+                    </Badge>
                   ) : null}
                 </div>
                 <div className="text-[11px] text-text-muted mt-1 leading-snug line-clamp-2">{theme.description}</div>
-              </button>
+              </Card>
             )
           })}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <label className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <span className={fieldLabelCls}>{t('settings.appearance.uiFont', 'Interface font')}</span>
-          <select
+          <Select
             value={appearance.uiFont}
-            onChange={(event) => onUpdate({ uiFont: event.target.value as UiFont })}
-            className={inputCls}
-          >
-            {UI_FONT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+            label={t('settings.appearance.uiFont', 'Interface font')}
+            onChange={(value) => onUpdate({ uiFont: value as UiFont })}
+            options={UI_FONT_OPTIONS.map((option) => ({
+              value: option.id,
+              label: option.label,
+            }))}
+          />
+        </div>
 
-        <label className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           <span className={fieldLabelCls}>{t('settings.appearance.monoFont', 'Monospace font')}</span>
-          <select
+          <Select
             value={appearance.monoFont}
-            onChange={(event) => onUpdate({ monoFont: event.target.value as MonoFont })}
-            className={inputCls}
-          >
-            {MONO_FONT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+            label={t('settings.appearance.monoFont', 'Monospace font')}
+            onChange={(value) => onUpdate({ monoFont: value as MonoFont })}
+            options={MONO_FONT_OPTIONS.map((option) => ({
+              value: option.id,
+              label: option.label,
+            }))}
+          />
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border-subtle p-4 bg-base">
@@ -147,15 +135,9 @@ export function AppearancePreview({
               <div className="text-[13px] font-semibold text-text">{t('settings.appearance.previewHealth', 'Workspace health')}</div>
               <div className="text-[11px] text-text-muted">{t('settings.appearance.previewHealthDescription', 'Provider connected, runtime ready')}</div>
             </div>
-            <span
-              className="px-2 py-0.5 rounded-full text-[10px] font-medium"
-              style={{
-                color: 'var(--color-accent)',
-                background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-              }}
-            >
+            <Badge tone="accent" className="settings-mini-badge">
               {t('settings.appearance.previewActive', 'Active')}
-            </span>
+            </Badge>
           </div>
           <div className="rounded-lg border border-border-subtle p-3 bg-elevated">
             <div className="text-[12px] text-text mb-1">{t('settings.appearance.previewMessage', 'Theme changes apply immediately.')}</div>

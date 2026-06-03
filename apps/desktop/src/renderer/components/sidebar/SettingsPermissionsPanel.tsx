@@ -4,6 +4,7 @@ import {
   panelCardCls,
   sectionLabelCls,
 } from './settings-panel-styles'
+import { SegmentedControl } from '../ui'
 
 const PERMISSION_RANK: Record<RuntimePermissionPolicy, number> = {
   deny: 0,
@@ -34,6 +35,61 @@ function canSelectPermission(value: RuntimePermissionPolicy, maximum: RuntimePer
   return PERMISSION_RANK[value] <= PERMISSION_RANK[maximum]
 }
 
+export function RuntimeConfigPanel({
+  settings,
+  update,
+}: {
+  settings: EffectiveAppSettings
+  update: (patch: Partial<EffectiveAppSettings>) => void
+}) {
+  const runtimeConfigSource = settings.runtimeConfigSource === 'machine' ? 'machine' : 'app'
+
+  return (
+    <div className="flex flex-col gap-5">
+      <span className={sectionLabelCls}>{t('settings.permissions.advancedHeader', 'Runtime config')}</span>
+      <div className={panelCardCls}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-text">{t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')}</div>
+            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
+              {t('settings.permissions.runtimeConfigSourceDescription', 'Choose whether the managed runtime uses Cowork’s isolated in-app OpenCode config or your machine’s native OpenCode install.')}
+            </div>
+          </div>
+          <SegmentedControl
+            label={t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')}
+            value={runtimeConfigSource}
+            onChange={(value) => update({ runtimeConfigSource: value } as Partial<EffectiveAppSettings>)}
+            className="settings-runtime-source-control shrink-0"
+            options={RUNTIME_CONFIG_SOURCE_OPTIONS.map((option) => ({
+              value: option.value,
+              label: t(`settings.permissions.runtimeConfigSource.${option.value}`, option.label),
+              disabledReason: option.description,
+            }))}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[12px] font-semibold text-text">{t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}</div>
+            <div className="text-[11px] text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'In app-isolated mode, expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed runtime. OpenCode config, agents, and skills are never bridged by this setting.')}</div>
+            <div className="mt-1 text-[10px] text-text-muted">{t('settings.permissions.toolingBridgeSingleSource', 'This is the same bridge setting shown during setup.')}</div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            disabled={runtimeConfigSource === 'machine'}
+            aria-checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
+            aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
+            onClick={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
+            className={`settings-switch shrink-0 ${runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 'settings-switch--on' : ''}`}
+          >
+            <span className="settings-switch__thumb" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PermissionsPanel({
   permissions,
   settings,
@@ -43,7 +99,6 @@ export function PermissionsPanel({
   settings: EffectiveAppSettings
   update: (patch: Partial<EffectiveAppSettings>) => void
 }) {
-  const runtimeConfigSource = settings.runtimeConfigSource === 'machine' ? 'machine' : 'app'
   const permissionRows = [
     {
       key: 'bashPermission' as const,
@@ -68,95 +123,38 @@ export function PermissionsPanel({
         {permissionRows.map((row) => {
           const selected = settings[row.key]
           return (
-            <div key={row.key} className="flex items-start justify-between gap-4">
+            <div
+              key={row.key}
+              id={row.key === 'bashPermission' ? 'settings-permissions-shell' : 'settings-permissions-files'}
+              className="flex items-start justify-between gap-4 scroll-mt-4"
+            >
               <div className="min-w-0">
                 <div className="text-[12px] font-semibold text-text">{row.title}</div>
                 <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{row.description}</div>
               </div>
-              <div role="group" aria-label={row.title} className="shrink-0 grid grid-cols-3 rounded-xl border border-border-subtle overflow-hidden">
-                {PERMISSION_OPTIONS.map((option) => {
+              <SegmentedControl
+                label={row.title}
+                value={selected}
+                onChange={(value) => update({
+                  [row.key]: value as RuntimePermissionPolicy,
+                  [row.legacyKey]: value !== 'deny',
+                } as Partial<EffectiveAppSettings>)}
+                className="settings-permission-control shrink-0"
+                options={PERMISSION_OPTIONS.map((option) => {
                   const allowed = canSelectPermission(option.value, row.maximum)
-                  const active = selected === option.value
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      disabled={!allowed}
-                      title={allowed ? option.description : t('settings.permissions.maximumHint', 'This build limits {{tool}} to {{mode}}.', { tool: row.title, mode: row.maximum })}
-                      aria-pressed={active}
-                      onClick={() => update({
-                        [row.key]: option.value,
-                        [row.legacyKey]: option.value !== 'deny',
-                      } as Partial<EffectiveAppSettings>)}
-                      className="px-3 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
-                      style={{
-                        background: active ? 'var(--color-accent)' : 'transparent',
-                        color: active ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
-                      }}
-                    >
-                      {t(`settings.permissions.mode.${option.value}`, option.label)}
-                    </button>
-                  )
+                  return {
+                    value: option.value,
+                    label: t(`settings.permissions.mode.${option.value}`, option.label),
+                    disabled: !allowed,
+                    disabledReason: allowed
+                      ? option.description
+                      : t('settings.permissions.maximumHint', 'This build limits {{tool}} to {{mode}}.', { tool: row.title, mode: row.maximum }),
+                  }
                 })}
-              </div>
+              />
             </div>
           )
         })}
-        <div className="flex items-start justify-between gap-4 border-t border-border-subtle pt-4">
-          <div className="min-w-0">
-            <div className="text-[12px] font-semibold text-text">{t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')}</div>
-            <div className="text-[11px] text-text-muted mt-1 leading-relaxed">
-              {t('settings.permissions.runtimeConfigSourceDescription', 'Choose whether the managed runtime uses Cowork’s isolated in-app OpenCode config or your machine’s native OpenCode install.')}
-            </div>
-          </div>
-          <div role="group" aria-label={t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source')} className="shrink-0 grid grid-cols-2 rounded-xl border border-border-subtle overflow-hidden max-w-[260px]">
-            {RUNTIME_CONFIG_SOURCE_OPTIONS.map((option) => {
-              const active = runtimeConfigSource === option.value
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={active}
-                  title={option.description}
-                  onClick={() => update({
-                    runtimeConfigSource: option.value,
-                  } as Partial<EffectiveAppSettings>)}
-                  className="px-3 py-1.5 text-[11px] font-semibold transition-colors cursor-pointer"
-                  style={{
-                    background: active ? 'var(--color-accent)' : 'transparent',
-                    color: active ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
-                  }}
-                >
-                  {t(`settings.permissions.runtimeConfigSource.${option.value}`, option.label)}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-[12px] font-semibold text-text">{t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}</div>
-            <div className="text-[11px] text-text-muted mt-1">{t('settings.permissions.toolingBridgeDescription', 'In app-isolated mode, expose standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config to the managed runtime. OpenCode config, agents, and skills are never bridged by this setting.')}</div>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            disabled={runtimeConfigSource === 'machine'}
-            aria-checked={runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled}
-            aria-label={t('settings.permissions.toolingBridgeTitle', 'Developer config bridge')}
-            onClick={() => update({ runtimeToolingBridgeEnabled: !settings.runtimeToolingBridgeEnabled })}
-            className="w-10 h-5 rounded-full transition-colors relative shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 'var(--color-accent)' : 'var(--color-border)' }}
-          >
-            <div
-              className="w-3.5 h-3.5 rounded-full absolute top-[3px] transition-all border border-border-subtle"
-              style={{
-                left: runtimeConfigSource === 'app' && settings.runtimeToolingBridgeEnabled ? 20 : 3,
-                background: 'color-mix(in srgb, var(--color-elevated) 92%, var(--color-base) 8%)',
-              }}
-            />
-          </button>
-        </div>
       </div>
     </div>
   )

@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { getBuiltInLocales, getLocale, setLocale, t } from '../../helpers/i18n'
+import { Select } from '../ui'
 import {
   fieldLabelCls,
-  inputCls,
   panelCardCls,
 } from './settings-panel-styles'
 
@@ -10,29 +10,28 @@ export function LanguagePicker() {
   const [current, setCurrent] = useState<string>(() => getLocale() || '')
   const options = getBuiltInLocales()
 
-  const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value || null
-    void setLocale(value)
-    setCurrent(value || getLocale() || '')
+  const handleChange = (value: string) => {
+    const nextValue = value || null
+    void setLocale(nextValue)
+    setCurrent(nextValue || getLocale() || '')
   }
 
   return (
     <div className={panelCardCls}>
       <div className="flex flex-col gap-1">
         <span className={fieldLabelCls}>{t('settings.language.label', 'Language')}</span>
-        <select
+        <Select
           value={current}
           onChange={handleChange}
-          className={inputCls}
-          aria-label={t('settings.language.label', 'Language')}
-        >
-          <option value="">{t('settings.language.systemDefault', 'Auto-detect (system)')}</option>
-          {options.map((option) => (
-            <option key={option.locale} value={option.locale}>
-              {option.nativeLabel}
-            </option>
-          ))}
-        </select>
+          label={t('settings.language.label', 'Language')}
+          options={[
+            { value: '', label: t('settings.language.systemDefault', 'Auto-detect (system)') },
+            ...options.map((option) => ({
+              value: option.locale,
+              label: option.nativeLabel,
+            })),
+          ]}
+        />
         <span className="text-[11px] text-text-muted leading-relaxed mt-1">
           {t(
             'settings.language.description',

@@ -10,6 +10,7 @@ import type {
   ThreadTag,
 } from '@open-cowork/shared'
 import { formatDate as formatLocalizedDate, t } from '../../helpers/i18n'
+import { Button, EmptyState, Input, Select, Skeleton } from '../ui'
 
 const STATUS_OPTIONS: Array<{ value: ThreadStatus; label: string }> = [
   { value: 'idle', label: 'Idle' },
@@ -410,8 +411,8 @@ function TagManager({
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tag.color }} />
               <span className="min-w-0 flex-1 truncate text-[12px] text-text-secondary">{tag.name}</span>
             </button>
-            <button type="button" disabled={selectedIds.length === 0} onClick={() => onApplyTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Apply</button>
-            <button type="button" disabled={selectedIds.length === 0} onClick={() => onRemoveTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Remove</button>
+            <button type="button" disabled={selectedIds.length === 0} onClick={() => onApplyTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Add tag</button>
+            <button type="button" disabled={selectedIds.length === 0} onClick={() => onRemoveTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover disabled:opacity-40">Remove tag</button>
             <button type="button" onClick={() => onDeleteTag(tag.id)} className="rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-surface-hover">Delete</button>
           </div>
         ))}
@@ -491,12 +492,12 @@ function DetailDrawer({
   }, [thread?.sessionId])
   if (!thread) return null
   return (
-    <aside aria-label="Thread detail" className="w-[340px] shrink-0 border-s border-border-subtle bg-base">
+    <aside aria-label="Thread detail" className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <h2 className="min-w-0 truncate text-[14px] font-semibold text-text">{thread.title}</h2>
         <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-text-muted hover:bg-surface-hover">Close</button>
       </div>
-      <div className="space-y-5 overflow-y-auto p-4 text-[12px] text-text-secondary">
+      <div className="threads-detail-body space-y-5 overflow-y-auto p-4 text-[12px] text-text-secondary">
         <section>
           <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Overview</h3>
           <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-1">
@@ -505,12 +506,12 @@ function DetailDrawer({
             <span className="text-text-muted">Provider</span><span>{thread.providerId || '—'}</span>
             <span className="text-text-muted">Cost</span><span>{money(thread.usage.cost)}</span>
           </div>
-          <button type="button" onClick={() => onOpen(thread.sessionId)} className="mt-3 w-full rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text">
+          <Button type="button" onClick={() => onOpen(thread.sessionId)} className="mt-3" fullWidth>
             Open thread
-          </button>
+          </Button>
         </section>
         <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Actual metadata</h3>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Thread activity</h3>
           <div className="flex flex-wrap gap-1.5">
             {thread.actualAgents.map((agent) => <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Agent: {agent.name} ×{agent.count}</span>)}
             {thread.actualTools.map((tool) => <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Tool: {tool.name} ×{tool.count}</span>)}
@@ -675,13 +676,13 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 bg-base text-text">
-      <aside aria-label="Thread filters" className="flex w-[280px] shrink-0 flex-col border-e border-border-subtle bg-base">
+    <div className="threads-page-shell flex h-full min-h-0 bg-base text-text">
+      <aside aria-label="Thread filters" className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
           <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Threads')}</div>
           <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search history, metadata, tags, and saved filters.')}</div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="threads-filter-scroll min-h-0 flex-1 overflow-y-auto">
           <SmartFilters
             filters={smartFilters}
             onSave={async (name) => {
@@ -727,81 +728,100 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
           <FacetGroup title="Thread tags" buckets={facets.tags} selected={query.tagIds} onToggle={(value) => setQuery((current) => ({ ...current, tagIds: toggleValue(current.tagIds, value) }))} />
         </div>
       </aside>
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className="threads-results-panel flex min-w-0 flex-1 flex-col">
         <div className="border-b border-border-subtle px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="threads-toolbar">
             <label className="sr-only" htmlFor="threads-search">Search threads</label>
-            <input
-              id="threads-search"
-              value={query.text}
-              onChange={(event) => setQuery((current) => ({ ...current, text: event.target.value }))}
-              placeholder={t('threads.searchPlaceholder', 'Search titles, projects, providers, agents, tools, tags, and suggestions')}
-              className="min-w-0 flex-1 rounded-md border border-border-subtle bg-base px-3 py-2 text-[13px] text-text outline-none focus:border-accent"
-            />
-            <label className="sr-only" htmlFor="threads-sort">Sort threads</label>
-            <select
-              id="threads-sort"
+            <div className="min-w-0 flex-1">
+              <Input
+                id="threads-search"
+                value={query.text}
+                onChange={(event) => setQuery((current) => ({ ...current, text: event.target.value }))}
+                placeholder={t('threads.searchPlaceholder', 'Search titles, projects, providers, agents, tools, tags, and suggestions')}
+                leftIcon="search"
+              />
+            </div>
+            <Select
               value={query.sort}
-              onChange={(event) => setQuery((current) => ({ ...current, sort: event.target.value as ThreadSort }))}
-              className="rounded-md border border-border-subtle bg-base px-2 py-2 text-[12px] text-text"
-            >
-              <option value="updated_desc">Recently updated</option>
-              <option value="created_desc">Recently created</option>
-              <option value="title_asc">Title A-Z</option>
-            </select>
-            <button type="button" onClick={reload} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover">Refresh</button>
+              onChange={(value) => setQuery((current) => ({ ...current, sort: value as ThreadSort }))}
+              label="Sort threads"
+              className="threads-sort-select"
+              options={[
+                { value: 'updated_desc', label: 'Recently updated' },
+                { value: 'created_desc', label: 'Recently created' },
+                { value: 'title_asc', label: 'Title A-Z' },
+              ]}
+            />
+            <Button type="button" onClick={reload} variant="secondary" size="md" leftIcon="rotate-ccw">Refresh</Button>
             {hasFilters(query) ? (
-              <button
+              <Button
                 type="button"
                 onClick={() => applyQuery(defaultQueryState())}
-                className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover"
+                variant="ghost"
+                size="md"
               >
                 Clear
-              </button>
+              </Button>
             ) : null}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-text-muted">
-            <span>{loading ? 'Loading…' : `${total} indexed thread${total === 1 ? '' : 's'}`}</span>
-            {selectedIds.length ? <span>{selectedIds.length} selected. Use Apply/Remove on a tag or drag rows onto a tag.</span> : <span>Actual metadata and suggestions are kept separate.</span>}
+            <span>{loading ? 'Loading...' : `${total} thread${total === 1 ? '' : 's'}`}</span>
+            {selectedIds.length ? <span>{selectedIds.length} selected. Use Add tag or Remove tag, or drag rows onto a tag.</span> : <span>Thread activity and suggestions are kept separate.</span>}
           </div>
         </div>
         {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-[12px] text-red-100">{error}</div> : null}
-        <div role="grid" aria-label={t('threads.resultsGrid', 'Thread results')} className="min-h-0 flex-1 overflow-auto">
-          <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-            <span role="columnheader" aria-label="Select" />
-            <span role="columnheader">Thread</span>
-            <span role="columnheader">Provider / model</span>
-            <span role="columnheader">Tags</span>
-            <span role="columnheader">Status</span>
+        <div className="scroll-shadow-x min-h-0 flex-1 overflow-auto">
+          <div role="grid" aria-label={t('threads.resultsGrid', 'Thread results')} className="min-w-[920px]">
+            <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+              <span role="columnheader" aria-label="Select" />
+              <span role="columnheader">Thread</span>
+              <span role="columnheader">Provider / model</span>
+              <span role="columnheader">Tags</span>
+              <span role="columnheader">Status</span>
+            </div>
+            {loading && threads.length === 0 ? (
+              <div role="row">
+                <div role="gridcell" aria-colspan={5} className="grid gap-2 p-4">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <Skeleton key={index} variant="block" className="h-12" />
+                  ))}
+                </div>
+              </div>
+            ) : threads.length ? threads.map((thread) => (
+              <ThreadRow
+                key={thread.sessionId}
+                thread={thread}
+                selected={selectedIds.includes(thread.sessionId)}
+                onToggleSelected={() => toggleSelection(thread.sessionId)}
+                onSelect={() => setDetailId(thread.sessionId)}
+                onOpen={() => openThread(thread.sessionId)}
+                onDragStart={() => {
+                  dragIdsRef.current = selectedIds.includes(thread.sessionId) ? selectedIds : [thread.sessionId]
+                }}
+              />
+            )) : (
+              <div role="row">
+                <div role="gridcell" aria-colspan={5} className="p-8 text-center text-[13px] text-text-muted">
+                  <EmptyState
+                    icon="search"
+                    title={hasFilters(query) ? 'No threads match your filters' : 'Your threads'}
+                    body={hasFilters(query)
+                      ? 'Try clearing a filter or changing the search text.'
+                      : 'Threads you start or run through workflows will appear here.'}
+                  />
+                </div>
+              </div>
+            )}
+            {nextCursor ? (
+              <div role="row">
+                <div role="gridcell" aria-colspan={5} className="flex justify-center border-t border-border-subtle p-3">
+                  <Button type="button" onClick={() => void loadThreads(nextCursor, true)}>
+                    Load more
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
-          {threads.length ? threads.map((thread) => (
-            <ThreadRow
-              key={thread.sessionId}
-              thread={thread}
-              selected={selectedIds.includes(thread.sessionId)}
-              onToggleSelected={() => toggleSelection(thread.sessionId)}
-              onSelect={() => setDetailId(thread.sessionId)}
-              onOpen={() => openThread(thread.sessionId)}
-              onDragStart={() => {
-                dragIdsRef.current = selectedIds.includes(thread.sessionId) ? selectedIds : [thread.sessionId]
-              }}
-            />
-          )) : (
-            <div role="row">
-              <div role="gridcell" aria-colspan={5} className="p-8 text-center text-[13px] text-text-muted">
-                {loading ? 'Loading threads…' : 'No indexed threads match this search.'}
-              </div>
-            </div>
-          )}
-          {nextCursor ? (
-            <div role="row">
-              <div role="gridcell" aria-colspan={5} className="flex justify-center border-t border-border-subtle p-3">
-                <button type="button" onClick={() => void loadThreads(nextCursor, true)} className="rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text-secondary hover:bg-surface-hover">
-                  Load more
-                </button>
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
       <DetailDrawer
