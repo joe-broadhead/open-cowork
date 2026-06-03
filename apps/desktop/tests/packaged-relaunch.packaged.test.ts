@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   cleanupSmokePaths,
   createSmokePaths,
+  launchPackagedLinuxProbe,
   launchPackagedMacProbe,
   launchSmokeSession,
   type SmokeSession,
@@ -15,7 +16,7 @@ const expectSignedUpdateInstall = process.env.OPEN_COWORK_EXPECT_SIGNED_UPDATE_I
 const packagedRelaunchTimeoutMs = 240_000
 const packagedLaunchTimeoutMs = 90_000
 const packagedIpcTimeoutMs = 60_000
-const packagedMacSeedSessionId = 'packaged_mac_seed_session'
+const packagedSeedSessionId = 'packaged_seed_session'
 const updateInstallUnsupportedReasons = new Set([
   'dev',
   'unsigned',
@@ -30,13 +31,13 @@ const updateInstallUnsupportedReasons = new Set([
   'unavailable',
 ])
 
-function makePackagedMacSeedSession() {
+function makePackagedSeedSession() {
   const now = new Date(Date.UTC(2026, 0, 1, 12, 0, 0)).toISOString()
   return {
-    id: packagedMacSeedSessionId,
-    title: 'Packaged macOS seed thread',
+    id: packagedSeedSessionId,
+    title: 'Packaged seed thread',
     directory: null,
-    opencodeDirectory: '/tmp/open-cowork-packaged-mac-seed',
+    opencodeDirectory: '/tmp/open-cowork-packaged-seed',
     createdAt: now,
     updatedAt: now,
     kind: 'interactive',
@@ -85,19 +86,22 @@ test(
       'OPEN_COWORK_PACKAGED_EXECUTABLE must point at a packaged desktop executable',
     )
 
-    const paths = createSmokePaths(process.platform === 'darwin'
-      ? {
-          seedBeforeLaunch: ({ dataRoot }) => {
-            writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify([makePackagedMacSeedSession()], null, 2))
-          },
-        }
-      : undefined)
+    const paths = createSmokePaths({
+      seedBeforeLaunch: ({ dataRoot }) => {
+        writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify([makePackagedSeedSession()], null, 2))
+      },
+    })
     let firstLaunch: SmokeSession | null = null
     let secondLaunch: SmokeSession | null = null
 
     try {
-      if (process.platform === 'darwin') {
-        const firstProbe = await launchPackagedMacProbe(paths, executablePath, {
+      const launchPackagedProbe = process.platform === 'darwin'
+        ? launchPackagedMacProbe
+        : process.platform === 'linux'
+          ? launchPackagedLinuxProbe
+          : null
+      if (launchPackagedProbe) {
+        const firstProbe = await launchPackagedProbe(paths, executablePath, {
           action: 'list-sessions',
           timeoutMs: packagedLaunchTimeoutMs,
         })
@@ -124,16 +128,16 @@ test(
         }
 
         assert.ok(
-          firstProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          firstProbe.sessions.some((session) => session.id === packagedSeedSessionId),
           'expected packaged app to load the seeded session before relaunch',
         )
 
-        const secondProbe = await launchPackagedMacProbe(paths, executablePath, {
+        const secondProbe = await launchPackagedProbe(paths, executablePath, {
           action: 'list-sessions',
           timeoutMs: packagedLaunchTimeoutMs,
         })
         assert.ok(
-          secondProbe.sessions.some((session) => session.id === packagedMacSeedSessionId),
+          secondProbe.sessions.some((session) => session.id === packagedSeedSessionId),
           'expected seeded session to survive a packaged-app relaunch',
         )
         return

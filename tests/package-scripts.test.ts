@@ -257,6 +257,17 @@ test('packaged e2e script fails before smoke discovery without a packaged execut
       `both packaged CDP launch paths must honor the packaged launch timeout via ${expectedCall}`,
     )
   }
+
+  assert.match(
+    smokeHelpers,
+    /export async function launchPackagedLinuxProbe/,
+    'Linux packaged smoke must use the E2E ready-file probe for preload and persistence contracts',
+  )
+  assert.match(
+    smokeHelpers,
+    /OPEN_COWORK_E2E_READY_FILE: readyFile/,
+    'packaged probe launch must pass an isolated ready file into the packaged process',
+  )
 })
 
 test('ci and release workflows use canonical release gate scripts', () => {
