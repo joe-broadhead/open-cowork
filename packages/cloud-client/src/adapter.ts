@@ -156,6 +156,8 @@ export type ChannelSessionBindingRecord = {
   updatedAt: string
 }
 
+export type ChannelCursorUpdateResult = { ok: true, binding: ChannelSessionBindingRecord } | { ok: false, reason: 'stale', binding: ChannelSessionBindingRecord } | { ok: false, reason: 'not_found' }
+
 export type ChannelInteractionRecord = {
   interactionId: string
   orgId: string
@@ -717,7 +719,7 @@ export type CloudTransportAdapter = {
     lastEventSequence: number
     lastWorkspaceSequence: number
     lastChatMessageId?: string | null
-  }): Promise<ChannelSessionBindingRecord | null>
+  }): Promise<ChannelCursorUpdateResult>
   createChannelInteraction?(input: {
     agentId: string
     sessionId: string
@@ -1863,10 +1865,19 @@ export function createHttpSseCloudTransportAdapter(
       })
     },
     async updateChannelCursor(input) {
-      return (await request<{ binding: ChannelSessionBindingRecord | null }>('/api/channels/cursor', {
-        method: 'POST',
-        body: input,
-      })).binding
+      try {
+        const response = await request<{ binding?: ChannelSessionBindingRecord | null, result?: ChannelCursorUpdateResult }>('/api/channels/cursor', {
+          method: 'POST',
+          body: input,
+        })
+        if (response.result) return response.result
+        return response.binding
+          ? { ok: true, binding: response.binding }
+          : { ok: false, reason: 'not_found' }
+      } catch (error) {
+        if (isCloudTransportError(error) && error.kind === 'not_found') return { ok: false, reason: 'not_found' }
+        throw error
+      }
     },
     createChannelInteraction(input) {
       return request('/api/channels/interactions', {

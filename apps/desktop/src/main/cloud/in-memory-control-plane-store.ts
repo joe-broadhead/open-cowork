@@ -861,6 +861,8 @@ export type UpdateChannelCursorInput = {
   updatedAt?: Date
 }
 
+export type ChannelCursorUpdateResult = { ok: true, binding: ChannelSessionBindingRecord } | { ok: false, reason: 'stale', binding: ChannelSessionBindingRecord } | { ok: false, reason: 'not_found' }
+
 export type CreateChannelInteractionInput = {
   interactionId: string
   orgId: string
@@ -1193,7 +1195,7 @@ export type ControlPlaneStore = {
     externalThreadId: string
   }): MaybePromise<ChannelSessionBindingRecord | null>
   listChannelSessionBindingsForSession(orgId: string, sessionId: string): MaybePromise<ChannelSessionBindingRecord[]>
-  updateChannelCursor(input: UpdateChannelCursorInput): MaybePromise<ChannelSessionBindingRecord | null>
+  updateChannelCursor(input: UpdateChannelCursorInput): MaybePromise<ChannelCursorUpdateResult>
   createChannelInteraction(input: CreateChannelInteractionInput): MaybePromise<IssuedChannelInteractionRecord>
   findChannelInteraction(input: FindChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
   resolveChannelInteraction(input: ResolveChannelInteractionInput): MaybePromise<ChannelInteractionRecord | null>
@@ -2645,21 +2647,19 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       .map((binding) => clone(binding))
   }
 
-  updateChannelCursor(input: UpdateChannelCursorInput): ChannelSessionBindingRecord | null {
+  updateChannelCursor(input: UpdateChannelCursorInput): ChannelCursorUpdateResult {
     const existing = this.channelSessionBindings.get(input.bindingId)
-    if (!existing || existing.orgId !== input.orgId) return null
+    if (!existing || existing.orgId !== input.orgId) return { ok: false, reason: 'not_found' }
     const lastEventSequence = normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence')
     const lastWorkspaceSequence = normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence')
     if (lastEventSequence < existing.lastEventSequence || lastWorkspaceSequence < existing.lastWorkspaceSequence) {
-      throw new Error('Channel cursor updates must be monotonic.')
+      return { ok: false, reason: 'stale', binding: clone(existing) }
     }
     existing.lastEventSequence = lastEventSequence
     existing.lastWorkspaceSequence = lastWorkspaceSequence
-    if (input.lastChatMessageId !== undefined) {
-      existing.lastChatMessageId = normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id')
-    }
+    if (input.lastChatMessageId !== undefined) existing.lastChatMessageId = normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id')
     existing.updatedAt = nowIso(input.updatedAt)
-    return clone(existing)
+    return { ok: true, binding: clone(existing) }
   }
 
   createChannelInteraction(input: CreateChannelInteractionInput): IssuedChannelInteractionRecord {

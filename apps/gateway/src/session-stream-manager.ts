@@ -168,11 +168,11 @@ export function createGatewaySessionStreamManager(
         lastWorkspaceSequence: state.lastWorkspaceSequence,
         lastChatMessageId,
       })
-      state.lastEventSequence = updated?.lastEventSequence ?? event.sequence
-      state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
-      state.lastChatMessageId = updated?.lastChatMessageId ?? lastChatMessageId
+      state.lastEventSequence = updated.lastEventSequence
+      state.lastWorkspaceSequence = updated.lastWorkspaceSequence
+      state.lastChatMessageId = updated.lastChatMessageId ?? lastChatMessageId
       state.renderFailures.delete(event.sequence)
-      if (updated) state.binding = updated
+      state.binding = updated
     } catch (error) {
       metrics.errors += 1
       const attempts = (state.renderFailures.get(event.sequence) ?? 0) + 1
@@ -203,11 +203,11 @@ export function createGatewaySessionStreamManager(
       lastWorkspaceSequence: state.lastWorkspaceSequence,
       lastChatMessageId: state.lastChatMessageId,
     })
-    state.lastEventSequence = updated?.lastEventSequence ?? event.sequence
-    state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
-    state.lastChatMessageId = updated?.lastChatMessageId ?? state.lastChatMessageId
+    state.lastEventSequence = updated.lastEventSequence
+    state.lastWorkspaceSequence = updated.lastWorkspaceSequence
+    state.lastChatMessageId = updated.lastChatMessageId ?? state.lastChatMessageId
     state.renderFailures.delete(event.sequence)
-    if (updated) state.binding = updated
+    state.binding = updated
   }
 
   async function hydrateSnapshot(state: StreamState, event: CloudTransportSessionEvent) {
@@ -225,10 +225,10 @@ export function createGatewaySessionStreamManager(
       lastWorkspaceSequence: state.lastWorkspaceSequence,
       lastChatMessageId: state.lastChatMessageId,
     })
-    state.lastEventSequence = updated?.lastEventSequence ?? latestSequence
-    state.lastWorkspaceSequence = updated?.lastWorkspaceSequence ?? state.lastWorkspaceSequence
-    state.lastChatMessageId = updated?.lastChatMessageId ?? state.lastChatMessageId
-    if (updated) state.binding = updated
+    state.lastEventSequence = updated.lastEventSequence
+    state.lastWorkspaceSequence = updated.lastWorkspaceSequence
+    state.lastChatMessageId = updated.lastChatMessageId ?? state.lastChatMessageId
+    state.binding = updated
   }
 
   async function persistCursor(state: StreamState, input: {
@@ -237,12 +237,12 @@ export function createGatewaySessionStreamManager(
     lastWorkspaceSequence: number
     lastChatMessageId?: string | null
   }) {
-    const updated = await cloud.updateCursor(input)
-    if (!updated) {
+    const result = await cloud.updateCursor(input)
+    if (!result.ok && result.reason === 'not_found') {
       metrics.cursorPersistenceFailures += 1
       throw new Error(`Gateway cursor persistence failed for channel binding ${state.binding.bindingId}.`)
     }
-    return updated
+    return result.binding
   }
 
   return manager

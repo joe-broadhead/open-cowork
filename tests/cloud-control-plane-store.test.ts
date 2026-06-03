@@ -1158,13 +1158,25 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     lastWorkspaceSequence: 3,
     lastChatMessageId: 'message-7',
   })
-  assert.equal(cursor?.lastEventSequence, 7)
-  assert.throws(() => store.updateChannelCursor({
+  assert.equal(cursor.ok, true)
+  if (!cursor.ok) assert.fail(`Expected cursor update to succeed, got ${cursor.reason}`)
+  assert.equal(cursor.binding.lastEventSequence, 7)
+  const staleCursor = store.updateChannelCursor({
     orgId: org.orgId,
     bindingId: sessionBinding.bindingId,
     lastEventSequence: 6,
     lastWorkspaceSequence: 3,
-  }), /monotonic/)
+  })
+  assert.equal(staleCursor.ok, false)
+  if (staleCursor.ok) assert.fail('Expected stale cursor update to be rejected.')
+  assert.equal(staleCursor.reason, 'stale')
+  assert.equal(staleCursor.binding.lastEventSequence, 7)
+  assert.deepEqual(store.updateChannelCursor({
+    orgId: org.orgId,
+    bindingId: 'missing-session-binding',
+    lastEventSequence: 1,
+    lastWorkspaceSequence: 1,
+  }), { ok: false, reason: 'not_found' })
 
   const issued = store.createChannelInteraction({
     interactionId: 'interaction-1',

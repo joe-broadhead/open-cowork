@@ -1640,6 +1640,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   }
 
   async updateChannelCursor(input: UpdateChannelCursorInput) {
+    const lastEventSequence = normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence'), lastWorkspaceSequence = normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence')
     const result = await this.pool.query(
       `UPDATE cloud_channel_session_bindings
        SET last_event_sequence = $3,
@@ -1654,14 +1655,17 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       [
         input.orgId,
         input.bindingId,
-        normalizeNonNegativeInteger(input.lastEventSequence, 'Last event sequence'),
-        normalizeNonNegativeInteger(input.lastWorkspaceSequence, 'Last workspace sequence'),
+        lastEventSequence,
+        lastWorkspaceSequence,
         input.lastChatMessageId !== undefined,
         normalizeNullableText(input.lastChatMessageId, CHANNEL_TEXT_MAX_LENGTH, 'Last chat message id'),
         nowIso(input.updatedAt),
       ],
     )
-    return result.rows[0] ? channelSessionBindingFromRow(result.rows[0]) : null
+    if (result.rows[0]) return { ok: true as const, binding: channelSessionBindingFromRow(result.rows[0]) }
+    const existing = await this.maybeOne(`SELECT * FROM cloud_channel_session_bindings WHERE org_id = $1 AND binding_id = $2`, [input.orgId, input.bindingId])
+    if (!existing) return { ok: false as const, reason: 'not_found' as const }
+    return { ok: false as const, reason: 'stale' as const, binding: channelSessionBindingFromRow(existing) }
   }
 
   async createChannelInteraction(input: CreateChannelInteractionInput): Promise<IssuedChannelInteractionRecord> {

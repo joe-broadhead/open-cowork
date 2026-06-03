@@ -614,6 +614,89 @@ test('cloud projection normalization filters malformed cached fields', () => {
   assert.equal(normalized.updatedAt, session.updatedAt)
 })
 
+test('cloud projection normalization owns nested cached structures', () => {
+  const session = baseSession()
+  const messageAttachments = [{ mime: 'text/plain', url: 'https://example.test/a.txt', filename: 'before.txt' }]
+  const toolInput = { command: 'pwd', args: ['before'] }
+  const toolOutput = { chunks: [{ text: 'before' }] }
+  const toolAttachments = [{ mime: 'text/plain', url: 'https://example.test/tool.txt', filename: 'tool-before.txt' }]
+  const taskTranscript = [{ id: 'segment-1', content: 'before', order: 1 }]
+  const taskReasoning = [{ id: 'reasoning-1', content: 'before', order: 1 }]
+  const taskCompactions = [{ id: 'compaction-1', status: 'compacted', auto: true, overflow: false, order: 1 }]
+  const approvalInput = { command: 'rm', paths: ['before'] }
+  const questionAnswers = [{ value: { selected: ['before'] } }]
+  const raw = {
+    sessionId: 'session-1',
+    messages: [{
+      id: 'message-1',
+      role: 'assistant',
+      content: 'cached',
+      createdAt: '2026-05-28T10:00:00.000Z',
+      attachments: messageAttachments,
+    }],
+    toolCalls: [{
+      id: 'tool-1',
+      name: 'bash',
+      status: 'complete',
+      input: toolInput,
+      output: toolOutput,
+      attachments: toolAttachments,
+    }],
+    taskRuns: [{
+      id: 'task-1',
+      title: 'Task',
+      status: 'running',
+      transcript: taskTranscript,
+      reasoning: taskReasoning,
+      compactions: taskCompactions,
+    }],
+    pendingApprovals: [{
+      id: 'permission-1',
+      sessionId: 'session-1',
+      tool: 'bash',
+      input: approvalInput,
+      description: 'Approve',
+    }],
+    resolvedQuestions: [{
+      id: 'question-1',
+      sessionId: 'session-1',
+      questions: [{ question: 'Continue?' }],
+      answers: questionAnswers,
+      resolvedAt: '2026-05-28T10:00:00.000Z',
+    }],
+  }
+
+  const normalized = normalizeCloudSessionProjectionView(raw, session)
+
+  messageAttachments[0].filename = 'after.txt'
+  toolInput.args.push('after')
+  toolOutput.chunks[0].text = 'after'
+  toolAttachments[0].filename = 'tool-after.txt'
+  taskTranscript[0].content = 'after'
+  taskReasoning[0].content = 'after'
+  taskCompactions[0].overflow = true
+  approvalInput.paths.push('after')
+  questionAnswers[0].value.selected.push('after')
+
+  assert.deepEqual(normalized.messages[0]?.attachments, [{
+    mime: 'text/plain',
+    url: 'https://example.test/a.txt',
+    filename: 'before.txt',
+  }])
+  assert.deepEqual(normalized.toolCalls[0]?.input, { command: 'pwd', args: ['before'] })
+  assert.deepEqual(normalized.toolCalls[0]?.output, { chunks: [{ text: 'before' }] })
+  assert.deepEqual(normalized.toolCalls[0]?.attachments, [{
+    mime: 'text/plain',
+    url: 'https://example.test/tool.txt',
+    filename: 'tool-before.txt',
+  }])
+  assert.deepEqual(normalized.taskRuns[0]?.transcript, [{ id: 'segment-1', content: 'before', order: 1 }])
+  assert.deepEqual(normalized.taskRuns[0]?.reasoning, [{ id: 'reasoning-1', content: 'before', order: 1 }])
+  assert.deepEqual(normalized.taskRuns[0]?.compactions, [{ id: 'compaction-1', status: 'compacted', auto: true, overflow: false, order: 1 }])
+  assert.deepEqual(normalized.pendingApprovals[0]?.input, { command: 'rm', paths: ['before'] })
+  assert.deepEqual(normalized.resolvedQuestions[0]?.answers, [{ value: { selected: ['before'] } }])
+})
+
 test('cloud SessionView conversion handles empty and error-only projections', () => {
   const session = baseSession()
   assert.deepEqual(cloudSessionViewToSessionView({ session, projection: null }), emptySessionView())

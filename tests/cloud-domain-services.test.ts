@@ -167,7 +167,7 @@ test('cloud domain services expose testable seams without an HTTP server', async
     async resolveChannelIdentity() { throw new Error('not needed') },
     async bindChannelSession() { throw new Error('not needed') },
     async getChannelSessionByThread() { return null },
-    async updateChannelCursor() { return null },
+    async updateChannelCursor() { return { ok: false, reason: 'not_found' } },
     async enqueueChannelPrompt() { throw new Error('not needed') },
     async createChannelInteraction() { throw new Error('not needed') },
     async resolveChannelInteraction() { throw new Error('not needed') },

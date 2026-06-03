@@ -286,7 +286,9 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
       lastWorkspaceSequence: 0,
       lastChatMessageId: 'chat-message-1',
     })
-    assert.equal(cursor?.lastChatMessageId, 'chat-message-1')
+    assert.equal(cursor.ok, true)
+    if (!cursor.ok) assert.fail(`Expected cursor update to succeed, got ${cursor.reason}`)
+    assert.equal(cursor.binding.lastChatMessageId, 'chat-message-1')
 
     await cloudGateway.respondToPermission(bound.session.session.sessionId, {
       permissionId: 'permission-wrapper',

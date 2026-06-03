@@ -1,6 +1,7 @@
 import {
   createHttpSseCloudTransportAdapter,
   type ChannelActorInput,
+  type ChannelCursorUpdateResult,
   type ChannelDeliveryRecord,
   type ChannelIdentityRecord,
   type ChannelSessionBindingRecord,
@@ -87,7 +88,7 @@ export type CloudGateway = {
     lastEventSequence: number
     lastWorkspaceSequence: number
     lastChatMessageId?: string | null
-  }): Promise<ChannelSessionBindingRecord | null>
+  }): Promise<ChannelCursorUpdateResult>
   ackDelivery(deliveryId: string, input: {
     claimedBy?: string | null
     status: 'sent' | 'failed' | 'dead'

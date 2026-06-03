@@ -164,6 +164,17 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {}
 }
 
+function cloneProjectionValue<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((entry) => cloneProjectionValue(entry)) as T
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, entry]) => [key, cloneProjectionValue(entry)]),
+    ) as T
+  }
+  return value
+}
+
 function readString(value: unknown, fallback = '') {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
@@ -193,7 +204,7 @@ function toCloudSessionMessage(value: unknown): CloudSessionMessage | null {
     role,
     content: readString(record.content),
     createdAt: readString(record.createdAt, new Date().toISOString()),
-    ...(Array.isArray(record.attachments) ? { attachments: record.attachments as MessageAttachment[] } : {}),
+    ...(Array.isArray(record.attachments) ? { attachments: cloneProjectionValue(record.attachments as MessageAttachment[]) } : {}),
   }
 }
 
@@ -254,10 +265,10 @@ function normalizeToolCall(value: unknown): ToolCall | null {
   return {
     id,
     name: readString(record.name, 'tool'),
-    input: asRecord(record.input),
+    input: cloneProjectionValue(asRecord(record.input)),
     status: normalizeToolStatus(record.status),
-    ...(record.output !== undefined ? { output: record.output } : {}),
-    ...(Array.isArray(record.attachments) ? { attachments: record.attachments as ToolCall['attachments'] } : {}),
+    ...(record.output !== undefined ? { output: cloneProjectionValue(record.output) } : {}),
+    ...(Array.isArray(record.attachments) ? { attachments: cloneProjectionValue(record.attachments as ToolCall['attachments']) } : {}),
     agent: readNullableString(record.agent),
     sourceSessionId: readNullableString(record.sourceSessionId),
     order: readNumber(record.order),
@@ -276,12 +287,12 @@ function normalizeTaskRun(value: unknown): TaskRun | null {
     sourceSessionId: readNullableString(record.sourceSessionId),
     parentSessionId: readNullableString(record.parentSessionId),
     content: readString(record.content),
-    transcript: Array.isArray(record.transcript) ? record.transcript as TaskRun['transcript'] : [],
-    reasoning: Array.isArray(record.reasoning) ? record.reasoning as TaskRun['reasoning'] : undefined,
+    transcript: Array.isArray(record.transcript) ? cloneProjectionValue(record.transcript as TaskRun['transcript']) : [],
+    reasoning: Array.isArray(record.reasoning) ? cloneProjectionValue(record.reasoning as TaskRun['reasoning']) : undefined,
     toolCalls: Array.isArray(record.toolCalls)
       ? record.toolCalls.map(normalizeToolCall).filter((entry): entry is ToolCall => Boolean(entry))
       : [],
-    compactions: Array.isArray(record.compactions) ? record.compactions as TaskRun['compactions'] : [],
+    compactions: Array.isArray(record.compactions) ? cloneProjectionValue(record.compactions as TaskRun['compactions']) : [],
     todos: normalizeTodos(record.todos),
     error: readNullableString(record.error),
     sessionCost: readNumber(record.sessionCost),
@@ -347,7 +358,7 @@ function normalizePendingApproval(value: unknown): PendingApproval | null {
     sessionId,
     taskRunId: readNullableString(record.taskRunId),
     tool: readString(record.tool, 'permission'),
-    input: asRecord(record.input),
+    input: cloneProjectionValue(asRecord(record.input)),
     description: readString(record.description, 'Permission requested'),
     order: readNumber(record.order),
   }
@@ -382,7 +393,7 @@ function normalizeResolvedQuestion(value: unknown): CloudResolvedQuestion | null
     questions: Array.isArray(record.questions)
       ? record.questions.map(normalizeQuestionPrompt).filter((entry): entry is PendingQuestion['questions'][number] => Boolean(entry))
       : [],
-    answers: Array.isArray(record.answers) ? record.answers : [],
+    answers: Array.isArray(record.answers) ? cloneProjectionValue(record.answers) : [],
     rejected: record.rejected === true,
     order: readNumber(record.order),
     resolvedAt: readString(record.resolvedAt),
@@ -516,10 +527,10 @@ function toolCallFromPayload(
   return {
     id,
     name: readString(payload.name, readString(payload.tool, 'tool')),
-    input: asRecord(payload.input),
+    input: cloneProjectionValue(asRecord(payload.input)),
     status: normalizeToolStatus(payload.status),
-    ...(payload.output !== undefined ? { output: payload.output } : {}),
-    ...(Array.isArray(payload.attachments) ? { attachments: payload.attachments as ToolCall['attachments'] } : {}),
+    ...(payload.output !== undefined ? { output: cloneProjectionValue(payload.output) } : {}),
+    ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as ToolCall['attachments']) } : {}),
     agent: readNullableString(payload.agent),
     sourceSessionId: readNullableString(payload.sourceSessionId),
     order: event.sequence,
@@ -565,7 +576,7 @@ function pendingApprovalFromPayload(
     sessionId: session.sessionId,
     taskRunId: readNullableString(payload.taskRunId),
     tool: readString(payload.tool, 'permission'),
-    input: asRecord(payload.input),
+    input: cloneProjectionValue(asRecord(payload.input)),
     description: readString(payload.description, readString(payload.tool, 'Permission requested')),
     order: event.sequence,
   }
@@ -727,7 +738,7 @@ export function reduceCloudSessionProjectionEvent(
         role: 'user',
         content: readString(payload.text),
         createdAt: eventTime,
-        ...(Array.isArray(payload.attachments) ? { attachments: payload.attachments as MessageAttachment[] } : {}),
+        ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as MessageAttachment[]) } : {}),
       })
     case 'assistant.message':
       return addMessage({
@@ -741,7 +752,7 @@ export function reduceCloudSessionProjectionEvent(
         role: 'assistant',
         content: readString(payload.content),
         createdAt: eventTime,
-        ...(Array.isArray(payload.attachments) ? { attachments: payload.attachments as MessageAttachment[] } : {}),
+        ...(Array.isArray(payload.attachments) ? { attachments: cloneProjectionValue(payload.attachments as MessageAttachment[]) } : {}),
       })
     case 'tool.call': {
       const toolCall = toolCallFromPayload(session, payload, event)
