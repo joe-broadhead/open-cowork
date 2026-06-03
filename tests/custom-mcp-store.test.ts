@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { listCustomMcps, removeCustomMcp, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
+import { getMachineOpencodeConfigPath, getMachineOpencodeDir } from '../apps/desktop/src/main/runtime-paths.ts'
 
 function withTempUserData<T>(fn: () => T): T {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-custom-mcp-store-'))
@@ -76,4 +77,35 @@ test('custom MCP store rejects incomplete MCP definitions before writing', () =>
     })
   }, /Remote MCPs require a URL/)
   assert.equal(listCustomMcps().some((entry) => entry.name === 'broken'), false)
+}))
+
+test('custom MCP store rolls back OpenCode config when metadata write fails', () => withTempUserData(() => {
+  const metadataPath = join(getMachineOpencodeDir(), 'mcp.open-cowork.json')
+  mkdirSync(metadataPath, { recursive: true })
+
+  assert.throws(() => {
+    saveCustomMcp({
+      scope: 'machine',
+      directory: null,
+      name: 'rollback-mcp',
+      label: 'Rollback MCP',
+      type: 'http',
+      url: 'https://example.com/rollback-mcp',
+    })
+  }, /metadata write failed.*restored previous MCP config/i)
+
+  assert.equal(listCustomMcps().some((entry) => entry.name === 'rollback-mcp'), false)
+  if (existsSync(getMachineOpencodeConfigPath())) {
+    const config = JSON.parse(readFileSync(getMachineOpencodeConfigPath(), 'utf8'))
+    assert.equal(Boolean(config.mcp?.['rollback-mcp']), false)
+  }
+}))
+
+test('custom MCP store repairs stale metadata sidecar entries during load', () => withTempUserData(() => {
+  const metadataPath = join(getMachineOpencodeDir(), 'mcp.open-cowork.json')
+  mkdirSync(getMachineOpencodeDir(), { recursive: true })
+  writeFileSync(metadataPath, `${JSON.stringify({ ghost: { label: 'Ghost MCP' } }, null, 2)}\n`)
+
+  assert.deepEqual(listCustomMcps(), [])
+  assert.equal(existsSync(metadataPath), false)
 }))

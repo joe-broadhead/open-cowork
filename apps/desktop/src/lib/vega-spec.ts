@@ -22,6 +22,17 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+function cloneSpecValue<T>(value: T): T {
+  if (!value || typeof value !== 'object') return value
+  if (Array.isArray(value)) return value.map((entry) => cloneSpecValue(entry)) as T
+
+  const output: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    output[key] = cloneSpecValue(entry)
+  }
+  return output as T
+}
+
 const TEMPORAL_POSITION_CHANNELS = ['x', 'y'] as const
 const HUMAN_DATE_WORD_PATTERN = /\b(?:sun|sunday|mon|monday|tue|tues|tuesday|wed|wednesday|thu|thur|thurs|thursday|fri|friday|sat|saturday|jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/i
 const ISO_DATE_OR_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[Tt\s]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
@@ -251,9 +262,11 @@ export function makeInteractiveVegaSpecResponsive(spec: Record<string, unknown>)
     return normalizedSpec
   }
 
+  const sourceEncoding = asRecord(normalizedSpec.encoding)
   const responsiveSpec: Record<string, unknown> = {
     ...normalizedSpec,
     width: 'container',
+    ...(sourceEncoding ? { encoding: cloneSpecValue(sourceEncoding) } : {}),
     autosize: {
       ...(typeof normalizedSpec.autosize === 'object' && normalizedSpec.autosize ? normalizedSpec.autosize : {}),
       type: 'fit-x',

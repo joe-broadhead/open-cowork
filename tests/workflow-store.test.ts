@@ -24,9 +24,14 @@ import {
   recoverInterruptedWorkflowRuns,
   parseWorkflowTriggersFromStorage,
   serializeWorkflowTriggersForStorage,
+  setWorkflowDatabaseForTests,
   setWorkflowSecretStorageForTests,
   updateWorkflowStatus,
 } from '../apps/desktop/src/main/workflow/workflow-store.ts'
+import {
+  normalizeWorkflowDraft,
+  previewWorkflowDraft as previewWorkflowDraftCalculation,
+} from '../apps/desktop/src/main/workflow/workflow-normalization.ts'
 import {
   createWorkflowFromTool,
   previewWorkflowFromTool,
@@ -196,6 +201,57 @@ test('workflow store preserves encrypted webhook secret records when decryption 
   const serialized = JSON.parse(serializeWorkflowTriggersForStorage(parsed)) as Array<{ webhookSecret?: unknown }>
   assert.deepEqual(serialized[0]?.webhookSecret, storedSecret)
 }))
+
+test('workflow normalization uses explicit calculation adapters', () => {
+  const normalized = normalizeWorkflowDraft({
+    ...draft,
+    projectDirectory: ' /tmp/project ',
+    triggers: [{ id: '', type: 'webhook', enabled: true }],
+  }, {
+    now: new Date('2026-05-15T08:00:00.000Z'),
+    idGenerator: () => 'generated-id',
+    secretGenerator: () => 'generated-secret',
+  })
+
+  assert.equal(normalized.projectDirectory, '/tmp/project')
+  assert.deepEqual(normalized.triggers.map((trigger) => `${trigger.id}:${trigger.type}`), [
+    'generated-id:manual',
+    'generated-id:webhook',
+  ])
+  assert.equal(normalized.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret, 'generated-secret')
+
+  const preview = previewWorkflowDraftCalculation({
+    ...draft,
+    projectDirectory: '/missing/project',
+    triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+  }, {
+    projectDirectoryExists: () => false,
+  })
+
+  assert.equal(preview.ok, false)
+  assert.deepEqual(preview.missing, ['Workflow project directory "/missing/project" is not available.'])
+})
+
+test('workflow store accepts explicit database and secret adapters in tests', () => {
+  const db = new DatabaseSync(':memory:')
+  try {
+    setWorkflowDatabaseForTests(db)
+    setWorkflowSecretStorageForTests({ mode: 'plaintext' })
+    const workflow = createWorkflow({
+      ...draft,
+      skillNames: [],
+      toolIds: [],
+      triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+    }, null, { now: new Date('2026-05-15T08:00:00.000Z') })
+
+    assert.equal(workflow.title, 'Inbox summary')
+    assert.equal(listWorkflows().workflows[0]?.id, workflow.id)
+  } finally {
+    setWorkflowSecretStorageForTests(null)
+    clearWorkflowStoreCache()
+    db.close()
+  }
+})
 
 test('workflow store treats valid non-array trigger JSON as empty', () => withWorkflowStore('non-array-triggers', () => {
   assert.deepEqual(parseWorkflowTriggersFromStorage('{}'), [])

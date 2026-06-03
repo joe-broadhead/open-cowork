@@ -18,6 +18,7 @@ import {
   getPublicAppConfig,
   getProviderDescriptors,
 } from '../apps/desktop/src/main/config-loader.ts'
+import { normalizeConfigLayers } from '../apps/desktop/src/main/config-normalizer.ts'
 
 test('open core ships with built-in tools, skills, mcps, and agents configured by default', () => {
   const tools = getConfiguredToolsFromConfig()
@@ -405,6 +406,49 @@ test('config loader applies per-user config after downstream env layers', () => 
     clearConfigCaches()
     rmSync(tempRoot, { recursive: true, force: true })
   }
+})
+
+test('config normalization applies layer precedence without loader state', () => {
+  const config = normalizeConfigLayers([
+    {
+      branding: {
+        dataDirName: 'calculation-data',
+        helpUrl: 'https://downstream.example/help',
+      },
+      cloud: {
+        role: 'worker',
+        defaultProfile: 'focused-agent',
+        profiles: {
+          'focused-agent': {
+            agents: ['data-analyst'],
+            features: {
+              workflows: false,
+            },
+          },
+        },
+      },
+      permissions: {
+        webSearch: true,
+      },
+    },
+    {
+      branding: {
+        helpUrl: 'https://user.example/help',
+      },
+      permissions: {
+        webSearch: false,
+      },
+    },
+  ])
+
+  assert.equal(config.branding.dataDirName, 'calculation-data')
+  assert.equal(config.branding.helpUrl, 'https://user.example/help')
+  assert.equal(config.permissions.webSearch, false)
+  assert.equal(config.cloud.role, 'worker')
+  assert.equal(config.cloud.defaultProfile, 'focused-agent')
+  assert.equal(config.cloud.profiles['focused-agent']?.agents?.[0], 'data-analyst')
+  assert.equal(config.cloud.profiles['focused-agent']?.features?.workflows, false)
+  assert.equal(config.cloud.runtime.configSource, 'app')
 })
 
 test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
