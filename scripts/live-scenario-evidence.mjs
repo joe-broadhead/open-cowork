@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url'
 
 const DEFAULT_SUITE = 'deploy/scenarios/local-desktop-scenarios.json'
 const DEFAULT_OUTPUT_DIR = '.open-cowork-test/live-scenarios'
+const EXECUTION_OUTPUT_MAX_BUFFER_BYTES = 8 * 1024 * 1024
+const FAILURE_SNIPPET_BYTES = 2000
 
 const TOKEN_PATTERNS = [
   /\bAuthorization:\s*Bearer\s+\S+/gi,
@@ -147,6 +149,15 @@ function sanitizedCommand(command) {
   return command.map((part) => sanitizeEvidenceText(part))
 }
 
+function failureSnippet(stdout, stderr, error) {
+  const text = [
+    error ? `spawn error: ${error.message}` : '',
+    stderr,
+    stdout,
+  ].filter(Boolean).join('\n')
+  return sanitizeEvidenceText(text).slice(0, FAILURE_SNIPPET_BYTES)
+}
+
 function scenarioFailureTaxonomy(scenario) {
   return {
     productSurface: sanitizeEvidenceText(scenario.productSurface),
@@ -182,7 +193,7 @@ function runScenario(scenario, options) {
   const result = spawnSync(bin, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
-    maxBuffer: 1024 * 1024,
+    maxBuffer: EXECUTION_OUTPUT_MAX_BUFFER_BYTES,
   })
   const rawStdout = result.stdout || ''
   const rawStderr = result.stderr || ''
@@ -209,6 +220,7 @@ function runScenario(scenario, options) {
     redactionsApplied: stdout !== rawStdout || stderr !== rawStderr,
     exitCode: result.status,
     signal: result.signal,
+    failureReason: result.status === 0 && !result.error ? undefined : failureSnippet(stdout, stderr, result.error),
   }
 }
 
@@ -259,6 +271,15 @@ export function runScenarioSuite(options = {}) {
     },
     results,
   }
+  report.failures = results
+    .filter((result) => result.status === 'fail')
+    .map((result) => ({
+      id: result.id,
+      title: result.title,
+      exitCode: result.exitCode,
+      signal: result.signal,
+      failureReason: result.failureReason || '',
+    }))
   const jsonPath = join(outputDir, 'live-scenario-evidence.json')
   const markdownPath = join(outputDir, 'live-scenario-evidence.md')
   report.artifacts = [
@@ -276,7 +297,13 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const args = parseArgs(process.argv.slice(2))
     const { report, jsonPath, markdownPath } = runScenarioSuite(args)
-    process.stdout.write(`${JSON.stringify({ ok: report.ok, counts: report.counts, jsonPath, markdownPath })}\n`)
+    process.stdout.write(`${JSON.stringify({
+      ok: report.ok,
+      counts: report.counts,
+      failures: report.failures,
+      jsonPath,
+      markdownPath,
+    })}\n`)
     if (!report.ok) process.exit(1)
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)

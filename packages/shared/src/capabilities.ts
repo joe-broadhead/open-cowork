@@ -1148,9 +1148,22 @@ export function applyCapabilityBundleUninstall(
   const removals = new Set(plan.actions
     .filter((action) => action.action === 'remove_bundle_resource')
     .map((action) => action.id))
+  const preserves = new Set(plan.actions
+    .filter((action) => action.action === 'preserve_user_resource')
+    .map((action) => action.id))
+  const resources = removeBundleOwnedLifecycleResources(current.resources, bundleName, removals)
   const next: CapabilityBundleLifecycleState = {
     bundles: sortedLifecycleBundles(current.bundles.filter((bundle) => bundle.name !== bundleName)),
-    resources: removeBundleOwnedLifecycleResources(current.resources, bundleName, removals),
+    resources: sortedLifecycleResources(resources.map((resource) => {
+      if (preserves.has(resource.id) && resource.owner === 'bundle' && resource.bundleName === bundleName) {
+        return {
+          ...resource,
+          owner: 'user',
+          bundleName: null,
+        }
+      }
+      return resource
+    })),
   }
 
   return {

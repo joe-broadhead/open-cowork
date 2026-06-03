@@ -331,12 +331,13 @@ test('capability bundle lifecycle blocks duplicate installs without mutating sta
 test('capability bundle lifecycle uninstall removes bundle-owned resources and preserves user-owned resources', () => {
   const installed = applyCapabilityBundleInstall(createEmptyCapabilityBundleLifecycleState(), manifest({
     resources: [
+      { kind: 'command', id: 'operator-command', ownedByBundle: true },
       { kind: 'skill', id: 'review-skill', ownedByBundle: true },
       { kind: 'workflow', id: 'operator-workflow' },
     ],
     uninstall: {
       removes: ['review-skill', 'operator-workflow'],
-      preserves: [],
+      preserves: ['operator-command'],
     },
   }), {
     productMode: 'desktop-local',
@@ -348,9 +349,11 @@ test('capability bundle lifecycle uninstall removes bundle-owned resources and p
   assert.equal(uninstalled.applied, true)
   assert.deepEqual(uninstalled.state.bundles, [])
   assert.deepEqual(uninstalled.state.resources.map((resource) => `${resource.owner}:${resource.kind}:${resource.id}`), [
+    'user:command:operator-command',
     'user:workflow:operator-workflow',
   ])
   assert.equal(uninstalled.audit.some((event) => event.outcome === 'removed' && event.id === 'review-skill'), true)
+  assert.equal(uninstalled.audit.some((event) => event.outcome === 'preserved' && event.id === 'operator-command'), true)
   assert.equal(uninstalled.audit.some((event) => event.outcome === 'preserved' && event.id === 'operator-workflow'), true)
 })
 

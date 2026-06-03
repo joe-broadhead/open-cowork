@@ -74,6 +74,43 @@ test('live scenario evidence runner writes redacted structured reports', () => {
   }
 })
 
+test('live scenario evidence runner records sanitized failing scenario details', () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-live-scenarios-'))
+  try {
+    const suitePath = join(root, 'suite.json')
+    const outputDir = join(root, 'evidence')
+    const failingSecret = 'sk-' + '123456789012345678901234567890123456'
+    writeFileSync(suitePath, JSON.stringify(suite([
+      scenario({
+        id: 'failing-scenario',
+        command: ['node', '-e', `process.stderr.write('/Users/joe/private ${failingSecret}'); process.exit(7)`],
+      }),
+      scenario({ id: 'two' }),
+      scenario({ id: 'three' }),
+      scenario({ id: 'four' }),
+      scenario({ id: 'five' }),
+    ]), null, 2))
+
+    const { report, jsonPath } = runScenarioSuite({
+      suite: suitePath,
+      outputDir,
+      execute: true,
+    })
+
+    assert.equal(report.ok, false)
+    assert.equal(report.counts.fail, 1)
+    assert.deepEqual(report.failures?.map((failure) => ({
+      id: failure.id,
+      exitCode: failure.exitCode,
+    })), [{ id: 'failing-scenario', exitCode: 7 }])
+    assert.match(report.failures?.[0]?.failureReason || '', /\[REDACTED_TOKEN\]/)
+    assert.match(report.failures?.[0]?.failureReason || '', /\/Users\/\[REDACTED_HOME\]/)
+    assert.doesNotMatch(readFileSync(jsonPath, 'utf8'), /sk-123456/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('live scenario redaction handles common evidence leaks', () => {
   const sanitized = sanitizeEvidenceText('Authorization: Bearer abcdef /home/alice/project ' + 'github_pat_' + 'abcdefghijklmnopqrstuvwxyz')
   assert.equal(sanitized.includes('Authorization: Bearer abcdef'), false)
