@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 import { t } from '../../helpers/i18n'
+import { Icon } from '../ui'
 
 type ChatInputToolbarProps = {
   fileInputRef: RefObject<HTMLInputElement | null>
@@ -62,18 +63,15 @@ export function ChatInputToolbar({
     <div className="flex items-center justify-between px-3 pb-2.5 pt-0.5">
       <div className="flex items-center gap-1">
         <button
+          aria-label={attachmentsAllowed ? t('chat.attachFile', 'Attach file') : attachmentsDisabledReason || t('chat.attachFileDisabled', 'File attachments are disabled by this workspace policy.')}
           onClick={() => {
             if (!attachmentsAllowed) return
             fileInputRef.current?.click()
           }}
           disabled={!attachmentsAllowed}
           className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          title={attachmentsAllowed ? t('chat.attachFile', 'Attach file') : attachmentsDisabledReason || t('chat.attachFileDisabled', 'File attachments are disabled by this workspace policy.')}
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-            <line x1="7.5" y1="3" x2="7.5" y2="12" />
-            <line x1="3" y1="7.5" x2="12" y2="7.5" />
-          </svg>
+          <Icon name="paperclip" size={16} />
         </button>
         <input
           ref={fileInputRef}
@@ -97,9 +95,7 @@ export function ChatInputToolbar({
             className="px-2.5 py-1 rounded-lg text-[11px] font-medium text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-all cursor-pointer flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {modelLabel}
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
-              <polyline points="2,3 4,5.5 6,3" />
-            </svg>
+            <Icon name="chevron-down" size={16} />
           </button>
         </div>
 
@@ -112,9 +108,7 @@ export function ChatInputToolbar({
             title={reasoningControlsManaged ? modelControlsReason || t('chat.reasoningManagedByPolicy', 'This workspace manages reasoning settings.') : t('chat.reasoningDescription', 'Reasoning mode for models that expose OpenCode variants')}
           >
             {t('chat.reasoningChip', 'Think')} {reasoningLabel || t('chat.reasoningAuto', 'Auto')}
-            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
-              <polyline points="2,3 4,5.5 6,3" />
-            </svg>
+            <Icon name="chevron-down" size={16} />
           </button>
         ) : null}
 
@@ -124,9 +118,7 @@ export function ChatInputToolbar({
             style={{ maxWidth: 160 }}
             title={currentDirectory}
           >
-            <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" className="shrink-0">
-              <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />
-            </svg>
+            <Icon name="folder" size={16} className="shrink-0" />
             {currentDirectory.split('/').pop()}
           </span>
         ) : null}
@@ -141,38 +133,30 @@ export function ChatInputToolbar({
           title={agentMode === 'plan' ? t('chat.planModeDescription', 'Plan mode: read-only analysis and audits') : t('chat.buildModeDescription', 'Build mode: full-access work and delegation')}
         >
           {agentMode === 'plan' ? t('chat.planMode', 'Plan') : t('chat.buildMode', 'Build')}
-          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
-            <polyline points="2,3 4,5.5 6,3" />
-          </svg>
+          <Icon name="chevron-down" size={16} />
         </button>
       </div>
 
       <div className="flex items-center gap-1.5">
         {currentSessionId && !isGenerating && !isAwaitingPermission && !isAwaitingQuestion ? (
           <button
+            aria-label={t('chat.forkThread', 'Fork thread')}
             onClick={() => void onFork()}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
             title={t('chat.forkThread', 'Fork thread')}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-              <line x1="7" y1="2" x2="7" y2="8" />
-              <line x1="4" y1="5" x2="7" y2="8" />
-              <line x1="10" y1="5" x2="7" y2="8" />
-              <line x1="4" y1="8" x2="4" y2="12" />
-              <line x1="10" y1="8" x2="10" y2="12" />
-            </svg>
+            <Icon name="git-fork" size={16} />
           </button>
         ) : null}
 
         {isGenerating ? (
           <button
+            aria-label={t('chat.stopGenerating', 'Stop generating (Esc)')}
             onClick={() => void onStop()}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:text-red hover:bg-red/10 transition-colors cursor-pointer"
             title={t('chat.stopGenerating', 'Stop generating (Esc)')}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-              <rect x="3" y="3" width="8" height="8" rx="1.5" />
-            </svg>
+            <Icon name="square" size={16} />
           </button>
         ) : null}
 
@@ -203,6 +187,7 @@ export function ChatInputToolbar({
         ) : null}
 
         <button
+          aria-label={isGenerating ? t('chat.stopGenerating', 'Stop generating (Esc)') : t('chat.send', 'Send message')}
           onClick={() => void (isGenerating ? onStop() : onSubmit())}
           disabled={!canSend && !isGenerating}
           title={!canSend && !isGenerating ? sendDisabledReason || undefined : undefined}
@@ -217,10 +202,7 @@ export function ChatInputToolbar({
           {isGenerating ? (
             <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
           ) : (
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="7" y1="11" x2="7" y2="3" />
-              <polyline points="3.5,6 7,2.5 10.5,6" />
-            </svg>
+            <Icon name="arrow-up" size={16} />
           )}
         </button>
       </div>

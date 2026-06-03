@@ -10,7 +10,7 @@ export { getThemeTokens, getUiThemeOptions, getDefaultThemeId }
 export type { UiTheme }
 
 export type ColorScheme = 'system' | 'dark' | 'light'
-export type UiFont = 'system' | 'rounded' | 'serif'
+export type UiFont = 'mona' | 'system' | 'rounded' | 'serif'
 export type MonoFont = 'sfmono' | 'jetbrains' | 'fira'
 
 export type AppearancePreferences = {
@@ -41,10 +41,13 @@ const LEGACY_THEME_MAP: Record<string, UiTheme> = {
 const SYSTEM_QUERY = '(prefers-color-scheme: light)'
 
 const UI_FONT_STACKS: Record<UiFont, string> = {
+  mona: "'Mona Sans Variable', 'Mona Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   system: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif",
   rounded: "'SF Pro Rounded', 'Avenir Next Rounded', 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif",
   serif: "'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif",
 }
+
+const DISPLAY_FONT_STACK = "'Hubot Sans Variable', 'Hubot Sans', var(--font-ui)"
 
 const MONO_FONT_STACKS: Record<MonoFont, string> = {
   sfmono: "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace",
@@ -54,6 +57,7 @@ const MONO_FONT_STACKS: Record<MonoFont, string> = {
 
 
 export const UI_FONT_OPTIONS: Array<{ id: UiFont; label: string }> = [
+  { id: 'mona', label: 'Mona Sans' },
   { id: 'system', label: 'System' },
   { id: 'rounded', label: 'Rounded' },
   { id: 'serif', label: 'Serif' },
@@ -90,9 +94,9 @@ function readUiTheme(): UiTheme {
 
 function readUiFont(): UiFont {
   const stored = localStorage.getItem(STORAGE_KEYS.uiFont)
-  return stored === 'rounded' || stored === 'serif' || stored === 'system'
+  return stored === 'mona' || stored === 'rounded' || stored === 'serif' || stored === 'system'
     ? stored
-    : 'system'
+    : 'mona'
 }
 
 function readMonoFont(): MonoFont {
@@ -174,6 +178,7 @@ export function applyAppearancePreferences(preferences = getAppearancePreference
   const root = document.documentElement
   root.setAttribute('data-ui-theme', preferences.uiTheme)
   root.style.setProperty('--font-ui', UI_FONT_STACKS[preferences.uiFont])
+  root.style.setProperty('--font-display', DISPLAY_FONT_STACK)
   root.style.setProperty('--font-mono', MONO_FONT_STACKS[preferences.monoFont])
   applyResolvedColorScheme(preferences.colorScheme)
   applyThemeVariables(preferences.uiTheme, preferences.colorScheme)

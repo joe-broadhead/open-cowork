@@ -3,9 +3,9 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `3ee91209b38cfb0b6a94e518bb0a8335719487a78814d7e0202f5e6b861aadea`
-- Production package entries: 503
-- Bundled license directories: 460 (43 package entries have no standalone license file or are workspace links)
+- pnpm lockfile SHA-256: `c288e00c8bd6a6ca3fde39fa1426c76a8242feb3e55f55369b0eb3098a30116c`
+- Production package entries: 506
+- Bundled license directories: 463 (43 package entries have no standalone license file or are workspace links)
 
 Each package remains licensed under its own license terms. The table below is provided for attribution and review; bundled license files are emitted under `THIRD_PARTY_LICENSES/`.
 
@@ -45,6 +45,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | @aws/lambda-invoke-store | 0.2.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.2.4/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
+| @fontsource-variable/hubot-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__hubot-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
+| @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @grammyjs/types | 3.27.3 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.27.3/ | git+https://github.com/grammyjs/types.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |
@@ -297,6 +299,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | lodash.escaperegexp | 4.1.2 | MIT | THIRD_PARTY_LICENSES/lodash.escaperegexp@4.1.2/ | lodash/lodash |
 | lodash.isequal | 4.5.0 | MIT | THIRD_PARTY_LICENSES/lodash.isequal@4.5.0/ | lodash/lodash |
 | longest-streak | 3.1.0 | MIT | THIRD_PARTY_LICENSES/longest-streak@3.1.0/ | wooorm/longest-streak |
+| lucide-react | 1.17.0 | ISC | THIRD_PARTY_LICENSES/lucide-react@1.17.0/ | https://github.com/lucide-icons/lucide.git |
 | markdown-table | 3.0.4 | MIT | THIRD_PARTY_LICENSES/markdown-table@3.0.4/ | wooorm/markdown-table |
 | marked | 16.4.2 | MIT | THIRD_PARTY_LICENSES/marked@16.4.2/ | git://github.com/markedjs/marked.git |
 | marked | 18.0.3 | MIT | THIRD_PARTY_LICENSES/marked@18.0.3/ | git://github.com/markedjs/marked.git |

@@ -39,7 +39,7 @@ describe('ChatInputToolbar', () => {
     const clickSpy = vi.spyOn(input, 'click')
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' })
 
-    fireEvent.click(screen.getByTitle('Attach file'))
+    fireEvent.click(screen.getByRole('button', { name: 'Attach file' }))
     expect(clickSpy).toHaveBeenCalledTimes(1)
 
     Object.defineProperty(input, 'files', {
@@ -55,8 +55,8 @@ describe('ChatInputToolbar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Claude Sonnet/i }))
     fireEvent.click(screen.getByRole('button', { name: /Build/i }))
-    fireEvent.click(screen.getByTitle('Fork thread'))
-    fireEvent.click(screen.getAllByRole('button').at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Fork thread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     expect(props.onToggleModelMenu).toHaveBeenCalledTimes(1)
     expect(props.onToggleAgentMode).toHaveBeenCalledTimes(1)
@@ -83,8 +83,8 @@ describe('ChatInputToolbar', () => {
   it('routes stop actions while generating', () => {
     const { props } = renderToolbar({ isGenerating: true })
 
-    fireEvent.click(screen.getByTitle('Stop generating (Esc)'))
-    fireEvent.click(screen.getAllByRole('button').at(-1)!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Stop generating (Esc)' })[1])
 
     expect(props.onStop).toHaveBeenCalledTimes(2)
     expect(props.onSubmit).not.toHaveBeenCalled()

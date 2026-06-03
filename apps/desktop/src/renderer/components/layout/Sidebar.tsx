@@ -13,6 +13,7 @@ import { t } from '../../helpers/i18n'
 import type { AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
+import { Icon } from '../ui'
 
 interface Props {
   currentView: AppView
@@ -588,10 +589,7 @@ export function Sidebar({
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
               title={t('sidebar.searchTitle', 'Search threads (⌘K)')}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                <circle cx="6" cy="6" r="4.5" />
-                <line x1="9.2" y1="9.2" x2="12" y2="12" />
-              </svg>
+              <Icon name="search" size={16} />
             </button>
           </div>
 
@@ -614,57 +612,31 @@ export function Sidebar({
             <button onClick={() => onViewChange('home')}
               aria-current={currentView === 'home' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M2 5.5 6.5 2 11 5.5V11a.75.75 0 0 1-.75.75H2.75A.75.75 0 0 1 2 11V5.5Z" />
-                <path d="M5 11.75V8h3v3.75" />
-              </svg>
+              <Icon name="home" size={16} />
               {t('sidebar.home', 'Home')}
             </button>
             <button onClick={() => onViewChange('agents')}
               aria-current={currentView === 'agents' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="4" cy="4" r="1.5" />
-                <circle cx="9" cy="4" r="1.5" />
-                <path d="M1.8 10.8C2.2 9.4 3.3 8.5 4.6 8.5H5.3C6.7 8.5 7.8 9.4 8.2 10.8" />
-                <path d="M7.5 10.8C7.8 9.9 8.5 9.3 9.4 9.3H9.8C10.8 9.3 11.5 9.9 11.8 10.8" />
-              </svg>
+              <Icon name="bot" size={16} />
               {t('sidebar.agents', 'Agents')}
             </button>
             <button onClick={() => onViewChange('workflows')}
               aria-current={currentView === 'workflows' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'workflows' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="3" height="3" rx="0.6" />
-                <rect x="8" y="2" width="3" height="3" rx="0.6" />
-                <rect x="2" y="8" width="3" height="3" rx="0.6" />
-                <path d="M8 9.5H11" />
-                <path d="M9.5 8V11" />
-                <path d="M5 3.5H8" />
-                <path d="M3.5 5V8" />
-              </svg>
+              <Icon name="workflow" size={16} />
               {t('sidebar.workflows', 'Workflows')}
             </button>
             <button onClick={() => onViewChange('capabilities')}
               aria-current={currentView === 'capabilities' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="3.25" cy="3.25" r="1.25" />
-                <circle cx="9.75" cy="3.25" r="1.25" />
-                <circle cx="6.5" cy="9.75" r="1.25" />
-                <path d="M4.5 3.25H8.5" />
-                <path d="M4 4.2 5.8 8.7" />
-                <path d="M9 4.2 7.2 8.7" />
-              </svg>
+              <Icon name="blocks" size={16} />
               {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] transition-colors cursor-pointer ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6.5 1.75 10.5 3.2v3.1c0 2.25-1.45 4.15-4 4.95-2.55-.8-4-2.7-4-4.95V3.2l4-1.45Z" />
-                <path d="M4.6 6.5 5.8 7.7 8.7 4.8" />
-              </svg>
+              <Icon name="heart-pulse" size={16} />
               {t('sidebar.healthCenter', 'Health Center')}
             </button>
           </div>
@@ -694,9 +666,7 @@ export function Sidebar({
           {/* Settings */}
           <button onClick={() => setShowSettings(true)}
             className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-              <circle cx="7" cy="7" r="2.5" /><path d="M7 1.5V3M7 11V12.5M1.5 7H3M11 7H12.5M2.8 2.8L3.9 3.9M10.1 10.1L11.2 11.2M11.2 2.8L10.1 3.9M3.9 10.1L2.8 11.2" />
-            </svg>
+            <Icon name="settings-2" size={16} />
             {t('sidebar.settings', 'Settings')}
           </button>
         </>

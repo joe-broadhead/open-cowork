@@ -11,7 +11,7 @@ import type {
 import { formatAgentLabel } from '../helpers/agent-label.ts'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health'
+export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health' | 'ui-primitives'
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
@@ -210,6 +210,18 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Navigate',
       keywords: 'health setup onboarding readiness doctor smoke workspace authority',
       run: () => onNavigate('health'),
+    },
+    {
+      id: 'nav:ui-primitives',
+      title: 'UI Primitives',
+      subtitle: 'Open the internal design-system gallery for visual QA.',
+      section: 'Go To',
+      badge: 'QA',
+      keywords: 'ui primitives design system gallery components',
+      run: () => {
+        window.location.hash = '#/ui-primitives'
+        onNavigate('ui-primitives')
+      },
     },
     {
       id: 'nav:settings',

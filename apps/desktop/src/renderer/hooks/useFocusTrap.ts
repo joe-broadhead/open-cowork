@@ -31,7 +31,17 @@ const FOCUSABLE_SELECTOR = [
 
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((el) => !el.hasAttribute('inert') && el.offsetParent !== null)
+    .filter((el) => !el.hasAttribute('inert') && isVisible(el))
+}
+
+function isVisible(element: HTMLElement) {
+  let current: HTMLElement | null = element
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current)
+    if (style.display === 'none' || style.visibility === 'hidden') return false
+    current = current.parentElement
+  }
+  return true
 }
 
 export function useFocusTrap(
