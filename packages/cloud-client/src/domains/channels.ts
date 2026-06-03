@@ -1,6 +1,7 @@
 export type {
   ChannelActorInput,
   ChannelBindingRecord,
+  ChannelCursorUpdateResult,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelInteractionRecord,

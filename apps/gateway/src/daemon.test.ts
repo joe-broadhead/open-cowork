@@ -94,7 +94,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
     subscribeSessionEvents() { return { close() {} } },
     subscribeDeliveries() { return { close() {} } },
-    async updateCursor() { return null },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
     async ackDelivery() { return null },
   }
   const config = resolveGatewayConfig({
@@ -747,7 +747,7 @@ test('gateway rejects oversized webhook bodies before provider dispatch', async 
     async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
     subscribeSessionEvents() { return { close() {} } },
     subscribeDeliveries() { return { close() {} } },
-    async updateCursor() { return null },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
     async ackDelivery() { return null },
   } as CloudGateway
   const config = resolveGatewayConfig({

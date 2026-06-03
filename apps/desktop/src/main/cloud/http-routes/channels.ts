@@ -260,17 +260,17 @@ export async function handleChannelsApiRoute(input: {
       tools.writeError(res, 400, 'Channel cursor update requires bindingId.', options.corsOrigin)
       return true
     }
-    const binding = await options.service.updateChannelCursor(context.principal, {
+    const result = await options.service.updateChannelCursor(context.principal, {
       bindingId,
       lastEventSequence: tools.readNonNegativeInteger(body.lastEventSequence),
       lastWorkspaceSequence: tools.readNonNegativeInteger(body.lastWorkspaceSequence),
       lastChatMessageId: body.lastChatMessageId === undefined ? undefined : tools.readString(body.lastChatMessageId),
     })
-    if (!binding) {
+    if (!result.ok && result.reason === 'not_found') {
       tools.writeError(res, 404, 'Channel session binding was not found.', options.corsOrigin)
       return true
     }
-    tools.writeJson(res, 200, { binding }, options.corsOrigin)
+    tools.writeJson(res, 200, { binding: result.binding, result }, options.corsOrigin)
     return true
   }
 

@@ -817,18 +817,25 @@ test('real Postgres cloud store keeps channel identities, cursors, and delivery 
       externalThreadId: 'thread-1',
       sessionId: ids.sessionId,
     })
-    assert.equal((await store.updateChannelCursor({
+    const updatedCursor = await store.updateChannelCursor({
       orgId: org.orgId,
       bindingId: sessionBinding.bindingId,
       lastEventSequence: 10,
       lastWorkspaceSequence: 8,
-    }))?.lastEventSequence, 10)
-    assert.equal(await store.updateChannelCursor({
+    })
+    assert.equal(updatedCursor.ok, true)
+    if (!updatedCursor.ok) assert.fail(`Expected cursor update to succeed, got ${updatedCursor.reason}`)
+    assert.equal(updatedCursor.binding.lastEventSequence, 10)
+    const staleCursor = await store.updateChannelCursor({
       orgId: org.orgId,
       bindingId: sessionBinding.bindingId,
       lastEventSequence: 9,
       lastWorkspaceSequence: 8,
-    }), null)
+    })
+    assert.equal(staleCursor.ok, false)
+    if (staleCursor.ok) assert.fail('Expected stale cursor update to be rejected.')
+    assert.equal(staleCursor.reason, 'stale')
+    assert.equal(staleCursor.binding.lastEventSequence, 10)
 
     await store.createChannelDelivery({
       deliveryId: `${ids.tenantId}-delivery`,

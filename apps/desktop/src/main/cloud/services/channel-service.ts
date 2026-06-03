@@ -1,4 +1,5 @@
 import type {
+  ChannelCursorUpdateResult,
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelIdentityRole,
@@ -72,7 +73,7 @@ export type CloudChannelServiceDelegate = {
     lastEventSequence: number
     lastWorkspaceSequence: number
     lastChatMessageId?: string | null
-  }): Promise<ChannelSessionBindingRecord | null>
+  }): Promise<ChannelCursorUpdateResult>
   enqueueChannelPrompt(principal: CloudPrincipal, input: Record<string, unknown>): Promise<{
     binding: ChannelSessionBindingRecord
     command: SessionCommandRecord

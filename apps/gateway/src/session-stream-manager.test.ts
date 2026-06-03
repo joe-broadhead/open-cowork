@@ -6,6 +6,35 @@ import { FakeChannelProvider } from '@open-cowork/gateway-testing'
 import type { CloudGateway } from '../dist/index.js'
 import { createGatewayMetrics, createGatewaySessionStreamManager } from '../dist/index.js'
 
+function cursorBinding(input: unknown, overrides: Record<string, unknown> = {}) {
+  return {
+    bindingId: 'binding-1',
+    orgId: 'tenant-1',
+    agentId: 'agent-1',
+    channelBindingId: 'channel-binding-1',
+    provider: 'cli',
+    externalWorkspaceId: null,
+    externalThreadId: 'thread-1',
+    externalChatId: 'chat-1',
+    sessionId: 'session-1',
+    lastEventSequence: (input as { lastEventSequence?: number }).lastEventSequence ?? 0,
+    lastWorkspaceSequence: (input as { lastWorkspaceSequence?: number }).lastWorkspaceSequence ?? 0,
+    lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
+    status: 'active',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+    ...overrides,
+  }
+}
+
+function cursorOk(input: unknown, overrides: Record<string, unknown> = {}) {
+  return { ok: true as const, binding: cursorBinding(input, overrides) }
+}
+
+function cursorNotFound() {
+  return { ok: false as const, reason: 'not_found' as const }
+}
+
 test('session stream manager renders session events once and persists cursor after provider send', async () => {
   const provider = new FakeChannelProvider()
   const subscriptions: Array<{
@@ -27,23 +56,7 @@ test('session stream manager renders session events once and persists cursor aft
     },
     async updateCursor(input: unknown) {
       cursorUpdates.push(input)
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: (input as { lastWorkspaceSequence: number }).lastWorkspaceSequence,
-        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
     async createChannelInteraction() {
       return {
@@ -149,23 +162,7 @@ test('session stream manager renders permission requests as channel buttons', as
       }
     },
     async updateCursor(input: unknown) {
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: 0,
-        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
   } as CloudGateway
   const manager = createGatewaySessionStreamManager(cloud, createGatewayMetrics())
@@ -237,7 +234,7 @@ test('session stream manager reconnects from the last persisted cursor', async (
       subscriptions.push(input)
       return { close() {} }
     },
-    async updateCursor() { return null },
+    async updateCursor() { return cursorNotFound() },
     async createChannelInteraction() {
       return {
         interaction: { interactionId: 'interaction-1' },
@@ -301,23 +298,7 @@ test('session stream manager hydrates snapshot-required retention gaps', async (
     },
     async updateCursor(input: unknown) {
       cursorUpdates.push(input)
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: 0,
-        lastChatMessageId: null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
     async createChannelInteraction() {
       return {
@@ -391,23 +372,7 @@ test('session stream manager leaves failed provider sends retryable', async () =
     },
     async updateCursor(input: unknown) {
       cursorUpdates.push(input)
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: 0,
-        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
     async createChannelInteraction() {
       return {
@@ -472,23 +437,7 @@ test('session stream manager retries transient poison events before skipping the
     },
     async updateCursor(input: unknown) {
       cursorUpdates.push(input)
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: 0,
-        lastChatMessageId: null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
     async createChannelInteraction() {
       return {
@@ -572,23 +521,7 @@ test('session stream manager does not let queued later events jump a failed tran
     },
     async updateCursor(input: unknown) {
       cursorUpdates.push(input)
-      return {
-        bindingId: 'binding-1',
-        orgId: 'tenant-1',
-        agentId: 'agent-1',
-        channelBindingId: 'channel-binding-1',
-        provider: 'cli',
-        externalWorkspaceId: null,
-        externalThreadId: 'thread-1',
-        externalChatId: 'chat-1',
-        sessionId: 'session-1',
-        lastEventSequence: (input as { lastEventSequence: number }).lastEventSequence,
-        lastWorkspaceSequence: 0,
-        lastChatMessageId: (input as { lastChatMessageId?: string | null }).lastChatMessageId ?? null,
-        status: 'active',
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-      }
+      return cursorOk(input)
     },
     async createChannelInteraction() {
       return {
@@ -659,6 +592,78 @@ test('session stream manager does not let queued later events jump a failed tran
   manager.closeAll()
 })
 
+test('session stream manager treats stale cursor updates as already persisted', async () => {
+  const provider = new FakeChannelProvider()
+  const metrics = createGatewayMetrics()
+  let onEvent: ((event: unknown) => void) | null = null
+  const cursorUpdates: unknown[] = []
+  const cloud = {
+    subscribeSessionEvents(input: { onEvent: (event: unknown) => void }) {
+      onEvent = input.onEvent
+      return { close() {} }
+    },
+    async updateCursor(input: unknown) {
+      cursorUpdates.push(input)
+      return {
+        ok: false as const,
+        reason: 'stale' as const,
+        binding: cursorBinding(input),
+      }
+    },
+    async createChannelInteraction() {
+      return {
+        interaction: { interactionId: 'interaction-1' },
+        plaintextToken: 'token-1',
+      }
+    },
+  } as CloudGateway
+  const manager = createGatewaySessionStreamManager(cloud, metrics, { retryDelayMs: 1 })
+
+  manager.ensure({
+    provider,
+    binding: {
+      bindingId: 'binding-1',
+      orgId: 'tenant-1',
+      agentId: 'agent-1',
+      channelBindingId: 'channel-binding-1',
+      provider: 'cli',
+      externalWorkspaceId: null,
+      externalThreadId: 'thread-1',
+      externalChatId: 'chat-1',
+      sessionId: 'session-1',
+      lastEventSequence: 0,
+      lastWorkspaceSequence: 0,
+      lastChatMessageId: null,
+      status: 'active',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    },
+  })
+
+  onEvent?.({
+    eventId: 'event-1',
+    sequence: 1,
+    type: 'assistant.message',
+    payload: { content: 'already persisted' },
+  })
+  await waitFor(() => cursorUpdates.length === 1)
+
+  assert.deepEqual(provider.sent.map((entry) => entry.text), ['already persisted'])
+  assert.equal(metrics.cursorPersistenceFailures, 0)
+  assert.equal(metrics.streamReconnects, 0)
+
+  onEvent?.({
+    eventId: 'event-1-duplicate',
+    sequence: 1,
+    type: 'assistant.message',
+    payload: { content: 'duplicate' },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 10))
+
+  assert.deepEqual(provider.sent.map((entry) => entry.text), ['already persisted'])
+  manager.closeAll()
+})
+
 test('session stream manager reconnects without advancing when cursor persistence fails', async () => {
   const provider = new FakeChannelProvider()
   const metrics = createGatewayMetrics()
@@ -669,7 +674,7 @@ test('session stream manager reconnects without advancing when cursor persistenc
       return { close() {} }
     },
     async updateCursor() {
-      return null
+      return cursorNotFound()
     },
     async createChannelInteraction() {
       return {

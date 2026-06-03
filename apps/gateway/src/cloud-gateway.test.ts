@@ -105,7 +105,7 @@ test('cloud gateway wraps all required channel and session operations', async ()
     },
     async updateChannelCursor(input: unknown) {
       calls.push(`cursor:${JSON.stringify(input)}`)
-      return { bindingId: 'binding-1' }
+      return { ok: true, binding: { bindingId: 'binding-1' } }
     },
     async ackChannelDelivery(deliveryId: string, input: unknown) {
       calls.push(`ack:${deliveryId}:${JSON.stringify(input)}`)

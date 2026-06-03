@@ -41,6 +41,7 @@ import type {
   ChannelIdentityRecord,
   ChannelIdentityRole,
   ChannelInteractionRecord,
+  ChannelCursorUpdateResult,
   ChannelProviderId,
   ChannelSessionBindingRecord,
   ClaimedWorkflowRunRecord,
@@ -1763,7 +1764,7 @@ export class CloudSessionService {
       lastWorkspaceSequence: number
       lastChatMessageId?: string | null
     },
-  ): Promise<ChannelSessionBindingRecord | null> {
+  ): Promise<ChannelCursorUpdateResult> {
     await this.ensurePrincipal(principal)
     this.assertGatewayAccess(principal)
     return this.store.updateChannelCursor({
