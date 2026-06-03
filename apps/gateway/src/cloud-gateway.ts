@@ -4,14 +4,17 @@ import {
   type ChannelDeliveryRecord,
   type ChannelIdentityRecord,
   type ChannelSessionBindingRecord,
+  type CloudChannelInteractionMutationResponse,
   type CloudChannelProviderId,
+  type CloudChannelPromptMutationResponse,
+  type CloudSessionCommandAckResponse,
+  type CloudSessionCommandMutationResponse,
   type SessionArtifactAttachment,
   type CloudSessionView,
   type CloudTransportAdapter,
   type CloudTransportSessionEvent,
   type CloudTransportSubscription,
   type IssuedChannelInteractionRecord,
-  type SessionCommandRecord,
 } from '@open-cowork/cloud-client'
 
 import type { GatewayCloudConnectionConfig } from './config.js'
@@ -42,14 +45,14 @@ export type CloudGateway = {
     bindingId: string
     text: string
     agent?: string | null
-  }): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, processed: number }>
+  }): Promise<CloudChannelPromptMutationResponse>
   resolveChannelInteraction(input: ChannelActorInput & {
     token?: string | null
     externalInteractionId?: string | null
     response?: unknown
     answers?: unknown[]
     reject?: boolean
-  }): Promise<{ interaction: unknown, command: SessionCommandRecord, processed: number }>
+  }): Promise<CloudChannelInteractionMutationResponse>
   createChannelInteraction(input: {
     agentId: string
     sessionId: string
@@ -61,19 +64,10 @@ export type CloudGateway = {
     expiresAt?: string | null
     interactionId?: string | null
   }): Promise<IssuedChannelInteractionRecord>
-  abortSession(sessionId: string): Promise<{ command: SessionCommandRecord, processed: number, view: CloudSessionView }>
-  respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
-  replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
-  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
+  abortSession(sessionId: string): Promise<CloudSessionCommandMutationResponse>
+  respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<CloudSessionCommandAckResponse>
+  replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<CloudSessionCommandAckResponse>
+  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<CloudSessionCommandAckResponse>
   readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
   artifactUrl(sessionId: string, artifactId: string): string
   subscribeSessionEvents(input: {

@@ -7,6 +7,7 @@ import type {
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
+  CloudProjectionFenceToken,
   CloudSessionProjectionRecord,
   CloudSessionEventType,
   CloudSessionViewRecord,
@@ -36,6 +37,7 @@ export type {
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
+  CloudProjectionFenceToken,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
@@ -552,6 +554,33 @@ export type CloudTransportSettingMetadata = {
   updatedAt: string
 }
 
+export type CloudSessionCommandMutationResponse = {
+  command: SessionCommandRecord
+  processed: number
+  view: CloudSessionView
+  projectionFence?: CloudProjectionFenceToken | null
+}
+
+export type CloudSessionCommandAckResponse = {
+  command: SessionCommandRecord
+  processed: number
+  projectionFence?: CloudProjectionFenceToken | null
+}
+
+export type CloudChannelPromptMutationResponse = {
+  binding: ChannelSessionBindingRecord
+  command: SessionCommandRecord
+  processed: number
+  projectionFence?: CloudProjectionFenceToken | null
+}
+
+export type CloudChannelInteractionMutationResponse = {
+  interaction: ChannelInteractionRecord
+  command: SessionCommandRecord
+  processed: number
+  projectionFence?: CloudProjectionFenceToken | null
+}
+
 export type CloudTransportAdapter = {
   getConfig(): Promise<CloudTransportConfig>
   getWorkspace(): Promise<CloudWorkspaceOverview>
@@ -563,24 +592,11 @@ export type CloudTransportAdapter = {
   uploadProjectSnapshot(input: CloudProjectSnapshotUploadInput): Promise<CloudProjectSnapshotUploadResult>
   importSession(input: SessionImportRequest): Promise<CloudSessionView>
   getSession(sessionId: string): Promise<CloudSessionView>
-  promptSession(sessionId: string, input: { text: string, agent?: string | null }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-    view: CloudSessionView
-  }>
-  abortSession(sessionId: string): Promise<{ command: SessionCommandRecord, processed: number, view: CloudSessionView }>
-  replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
-  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
-  respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<{
-    command: SessionCommandRecord
-    processed: number
-  }>
+  promptSession(sessionId: string, input: { text: string, agent?: string | null }): Promise<CloudSessionCommandMutationResponse>
+  abortSession(sessionId: string): Promise<CloudSessionCommandMutationResponse>
+  replyToQuestion(sessionId: string, input: { requestId: string, answers: unknown[] }): Promise<CloudSessionCommandAckResponse>
+  rejectQuestion(sessionId: string, input: { requestId: string }): Promise<CloudSessionCommandAckResponse>
+  respondToPermission(sessionId: string, input: { permissionId: string, response: unknown }): Promise<CloudSessionCommandAckResponse>
   listWorkflows?(): Promise<WorkflowListPayload>
   getWorkflow?(workflowId: string): Promise<WorkflowDetail | null>
   runWorkflow?(workflowId: string, input?: { triggerType?: WorkflowTriggerType, triggerPayload?: Record<string, unknown> | null }): Promise<WorkflowRun | null>
@@ -695,7 +711,7 @@ export type CloudTransportAdapter = {
     bindingId: string
     text: string
     agent?: string | null
-  }): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, processed: number }>
+  }): Promise<CloudChannelPromptMutationResponse>
   updateChannelCursor?(input: {
     bindingId: string
     lastEventSequence: number
@@ -719,7 +735,7 @@ export type CloudTransportAdapter = {
     response?: unknown
     answers?: unknown[]
     reject?: boolean
-  }): Promise<{ interaction: ChannelInteractionRecord, command: SessionCommandRecord, processed: number }>
+  }): Promise<CloudChannelInteractionMutationResponse>
   createChannelDelivery?(input: {
     agentId: string
     channelBindingId: string

@@ -65,6 +65,11 @@ type SeenSlackWebhookSignature = {
   scope: string;
 };
 
+type SlackWebhookReplayClaim = {
+  key: string;
+  entry: SeenSlackWebhookSignature;
+};
+
 export class SlackProvider implements ChannelProvider {
   readonly kind: ChannelProviderKind = "slack";
   readonly id: ChannelProviderId;
@@ -111,17 +116,23 @@ export class SlackProvider implements ChannelProvider {
   }
 
   async handleWebhookPayload(payload: unknown, auth: SlackWebhookAuth): Promise<SlackWebhookResult | void> {
-    this.assertWebhookAuthorized(auth);
+    const replayClaim = this.assertWebhookAuthorized(auth);
     const record = objectRecord(payload);
     if (record.type === "url_verification") {
       const challenge = stringField(record, "challenge");
       return challenge ? { challenge } : undefined;
     }
 
-    if (!this.handler) throw new Error("Slack provider is not started.");
     const message = mapSlackPayload(record, this.config.now?.() ?? new Date(), this.id);
-    if (message) await this.handler(message);
-    return undefined;
+    if (!message) return undefined;
+    try {
+      if (!this.handler) throw new Error("Slack provider is not started.");
+      await this.handler(message);
+      return undefined;
+    } catch (error) {
+      if (replayClaim) this.releaseWebhookReplayClaim(replayClaim);
+      throw error;
+    }
   }
 
   async sendText(target: ChannelTarget, text: string, options?: SendOptions): Promise<SentMessage> {
@@ -209,8 +220,8 @@ export class SlackProvider implements ChannelProvider {
     return new Uint8Array(await response.arrayBuffer());
   }
 
-  private assertWebhookAuthorized(auth: SlackWebhookAuth): void {
-    if (auth.verified === true) return;
+  private assertWebhookAuthorized(auth: SlackWebhookAuth): SlackWebhookReplayClaim | null {
+    if (auth.verified === true) return null;
     const signingSecret = auth.signingSecret || this.config.signingSecret;
     const rawBody = auth.rawBody || "";
     const timestamp = headerValue(auth.headers, "x-slack-request-timestamp");
@@ -229,18 +240,26 @@ export class SlackProvider implements ChannelProvider {
     if (!constantTimeStringEqual(signature, expected)) {
       throw new Error("Slack webhook signature verification failed.");
     }
-    this.claimWebhookSignature(`${timestamp}:${signature}`, slackReplayScopeFromRawBody(rawBody, this.id), nowMs, maxAgeMs);
+    return this.claimWebhookSignature(`${timestamp}:${signature}`, slackReplayScopeFromRawBody(rawBody, this.id), nowMs, maxAgeMs);
   }
 
-  private claimWebhookSignature(replayKey: string, scope: string, nowMs: number, maxAgeMs: number): void {
+  private claimWebhookSignature(replayKey: string, scope: string, nowMs: number, maxAgeMs: number): SlackWebhookReplayClaim {
     this.purgeSeenWebhookSignatures(nowMs);
     const existing = this.seenWebhookSignatures.get(replayKey);
     if (existing && existing.expiresAt > nowMs) {
       throw new Error("Slack webhook signature replay rejected.");
     }
-    this.seenWebhookSignatures.set(replayKey, { expiresAt: nowMs + maxAgeMs, scope });
+    const entry = { expiresAt: nowMs + maxAgeMs, scope };
+    this.seenWebhookSignatures.set(replayKey, entry);
     this.enforceSeenWebhookSignatureScopeLimit(scope);
     this.enforceSeenWebhookSignatureGlobalLimit();
+    return { key: replayKey, entry };
+  }
+
+  private releaseWebhookReplayClaim(claim: SlackWebhookReplayClaim): void {
+    if (this.seenWebhookSignatures.get(claim.key) === claim.entry) {
+      this.seenWebhookSignatures.delete(claim.key);
+    }
   }
 
   private enforceSeenWebhookSignatureScopeLimit(scope: string): void {

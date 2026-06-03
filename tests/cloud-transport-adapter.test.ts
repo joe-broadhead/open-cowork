@@ -40,7 +40,18 @@ function textResponse(text: string, status = 200, headers: Record<string, string
   }
 }
 
-test('cloud transport adapter maps session commands to HTTP routes with CSRF', async () => {
+function projectionFence(commandId: string, sessionId = 'session-1') {
+  return {
+    version: 1,
+    scope: 'session',
+    tenantId: 'tenant-1',
+    sessionId,
+    commandId,
+    issuedAt: '2026-05-27T10:00:00.000Z',
+  }
+}
+
+test('cloud transport adapter maps session and channel commands to HTTP routes with CSRF', async () => {
   const requests: Array<{ url: string, init?: Parameters<CloudTransportFetch>[1] }> = []
   const fetcher: CloudTransportFetch = async (url, init) => {
     requests.push({ url, init })
@@ -82,16 +93,49 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
       }, 201)
     }
     if (url.endsWith('/api/sessions/session-1/prompt')) {
-      return jsonResponse({ command: { commandId: 'cmd-1' }, processed: 0, view: { session: {}, projection: null } }, 202)
+      return jsonResponse({
+        command: { commandId: 'cmd-1' },
+        processed: 0,
+        view: { session: {}, projection: null },
+        projectionFence: projectionFence('cmd-1'),
+      }, 202)
     }
     if (url.endsWith('/api/sessions/session-1/question-reply')) {
-      return jsonResponse({ command: { commandId: 'cmd-2' }, processed: 0 }, 202)
+      return jsonResponse({
+        command: { commandId: 'cmd-2' },
+        processed: 0,
+        projectionFence: projectionFence('cmd-2'),
+      }, 202)
     }
     if (url.endsWith('/api/sessions/session-1/question-reject')) {
-      return jsonResponse({ command: { commandId: 'cmd-3' }, processed: 0 }, 202)
+      return jsonResponse({
+        command: { commandId: 'cmd-3' },
+        processed: 0,
+        projectionFence: projectionFence('cmd-3'),
+      }, 202)
     }
     if (url.endsWith('/api/sessions/session-1/permission-respond')) {
-      return jsonResponse({ command: { commandId: 'cmd-4' }, processed: 0 }, 202)
+      return jsonResponse({
+        command: { commandId: 'cmd-4' },
+        processed: 0,
+        projectionFence: projectionFence('cmd-4'),
+      }, 202)
+    }
+    if (url.endsWith('/api/channels/sessions/prompt')) {
+      return jsonResponse({
+        binding: { bindingId: 'binding-1' },
+        command: { commandId: 'cmd-channel-prompt' },
+        processed: 0,
+        projectionFence: projectionFence('cmd-channel-prompt'),
+      }, 202)
+    }
+    if (url.endsWith('/api/channels/interactions/resolve')) {
+      return jsonResponse({
+        interaction: { interactionId: 'interaction-1' },
+        command: { commandId: 'cmd-channel-interaction' },
+        processed: 0,
+        projectionFence: projectionFence('cmd-channel-interaction'),
+      }, 202)
     }
     if (url.endsWith('/api/sessions/session-1/artifacts')) {
       if (init?.method === 'POST') {
@@ -303,10 +347,24 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
     itemCounts: { messages: 1, artifacts: 0, attachments: 0, projectSource: 0, excluded: 1 },
     messages: [{ id: 'm1', role: 'user', content: 'imported', order: 1 }],
   })).session.sessionId, 'session-imported')
-  assert.equal((await transport.promptSession('session-1', { text: 'hello' })).processed, 0)
-  assert.equal((await transport.replyToQuestion('session-1', { requestId: 'q1', answers: ['A'] })).processed, 0)
-  assert.equal((await transport.rejectQuestion('session-1', { requestId: 'q2' })).processed, 0)
-  assert.equal((await transport.respondToPermission('session-1', { permissionId: 'p1', response: { allowed: true } })).processed, 0)
+  const prompt = await transport.promptSession('session-1', { text: 'hello' })
+  assert.equal(prompt.processed, 0)
+  assert.equal(prompt.projectionFence?.commandId, 'cmd-1')
+  const questionReply = await transport.replyToQuestion('session-1', { requestId: 'q1', answers: ['A'] })
+  assert.equal(questionReply.processed, 0)
+  assert.equal(questionReply.projectionFence?.commandId, 'cmd-2')
+  const questionReject = await transport.rejectQuestion('session-1', { requestId: 'q2' })
+  assert.equal(questionReject.processed, 0)
+  assert.equal(questionReject.projectionFence?.commandId, 'cmd-3')
+  const permissionResponse = await transport.respondToPermission('session-1', { permissionId: 'p1', response: { allowed: true } })
+  assert.equal(permissionResponse.processed, 0)
+  assert.equal(permissionResponse.projectionFence?.commandId, 'cmd-4')
+  const channelPrompt = await transport.promptChannelSession?.({ identityId: 'identity-1', bindingId: 'binding-1', text: 'hello channel' })
+  assert.equal(channelPrompt?.processed, 0)
+  assert.equal(channelPrompt?.projectionFence?.commandId, 'cmd-channel-prompt')
+  const channelInteraction = await transport.resolveChannelInteraction?.({ identityId: 'identity-1', token: 'token-1', response: { allowed: true } })
+  assert.equal(channelInteraction?.processed, 0)
+  assert.equal(channelInteraction?.projectionFence?.commandId, 'cmd-channel-interaction')
   assert.equal((await transport.listWorkflows?.())?.workflows[0]?.id, 'workflow-1')
   assert.equal((await transport.getWorkflow?.('workflow-1'))?.id, 'workflow-1')
   assert.equal((await transport.runWorkflow?.('workflow-1'))?.id, 'run-1')
@@ -358,6 +416,8 @@ test('cloud transport adapter maps session commands to HTTP routes with CSRF', a
       '/api/sessions/session-1/question-reply',
       '/api/sessions/session-1/question-reject',
       '/api/sessions/session-1/permission-respond',
+      '/api/channels/sessions/prompt',
+      '/api/channels/interactions/resolve',
       '/api/workflows/workflow-1/run',
       '/api/workflows/workflow-1/pause',
       '/api/threads/tags',
