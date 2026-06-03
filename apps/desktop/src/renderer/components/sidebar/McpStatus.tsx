@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isMcpAuthRequiredStatus } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { summarizeMcpConnections } from '../../helpers/mcp-status-summary'
+import { Badge, Button, Icon } from '../ui'
 
 export function McpStatus() {
   const mcpConnections = useSessionStore((s) => s.mcpConnections)
@@ -31,27 +32,22 @@ export function McpStatus() {
 
   return (
     <div>
-      <button
+      <Button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-[6px] rounded-md text-[13px] text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
+        className="w-full justify-between"
+        variant="ghost"
+        size="sm"
+        rightIcon={expanded ? 'chevron-down' : 'chevron-right'}
+        aria-label={`${up} ${down} ${total} connections`}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <div className="w-[6px] h-[6px] rounded-full" style={{ background: 'var(--color-green)', boxShadow: '0 0 4px var(--color-green)' }} />
-            <span className="text-[11px] text-text-muted">{up}</span>
-          </div>
+        <span className="flex items-center gap-2">
+          <Badge tone="success">{up}</Badge>
           {down > 0 && (
-            <div className="flex items-center gap-1">
-              <div className="w-[6px] h-[6px] rounded-full" style={{ background: 'var(--color-red)' }} />
-              <span className="text-[11px] text-text-muted">{down}</span>
-            </div>
+            <Badge tone="danger">{down}</Badge>
           )}
           <span>{total} connections</span>
-        </div>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3" style={{ transform: expanded ? 'rotate(180deg)' : '', transition: 'transform 0.15s' }}>
-          <polyline points="2.5,3.5 5,6.5 7.5,3.5" />
-        </svg>
-      </button>
+        </span>
+      </Button>
       {expanded && (
         <div className="mt-1 flex flex-col gap-px ms-1">
           {mcpConnections.map((mcp) => {
@@ -59,32 +55,24 @@ export function McpStatus() {
             return (
               <div key={mcp.name} className="flex items-center justify-between px-3 py-[3px] text-[11px] text-text-muted group/mcp">
                 <div className="flex items-center gap-2">
-                  <div className="w-[5px] h-[5px] rounded-full shrink-0" style={{
-                    background: mcp.connected ? 'var(--color-green)' : 'var(--color-red)',
-                  }} />
+                  <Icon name={mcp.connected ? 'check' : 'circle-x'} size={16} className={mcp.connected ? 'text-green' : 'text-red'} />
                   {mcp.name}
                   {!mcp.connected && mcp.rawStatus && (
-                    <span
-                      className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-[0.04em]"
-                      style={{
-                        color: needsAuth ? 'var(--color-amber)' : 'var(--color-text-muted)',
-                        background: needsAuth
-                          ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                          : 'var(--color-surface-hover)',
-                      }}
-                    >
+                    <Badge tone={needsAuth ? 'warning' : 'neutral'}>
                       {mcp.rawStatus.replace(/_/g, ' ')}
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 {!mcp.connected && (
-                  <button
+                  <Button
                     onClick={() => handleReconnect(mcp.name, mcp.rawStatus)}
                     disabled={reconnecting === mcp.name}
-                    className="opacity-0 group-hover/mcp:opacity-100 text-[9px] px-1.5 py-0.5 rounded text-accent hover:bg-accent/10 cursor-pointer transition-all"
+                    size="sm"
+                    variant="ghost"
+                    loading={reconnecting === mcp.name}
                   >
-                    {reconnecting === mcp.name ? '...' : needsAuth ? 'Re-auth' : 'Retry'}
-                  </button>
+                    {needsAuth ? 'Re-auth' : 'Retry'}
+                  </Button>
                 )}
               </div>
             )

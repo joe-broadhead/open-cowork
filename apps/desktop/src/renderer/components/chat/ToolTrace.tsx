@@ -10,6 +10,7 @@ import { VegaChart } from './VegaChart'
 import { attachmentFromArtifact, dispatchComposerCompose } from './composer-events'
 import { artifactForTool, listArtifactsForTools, sanitizeArtifactToolInput } from './session-artifacts'
 import { AGENT_LABELS, SUB_AGENT_IDS, buildCustomMcpToolTraceRules, summarizeTools, tryParseChartOutput } from './tool-trace-utils'
+import { Badge, Button, Card, Icon, type BadgeTone } from '../ui'
 
 // Cache parsed chart output by ToolCall identity. `tryParseChartOutput`
 // returns a fresh object (and a freshly-parsed spec) on every call —
@@ -108,6 +109,24 @@ function artifactWorkspaceScope(workspaceId?: string) {
   return workspaceId ? { workspaceId } : {}
 }
 
+function statusTone(status: ToolCall['status']): BadgeTone {
+  if (status === 'complete') return 'success'
+  if (status === 'error') return 'danger'
+  return 'accent'
+}
+
+function statusLabel(status: ToolCall['status']) {
+  if (status === 'complete') return t('toolTrace.statusComplete', 'Complete')
+  if (status === 'error') return t('toolTrace.statusError', 'Error')
+  return t('toolTrace.statusRunning', 'Running')
+}
+
+function statusIconClass(status: ToolCall['status']) {
+  if (status === 'error') return 'chat-tool-status-icon chat-tool-status-icon--error'
+  if (status === 'complete') return 'chat-tool-status-icon'
+  return 'chat-tool-status-icon chat-tool-status-icon--running'
+}
+
 interface Props {
   tools: ToolCall[]
   compact?: boolean
@@ -129,10 +148,10 @@ function ArtifactCard({
   onReveal: () => Promise<void>
 }) {
   return (
-    <div className="mt-1 mb-1 rounded-lg overflow-hidden border border-border-subtle bg-surface px-3 py-3">
+    <Card className="mt-1 mb-1 overflow-hidden" padding="sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-text-muted mb-1">{t('toolTrace.artifact', 'Artifact')}</div>
+          <Badge tone="neutral" className="mb-1">{t('toolTrace.artifact', 'Artifact')}</Badge>
           <div className="text-[12px] font-medium text-text truncate">{artifact.filename}</div>
           <div className="mt-1 text-[11px] text-text-muted">
             {artifact.taskRunId
@@ -141,27 +160,33 @@ function ArtifactCard({
           </div>
         </div>
         <div className="shrink-0 flex items-center gap-2">
-          <button
+          <Button
             onClick={() => void onAttach()}
-            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            size="sm"
+            variant="secondary"
+            loading={attaching}
           >
-            {attaching ? 'Sending…' : 'Send to thread'}
-          </button>
-          <button
+            {t('toolTrace.sendToThread', 'Send to thread')}
+          </Button>
+          <Button
             onClick={() => void onReveal()}
-            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            size="sm"
+            variant="ghost"
+            leftIcon="external-link"
           >
             {t('toolTrace.reveal', 'Reveal')}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void onExport()}
-            className="px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            size="sm"
+            variant="ghost"
+            loading={exporting}
           >
-            {exporting ? t('toolTrace.saving', 'Saving...') : t('toolTrace.saveAs', 'Save As…')}
-          </button>
+            {t('toolTrace.saveAs', 'Save As...')}
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -216,26 +241,12 @@ export function ToolTrace({ tools, compact = false }: Props) {
       <div className="flex flex-wrap items-center gap-1.5">
         {agentLabel && (
           <>
-            <span
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.06em] border"
-              style={{
-                background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
-                color: 'var(--color-text-secondary)',
-                borderColor: 'var(--color-border)',
-              }}
-            >
+            <Badge tone="neutral">
               {actorTypeLabel}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border"
-              style={{
-                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-                color: 'var(--color-accent)',
-                borderColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
-              }}
-            >
+            </Badge>
+            <Badge tone="accent">
               {agentLabel}
-            </span>
+            </Badge>
           </>
         )}
         <span className="text-[11px] text-text-muted">{summarizeTools(tools, toolTraceRules)}</span>
@@ -246,48 +257,30 @@ export function ToolTrace({ tools, compact = false }: Props) {
   return (
     <div className="py-px">
       {/* Summary line with agent badge */}
-      <button
+      <Button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-[12px] cursor-pointer group"
-        style={{ color: 'var(--color-text-muted)' }}
+        variant="ghost"
+        size="sm"
+        rightIcon={expanded ? 'chevron-down' : 'chevron-right'}
+        className="max-w-full justify-start"
       >
         {!allDone && (
-          <span className="inline-block w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
+          <Icon name="loader-circle" size={16} className="ui-spin text-accent" />
         )}
         {agentLabel && (
           <>
-            <span
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.06em] border"
-              style={{
-                background: 'color-mix(in srgb, var(--color-base) 86%, var(--color-text) 14%)',
-                color: 'var(--color-text-secondary)',
-                borderColor: 'var(--color-border)',
-              }}
-            >
+            <Badge tone="neutral">
               {actorTypeLabel}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium border"
-              style={{
-                background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',
-                color: 'var(--color-accent)',
-                borderColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
-              }}
-            >
+            </Badge>
+            <Badge tone="accent">
               {agentLabel}
-            </span>
+            </Badge>
           </>
         )}
-        <span className="font-medium group-hover:text-text-secondary transition-colors">
+        <span className="min-w-0 truncate font-medium text-text-muted">
           {summarizeTools(tools, toolTraceRules)}
         </span>
-        <svg
-          width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3"
-          style={{ transform: expanded ? 'rotate(180deg)' : '', transition: 'transform 0.15s' }}
-        >
-          <polyline points="2.5,3.5 5,6.5 7.5,3.5" />
-        </svg>
-      </button>
+      </Button>
 
       {/* Charts always visible regardless of expand state */}
       {currentSessionId && artifacts.map((artifact) => (
@@ -327,7 +320,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
         const chart = cachedChart(tool)
         if ((chart?.type === 'vega-lite' || chart?.type === 'vega') && chart.spec) {
           return (
-            <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+            <div key={`chart-${tool.id}`} className="chat-tool-chart-frame mt-1 mb-1">
               {chart.type === 'vega' && chart.title && (
                 <div className="px-4 pt-3 pb-1 text-[12px] font-medium text-text">
                   {chart.title}
@@ -347,7 +340,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
         }
         if (chart?.type === 'mermaid' && chart.diagram) {
           return (
-            <div key={`chart-${tool.id}`} className="mt-1 mb-1 rounded-lg overflow-hidden" style={{ background: 'var(--color-surface)' }}>
+            <div key={`chart-${tool.id}`} className="chat-tool-chart-frame mt-1 mb-1">
               <MermaidChart diagram={chart.diagram} title={chart.title} />
             </div>
           )
@@ -359,7 +352,7 @@ export function ToolTrace({ tools, compact = false }: Props) {
             <div key={`att-${tool.id}`}>
               {tool.attachments.filter(a => a.mime?.startsWith('image/')).map((att) => (
                 <div key={toolAttachmentKey(att, imageAttachmentKeys)} className="mt-1 mb-1">
-                  <img src={att.url} alt={att.filename || 'attachment'} className="rounded-lg max-w-full border border-border-subtle" style={{ maxHeight: 400 }} />
+                  <img src={att.url} alt={att.filename || 'attachment'} className="chat-tool-image rounded-lg max-w-full border border-border-subtle" />
                 </div>
               ))}
             </div>
@@ -372,10 +365,6 @@ export function ToolTrace({ tools, compact = false }: Props) {
       {expanded && (
         <div className="mt-1.5 ms-0.5 flex flex-col gap-0.5">
           {tools.map((tool) => {
-            const statusIcon = tool.status === 'complete' ? '✓'
-              : tool.status === 'error' ? '✗' : '…'
-            const statusColor = tool.status === 'complete' ? 'var(--color-text-muted)'
-              : tool.status === 'error' ? 'var(--color-red)' : 'var(--color-accent)'
             const isToolExpanded = expandedToolId === tool.id
             const artifact = privateWorkspace ? artifactForTool(tool) : null
             const rawInput: Record<string, unknown> = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input)
@@ -385,38 +374,43 @@ export function ToolTrace({ tools, compact = false }: Props) {
 
             return (
               <div key={tool.id} data-tool-call-id={tool.id}>
-                <button
+                <Card
+                  interactive
                   onClick={() => setExpandedToolId(isToolExpanded ? null : tool.id)}
-                  className="flex items-center gap-1.5 text-[11px] leading-relaxed cursor-pointer hover:text-text-secondary transition-colors w-full text-start"
-                  style={{ color: 'var(--color-text-muted)' }}
+                  padding="sm"
+                  aria-expanded={isToolExpanded}
+                  className="chat-tool-row"
                 >
-                  <span style={{ color: statusColor }}>{statusIcon}</span>
-                  <span className="font-mono">{tool.name}</span>
-                  {isToolExpanded ? (
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="2,3 4,5.5 6,3" /></svg>
-                  ) : (
-                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2"><polyline points="3,2 5.5,4 3,6" /></svg>
-                  )}
-                </button>
+                  <Icon
+                    name={tool.status === 'complete' ? 'check' : tool.status === 'error' ? 'circle-x' : 'loader-circle'}
+                    size={16}
+                    className={`${statusIconClass(tool.status)} ${tool.status !== 'complete' && tool.status !== 'error' ? 'ui-spin' : ''}`}
+                  />
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-secondary">{tool.name}</span>
+                  <Badge tone={statusTone(tool.status)}>{statusLabel(tool.status)}</Badge>
+                  <Icon name={isToolExpanded ? 'chevron-down' : 'chevron-right'} size={16} className="text-text-muted" />
+                </Card>
 
                 {isToolExpanded && (
-                  <div className="ms-4 mt-1 mb-2 rounded-lg border border-border-subtle bg-surface overflow-hidden">
+                  <div className="chat-tool-details ms-4 mt-1 mb-2">
                     {artifact && currentSessionId && (
                       <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[10px] font-medium text-text-muted mb-1">{t('toolTrace.artifact', 'Artifact')}</div>
+                          <Badge tone="neutral" className="mb-1">{t('toolTrace.artifact', 'Artifact')}</Badge>
                           <div className="text-[11px] text-text truncate">{artifact.filename}</div>
                         </div>
-                        <button
+                        <Button
                           onClick={async (event) => {
                             event.stopPropagation()
                             await sendArtifactToThread(artifact)
                           }}
-                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                          size="sm"
+                          variant="secondary"
+                          loading={attachingArtifactId === artifact.id}
                         >
-                          {attachingArtifactId === artifact.id ? 'Sending…' : 'Send to thread'}
-                        </button>
-                        <button
+                          {t('toolTrace.sendToThread', 'Send to thread')}
+                        </Button>
+                        <Button
                           onClick={async (event) => {
                             event.stopPropagation()
                             try {
@@ -430,11 +424,13 @@ export function ToolTrace({ tools, compact = false }: Props) {
                               setExportingArtifactId(null)
                             }
                           }}
-                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                          size="sm"
+                          variant="ghost"
+                          loading={exportingArtifactId === artifact.id}
                         >
-                          {exportingArtifactId === artifact.id ? t('toolTrace.saving', 'Saving...') : t('toolTrace.saveAs', 'Save As…')}
-                        </button>
-                        <button
+                          {t('toolTrace.saveAs', 'Save As...')}
+                        </Button>
+                        <Button
                           onClick={async (event) => {
                             event.stopPropagation()
                             await window.coworkApi.artifact.reveal({
@@ -442,10 +438,12 @@ export function ToolTrace({ tools, compact = false }: Props) {
                               filePath: artifact.filePath,
                             })
                           }}
-                          className="shrink-0 px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                          size="sm"
+                          variant="ghost"
+                          leftIcon="external-link"
                         >
-                          Reveal
-                        </button>
+                          {t('toolTrace.reveal', 'Reveal')}
+                        </Button>
                       </div>
                     )}
                     {Object.keys(displayInput).length > 0 && (

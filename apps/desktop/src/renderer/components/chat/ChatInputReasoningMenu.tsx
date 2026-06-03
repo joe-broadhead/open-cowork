@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
+import { Card, Icon } from '../ui'
 
 type ChatInputReasoningMenuProps = {
   visible: boolean
@@ -29,6 +30,22 @@ export function formatReasoningVariantLabel(variant: string | null | undefined) 
     || normalized
       .replace(/[-_]+/g, ' ')
       .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function describeReasoningVariant(variant: string | null) {
+  if (!variant) return t('chat.reasoningAutoDescription', 'Use the model default.')
+  switch (variant.trim().toLowerCase()) {
+    case 'low':
+      return t('chat.reasoningLowDescription', 'Keep reasoning concise for simple edits and quick replies.')
+    case 'medium':
+      return t('chat.reasoningMediumDescription', 'Balance speed and depth for everyday implementation work.')
+    case 'high':
+      return t('chat.reasoningHighDescription', 'Spend more effort on complex debugging, planning, and reviews.')
+    case 'xhigh':
+      return t('chat.reasoningXHighDescription', 'Use maximum effort for risky, multi-step, or deeply coupled changes.')
+    default:
+      return t('chat.reasoningVariantDescription', 'Use the model variant reported by OpenCode.')
+  }
 }
 
 export function ChatInputReasoningMenu({
@@ -92,24 +109,19 @@ export function ChatInputReasoningMenu({
       <ModalBackdrop onDismiss={onClose} className="fixed inset-0 z-40" />
       <div
         ref={menuRef}
-        className="fixed z-50 rounded-xl border shadow-xl overflow-hidden"
+        className="chat-menu-panel fixed z-50"
         role="listbox"
         tabIndex={-1}
         aria-label={t('chat.reasoningSelect', 'Select reasoning mode')}
         onKeyDown={handleKeyDown}
         style={{
-          background: 'var(--color-base)',
-          borderColor: 'var(--color-border)',
           width: MENU_WIDTH,
           maxHeight: desiredHeight,
           left,
           top,
         }}
       >
-        <div
-          className="px-3 py-2 text-[11px] text-text-muted font-medium border-b"
-          style={{ borderColor: 'var(--color-border-subtle)' }}
-        >
+        <div className="chat-menu-header">
           {t('chat.reasoning', 'Reasoning')}
         </div>
         <div className="py-1">
@@ -117,39 +129,29 @@ export function ChatInputReasoningMenu({
             const isActive = (currentVariant || null) === variant
             const isHighlighted = highlightIndex === index
             const label = formatReasoningVariantLabel(variant)
-            const description = variant
-              ? t('chat.reasoningVariantDescription', 'Use the model variant reported by OpenCode.')
-              : t('chat.reasoningAutoDescription', 'Use the model default.')
+            const description = describeReasoningVariant(variant)
             return (
-              <button
+              <Card
+                interactive
+                padding="sm"
                 key={variant || 'auto'}
-                type="button"
                 role="option"
                 aria-selected={isActive}
+                data-highlighted={isHighlighted || undefined}
                 onClick={() => {
                   onSelect(variant)
                   onClose()
                 }}
-                className="w-full text-start px-3 py-2 text-[12px] cursor-pointer transition-colors flex items-center justify-between gap-2 hover:bg-surface-hover"
-                style={{
-                  color: 'var(--color-text)',
-                  background: isHighlighted
-                    ? 'var(--color-surface-hover)'
-                    : isActive
-                      ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)'
-                      : 'transparent',
-                }}
+                className="chat-menu-option text-[12px]"
               >
                 <span className="min-w-0">
                   <span className="block font-medium truncate">{label}</span>
                   <span className="block text-[10px] text-text-muted truncate">{description}</span>
                 </span>
                 {isActive ? (
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                    <polyline points="3,7.5 6,10.5 11,4" />
-                  </svg>
+                  <Icon name="check" size={16} className="shrink-0" />
                 ) : null}
-              </button>
+              </Card>
             )
           })}
         </div>

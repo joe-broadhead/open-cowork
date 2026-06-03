@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useSessionStore } from '../../stores/session'
 import { formatAgentLabel as formatReadableAgentLabel } from '../../helpers/agent-label'
 import { formatCost } from '../../helpers/format'
@@ -6,6 +6,11 @@ import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from './ModalBackdrop'
 import { getModelContextLimit } from '../../helpers/model-info'
 import { McpStatusBadge } from '../chrome/McpStatusBadge'
+import { Badge, type BadgeTone } from '../ui'
+
+type MeterStyle = CSSProperties & {
+  '--statusbar-meter-color': string
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -16,6 +21,13 @@ function formatTokens(n: number): string {
 function formatStatusAgentLabel(agent: string | null) {
   if (!agent) return t('statusbar.thinking', 'Thinking...')
   return t('statusbar.agentWorking', '{{agent}} working...', { agent: formatReadableAgentLabel(agent).toLowerCase() })
+}
+
+function contextToneTextClass(tone: BadgeTone) {
+  if (tone === 'danger') return 'text-red'
+  if (tone === 'warning') return 'text-amber'
+  if (tone === 'accent') return 'text-accent'
+  return 'text-text-muted'
 }
 
 export function StatusBar() {
@@ -77,6 +89,15 @@ export function StatusBar() {
         : contextPercent > 69
           ? 'var(--color-amber)'
           : 'var(--color-text-muted)'
+  const contextTone: BadgeTone = contextState === 'compacting'
+    ? 'accent'
+    : contextState === 'compacted' || nearCompactionThreshold
+      ? 'warning'
+      : contextPercent > 84
+        ? 'danger'
+        : contextPercent > 69
+          ? 'warning'
+          : 'neutral'
   const contextLabel = contextState === 'compacting'
     ? t('statusbar.compacting', 'Compacting…')
     : contextState === 'compacted'
@@ -106,27 +127,23 @@ export function StatusBar() {
   return (
     <div className="relative">
       <div
-        className="flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted"
-        style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
+        className="statusbar-root flex items-center justify-between h-[26px] px-4 shrink-0 select-none text-[10px] border-t border-border-subtle text-text-muted"
       >
         <div className="flex items-center gap-2.5">
           {isGenerating ? (
-            <span className="text-accent flex items-center gap-1.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <Badge tone="accent" className="statusbar-badge">
               {formatStatusAgentLabel(activeAgent)}
-            </span>
+            </Badge>
           ) : isAwaitingPermission ? (
-            <span className="flex items-center gap-1.5" style={{ color: 'var(--color-amber)' }}>
-              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--color-amber)' }} />
+            <Badge tone="warning" className="statusbar-badge">
               {t('chat.awaitingApproval', 'Awaiting approval')}
-            </span>
+            </Badge>
           ) : isAwaitingQuestion ? (
-            <span className="flex items-center gap-1.5 text-accent">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent" />
+            <Badge tone="accent" className="statusbar-badge">
               {t('chat.awaitingAnswer', 'Awaiting answer')}
-            </span>
+            </Badge>
           ) : (
-            <span>{t('statusbar.ready', 'Ready')}</span>
+            <Badge tone="neutral" className="statusbar-badge">{t('statusbar.ready', 'Ready')}</Badge>
           )}
           <span className="text-border">|</span>
           <span className="capitalize">{modelName}</span>
@@ -136,20 +153,14 @@ export function StatusBar() {
           <McpStatusBadge />
           {showContext && (
             <div className="tabular flex items-center gap-1.5 min-w-[96px]">
-              <span style={{ color: contextColor }}>{contextLabel}</span>
-              <span
-                className="relative inline-flex w-12 h-1.5 rounded-full overflow-hidden"
-                style={{ background: 'color-mix(in srgb, var(--color-border) 75%, transparent)' }}
-              >
+              <Badge tone={contextTone} className="statusbar-badge">{contextLabel}</Badge>
+              <span className="statusbar-meter">
                 <span
-                  className={contextState === 'compacting' ? 'animate-pulse' : ''}
+                  className={`statusbar-meter__fill ${contextState === 'compacting' ? 'statusbar-meter__fill--compacting animate-pulse' : ''}`}
                   style={{
                     width: `${meterWidth}%`,
-                    background: contextColor,
-                    height: '100%',
-                    display: 'block',
-                    boxShadow: contextState === 'compacting' ? `0 0 8px ${contextColor}` : 'none',
-                  }}
+                    '--statusbar-meter-color': contextColor,
+                  } as MeterStyle}
                 />
               </span>
             </div>
@@ -206,7 +217,7 @@ export function StatusBar() {
               <div className="border-t border-border-subtle my-1" />
               <div className="flex justify-between">
                 <span className="text-text-muted">{t('statusbar.contextWindow', 'Context window')}</span>
-                <span className="text-text font-mono" style={{ color: contextColor }}>{contextDetail}</span>
+                <span className={`font-mono ${contextToneTextClass(contextTone)}`}>{contextDetail}</span>
               </div>
               {compactionCount > 0 && (
                 <div className="flex justify-between">

@@ -18,6 +18,7 @@ import {
 } from './chat/chat-input-utils'
 import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
+import { Badge, Button, Card, EmptyState, Icon, IconButton } from './ui'
 
 // Home is the welcoming landing surface for the simplified core product:
 // start a normal chat, @mention an agent, or pick up recent work.
@@ -41,12 +42,32 @@ const GREETING_FALLBACK = 'What shall we cowork on today?'
 // "everything at once".
 const MAX_SUGGESTIONS = 4
 const MAX_RECENT_THREADS = 3
+const HOME_COACHMARK_DISMISSED_KEY = 'open-cowork-home-coachmark-dismissed'
 
 // Upper bound on the composer's auto-grow. Past ~220px the textarea
 // starts to dominate the landing page and push everything below the
 // fold. The value matches ChatInput's own ceiling so the UX feels
 // consistent across Home → chat transitions.
 const MAX_COMPOSER_HEIGHT = 220
+
+const EXAMPLE_PROMPTS = [
+  {
+    title: 'Plan a release',
+    prompt: 'Draft a release plan for the next milestone.',
+  },
+  {
+    title: 'Review a change',
+    prompt: 'Review the recent changes and call out production risks.',
+  },
+  {
+    title: 'Create a workflow',
+    prompt: 'Help me turn a repeated task into a saved workflow.',
+  },
+  {
+    title: 'Investigate an issue',
+    prompt: 'Trace this bug from symptoms to a concrete fix.',
+  },
+]
 
 function interpolateCopy(value: string, vars?: Record<string, string | number>) {
   if (!vars) return value
@@ -65,6 +86,14 @@ function configuredCopy(
   const trimmed = configured?.trim()
   if (trimmed) return interpolateCopy(trimmed, vars)
   return t(key, fallback, vars)
+}
+
+function readHomeCoachmarkDismissed() {
+  try {
+    return window.localStorage.getItem(HOME_COACHMARK_DISMISSED_KEY) === 'true'
+  } catch {
+    return false
+  }
 }
 
 function HomeBackdrop() {
@@ -116,6 +145,7 @@ function HomeComposer({
   placeholder,
   specialistAgents,
   prefillAgent,
+  prefillPrompt,
   workspaceOptions,
   canPrompt = true,
   sendDisabledReason = null,
@@ -129,6 +159,7 @@ function HomeComposer({
   placeholder: string
   specialistAgents: MentionableAgent[]
   prefillAgent: { id: string; nonce: number } | null
+  prefillPrompt: { text: string; nonce: number } | null
   workspaceOptions?: { workspaceId: string }
   canPrompt?: boolean
   sendDisabledReason?: string | null
@@ -197,6 +228,20 @@ function HomeComposer({
     })
   }, [prefillAgent])
 
+  useEffect(() => {
+    if (!prefillPrompt) return
+    setInlinePicker(null)
+    setText(prefillPrompt.text)
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      const cursor = prefillPrompt.text.length
+      textarea.setSelectionRange(cursor, cursor)
+      autosize()
+    })
+  }, [prefillPrompt])
+
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim()
     if ((!trimmed && attachments.length === 0) || disabled) return
@@ -209,7 +254,7 @@ function HomeComposer({
       return
     }
     const directInvocation = resolveDirectAgentInvocation(trimmed, specialistAgents)
-    const promptText = directInvocation.text
+    const promptText = directInvocation.text || (attachments.length > 0 ? t('home.imageOnlyPrompt', 'Describe this image.') : '')
     if (!promptText && attachments.length === 0) return
     const currentAttachments = [...attachments]
     const promptAgent = directInvocation.agent || agentMode
@@ -426,6 +471,14 @@ function HomeComposer({
           className="flex-1 bg-transparent text-[15px] text-text placeholder:text-text-muted resize-none outline-none min-h-[28px] max-h-[220px] leading-[1.45]"
         />
       </div>
+      {attachments.length > 0 && !text.trim() && (
+        <div className="mt-2 flex justify-end">
+          <span className="home-image-hint">
+            <Icon name="file" size={16} />
+            {t('home.imageOnlyHint', "Will ask: 'Describe this image'")}
+          </span>
+        </div>
+      )}
       <div
         className="rounded-b-[18px] border-x border-b"
         style={{
@@ -533,16 +586,66 @@ function AgentSuggestions({ agents, onPick, label }: {
         {label}
       </span>
       {agents.slice(0, MAX_SUGGESTIONS).map((agent) => (
-        <button
+        <Button
           key={agent.id}
           type="button"
           onClick={() => onPick(agent.id)}
-          title={agent.description}
-          className="px-3 py-1.5 rounded-full text-[12px] text-text-secondary border border-border-subtle bg-surface hover:text-text hover:bg-surface-hover hover:border-border transition-colors cursor-pointer"
+          variant="ghost"
+          size="sm"
         >
           @{agent.label}
-        </button>
+        </Button>
       ))}
+    </div>
+  )
+}
+
+function FirstRunExamples({ onPick }: { onPick: (prompt: string) => void }) {
+  return (
+    <div className="w-full mt-7">
+      <EmptyState
+        icon="sparkles"
+        title={t('home.firstRunTitle', 'Start with an example')}
+        body={t('home.firstRunBody', 'Pick a prompt to prefill the composer, then adjust it for your work.')}
+      />
+      <div className="home-example-grid">
+        {EXAMPLE_PROMPTS.map((example) => (
+          <Card
+            key={example.title}
+            interactive
+            padding="md"
+            onClick={() => onPick(example.prompt)}
+            aria-label={`${example.title}: ${example.prompt}`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-accent">
+                <Icon name="sparkles" size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-text">{example.title}</span>
+                <span className="mt-1 block text-[11px] leading-snug text-text-muted">{example.prompt}</span>
+              </span>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HomeCoachmark({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="home-coachmark mt-7">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon name="sparkles" size={16} className="shrink-0 text-accent" />
+        <span className="min-w-0">{t('home.coachmark', 'Type a prompt, attach context, or @mention an agent — ⌘K for commands.')}</span>
+      </div>
+      <IconButton
+        icon="x"
+        label={t('home.dismissCoachmark', 'Dismiss Home tip')}
+        size="sm"
+        onClick={onDismiss}
+      />
     </div>
   )
 }
@@ -559,15 +662,14 @@ function RecentThreads({ threads, onOpen }: {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {threads.slice(0, MAX_RECENT_THREADS).map((thread) => (
-          <button
+          <Card
             key={thread.id}
-            type="button"
+            interactive
+            padding="md"
             onClick={() => onOpen(thread.id)}
-            className="group text-start rounded-lg p-3 border border-border-subtle bg-elevated hover:border-border hover:bg-surface-hover transition-colors cursor-pointer"
           >
             <div
-              className="h-px w-8 mb-3 transition-colors"
-              style={{ background: 'color-mix(in srgb, var(--color-accent) 34%, var(--color-border-subtle))' }}
+              className="home-recent-accent mb-3 transition-colors"
               aria-hidden="true"
             />
             <div className="text-[13px] font-medium text-text truncate">
@@ -576,7 +678,7 @@ function RecentThreads({ threads, onOpen }: {
             <div className="mt-1 text-[11px] text-text-muted truncate">
               {thread.updatedAt ? formatDate(thread.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
             </div>
-          </button>
+          </Card>
         ))}
       </div>
     </div>
@@ -590,15 +692,11 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
   const total = summary.total
 
   return (
-    <div
-      className="mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted"
-      style={{
-        background: 'color-mix(in srgb, var(--color-surface) 62%, transparent)',
-      }}
-    >
+    <div className="home-status-strip mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full border border-border-subtle text-[12px] text-text-muted">
       <span className="inline-flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full" style={{ background: total > 0 && connected === total ? 'var(--color-success)' : 'var(--color-warning)' }} />
-        {readyLabel}
+        <Badge tone={total > 0 && connected === total ? 'success' : 'warning'}>
+          {readyLabel}
+        </Badge>
       </span>
       <span className="opacity-40">·</span>
       <span>{t('home.statusStrip.mcps', '{{connected}}/{{total}} MCPs', { connected, total })}</span>
@@ -610,6 +708,8 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
   const sessions = useSessionStore((s) => s.sessions)
   const [submitting, setSubmitting] = useState(false)
   const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
+  const [promptPrefill, setPromptPrefill] = useState<{ text: string; nonce: number } | null>(null)
+  const [coachmarkDismissed, setCoachmarkDismissed] = useState(readHomeCoachmarkDismissed)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = useMemo(
@@ -632,6 +732,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
     () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive').slice(0, MAX_RECENT_THREADS),
     [sessions],
   )
+  const firstRun = recentThreads.length === 0
 
   const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
     if (submitting) return
@@ -658,6 +759,19 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
     setAgentPrefill({ id: agentId, nonce: Date.now() })
   }, [])
 
+  const handlePickExample = useCallback((prompt: string) => {
+    setPromptPrefill({ text: prompt, nonce: Date.now() })
+  }, [])
+
+  const handleDismissCoachmark = useCallback(() => {
+    setCoachmarkDismissed(true)
+    try {
+      window.localStorage.setItem(HOME_COACHMARK_DISMISSED_KEY, 'true')
+    } catch {
+      // Home coachmark dismissal is cosmetic; ignore storage failures.
+    }
+  }, [])
+
   const handleOpenThread = useCallback((sessionId: string) => {
     void onOpenThread(sessionId)
   }, [onOpenThread])
@@ -677,6 +791,9 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
     homeCopyVars,
   )
   const suggestionLabel = configuredCopy(homeBranding?.suggestionLabel, 'home.suggestions.title', 'Try', homeCopyVars)
+  const agentNudgeLabel = firstRun && !homeBranding?.suggestionLabel
+    ? t('home.agentNudge', '@mention an agent')
+    : suggestionLabel
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
   return (
@@ -698,6 +815,7 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
             placeholder={composerPlaceholder}
             specialistAgents={specialistAgents}
             prefillAgent={agentPrefill}
+            prefillPrompt={promptPrefill}
             workspaceOptions={workspaceOptions}
             canPrompt={workspaceSupport.flags.canPrompt}
             sendDisabledReason={workspaceSupport.flags.reasons.prompt}
@@ -708,7 +826,11 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
           />
         </div>
 
-        <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={suggestionLabel} />
+        {firstRun && !coachmarkDismissed && <HomeCoachmark onDismiss={handleDismissCoachmark} />}
+
+        {firstRun && <FirstRunExamples onPick={handlePickExample} />}
+
+        <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={agentNudgeLabel} />
 
         <RecentThreads threads={recentThreads} onOpen={handleOpenThread} />
 

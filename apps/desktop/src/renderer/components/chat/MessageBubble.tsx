@@ -3,6 +3,7 @@ import { MarkdownContent } from './MarkdownContent'
 import { MessageActions } from './MessageActions'
 import { ReasoningDisclosure } from './ReasoningDisclosure'
 import { t } from '../../helpers/i18n'
+import { Icon } from '../ui'
 
 import type { Message } from '../../stores/session'
 
@@ -36,7 +37,7 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
         <div className={`grid gap-1.5 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {images.map((img) => (
             <img key={attachmentRenderKey('image', img, imageKeys)} src={img.url} alt={img.filename}
-              className="rounded-lg object-cover w-full border border-white/10"
+              className="rounded-lg object-cover w-full border border-border-subtle"
               style={{ maxHeight: images.length === 1 ? 300 : 160 }} />
           ))}
         </div>
@@ -44,9 +45,8 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {files.map((f) => (
-            <div key={attachmentRenderKey('file', f, fileKeys)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
-              style={{ background: 'var(--color-surface-active)', color: 'var(--color-text-secondary)' }}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M7 1H3a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V4L7 1z"/><polyline points="7,1 7,4 10,4"/></svg>
+            <div key={attachmentRenderKey('file', f, fileKeys)} className="chat-attachment-file">
+              <Icon name="file" size={16} />
               {f.filename}
             </div>
           ))}
@@ -54,6 +54,10 @@ function AttachmentGrid({ attachments }: { attachments: import('../../stores/ses
       )}
     </div>
   )
+}
+
+function isLivePlaceholderId(id: string) {
+  return id.endsWith(':user:live') || id.endsWith(':assistant:live')
 }
 
 export const MessageBubble = memo(function MessageBubbleComponent({
@@ -67,6 +71,7 @@ export const MessageBubble = memo(function MessageBubbleComponent({
 }) {
   const isUser = message.role === 'user'
   const hasAttachments = message.attachments && message.attachments.length > 0
+  const isLivePlaceholder = isLivePlaceholderId(message.id)
 
   if (isUser) {
     return (
@@ -74,16 +79,17 @@ export const MessageBubble = memo(function MessageBubbleComponent({
         <div className="max-w-[80%] flex flex-col gap-2">
           {hasAttachments && <AttachmentGrid attachments={message.attachments!} />}
           {message.content && message.content !== 'Sent attachments' && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-ee-sm text-[13px] whitespace-pre-wrap self-end"
-              style={{ background: 'var(--color-surface-active)', color: 'var(--color-text)' }}>
+            <div className="chat-user-bubble">
               {message.content}
             </div>
           )}
           {!message.content && hasAttachments && (
-            <div className="px-4 py-2.5 rounded-2xl rounded-ee-sm text-[13px] self-end opacity-70"
-              style={{ background: 'var(--color-surface-active)', color: 'var(--color-text)' }}>
+            <div className="chat-user-bubble opacity-70">
               Sent {message.attachments!.length} attachment{message.attachments!.length > 1 ? 's' : ''}
             </div>
+          )}
+          {isLivePlaceholder && (
+            <div className="chat-message-sending">{t('chat.messageSending', 'Sending...')}</div>
           )}
         </div>
         {actionsEnabled && <MessageActions message={message} placement="right" />}
@@ -99,6 +105,9 @@ export const MessageBubble = memo(function MessageBubbleComponent({
           streaming={streaming}
         />
         {message.content && <MarkdownContent text={message.content} streaming={streaming} />}
+        {isLivePlaceholder && !message.content && (
+          <div className="chat-message-sending">{t('chat.messageSending', 'Sending...')}</div>
+        )}
       </div>
       {actionsEnabled && <MessageActions message={message} placement="left" />}
     </article>

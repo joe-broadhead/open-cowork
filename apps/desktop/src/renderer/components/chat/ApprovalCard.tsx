@@ -1,6 +1,7 @@
 import type { PendingApproval } from '../../stores/session'
 import { useSessionStore } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { Badge, Button, Card, Icon } from '../ui'
 
 // Map tool names to user-friendly descriptions
 function describeAction(tool: string, input: Record<string, unknown>): { verb: string; detail: string } {
@@ -31,7 +32,15 @@ function describeAction(tool: string, input: Record<string, unknown>): { verb: s
   return { verb: t('approval.allowAction', 'Allow action'), detail: tool }
 }
 
-export function ApprovalCard({ approval }: { approval: PendingApproval }) {
+export function ApprovalCard({
+  approval,
+  queueCount = 1,
+  onOpenSource,
+}: {
+  approval: PendingApproval
+  queueCount?: number
+  onOpenSource?: () => void
+}) {
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const respond = async (allowed: boolean) => {
     try {
@@ -46,28 +55,34 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const { verb, detail } = describeAction(approval.tool, approval.input)
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--color-amber) 25%, var(--color-border))' }}>
-      <div className="flex items-center justify-between px-4 py-3">
+    <Card className="chat-approval-card overflow-hidden" padding="md">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--color-amber) 12%, transparent)' }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--color-amber)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7 1.5L12 11.5H2L7 1.5Z" /><line x1="7" y1="5.5" x2="7" y2="8" /><circle cx="7" cy="9.5" r="0.4" fill="var(--color-amber)" />
-            </svg>
-          </div>
+          <span className="chat-approval-icon">
+            <Icon name="alert-circle" size={16} />
+          </span>
           <div>
-            <div className="text-[13px] font-medium text-text">{verb}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[13px] font-medium text-text">{verb}</div>
+              {queueCount > 1 ? <Badge tone="warning">{t('approval.queueCount', '{{count}} pending', { count: queueCount })}</Badge> : null}
+            </div>
             {detail && <div className="text-[11px] text-text-muted">{detail}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => respond(false)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-text-secondary bg-surface-hover hover:bg-surface-active transition-colors cursor-pointer">
+          {onOpenSource ? (
+            <Button onClick={onOpenSource} size="sm" variant="ghost" rightIcon="external-link">
+              {t('approval.openSource', 'Source')}
+            </Button>
+          ) : null}
+          <Button onClick={() => respond(false)} size="sm" variant="danger">
             {t('approval.deny', 'Deny')}
-          </button>
-          <button onClick={() => respond(true)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-white transition-colors cursor-pointer" style={{ background: 'var(--color-green)' }}>
+          </Button>
+          <Button onClick={() => respond(true)} size="sm" variant="primary">
             {t('approval.approve', 'Approve')}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

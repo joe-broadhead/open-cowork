@@ -8,6 +8,7 @@ import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId } from '../../stores/session-w
 import { supportEntry, supportAllows, useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
 import { t } from '../../helpers/i18n'
+import { Button, Card, Icon, IconButton, Input, SegmentedControl } from '../ui'
 
 function describeThreadError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -69,14 +70,20 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
     : canExposeLocalPaths
       ? localFilesReason
       : null
-  const blankHint = canExposeLocalPaths
-    ? t('newThread.blankHint', 'Local workspace - start with Build and the currently available agents, tools, and skills')
-    : t('newThread.blankCloudHint', 'Cloud-safe action - start a synced cloud thread')
+  const blankDisabledReason = cloudCreateReason || t('newThread.blankUnavailableReason', 'Thread creation is unavailable for this workspace.')
+  const blankHint = blankDisabled
+    ? `${t('newThread.unavailable', 'Unavailable')} - ${blankDisabledReason}`
+    : canExposeLocalPaths
+      ? t('newThread.blankHint', 'Local workspace - start with Build and the currently available agents, tools, and skills')
+      : t('newThread.blankCloudHint', 'Cloud-safe action - start a synced cloud thread')
   const projectHint = projectDisabled
     ? `${canExposeLocalPaths ? t('newThread.localOnlyAction', 'Local-only action') : t('newThread.cloudAction', 'Cloud action')} - ${projectDisabledReason || ''}`
     : canExposeLocalPaths
       ? t('newThread.projectHint', 'Local-only action - choose a directory the agent can read and edit')
       : t('newThread.cloudProjectHint', 'Cloud-safe action - choose Git or upload an explicit snapshot')
+  const createProjectDisabledReason = projectMode === 'snapshot' && !snapshotInventory && !projectBusy
+    ? t('newThread.snapshotRequired', 'Choose a snapshot directory first.')
+    : null
 
   const closeProjectDialog = () => {
     setShowCloudProjectDialog(false)
@@ -188,16 +195,16 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
 
   return (
     <div className="relative">
-      <button
+      <Button
         onClick={() => setShowMenu(!showMenu)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-text-secondary rounded-lg border border-border-subtle hover:bg-surface-hover hover:text-text transition-colors cursor-pointer"
+        variant="secondary"
+        size="sm"
+        fullWidth
+        leftIcon="plus"
+        className="new-thread-trigger"
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <line x1="6" y1="2" x2="6" y2="10" />
-          <line x1="2" y1="6" x2="10" y2="6" />
-        </svg>
         {t('sidebar.newThread', 'New Thread')}
-      </button>
+      </Button>
 
       {showMenu && (
         <>
@@ -205,23 +212,23 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
           <div
             className="absolute start-0 end-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
           >
-            <button
+            <Card
+              interactive
+              padding="sm"
               onClick={() => createThread()}
               disabled={blankDisabled}
-              title={blankDisabled ? cloudCreateReason : undefined}
-              className="w-full text-start px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="new-thread-menu-option"
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" className="text-text-muted">
-                <circle cx="7" cy="7" r="5" />
-                <path d="M7 4.5v5M4.5 7h5" />
-              </svg>
+              <Icon name="plus" size={16} className="text-text-muted" />
               <div>
                 <div className="font-medium">{t('newThread.blank', 'Blank thread')}</div>
                 <div className="text-[10px] text-text-muted mt-px">{blankHint}</div>
               </div>
-            </button>
-            <div className="border-t" style={{ borderColor: 'var(--color-border-subtle)' }} />
-            <button
+            </Card>
+            <div className="new-thread-menu-separator" />
+            <Card
+              interactive
+              padding="sm"
               onClick={async () => {
                 if (projectDisabled) {
                   addGlobalError(projectDisabledReason || t('newThread.projectBlocked', 'Project thread creation is disabled.'))
@@ -244,17 +251,14 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 }
               }}
               disabled={projectDisabled}
-              title={projectDisabled ? projectDisabledReason || undefined : undefined}
-              className="w-full text-start px-3 py-2.5 text-[12px] text-text hover:bg-surface-hover cursor-pointer transition-colors flex items-center gap-2.5 disabled:cursor-not-allowed disabled:opacity-50"
+              className="new-thread-menu-option"
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" className="text-text-muted">
-                <path d="M2 3.5C2 2.67 2.67 2 3.5 2H5.5L7 3.5H10.5C11.33 3.5 12 4.17 12 5V10.5C12 11.33 11.33 12 10.5 12H3.5C2.67 12 2 11.33 2 10.5V3.5Z" />
-              </svg>
+              <Icon name="folder" size={16} className="text-text-muted" />
               <div>
                 <div className="font-medium">{t('newThread.project', 'Open Project')}</div>
                 <div className="text-[10px] text-text-muted mt-px">{projectHint}</div>
               </div>
-            </button>
+            </Card>
           </div>
         </>
       )}
@@ -267,76 +271,72 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 <div className="text-[13px] font-semibold text-text">{t('newThread.cloudProjectTitle', 'Cloud project source')}</div>
                 <div className="text-[11px] text-text-muted mt-1">{t('newThread.cloudProjectSubtitle', 'Start a cloud thread from Git or an explicit uploaded snapshot.')}</div>
               </div>
-              <button
-                type="button"
+              <IconButton
+                icon="x"
+                label={t('common.close', 'Close')}
                 onClick={closeProjectDialog}
-                className="px-2 py-1 text-[12px] rounded-md text-text-muted hover:bg-surface-hover"
-              >
-                {t('common.close', 'Close')}
-              </button>
+                size="sm"
+              />
             </div>
 
-            <div
-              className="mt-4 grid grid-cols-2 gap-2 rounded-lg p-1"
-              style={{ background: 'var(--color-surface-hover)' }}
-            >
-              <button
-                type="button"
-                onClick={() => setProjectMode('git')}
-                className={`rounded-md px-3 py-1.5 text-[12px] ${projectMode === 'git' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
-              >
-                {t('newThread.gitSource', 'Git source')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setProjectMode('snapshot')}
-                className={`rounded-md px-3 py-1.5 text-[12px] ${projectMode === 'snapshot' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}
-              >
-                {t('newThread.snapshotSource', 'Uploaded snapshot')}
-              </button>
-            </div>
+            <SegmentedControl
+              className="mt-4 w-full"
+              label={t('newThread.cloudProjectSourceMode', 'Cloud project source mode')}
+              value={projectMode}
+              onChange={(value) => setProjectMode(value as 'git' | 'snapshot')}
+              options={[
+                { value: 'git', label: t('newThread.gitSource', 'Git source') },
+                { value: 'snapshot', label: t('newThread.snapshotSource', 'Uploaded snapshot') },
+              ]}
+            />
 
             {projectMode === 'git' ? (
               <div className="mt-4 space-y-3">
-                <input
+                <Input
                   value={gitUrl}
                   onChange={(event) => setGitUrl(event.target.value)}
                   placeholder="https://github.com/org/repo.git"
-                  className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] text-text outline-none focus:border-border"
+                  aria-label={t('newThread.gitUrlLabel', 'Git repository URL')}
+                  size="sm"
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <Input
                     value={gitRef}
                     onChange={(event) => setGitRef(event.target.value)}
                     placeholder={t('newThread.gitRefPlaceholder', 'branch, tag, or commit')}
-                    className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] text-text outline-none focus:border-border"
+                    aria-label={t('newThread.gitRefLabel', 'Git ref')}
+                    size="sm"
                   />
-                  <input
+                  <Input
                     value={gitSubdirectory}
                     onChange={(event) => setGitSubdirectory(event.target.value)}
                     placeholder={t('newThread.gitSubdirPlaceholder', 'subdirectory')}
-                    className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] text-text outline-none focus:border-border"
+                    aria-label={t('newThread.gitSubdirLabel', 'Git subdirectory')}
+                    size="sm"
                   />
                 </div>
-                <input
+                <Input
                   value={gitCredentialRef}
                   onChange={(event) => setGitCredentialRef(event.target.value)}
                   placeholder={t('newThread.gitCredentialPlaceholder', 'credential ref')}
-                  className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-[12px] text-text outline-none focus:border-border"
+                  aria-label={t('newThread.gitCredentialLabel', 'Git credential reference')}
+                  size="sm"
                 />
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                <button
+                <Button
                   type="button"
                   onClick={chooseSnapshotDirectory}
                   disabled={projectBusy}
-                  className="w-full rounded-md border border-border-subtle px-3 py-2 text-[12px] text-text hover:bg-surface-hover disabled:opacity-50"
+                  fullWidth
+                  size="sm"
+                  variant="secondary"
                 >
                   {snapshotDirectory
                     ? t('newThread.chooseDifferentSnapshot', 'Choose different directory')
                     : t('newThread.chooseSnapshot', 'Choose directory')}
-                </button>
+                </Button>
                 {snapshotInventory && (
                   <div className="rounded-lg border border-border-subtle p-3 text-[11px] text-text-muted">
                     <div className="text-text">
@@ -358,34 +358,31 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             )}
 
             {projectError && (
-              <div
-                className="mt-3 rounded-md border px-3 py-2 text-[12px]"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--color-red) 35%, transparent)',
-                  background: 'color-mix(in srgb, var(--color-red) 10%, transparent)',
-                  color: 'var(--color-red)',
-                }}
-              >
+              <div className="new-thread-error mt-3 rounded-md border px-3 py-2 text-[12px]">
                 {projectError}
               </div>
             )}
 
             <div className="mt-4 flex justify-end gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={closeProjectDialog}
-                className="rounded-md px-3 py-2 text-[12px] text-text-muted hover:bg-surface-hover"
+                size="sm"
+                variant="ghost"
               >
                 {t('common.cancel', 'Cancel')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                disabled={projectBusy || (projectMode === 'snapshot' && !snapshotInventory)}
+                disabled={projectBusy}
+                disabledReason={createProjectDisabledReason}
                 onClick={projectMode === 'git' ? createGitCloudThread : createSnapshotCloudThread}
-                className="rounded-md bg-accent px-3 py-2 text-[12px] font-medium text-accent-foreground disabled:opacity-50"
+                size="sm"
+                variant="primary"
+                loading={projectBusy}
               >
-                {projectBusy ? t('common.working', 'Working...') : t('newThread.createCloudProject', 'Create thread')}
-              </button>
+                {t('newThread.createCloudProject', 'Create thread')}
+              </Button>
             </div>
           </div>
         </>

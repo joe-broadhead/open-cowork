@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ApprovalCard } from './ApprovalCard'
 import type { PendingApproval } from '../../stores/session'
 
@@ -30,5 +30,15 @@ describe('ApprovalCard', () => {
     await waitFor(() => expect(window.coworkApi.permission.respond).toHaveBeenCalledTimes(2))
     expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(1, 'permission-1', true, 'session-1', { workspaceId: 'local' })
     expect(window.coworkApi.permission.respond).toHaveBeenNthCalledWith(2, 'permission-1', false, 'session-1', { workspaceId: 'local' })
+  })
+
+  it('shows an optional source action for the triggering tool', async () => {
+    const user = userEvent.setup()
+    const onOpenSource = vi.fn()
+    render(<ApprovalCard approval={approval} onOpenSource={onOpenSource} />)
+
+    await user.click(screen.getByRole('button', { name: /Source/ }))
+
+    expect(onOpenSource).toHaveBeenCalledTimes(1)
   })
 })

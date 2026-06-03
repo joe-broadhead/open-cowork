@@ -1,12 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSessionStore } from '../../stores/session'
 import { WORKSPACE_SUPPORT_APIS, unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { ChatInput } from './ChatInput'
 
 const HISTORY_KEY = 'open-cowork-prompt-history'
+const HINTS_KEY = 'open-cowork-chat-keyboard-hints-dismissed'
+
+beforeEach(() => {
+  window.localStorage.clear()
+})
 
 function seedCurrentSession() {
   useWorkspaceSupportStore.setState({
@@ -184,7 +189,7 @@ describe('ChatInput', () => {
 
     await waitFor(() => expect(textarea).toHaveValue(longPrompt))
     await waitFor(() => expect(textarea.style.height).toBe('240px'))
-    expect(textarea.style.maxHeight).toBe('8lh')
+    expect(textarea.style.getPropertyValue('--ui-textarea-max-height')).toBe('8lh')
 
     scrollHeight = 48
     textarea.setSelectionRange(longPrompt.length, longPrompt.length)
@@ -393,6 +398,46 @@ describe('ChatInput', () => {
       )
     })
     expect(api.session.setComposerPreferences).not.toHaveBeenCalled()
+  })
+
+  it('renders and persists the dismissible keyboard hint bar', async () => {
+    const user = userEvent.setup()
+    installModelRuntime()
+    seedCurrentSession()
+
+    const { unmount } = render(<ChatInput />)
+
+    expect(screen.getByText('Send')).toBeInTheDocument()
+    expect(screen.getByText('New line')).toBeInTheDocument()
+    expect(screen.getByText('Plan/Build')).toBeInTheDocument()
+    expect(screen.getByText('Stop')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Dismiss keyboard hints' }))
+
+    expect(window.localStorage.getItem(HINTS_KEY)).toBe('true')
+    expect(screen.queryByText('New line')).not.toBeInTheDocument()
+
+    unmount()
+    render(<ChatInput />)
+    expect(screen.queryByText('New line')).not.toBeInTheDocument()
+  })
+
+  it('stops active generation with Escape from the composer', async () => {
+    const api = installModelRuntime()
+    seedCurrentSession()
+    useSessionStore.setState((state) => ({
+      currentView: {
+        ...state.currentView,
+        isGenerating: true,
+      },
+    }))
+
+    render(<ChatInput />)
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+
+    await waitFor(() => {
+      expect(api.session.abort).toHaveBeenCalledWith('session-1')
+    })
   })
 
   it('fails closed for cloud prompt submission when workspace support cannot load', async () => {

@@ -110,6 +110,7 @@ function createStartThreadMock() {
 
 describe('HomePage', () => {
   beforeEach(() => {
+    window.localStorage.clear()
     useSessionStore.getState().setAgentMode('build')
   })
 
@@ -259,6 +260,8 @@ describe('HomePage', () => {
     )
 
     await user.click(await screen.findByRole('button', { name: /Think Auto/i }))
+    expect(await screen.findByText('Keep reasoning concise for simple edits and quick replies.')).toBeTruthy()
+    expect(await screen.findByText('Use maximum effort for risky, multi-step, or deeply coupled changes.')).toBeTruthy()
     await user.click(await screen.findByRole('option', { name: /XHigh/i }))
     expect(screen.getByRole('button', { name: /Think XHigh/i })).toBeTruthy()
 
@@ -306,6 +309,54 @@ describe('HomePage', () => {
         mime: 'text/plain',
       })
       expect(attachment?.url).toContain('data:text/plain')
+      expect(agent).toBe('build')
+    })
+  })
+
+  it('prefills the Home composer from first-run example prompt cards', async () => {
+    const user = userEvent.setup()
+    installHomeRuntime()
+
+    render(
+      <HomePage
+        brandName="Open Cowork"
+        onStartThread={createStartThreadMock()}
+        onOpenThread={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Plan a release/i }))
+
+    expect(screen.getByPlaceholderText('Ask anything, or @mention an agent')).toHaveValue('Draft a release plan for the next milestone.')
+    expect(screen.getByText('@mention an agent')).toBeTruthy()
+    expect(screen.getByText(/⌘K for commands/)).toBeTruthy()
+  })
+
+  it('sends the explicit image-only default prompt from Home', async () => {
+    const user = userEvent.setup()
+    const onStartThread = createStartThreadMock()
+    installHomeRuntime()
+
+    const { container } = render(
+      <HomePage
+        brandName="Open Cowork"
+        onStartThread={onStartThread}
+        onOpenThread={vi.fn()}
+      />,
+    )
+
+    const input = container.querySelector('input[type="file"]')
+    expect(input).toBeInstanceOf(HTMLInputElement)
+    const file = new File(['fake image'], 'screenshot.png', { type: 'image/png' })
+    await user.upload(input as HTMLInputElement, file)
+
+    expect(await screen.findByText("Will ask: 'Describe this image'")).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => {
+      const [text, attachments, agent] = onStartThread.mock.calls[0]
+      expect(text).toBe('Describe this image.')
+      expect(attachments ?? []).toHaveLength(1)
       expect(agent).toBe('build')
     })
   })
