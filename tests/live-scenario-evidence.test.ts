@@ -43,6 +43,25 @@ test('live scenario suite validation requires five fully-described scenarios', (
   assert.throws(() => validateScenarioSuite(suite([scenario(), scenario(), scenario({ id: 'three' }), scenario({ id: 'four' }), scenario({ id: 'five' })])), /Duplicate/)
 })
 
+test('release live scenario node tests use the repo node runtime contract', () => {
+  const releaseSuite = JSON.parse(readFileSync('deploy/scenarios/local-desktop-scenarios.json', 'utf8'))
+  validateScenarioSuite(releaseSuite)
+
+  for (const releaseScenario of releaseSuite.scenarios) {
+    if (releaseScenario.command[0] !== 'node' || !releaseScenario.command.includes('--test')) continue
+    assert.equal(
+      releaseScenario.command.includes('--experimental-sqlite'),
+      true,
+      `${releaseScenario.id} must pass --experimental-sqlite for Node 22.12 CI`,
+    )
+    assert.equal(
+      releaseScenario.command.includes('--experimental-strip-types'),
+      true,
+      `${releaseScenario.id} must pass --experimental-strip-types for TypeScript tests`,
+    )
+  }
+})
+
 test('live scenario evidence runner writes redacted structured reports', () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-live-scenarios-'))
   try {

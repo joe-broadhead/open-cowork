@@ -16,7 +16,7 @@
       "steps": ["Run runtime status tests", "Run diagnostics export tail tests"],
       "expectedOutcomes": ["Runtime status keeps ready/error compatibility", "Doctor timeline is emitted", "Diagnostics output redacts token-like values"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/runtime-status.test.ts", "tests/diagnostics-export.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/runtime-status.test.ts", "tests/diagnostics-export.test.ts"]
     },
     {
       "id": "cloud-projection-fence-contract",
@@ -31,7 +31,7 @@
       "steps": ["Run cloud session projection contract tests"],
       "expectedOutcomes": ["Projected event types reduce into SessionView", "Fence/checkpoint identity is exact", "Automation envelopes are versioned"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/cloud-session-projection-contract.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/cloud-session-projection-contract.test.ts"]
     },
     {
       "id": "capability-bundle-dry-run-policy",
@@ -46,7 +46,7 @@
       "steps": ["Run bundle manifest and planner tests"],
       "expectedOutcomes": ["Unsupported product modes fail closed", "Dangerous MCP URL and stdio settings are blocked", "User-owned resources are preserved"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/capability-bundle-policy.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/capability-bundle-policy.test.ts"]
     },
     {
       "id": "desktop-pairing-command-safety",
@@ -61,7 +61,7 @@
       "steps": ["Run desktop pairing service and transport tests"],
       "expectedOutcomes": ["Pairing commands require exact pairing state", "Audit output stays remote-safe", "Transport failures do not bypass local execution policy"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/desktop-pairing-service.test.ts", "tests/desktop-pairing-transport.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/desktop-pairing-service.test.ts", "tests/desktop-pairing-transport.test.ts"]
     },
     {
       "id": "workspace-sandbox-portability-policy",
@@ -76,7 +76,7 @@
       "steps": ["Run runtime portability and checkpoint store tests"],
       "expectedOutcomes": ["Secret-looking mounts are rejected", "Docker and Apple Container command plans are hardened and redacted", "Blocked plans do not invoke a runner", "Checkpoint writes are fenced", "Portability proof remains deterministic"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/runtime-portability.test.ts", "tests/runtime-portability-proof-store.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/runtime-portability.test.ts", "tests/runtime-portability-proof-store.test.ts"]
     },
     {
       "id": "control-plane-foundation-contracts",
@@ -91,7 +91,7 @@
       "steps": ["Run resource identity, permission inheritance, file-session, headless host, and semantic UI bridge tests"],
       "expectedOutcomes": ["Unknown identities do not fall back", "Delegated read-only agents cannot regain write authority", "File sessions deny traversal and sensitive paths", "Headless check/status/doctor state is loopback-only and redacted", "Semantic UI tools require tokens and execute only allowlisted redacted actions"],
       "evidence": ["node test output", "live-scenario-evidence.json"],
-      "command": ["node", "--no-warnings", "--experimental-strip-types", "--test", "tests/resource-identity.test.ts", "tests/permission-inheritance.test.ts", "tests/file-session.test.ts", "tests/headless-host.test.ts", "tests/semantic-ui-bridge.test.ts"]
+      "command": ["node", "--no-warnings", "--experimental-sqlite", "--experimental-strip-types", "--test", "tests/resource-identity.test.ts", "tests/permission-inheritance.test.ts", "tests/file-session.test.ts", "tests/headless-host.test.ts", "tests/semantic-ui-bridge.test.ts"]
     }
   ]
 }
