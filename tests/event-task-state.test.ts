@@ -286,6 +286,40 @@ test('SessionTaskStateStore keeps hierarchy indexes isolated per instance', () =
   assert.equal(first.consumePendingPromptEcho('child-session', 'pending echo'), 'pending echo')
 })
 
+test('SessionTaskStateStore returns task run snapshots at public boundaries', () => {
+  const store = new SessionTaskStateStore()
+  store.trackParentSession('root-session')
+  const registered = store.registerTaskRun({
+    id: 'task-copy',
+    rootSessionId: 'root-session',
+    parentSessionId: 'root-session',
+    title: 'Original title',
+    agent: 'research',
+    childSessionId: null,
+    status: 'queued',
+  })
+
+  registered.title = 'Mutated registration result'
+  registered.status = 'complete'
+  assert.equal(store.getTaskRun('task-copy')?.title, 'Original title')
+  assert.equal(store.getTaskRun('task-copy')?.status, 'queued')
+
+  const bound = store.queueOrBindChildSession('root-session', 'child-session')
+  assert.ok(bound)
+  bound.childSessionId = 'mutated-child'
+  assert.equal(store.getTaskRun('task-copy')?.childSessionId, 'child-session')
+
+  const updated = store.updateTaskRun('task-copy', { status: 'running' })
+  assert.ok(updated)
+  updated.status = 'error'
+  assert.equal(store.getTaskRun('task-copy')?.status, 'running')
+
+  const read = store.getTaskRun('task-copy')
+  assert.ok(read)
+  read.title = 'Mutated read result'
+  assert.equal(store.getTaskRun('task-copy')?.title, 'Original title')
+})
+
 test('consumes pending prompt echo incrementally', () => {
   rememberSubmittedPrompt('session-1', 'awesome')
 

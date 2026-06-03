@@ -32,6 +32,10 @@ type QueuedChildSessionMeta = {
   id: string
 }
 
+function cloneTaskRunMeta(taskRun: TaskRunMeta): TaskRunMeta {
+  return { ...taskRun }
+}
+
 // Local cache fed by OpenCode session/task events. OpenCode remains the
 // source of truth; this store only keeps enough indexed state for synchronous
 // event projection without calling the SDK from every event handler.
@@ -115,7 +119,7 @@ export class SessionTaskStateStore {
         && (taskRun.status === 'queued' || taskRun.status === 'running')
     })
 
-    return candidates.length === 1 ? candidates[0] : null
+    return candidates.length === 1 ? cloneTaskRunMeta(candidates[0]) : null
   }
 
   bindTaskRunToChild(taskRunId: string, childSessionId: string) {
@@ -165,19 +169,23 @@ export class SessionTaskStateStore {
         if (resolvedTaskRunId !== taskRunId) this.taskRunAliases.set(resolvedTaskRunId, existingTaskRunId)
         this.removePendingTaskRun(resolvedTaskRunId)
         this.removeQueuedChildSession(childSessionId)
-        return mergedTaskRun
+        return cloneTaskRunMeta(mergedTaskRun)
       }
     }
 
     const taskRun = this.taskRuns.get(resolvedTaskRunId)
     if (!taskRun) return null
-    taskRun.childSessionId = childSessionId
-    taskRun.parentSessionId = childParentSessionId || taskRun.parentSessionId || taskRun.rootSessionId
+    const nextTaskRun: TaskRunMeta = {
+      ...taskRun,
+      childSessionId,
+      parentSessionId: childParentSessionId || taskRun.parentSessionId || taskRun.rootSessionId,
+    }
+    this.taskRuns.set(resolvedTaskRunId, nextTaskRun)
     this.childSessionToTaskRunId.set(childSessionId, resolvedTaskRunId)
     if (resolvedTaskRunId !== taskRunId) this.taskRunAliases.set(taskRunId, resolvedTaskRunId)
     this.removePendingTaskRun(resolvedTaskRunId)
     this.removeQueuedChildSession(childSessionId)
-    return taskRun
+    return cloneTaskRunMeta(nextTaskRun)
   }
 
   registerTaskRun(taskRun: TaskRunMeta) {
@@ -193,20 +201,20 @@ export class SessionTaskStateStore {
       this.childSessionToTaskRunId.set(normalizedTaskRun.childSessionId, normalizedTaskRun.id)
       this.removePendingTaskRun(normalizedTaskRun.id)
       this.removeQueuedChildSession(normalizedTaskRun.childSessionId)
-      return normalizedTaskRun
+      return cloneTaskRunMeta(normalizedTaskRun)
     }
 
     const queuedChild = this.takeQueuedChildSession(parentQueueKey)
     if (queuedChild) {
       const bound = this.bindTaskRunToChild(normalizedTaskRun.id, queuedChild.id)
-      return bound || this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
+      return bound || cloneTaskRunMeta(this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun)
     }
 
     if (!normalizedTaskRun.childSessionId && !isTerminalTaskStatus(normalizedTaskRun.status)) {
       pushUniqueQueueValue(this.pendingTaskRunsByParent, parentQueueKey, normalizedTaskRun.id)
     }
 
-    return this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun
+    return cloneTaskRunMeta(this.taskRuns.get(normalizedTaskRun.id) || normalizedTaskRun)
   }
 
   queueOrBindChildSession(
@@ -219,7 +227,7 @@ export class SessionTaskStateStore {
       const existing = this.taskRuns.get(existingTaskRunId)
       if (existing) {
         this.removeQueuedChildSession(childSessionId)
-        return existing
+        return cloneTaskRunMeta(existing)
       }
       this.childSessionToTaskRunId.delete(childSessionId)
     }
@@ -246,7 +254,10 @@ export class SessionTaskStateStore {
     parentSessionId?: string | null,
   ) {
     const existingTaskRunId = this.childSessionToTaskRunId.get(childSessionId)
-    if (existingTaskRunId) return this.taskRuns.get(existingTaskRunId) || null
+    if (existingTaskRunId) {
+      const existing = this.taskRuns.get(existingTaskRunId)
+      return existing ? cloneTaskRunMeta(existing) : null
+    }
 
     const immediateParentSessionId = parentSessionId || this.getImmediateParentSession(childSessionId) || rootSessionId
     const fallback: TaskRunMeta = {
@@ -262,7 +273,7 @@ export class SessionTaskStateStore {
     }
     this.taskRuns.set(fallback.id, fallback)
     this.childSessionToTaskRunId.set(childSessionId, fallback.id)
-    return fallback
+    return cloneTaskRunMeta(fallback)
   }
 
   updateTaskRun(taskRunId: string, patch: Partial<TaskRunMeta>) {
@@ -276,12 +287,13 @@ export class SessionTaskStateStore {
     } else if (isTerminalTaskStatus(next.status)) {
       this.removePendingTaskRun(next.id)
     }
-    return next
+    return cloneTaskRunMeta(next)
   }
 
   getTaskRun(taskRunId: string | null | undefined) {
     if (!taskRunId) return null
-    return this.taskRuns.get(taskRunId) || null
+    const taskRun = this.taskRuns.get(taskRunId)
+    return taskRun ? cloneTaskRunMeta(taskRun) : null
   }
 
   getTaskRunIdForChild(sessionId: string | null | undefined) {

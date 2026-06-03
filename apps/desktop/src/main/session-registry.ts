@@ -58,6 +58,27 @@ export function toDisplayDirectory(opencodeDirectory: string) {
   return normalized === resolve(getRuntimeHomeDir()) || isSandboxWorkspaceDir(normalized) ? null : normalized
 }
 
+function cloneSessionRecord(record: SessionRecord): SessionRecord {
+  try {
+    return structuredClone(record)
+  } catch {
+    return {
+      ...record,
+      summary: record.summary
+        ? {
+            ...record.summary,
+            tokens: { ...record.summary.tokens },
+            agentBreakdown: record.summary.agentBreakdown?.map((entry) => ({
+              ...entry,
+              tokens: { ...entry.tokens },
+            })),
+          }
+        : null,
+      changeSummary: record.changeSummary ? { ...record.changeSummary } : null,
+    }
+  }
+}
+
 function getManagedSessionIdsFromLogs() {
   const logDir = getLogDir()
   if (!existsSync(logDir)) return new Set<string>()
@@ -167,13 +188,16 @@ function scheduleRegistrySave() {
 }
 
 export function listSessionRecords() {
-  return Array.from(loadRegistryMap().values()).sort((a, b) => {
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  })
+  return Array.from(loadRegistryMap().values())
+    .map(cloneSessionRecord)
+    .sort((a, b) => {
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    })
 }
 
 export function getSessionRecord(id: string) {
-  return loadRegistryMap().get(id) || null
+  const record = loadRegistryMap().get(id)
+  return record ? cloneSessionRecord(record) : null
 }
 
 export function upsertSessionRecord(record: SessionRecord) {
@@ -187,7 +211,7 @@ export function upsertSessionRecord(record: SessionRecord) {
   } else {
     scheduleRegistrySave()
   }
-  return map.get(record.id) || null
+  return cloneSessionRecord(next)
 }
 
 export function updateSessionRecord(id: string, patch: Partial<Omit<SessionRecord, 'id'>>) {
@@ -202,9 +226,11 @@ export function updateSessionRecord(id: string, patch: Partial<Omit<SessionRecor
   if (!('directory' in patch) || patch.directory === undefined) {
     next.directory = toDisplayDirectory(next.opencodeDirectory)
   }
-  map.set(id, next)
+  const normalized = normalizeStoredSessionRecord(next, normalizeOpencodeDirectory, toDisplayDirectory)
+  if (!normalized) return null
+  map.set(id, normalized)
   scheduleRegistrySave()
-  return next
+  return cloneSessionRecord(normalized)
 }
 
 export function touchSessionRecord(id: string, updatedAt = new Date().toISOString()) {

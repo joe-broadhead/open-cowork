@@ -40,6 +40,7 @@ import {
   normalizeToolStatus,
 } from './session-engine-events.ts'
 import { createSessionViewSequence, type SessionViewSequence } from './session-view-sequence.ts'
+import { nextSessionScopedFallbackId } from './runtime-fallback-ids.ts'
 
 export { MAX_SEEN_COST_EVENT_IDS_PER_SESSION } from './session-cost-event-tracker.ts'
 
@@ -411,7 +412,7 @@ export class SessionEngine {
         break
       case 'tool_call':
         this.updateSessionState(sessionId, (current) => {
-          const toolId = typeof data.id === 'string' ? data.id : `${sessionId}:tool:${this.nowMs()}`
+          const toolId = typeof data.id === 'string' ? data.id : nextSessionScopedFallbackId(sessionId, 'tool')
           const toolStatus = normalizeToolStatus(data.status)
           const toolName = typeof data.name === 'string' ? data.name : undefined
           if (data.taskRunId) {

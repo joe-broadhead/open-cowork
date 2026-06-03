@@ -3,15 +3,58 @@ import assert from 'node:assert/strict'
 import {
   getRuntimeStatus,
   isRuntimeReady,
+  reduceRuntimeStatus,
   recordRuntimeComponentVerification,
   recordRuntimeDoctorCheck,
   recordRuntimeReadinessPhase,
   resetRuntimeStatus,
+  RuntimeStatusStore,
   setRuntimeError,
   setRuntimeReady,
+  type RuntimeStatusState,
 } from '../apps/desktop/src/main/runtime-status.ts'
 import { verifyRuntimeComponentManifest } from '../apps/desktop/src/main/runtime-component-manifest.ts'
 import { RUNTIME_COMPONENT_MANIFEST_FORMAT } from '../packages/shared/src/runtime.ts'
+
+test('runtime status reducer derives phase changes without mutating prior state', () => {
+  const initial: RuntimeStatusState = {
+    ready: false,
+    error: null,
+    phase: 'environment',
+    updatedAt: '2026-06-03T10:00:00.000Z',
+    timeline: [],
+    checks: [],
+    components: null,
+  }
+
+  const next = reduceRuntimeStatus(initial, {
+    type: 'record-readiness-phase',
+    phase: 'config-build',
+    message: 'Config ready',
+    timestamp: '2026-06-03T10:00:01.000Z',
+  })
+
+  assert.equal(initial.phase, 'environment')
+  assert.equal(initial.timeline.length, 0)
+  assert.equal(next.phase, 'config-build')
+  assert.equal(next.updatedAt, '2026-06-03T10:00:01.000Z')
+  assert.deepEqual(next.timeline.map((entry) => entry.code), ['runtime.config_build'])
+})
+
+test('runtime status store accepts an explicit clock dependency', () => {
+  const timestamps = [
+    '2026-06-03T10:00:00.000Z',
+    '2026-06-03T10:00:01.000Z',
+  ]
+  const store = new RuntimeStatusStore(() => timestamps.shift() || '2026-06-03T10:00:02.000Z')
+
+  store.recordReadinessPhase('event-stream', 'Connected')
+
+  const status = store.getStatus()
+  assert.equal(status.phase, 'event-stream')
+  assert.equal(status.updatedAt, '2026-06-03T10:00:01.000Z')
+  assert.equal(status.timeline?.at(-1)?.timestamp, '2026-06-03T10:00:01.000Z')
+})
 
 test('runtime status starts not ready with no error after reset', () => {
   resetRuntimeStatus()
