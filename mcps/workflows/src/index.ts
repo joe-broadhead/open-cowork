@@ -41,6 +41,10 @@ const workflowDraftShape = {
 
 type WorkflowDraftInput = z.infer<z.ZodObject<typeof workflowDraftShape>>
 
+const workflowCreateShape = {
+  previewToken: z.string().min(1).describe('previewToken returned by preview_workflow after the user explicitly confirms the proposal.'),
+}
+
 function bridgeUrl() {
   const value = process.env.OPEN_COWORK_WORKFLOW_TOOL_URL?.trim()
   if (!value) throw new Error('OPEN_COWORK_WORKFLOW_TOOL_URL is not configured.')
@@ -72,7 +76,7 @@ function bridgeToken() {
   return value
 }
 
-async function postToBridge(path: '/preview' | '/create', draft: WorkflowDraftInput) {
+async function postToBridge(path: '/preview' | '/create', body: WorkflowDraftInput | z.infer<z.ZodObject<typeof workflowCreateShape>>) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), BRIDGE_REQUEST_TIMEOUT_MS)
   let response: Response
@@ -83,7 +87,7 @@ async function postToBridge(path: '/preview' | '/create', draft: WorkflowDraftIn
         authorization: `Bearer ${bridgeToken()}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(draft),
+      body: JSON.stringify(body),
       signal: controller.signal,
     })
   } catch (error) {
@@ -128,9 +132,9 @@ server.tool(
 
 server.tool(
   'create_workflow',
-  'Save a confirmed Open Cowork workflow. Call only after the user explicitly confirms the preview.',
-  workflowDraftShape,
-  async (draft) => textResult(await postToBridge('/create', draft)),
+  'Save a confirmed Open Cowork workflow. Call only after the user explicitly confirms the preview, passing the previewToken returned by preview_workflow.',
+  workflowCreateShape,
+  async (request) => textResult(await postToBridge('/create', request)),
 )
 
 process.stderr.write('[workflows-mcp] Server started\n')

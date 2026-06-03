@@ -417,6 +417,11 @@ test('dist workflow schedule helpers validate and compute next runs across trigg
   assert.equal(validateWorkflowSchedule({ type: 'monthly', timezone: 'UTC', dayOfMonth: 32 }), 'Monthly schedules require dayOfMonth between 1 and 31.')
   assert.equal(validateWorkflowSchedule({ type: 'one_time', timezone: 'UTC' }), 'One-time schedules require startAt.')
   assert.equal(validateWorkflowSchedule({ type: 'daily', timezone: 'Not/AZone' }), 'Schedule timezone is invalid.')
+  assert.equal(validateWorkflowSchedule({ type: 'daily', timezone: 'UTC', runAtHour: 24 }), 'Schedule runAtHour must be an integer between 0 and 23.')
+  assert.equal(validateWorkflowSchedule({ type: 'daily', timezone: 'UTC', runAtMinute: 60 }), 'Schedule runAtMinute must be an integer between 0 and 59.')
+  assert.equal(validateWorkflowSchedule({ type: 'one_time', timezone: 'UTC', startAt: 'not-a-date' }, from), 'Schedule startAt must be a valid ISO timestamp.')
+  assert.equal(validateWorkflowSchedule({ type: 'one_time', timezone: 'UTC', startAt: '2026-06-03T09:00:00.000Z' }, from), 'Schedule startAt must be in the future.')
+  assert.equal(validateWorkflowSchedule({ type: 'one_time', timezone: 'UTC', startAt: '2026-06-03T11:00:00.000Z' }, from), null)
 
   assert.equal(computeNextWorkflowScheduleRunAt({
     type: 'one_time',
@@ -434,6 +439,13 @@ test('dist workflow schedule helpers validate and compute next runs across trigg
     runAtHour: 9,
     runAtMinute: 15,
   }, from), '2026-06-04T09:15:00.000Z')
+  assert.equal(computeNextWorkflowScheduleRunAt({
+    type: 'daily',
+    timezone: 'UTC',
+    startAt: '2026-06-05T10:00:00.000Z',
+    runAtHour: 9,
+    runAtMinute: 15,
+  }, from), '2026-06-06T09:15:00.000Z')
   assert.equal(computeNextWorkflowScheduleRunAt({
     type: 'weekly',
     timezone: 'UTC',

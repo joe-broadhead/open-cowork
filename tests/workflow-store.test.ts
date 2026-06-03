@@ -27,6 +27,10 @@ import {
   setWorkflowSecretStorageForTests,
   updateWorkflowStatus,
 } from '../apps/desktop/src/main/workflow/workflow-store.ts'
+import {
+  createWorkflowFromTool,
+  previewWorkflowFromTool,
+} from '../apps/desktop/src/main/workflow/workflow-tool-actions.ts'
 
 function uniqueUserDataDir(name: string) {
   return join(tmpdir(), `open-cowork-workflow-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
@@ -40,6 +44,24 @@ function withWorkflowStore(name: string, run: (userDataDir: string) => void) {
     clearConfigCaches()
     clearWorkflowStoreCache()
     run(userDataDir)
+  } finally {
+    setWorkflowSecretStorageForTests(null)
+    clearWorkflowStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
+}
+
+async function withWorkflowStoreAsync(name: string, run: (userDataDir: string) => Promise<void>) {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = uniqueUserDataDir(name)
+  try {
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+    clearConfigCaches()
+    clearWorkflowStoreCache()
+    await run(userDataDir)
   } finally {
     setWorkflowSecretStorageForTests(null)
     clearWorkflowStoreCache()
@@ -309,6 +331,84 @@ test('workflow preview accepts manual-only workflows', () => {
   assert.equal(preview.ok, true)
   assert.equal(preview.normalizedDraft?.triggers.length, 1)
   assert.equal(preview.normalizedDraft?.triggers[0]?.type, 'manual')
+})
+
+test('workflow preview blocks missing required agents and create enforces the same capability check', () => {
+  const missingAgentDraft = {
+    ...draft,
+    agentName: 'missing-agent',
+    skillNames: [],
+    toolIds: [],
+    triggers: [{ id: 'manual', type: 'manual' as const, enabled: true }],
+  }
+  const capabilities = { agentNames: ['build'], skillNames: [], toolIds: [] }
+  const preview = previewWorkflowDraft(missingAgentDraft, { capabilities })
+
+  assert.equal(preview.ok, false)
+  assert.deepEqual(preview.missing, ['Workflow agent "missing-agent" is not available.'])
+  assert.deepEqual(preview.gaps?.map((gap) => `${gap.severity}:${gap.field}:${gap.value}`), ['required:agentName:missing-agent'])
+
+  assert.throws(
+    () => createWorkflow(missingAgentDraft, null, { capabilities }),
+    /Workflow agent "missing-agent" is not available/,
+  )
+})
+
+test('workflow preview represents missing optional skill and tool references as gaps', () => {
+  const preview = previewWorkflowDraft({
+    ...draft,
+    skillNames: ['ghost-skill'],
+    toolIds: ['ghost-tool'],
+    triggers: [{ id: 'manual', type: 'manual' as const, enabled: true }],
+  }, { capabilities: { agentNames: ['build'], skillNames: [], toolIds: [] } })
+
+  assert.equal(preview.ok, true)
+  assert.deepEqual(preview.missing, [])
+  assert.deepEqual(preview.gaps?.map((gap) => `${gap.severity}:${gap.field}:${gap.value}`), [
+    'optional:skillNames:ghost-skill',
+    'optional:toolIds:ghost-tool',
+  ])
+})
+
+test('workflow preview blocks unavailable project directories', () => {
+  const projectDirectory = join(tmpdir(), `open-cowork-missing-workflow-project-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const preview = previewWorkflowDraft({
+    ...draft,
+    skillNames: [],
+    toolIds: [],
+    projectDirectory,
+    triggers: [{ id: 'manual', type: 'manual' as const, enabled: true }],
+  }, { capabilities: { agentNames: ['build'], skillNames: [], toolIds: [] } })
+
+  assert.equal(preview.ok, false)
+  assert.deepEqual(preview.missing, [`Workflow project directory "${projectDirectory}" is not available.`])
+})
+
+test('workflow tool create requires and consumes a confirmed preview token', async () => {
+  await withWorkflowStoreAsync('tool-preview-token', async () => {
+    await assert.rejects(
+      () => createWorkflowFromTool({ previewToken: 'missing-token' }),
+      /valid confirmed preview token/,
+    )
+
+    const preview = await previewWorkflowFromTool({
+      ...draft,
+      skillNames: [],
+      toolIds: [],
+      triggers: [{ id: 'manual', type: 'manual' as const, enabled: true }],
+    })
+    assert.equal(preview.ok, true)
+    assert.equal(typeof preview.previewToken, 'string')
+
+    const result = await createWorkflowFromTool({ previewToken: preview.previewToken! })
+    assert.equal(result.ok, true)
+    assert.equal(result.workflow.title, 'Inbox summary')
+
+    await assert.rejects(
+      () => createWorkflowFromTool({ previewToken: preview.previewToken! }),
+      /valid confirmed preview token/,
+    )
+  })
 })
 
 test('workflow store pauses, resumes, archives, regenerates webhook secrets, and lists due workflows', () => withWorkflowStore('status', () => {

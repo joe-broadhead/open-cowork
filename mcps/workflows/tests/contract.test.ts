@@ -24,6 +24,7 @@ async function withBridge<T>(fn: (baseUrl: string, seen: Array<{ url: string; bo
         ok: true,
         route: req.url,
         title: body?.title,
+        previewToken: req.url === '/preview' ? 'preview-token-from-bridge' : undefined,
       }))
     })
   })
@@ -125,11 +126,16 @@ test('workflows MCP previews and creates through the app bridge', async () => {
       const listed = await client.listTools()
       assert.deepEqual(listed.tools.map((tool) => tool.name).sort(), ['create_workflow', 'preview_workflow'])
 
-      assert.equal(parseTextResult(await client.callTool({ name: 'preview_workflow', arguments: draft })).route, '/preview')
-      assert.equal(parseTextResult(await client.callTool({ name: 'create_workflow', arguments: draft })).route, '/create')
+      const preview = parseTextResult(await client.callTool({ name: 'preview_workflow', arguments: draft }))
+      assert.equal(preview.route, '/preview')
+      assert.equal(parseTextResult(await client.callTool({
+        name: 'create_workflow',
+        arguments: { previewToken: preview.previewToken },
+      })).route, '/create')
     })
     assert.deepEqual(seen.map((entry) => entry.url), ['/preview', '/create'])
     assert.equal((seen[0]?.body as { title?: string }).title, 'Inbox summary')
+    assert.deepEqual(seen[1]?.body, { previewToken: 'preview-token-from-bridge' })
   })
 })
 
@@ -147,7 +153,7 @@ test('workflows MCP rejects invalid drafts and surfaces bridge errors', async ()
     await withWorkflowsClient(baseUrl, async (client) => {
       await assertToolError(client, {
         name: 'create_workflow',
-        arguments: draft,
+        arguments: { previewToken: 'preview-token-from-bridge' },
       }, /workflow bridge exploded/)
     })
   })

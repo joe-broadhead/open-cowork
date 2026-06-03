@@ -451,7 +451,9 @@ test('workflow tool bridge requires bearer auth and creates workflows through th
       body: JSON.stringify(manualWorkflowDraft),
     })
     assert.equal(preview.status, 200)
-    assert.equal((await preview.json() as { ok: boolean }).ok, true)
+    const previewBody = await preview.json() as { ok: boolean; previewToken?: string }
+    assert.equal(previewBody.ok, true)
+    assert.equal(typeof previewBody.previewToken, 'string')
 
     const created = await fetch(`${baseUrl}/create`, {
       method: 'POST',
@@ -459,7 +461,7 @@ test('workflow tool bridge requires bearer auth and creates workflows through th
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(manualWorkflowDraft),
+      body: JSON.stringify({ previewToken: previewBody.previewToken }),
     })
     assert.equal(created.status, 200)
     const createdBody = await created.json() as { ok: boolean; workflow: { id: string; title: string; webhookUrl: string | null } }

@@ -52,7 +52,8 @@ local project directory or host-path grant.
 6. Workflow Designer calls the bundled `mcp__workflows__preview_workflow`
    tool and shows the proposed workflow.
 7. After you explicitly confirm, Workflow Designer calls
-   `mcp__workflows__create_workflow`.
+   `mcp__workflows__create_workflow` with the preview token returned by the
+   preview tool.
 
 The saved workflow points back to that setup thread so you can reopen the
 conversation that created it.
@@ -120,7 +121,7 @@ stateDiagram-v2
     [*] --> SetupThread: Add workflow
     SetupThread --> Preview: Workflow Designer calls preview_workflow
     Preview --> SetupThread: user edits or answers questions
-    Preview --> Saved: user confirms and Workflow Designer calls create_workflow
+    Preview --> Saved: user confirms and Workflow Designer calls create_workflow with preview token
     Saved --> RunThread: manual, schedule, or webhook trigger
     RunThread --> Completed: assistant finishes
     RunThread --> Failed: runtime or session error
