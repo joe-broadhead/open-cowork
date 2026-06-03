@@ -4,9 +4,9 @@ import type {
   CustomAgentConfig,
   RuntimeContextOptions,
 } from '@open-cowork/shared'
-import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp'
+import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { getEffectiveSettings } from './settings.ts'
 import { getCustomAgentCatalog } from './custom-agents.ts'
 import { buildCustomAgentPermissionFromCatalog } from './custom-agents-utils.ts'
@@ -24,6 +24,19 @@ type CapabilityToolDiscoveryDeps = {
   resolveContextDirectory: (options?: RuntimeContextOptions) => string | null
   logHandlerError: (handler: string, err: unknown) => void
   capabilityToolMethodCache: Map<string, { expiresAt: number; entries: CapabilityToolEntry[] }>
+}
+
+export const CAPABILITY_TOOL_DISCOVERY_TIMEOUT_MS = 5_000
+
+type CapabilityToolDiscoveryOptions = RuntimeContextOptions & {
+  deep?: boolean
+  discoveryTimeoutMs?: number
+  signal?: AbortSignal
+}
+
+export type ListToolsFromMcpEntryOptions = {
+  timeoutMs?: number
+  signal?: AbortSignal
 }
 
 export async function buildCustomAgentPermission(agent: CustomAgentConfig, options?: RuntimeContextOptions) {
@@ -56,7 +69,63 @@ function isMcpBackedCapability(tool: CapabilityTool) {
   return Boolean(tool.namespace) || tool.patterns.some((pattern) => pattern.startsWith('mcp__'))
 }
 
-export async function listToolsFromMcpEntry(entry: unknown, options: { timeoutMs?: number } = {}) {
+function capabilityDiscoveryTimeoutError(timeoutMs: number) {
+  const error = new Error(`MCP capability discovery timed out after ${timeoutMs}ms.`)
+  error.name = 'TimeoutError'
+  return error
+}
+
+function createDiscoveryAbortSignal(options: ListToolsFromMcpEntryOptions) {
+  const timeoutMs = options.timeoutMs ?? CAPABILITY_TOOL_DISCOVERY_TIMEOUT_MS
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const onCallerAbort = () => {
+    controller.abort(options.signal?.reason || new Error('MCP capability discovery was cancelled.'))
+  }
+
+  if (options.signal?.aborted) {
+    onCallerAbort()
+  } else {
+    options.signal?.addEventListener('abort', onCallerAbort, { once: true })
+  }
+
+  if (timeoutMs > 0) {
+    timeout = setTimeout(() => {
+      controller.abort(capabilityDiscoveryTimeoutError(timeoutMs))
+    }, timeoutMs)
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      if (timeout) clearTimeout(timeout)
+      options.signal?.removeEventListener('abort', onCallerAbort)
+    },
+  }
+}
+
+function abortReason(signal: AbortSignal) {
+  const reason = signal.reason
+  return reason instanceof Error ? reason : new Error('MCP capability discovery was cancelled.')
+}
+
+async function withDiscoveryAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw abortReason(signal)
+  let cleanup = () => {}
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal))
+    cleanup = () => signal.removeEventListener('abort', onAbort)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+
+  try {
+    return await Promise.race([operation, aborted])
+  } finally {
+    cleanup()
+  }
+}
+
+export async function listToolsFromMcpEntry(entry: unknown, options: ListToolsFromMcpEntryOptions = {}) {
   if (!entry) return []
 
   const runtimeEntry = entry as ResolvedRuntimeMcpEntry
@@ -65,12 +134,7 @@ export async function listToolsFromMcpEntry(entry: unknown, options: { timeoutMs
     { capabilities: {} },
   )
 
-  const abortController = runtimeEntry.type === 'remote' && options.timeoutMs
-    ? new AbortController()
-    : null
-  const timeout = abortController && options.timeoutMs
-    ? setTimeout(() => abortController.abort(), options.timeoutMs)
-    : null
+  const abort = createDiscoveryAbortSignal(options)
 
   try {
     if (runtimeEntry.type === 'local') {
@@ -82,25 +146,25 @@ export async function listToolsFromMcpEntry(entry: unknown, options: { timeoutMs
         env: runtimeEntry.environment,
         stderr: 'pipe',
       })
-      await client.connect(transport)
+      await withDiscoveryAbort(client.connect(transport), abort.signal)
     } else {
       const requestInit: RequestInit = {
         ...(runtimeEntry.headers ? { headers: runtimeEntry.headers } : {}),
-        ...(abortController ? { signal: abortController.signal } : {}),
+        signal: abort.signal,
       }
       const transport = new StreamableHTTPClientTransport(new URL(runtimeEntry.url), {
         requestInit,
       })
-      await client.connect(transport)
+      await withDiscoveryAbort(client.connect(transport), abort.signal)
     }
 
-    const result = await client.listTools()
+    const result = await withDiscoveryAbort(client.listTools(), abort.signal)
     return (result.tools || []).map((tool: { name: string; description?: string }) => ({
       id: tool.name,
       description: tool.description?.trim() || 'No description available for this MCP method.',
     }))
   } finally {
-    if (timeout) clearTimeout(timeout)
+    abort.cleanup()
     await client.close().catch(() => {})
   }
 }
@@ -112,7 +176,7 @@ export function isLikelyMcpAuthError(error: unknown) {
 
 async function discoverCapabilityToolEntries(
   tool: CapabilityTool,
-  options: RuntimeContextOptions | undefined,
+  options: CapabilityToolDiscoveryOptions | undefined,
   deps: CapabilityToolDiscoveryDeps,
 ) {
   if (!isMcpBackedCapability(tool)) return tool.availableTools || []
@@ -150,7 +214,10 @@ async function discoverCapabilityToolEntries(
   )
   if (shouldSkipDirectProbe) return []
 
-  const entries = await listToolsFromMcpEntry(builtinEntry || customEntry).catch((error) => {
+  const entries = await listToolsFromMcpEntry(builtinEntry || customEntry, {
+    timeoutMs: options?.discoveryTimeoutMs,
+    signal: options?.signal,
+  }).catch((error) => {
     deps.logHandlerError(`capability:mcp-tools ${tool.id}`, error)
     return []
   })
@@ -178,7 +245,7 @@ export function createCapabilityToolDiscovery(deps: CapabilityToolDiscoveryDeps)
     async withDiscoveredBuiltInTools(
       tools: CapabilityTool[],
       runtimeTools: unknown[],
-      options?: RuntimeContextOptions & { deep?: boolean },
+      options?: CapabilityToolDiscoveryOptions,
     ) {
       const builtInAgentDetails = listBuiltInAgentDetails()
       const nativeToolEntries = new Map<string, CapabilityTool>()

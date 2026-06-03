@@ -87,6 +87,31 @@ test('capability bundle validation requires explicit plugin compatibility', () =
   assert.equal(result.issues.some((issue) => issue.code === 'plugin_compatibility_required'), true)
 })
 
+test('capability bundle validation aligns required collections with the public schema', () => {
+  const result = normalizeCapabilityBundleManifest({
+    format: CAPABILITY_BUNDLE_FORMAT,
+    name: 'schema-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+  })
+
+  assert.equal(result.ok, false)
+  if (result.ok) return
+  assert.equal(result.issues.some((issue) => issue.code === 'resources_required'), true)
+  assert.equal(result.issues.some((issue) => issue.code === 'permissions_required'), true)
+
+  const legacy = normalizeCapabilityBundleManifest({
+    format: CAPABILITY_BUNDLE_FORMAT,
+    name: 'legacy-pack',
+    version: '1.0.0',
+    owner: 'open-cowork',
+  }, { allowMissingCollections: true })
+  assert.equal(legacy.ok, true)
+  if (!legacy.ok) return
+  assert.deepEqual(legacy.manifest.resources, [])
+  assert.deepEqual(legacy.manifest.permissions, [])
+})
+
 test('capability bundle plan fails closed for unsupported product modes and remote plugin tiers', () => {
   const localOnly = manifest({
     resources: [
@@ -139,6 +164,24 @@ test('capability bundle plan preserves existing user resources and orders action
   ])
   assert.equal(plan.risk.level, 'high')
   assert.equal(plan.risk.reasons.some((reason) => reason.includes('shell permission')), true)
+})
+
+test('capability bundle plan uses kind-qualified resource identity for existing resources', () => {
+  const plan = planCapabilityBundleInstall(manifest({
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+  }), {
+    productMode: 'desktop-local',
+    existingResourceIds: [{ kind: 'workflow', id: 'shared-id' }],
+  })
+
+  assert.equal(plan.blocked, false)
+  assert.deepEqual(plan.actions.map((action) => `${action.action}:${action.kind}:${action.id}`), [
+    'install:skill:shared-id',
+    'preserve_user_resource:workflow:shared-id',
+  ])
 })
 
 test('capability bundle uninstall plan removes only bundle-owned resources', () => {
@@ -355,6 +398,53 @@ test('capability bundle lifecycle uninstall removes bundle-owned resources and p
   assert.equal(uninstalled.audit.some((event) => event.outcome === 'removed' && event.id === 'review-skill'), true)
   assert.equal(uninstalled.audit.some((event) => event.outcome === 'preserved' && event.id === 'operator-command'), true)
   assert.equal(uninstalled.audit.some((event) => event.outcome === 'preserved' && event.id === 'operator-workflow'), true)
+})
+
+test('capability bundle lifecycle preserves mixed-kind resources with the same id', () => {
+  const installed = applyCapabilityBundleInstall(createEmptyCapabilityBundleLifecycleState(), manifest({
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+    uninstall: {
+      removes: [{ kind: 'skill', id: 'shared-id' }],
+      preserves: [{ kind: 'workflow', id: 'shared-id' }],
+    },
+  }), {
+    productMode: 'desktop-local',
+    now: '2026-06-03T10:00:00.000Z',
+  })
+  const uninstalled = applyCapabilityBundleUninstall(installed.state, 'review-pack')
+
+  assert.equal(uninstalled.applied, true)
+  assert.deepEqual(uninstalled.state.resources.map((resource) => `${resource.owner}:${resource.kind}:${resource.id}`), [
+    'user:workflow:shared-id',
+  ])
+
+  const reinstalled = applyCapabilityBundleInstall(createEmptyCapabilityBundleLifecycleState(), manifest({
+    resources: [
+      { kind: 'skill', id: 'shared-id', ownedByBundle: true },
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+  }), {
+    productMode: 'desktop-local',
+    now: '2026-06-03T11:00:00.000Z',
+  })
+  const updated = applyCapabilityBundleUpdate(reinstalled.state, manifest({
+    version: '1.1.0',
+    resources: [
+      { kind: 'workflow', id: 'shared-id', ownedByBundle: true },
+    ],
+  }), {
+    productMode: 'desktop-local',
+    now: '2026-06-03T12:00:00.000Z',
+  })
+
+  assert.equal(updated.applied, true)
+  assert.deepEqual(updated.state.resources.map((resource) => `${resource.owner}:${resource.kind}:${resource.id}`), [
+    'bundle:workflow:shared-id',
+  ])
+  assert.equal(updated.audit.some((event) => event.outcome === 'removed' && event.kind === 'skill' && event.id === 'shared-id'), true)
 })
 
 test('capability bundle lifecycle update preserves user resources and removes obsolete owned resources', () => {

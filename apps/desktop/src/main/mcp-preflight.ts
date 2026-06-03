@@ -9,7 +9,7 @@ type FetchLike = typeof fetch
 
 type McpPreflightDeps = {
   fetchImpl?: FetchLike
-  listToolsFromMcpEntry: (entry: ResolvedRuntimeMcpEntry, options?: { timeoutMs?: number }) => Promise<CapabilityToolEntry[]>
+  listToolsFromMcpEntry: (entry: ResolvedRuntimeMcpEntry, options?: { timeoutMs?: number; signal?: AbortSignal }) => Promise<CapabilityToolEntry[]>
   resolveHostname?: McpDnsResolver
   timeoutMs?: number
 }

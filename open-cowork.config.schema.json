@@ -1080,6 +1080,24 @@
       },
       "required": ["kind", "id"]
     },
+    "capabilityBundleResourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["opencode-plugin", "skill", "agent", "mcp", "provider", "workflow", "command", "native-helper"]
+        },
+        "id": { "$ref": "#/$defs/capabilityBundleId" }
+      },
+      "required": ["kind", "id"]
+    },
+    "capabilityBundleResourceSelector": {
+      "oneOf": [
+        { "$ref": "#/$defs/capabilityBundleId" },
+        { "$ref": "#/$defs/capabilityBundleResourceIdentity" }
+      ]
+    },
     "capabilityBundlePermission": {
       "type": "object",
       "additionalProperties": false,
@@ -1124,12 +1142,12 @@
           "properties": {
             "removes": {
               "type": "array",
-              "items": { "$ref": "#/$defs/capabilityBundleId" },
+              "items": { "$ref": "#/$defs/capabilityBundleResourceSelector" },
               "uniqueItems": true
             },
             "preserves": {
               "type": "array",
-              "items": { "$ref": "#/$defs/capabilityBundleId" },
+              "items": { "$ref": "#/$defs/capabilityBundleResourceSelector" },
               "uniqueItems": true
             }
           }
