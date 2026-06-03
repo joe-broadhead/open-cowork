@@ -37,12 +37,75 @@ function describeSupportError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+const WORKSPACE_SUPPORT_UNAVAILABLE_REASON = 'Workspace support could not be loaded. Mutating and file actions are disabled until policy is available.'
+
+function unavailableSupportAuthorityForWorkspace(workspaceId: string): WorkspaceExecutionAuthority {
+  if (workspaceId.startsWith('gateway:')) return 'gateway_standalone'
+  if (workspaceId.startsWith('paired-desktop:')) return 'desktop_paired'
+  return 'cloud_worker'
+}
+
+function unavailableSupportSurface(authority: WorkspaceExecutionAuthority) {
+  if (authority === 'gateway_standalone') return 'gateway_standalone'
+  if (authority === 'desktop_paired') return 'desktop_paired'
+  if (authority === 'cloud_channel_gateway') return 'cloud_channel_gateway'
+  return 'desktop_cloud'
+}
+
+export function unavailableWorkspaceSupport(
+  reason = WORKSPACE_SUPPORT_UNAVAILABLE_REASON,
+  options: { authority?: WorkspaceExecutionAuthority } = {},
+): WorkspaceApiSupport[] {
+  const authority = options.authority || 'cloud_worker'
+  return WORKSPACE_SUPPORT_APIS.map((api) => {
+    const verdict = {
+      allowed: false,
+      reason,
+      policyCode: 'workspace.policy_unavailable',
+    }
+    return {
+      api,
+      status: 'blocked_by_policy',
+      verdict,
+      context: workspaceApiSupportContextForAuthority(authority, {
+        status: 'blocked_by_policy',
+        surface: unavailableSupportSurface(authority),
+        onlineState: 'error',
+        pathExposure: 'not_exposed',
+        artifactBody: 'none',
+        artifactReveal: 'none',
+        workflows: 'blocked',
+        blockedReason: verdict,
+      }),
+    }
+  })
+}
+
+function supportForWorkspace(
+  workspaceId: string,
+  support: WorkspaceApiSupport[] | undefined,
+  options: { loaded?: boolean; error?: string | null } = {},
+) {
+  if (workspaceId === LOCAL_WORKSPACE_ID) {
+    return support && support.length > 0 ? support : LOCAL_SUPPORT
+  }
+  if (support && support.length > 0) {
+    return support
+  }
+  if (options.loaded || options.error) {
+    return unavailableWorkspaceSupport(options.error || undefined, {
+      authority: unavailableSupportAuthorityForWorkspace(workspaceId),
+    })
+  }
+  return []
+}
+
 export function supportEntry(support: WorkspaceApiSupport[] | undefined, api: string) {
   return (support || []).find((entry) => entry.api === api)
 }
 
 export function supportAllows(entry: WorkspaceApiSupport | undefined, options: { mutation?: boolean } = {}) {
-  if (!entry) return true
+  if (!entry) return false
   if (options.mutation && entry.status !== 'supported') return false
   return entry.status === 'supported' || entry.status === 'read_only' || entry.verdict?.allowed === true
 }
@@ -121,8 +184,9 @@ export const useWorkspaceSupportStore = create<WorkspaceSupportState>((set, get)
   errorByWorkspace: {},
   setWorkspaceSupport: (workspaceId, support) => set((state) => {
     const normalized = normalizeWorkspaceId(workspaceId)
+    const effectiveSupport = supportForWorkspace(normalized, support, { loaded: true })
     return {
-      supportByWorkspace: { ...state.supportByWorkspace, [normalized]: support },
+      supportByWorkspace: { ...state.supportByWorkspace, [normalized]: effectiveSupport },
       loadedByWorkspace: { ...state.loadedByWorkspace, [normalized]: true },
       loadingByWorkspace: { ...state.loadingByWorkspace, [normalized]: false },
       errorByWorkspace: { ...state.errorByWorkspace, [normalized]: null },
@@ -147,22 +211,26 @@ export const useWorkspaceSupportStore = create<WorkspaceSupportState>((set, get)
     }))
     try {
       const support = await window.coworkApi.workspace.support(normalized)
-      get().setWorkspaceSupport(normalized, support)
-      return support
+      const effectiveSupport = supportForWorkspace(normalized, support, { loaded: true })
+      get().setWorkspaceSupport(normalized, effectiveSupport)
+      return effectiveSupport
     } catch (error) {
+      const reason = describeSupportError(error)
+      const support = unavailableWorkspaceSupport(reason)
       set((current) => ({
+        supportByWorkspace: { ...current.supportByWorkspace, [normalized]: support },
         loadedByWorkspace: { ...current.loadedByWorkspace, [normalized]: true },
         loadingByWorkspace: { ...current.loadingByWorkspace, [normalized]: false },
-        errorByWorkspace: { ...current.errorByWorkspace, [normalized]: describeSupportError(error) },
+        errorByWorkspace: { ...current.errorByWorkspace, [normalized]: reason },
       }))
-      return []
+      return support
     }
   },
 }))
 
 export function useActiveWorkspaceSupport() {
   const activeWorkspaceId = useSessionStore((state) => normalizeWorkspaceId(state.activeWorkspaceId))
-  const support = useWorkspaceSupportStore((state) => state.supportByWorkspace[activeWorkspaceId])
+  const rawSupport = useWorkspaceSupportStore((state) => state.supportByWorkspace[activeWorkspaceId])
   const loaded = useWorkspaceSupportStore((state) => state.loadedByWorkspace[activeWorkspaceId] === true)
   const loading = useWorkspaceSupportStore((state) => state.loadingByWorkspace[activeWorkspaceId] === true)
   const error = useWorkspaceSupportStore((state) => state.errorByWorkspace[activeWorkspaceId] || null)
@@ -171,6 +239,11 @@ export function useActiveWorkspaceSupport() {
   useEffect(() => {
     void loadWorkspaceSupport(activeWorkspaceId)
   }, [activeWorkspaceId, loadWorkspaceSupport])
+
+  const support = useMemo(
+    () => supportForWorkspace(activeWorkspaceId, rawSupport, { loaded, error }),
+    [activeWorkspaceId, error, loaded, rawSupport],
+  )
 
   const flags = useMemo(() => {
     const next = deriveWorkspaceSupportFlags(support)
@@ -205,7 +278,7 @@ export function useActiveWorkspaceSupport() {
 
   return {
     workspaceId: activeWorkspaceId,
-    support: support || (activeWorkspaceId === LOCAL_WORKSPACE_ID ? LOCAL_SUPPORT : []),
+    support,
     loaded,
     loading,
     error,

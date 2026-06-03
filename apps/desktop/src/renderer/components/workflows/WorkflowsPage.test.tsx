@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CoworkAPI, EffectiveAppSettings, WorkflowListPayload } from '@open-cowork/shared'
 import { WorkflowsPage } from './WorkflowsPage'
 import { useSessionStore } from '../../stores/session'
-import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from '../../stores/workspace-support'
+import { WORKSPACE_SUPPORT_APIS, unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 function payload(overrides: Partial<WorkflowListPayload> = {}): WorkflowListPayload {
   return {
@@ -182,6 +182,24 @@ describe('WorkflowsPage', () => {
 
     expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1', { workspaceId: 'cloud:test' })
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
+  })
+
+  it('fails closed for cloud workflow access when workspace support cannot load', async () => {
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:test' })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: { 'cloud:test': unavailableWorkspaceSupport('support failed') },
+      loadedByWorkspace: { 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: { 'cloud:test': 'support failed' },
+    })
+    const { api } = installApi()
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    expect(await screen.findByText('No workflows yet')).toBeInTheDocument()
+    expect(screen.getByText('support failed')).toBeInTheDocument()
+    expect(api.workflows?.list).not.toHaveBeenCalled()
+    expect(api.workflows?.runNow).not.toHaveBeenCalled()
   })
 
   it('copies webhook invocation without putting the secret in the URL', async () => {
