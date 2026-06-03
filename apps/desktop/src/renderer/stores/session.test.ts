@@ -437,6 +437,8 @@ describe('useSessionStore', () => {
       message: 'Boom',
       order: expect.any(Number),
     }])
+    useSessionStore.getState().dismissGlobalError('00000000-0000-4000-8000-000000000000')
+    expect(useSessionStore.getState().globalErrors).toEqual([])
     expect(state.sidebarCollapsed).toBe(true)
     expect(state.chartArtifactsBySession.ses_1).toEqual([{ ...artifact, id: 'artifact-2' }])
   })

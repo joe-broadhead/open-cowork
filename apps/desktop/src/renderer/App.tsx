@@ -5,6 +5,7 @@ import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { ViewErrorBoundary } from './components/layout/ViewErrorBoundary'
 import { RuntimeOfflineBanner } from './components/layout/RuntimeOfflineBanner'
+import { Toaster } from './components/ui/Toaster'
 import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
@@ -455,11 +456,14 @@ export function App() {
 
   if (!authChecked || !config || loadingStage) {
     return (
-      <LoadingScreen
-        brandName={config?.branding.name || 'Cowork'}
-        stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
-        errorMessage={bootstrapError || runtimeError}
-      />
+      <>
+        <LoadingScreen
+          brandName={config?.branding.name || 'Cowork'}
+          stage={(!authChecked ? 'boot' : !config ? 'config' : loadingStage || 'runtime') as 'boot' | 'auth' | 'config' | 'runtime'}
+          errorMessage={bootstrapError || runtimeError}
+        />
+        <Toaster />
+      </>
     )
   }
 
@@ -469,43 +473,52 @@ export function App() {
   // visible while they retry.
   if (runtimeError && !runtimeWasReady) {
     return (
-      <LoadingScreen
-        brandName={config.branding.name}
-        stage="runtime"
-        errorMessage={runtimeError}
-      />
+      <>
+        <LoadingScreen
+          brandName={config.branding.name}
+          stage="runtime"
+          errorMessage={runtimeError}
+        />
+        <Toaster />
+      </>
     )
   }
 
   if (config.auth.enabled && !authenticated) {
     return (
-      <LoginScreen
-        brandName={config.branding.name}
-        onLoggedIn={(email) => {
-          setAuthenticated(true)
-          setUserEmail(email)
-          window.coworkApi.settings.get().then((settings) => {
-            setNeedsSetup(!isSetupComplete(settings, config))
-            if (isSetupComplete(settings, config)) void refreshRuntimeState()
-          }).catch((err) => reportAppError('Could not load settings after sign-in. Try again.', err, 'login'))
-        }}
-      />
+      <>
+        <LoginScreen
+          brandName={config.branding.name}
+          onLoggedIn={(email) => {
+            setAuthenticated(true)
+            setUserEmail(email)
+            window.coworkApi.settings.get().then((settings) => {
+              setNeedsSetup(!isSetupComplete(settings, config))
+              if (isSetupComplete(settings, config)) void refreshRuntimeState()
+            }).catch((err) => reportAppError('Could not load settings after sign-in. Try again.', err, 'login'))
+          }}
+        />
+        <Toaster />
+      </>
     )
   }
 
   if (needsSetup) {
     return (
-      <SetupScreen
-        brandName={config.branding.name}
-        email={userEmail}
-        providers={config.providers.available}
-        defaultProviderId={config.providers.defaultProvider}
-        defaultModelId={config.providers.defaultModel}
-        onComplete={() => {
-          setNeedsSetup(false)
-          void refreshRuntimeState()
-        }}
-      />
+      <>
+        <SetupScreen
+          brandName={config.branding.name}
+          email={userEmail}
+          providers={config.providers.available}
+          defaultProviderId={config.providers.defaultProvider}
+          defaultModelId={config.providers.defaultModel}
+          onComplete={() => {
+            setNeedsSetup(false)
+            void refreshRuntimeState()
+          }}
+        />
+        <Toaster />
+      </>
     )
   }
 
@@ -679,6 +692,7 @@ export function App() {
           </Suspense>
         </ViewErrorBoundary>
       )}
+      <Toaster />
     </div>
   )
 }

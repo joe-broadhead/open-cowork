@@ -105,6 +105,7 @@ export interface SessionStore {
   addPendingApproval: (approval: PermissionRequest) => void
 
   addGlobalError: (message: string) => void
+  dismissGlobalError: (id: string) => void
 
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpStatus[]) => void
@@ -432,6 +433,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   addGlobalError: (message) => set((state) => ({
     globalErrors: [...state.globalErrors, { id: crypto.randomUUID(), sessionId: null, message, order: sessionViewTiming().nowMs }],
+  })),
+  dismissGlobalError: (id) => set((state) => ({
+    globalErrors: state.globalErrors.filter((error) => error.id !== id),
   })),
 
   mcpConnections: [],

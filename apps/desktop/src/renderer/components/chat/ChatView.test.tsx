@@ -474,7 +474,7 @@ describe('ChatView', () => {
     expect(screen.getByTestId('question-dock')).toHaveTextContent('Task-specific question?')
   })
 
-  it('surfaces a global error when unreverting fails', async () => {
+  it('records a global error when unreverting fails without rendering it inline', async () => {
     const user = userEvent.setup()
     installChatViewApi({ unrevertResult: false })
     seedCurrentSession()
@@ -483,10 +483,11 @@ describe('ChatView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reverted · click to unrevert' }))
 
-    expect(await screen.findByText('Could not unrevert this session. Please try again.')).toBeInTheDocument()
+    await waitFor(() => expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not unrevert this session. Please try again.'))
+    expect(screen.queryByText('Could not unrevert this session. Please try again.')).not.toBeInTheDocument()
   })
 
-  it('surfaces a generic global error when unreverting rejects', async () => {
+  it('records a generic global error when unreverting rejects without rendering it inline', async () => {
     const user = userEvent.setup()
     installChatViewApi({ unrevertError: new Error('Runtime unavailable') })
     seedCurrentSession()
@@ -495,7 +496,8 @@ describe('ChatView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Reverted · click to unrevert' }))
 
-    expect(await screen.findByText('Could not unrevert this session. Please try again.')).toBeInTheDocument()
+    await waitFor(() => expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not unrevert this session. Please try again.'))
+    expect(screen.queryByText('Could not unrevert this session. Please try again.')).not.toBeInTheDocument()
   })
 
   it('stops auto-following when the user scrolls away from the transcript bottom', () => {
