@@ -7,6 +7,7 @@ export function cloudWebsiteClientOpsScript() {
   if (!panel) return;
   removeChildren(panel);
   if (entitlements) removeChildren(entitlements);
+  const billingReason = adminSurfaceText('billing', 'disabledReason', 'Billing changes require an org owner or admin role and a managed billing deployment.');
   if (!billing || !billing.enabled) {
     panel.appendChild(pill('billing disabled', 'warn'));
     const text = document.createElement('p');
@@ -14,10 +15,20 @@ export function cloudWebsiteClientOpsScript() {
     text.textContent = 'Self-host mode is active. BYOK, desktop tokens, gateway setup, and workbench features remain available without commercial billing.';
     panel.appendChild(text);
     if (entitlements) appendDetails(entitlements, 'Self-host entitlements', billing?.entitlements || {});
-    qsa('[data-billing-control="true"]').forEach((element) => { element.disabled = true; });
+    qsa('[data-billing-control="true"]').forEach((element) => {
+      element.disabled = true;
+      element.dataset.locked = 'true';
+      element.title = billingReason;
+    });
     return;
   }
-  qsa('[data-billing-control="true"]').forEach((element) => { element.disabled = adminLocked(); });
+  const billingLocked = adminLocked();
+  qsa('[data-billing-control="true"]').forEach((element) => {
+    element.disabled = billingLocked;
+    element.dataset.locked = billingLocked ? 'true' : 'false';
+    if (billingLocked) element.title = billingReason;
+    else element.removeAttribute('title');
+  });
   panel.appendChild(pill(billing.active ? 'active' : 'action required', billing.active ? 'ok' : 'warn'));
   panel.appendChild(pill(billing.mode || 'managed'));
   panel.appendChild(pill(billing.providerId || 'provider'));

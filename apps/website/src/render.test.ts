@@ -2,6 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import {
+  CLOUD_WEB_ADMIN_SURFACE_MATRIX,
+  cloudWebAdminRouteSummary,
+  cloudWebAdminSurfaceForRoute,
+} from './admin-surface-matrix.ts'
 import { CLOUD_WEB_ROUTES, CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientStateContract } from './client-contract.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
@@ -63,6 +68,10 @@ function parityDocRow(entry: (typeof CLOUD_WEB_WORKBENCH_PARITY_MATRIX)[number])
   return `| ${markdownTableCell(entry.label)} | ${parityAvailabilityDocLabels[entry.availability]} | ${routes} | ${markdownTableCell(entry.cloudAffordance)} | ${markdownTableCell(entry.boundary)} |`
 }
 
+function adminSurfaceDocRow(entry: (typeof CLOUD_WEB_ADMIN_SURFACE_MATRIX)[number]) {
+  return `| ${markdownTableCell(entry.label)} | \`${entry.routeId}\` | ${markdownTableCell(entry.desktopSurface)} | ${markdownTableCell(entry.cloudAffordance)} | ${markdownTableCell(entry.sensitiveBoundary)} |`
+}
+
 test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Open Cowork Cloud/)
   assert.match(html, /Workbench/)
@@ -99,8 +108,11 @@ test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /--danger: #fc92b4;/)
   assert.match(html, /--ok: #7fcfa0;/)
   assert.match(html, /"workbenchParity":/)
+  assert.match(html, /"adminSurfaces":/)
   assert.match(html, /data-parity-route="threads"/)
   assert.match(html, /data-parity-route="chat"/)
+  assert.match(html, /data-admin-surface-route="byok"/)
+  assert.match(html, /Provider keys are never rendered after submission/)
   assert.match(html, /Local Filesystem/)
   assert.match(html, /Local Stdio MCPs/)
 })
@@ -148,6 +160,34 @@ test('cloud website desktop parity matrix covers every workbench route and docum
     }
     if (entry.availability === 'desktop-only' || entry.availability === 'intentionally-unavailable') {
       assert.ok(entry.disabledReason, `${entry.conceptId} explains why Cloud Web does not expose it`)
+    }
+  }
+})
+
+test('cloud website admin surface matrix covers every admin route and documented boundary', () => {
+  const adminRoutes = CLOUD_WEB_ROUTES.filter((route) => route.surface === 'admin')
+  const routeApiIds = new Set(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId))
+  const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
+
+  assert.match(doc, /Admin\/Settings Surface Matrix/)
+  assert.deepEqual(CLOUD_WEB_ADMIN_SURFACE_MATRIX.map((entry) => entry.routeId).sort(), adminRoutes.map((route) => route.id).sort())
+
+  for (const route of adminRoutes) {
+    const entry = cloudWebAdminSurfaceForRoute(route.id)
+    assert.ok(entry, `${route.id} has an admin surface entry`)
+    assert.equal(route.summary, entry.cloudAffordance, `${route.id} summary is admin-surface-derived`)
+    assert.equal(route.summary, cloudWebAdminRouteSummary(route.id, 'fallback'), `${route.id} helper returns the same summary`)
+    assert.ok(routeApiIds.has(route.id), `${route.id} is covered by route/API matrix`)
+  }
+
+  for (const entry of CLOUD_WEB_ADMIN_SURFACE_MATRIX) {
+    assert.ok(entry.desktopSurface, `${entry.routeId} names its Desktop analog`)
+    assert.ok(entry.cloudAffordance, `${entry.routeId} names its Cloud Web affordance`)
+    assert.ok(entry.sensitiveBoundary, `${entry.routeId} documents its sensitive boundary`)
+    assert.ok(entry.disabledReason, `${entry.routeId} documents disabled behavior`)
+    assert.ok(doc.includes(adminSurfaceDocRow(entry)), `docs list exact admin surface row for ${entry.label}`)
+    for (const filename of entry.tests) {
+      assert.ok(existsSync(fileURLToPath(routeMatrixTestUrl(filename))), `${entry.routeId} listed test file exists: ${filename}`)
     }
   }
 })
@@ -208,6 +248,7 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'workspace')?.path, '/api/workspace')
   assert.match(html, /"api":/)
   assert.match(html, /"routeMatrix":/)
+  assert.match(html, /"adminSurfaces":/)
   assert.match(cloudWebsiteClientScript(), /endpoint\(id, fallback\)/)
   assert.match(cloudWebsiteClientScript(), /sessionSelectionGeneration/)
   assert.match(cloudWebsiteClientScript(), /isCurrentSessionSelection/)
@@ -734,8 +775,9 @@ test('cloud website thread helper handles status filters and thousands-sized lis
 
 test('cloud website disables dynamic admin actions for member roles', () => {
   const script = cloudWebsiteClientScript()
-  assert.match(script, /Validate', \(\) => validateByok\(secret\.providerId\), 'secondary', adminLocked\(\)\)/)
-  assert.match(script, /Revoke', \(\) => revokeToken\(token\.tokenId\), 'danger', adminLocked\(\)\)/)
+  assert.match(script, /adminSurfaceText\('byok', 'disabledReason'/)
+  assert.match(script, /Validate', \(\) => validateByok\(secret\.providerId\), 'secondary', byokLocked, byokLocked \? byokAdminReason : ''\)/)
+  assert.match(script, /Revoke', \(\) => revokeToken\(token\.tokenId\), 'danger', tokenLocked, tokenLocked \? tokenAdminReason : ''\)/)
   assert.match(html, /data-requires-admin="true"/)
 })
 

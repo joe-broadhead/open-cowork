@@ -14,6 +14,8 @@ export function cloudWebsiteClientByokScript() {
     policyNote.textContent = parts.join(' - ');
   }
   removeChildren(list);
+  const byokLocked = adminLocked();
+  const byokAdminReason = adminSurfaceText('byok', 'disabledReason', 'BYOK management requires an org owner or admin role.');
   if (!state.byok.length) {
     const empty = document.createElement('p');
     empty.className = 'empty';
@@ -40,8 +42,8 @@ export function cloudWebsiteClientByokScript() {
     const actions = document.createElement('div');
     actions.className = 'row-actions';
     actions.appendChild(pill(secret.status, secret.status === 'active' ? 'ok' : 'warn'));
-    actions.appendChild(actionButton('Validate', () => validateByok(secret.providerId), 'secondary', adminLocked()));
-    actions.appendChild(actionButton('Disable', () => deleteByok(secret.providerId), 'danger', adminLocked()));
+    actions.appendChild(actionButton('Validate', () => validateByok(secret.providerId), 'secondary', byokLocked, byokLocked ? byokAdminReason : ''));
+    actions.appendChild(actionButton('Disable', () => deleteByok(secret.providerId), 'danger', byokLocked, byokLocked ? byokAdminReason : ''));
     row.appendChild(main);
     row.appendChild(actions);
     list.appendChild(row);
@@ -52,6 +54,8 @@ function renderTokens() {
   const list = qs('#token-list');
   if (!list) return;
   removeChildren(list);
+  const tokenLocked = adminLocked();
+  const tokenAdminReason = adminSurfaceText('connections', 'disabledReason', 'Connection token issuance requires an org owner or admin role.');
   if (state.revealToken) {
     const reveal = document.createElement('div');
     reveal.className = 'secret-reveal';
@@ -89,7 +93,7 @@ function renderTokens() {
     const actions = document.createElement('div');
     actions.className = 'row-actions';
     actions.appendChild(pill(token.revokedAt ? 'revoked' : 'active', token.revokedAt ? 'warn' : 'ok'));
-    if (!token.revokedAt) actions.appendChild(actionButton('Revoke', () => revokeToken(token.tokenId), 'danger', adminLocked()));
+    if (!token.revokedAt) actions.appendChild(actionButton('Revoke', () => revokeToken(token.tokenId), 'danger', tokenLocked, tokenLocked ? tokenAdminReason : ''));
     row.appendChild(main);
     row.appendChild(actions);
     list.appendChild(row);

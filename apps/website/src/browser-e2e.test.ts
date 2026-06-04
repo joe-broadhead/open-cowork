@@ -25,6 +25,8 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
     assert.equal((harness.document.querySelector('[data-route-link="byok"]') as HTMLElement).hidden, true)
     assert.equal((harness.document.querySelector('#byok-form input[name="providerId"]') as HTMLInputElement).disabled, true)
     assert.equal((harness.document.querySelector('#desktop-token') as HTMLButtonElement).disabled, true)
+    assert.match((harness.document.querySelector('#desktop-token') as HTMLButtonElement).title, /Connection token issuance requires/)
+    assert.match((harness.document.querySelector('#prepare-diagnostics') as HTMLButtonElement).title, /Diagnostics require/)
     assert.equal(harness.lastRequest((request) => request.path === '/api/workspace')?.method, 'GET')
   } finally {
     harness.close()
@@ -35,6 +37,7 @@ test('cloud web browser exercises every route declared in the route API matrix',
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    assert.ok(Array.isArray(harness.bootstrap.adminSurfaces))
 
     for (const entry of CLOUD_WEB_ROUTE_API_MATRIX) {
       const link = harness.document.querySelector(`[data-route-link="${entry.routeId}"]`) as HTMLElement | null
@@ -48,6 +51,10 @@ test('cloud web browser exercises every route declared in the route API matrix',
         assert.equal(harness.document.body.dataset.route, entry.routeId)
         assert.equal(panel.getAttribute('aria-hidden'), 'false')
       })
+      if (entry.surface === 'admin') {
+        const surface = panel.querySelector(`[data-admin-surface-route="${entry.routeId}"]`)
+        assert.ok(surface, `${entry.routeId} renders an admin surface contract card`)
+      }
     }
   } finally {
     harness.close()
@@ -282,6 +289,7 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    assert.match(harness.document.querySelector('[data-admin-surface-route="byok"]')?.textContent || '', /Provider keys are never rendered/)
 
     ;(harness.document.querySelector('#byok-form input[name="providerId"]') as HTMLInputElement).value = 'openai'
     ;(harness.document.querySelector('#byok-form input[name="apiKey"]') as HTMLInputElement).value = 'sk-test-secret'
@@ -289,9 +297,17 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/byok/openai')))
     assert.doesNotMatch(harness.document.querySelector('#byok-list')?.textContent || '', /sk-test-secret/)
 
+    harness.clickText('[data-route-link]', 'Connections')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'connections'))
+    assert.match(harness.document.querySelector('[data-admin-surface-route="connections"]')?.textContent || '', /one-time plaintext reveal/)
+
     ;(harness.document.querySelector('#agent-form input[name="name"]') as HTMLInputElement).value = 'Release helper'
     harness.submit('#agent-form')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/agents')))
+
+    harness.clickText('[data-route-link]', 'Gateway')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'gateway'))
+    assert.match(harness.document.querySelector('[data-admin-surface-route="gateway"]')?.textContent || '', /delivery backlog/)
 
     ;(harness.document.querySelector('#binding-form input[name="displayName"]') as HTMLInputElement).value = 'Team Slack'
     ;(harness.document.querySelector('#binding-form input[name="credentialRef"]') as HTMLInputElement).value = 'secret://gateway/slack'
@@ -311,6 +327,9 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     harness.clickText('#diagnostics button', 'Prepare bundle')
     await waitFor(() => assert.match(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /secrets-redacted/))
     assert.doesNotMatch(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /sk-test-secret|occ_created_token/)
+    harness.clickText('[data-route-link]', 'Diagnostics')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'diagnostics'))
+    assert.match(harness.document.querySelector('[data-admin-surface-route="diagnostics"]')?.textContent || '', /recursively redacted/)
   } finally {
     harness.close()
   }

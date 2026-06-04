@@ -544,6 +544,16 @@ function parityText(conceptId, field, fallback) {
   return entry?.[field] || fallback;
 }
 
+function adminSurfaceText(routeId, field, fallback) {
+  const entry = normalizeList(state.config?.adminSurfaces || bootstrap.adminSurfaces)
+    .find((candidate) => candidate.routeId === routeId);
+  return entry?.[field] || fallback;
+}
+
+function adminControlReason(element, fallback) {
+  return adminSurfaceText(element.closest('[data-route-panel]')?.dataset.routePanel, 'disabledReason', fallback);
+}
+
 function capabilityPolicyNote(capability) {
   if (capability.kind === 'mcp' && capability.scope === 'machine') return parityText('local-stdio-mcps', 'disabledReason', 'Machine-scoped MCP metadata requires a cloud-safe profile capability.');
   if (capability.source === 'custom') return 'Synced custom metadata. Execution depends on org policy.';
