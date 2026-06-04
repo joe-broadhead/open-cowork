@@ -150,3 +150,26 @@ smoke, accessibility/keyboard behavior, responsive layout expectations,
 performance budgets for large thread and admin lists, route/API matrix coverage,
 backend cursor validation, and package-boundary checks that keep the browser out
 of server-only modules.
+
+## Visual QA Checklist
+
+For visual or surface-organization changes, compare Cloud Web and Desktop
+side-by-side before merge. The expected match is product language and workflow
+parity, not pixel-perfect screenshots.
+
+- App shell, sidebar, topbar, active route, status text, and density use the
+  same dark product language.
+- Cards, panels, tables, rows, badges, notices, empty states, focus rings, and
+  destructive/primary/secondary controls read like Desktop primitives.
+- Threads, chat, runtime status, approvals, questions, tools, skills,
+  workflows, and artifacts map to the Desktop/Cloud parity matrix.
+- Org, members, policy, BYOK, connections, gateway, billing, audit, usage, and
+  diagnostics map to the admin/settings surface matrix.
+- Loading, empty, error, disabled, confirmation, and one-time reveal states stay
+  visible and consistent without exposing secrets.
+- Desktop-only boundaries remain explicit: no local host paths, local stdio MCP
+  process controls, machine runtime config, or browser-owned OpenCode runtime.
+- Responsive desktop and mobile views have no horizontal overflow, clipped
+  controls, or unreachable keyboard focus targets.
+- `/assets/fonts/*.woff2` requests return `200 font/woff2` and computed fonts
+  resolve to Mona Sans / Hubot Sans in the real-browser smoke.

@@ -135,10 +135,13 @@ ship one desktop app that can connect to different cloud orgs.
       "securityUrl": "https://security.acme.example/cowork",
       "legalUrl": "https://legal.acme.example/terms",
       "theme": {
-        "background": "#f7f8f5",
-        "surface": "#ffffff",
-        "accent": "#0f6b4b",
-        "accentStrong": "#0a4c35"
+        "background": "#1b1b26",
+        "elevated": "#23232f",
+        "surface": "rgba(141, 164, 245, 0.04)",
+        "text": "#e8e9f3",
+        "accent": "#8da4f5",
+        "accentHover": "#a7b6f8",
+        "accentForeground": "#0f0f18"
       },
       "managedOrgConnectionLabels": {
         "desktopToken": "Acme Desktop token",
@@ -155,6 +158,16 @@ The cloud service exposes the same metadata from `GET /api/config`; the browser
 dashboard renders it directly, and the gateway returns it from health/readiness
 metadata for provider setup tooling. Helm deployments can set the equivalent
 `cloud.branding` and `gateway.branding` values.
+
+Cloud Web defaults to the shared Desktop dark palette, Mona Sans / Hubot Sans
+font stacks, and the structural token scale from
+`packages/shared/src/design-tokens.ts`. Public branding may override color and
+brand presentation keys such as `background`, `surface`, `elevated`, `text`,
+`mutedText`, `accent`, `accentHover`, `accentForeground`, semantic tones,
+`shadowCard`, `shadowElevated`, and `bgImage`. Do not use public branding to
+fork spacing, radius, control heights, typography scale, or runtime behavior.
+Legacy light partial theme overrides are still normalized for existing
+deployments.
 
 ## Environment placeholders
 
