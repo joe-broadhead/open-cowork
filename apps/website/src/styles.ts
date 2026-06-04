@@ -1,18 +1,72 @@
-import type { PublicBrandingConfig } from '@open-cowork/shared'
+import { cssColorLuminance, emitRootTokensCss, type PublicBrandingConfig } from '@open-cowork/shared'
 import { publicBrandingCss } from './branding.ts'
 
+const FONT_UNICODE_RANGE = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD'
+
+function cloudWebsiteColorScheme(branding: PublicBrandingConfig) {
+  const background = cssColorLuminance(branding.theme?.background)
+  const text = cssColorLuminance(branding.theme?.text)
+  return background !== null && text !== null && background > text ? 'light' : 'dark'
+}
+
+function cloudWebsiteFontFaces() {
+  return String.raw`@font-face {
+  font-family: 'Mona Sans Variable';
+  font-style: normal;
+  font-display: block;
+  font-weight: 200 900;
+  src: url('/assets/fonts/mona-sans-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: ${FONT_UNICODE_RANGE};
+}
+@font-face {
+  font-family: 'Mona Sans Variable';
+  font-style: italic;
+  font-display: block;
+  font-weight: 200 900;
+  src: url('/assets/fonts/mona-sans-latin-wght-italic.woff2') format('woff2-variations');
+  unicode-range: ${FONT_UNICODE_RANGE};
+}
+@font-face {
+  font-family: 'Hubot Sans Variable';
+  font-style: normal;
+  font-display: block;
+  font-weight: 200 900;
+  src: url('/assets/fonts/hubot-sans-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: ${FONT_UNICODE_RANGE};
+}
+@font-face {
+  font-family: 'Hubot Sans Variable';
+  font-style: italic;
+  font-display: block;
+  font-weight: 200 900;
+  src: url('/assets/fonts/hubot-sans-latin-wght-italic.woff2') format('woff2-variations');
+  unicode-range: ${FONT_UNICODE_RANGE};
+}`
+}
+
 export function cloudWebsiteStyles(branding: PublicBrandingConfig) {
-  return String.raw`    :root {
-      color-scheme: light;
+  return String.raw`${cloudWebsiteFontFaces()}
+${emitRootTokensCss()}
+    :root {
+      color-scheme: ${cloudWebsiteColorScheme(branding)};
 ${publicBrandingCss(branding)}
-      --shadow: 0 8px 24px rgba(24, 33, 28, 0.08);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --shadow: var(--shadow-card);
+      --field-bg: color-mix(in srgb, var(--color-base) 78%, var(--color-elevated) 22%);
+      --field-border: color-mix(in srgb, var(--color-border) 74%, var(--color-text-muted) 26%);
+      --tone-ok-bg: color-mix(in srgb, var(--color-green) 14%, var(--color-elevated) 86%);
+      --tone-ok-border: color-mix(in srgb, var(--color-green) 42%, var(--color-border) 58%);
+      --tone-warn-bg: color-mix(in srgb, var(--color-amber) 14%, var(--color-elevated) 86%);
+      --tone-warn-border: color-mix(in srgb, var(--color-amber) 42%, var(--color-border) 58%);
+      --tone-danger-border: color-mix(in srgb, var(--color-red) 42%, var(--color-border) 58%);
+      --ring-selected: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
+      font-family: var(--font-ui);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--bg);
+      background-color: var(--bg);
+      background-image: var(--bg-image);
       color: var(--text);
     }
     button, input, select, textarea {
@@ -31,7 +85,7 @@ ${publicBrandingCss(branding)}
     button.primary {
       background: var(--accent);
       border-color: var(--accent);
-      color: #fff;
+      color: var(--color-accent-foreground);
     }
     button.primary:hover {
       background: var(--accent-strong);
@@ -39,7 +93,7 @@ ${publicBrandingCss(branding)}
     }
     button.danger {
       color: var(--danger);
-      border-color: #d9bbb8;
+      border-color: var(--tone-danger-border);
     }
     button.secondary {
       color: var(--accent);
@@ -55,12 +109,15 @@ ${publicBrandingCss(branding)}
     a:hover { text-decoration: underline; }
     input, select, textarea {
       min-height: 36px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--field-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--field-bg);
       color: var(--text);
       padding: 0 10px;
       min-width: 0;
+    }
+    input::placeholder, textarea::placeholder {
+      color: var(--muted);
     }
     textarea {
       min-height: 108px;
@@ -108,8 +165,8 @@ ${publicBrandingCss(branding)}
       border-radius: 8px;
       display: grid;
       place-items: center;
-      background: var(--text);
-      color: #fff;
+      background: var(--accent);
+      color: var(--color-accent-foreground);
       font-weight: 700;
       flex: 0 0 auto;
     }
@@ -163,9 +220,9 @@ ${publicBrandingCss(branding)}
       text-decoration: none;
     }
     .nav-links a[data-active="true"] {
-      background: var(--surface);
+      background: var(--color-surface-active);
       border: 1px solid var(--line);
-      box-shadow: 0 1px 0 rgba(24, 33, 28, 0.04);
+      box-shadow: var(--ring-selected);
     }
     .nav-links a[data-locked="true"] {
       color: var(--muted);
@@ -303,7 +360,7 @@ ${publicBrandingCss(branding)}
       border: 1px solid var(--line);
       border-radius: 8px;
       overflow: hidden;
-      background: #fff;
+      background: var(--surface);
     }
     .table-row {
       display: grid;
@@ -332,11 +389,11 @@ ${publicBrandingCss(branding)}
       border-right: 0;
       border-bottom: 0;
       border-radius: 0;
-      background: #fff;
+      background: var(--surface);
       color: var(--text);
     }
     .thread-row[data-selected="true"] {
-      background: #eef8f2;
+      background: var(--color-surface-active);
       box-shadow: inset 3px 0 0 var(--accent);
     }
     .row-link {
@@ -368,7 +425,7 @@ ${publicBrandingCss(branding)}
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
-      background: #fff;
+      background: var(--surface);
     }
     .row.compact {
       min-height: 44px;
@@ -388,24 +445,24 @@ ${publicBrandingCss(branding)}
       border-radius: 999px;
       padding: 0 8px;
       color: var(--muted);
-      background: #f7f8f6;
+      background: var(--color-surface-hover);
       font-size: 12px;
       white-space: nowrap;
     }
     .pill[data-kind="ok"] {
       color: var(--ok);
-      border-color: #a6cfb8;
-      background: #eef8f2;
+      border-color: var(--tone-ok-border);
+      background: var(--tone-ok-bg);
     }
     .pill[data-kind="warn"] {
       color: var(--warn);
-      border-color: #dfc48f;
-      background: #fff8e8;
+      border-color: var(--tone-warn-border);
+      background: var(--tone-warn-bg);
     }
     .notice {
-      border: 1px solid #dfc48f;
+      border: 1px solid var(--tone-warn-border);
       border-radius: 8px;
-      background: #fff8e8;
+      background: var(--tone-warn-bg);
       color: var(--warn);
       padding: 10px 12px;
       font-size: 13px;
@@ -417,7 +474,7 @@ ${publicBrandingCss(branding)}
       align-items: center;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fff;
+      background: var(--surface);
       padding: 8px 10px;
     }
     .runtime-card {
@@ -425,14 +482,14 @@ ${publicBrandingCss(branding)}
       gap: 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fff;
+      background: var(--surface);
       padding: 10px 12px;
       max-width: 880px;
       min-width: 0;
     }
     .runtime-card[data-kind="approval"], .runtime-card[data-kind="question"] {
-      border-color: #dfc48f;
-      background: #fffdf6;
+      border-color: var(--tone-warn-border);
+      background: var(--tone-warn-bg);
     }
     .runtime-card-header {
       display: flex;
@@ -459,7 +516,7 @@ ${publicBrandingCss(branding)}
     .runtime-detail {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fff;
+      background: var(--surface);
       padding: 8px 10px;
       max-width: 880px;
       min-width: 0;
@@ -512,10 +569,10 @@ ${publicBrandingCss(branding)}
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 10px 12px;
-      background: #fff;
+      background: var(--surface);
     }
     .message-bubble[data-role="assistant"] {
-      background: var(--muted-surface);
+      background: var(--color-surface-hover);
     }
     .message-heading {
       color: var(--muted);
@@ -534,7 +591,7 @@ ${publicBrandingCss(branding)}
       align-items: center;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fff;
+      background: var(--surface);
       padding: 8px 10px;
       min-width: 0;
     }
@@ -549,9 +606,9 @@ ${publicBrandingCss(branding)}
       font-size: 13px;
     }
     .secret-reveal {
-      border: 1px solid #a6cfb8;
+      border: 1px solid var(--tone-ok-border);
       border-radius: 8px;
-      background: #eef8f2;
+      background: var(--tone-ok-bg);
       padding: 10px;
       display: grid;
       gap: 6px;

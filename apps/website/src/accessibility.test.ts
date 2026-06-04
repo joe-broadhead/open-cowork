@@ -89,10 +89,10 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/)
   assert.match(css, /@media \(max-width: 920px\)/)
   assert.match(css, /\.workbench-split\s*\{[\s\S]*grid-template-columns: minmax\(0, 1\.4fr\) minmax\(280px, 0\.6fr\)/)
-  assert.ok(contrast('#18211c', '#f5f6f3') >= 4.5, 'body text contrasts with background')
-  assert.ok(contrast('#66736b', '#ffffff') >= 4.5, 'muted text contrasts with surface')
-  assert.ok(contrast('#2d6b56', '#ffffff') >= 4.5, 'links and secondary actions contrast with surface')
-  assert.ok(contrast('#9d3630', '#ffffff') >= 4.5, 'danger text contrasts with surface')
+  assert.ok(contrast('#e8e9f3', '#1b1b26') >= 4.5, 'body text contrasts with background')
+  assert.ok(contrast('#8a8da0', '#23232f') >= 4.5, 'muted text contrasts with elevated surface')
+  assert.ok(contrast('#8da4f5', '#23232f') >= 4.5, 'links and secondary actions contrast with elevated surface')
+  assert.ok(contrast('#fc92b4', '#23232f') >= 4.5, 'danger text contrasts with elevated surface')
 })
 
 test('cloud web hydrated shell manages route focus state and admin visibility for keyboard users', async () => {

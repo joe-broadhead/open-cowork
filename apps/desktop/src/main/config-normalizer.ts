@@ -1,5 +1,5 @@
 import type { PublicBrandingConfig } from '@open-cowork/shared'
-import { normalizeCloudProjectSource } from '@open-cowork/shared'
+import { derivePublicBrandingThemeTokens, normalizeCloudProjectSource } from '@open-cowork/shared'
 import { deepMerge } from './config-layer-utils.ts'
 import { DEFAULT_CONFIG } from './config-types.ts'
 import type {
@@ -56,6 +56,16 @@ function cleanPublicBrandingStrings(value: unknown) {
     output[key] = text
   }
   return output
+}
+
+function derivePublicBrandingConfigLayer(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const branding = value as Partial<PublicBrandingConfig>
+  if (!branding.theme || typeof branding.theme !== 'object' || Array.isArray(branding.theme)) return value
+  return {
+    ...branding,
+    theme: derivePublicBrandingThemeTokens(cleanPublicBrandingStrings(branding.theme)),
+  }
 }
 
 function normalizePublicBranding(raw: Partial<PublicBrandingConfig> | undefined): PublicBrandingConfig {
@@ -523,7 +533,34 @@ export function normalizeConfigLayers(
   base: OpenCoworkConfig = DEFAULT_CONFIG,
 ): OpenCoworkConfig {
   return layers.reduce<OpenCoworkConfig>(
-    (current, layer) => normalizeAppConfig(deepMerge<OpenCoworkConfig>(current, layer)),
+    (current, layer) => normalizeAppConfig(deepMerge<OpenCoworkConfig>(current, deriveConfigLayerPublicBranding(layer))),
     normalizeAppConfig(base),
   )
+}
+
+function deriveConfigLayerPublicBranding(layer: Partial<OpenCoworkConfig>): Partial<OpenCoworkConfig> {
+  const hasCloudPublicBranding = Boolean(layer.cloud?.publicBranding)
+  const hasGatewayBranding = Boolean(layer.gateway?.branding)
+  const cloudPublicBranding = hasCloudPublicBranding
+    ? derivePublicBrandingConfigLayer(layer.cloud?.publicBranding)
+    : undefined
+  const gatewayBranding = hasGatewayBranding
+    ? derivePublicBrandingConfigLayer(layer.gateway?.branding)
+    : undefined
+  if (cloudPublicBranding === layer.cloud?.publicBranding && gatewayBranding === layer.gateway?.branding) return layer
+
+  const next: Partial<OpenCoworkConfig> = { ...layer }
+  if (hasCloudPublicBranding && layer.cloud) {
+    next.cloud = {
+      ...layer.cloud,
+      publicBranding: cloudPublicBranding as PublicBrandingConfig,
+    }
+  }
+  if (hasGatewayBranding && layer.gateway) {
+    next.gateway = {
+      ...layer.gateway,
+      branding: gatewayBranding as PublicBrandingConfig,
+    }
+  }
+  return next
 }

@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { IncomingMessage } from 'node:http'
-import { splitTrustedProxyCidrs, type PublicBrandingConfig } from '@open-cowork/shared'
+import { derivePublicBrandingThemeTokens, PUBLIC_BRANDING_THEME_TOKEN_KEYS, splitTrustedProxyCidrs, type PublicBrandingConfig } from '@open-cowork/shared'
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudAuthConfig, type CloudBillingConfig, type OpenCoworkConfig } from '../config-types.ts'
 import { CloudArtifactService } from './artifact-service.ts'
 import { evaluateBillingEntitlement, type BillingAdapter } from './billing-adapter.ts'
@@ -574,20 +574,7 @@ function safePublicBrandingUrl(value: unknown, allowMailto = false) {
   return undefined
 }
 
-const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>([
-  'background',
-  'surface',
-  'mutedSurface',
-  'border',
-  'text',
-  'mutedText',
-  'accent',
-  'accentStrong',
-  'focus',
-  'warn',
-  'danger',
-  'ok',
-])
+const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>(PUBLIC_BRANDING_THEME_TOKEN_KEYS)
 const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
   'title',
   'subtitle',
@@ -644,12 +631,13 @@ function mergePublicBranding(...entries: Array<Partial<PublicBrandingConfig> | u
   const merged = entries.reduce<PublicBrandingConfig>((current, entry) => {
     if (!entry) return current
     const cleanEntry = cleanPublicBrandingEntry(entry)
+    const theme = derivePublicBrandingThemeTokens(cleanBrandingObject(cleanEntry.theme))
     return {
       ...current,
       ...cleanEntry,
       theme: {
         ...(current.theme || {}),
-        ...cleanBrandingObject(cleanEntry.theme),
+        ...theme,
       },
       dashboard: {
         ...(current.dashboard || {}),

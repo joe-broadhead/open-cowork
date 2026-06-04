@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { accessSync } from 'node:fs'
+import { accessSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { CLOUD_WEB_ROUTES } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
 import {
@@ -17,6 +18,13 @@ import {
 } from './browser-test-fixtures.ts'
 
 const CI = Boolean(process.env.CI)
+const desktopRequire = createRequire(new URL('../../desktop/package.json', import.meta.url))
+const FONT_ASSET_SPECS = {
+  'mona-sans-latin-wght-normal.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2',
+  'mona-sans-latin-wght-italic.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-italic.woff2',
+  'hubot-sans-latin-wght-normal.woff2': '@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-normal.woff2',
+  'hubot-sans-latin-wght-italic.woff2': '@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-italic.woff2',
+} as const
 
 type ChromiumLauncher = {
   launch(options: Record<string, unknown>): Promise<any>
@@ -29,6 +37,12 @@ function pathExists(path: string) {
   } catch {
     return false
   }
+}
+
+function readCloudWebFontAsset(pathname: string) {
+  const fileName = pathname.split('/').pop() || ''
+  const spec = FONT_ASSET_SPECS[fileName as keyof typeof FONT_ASSET_SPECS]
+  return spec ? readFileSync(desktopRequire.resolve(spec)) : null
 }
 
 async function loadChromium() {
@@ -316,6 +330,12 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
       contentType: 'text/html; charset=utf-8',
       body: html,
     }))
+    await page.route('https://cloud.example.test/assets/fonts/*.woff2', (route: any) => {
+      const body = readCloudWebFontAsset(new URL(route.request().url()).pathname)
+      return route.fulfill(body
+        ? { status: 200, contentType: 'font/woff2', body }
+        : { status: 404, contentType: 'text/plain; charset=utf-8', body: 'Not found' })
+    })
     await page.addInitScript(browserMocksScript(state))
     const pageErrors: string[] = []
     page.on('pageerror', (error: Error) => pageErrors.push(error.message))
