@@ -1,3 +1,4 @@
+import { cloudWebAdminRouteSummary } from './admin-surface-matrix.ts'
 import { cloudWebWorkbenchRouteSummary } from './workbench-parity.ts'
 
 export type CloudWebSurface = 'workbench' | 'admin'
@@ -92,7 +93,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: false,
     requiresAdmin: false,
-    summary: 'Organization profile, role, and deployment policy.',
+    summary: cloudWebAdminRouteSummary('org', 'Organization profile, role, and deployment policy.'),
   },
   {
     id: 'members',
@@ -100,7 +101,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Member, invite, and role administration.',
+    summary: cloudWebAdminRouteSummary('members', 'Member, invite, and role administration.'),
   },
   {
     id: 'policy',
@@ -108,7 +109,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Runtime profile and feature verdicts.',
+    summary: cloudWebAdminRouteSummary('policy', 'Runtime profile and feature verdicts.'),
   },
   {
     id: 'byok',
@@ -116,7 +117,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Write-only provider key status and rotation.',
+    summary: cloudWebAdminRouteSummary('byok', 'Write-only provider key status and rotation.'),
   },
   {
     id: 'connections',
@@ -124,7 +125,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Scoped API tokens for desktop and gateway clients.',
+    summary: cloudWebAdminRouteSummary('connections', 'Scoped API tokens for desktop and gateway clients.'),
   },
   {
     id: 'billing',
@@ -132,7 +133,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Subscription and entitlement state.',
+    summary: cloudWebAdminRouteSummary('billing', 'Subscription and entitlement state.'),
   },
   {
     id: 'gateway',
@@ -140,7 +141,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Headless agents and channel bindings.',
+    summary: cloudWebAdminRouteSummary('gateway', 'Headless agents and channel bindings.'),
   },
   {
     id: 'audit',
@@ -148,7 +149,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Redacted audit events for sensitive actions.',
+    summary: cloudWebAdminRouteSummary('audit', 'Redacted audit events for sensitive actions.'),
   },
   {
     id: 'usage',
@@ -156,7 +157,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Recent metering and quota events.',
+    summary: cloudWebAdminRouteSummary('usage', 'Recent metering and quota events.'),
   },
   {
     id: 'diagnostics',
@@ -164,7 +165,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'admin',
     requiresAuth: true,
     requiresAdmin: true,
-    summary: 'Redacted health and support data.',
+    summary: cloudWebAdminRouteSummary('diagnostics', 'Redacted health and support data.'),
   },
 ]
 

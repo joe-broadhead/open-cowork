@@ -9,6 +9,8 @@ export function cloudWebsiteClientGatewayScript() {
   removeChildren(agents);
   removeChildren(bindings);
   removeChildren(select);
+  const gatewayLocked = adminLocked();
+  const gatewayAdminReason = adminSurfaceText('gateway', 'disabledReason', 'Gateway administration requires an org owner or admin role.');
   if (deliveries) removeChildren(deliveries);
   if (setup) {
     removeChildren(setup);
@@ -103,8 +105,8 @@ export function cloudWebsiteClientGatewayScript() {
       const actions = document.createElement('div');
       actions.className = 'row-actions';
       actions.appendChild(pill(delivery.status || 'unknown', deliveryPillKind(delivery.status)));
-      actions.appendChild(actionButton('Retry', () => retryDelivery(delivery.deliveryId), 'secondary', adminLocked() || !delivery.deliveryId || delivery.status === 'sent'));
-      actions.appendChild(actionButton('Dead-letter', () => deadLetterDelivery(delivery.deliveryId), 'danger', adminLocked() || !delivery.deliveryId || delivery.status === 'dead'));
+      actions.appendChild(actionButton('Retry', () => retryDelivery(delivery.deliveryId), 'secondary', gatewayLocked || !delivery.deliveryId || delivery.status === 'sent', gatewayLocked ? gatewayAdminReason : ''));
+      actions.appendChild(actionButton('Dead-letter', () => deadLetterDelivery(delivery.deliveryId), 'danger', gatewayLocked || !delivery.deliveryId || delivery.status === 'dead', gatewayLocked ? gatewayAdminReason : ''));
       row.appendChild(main);
       row.appendChild(actions);
       appendDetails(row, 'Redacted delivery payload', {

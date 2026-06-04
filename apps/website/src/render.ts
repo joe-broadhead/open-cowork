@@ -1,4 +1,5 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
+import { CLOUD_WEB_ADMIN_SURFACE_MATRIX, cloudWebAdminSurfaceForRoute } from './admin-surface-matrix.ts'
 import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientBootstrap } from './client-contract.ts'
 import { DEFAULT_WEBSITE_PUBLIC_BRANDING, brandLinksMarkup, brandLogoMarkup, resolvePublicBranding } from './branding.ts'
@@ -66,6 +67,22 @@ function routeParityMarkup(routeId: CloudWebRouteId) {
           </div>`
 }
 
+function routeAdminSurfaceMarkup(routeId: CloudWebRouteId) {
+  const entry = cloudWebAdminSurfaceForRoute(routeId)
+  if (!entry) return ''
+  return `<div class="surface-grid" data-admin-surface-route="${escapeHtml(routeId)}" aria-label="Cloud Web admin surface contract for ${escapeHtml(routeId)}">
+            <article class="surface-card">
+              <div class="runtime-card-header">
+                <span class="pill" data-kind="info">Admin surface</span>
+                <strong>${escapeHtml(entry.label)}</strong>
+              </div>
+              <p>${escapeHtml(entry.cloudAffordance)}</p>
+              <small>${escapeHtml(entry.sensitiveBoundary)}</small>
+              <small>${escapeHtml(entry.disabledReason)}</small>
+            </article>
+          </div>`
+}
+
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
   const branding = resolvePublicBranding(publicBranding || policy.publicBranding)
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
@@ -79,6 +96,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
     api: CLOUD_WEB_CLIENT_ENDPOINTS,
     routeMatrix: CLOUD_WEB_ROUTE_API_MATRIX,
+    adminSurfaces: CLOUD_WEB_ADMIN_SURFACE_MATRIX,
     workbenchParity: CLOUD_WEB_WORKBENCH_PARITY_MATRIX,
     sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
   }
@@ -379,6 +397,7 @@ ${cloudWebsiteStyles(branding)}
               <div class="meta">${escapeHtml(copy.subtitle || 'Cloud control plane state for this signed-in org.')}</div>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('org')}
           <div class="grid">
             <div class="panel">
               <h3>Profile and policy</h3>
@@ -405,6 +424,7 @@ ${cloudWebsiteStyles(branding)}
               <button id="refresh-admin" type="button" data-admin-control="true">Refresh admin</button>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('members')}
           <div class="workbench-split">
             <div class="panel">
               <div class="section-header">
@@ -450,6 +470,7 @@ ${cloudWebsiteStyles(branding)}
               <div class="meta">Runtime profile and feature flags</div>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('policy')}
           <div class="grid">
             <div class="panel">
               <h3>Runtime profile</h3>
@@ -493,6 +514,7 @@ ${cloudWebsiteStyles(branding)}
               <div class="meta">${escapeHtml(copy.byokDescription || 'Provider keys are write-only. The dashboard stores status metadata only.')}</div>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('byok')}
           <div class="grid">
             <form class="panel" id="byok-form">
               <h3>Add or rotate key</h3>
@@ -518,6 +540,7 @@ ${cloudWebsiteStyles(branding)}
               <div class="meta">${escapeHtml(copy.connectionsDescription || 'Issue scoped tokens for desktop and gateway clients. Plaintext is shown once.')}</div>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('connections')}
           <div class="grid">
             <form class="panel" id="token-form">
               <h3>Create ${escapeHtml(labels.apiToken || 'API token')}</h3>
@@ -548,6 +571,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
             <button id="refresh-gateway" type="button" data-admin-control="true">Refresh gateway</button>
           </div>
+          ${routeAdminSurfaceMarkup('gateway')}
           <div class="grid">
             <div class="panel">
               <h3>Setup guide</h3>
@@ -611,6 +635,7 @@ ${cloudWebsiteStyles(branding)}
               <div class="meta">${escapeHtml(copy.billingDescription || 'Manage hosted plan state and entitlements for this org.')}</div>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('billing')}
           <div class="grid">
             <form class="panel" id="billing-form">
               <h3>Plan</h3>
@@ -641,6 +666,7 @@ ${cloudWebsiteStyles(branding)}
               <button id="export-audit" type="button" data-admin-control="true">Export</button>
             </div>
           </div>
+          ${routeAdminSurfaceMarkup('audit')}
           <div class="panel">
             <div class="section-header">
               <h3>Events</h3>
@@ -660,6 +686,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
             <button id="export-usage" type="button">Export usage</button>
           </div>
+          ${routeAdminSurfaceMarkup('usage')}
           <div class="grid">
             <div class="panel">
               <h3>Quota windows</h3>
@@ -684,6 +711,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
             <button id="prepare-diagnostics" type="button" data-admin-control="true">Prepare bundle</button>
           </div>
+          ${routeAdminSurfaceMarkup('diagnostics')}
           <div class="grid">
             <div class="panel">
               <h3>Health</h3>

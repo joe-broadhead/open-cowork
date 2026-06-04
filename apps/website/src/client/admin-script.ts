@@ -10,9 +10,12 @@ export function cloudWebsiteClientAdminScript() {
   if (adminNotice) {
     adminNotice.hidden = !workspace || canManage(workspace.role);
   }
+  const locked = adminLocked();
   qsa('[data-admin-control="true"]').forEach((element) => {
-    element.disabled = adminLocked();
-    element.dataset.locked = adminLocked() ? 'true' : 'false';
+    element.disabled = locked;
+    element.dataset.locked = locked ? 'true' : 'false';
+    if (locked) element.title = adminControlReason(element, 'This action requires an org owner or admin role.');
+    else element.removeAttribute('title');
   });
   qsa('[data-chat-control="true"]').forEach((element) => {
     const locked = !workspace || bootstrap.features?.chat === false;
@@ -40,11 +43,15 @@ function renderMembers() {
   if (!list) return;
   const policy = state.admin.policy;
   const signup = policy?.signup || {};
+  const memberLocked = adminLocked();
+  const memberAdminReason = adminSurfaceText('members', 'disabledReason', 'Member administration requires an org owner or admin role.');
   if (inviteForm) {
     qsa('button, input, select', inviteForm).forEach((element) => {
-      const locked = adminLocked() || signup.mode !== 'invite';
+      const locked = memberLocked || signup.mode !== 'invite';
       element.disabled = locked;
       element.dataset.locked = locked ? 'true' : 'false';
+      if (locked) element.title = memberLocked ? memberAdminReason : 'Invite creation is disabled for the current signup mode.';
+      else element.removeAttribute('title');
     });
   }
   if (inviteNotice) {
@@ -97,13 +104,13 @@ function renderMembers() {
     const actions = document.createElement('span');
     actions.setAttribute('role', 'cell');
     actions.className = 'row-actions';
-    actions.appendChild(actionButton('Make admin', () => updateMember(member.accountId, { role: 'admin' }), 'secondary', adminLocked() || member.role === 'admin' || member.status === 'disabled'));
-    actions.appendChild(actionButton('Make member', () => updateMember(member.accountId, { role: 'member' }), 'secondary', adminLocked() || member.role === 'member' || member.status === 'disabled'));
+    actions.appendChild(actionButton('Make admin', () => updateMember(member.accountId, { role: 'admin' }), 'secondary', memberLocked || member.role === 'admin' || member.status === 'disabled', memberLocked ? memberAdminReason : ''));
+    actions.appendChild(actionButton('Make member', () => updateMember(member.accountId, { role: 'member' }), 'secondary', memberLocked || member.role === 'member' || member.status === 'disabled', memberLocked ? memberAdminReason : ''));
     if (member.status === 'invited') {
-      actions.appendChild(actionButton('Activate', () => updateMember(member.accountId, { status: 'active' }), 'primary', adminLocked()));
-      actions.appendChild(actionButton('Revoke', () => disableMember(member.accountId), 'danger', adminLocked()));
+      actions.appendChild(actionButton('Activate', () => updateMember(member.accountId, { status: 'active' }), 'primary', memberLocked, memberLocked ? memberAdminReason : ''));
+      actions.appendChild(actionButton('Revoke', () => disableMember(member.accountId), 'danger', memberLocked, memberLocked ? memberAdminReason : ''));
     } else if (member.status !== 'disabled') {
-      actions.appendChild(actionButton('Suspend', () => disableMember(member.accountId), 'danger', adminLocked()));
+      actions.appendChild(actionButton('Suspend', () => disableMember(member.accountId), 'danger', memberLocked, memberLocked ? memberAdminReason : ''));
     }
     row.appendChild(identity);
     row.appendChild(role);

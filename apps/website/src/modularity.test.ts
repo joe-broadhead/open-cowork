@@ -22,6 +22,7 @@ function lineCount(path: string) {
 test('cloud web workbench production source stays split into bounded modules', () => {
   const files = new Map(sourceFiles().map((path) => [relative(SRC_ROOT, path), lineCount(path)]))
   const requiredModules = [
+    'admin-surface-matrix.ts',
     'app-shell.ts',
     'branding.ts',
     'client-contract.ts',

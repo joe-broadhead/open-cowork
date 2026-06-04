@@ -64,6 +64,27 @@ keeping Cloud Web honest about cloud-only and desktop-only boundaries.
 | Local Stdio MCPs | Unavailable in Cloud | `capabilities`, `agents` | Show only policy-safe MCP metadata that has been converted into the Cloud profile. | Cloud Web cannot spawn local stdio MCP processes or expose command lines, environment variables, or secret refs. |
 | Machine Runtime Config | Desktop-only | `chat`, `agents`, `capabilities` | Show current Cloud profile, feature flags, and projected runtime state. | Cloud Web does not configure the local machine runtime, provider defaults, local approvals mode, or desktop notification settings. |
 
+## Admin/Settings Surface Matrix
+
+The typed source of truth is
+`apps/website/src/admin-surface-matrix.ts`. Cloud Web admin route summaries,
+browser bootstrap metadata, rendered admin surface cards, and locked-control
+copy consume this matrix. This document mirrors the same rows, and render tests
+assert every documented row against the typed source.
+
+| Surface | Route | Desktop analog | Cloud Web affordance | Sensitive boundary |
+|---|---|---|---|---|
+| Workspace Profile | `org` | Desktop account, workspace, and profile status surfaces | Show signed-in org identity, role, profile, and public sign-in state. | Bootstrap and signed-out state expose only public branding, route metadata, endpoint metadata, and feature flags. |
+| Members | `members` | Desktop account/settings identity context | Manage org member roles, invites, activation, suspension, and invite-mode state. | Member rows expose identity, role, and status only; authorization remains server-side. |
+| Profiles & Policy | `policy` | Desktop runtime settings, capability policy, and Health Center | Show Cloud profile features, project-source policy, runtime guardrails, gateway policy, and worker health. | Cloud Web reports policy and health summaries without configuring local runtime, host paths, or stdio MCP processes. |
+| BYOK | `byok` | Desktop provider credential setup | Add, rotate, validate, and disable provider credentials through write-only Cloud APIs. | Provider keys are never rendered after submission; the browser receives metadata such as provider id, status, last4, and validation timestamps. |
+| Connections | `connections` | Desktop Cloud connection and Gateway pairing surfaces | Issue scoped Desktop, Gateway, and admin API tokens with one-time plaintext reveal. | Token plaintext is shown once after creation and is not stored in persistent browser state. |
+| Billing | `billing` | Desktop entitlement and setup status surfaces | Show managed billing mode, plan state, checkout/portal actions, and resolved entitlements. | Billing renders plan and entitlement metadata only; provider integration stays behind the Cloud API. |
+| Headless Gateway | `gateway` | Desktop Gateway connection and workflow delivery status | Configure headless agents, channel bindings, setup guidance, and delivery backlog controls. | Channel credential refs, delivery targets, payloads, and errors are browser-sanitized before rendering. |
+| Audit | `audit` | Desktop diagnostics and sensitive-action history context | Browse and export redacted administrative events for sensitive Cloud actions. | Audit metadata must be server-redacted and is sanitized again before display or export. |
+| Usage | `usage` | Desktop chat cost, token, and runtime status summaries | Show quota windows, recent metering totals, and bounded usage event samples. | Usage events include metering dimensions only, never prompts, provider keys, or tokens. |
+| Diagnostics | `diagnostics` | Desktop Health Center and support bundle surfaces | Prepare redacted health summaries and support bundles for Cloud runtime, BYOK, gateway, and object-store state. | Diagnostics are recursively redacted and array-capped before rendering or download. |
+
 ## End-User Workbench Contract
 
 Cloud Web must keep parity with Desktop Cloud for cloud workspaces:

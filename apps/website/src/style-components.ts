@@ -135,14 +135,16 @@ export function cloudWebsiteComponentStyles() {
       font-size: var(--text-md);
       line-height: var(--lh-md);
     }
-    .parity-grid {
+    .parity-grid,
+    .surface-grid {
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: var(--space-2);
       min-width: 0;
     }
-    .parity-card {
+    .parity-card,
+    .surface-card {
       min-width: 0;
       display: grid;
       gap: var(--space-2);
@@ -156,7 +158,8 @@ export function cloudWebsiteComponentStyles() {
       background: color-mix(in srgb, var(--color-amber) 8%, var(--color-surface) 92%);
       border-color: var(--tone-warn-border);
     }
-    .parity-card p {
+    .parity-card p,
+    .surface-card p {
       margin: 0;
       color: var(--text);
       font-size: var(--text-sm);
@@ -366,7 +369,8 @@ export function cloudWebsiteComponentStyles() {
       .form-grid {
         grid-template-columns: 1fr;
       }
-      .parity-grid {
+      .parity-grid,
+      .surface-grid {
         grid-template-columns: 1fr;
       }
       .row {
