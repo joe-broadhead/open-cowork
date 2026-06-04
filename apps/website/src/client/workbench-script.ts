@@ -264,12 +264,13 @@ function renderResolvedCard(kind, item) {
 function renderMessageBubble(message) {
   const bubble = document.createElement('article');
   bubble.className = 'message-bubble';
-  bubble.dataset.role = message.role;
+  const role = String(message.role || 'assistant').toLowerCase();
+  bubble.dataset.role = ['assistant', 'user', 'system', 'error'].includes(role) ? role : 'assistant';
   const heading = document.createElement('div');
   heading.className = 'message-heading';
-  heading.textContent = message.role === 'user' ? 'You' : 'Assistant';
+  heading.textContent = role === 'user' ? 'You' : role === 'system' ? 'System' : role === 'error' ? 'Error' : 'Assistant';
   const body = document.createElement('p');
-  body.textContent = messageText(message);
+  body.textContent = messageText(message) || '(empty message)';
   bubble.appendChild(heading);
   bubble.appendChild(body);
   if (Array.isArray(message.attachments) && message.attachments.length) {
@@ -379,6 +380,7 @@ function renderTodoList(todos) {
 function renderRuntimeError(error) {
   const item = document.createElement('div');
   item.className = 'notice runtime-error';
+  item.dataset.kind = 'error';
   item.appendChild(pill(errorCategory(error.message), 'warn'));
   const text = document.createElement('span');
   text.textContent = error.message || 'Runtime error';

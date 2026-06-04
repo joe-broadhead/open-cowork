@@ -54,6 +54,57 @@ test('cloud web browser exercises every route declared in the route API matrix',
   }
 })
 
+test('cloud web browser exposes desktop parity boundaries and workbench state vocabulary', async () => {
+  const harness = createCloudWebBrowserHarness({ role: 'admin' })
+  const firstView = harness.views[harness.sessions[0].sessionId]
+  firstView.projection.view.messages.push(
+    { id: 'system-note', role: 'system', content: 'Cloud policy loaded.', order: 8 },
+    { id: 'error-note', role: 'error', content: 'Provider warning projected from cloud.', order: 9 },
+  )
+  await harness.start()
+  try {
+    assert.ok(Array.isArray(harness.bootstrap.workbenchParity))
+    assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Cloud Project Sources/)
+    assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Local Filesystem/)
+
+    const chatLink = harness.document.querySelector('[data-route-link="chat"]') as HTMLAnchorElement
+    chatLink.focus()
+    assert.equal(harness.document.activeElement, chatLink)
+    chatLink.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'chat'))
+    assert.match(harness.document.querySelector('[data-parity-route="chat"]')?.textContent || '', /Runtime Status/)
+    assert.match(harness.document.querySelector('[data-parity-route="chat"]')?.textContent || '', /Approvals & Questions/)
+    assert.match(harness.document.querySelector('.message-bubble[data-role="system"]')?.textContent || '', /Cloud policy loaded/)
+    assert.match(harness.document.querySelector('.message-bubble[data-role="error"]')?.textContent || '', /Provider warning/)
+
+    harness.clickText('[data-route-link]', 'Tools & Skills')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'capabilities'))
+    assert.match(harness.document.querySelector('[data-parity-route="capabilities"]')?.textContent || '', /Local Stdio MCPs/)
+    assert.match(harness.document.querySelector('#capability-policy-note')?.textContent || '', /Local stdio MCPs are Desktop-only/)
+
+    harness.clickText('[data-route-link]', 'Workflows')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'workflows'))
+    assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Latest run/)
+  } finally {
+    harness.close()
+  }
+
+  const locked = await createCloudWebBrowserHarness({
+    role: 'admin',
+    features: { chat: false, workflows: false, agents: false },
+  }).start()
+  try {
+    const startThread = locked.document.querySelector('#workbench-agent-list button.primary') as HTMLButtonElement
+    assert.equal(startThread.disabled, true)
+    assert.match(startThread.title, /Start thread disables/)
+    const runNow = locked.document.querySelector('#workflow-detail button.primary') as HTMLButtonElement
+    assert.equal(runNow.disabled, true)
+    assert.match(runNow.title, /Workflow controls disable/)
+  } finally {
+    locked.close()
+  }
+})
+
 test('cloud web browser creates, prompts, streams, reloads, and continues a cloud thread', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {

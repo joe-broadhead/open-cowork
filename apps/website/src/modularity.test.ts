@@ -45,6 +45,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'styles.ts',
     'surface-workbench.ts',
     'thread-workbench.ts',
+    'workbench-parity.ts',
   ]
   for (const module of requiredModules) {
     assert.ok(files.has(module), `${module} exists`)

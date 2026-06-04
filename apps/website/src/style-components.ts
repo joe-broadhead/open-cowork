@@ -135,6 +135,33 @@ export function cloudWebsiteComponentStyles() {
       font-size: var(--text-md);
       line-height: var(--lh-md);
     }
+    .parity-grid {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .parity-card {
+      min-width: 0;
+      display: grid;
+      gap: var(--space-2);
+      border: var(--border-width-1) solid var(--color-border-subtle);
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--color-surface) 76%, transparent);
+      padding: var(--space-3);
+    }
+    .parity-card[data-parity-availability="intentionally-unavailable"],
+    .parity-card[data-parity-availability="desktop-only"] {
+      background: color-mix(in srgb, var(--color-amber) 8%, var(--color-surface) 92%);
+      border-color: var(--tone-warn-border);
+    }
+    .parity-card p {
+      margin: 0;
+      color: var(--text);
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+    }
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -337,6 +364,9 @@ export function cloudWebsiteComponentStyles() {
         min-width: 620px;
       }
       .form-grid {
+        grid-template-columns: 1fr;
+      }
+      .parity-grid {
         grid-template-columns: 1fr;
       }
       .row {
