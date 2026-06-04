@@ -364,6 +364,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       callback: vi.fn(async () => false),
       list: vi.fn(async () => []),
       logout: vi.fn(async () => true),
+      testConnection: vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId })),
     },
     runtime: {
       awaitInitialization: vi.fn(async () => ({

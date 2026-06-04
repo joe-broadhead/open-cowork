@@ -162,10 +162,9 @@ export function CommandPalette({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={handleKeyDown}
-            role="combobox"
+            type="search"
+            role="searchbox"
             aria-label={t('commandPalette.searchLabel', 'Search command palette')}
-            aria-autocomplete="list"
-            aria-expanded="true"
             aria-controls={listboxId}
             aria-activedescendant={activeOptionId}
             placeholder={t('commandPalette.search', 'Search actions, agents, and commands...')}

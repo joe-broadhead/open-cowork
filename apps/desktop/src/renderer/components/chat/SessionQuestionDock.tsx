@@ -29,7 +29,7 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
     if (!callId) return
     const target = document.querySelector(`[data-tool-call-id="${CSS.escape(callId)}"]`)
     if (target instanceof HTMLElement) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'center' })
     }
   }
 
@@ -259,4 +259,10 @@ export function SessionQuestionDock({ request, queueCount = 1 }: Props) {
       </div>
     </div>
   )
+}
+
+function preferredScrollBehavior(): ScrollBehavior {
+  const reduce = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  return reduce ? 'auto' : 'smooth'
 }

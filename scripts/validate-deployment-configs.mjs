@@ -1111,8 +1111,16 @@ function validateSetupHealthCenter() {
   }
 
   const setupScreen = read(setupScreenPath)
-  if (!setupScreen.includes('SETUP_INTENTS') || !setupScreen.includes('Setup path')) {
-    throw new Error(`${setupScreenPath} must render shared setup intents`)
+  for (const phrase of [
+    'SETUP_INTENTS',
+    'advancedIntents.map',
+    'Set up a team or server deployment',
+    'selectedIntent.primaryCommand',
+    'selectedIntent.primaryDocs',
+  ]) {
+    if (!setupScreen.includes(phrase)) {
+      throw new Error(`${setupScreenPath} must render shared setup intents behind advanced setup disclosure`)
+    }
   }
 
   const healthCenter = read(healthCenterPath)

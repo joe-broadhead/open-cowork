@@ -99,7 +99,8 @@ beforeEach(() => {
 })
 
 describe('SetupScreen', () => {
-  it('shows topology choices before provider setup', async () => {
+  it('defaults to local setup and keeps deployment topology behind disclosure', async () => {
+    const user = userEvent.setup()
     installRendererTestCoworkApi({
       settings: {
         get: vi.fn(async () => settings()),
@@ -117,11 +118,22 @@ describe('SetupScreen', () => {
       />,
     )
 
-    expect(await screen.findByRole('button', { name: /Run Desktop locally/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Deploy Gateway/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Connect Cloud/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Pair Desktop/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Connect all surfaces/ })).toBeTruthy()
+    expect(await screen.findByText('Running on this Mac')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Deploy Gateway/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Gateway/)).not.toBeInTheDocument()
+    expect(screen.queryByText('desktop-only')).not.toBeInTheDocument()
+    expect(screen.queryByText(/pnpm/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Learn more' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('https://github.com/joe-broadhead/open-cowork/blob/master/docs/desktop-app.md'),
+    )
+
+    await user.click(screen.getByRole('button', { name: /Set up a team or server deployment/ }))
+
+    expect(screen.getByRole('button', { name: /Deploy Gateway/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Deploy Gateway/ }))
+    expect(screen.getByText('gateway-only')).toBeInTheDocument()
+    expect(screen.getByText('pnpm standalone-gateway:setup')).toBeInTheDocument()
   })
 
   it('loads selected-provider credentials through the scoped credential IPC', async () => {
@@ -246,10 +258,18 @@ describe('SetupScreen', () => {
     expect(apiKeyInput).toHaveValue('sk-or-user-edit')
   })
 
-  it('discloses and persists the developer config bridge choice during first-run setup', async () => {
+  it('tests the connection, then persists the developer config bridge choice during first-run setup', async () => {
     const user = userEvent.setup()
     const set = vi.fn(async () => settings())
     const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const testConnection = vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId }))
+    const awaitInitialization = vi.fn(async () => ({
+      phase: 'ready' as const,
+      message: 'Runtime is ready.',
+      ready: true,
+      error: null,
+      updatedAt: new Date().toISOString(),
+    }))
     const onComplete = vi.fn()
     installRendererTestCoworkApi({
       settings: {
@@ -258,7 +278,11 @@ describe('SetupScreen', () => {
         set,
       },
       runtime: {
+        awaitInitialization,
         restart,
+      },
+      provider: {
+        testConnection,
       },
     })
 
@@ -272,14 +296,20 @@ describe('SetupScreen', () => {
       />,
     )
 
-    const bridgeToggle = await screen.findByRole('checkbox', { name: /Developer config bridge/ })
+    await user.click(screen.getByRole('button', { name: /Set up a team or server deployment/ }))
+    const bridgeToggle = await screen.findByRole('checkbox', { name: /Reuse developer tools from this Mac/ })
     expect(bridgeToggle).toBeChecked()
 
     await user.click(bridgeToggle)
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    await waitFor(() => expect(screen.getByText(/Connection tested/)).toBeInTheDocument())
+    expect(screen.queryByText('Runtime is ready.')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
-    expect(restart).toHaveBeenCalledTimes(1)
+    expect(awaitInitialization).toHaveBeenCalledTimes(1)
+    expect(testConnection).toHaveBeenCalledWith('openrouter', 'anthropic/claude-sonnet-4')
+    expect(restart).not.toHaveBeenCalled()
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
@@ -290,7 +320,46 @@ describe('SetupScreen', () => {
     }))
   })
 
-  it('uses OpenCode runtime catalog defaults after credentialless provider auth', async () => {
+  it('keeps setup open and surfaces provider validation failures', async () => {
+    const user = userEvent.setup()
+    const testConnection = vi.fn(async () => {
+      throw new Error('Provider rejected the API key')
+    })
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: vi.fn(async () => settings()),
+      },
+      provider: {
+        testConnection,
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
+    await user.type(apiKeyInput, 'sk-or-bad')
+    const testButton = await screen.findByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(testButton).not.toBeDisabled())
+    await user.click(testButton)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Provider rejected the API key'))
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Provider rejected the API key')
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  it('uses model catalog defaults after credentialless provider auth', async () => {
     const user = userEvent.setup()
     const set = vi.fn(async (updates: Partial<EffectiveAppSettings>) => settings({
       ...updates,
@@ -317,6 +386,7 @@ describe('SetupScreen', () => {
           defaultModel: 'gpt-5.4',
           models: { 'gpt-5.4': {} },
         }]),
+        testConnection: vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId })),
       },
       settings: {
         get: vi.fn(async () => settings({
@@ -355,6 +425,8 @@ describe('SetupScreen', () => {
     await user.click(screen.getByRole('button', { name: "I've finished signing in" }))
     await waitFor(() => expect(screen.getByPlaceholderText('Model ID')).toHaveValue('gpt-5.4'))
 
+    await user.click(screen.getByRole('button', { name: 'Test connection' }))
+    await waitFor(() => expect(screen.getByText(/Connection tested/)).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
     expect(set).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -364,6 +436,6 @@ describe('SetupScreen', () => {
         'github-copilot': {},
       },
     }))
-    expect(restart).toHaveBeenCalledTimes(2)
+    expect(restart).toHaveBeenCalledTimes(1)
   })
 })

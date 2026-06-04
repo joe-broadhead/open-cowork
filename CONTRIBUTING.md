@@ -60,7 +60,11 @@ pnpm dev
   `eslint-plugin-no-unsanitized` for the renderer. Config lives in
   `eslint.config.mjs`. `pnpm lint` runs ESLint (`--max-warnings 0`)
   followed by `scripts/lint.mjs` for repo-specific checks (trailing
-  whitespace, tabs, final newlines).
+  whitespace, tabs, final newlines, design-system drift gates).
+- **Design system** primitives, tokens, accessibility gates, and motion
+  rules are documented in `docs/design-system.md`. Prefer the shared
+  renderer primitives before adding local button, input, badge, modal, or
+  icon-only control markup.
 - **Tests** run with Node's built-in runner via
   `--experimental-strip-types` for main/shared/runtime coverage.
   Renderer component tests run with Vitest + jsdom via
