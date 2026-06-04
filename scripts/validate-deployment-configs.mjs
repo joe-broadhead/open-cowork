@@ -192,6 +192,21 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none with public service or ingress requires explicit cloud.allowInsecurePublicAuth=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.image.tag=latest is not allowed')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.enabled=true requires cloudSqlProxy.instanceConnectionName')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.address must be 127.0.0.1')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloudSqlProxy.healthCheck.port must be distinct from cloudSqlProxy.port')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '--max-sigterm-delay=')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '--health-check')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '/cloud-sql-proxy')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '- wait')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'restartPolicy: Always')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'name: cloud-sql-proxy')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', '--run-connection-test')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'cloudSqlProxy:')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'gcr.io/cloud-sql-connectors/cloud-sql-proxy')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'tag: "2.22.0"')
+  assertIncludes('helm/open-cowork-cloud/values.yaml', 'maxSigtermDelay: ""')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.web.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.worker.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.scheduler.enabled=true')
@@ -347,6 +362,37 @@ function validateHelm() {
       '--set',
       'cloud.objectStore.bucket=open-cowork-ci',
     ])
+    run('helm', [
+      'template',
+      'open-cowork-cloud-gcp-proxy',
+      cloudChart,
+      '--set',
+      'image.repository=example.com/open-cowork-cloud',
+      '--set',
+      'image.tag=ci',
+      '--set',
+      'cloud.auth.mode=oidc',
+      '--set',
+      'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+      '--set',
+      'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+      '--set',
+      'cloud.controlPlaneUrl=postgres://postgres:postgres@127.0.0.1:5432/open_cowork_cloud',
+      '--set',
+      'cloud.secretKey=ci-secret-key',
+      '--set',
+      'cloud.cookieSecret=ci-cookie-secret',
+      '--set',
+      'cloud.objectStore.kind=s3',
+      '--set',
+      'cloud.objectStore.bucket=open-cowork-ci',
+      '--set',
+      'cloudSqlProxy.enabled=true',
+      '--set',
+      'cloudSqlProxy.instanceConnectionName=PROJECT:REGION:INSTANCE',
+      '--set',
+      'cloudSqlProxy.runConnectionTest=true',
+    ])
     expectFailure(
       'helm',
       [
@@ -363,6 +409,87 @@ function validateHelm() {
         'cloud.auth.oidcClientId=open-cowork-cloud-ci',
       ],
       'image.tag=latest is not allowed'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-cloud-sql-proxy-missing-instance',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloudSqlProxy.enabled=true',
+      ],
+      'cloudSqlProxy.enabled=true requires cloudSqlProxy.instanceConnectionName'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-cloud-sql-proxy-latest',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloudSqlProxy.enabled=true',
+        '--set',
+        'cloudSqlProxy.image.tag=latest',
+        '--set',
+        'cloudSqlProxy.instanceConnectionName=PROJECT:REGION:INSTANCE',
+      ],
+      'cloudSqlProxy.image.tag=latest is not allowed'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-cloud-sql-proxy-address',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloudSqlProxy.enabled=true',
+        '--set',
+        'cloudSqlProxy.instanceConnectionName=PROJECT:REGION:INSTANCE',
+        '--set',
+        'cloudSqlProxy.address=0.0.0.0',
+      ],
+      'cloudSqlProxy.address must be 127.0.0.1'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-cloud-sql-proxy-localhost',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloudSqlProxy.enabled=true',
+        '--set',
+        'cloudSqlProxy.instanceConnectionName=PROJECT:REGION:INSTANCE',
+        '--set',
+        'cloudSqlProxy.address=localhost',
+      ],
+      'cloudSqlProxy.address must be 127.0.0.1'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-cloud-sql-proxy-health-port',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloudSqlProxy.enabled=true',
+        '--set',
+        'cloudSqlProxy.instanceConnectionName=PROJECT:REGION:INSTANCE',
+        '--set',
+        'cloudSqlProxy.healthCheck.port=5432',
+      ],
+      'cloudSqlProxy.healthCheck.port must be distinct from cloudSqlProxy.port'
     )
     expectFailure(
       'helm',

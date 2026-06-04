@@ -112,6 +112,49 @@ Minimum IAM bindings:
   Bind that KSA to the matching GCP service account, or replace it in your
   private overlay with role-specific KSAs/GSAs.
 
+Template commands for the shared reference service account:
+
+```bash
+gcloud iam service-accounts add-iam-policy-binding \
+  open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+  --project PROJECT \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:PROJECT.svc.id.goog[open-cowork/open-cowork-cloud]"
+
+gcloud projects add-iam-policy-binding PROJECT \
+  --member serviceAccount:open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+  --role roles/cloudsql.client
+```
+
+Grant Secret Manager and Cloud Storage access at the narrowest practical scope
+for your environment. For a first private deployment, project-level
+`roles/secretmanager.secretAccessor` and bucket-level `roles/storage.objectAdmin`
+are acceptable bring-up defaults, but managed environments should split
+read/write and secret access by role before public rollout.
+
+Run the preflight with optional IAM/resource checks before Helm:
+
+```bash
+OPEN_COWORK_GCP_PROJECT=PROJECT \
+OPEN_COWORK_GCP_REGION=REGION \
+OPEN_COWORK_GCP_SQL_INSTANCE=INSTANCE \
+OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_GSA_EMAIL=open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+OPEN_COWORK_GCP_REQUIRE_GKE_IAM=true \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
+pnpm deploy:gcp:preflight -- \
+  --secrets open-cowork-cloud-control-plane-url,open-cowork-cloud-cookie-secret,open-cowork-cloud-internal-token,open-cowork-cloud-secret-key,open-cowork-cloud-secret-key-ref,open-cowork-cloud-oidc-client-secret
+```
+
+The optional checks are read-only. They verify the Cloud SQL connection name,
+Cloud SQL backup/PITR settings, bucket versioning, named Secret Manager
+secrets, the GCP service account, Workload Identity binding, and required
+project roles. Set `OPEN_COWORK_GCP_REQUIRED_PROJECT_ROLES` to a comma-separated
+role list when a private overlay intentionally requires more than
+`roles/cloudsql.client`. Set `OPEN_COWORK_GCP_ALLOW_NO_PITR=true` or
+`OPEN_COWORK_GCP_ALLOW_UNVERSIONED_BUCKET=true` only for documented
+non-production exceptions.
+
 ## Secret Inventory
 
 Create these Secret Manager secrets, or map equivalent secret names through
@@ -138,12 +181,33 @@ The app resolves that ref at runtime using the pod/service identity access
 token. BYOK provider keys are still stored as tenant-scoped encrypted records;
 they must not be injected as process env vars.
 
+When the GKE values enable `cloudSqlProxy`, store
+`open-cowork-cloud-control-plane-url` with a localhost host and the proxy port,
+for example:
+
+```text
+postgres://open_cowork:PASSWORD@127.0.0.1:5432/open_cowork?sslmode=disable
+```
+
+Do not put the raw database URL in Helm values for
+`cloud.deploymentTier=public_production`; keep it in Secret Manager or the
+private deployment repo's secret system so it does not enter Helm release
+history.
+
 ## GKE Split-Role Rollout
 
 1. Create or select a GCP project and region.
 2. Create Artifact Registry repository and publish `open-cowork-cloud` and
    `open-cowork-gateway` images.
-3. Create Cloud SQL PostgreSQL, enable backups/PITR, and create a database.
+3. Create Cloud SQL PostgreSQL, enable backups/PITR, create a database, and
+   capture the connection name for `cloudSqlProxy.instanceConnectionName`:
+
+   ```bash
+   gcloud sql instances describe INSTANCE \
+     --project PROJECT \
+     --format='value(connectionName)'
+   ```
+
 4. Create a private Cloud Storage bucket with versioning/lifecycle policy.
 5. Create Secret Manager secrets listed above.
 6. Create or select a GKE cluster with Workload Identity and bind the
@@ -169,7 +233,18 @@ they must not be injected as process env vars.
    ```
 
 9. Copy `gke/values.gke.yaml.example` into your private deployment repo and
-   replace placeholders.
+   replace placeholders, including `cloudSqlProxy.instanceConnectionName`.
+   The reference chart runs a pinned Cloud SQL Auth Proxy sidecar in each
+   Cloud role pod and keeps it bound to `127.0.0.1`; the Cloud control-plane
+   database URL secret should point at that local listener. The proxy is
+   rendered as a native Kubernetes sidecar with a startup health gate so it
+   starts before the app and shuts down after Cloud workers and schedulers
+   finish draining.
+   When enabling the sidecar on an existing single-replica GKE Autopilot smoke
+   environment, make sure the cluster has enough temporary surge capacity or
+   temporarily set `roles.<role>.updateStrategy.rollingUpdate.maxUnavailable=1`
+   and `maxSurge=0` for the migration window. Production overlays should prefer
+   enough capacity for the default zero-unavailable rollout.
 10. Render and install:
 
    ```bash

@@ -4,6 +4,26 @@
 {{- if eq $.Values.image.tag "latest" }}
 {{- fail "image.tag=latest is not allowed; pin a release tag or immutable digest for reproducible deployments." }}
 {{- end }}
+{{- $cloudSqlProxy := default dict $.Values.cloudSqlProxy }}
+{{- $cloudSqlProxyImage := default dict $cloudSqlProxy.image }}
+{{- $cloudSqlProxyHealthCheck := default dict $cloudSqlProxy.healthCheck }}
+{{- $cloudSqlProxyStartupProbe := default dict $cloudSqlProxyHealthCheck.startupProbe }}
+{{- $cloudSqlProxyHealthCheckPort := int (default 9090 $cloudSqlProxyHealthCheck.port) }}
+{{- $cloudSqlProxyHealthCheckWaitTimeout := default "1s" $cloudSqlProxyHealthCheck.waitTimeout }}
+{{- if $cloudSqlProxy.enabled }}
+{{- if eq (default "" $cloudSqlProxyImage.tag) "latest" }}
+{{- fail "cloudSqlProxy.image.tag=latest is not allowed; pin a Cloud SQL Auth Proxy version tag or immutable digest." }}
+{{- end }}
+{{- if not $cloudSqlProxy.instanceConnectionName }}
+{{- fail "cloudSqlProxy.enabled=true requires cloudSqlProxy.instanceConnectionName in PROJECT:REGION:INSTANCE form." }}
+{{- end }}
+{{- if ne (toString (default "127.0.0.1" $cloudSqlProxy.address)) "127.0.0.1" }}
+{{- fail "cloudSqlProxy.address must be 127.0.0.1 so Cloud SQL is exposed only inside the pod and the proxy receives an IP address." }}
+{{- end }}
+{{- if eq $cloudSqlProxyHealthCheckPort (int (default 5432 $cloudSqlProxy.port)) }}
+{{- fail "cloudSqlProxy.healthCheck.port must be distinct from cloudSqlProxy.port so the proxy database listener and startup health server do not conflict." }}
+{{- end }}
+{{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
 {{- if not $.Values.roles.web.enabled }}
 {{- fail "cloud.deploymentTier=public_production requires roles.web.enabled=true." }}
@@ -56,6 +76,9 @@
 {{- end }}
 {{- range $roleName, $role := .Values.roles }}
 {{- if $role.enabled }}
+{{- $roleTerminationGracePeriodSeconds := int (default 60 $role.terminationGracePeriodSeconds) }}
+{{- $cloudSqlProxyMaxSigtermDelay := default (printf "%ds" $roleTerminationGracePeriodSeconds) $cloudSqlProxy.maxSigtermDelay }}
+{{- $cloudSqlProxyMinSigtermDelay := default "0s" $cloudSqlProxy.minSigtermDelay }}
 {{- if and (eq $roleName "web") (eq $.Values.cloud.auth.mode "oidc") (or (not $.Values.cloud.auth.oidcIssuerUrl) (not $.Values.cloud.auth.oidcClientId)) }}
 {{- fail "cloud.auth.mode=oidc requires cloud.auth.oidcIssuerUrl and cloud.auth.oidcClientId." }}
 {{- end }}
@@ -116,6 +139,53 @@ spec:
       {{- with $.Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $cloudSqlProxy.enabled }}
+      initContainers:
+        - name: cloud-sql-proxy
+          restartPolicy: Always
+          image: "{{ include "open-cowork-cloud.cloudSqlProxyImage" $ }}"
+          imagePullPolicy: {{ default "IfNotPresent" $cloudSqlProxyImage.pullPolicy }}
+          args:
+            - "--address={{ default "127.0.0.1" $cloudSqlProxy.address }}"
+            - "--port={{ default 5432 $cloudSqlProxy.port }}"
+            - "--health-check"
+            - "--http-address=127.0.0.1"
+            - "--http-port={{ $cloudSqlProxyHealthCheckPort }}"
+            - "--min-sigterm-delay={{ $cloudSqlProxyMinSigtermDelay }}"
+            - "--max-sigterm-delay={{ $cloudSqlProxyMaxSigtermDelay }}"
+            {{- if $cloudSqlProxy.privateIp }}
+            - "--private-ip"
+            {{- end }}
+            {{- if $cloudSqlProxy.autoIamAuthn }}
+            - "--auto-iam-authn"
+            {{- end }}
+            {{- if $cloudSqlProxy.structuredLogs }}
+            - "--structured-logs"
+            {{- end }}
+            {{- if $cloudSqlProxy.runConnectionTest }}
+            - "--run-connection-test"
+            {{- end }}
+            - {{ $cloudSqlProxy.instanceConnectionName | quote }}
+          startupProbe:
+            exec:
+              command:
+                - /cloud-sql-proxy
+                - wait
+                - "--http-address=127.0.0.1"
+                - "--http-port={{ $cloudSqlProxyHealthCheckPort }}"
+                - "--max={{ $cloudSqlProxyHealthCheckWaitTimeout }}"
+            periodSeconds: {{ default 2 $cloudSqlProxyStartupProbe.periodSeconds }}
+            timeoutSeconds: {{ default 2 $cloudSqlProxyStartupProbe.timeoutSeconds }}
+            failureThreshold: {{ default 30 $cloudSqlProxyStartupProbe.failureThreshold }}
+          {{- with $.Values.cloudSqlProxy.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.cloudSqlProxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       {{- end }}
       containers:
         - name: open-cowork-cloud

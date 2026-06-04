@@ -54,6 +54,29 @@ cloud:
     bucket: OPEN_COWORK_GCS_BUCKET
     prefix: cloud
 
+cloudSqlProxy:
+  enabled: true
+  instanceConnectionName: PROJECT:REGION:INSTANCE
+  address: 127.0.0.1
+  port: 5432
+  privateIp: false
+  structuredLogs: true
+  runConnectionTest: true
+  healthCheck:
+    port: 9090
+    waitTimeout: 1s
+    startupProbe:
+      periodSeconds: 2
+      timeoutSeconds: 2
+      failureThreshold: 30
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 roles:
   web:
     enabled: true

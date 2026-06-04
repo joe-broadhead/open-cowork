@@ -29,6 +29,30 @@ The preflight checks:
 
 It does not create, modify, or delete resources.
 
+For GKE split-role deployments, add the optional resource/IAM checks:
+
+```bash
+OPEN_COWORK_GCP_PROJECT=PROJECT \
+OPEN_COWORK_GCP_REGION=REGION \
+OPEN_COWORK_GCP_SQL_INSTANCE=INSTANCE \
+OPEN_COWORK_GCP_BUCKET=OPEN_COWORK_BUCKET \
+OPEN_COWORK_GCP_GSA_EMAIL=open-cowork-cloud@PROJECT.iam.gserviceaccount.com \
+OPEN_COWORK_GCP_KSA_NAMESPACE=open-cowork \
+OPEN_COWORK_GCP_KSA_NAME=open-cowork-cloud \
+OPEN_COWORK_GCP_REQUIRE_GKE_IAM=true \
+OPEN_COWORK_GCP_REDACT_OUTPUT=true \
+pnpm deploy:gcp:preflight -- \
+  --secrets open-cowork-cloud-control-plane-url,open-cowork-cloud-cookie-secret,open-cowork-cloud-internal-token,open-cowork-cloud-secret-key,open-cowork-cloud-secret-key-ref,open-cowork-cloud-oidc-client-secret
+```
+
+Those optional checks verify Cloud SQL backup/PITR settings, the Cloud SQL
+connection name used by `cloudSqlProxy.instanceConnectionName`, Cloud Storage
+bucket versioning, named Secret Manager secrets, the GCP service account, the
+Workload Identity binding, and required project roles. Set
+`OPEN_COWORK_GCP_ALLOW_NO_PITR=true` or
+`OPEN_COWORK_GCP_ALLOW_UNVERSIONED_BUCKET=true` only for documented
+non-production exceptions.
+
 ## Cloud Web Smoke
 
 ```bash

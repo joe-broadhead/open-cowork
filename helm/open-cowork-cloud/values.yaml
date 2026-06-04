@@ -109,6 +109,38 @@ cloud:
     sasToken: ""
     accountName: ""
 
+cloudSqlProxy:
+  enabled: false
+  image:
+    repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy
+    tag: "2.22.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  instanceConnectionName: ""
+  address: 127.0.0.1
+  port: 5432
+  privateIp: false
+  autoIamAuthn: false
+  structuredLogs: true
+  runConnectionTest: false
+  minSigtermDelay: ""
+  maxSigtermDelay: ""
+  healthCheck:
+    port: 9090
+    waitTimeout: 1s
+    startupProbe:
+      periodSeconds: 2
+      timeoutSeconds: 2
+      failureThreshold: 30
+  resources: {}
+  securityContext:
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
 roles:
   web:
     enabled: true

@@ -52,3 +52,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "open-cowork-cloud.cloudSqlProxyImage" -}}
+{{- $image := default dict .Values.cloudSqlProxy.image -}}
+{{- $repository := default "gcr.io/cloud-sql-connectors/cloud-sql-proxy" $image.repository -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $repository $image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $repository (default "2.22.0" $image.tag) -}}
+{{- end -}}
+{{- end -}}
