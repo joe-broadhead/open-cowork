@@ -161,6 +161,15 @@ spec:
           ports:
             - name: http
               containerPort: {{ $role.port }}
+          {{- if $role.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: {{ $role.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ $role.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ $role.startupProbe.failureThreshold }}
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /livez

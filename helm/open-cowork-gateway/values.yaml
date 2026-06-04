@@ -118,6 +118,12 @@ serviceAccount:
 
 resources: {}
 
+startupProbe:
+  enabled: true
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 30
+
 topologySpreadConstraints: []
 
 podDisruptionBudget:
