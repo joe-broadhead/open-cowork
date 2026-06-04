@@ -123,6 +123,32 @@ test('desktop font package dependencies are present for cloud font serving', () 
   assert.ok(packageJson.dependencies?.['@fontsource-variable/hubot-sans'], 'Hubot Sans font package is a desktop dependency')
 })
 
+test('design docs describe the shared Cloud Web and Desktop token contract', () => {
+  const designSystem = readFileSync('docs/design-system.md', 'utf8')
+  const designTokens = readFileSync('docs/design-tokens.md', 'utf8')
+  const configuration = readFileSync('docs/configuration.md', 'utf8')
+  const downstream = readFileSync('docs/downstream.md', 'utf8')
+  const downstreamContract = readFileSync('docs/downstream-contract.md', 'utf8')
+  const cloudWeb = readFileSync('docs/cloud-web-workbench.md', 'utf8')
+  const releaseChecklist = readFileSync('docs/release-checklist.md', 'utf8')
+
+  for (const doc of [designSystem, designTokens, downstream, downstreamContract]) {
+    assert.match(doc, /packages\/shared\/src\/design-tokens\.ts/)
+  }
+  assert.match(designSystem, /emitRootTokensCss\(\)/)
+  assert.match(designTokens, /DEFAULT_DARK_BRAND_THEME/)
+  assert.match(designTokens, /Public Branding Theme Keys/)
+  assert.match(designTokens, /surfaceHover/)
+  assert.match(designTokens, /shadowElevated/)
+  assert.match(configuration, /Cloud Web defaults to the shared Desktop dark palette/)
+  assert.match(configuration, /Legacy light partial theme overrides/)
+  assert.match(downstream, /should not fork Cloud Web\s+layout CSS/)
+  assert.match(downstreamContract, /bypass the Desktop\/Cloud Web drift gates/)
+  assert.match(cloudWeb, /Visual QA Checklist/)
+  assert.match(cloudWeb, /\/assets\/fonts\/\*\.woff2/)
+  assert.match(releaseChecklist, /Cloud Web and Desktop visual parity checklist/)
+})
+
 test('shared public branding default uses the canonical dark theme', () => {
   assert.deepEqual(DEFAULT_PUBLIC_BRANDING.theme, DEFAULT_DARK_PUBLIC_BRANDING_THEME)
 })

@@ -209,6 +209,15 @@ config overlays, billing adapters, object-store and secret refs, and operations
 evidence. That repo should not fork Open Cowork runtime behavior or require
 billing for the OSS self-host path.
 
+Cloud Web theming is intentionally narrow. Downstream overlays can change
+`cloud.publicBranding` names, logo/legal/support URLs, dashboard copy, token
+labels, and public theme colors, including the expanded dark-token keys
+documented in [Design Tokens](design-tokens.md). They should not fork Cloud Web
+layout CSS, add a separate build pipeline, replace Mona/Hubot font serving, or
+change the Cloud Web cloud-client-only architecture. The shared structural
+tokens in `packages/shared/src/design-tokens.ts` keep Desktop and Cloud Web
+aligned across spacing, radius, typography scale, shadows, and control density.
+
 Downstream deployment recipes must also preserve these production contracts:
 
 - images are pinned by immutable release tag or digest; `latest`, `stable`,

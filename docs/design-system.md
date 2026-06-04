@@ -4,7 +4,19 @@ Open Cowork uses a small, enforceable design system so UI work stays consistent 
 
 ## Tokens
 
-Structural tokens live in `apps/desktop/src/renderer/styles/globals.css` and are documented in [Design Tokens](design-tokens.md). Use the token-backed classes and CSS variables for type, spacing, radius, motion, elevation, and content measures. Theme color values stay inside the `BrandThemeTokens` contract so downstream themes can change color without forking layout.
+Canonical structural tokens live in
+`packages/shared/src/design-tokens.ts` and are documented in
+[Design Tokens](design-tokens.md). Desktop keeps the matching CSS variables in
+`apps/desktop/src/renderer/styles/globals.css`; Cloud Web emits the same
+structural `:root` block from `emitRootTokensCss()` while staying a zero-build,
+inline HTML Cloud API client. `tests/design-tokens-sync.test.ts` drift-gates the
+shared module against Desktop globals, the default dark public branding theme,
+and the Cloud Web font package assumptions.
+
+Use the token-backed classes and CSS variables for type, spacing, radius,
+motion, elevation, and content measures. Theme color values stay inside the
+`BrandThemeTokens` / public branding contract so downstream themes can change
+color without forking layout.
 
 Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `pnpm lint` ratchets the existing renderer count and fails if the count increases.
 
@@ -18,6 +30,13 @@ Shared renderer primitives live in `apps/desktop/src/renderer/components/ui/`:
 - `Icon` wraps Lucide icons so stroke, sizing, and naming stay consistent.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
+
+Cloud Web does not import the Desktop React primitive library, but it must match
+the same product vocabulary in CSS and markup: shell/sidebar/topbar, cards,
+buttons, icon-sized controls, inputs, badges, notices, empty states, tables,
+chat bubbles, runtime cards, and admin surface cards. The route/API,
+workbench-parity, admin-surface, browser, accessibility, and performance tests
+are the Cloud Web guardrail for that non-React implementation.
 
 ## Accessibility Gates
 

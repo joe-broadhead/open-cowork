@@ -2,9 +2,18 @@
 
 Open Cowork separates color from structure.
 
-Color tokens stay in the runtime `BrandThemeTokens` contract so downstream
-themes can vary by brand and color scheme. Structural tokens are theme
-invariant and live in `apps/desktop/src/renderer/styles/globals.css`.
+The canonical typed token source is
+`packages/shared/src/design-tokens.ts`. It exports `DESIGN_TOKENS`,
+`DEFAULT_DARK_BRAND_THEME`, and `emitRootTokensCss()`. Desktop keeps the
+matching CSS variables in `apps/desktop/src/renderer/styles/globals.css`; Cloud
+Web emits the same structural variables from `emitRootTokensCss()` and layers
+public branding color tokens on top. `tests/design-tokens-sync.test.ts`
+drift-gates the shared module against Desktop globals and the default Cloud Web
+dark branding theme.
+
+Color tokens stay in the runtime `BrandThemeTokens` and public branding
+contracts so downstream themes can vary by brand and color scheme. Structural
+tokens are theme invariant and should not be forked by downstream deployments.
 
 ## Type
 
@@ -79,3 +88,32 @@ Z-index tokens reserve predictable stacking slots:
 
 Control heights are `--control-h-sm` at 28px, `--control-h-md` at 32px, and
 `--control-h-lg` at 40px.
+
+## Consumers
+
+| Surface | Source path | Contract |
+| --- | --- | --- |
+| Shared package | `packages/shared/src/design-tokens.ts` | Canonical typed token values, default dark brand theme, public branding bridge, and CSS emitter. |
+| Desktop | `apps/desktop/src/renderer/styles/globals.css` | Hand-authored CSS variables and font-face declarations that must match the shared token module. |
+| Cloud Web | `apps/website/src/styles.ts` | Zero-build inline CSS that imports `emitRootTokensCss()`, serves Mona Sans / Hubot Sans from `/assets/fonts/*.woff2`, and overlays public branding variables. |
+| Drift gate | `tests/design-tokens-sync.test.ts` | Fails when Desktop globals, shared tokens, font package assumptions, or default public branding drift. |
+
+## Public Branding Theme Keys
+
+`cloud.publicBranding.theme` may override color and visual-brand values only.
+The default theme is the Desktop-aligned dark palette from
+`DEFAULT_DARK_BRAND_THEME`; legacy light partial overrides remain supported for
+existing deployments.
+
+Supported keys are:
+
+`background`, `surface`, `mutedSurface`, `border`, `text`, `mutedText`,
+`accent`, `accentStrong`, `focus`, `warn`, `danger`, `ok`, `surfaceHover`,
+`surfaceActive`, `borderSubtle`, `elevated`, `textSecondary`, `accentHover`,
+`accentForeground`, `green`, `amber`, `red`, `info`, `shadowCard`,
+`shadowElevated`, and `bgImage`.
+
+Downstream builders should override only the color/brand keys they own and let
+the shared structural tokens continue to define layout density, control heights,
+radii, typography scale, and shadows. Do not reintroduce Cloud Web-only spacing
+or typography scales.

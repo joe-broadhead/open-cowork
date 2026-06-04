@@ -189,6 +189,10 @@ and linked from the release Go/No-Go report.
       decision, Accepted Launch Tier, Known limits, Cost and scaling notes,
       Final smoke status, and Findings Workflow.
 - [ ] final Cloud Web/Desktop/Gateway smoke gates passed after the soak run.
+- [ ] Cloud Web and Desktop visual parity checklist completed from
+      `docs/cloud-web-workbench.md`: shell/nav/topbar, cards/panels, controls,
+      chat/thread runtime surfaces, admin/settings surfaces, responsive layout,
+      loading/empty/error states, and `/assets/fonts/*.woff2` font loading.
 
 ## Tagged release
 

@@ -96,6 +96,12 @@ Downstream branding must flow through config and assets:
 Back-compat names such as `com.opencowork.desktop` and `.opencowork/` are
 allowed only where docs identify them as migration or bundle-id compatibility.
 
+Cloud Web branding must stay on the shared token contract. Public theme
+overrides may change color, semantic tones, shadows, and background imagery, but
+the structural token source remains `packages/shared/src/design-tokens.ts`.
+Downstream builds should not patch `apps/website/src/styles.ts` to create a
+separate Cloud Web visual language or bypass the Desktop/Cloud Web drift gates.
+
 ## Extension Contracts
 
 Downstream extension work must start in the layer that owns the concept.
