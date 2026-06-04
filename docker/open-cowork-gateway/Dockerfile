@@ -43,4 +43,4 @@ USER node
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:'+(process.env.OPEN_COWORK_GATEWAY_PORT||'8790')+'/ready').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["pnpm", "--dir", "apps/gateway", "start"]
+CMD ["node", "apps/gateway/dist/index.js"]
