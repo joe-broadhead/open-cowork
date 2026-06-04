@@ -4,6 +4,7 @@ import {
   type ProviderDescriptor,
   type RuntimeLoadingPhase,
   type RuntimeLoadingStatus,
+  type RuntimeStatus,
   type SetupIntentId,
 } from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
@@ -108,6 +109,19 @@ function runtimeProgressLabel(status: RuntimeLoadingStatus | null, fallback: str
   if (status?.phase === 'ready') return t('setup.progressReady', 'Model service is ready.')
   if (status?.phase === 'error') return t('setup.progressError', 'The model service could not start.')
   return fallback || t('setup.connectionIdle', 'Ready to test the connection.')
+}
+
+function runtimeStatusToLoadingStatus(
+  status: RuntimeStatus,
+  message: string,
+): RuntimeLoadingStatus {
+  return {
+    phase: status.ready ? 'ready' : 'error',
+    message,
+    ready: status.ready,
+    error: status.ready ? null : status.error || message,
+    updatedAt: status.updatedAt || new Date().toISOString(),
+  }
 }
 
 export function SetupScreen({
@@ -330,15 +344,19 @@ export function SetupScreen({
     })
     try {
       await saveSetupSelection()
-      const status = await window.coworkApi.runtime.awaitInitialization()
+      const status = await window.coworkApi.runtime.restart()
       if (!status.ready) {
         const message = status.error || t('setup.runtimeFailed', 'The model service could not start with these settings. Double-check your key and try again.')
+        setRuntimeProgress(runtimeStatusToLoadingStatus(status, message))
         setError(message)
         setConnectionTest({ status: 'error', signature: null, message })
         addGlobalError(message)
         return
       }
-      setRuntimeProgress(status)
+      setRuntimeProgress(runtimeStatusToLoadingStatus(
+        status,
+        t('setup.progressReady', 'Model service is ready.'),
+      ))
       await window.coworkApi.provider.testConnection(providerId, modelId.trim())
       const message = t('setup.connectionReady', 'Connection tested. You can start using {{brandName}}.', { brandName })
       setConnectionTest({

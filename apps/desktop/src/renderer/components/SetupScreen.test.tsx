@@ -258,10 +258,16 @@ describe('SetupScreen', () => {
     expect(apiKeyInput).toHaveValue('sk-or-user-edit')
   })
 
-  it('tests the connection, then persists the developer config bridge choice during first-run setup', async () => {
+  it('restarts with saved setup choices before testing the connection', async () => {
     const user = userEvent.setup()
     const set = vi.fn(async () => settings())
-    const restart = vi.fn(async () => ({ ready: true, error: null }))
+    const restart = vi.fn(async () => ({
+      phase: 'ready' as const,
+      message: 'Runtime is ready.',
+      ready: true,
+      error: null,
+      updatedAt: new Date().toISOString(),
+    }))
     const testConnection = vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId }))
     const awaitInitialization = vi.fn(async () => ({
       phase: 'ready' as const,
@@ -307,9 +313,9 @@ describe('SetupScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Get Started' }))
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1))
-    expect(awaitInitialization).toHaveBeenCalledTimes(1)
+    expect(awaitInitialization).not.toHaveBeenCalled()
     expect(testConnection).toHaveBeenCalledWith('openrouter', 'anthropic/claude-sonnet-4')
-    expect(restart).not.toHaveBeenCalled()
+    expect(restart).toHaveBeenCalledTimes(1)
     expect(set).toHaveBeenCalledWith(expect.objectContaining({
       selectedProviderId: 'openrouter',
       selectedModelId: 'anthropic/claude-sonnet-4',
@@ -318,6 +324,53 @@ describe('SetupScreen', () => {
         openrouter: expect.objectContaining({ apiKey: 'sk-or-scoped' }),
       },
     }))
+  })
+
+  it('blocks provider validation when saved setup choices fail to restart the runtime', async () => {
+    const user = userEvent.setup()
+    const restart = vi.fn(async () => ({
+      ready: false,
+      error: 'Runtime config rejected provider options',
+      updatedAt: new Date().toISOString(),
+    }))
+    const testConnection = vi.fn(async (providerId: string, modelId: string) => ({ ok: true, providerId, modelId }))
+    const onComplete = vi.fn()
+    installRendererTestCoworkApi({
+      settings: {
+        get: vi.fn(async () => settings()),
+        getProviderCredentials: vi.fn(async () => ({})),
+        set: vi.fn(async () => settings()),
+      },
+      runtime: {
+        restart,
+      },
+      provider: {
+        testConnection,
+      },
+    })
+
+    render(
+      <SetupScreen
+        brandName="Open Cowork"
+        providers={providers}
+        defaultProviderId="openrouter"
+        defaultModelId="anthropic/claude-sonnet-4"
+        onComplete={onComplete}
+      />,
+    )
+
+    const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
+    await user.type(apiKeyInput, 'runtime-config-placeholder')
+    const testButton = await screen.findByRole('button', { name: 'Test connection' })
+    await waitFor(() => expect(testButton).not.toBeDisabled())
+    await user.click(testButton)
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Runtime config rejected provider options'))
+    expect(restart).toHaveBeenCalledTimes(1)
+    expect(testConnection).not.toHaveBeenCalled()
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Runtime config rejected provider options')
+    expect(screen.getByRole('button', { name: 'Get Started' })).toBeDisabled()
+    expect(onComplete).not.toHaveBeenCalled()
   })
 
   it('keeps setup open and surfaces provider validation failures', async () => {
@@ -436,6 +489,6 @@ describe('SetupScreen', () => {
         'github-copilot': {},
       },
     }))
-    expect(restart).toHaveBeenCalledTimes(1)
+    expect(restart).toHaveBeenCalledTimes(2)
   })
 })
