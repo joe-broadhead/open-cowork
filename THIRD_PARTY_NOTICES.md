@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `c288e00c8bd6a6ca3fde39fa1426c76a8242feb3e55f55369b0eb3098a30116c`
+- pnpm lockfile SHA-256: `8827d6e2b385a972cb63c797c9476b5fcad022f8dde039a84af4efc8322571ad`
 - Production package entries: 506
 - Bundled license directories: 463 (43 package entries have no standalone license file or are workspace links)
 
@@ -262,7 +262,7 @@ Each package remains licensed under its own license terms. The table below is pr
 | hasown | 2.0.2 | MIT | THIRD_PARTY_LICENSES/hasown@2.0.2/ | git+https://github.com/inspect-js/hasOwn.git |
 | hast-util-to-jsx-runtime | 2.3.6 | MIT | THIRD_PARTY_LICENSES/hast-util-to-jsx-runtime@2.3.6/ | syntax-tree/hast-util-to-jsx-runtime |
 | hast-util-whitespace | 3.0.0 | MIT | THIRD_PARTY_LICENSES/hast-util-whitespace@3.0.0/ | syntax-tree/hast-util-whitespace |
-| hono | 4.12.18 | MIT | THIRD_PARTY_LICENSES/hono@4.12.18/ | git+https://github.com/honojs/hono.git |
+| hono | 4.12.21 | MIT | THIRD_PARTY_LICENSES/hono@4.12.21/ | git+https://github.com/honojs/hono.git |
 | html-url-attributes | 3.0.1 | MIT | THIRD_PARTY_LICENSES/html-url-attributes@3.0.1/ | https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes |
 | http-errors | 2.0.1 | MIT | THIRD_PARTY_LICENSES/http-errors@2.0.1/ | jshttp/http-errors |
 | https-proxy-agent | 7.0.6 | MIT | THIRD_PARTY_LICENSES/https-proxy-agent@7.0.6/ | https://github.com/TooTallNate/proxy-agents.git |
