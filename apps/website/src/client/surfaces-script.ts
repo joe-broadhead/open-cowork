@@ -31,7 +31,14 @@ export function cloudWebsiteClientSurfacesScript() {
     const actions = document.createElement('div');
     actions.className = 'row-actions';
     actions.appendChild(pill(agent.custom ? 'custom' : 'profile', agent.custom ? 'warn' : 'ok'));
-    actions.appendChild(actionButton('Start thread', () => startAgentThread(agent.name), 'primary', bootstrap.features?.chat === false || bootstrap.features?.agents === false));
+    const agentStartLocked = bootstrap.features?.chat === false || bootstrap.features?.agents === false;
+    actions.appendChild(actionButton(
+      'Start thread',
+      () => startAgentThread(agent.name),
+      'primary',
+      agentStartLocked,
+      parityText('agents', 'disabledReason', 'Chat or agent browsing is disabled by this cloud profile.'),
+    ));
     row.appendChild(main);
     row.appendChild(actions);
     list.appendChild(row);
@@ -121,7 +128,8 @@ function renderCapabilities() {
     bootstrap.features?.customSkills === false ? 'Custom skill metadata may be synced but is disabled by this org profile.' : null,
     bootstrap.features?.customMcps === false ? 'Custom MCP metadata may be synced but is disabled by this org profile.' : null,
   ].filter(Boolean);
-  if (!rows.length) rows.push('The browser shows cloud-safe capability metadata and policy verdicts only.');
+  if (!rows.length) rows.push(parityText('tools-skills', 'boundary', 'The browser shows cloud-safe capability metadata and policy verdicts only.'));
+  rows.push(parityText('local-stdio-mcps', 'disabledReason', 'Local stdio MCPs are Desktop-only unless represented by a Cloud-safe capability profile.'));
   for (const text of rows) {
     const row = document.createElement('p');
     row.className = 'empty';
@@ -238,6 +246,30 @@ function renderWorkflows() {
   detail.appendChild(pill(workflow.status || 'unknown', workflowPillKind(workflow.status)));
   detail.appendChild(pill('trigger: ' + workflowTriggerSummary(workflow)));
   if (workflow.webhookUrl) detail.appendChild(pill('webhook configured', 'ok'));
+  if (workflow.latestRunStatus || workflow.latestRunSummary || workflow.latestRunSessionId) {
+    const latest = document.createElement('div');
+    latest.className = 'row compact';
+    const main = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = 'Latest run';
+    main.appendChild(title);
+    const meta = document.createElement('small');
+    meta.textContent = [
+      workflow.latestRunStatus || 'unknown',
+      workflow.latestRunSummary || null,
+      workflow.latestRunSessionId ? 'thread ' + workflow.latestRunSessionId : null,
+    ].filter(Boolean).join(' - ');
+    main.appendChild(document.createElement('br'));
+    main.appendChild(meta);
+    latest.appendChild(main);
+    if (workflow.latestRunSessionId) {
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      actions.appendChild(actionButton('Open run thread', () => selectSession(workflow.latestRunSessionId), 'secondary'));
+      latest.appendChild(actions);
+    }
+    detail.appendChild(latest);
+  }
   const text = document.createElement('p');
   text.className = 'empty';
   text.textContent = workflow.instructions || 'No instructions.';
@@ -255,10 +287,11 @@ function renderWorkflows() {
   });
   const actions = document.createElement('div');
   actions.className = 'row-actions';
-  actions.appendChild(actionButton('Run now', () => runWorkflow(workflow.id), 'primary', bootstrap.features?.workflows === false || workflow.status === 'archived'));
-  if (workflow.status === 'paused') actions.appendChild(actionButton('Resume', () => updateWorkflowStatus(workflow.id, 'resume'), 'secondary', bootstrap.features?.workflows === false));
-  else actions.appendChild(actionButton('Pause', () => updateWorkflowStatus(workflow.id, 'pause'), 'secondary', bootstrap.features?.workflows === false || workflow.status === 'archived'));
-  actions.appendChild(actionButton('Archive', () => updateWorkflowStatus(workflow.id, 'archive'), 'danger', bootstrap.features?.workflows === false || workflow.status === 'archived'));
+  const workflowLockedReason = parityText('workflows', 'disabledReason', 'Workflow controls are disabled by policy or workflow state.');
+  actions.appendChild(actionButton('Run now', () => runWorkflow(workflow.id), 'primary', bootstrap.features?.workflows === false || workflow.status === 'archived', workflowLockedReason));
+  if (workflow.status === 'paused') actions.appendChild(actionButton('Resume', () => updateWorkflowStatus(workflow.id, 'resume'), 'secondary', bootstrap.features?.workflows === false, workflowLockedReason));
+  else actions.appendChild(actionButton('Pause', () => updateWorkflowStatus(workflow.id, 'pause'), 'secondary', bootstrap.features?.workflows === false || workflow.status === 'archived', workflowLockedReason));
+  actions.appendChild(actionButton('Archive', () => updateWorkflowStatus(workflow.id, 'archive'), 'danger', bootstrap.features?.workflows === false || workflow.status === 'archived', workflowLockedReason));
   if (workflow.latestRunSessionId) actions.appendChild(actionButton('Open run thread', () => selectSession(workflow.latestRunSessionId), 'secondary'));
   detail.appendChild(actions);
 }`

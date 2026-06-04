@@ -25,6 +25,11 @@ import {
   deriveCloudWebWorkbenchAgents,
   filterCloudWebCapabilities,
 } from './surface-workbench.ts'
+import {
+  CLOUD_WEB_WORKBENCH_PARITY_MATRIX,
+  cloudWebWorkbenchParityForRoute,
+  cloudWebWorkbenchRouteSummary,
+} from './workbench-parity.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -40,6 +45,22 @@ const repositoryTestsDir = new URL('../../../tests/', import.meta.url)
 function routeMatrixTestUrl(filename: string) {
   if (filename === 'cloud-continuation-e2e.test.ts') return new URL(filename, repositoryTestsDir)
   return new URL(filename, import.meta.url)
+}
+
+const parityAvailabilityDocLabels = {
+  shared: 'Shared with Desktop',
+  'cloud-only': 'Cloud-only',
+  'desktop-only': 'Desktop-only',
+  'intentionally-unavailable': 'Unavailable in Cloud',
+} as const
+
+function markdownTableCell(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
+}
+
+function parityDocRow(entry: (typeof CLOUD_WEB_WORKBENCH_PARITY_MATRIX)[number]) {
+  const routes = entry.cloudRouteIds.map((routeId) => `\`${routeId}\``).join(', ')
+  return `| ${markdownTableCell(entry.label)} | ${parityAvailabilityDocLabels[entry.availability]} | ${routes} | ${markdownTableCell(entry.cloudAffordance)} | ${markdownTableCell(entry.boundary)} |`
 }
 
 test('cloud website renders workbench and admin shell surfaces', () => {
@@ -71,10 +92,17 @@ test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /\.panel \{[\s\S]*border-radius: var\(--radius-lg\);/)
   assert.match(html, /\.pill\[data-kind="info"\]/)
   assert.match(html, /\.message-bubble\[data-role="user"\]/)
+  assert.match(html, /\.message-bubble\[data-role="system"\]/)
+  assert.match(html, /\.message-bubble\[data-role="error"\]/)
   assert.match(html, /--focus: rgba\(141, 164, 245, 0\.55\);/)
   assert.match(html, /--warn: #fcb07a;/)
   assert.match(html, /--danger: #fc92b4;/)
   assert.match(html, /--ok: #7fcfa0;/)
+  assert.match(html, /"workbenchParity":/)
+  assert.match(html, /data-parity-route="threads"/)
+  assert.match(html, /data-parity-route="chat"/)
+  assert.match(html, /Local Filesystem/)
+  assert.match(html, /Local Stdio MCPs/)
 })
 
 test('cloud website app shell exposes typed route metadata', () => {
@@ -83,6 +111,45 @@ test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(findCloudWebRoute('threads')?.surface, 'workbench')
   assert.equal(findCloudWebRoute('byok')?.requiresAdmin, true)
   assert.equal(findCloudWebRoute('usage')?.requiresAdmin, false)
+})
+
+test('cloud website desktop parity matrix covers every workbench route and documented boundary', () => {
+  const workbenchRoutes = CLOUD_WEB_ROUTES.filter((route) => route.surface === 'workbench')
+  const routeApiIds = new Set(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId))
+  const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
+
+  assert.match(doc, /Desktop\/Cloud Workbench Parity Matrix/)
+  assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'shared'))
+  assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'cloud-only'))
+  assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'desktop-only'))
+  assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'intentionally-unavailable'))
+
+  for (const route of workbenchRoutes) {
+    const entries = cloudWebWorkbenchParityForRoute(route.id)
+    const sharedEntry = entries.find((entry) => entry.availability === 'shared')
+    assert.ok(entries.length > 0, `${route.id} has Desktop/Cloud parity entries`)
+    assert.ok(sharedEntry, `${route.id} has at least one shared Desktop concept`)
+    assert.equal(route.summary, sharedEntry.cloudAffordance, `${route.id} summary is parity-derived`)
+    assert.equal(route.summary, cloudWebWorkbenchRouteSummary(route.id, 'fallback'), `${route.id} helper returns the same summary`)
+    assert.ok(routeApiIds.has(route.id), `${route.id} is covered by route/API matrix`)
+  }
+
+  for (const entry of CLOUD_WEB_WORKBENCH_PARITY_MATRIX) {
+    assert.ok(entry.desktopSurface, `${entry.conceptId} names its Desktop surface`)
+    assert.ok(entry.cloudAffordance, `${entry.conceptId} names its Cloud Web affordance`)
+    assert.ok(entry.boundary, `${entry.conceptId} documents its product boundary`)
+    assert.ok(entry.cloudRouteIds.length > 0, `${entry.conceptId} maps to at least one Cloud route`)
+    assert.ok(doc.includes(parityDocRow(entry)), `docs list exact parity row for ${entry.label}`)
+    for (const routeId of entry.cloudRouteIds) {
+      assert.ok(CLOUD_WEB_ROUTES.some((route) => route.id === routeId), `${entry.conceptId} references existing route ${routeId}`)
+    }
+    for (const filename of entry.tests) {
+      assert.ok(existsSync(fileURLToPath(routeMatrixTestUrl(filename))), `${entry.conceptId} listed test file exists: ${filename}`)
+    }
+    if (entry.availability === 'desktop-only' || entry.availability === 'intentionally-unavailable') {
+      assert.ok(entry.disabledReason, `${entry.conceptId} explains why Cloud Web does not expose it`)
+    }
+  }
 })
 
 test('cloud website route/API matrix covers every route and real endpoint id', () => {
@@ -520,7 +587,10 @@ test('cloud website renders cloud thread controls without local host path afford
   assert.match(html, /id="admin-project-policy"/)
   assert.match(html, /id="audit-list"/)
   assert.doesNotMatch(html, /\/Users\//)
-  assert.doesNotMatch(html, /local stdio MCP/i)
+  assert.doesNotMatch(html, /name="localPath"/)
+  assert.doesNotMatch(html, /name="stdioCommand"/)
+  assert.match(html, /Local Stdio MCPs/)
+  assert.match(html, /Cloud Web cannot spawn local stdio MCP processes/)
 })
 
 test('cloud website surface helper derives agents, filters capabilities, and summarizes workflow triggers', () => {

@@ -1,11 +1,12 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
-import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute } from './app-shell.ts'
+import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientBootstrap } from './client-contract.ts'
 import { DEFAULT_WEBSITE_PUBLIC_BRANDING, brandLinksMarkup, brandLogoMarkup, resolvePublicBranding } from './branding.ts'
 import { cloudWebsiteClientScript } from './client-script.ts'
 import { escapeHtml, jsonScript } from './html-utils.ts'
 import { cloudWebsiteStyles } from './styles.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
+import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX, cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailability } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
 export { cloudWebsiteClientScript } from './client-script.ts'
@@ -38,6 +39,33 @@ function routePanelAttrs(routeId: string, options: { signedIn?: boolean, admin?:
   return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"`
 }
 
+const parityAvailabilityLabels: Record<CloudWebWorkbenchParityAvailability, { label: string, kind: string }> = {
+  shared: { label: 'Shared with Desktop', kind: 'ok' },
+  'cloud-only': { label: 'Cloud-only', kind: 'info' },
+  'desktop-only': { label: 'Desktop-only', kind: 'warn' },
+  'intentionally-unavailable': { label: 'Unavailable in Cloud', kind: 'warn' },
+}
+
+function routeParityMarkup(routeId: CloudWebRouteId) {
+  const entries = cloudWebWorkbenchParityForRoute(routeId)
+  if (!entries.length) return ''
+  return `<div class="parity-grid" data-parity-route="${escapeHtml(routeId)}" aria-label="Desktop and Cloud Web parity for ${escapeHtml(routeId)}">
+            ${entries.map((entry) => {
+              const availability = parityAvailabilityLabels[entry.availability]
+              const reason = entry.disabledReason ? `<small>${escapeHtml(entry.disabledReason)}</small>` : ''
+              return `<article class="parity-card" data-parity-concept="${escapeHtml(entry.conceptId)}" data-parity-availability="${escapeHtml(entry.availability)}">
+                <div class="runtime-card-header">
+                  <span class="pill" data-kind="${escapeHtml(availability.kind)}">${escapeHtml(availability.label)}</span>
+                  <strong>${escapeHtml(entry.label)}</strong>
+                </div>
+                <p>${escapeHtml(entry.cloudAffordance)}</p>
+                <small>${escapeHtml(entry.boundary)}</small>
+                ${reason}
+              </article>`
+            }).join('')}
+          </div>`
+}
+
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
   const branding = resolvePublicBranding(publicBranding || policy.publicBranding)
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
@@ -51,6 +79,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
     api: CLOUD_WEB_CLIENT_ENDPOINTS,
     routeMatrix: CLOUD_WEB_ROUTE_API_MATRIX,
+    workbenchParity: CLOUD_WEB_WORKBENCH_PARITY_MATRIX,
     sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
@@ -108,6 +137,7 @@ ${cloudWebsiteStyles(branding)}
             <button class="primary" id="new-thread-shortcut" type="button" data-chat-control="true">New thread</button>
           </div>
           <div class="workbench-split">
+            ${routeParityMarkup('threads')}
             <div class="panel">
               <div class="toolbar" aria-label="Thread filters">
                 <label><span>Search</span><input id="thread-query" autocomplete="off" placeholder="title, profile, project, tag"></label>
@@ -170,6 +200,7 @@ ${cloudWebsiteStyles(branding)}
             <span class="pill" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'enabled' : 'disabled'}</span>
           </div>
           <div class="workbench-split">
+            ${routeParityMarkup('chat')}
             <div class="panel chat-shell">
               <div class="section-header">
                 <div>
@@ -202,6 +233,7 @@ ${cloudWebsiteStyles(branding)}
             <button id="refresh-capabilities" type="button" data-capability-control="true">Refresh</button>
           </div>
           <div class="grid">
+            ${routeParityMarkup('agents')}
             <div class="panel">
               <h3>Available agents</h3>
               <div class="list" id="workbench-agent-list">
@@ -227,6 +259,7 @@ ${cloudWebsiteStyles(branding)}
             <label><span>Filter</span><input id="capability-filter" autocomplete="off" placeholder="tool, skill, agent, source" data-capability-control="true"></label>
           </div>
           <div class="grid">
+            ${routeParityMarkup('capabilities')}
             <div class="panel">
               <h3>Tools</h3>
               <div class="list" id="tool-list">
@@ -261,6 +294,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
           </div>
           <div class="workbench-split">
+            ${routeParityMarkup('workflows')}
             <div class="panel">
               <div class="table-shell" role="table" aria-label="Cloud workflows">
                 <div class="table-row table-head" role="row">
@@ -316,6 +350,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
           </div>
           <div class="grid">
+            ${routeParityMarkup('artifacts')}
             <div class="panel">
               <h3>Selected thread artifacts</h3>
               <div class="list" id="artifact-list">

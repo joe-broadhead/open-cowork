@@ -115,6 +115,14 @@ export function cloudWebsiteChatStyles() {
       border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl);
       background: var(--color-surface-active);
     }
+    .message-bubble[data-role="system"] {
+      border-style: dashed;
+      background: color-mix(in srgb, var(--color-info) 8%, var(--color-surface) 92%);
+    }
+    .message-bubble[data-role="error"] {
+      border-color: var(--tone-danger-border);
+      background: var(--tone-danger-bg);
+    }
     .message-heading {
       color: var(--muted);
       font-size: var(--text-xs);

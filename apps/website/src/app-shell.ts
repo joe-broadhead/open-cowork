@@ -1,3 +1,5 @@
+import { cloudWebWorkbenchRouteSummary } from './workbench-parity.ts'
+
 export type CloudWebSurface = 'workbench' | 'admin'
 
 export type CloudWebRouteId =
@@ -42,7 +44,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Cloud threads from web, desktop, and gateway.',
+    summary: cloudWebWorkbenchRouteSummary('threads', 'Cloud threads from web, desktop, and gateway.'),
   },
   {
     id: 'chat',
@@ -50,7 +52,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Selected cloud session timeline and composer.',
+    summary: cloudWebWorkbenchRouteSummary('chat', 'Selected cloud session timeline and composer.'),
   },
   {
     id: 'agents',
@@ -58,7 +60,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Profile-allowed agents and runtime capability status.',
+    summary: cloudWebWorkbenchRouteSummary('agents', 'Profile-allowed agents and runtime capability status.'),
   },
   {
     id: 'capabilities',
@@ -66,7 +68,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Allowed tools, skills, and MCP capability verdicts.',
+    summary: cloudWebWorkbenchRouteSummary('capabilities', 'Allowed tools, skills, and MCP capability verdicts.'),
   },
   {
     id: 'workflows',
@@ -74,7 +76,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Workflow definitions, runs, and status.',
+    summary: cloudWebWorkbenchRouteSummary('workflows', 'Workflow definitions, runs, and status.'),
   },
   {
     id: 'artifacts',
@@ -82,7 +84,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: 'Cloud artifact metadata and downloads.',
+    summary: cloudWebWorkbenchRouteSummary('artifacts', 'Cloud artifact metadata and downloads.'),
   },
   {
     id: 'org',

@@ -39,6 +39,31 @@ loading/empty/error state contract.
 | `usage` | Admin | Member | `usageEvents`, `usageSummary` | Usage events load `limit=20`; summaries load `limit=100`. | Usage events include metering dimensions only, not prompts, provider keys, or tokens. |
 | `diagnostics` | Admin | Operator | `diagnostics`, `runtimeStatus`, `workerHeartbeats` | Diagnostics includes bounded worker heartbeat and gateway delivery samples. Browser diagnostics arrays are recursively capped before rendering. | Diagnostics are redacted recursively. Org admins may see the route, but the API may require operator-token privileges for global operational state. |
 
+## Desktop/Cloud Workbench Parity Matrix
+
+The typed source of truth is
+`apps/website/src/workbench-parity.ts`. Cloud Web route labels, summaries,
+browser bootstrap metadata, and rendered parity cards consume this matrix.
+This document mirrors the same rows, and render tests assert every documented
+row against the typed source so the product boundary cannot drift silently. The
+purpose is to make shared Desktop concepts feel like the same product while
+keeping Cloud Web honest about cloud-only and desktop-only boundaries.
+
+| Concept | Availability | Cloud route(s) | Cloud Web affordance | Product boundary |
+|---|---|---|---|---|
+| Threads | Shared with Desktop | `threads` | List, filter, page, create, and reopen tenant-scoped Cloud threads. | Cloud Web reads Cloud session records and projections through the Cloud API; Desktop may also show local sessions. |
+| Chat | Shared with Desktop | `chat` | Render the selected Cloud session timeline and send prompts through durable Cloud commands. | Cloud Web never builds a browser-only projection model or invokes local OpenCode runtime commands. |
+| Runtime Status | Shared with Desktop | `chat` | Show status, streaming state, cost, token usage, context, compactions, tool calls, task runs, todos, and errors from Cloud projections. | Cloud Web reports projected Cloud runtime state only; machine health and local model controls remain Desktop-owned. |
+| Approvals & Questions | Shared with Desktop | `chat` | Render pending and resolved approvals/questions and answer them through Cloud API endpoints. | Approval and question semantics remain OpenCode-owned; Cloud Web only submits tenant-scoped responses. |
+| Agents | Shared with Desktop | `agents` | Show profile-allowed agents, built-in/custom metadata, and a Start thread action. | Cloud Web displays policy-safe agent metadata and cannot edit local custom agent files. |
+| Tools & Skills | Shared with Desktop | `capabilities` | Show allowed tools, skills, MCP metadata, linked agents, and policy verdicts. | Cloud Web renders cloud-safe capability metadata; runtime execution remains owned by OpenCode workers. |
+| Artifacts | Shared with Desktop | `artifacts`, `chat` | Show artifact cards, loaded-thread history, sanitized metadata, explicit view/download actions, and selected-thread previews. | Cloud Web fetches artifact bodies only after explicit user action and strips object-store internals from metadata. |
+| Workflows | Shared with Desktop | `workflows`, `chat` | Create, list, run, pause, resume, archive, and inspect Cloud workflow definitions and run threads. | Cloud Web runs saved workflows through Cloud workflow APIs; local launch-at-login and native notifications remain Desktop settings. |
+| Cloud Project Sources | Cloud-only | `threads` | Create Cloud threads from allowed git repositories or explicit browser-uploaded snapshots. | Cloud policy validates git and snapshot sources before execution. |
+| Local Filesystem | Unavailable in Cloud | `threads`, `artifacts` | Use git URLs, managed Cloud project sources, uploaded snapshots, and Cloud artifacts instead. | Browser sessions must not implicitly read or upload host paths from the user machine. |
+| Local Stdio MCPs | Unavailable in Cloud | `capabilities`, `agents` | Show only policy-safe MCP metadata that has been converted into the Cloud profile. | Cloud Web cannot spawn local stdio MCP processes or expose command lines, environment variables, or secret refs. |
+| Machine Runtime Config | Desktop-only | `chat`, `agents`, `capabilities` | Show current Cloud profile, feature flags, and projected runtime state. | Cloud Web does not configure the local machine runtime, provider defaults, local approvals mode, or desktop notification settings. |
+
 ## End-User Workbench Contract
 
 Cloud Web must keep parity with Desktop Cloud for cloud workspaces:

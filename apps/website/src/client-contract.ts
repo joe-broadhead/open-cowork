@@ -1,6 +1,7 @@
 import type { PublicBrandingConfig } from '@open-cowork/shared'
 import type { CloudWebRoute, CloudWebRouteId } from './app-shell.ts'
 import type { CloudWebRouteApiMatrixEntry } from './route-api-matrix.ts'
+import type { CloudWebWorkbenchParityEntry } from './workbench-parity.ts'
 
 export type CloudWebEndpointId =
   | 'authMe'
@@ -64,6 +65,7 @@ export type CloudWebClientBootstrap = {
   defaultRoute: string
   api: CloudWebEndpoint[]
   routeMatrix: CloudWebRouteApiMatrixEntry[]
+  workbenchParity: CloudWebWorkbenchParityEntry[]
   sessionEventTypes: string[]
 }
 

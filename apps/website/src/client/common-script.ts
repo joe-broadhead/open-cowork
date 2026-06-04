@@ -354,12 +354,16 @@ function pill(text, kind = '') {
   return node;
 }
 
-function actionButton(label, onClick, variant = '', disabled = false) {
+function actionButton(label, onClick, variant = '', disabled = false, disabledReason = '') {
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
   button.disabled = disabled;
   if (variant) button.className = variant;
+  if (disabled && disabledReason) {
+    button.title = disabledReason;
+    button.setAttribute('aria-label', label + ' - ' + disabledReason);
+  }
   button.addEventListener('click', () => {
     try {
       const result = onClick();
@@ -530,8 +534,18 @@ function capabilityLabel(capability) {
   return capability.label || capability.name || capability.id || 'Capability';
 }
 
+function parityEntry(conceptId) {
+  return normalizeList(state.config?.workbenchParity || bootstrap.workbenchParity)
+    .find((entry) => entry.conceptId === conceptId) || null;
+}
+
+function parityText(conceptId, field, fallback) {
+  const entry = parityEntry(conceptId);
+  return entry?.[field] || fallback;
+}
+
 function capabilityPolicyNote(capability) {
-  if (capability.kind === 'mcp' && capability.scope === 'machine') return 'Machine-scoped MCP metadata requires a cloud-safe profile capability.';
+  if (capability.kind === 'mcp' && capability.scope === 'machine') return parityText('local-stdio-mcps', 'disabledReason', 'Machine-scoped MCP metadata requires a cloud-safe profile capability.');
   if (capability.source === 'custom') return 'Synced custom metadata. Execution depends on org policy.';
   return 'Allowed by current cloud profile.';
 }
