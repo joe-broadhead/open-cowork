@@ -26,6 +26,7 @@ import { sessionEngine } from '../apps/desktop/src/main/session-engine.ts'
 import { stopSessionStatusReconciliation } from '../apps/desktop/src/main/session-status-reconciler.ts'
 import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from '../apps/desktop/src/main/session-registry.ts'
 import { LOCAL_WORKSPACE_ID, createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
+import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
 import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
 
 function createBaseContext() {
@@ -2075,6 +2076,95 @@ test('local credential editor IPC masks secret fields and preserves them on save
   } finally {
     const { clearSettingsCache } = await import('../apps/desktop/src/main/settings.ts')
     clearSettingsCache()
+    if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
+    else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('provider connection test IPC syncs saved API auth and validates live models', async () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'opencowork-ipc-provider-test-'))
+  const configDir = join(tempRoot, 'downstream')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousConfigDir = process.env.OPEN_COWORK_CONFIG_DIR
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  writeCredentialDescriptorConfig(configDir)
+  process.env.OPEN_COWORK_CONFIG_DIR = configDir
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+
+  const authSetCalls: unknown[] = []
+  const fakeClient = {
+    auth: {
+      set: async (input: unknown, options: unknown) => {
+        authSetCalls.push({ input, options })
+      },
+    },
+    provider: {
+      list: async () => ({
+        data: {
+          all: [{
+            id: 'acme',
+            name: 'Acme',
+            models: {
+              'acme/model': {},
+            },
+          }],
+          connected: [],
+        },
+      }),
+    },
+  }
+
+  runtimeState.setClient(fakeClient as Parameters<typeof runtimeState.setClient>[0])
+  try {
+    const {
+      clearSettingsCache,
+      saveSettings,
+    } = await import('../apps/desktop/src/main/settings.ts')
+    clearSettingsCache()
+    saveSettings({
+      selectedProviderId: 'acme',
+      selectedModelId: 'acme/model',
+      providerCredentials: {
+        acme: { apiKey: 'provider-secret', projectId: 'project-visible' },
+      },
+    })
+
+    const { context, handlers } = createBaseContext()
+    registerAppHandlers(context)
+    const handler = handlers.get('provider:test-connection')
+    assert.ok(handler, 'expected provider:test-connection handler to be registered')
+
+    assert.deepEqual(await handler({}, 'acme', 'acme/model'), {
+      ok: true,
+      providerId: 'acme',
+      modelId: 'acme/model',
+    })
+    assert.deepEqual(authSetCalls, [{
+      input: {
+        providerID: 'acme',
+        auth: {
+          type: 'api',
+          key: 'provider-secret',
+          metadata: { source: 'open-cowork' },
+        },
+      },
+      options: { throwOnError: true },
+    }])
+
+    await assert.rejects(
+      () => handler({}, 'acme', 'missing-model'),
+      /missing-model is not available from Acme/,
+    )
+  } finally {
+    const { clearSettingsCache } = await import('../apps/desktop/src/main/settings.ts')
+    clearSettingsCache()
+    runtimeState.resetAfterStop()
     if (previousConfigDir === undefined) delete process.env.OPEN_COWORK_CONFIG_DIR
     else process.env.OPEN_COWORK_CONFIG_DIR = previousConfigDir
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR

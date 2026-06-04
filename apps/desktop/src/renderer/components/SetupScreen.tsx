@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SETUP_INTENTS, type ProviderDescriptor, type SetupIntentId } from '@open-cowork/shared'
+import {
+  SETUP_INTENTS,
+  type ProviderDescriptor,
+  type RuntimeLoadingPhase,
+  type RuntimeLoadingStatus,
+  type SetupIntentId,
+} from '@open-cowork/shared'
 import { t } from '../helpers/i18n'
 import { credentialFieldIsSecret, isCredentialMask, mergeFetchedProviderCredentials } from './provider/credential-merge'
 import { ProviderAuthControls } from './provider/ProviderAuthControls'
 import { useSessionStore } from '../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
+import { Badge, Button } from './ui'
 
 interface Props {
   brandName: string
@@ -13,6 +20,26 @@ interface Props {
   defaultProviderId: string | null
   defaultModelId: string | null
   onComplete: () => void
+}
+
+type ConnectionTestState =
+  | { status: 'idle'; signature: null; message: string | null }
+  | { status: 'testing'; signature: null; message: string | null }
+  | { status: 'success'; signature: string; message: string }
+  | { status: 'error'; signature: null; message: string }
+
+const localIntent = SETUP_INTENTS.find((intent) => intent.id === 'desktop-local') || SETUP_INTENTS[0]
+const advancedIntents = SETUP_INTENTS.filter((intent) => intent.id !== 'desktop-local')
+
+const phaseProgress: Record<RuntimeLoadingPhase, number> = {
+  idle: 6,
+  starting: 16,
+  config: 34,
+  'managed-server': 56,
+  'connecting-events': 72,
+  mcp: 86,
+  ready: 100,
+  error: 100,
 }
 
 function describeSetupLoadError(error: unknown) {
@@ -46,6 +73,43 @@ async function resolveRuntimeProviderDefaultModel(providerId: string | null) {
   return models[0] || ''
 }
 
+function buildConnectionSignature(input: {
+  providerId: string | null
+  modelId: string
+  credentials: Record<string, string>
+  runtimeToolingBridgeEnabled: boolean
+}) {
+  const credentials = Object.fromEntries(
+    Object.entries(input.credentials).sort(([left], [right]) => left.localeCompare(right)),
+  )
+  return JSON.stringify({
+    providerId: input.providerId,
+    modelId: input.modelId.trim(),
+    credentials,
+    runtimeToolingBridgeEnabled: input.runtimeToolingBridgeEnabled,
+  })
+}
+
+function docsLabel(path: string) {
+  return path.replace(/^docs\//, '').replace(/\.md$/, '').replace(/-/g, ' ')
+}
+
+function docsHref(path: string) {
+  if (/^https?:\/\//i.test(path)) return path
+  return `https://github.com/joe-broadhead/open-cowork/blob/master/${path.replace(/^\/+/, '')}`
+}
+
+function runtimeProgressLabel(status: RuntimeLoadingStatus | null, fallback: string | null) {
+  if (status?.phase === 'starting') return t('setup.progressStarting', 'Starting the model service...')
+  if (status?.phase === 'config') return t('setup.progressConfig', 'Applying setup choices...')
+  if (status?.phase === 'managed-server') return t('setup.progressManagedServer', 'Preparing the local model service...')
+  if (status?.phase === 'connecting-events') return t('setup.progressEvents', 'Connecting status updates...')
+  if (status?.phase === 'mcp') return t('setup.progressTools', 'Preparing agent tools...')
+  if (status?.phase === 'ready') return t('setup.progressReady', 'Model service is ready.')
+  if (status?.phase === 'error') return t('setup.progressError', 'The model service could not start.')
+  return fallback || t('setup.connectionIdle', 'Ready to test the connection.')
+}
+
 export function SetupScreen({
   brandName,
   email,
@@ -61,6 +125,13 @@ export function SetupScreen({
   const [selectedIntentId, setSelectedIntentId] = useState<SetupIntentId>('desktop-local')
   const [loadedCredentialProviders, setLoadedCredentialProviders] = useState<Set<string>>(() => new Set())
   const [saving, setSaving] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [runtimeProgress, setRuntimeProgress] = useState<RuntimeLoadingStatus | null>(null)
+  const [connectionTest, setConnectionTest] = useState<ConnectionTestState>({
+    status: 'idle',
+    signature: null,
+    message: null,
+  })
   const [error, setError] = useState<string | null>(null)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
@@ -84,8 +155,12 @@ export function SetupScreen({
   }
 
   useEffect(() => {
-    // Settings are loaded masked by default. The setup form requests only
-    // the selected provider's descriptor-aware masked credential bag below.
+    return window.coworkApi.on.runtimeLoadingStatus((status) => {
+      setRuntimeProgress(status)
+    })
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
     window.coworkApi.settings.get().then(async (settings) => {
       const initialProviderId = providers.some((provider) => provider.id === settings.selectedProviderId)
@@ -129,7 +204,7 @@ export function SetupScreen({
     [providers, providerId],
   )
   const selectedIntent = useMemo(
-    () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) || SETUP_INTENTS[0],
+    () => SETUP_INTENTS.find((intent) => intent.id === selectedIntentId) || localIntent,
     [selectedIntentId],
   )
 
@@ -165,11 +240,26 @@ export function SetupScreen({
 
   const selectedCredentials = providerId ? (providerCredentials[providerId] || {}) : {}
   const requiredCredentials = selectedProvider?.credentials.filter((credential) => credential.required !== false) || []
-  const canContinue = Boolean(
-    providerId
-    && modelId.trim()
-    && requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim()),
-  )
+  const hasRequiredCredentials = requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim())
+  const canContinue = Boolean(providerId && modelId.trim() && hasRequiredCredentials)
+  const currentConnectionSignature = useMemo(() => buildConnectionSignature({
+    providerId,
+    modelId,
+    credentials: selectedCredentials,
+    runtimeToolingBridgeEnabled,
+  }), [modelId, providerId, runtimeToolingBridgeEnabled, selectedCredentials])
+  const connectionIsCurrent = connectionTest.status === 'success'
+    && connectionTest.signature === currentConnectionSignature
+  const connectionNeedsRetest = connectionTest.status === 'success' && !connectionIsCurrent
+  const setupProgress = connectionIsCurrent ? 3 : modelId.trim() ? 2 : providerId ? 1 : 0
+  const progressPercent = connectionTest.status === 'testing'
+    ? phaseProgress[runtimeProgress?.phase || 'starting']
+    : connectionIsCurrent
+      ? 100
+      : Math.max(12, setupProgress * 28)
+  const visibleRuntimeProgress = connectionTest.status === 'testing' || connectionIsCurrent
+    ? runtimeProgress
+    : null
 
   const updateCredential = (key: string, value: string) => {
     if (!providerId) return
@@ -183,31 +273,30 @@ export function SetupScreen({
     }))
   }
 
-  const persistSelectionAndRestart = async (modelOverride?: string, options: { allowMissingModel?: boolean } = {}) => {
+  const saveSetupSelection = async (modelOverride?: string, options: { allowMissingModel?: boolean } = {}) => {
     if (!providerId) return false
     const nextModelId = (modelOverride || modelId).trim()
-    const hasRequiredCredentials = requiredCredentials.every((credential) => (selectedCredentials[credential.key] || '').trim())
     if ((!nextModelId && !options.allowMissingModel) || !hasRequiredCredentials) return false
+    await window.coworkApi.settings.set({
+      selectedProviderId: providerId,
+      selectedModelId: nextModelId,
+      runtimeToolingBridgeEnabled,
+      providerCredentials: {
+        [providerId]: selectedCredentials,
+      },
+    })
+    return true
+  }
+
+  const prepareProviderAuthorization = async () => {
     setSaving(true)
     setError(null)
     try {
-      await window.coworkApi.settings.set({
-        selectedProviderId: providerId,
-        selectedModelId: nextModelId,
-        runtimeToolingBridgeEnabled,
-        providerCredentials: {
-          [providerId]: selectedCredentials,
-        },
-      })
-      // Reboot the runtime with the new credentials so a bad API key
-      // surfaces here instead of silently during the user's first
-      // prompt. If restart reports `ready: false`, show the actual
-      // runtime error (wrong key, unreachable provider, etc.) and
-      // leave the setup form open so the user can correct it.
+      const saved = await saveSetupSelection(undefined, { allowMissingModel: true })
+      if (!saved) return false
       const status = await window.coworkApi.runtime.restart()
       if (!status.ready) {
-        setError(status.error || t('setup.runtimeFailed', 'Runtime could not start with the provided credentials. Double-check your API key and try again.'))
-        setSaving(false)
+        setError(status.error || t('setup.runtimeFailed', 'The model service could not start with these settings. Double-check your key and try again.'))
         return false
       }
       return true
@@ -219,18 +308,67 @@ export function SetupScreen({
     }
   }
 
-  const handleContinue = async () => {
-    const ok = await persistSelectionAndRestart()
-    if (ok) {
-      onComplete()
+  const handleTestConnection = async () => {
+    if (!canContinue) {
+      setError(t('setup.connectionMissingFields', 'Choose a provider, enter the required key, and choose a model before testing.'))
+      return
+    }
+    if (!providerId) return
+    setSaving(true)
+    setError(null)
+    setRuntimeProgress({
+      phase: 'starting',
+      message: t('setup.connectionSaving', 'Saving setup choices...'),
+      ready: false,
+      error: null,
+      updatedAt: new Date().toISOString(),
+    })
+    setConnectionTest({
+      status: 'testing',
+      signature: null,
+      message: t('setup.connectionTesting', 'Testing the model connection...'),
+    })
+    try {
+      await saveSetupSelection()
+      const status = await window.coworkApi.runtime.awaitInitialization()
+      if (!status.ready) {
+        const message = status.error || t('setup.runtimeFailed', 'The model service could not start with these settings. Double-check your key and try again.')
+        setError(message)
+        setConnectionTest({ status: 'error', signature: null, message })
+        addGlobalError(message)
+        return
+      }
+      setRuntimeProgress(status)
+      await window.coworkApi.provider.testConnection(providerId, modelId.trim())
+      const message = t('setup.connectionReady', 'Connection tested. You can start using {{brandName}}.', { brandName })
+      setConnectionTest({
+        status: 'success',
+        signature: currentConnectionSignature,
+        message,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('setup.saveFailed', 'Failed to save settings')
+      setError(message)
+      setConnectionTest({ status: 'error', signature: null, message })
+      addGlobalError(message)
+    } finally {
+      setSaving(false)
     }
   }
 
+  const handleContinue = () => {
+    if (!connectionIsCurrent) {
+      setError(t('setup.connectionRequired', 'Test this provider and model before continuing.'))
+      return
+    }
+    onComplete()
+  }
+
   return (
-    <div className="h-screen w-screen overflow-y-auto" style={{ background: 'var(--color-base)' }}>
-      <div className="mx-auto w-full max-w-2xl px-6 py-8">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-12 h-12 rounded-2xl bg-surface border border-border flex items-center justify-center">
+    <div className="h-screen w-screen overflow-y-auto bg-base">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-8">
+        <header className="flex flex-col items-center gap-2 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-surface">
             <span className="text-lg font-bold text-accent">O</span>
           </div>
           <h1 className="text-lg font-semibold text-text">
@@ -238,194 +376,311 @@ export function SetupScreen({
               ? t('setup.welcomeUser', 'Welcome, {{name}}', { name: email.split('@')[0] })
               : t('setup.welcomeGeneric', 'Welcome to {{brandName}}', { brandName })}
           </h1>
-          <p className="text-[13px] text-text-muted text-center max-w-2xl">
-            {t('setup.description', 'Choose the provider and model this {{brandName}} build should use by default.', { brandName })}
+          <p className="max-w-xl text-sm text-text-muted">
+            {t('setup.description', 'Connect an AI model, choose your default model, then start your first prompt.')}
           </p>
-        </div>
+        </header>
 
-        <div className="mt-6 w-full flex flex-col gap-3">
-          <div className="rounded-xl border border-border-subtle bg-elevated p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-              {t('setup.pathLabel', 'Setup path')}
+        <section aria-label={t('setup.progress', 'Setup progress')} className="rounded-2xl border border-border-subtle bg-elevated p-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: t('setup.stepConnect', 'Connect a model'), done: setupProgress >= 1 },
+              { label: t('setup.stepChoose', 'Choose model'), done: setupProgress >= 2 },
+              { label: t('setup.stepDone', 'Done'), done: setupProgress >= 3 },
+            ].map((step, index) => (
+              <div key={step.label} className="flex items-center gap-2 text-sm text-text-secondary">
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold ${step.done ? 'border-accent bg-accent text-accent-foreground' : 'border-border-subtle text-text-muted'}`}>
+                  {index + 1}
+                </span>
+                <span className={step.done ? 'text-text' : undefined}>{step.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface">
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${progressPercent}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-text-muted">
+            {runtimeProgressLabel(visibleRuntimeProgress, connectionTest.message)}
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-border-subtle bg-elevated p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-text">{t('setup.localTitle', 'Running on this Mac')}</h2>
+                <Badge tone="success">{t('setup.localReady', 'Ready')}</Badge>
+              </div>
+              <p className="mt-1 text-sm text-text-muted">
+                {t('setup.localDescription', 'Your projects and model credentials stay on this computer unless you choose a team or server option.')}
+              </p>
             </div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {SETUP_INTENTS.map((intent) => (
+            <a
+              href={docsHref(localIntent.primaryDocs)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-accent hover:underline"
+            >
+              {t('setup.learnMore', 'Learn more')}
+            </a>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3" aria-label={t('setup.providerSection', 'Model provider')}>
+          <div>
+            <h2 className="text-base font-semibold text-text">{t('setup.providerTitle', 'Model provider')}</h2>
+            <p className="text-sm text-text-muted">
+              {t('setup.providerDescription', 'Choose the account that will power your agents.')}
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {providers.map((provider) => {
+              const active = providerId === provider.id
+              return (
                 <button
-                  key={intent.id}
+                  key={provider.id}
                   type="button"
-                  onClick={() => setSelectedIntentId(intent.id)}
-                  className="min-h-[86px] rounded-lg border px-3 py-2 text-start transition-colors"
-                  style={{
-                    background: selectedIntentId === intent.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'var(--color-base)',
-                    borderColor: selectedIntentId === intent.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                  onClick={() => {
+                    providerSelectionEdited.current = true
+                    setProviderId(provider.id)
+                    setModelId(provider.defaultModel || provider.models[0]?.id || '')
                   }}
+                  className={`rounded-2xl border px-4 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle bg-elevated hover:bg-surface-hover'}`}
                 >
-                  <div className="text-[12px] font-semibold text-text">{intent.label}</div>
-                  <div className="mt-1 line-clamp-3 text-[10px] leading-relaxed text-text-muted">{intent.summary}</div>
+                  <div className={`text-sm font-semibold ${active ? 'text-accent' : 'text-text'}`}>{provider.name}</div>
+                  <div className="mt-1 text-xs text-text-muted">{t('setup.providerCardHint', 'Use this provider for new chats.')}</div>
                 </button>
-              ))}
+              )
+            })}
+          </div>
+        </section>
+
+        {selectedProvider ? (
+          <section className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-elevated p-4" aria-label={t('setup.connectionSection', 'Connection details')}>
+            <div>
+              <h2 className="text-base font-semibold text-text">{t('settings.models.authentication', 'Authentication')}</h2>
+              <p className="text-sm text-text-muted">
+                {t('setup.authenticationDescription', 'Use a browser sign-in if available, or enter the required API key.')}
+              </p>
             </div>
-            {selectedIntent ? (
-              <div className="mt-2 rounded-lg border border-border-subtle bg-base px-3 py-2 text-[11px] text-text-secondary">
-                <div className="font-medium text-text">{selectedIntent.topologyProfile}</div>
-                <div className="mt-1 text-text-muted">{selectedIntent.nextActions[0]}</div>
-                {selectedIntent.primaryCommand ? (
-                  <div className="mt-2 rounded border border-border-subtle px-2 py-1 font-mono text-[10px] text-text-muted">
-                    {selectedIntent.primaryCommand}
-                  </div>
-                ) : null}
+            <ProviderAuthControls
+              providerId={providerId}
+              providerName={selectedProvider.name}
+              connected={selectedProvider.connected}
+              disabled={!providerId || saving}
+              copyMode="setup"
+              onBeforeAuthorize={prepareProviderAuthorization}
+              onAuthUpdated={async () => {
+                const authModelId = selectedProvider.defaultModel
+                  || await resolveRuntimeProviderDefaultModel(providerId)
+                  || modelId
+                setModelId(authModelId)
+              }}
+            />
+            {selectedProvider.credentials.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {selectedProvider.credentials.map((credential) => {
+                  const credentialIsSecret = credentialFieldIsSecret(credential)
+                  return (
+                    <label key={credential.key} className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium text-text-secondary">{credential.label}</span>
+                      <input
+                        type={credentialIsSecret ? 'password' : 'text'}
+                        value={selectedCredentials[credential.key] || ''}
+                        onFocus={() => {
+                          if (credentialIsSecret && isCredentialMask(selectedCredentials[credential.key])) {
+                            updateCredential(credential.key, '')
+                          }
+                        }}
+                        onChange={(event) => updateCredential(credential.key, event.target.value)}
+                        placeholder={credential.placeholder}
+                        className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
+                      />
+                      <span className="text-xs text-text-muted">{credential.description}</span>
+                    </label>
+                  )
+                })}
+                <a
+                  href={docsHref(localIntent.primaryDocs)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium text-accent hover:underline"
+                >
+                  {t('setup.keyHelp', 'Where do I get a key?')}
+                </a>
               </div>
             ) : null}
-          </div>
+          </section>
+        ) : null}
 
-          {providers.map((provider) => (
-            <button
-              key={provider.id}
-              onClick={() => {
-                providerSelectionEdited.current = true
-                setProviderId(provider.id)
-                setModelId(provider.defaultModel || provider.models[0]?.id || '')
-              }}
-              className="w-full text-start px-4 py-3 rounded-xl border transition-all cursor-pointer"
-              style={{
-                background: providerId === provider.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'var(--color-elevated)',
-                borderColor: providerId === provider.id ? 'var(--color-accent)' : 'var(--color-border-subtle)',
-              }}
-            >
-              <div className="text-[13px] font-medium" style={{ color: providerId === provider.id ? 'var(--color-accent)' : 'var(--color-text)' }}>
-                {provider.name}
+        {selectedProvider ? (
+          <section className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-elevated p-4" aria-label={t('setup.model', 'Model')}>
+            <div>
+              <h2 className="text-base font-semibold text-text">{t('setup.model', 'Model')}</h2>
+              <p className="text-sm text-text-muted">{t('setup.modelDescription', 'Pick the model agents will use by default.')}</p>
+            </div>
+            {selectedProvider.models.length > 0 ? (
+              <div className="grid gap-2">
+                {selectedProvider.models.map((model) => {
+                  const active = modelId === model.id
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => setModelId(model.id)}
+                      className={`rounded-xl border px-3.5 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle hover:bg-surface-hover'}`}
+                    >
+                      <span className={`block text-sm font-medium ${active ? 'text-accent' : 'text-text-secondary'}`}>{model.name}</span>
+                      {model.description ? (
+                        <span className="mt-1 block line-clamp-2 text-xs leading-relaxed text-text-muted">
+                          {model.description}
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })}
               </div>
-              <div className="text-[11px] text-text-muted mt-0.5">{provider.description}</div>
-            </button>
-          ))}
+            ) : (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-text-secondary">{t('setup.modelIdLabel', 'Model ID')}</span>
+                <input
+                  type="text"
+                  value={modelId}
+                  onChange={(event) => setModelId(event.target.value)}
+                  placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
+                  className="w-full rounded-lg border border-border-subtle bg-base px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-text-muted focus:border-accent/40"
+                />
+                <span className="text-xs text-text-muted">
+                  {t('setup.liveModelsHint', 'This provider fills its model list after sign-in.')}
+                </span>
+              </label>
+            )}
+          </section>
+        ) : null}
 
-          {selectedProvider && (
-            <>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1 mt-3">{t('settings.models.authentication', 'Authentication')}</span>
-              <ProviderAuthControls
-                providerId={providerId}
-                providerName={selectedProvider.name}
-                connected={selectedProvider.connected}
-                disabled={!providerId || saving}
-                onBeforeAuthorize={async () => persistSelectionAndRestart(undefined, { allowMissingModel: true })}
-                onAuthUpdated={async () => {
-                  const authModelId = selectedProvider.defaultModel
-                    || await resolveRuntimeProviderDefaultModel(providerId)
-                    || modelId
-                  setModelId(authModelId)
-                }}
-              />
-              {selectedProvider.credentials.length > 0 ? (
-                <div className="flex flex-col gap-2.5 rounded-xl border border-border-subtle p-3.5" style={{ background: 'var(--color-elevated)' }}>
-                  {selectedProvider.credentials.map((credential) => {
-                    const credentialIsSecret = credentialFieldIsSecret(credential)
-                    return (
-                      <label key={credential.key} className="flex flex-col gap-1">
-                        <span className="text-[11px] text-text-muted font-medium">{credential.label}</span>
-                        <input
-                          type={credentialIsSecret ? 'password' : 'text'}
-                          value={selectedCredentials[credential.key] || ''}
-                          onFocus={() => {
-                            if (credentialIsSecret && isCredentialMask(selectedCredentials[credential.key])) {
-                              updateCredential(credential.key, '')
-                            }
-                          }}
-                          onChange={(event) => updateCredential(credential.key, event.target.value)}
-                          placeholder={credential.placeholder}
-                          className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
-                        />
-                        <span className="text-[10px] text-text-muted">{credential.description}</span>
-                      </label>
-                    )
-                  })}
+        <section className="rounded-2xl border border-border-subtle bg-elevated p-4">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 text-start"
+            aria-expanded={advancedOpen}
+          >
+            <span>
+              <span className="block text-sm font-semibold text-text">
+                {t('setup.advancedTitle', 'Set up a team or server deployment')}
+              </span>
+              <span className="mt-1 block text-xs text-text-muted">
+                {t('setup.advancedDescription', 'Optional paths for shared work, remote access, or stricter local isolation.')}
+              </span>
+            </span>
+            <span className="text-sm text-accent">{advancedOpen ? t('common.hide', 'Hide') : t('common.show', 'Show')}</span>
+          </button>
+
+          {advancedOpen ? (
+            <div className="mt-4 flex flex-col gap-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {advancedIntents.map((intent) => {
+                  const active = selectedIntentId === intent.id
+                  return (
+                    <button
+                      key={intent.id}
+                      type="button"
+                      onClick={() => setSelectedIntentId(intent.id)}
+                      className={`min-h-24 rounded-xl border px-3 py-3 text-start transition-colors ${active ? 'border-accent bg-accent/10' : 'border-border-subtle hover:bg-surface-hover'}`}
+                    >
+                      <div className="text-sm font-semibold text-text">{intent.label}</div>
+                      <div className="mt-1 line-clamp-3 text-xs leading-relaxed text-text-muted">{intent.summary}</div>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedIntent.id !== 'desktop-local' ? (
+                <div className="rounded-xl border border-border-subtle bg-base px-3 py-2 text-xs text-text-secondary">
+                  <div className="font-medium text-text">{selectedIntent.topologyProfile}</div>
+                  <div className="mt-1 text-text-muted">{selectedIntent.nextActions[0]}</div>
+                  {selectedIntent.primaryCommand ? (
+                    <div className="mt-2 rounded border border-border-subtle px-2 py-1 font-mono text-xs text-text-muted">
+                      {selectedIntent.primaryCommand}
+                    </div>
+                  ) : null}
+                  <a
+                    href={docsHref(selectedIntent.primaryDocs)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex text-accent hover:underline"
+                  >
+                    {t('setup.readDocs', 'Read {{name}} docs', { name: docsLabel(selectedIntent.primaryDocs) })}
+                  </a>
                 </div>
               ) : null}
 
-              <div className="w-full flex flex-col gap-3 mt-2">
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">{t('setup.model', 'Model')}</span>
-                {selectedProvider.models.length > 0 ? (
-                  <div className="flex flex-col gap-1">
-                    {selectedProvider.models.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => setModelId(model.id)}
-                        className="flex flex-col items-start gap-1 px-3.5 py-2.5 rounded-lg text-start cursor-pointer transition-all border"
-                        style={{
-                          background: modelId === model.id ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
-                          borderColor: modelId === model.id ? 'var(--color-accent)' : 'transparent',
-                        }}
-                      >
-                        <span
-                          className="text-[12px] font-medium leading-snug w-full"
-                          style={{ color: modelId === model.id ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
-                        >
-                          {model.name}
-                        </span>
-                        {model.description ? (
-                          <span className="text-[10px] text-text-muted leading-relaxed w-full line-clamp-2">
-                            {model.description}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <input
-                    type="text"
-                    value={modelId}
-                    onChange={(event) => setModelId(event.target.value)}
-                    placeholder={t('setup.modelIdPlaceholder', 'Model ID')}
-                    className="w-full px-3 py-2 rounded-lg text-[12px] bg-base border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-accent/40 transition-colors"
-                  />
-                )}
-                {selectedProvider.models.length === 0 ? (
-                  <span className="text-[10px] text-text-muted px-1">
-                    {t('setup.runtimeModelsHint', 'This provider uses OpenCode\'s live model catalog after the runtime starts.')}
+              <div className="flex items-start gap-3 rounded-xl border border-border-subtle bg-base px-3.5 py-3">
+                <input
+                  id="setup-runtime-tooling-bridge"
+                  type="checkbox"
+                  checked={runtimeToolingBridgeEnabled}
+                  onChange={(event) => setRuntimeToolingBridgeEnabled(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="setup-runtime-tooling-bridge" className="flex min-w-0 cursor-pointer flex-col gap-1">
+                  <span id="setup-runtime-tooling-bridge-title" className="text-sm font-semibold text-text">
+                    {t('setup.toolingBridgeTitle', 'Reuse developer tools from this Mac')}
                   </span>
-                ) : null}
+                  <span className="text-xs leading-relaxed text-text-muted">
+                    {t(
+                      'setup.toolingBridgeDescription',
+                      'Allow agents to see standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for stricter isolation; you can change it later in Settings.',
+                    )}
+                  </span>
+                </label>
               </div>
-            </>
-          )}
-
-          {error ? (
-            <p className="text-[12px] text-center" style={{ color: 'var(--color-red)' }}>{error}</p>
+            </div>
           ) : null}
+        </section>
 
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label htmlFor="setup-runtime-tooling-bridge" className="mt-1 flex items-start gap-3 rounded-xl border border-border-subtle bg-elevated px-3.5 py-3 cursor-pointer">
-            <input
-              id="setup-runtime-tooling-bridge"
-              type="checkbox"
-              checked={runtimeToolingBridgeEnabled}
-              onChange={(event) => setRuntimeToolingBridgeEnabled(event.target.checked)}
-              className="mt-0.5"
-            />
-            <span className="flex min-w-0 flex-col gap-1">
-              <span className="text-[12px] font-semibold text-text">
-                {t('setup.toolingBridgeTitle', 'Developer config bridge')}
-              </span>
-              <span className="text-[10px] leading-relaxed text-text-muted">
-                {t(
-                  'setup.toolingBridgeDescription',
-                  'Let the managed OpenCode runtime reuse standard Git, SSH, package-manager, cloud, Docker, and Kubernetes config from your home directory. Turn this off for a stricter isolated runtime HOME; you can change it later in Settings.',
-                )}
-              </span>
-            </span>
-          </label>
+        {connectionNeedsRetest ? (
+          <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            {t('setup.connectionStale', 'The provider or model changed. Test the connection again before continuing.')}
+          </div>
+        ) : null}
+        {error ? (
+          <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+            <div>{error}</div>
+            <a href={docsHref(localIntent.primaryDocs)} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-red-50 underline">
+              {t('setup.errorDocs', 'Open setup help')}
+            </a>
+          </div>
+        ) : null}
 
-          <button
-            onClick={handleContinue}
+        <footer className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            variant="secondary"
+            fullWidth
+            onClick={() => void handleTestConnection()}
+            loading={connectionTest.status === 'testing'}
             disabled={!canContinue || saving}
-            className="w-full py-2.5 rounded-xl text-[13px] font-semibold cursor-pointer transition-all mt-2"
-            style={{
-              background: canContinue ? 'var(--color-accent)' : 'var(--color-surface-hover)',
-              color: canContinue ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
-              opacity: saving ? 0.6 : 1,
-            }}
+            disabledReason={!canContinue ? t('setup.testDisabled', 'Choose a provider, enter required credentials, and choose a model first.') : null}
           >
-            {saving ? t('common.loading', 'Setting up...') : t('setup.continue', 'Get Started')}
-          </button>
-        </div>
+            {connectionTest.status === 'testing'
+              ? t('setup.testingConnection', 'Testing connection...')
+              : t('setup.testConnection', 'Test connection')}
+          </Button>
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={handleContinue}
+            disabled={!connectionIsCurrent || saving}
+            disabledReason={!connectionIsCurrent ? t('setup.continueDisabled', 'Test this provider and model first.') : null}
+          >
+            {t('setup.continue', 'Get Started')}
+          </Button>
+        </footer>
+
+        {connectionTest.status === 'success' && connectionIsCurrent ? (
+          <div role="status" className="text-center text-sm text-text-muted">
+            {connectionTest.message}
+          </div>
+        ) : null}
       </div>
     </div>
   )

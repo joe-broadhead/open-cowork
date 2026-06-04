@@ -3,14 +3,25 @@ import type { ProviderAuthMethod, ProviderAuthPrompt } from '@open-cowork/shared
 import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 
-function suggestedAuthLabel(providerId: string | null | undefined, providerName?: string) {
+type CopyMode = 'settings' | 'setup'
+
+function suggestedAuthLabel(providerId: string | null | undefined, providerName?: string, copyMode: CopyMode = 'settings') {
   if (providerId === 'openai') return 'ChatGPT Plus/Pro'
-  return providerName || t('providerAuth.openCodeLogin', 'OpenCode login')
+  return providerName || (
+    copyMode === 'setup'
+      ? t('providerAuth.browserLogin', 'Browser login')
+      : t('providerAuth.openCodeLogin', 'OpenCode login')
+  )
 }
 
-function noBrowserMethodMessage(providerId: string | null | undefined, providerName?: string) {
+function noBrowserMethodMessage(providerId: string | null | undefined, providerName?: string, copyMode: CopyMode = 'settings') {
+  if (copyMode === 'setup') {
+    return t('providerAuth.noBrowserMethodSetup', 'Browser sign-in is not available for {{provider}} yet. Use the API key field.', {
+      provider: suggestedAuthLabel(providerId, providerName, copyMode),
+    })
+  }
   return t('providerAuth.noBrowserMethod', 'OpenCode does not currently expose browser login for {{provider}} in this runtime. Use the API key field, or update OpenCode when this provider adds subscription login support.', {
-    provider: suggestedAuthLabel(providerId, providerName),
+    provider: suggestedAuthLabel(providerId, providerName, copyMode),
   })
 }
 
@@ -27,6 +38,7 @@ interface Props {
   providerName?: string
   connected?: boolean
   disabled?: boolean
+  copyMode?: CopyMode
   onBeforeAuthorize?: () => Promise<boolean>
   onAuthUpdated?: () => void | Promise<void>
 }
@@ -74,6 +86,7 @@ export function ProviderAuthControls({
   providerName,
   connected,
   disabled,
+  copyMode = 'settings',
   onBeforeAuthorize,
   onAuthUpdated,
 }: Props) {
@@ -171,7 +184,9 @@ export function ProviderAuthControls({
       const selectedIndex = methodIndex ?? latestMethods.findIndex((method) => method.type === 'oauth')
       const selected = selectedIndex >= 0 ? latestMethods[selectedIndex] : null
       if (!selected || selected.type !== 'oauth') {
-        setStatus(t('providerAuth.noOauthMethod', 'OpenCode did not expose a subscription login method for this provider. Use the API key field or update the bundled OpenCode runtime.'))
+        setStatus(copyMode === 'setup'
+          ? t('providerAuth.noOauthMethodSetup', 'Browser sign-in is not available for this provider. Use the API key field.')
+          : t('providerAuth.noOauthMethod', 'OpenCode did not expose a subscription login method for this provider. Use the API key field or update the bundled OpenCode runtime.'))
         return
       }
 
@@ -181,7 +196,9 @@ export function ProviderAuthControls({
         methodInputs[selectedIndex] || {},
       )
       if (!authorization) {
-        setStatus(t('providerAuth.noAuthorization', 'OpenCode did not return a login URL. Its local callback server may already be running or blocked; close any stale OpenCode login flow and try again.'))
+        setStatus(copyMode === 'setup'
+          ? t('providerAuth.noAuthorizationSetup', 'The login URL was not returned. Close any stale browser login flow and try again.')
+          : t('providerAuth.noAuthorization', 'OpenCode did not return a login URL. Its local callback server may already be running or blocked; close any stale OpenCode login flow and try again.'))
         return
       }
       if (authorization.method === 'code') {
@@ -213,7 +230,9 @@ export function ProviderAuthControls({
         : t('providerAuth.callbackFailed', 'Provider login did not complete. Try the login flow again.'))
       if (ok) {
         if (!await verifyProviderConnected()) {
-          setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
+          setStatus(copyMode === 'setup'
+            ? t('providerAuth.notVerifiedSetup', 'This provider is not signed in yet. Finish the browser login, then try confirming again.')
+            : t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
           return
         }
         setPendingAuth(null)
@@ -246,7 +265,9 @@ export function ProviderAuthControls({
     setStatus(t('providerAuth.verifying', 'Checking provider login status...'))
     if (await checkCurrentRuntime(5)) return true
 
-    setStatus(t('providerAuth.reloadingRuntime', 'Reloading OpenCode to pick up the provider login...'))
+    setStatus(copyMode === 'setup'
+      ? t('providerAuth.reloadingRuntimeSetup', 'Refreshing the model service to pick up the provider login...')
+      : t('providerAuth.reloadingRuntime', 'Reloading OpenCode to pick up the provider login...'))
     const runtimeStatus = await window.coworkApi.runtime.restart()
     if (!runtimeStatus.ready) return false
     return checkCurrentRuntime(5)
@@ -267,7 +288,9 @@ export function ProviderAuthControls({
       }
 
       if (!await verifyProviderConnected()) {
-        setStatus(t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
+        setStatus(copyMode === 'setup'
+          ? t('providerAuth.notVerifiedSetup', 'This provider is not signed in yet. Finish the browser login, then try confirming again.')
+          : t('providerAuth.notVerified', 'OpenCode still does not report this provider as signed in. Finish the browser login, then try confirming again.'))
         return
       }
       await onAuthUpdated?.()
@@ -312,20 +335,30 @@ export function ProviderAuthControls({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-[10px] font-semibold uppercase tracking-widest text-text-muted px-1">
-        {t('providerAuth.header', 'OpenCode login')}
+        {copyMode === 'setup'
+          ? t('providerAuth.headerSetup', 'Browser sign-in')
+          : t('providerAuth.header', 'OpenCode login')}
       </span>
       <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
         <div className="text-[11px] text-text-muted leading-relaxed">
-          {t('providerAuth.description', 'Use OpenCode-native provider auth for subscriptions/OAuth, or keep using the API key field above.')}
+          {copyMode === 'setup'
+            ? t('providerAuth.descriptionSetup', 'Use provider sign-in for subscriptions or OAuth, or keep using the API key field.')
+            : t('providerAuth.description', 'Use OpenCode-native provider auth for subscriptions/OAuth, or keep using the API key field above.')}
         </div>
         {connected === false ? (
           <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
-            {t('providerAuth.notConnected', 'OpenCode does not currently report this provider as signed in. Sign in below or enter an API key above, then save before chatting.')}
+            {copyMode === 'setup'
+              ? t('providerAuth.notConnectedSetup', 'This provider is not signed in yet. Sign in below or enter an API key.')
+              : t('providerAuth.notConnected', 'OpenCode does not currently report this provider as signed in. Sign in below or enter an API key above, then save before chatting.')}
           </div>
         ) : null}
         {connected === true ? (
           <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed flex items-center justify-between gap-3" style={{ color: 'var(--color-green)', background: 'var(--color-surface)' }}>
-            <span>{t('providerAuth.connectedStatus', 'OpenCode reports this provider is signed in.')}</span>
+            <span>
+              {copyMode === 'setup'
+                ? t('providerAuth.connectedStatusSetup', 'This provider is signed in.')
+                : t('providerAuth.connectedStatus', 'OpenCode reports this provider is signed in.')}
+            </span>
             <button
               type="button"
               onClick={forgetProviderLogin}
@@ -338,7 +371,7 @@ export function ProviderAuthControls({
         ) : null}
         {!loading && entries.length === 0 ? (
           <div className="rounded-xl border border-border-subtle px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--color-surface)' }}>
-            {noBrowserMethodMessage(providerId, providerName)}
+            {noBrowserMethodMessage(providerId, providerName, copyMode)}
           </div>
         ) : null}
         {entries.map(({ method, index }) => {

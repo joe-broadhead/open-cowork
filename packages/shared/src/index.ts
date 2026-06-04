@@ -293,6 +293,7 @@ export interface CoworkAPI {
   provider: {
     list: () => Promise<RuntimeProviderDescriptor[]>
     authMethods: () => Promise<Record<string, ProviderAuthMethod[]>>
+    testConnection: (providerId: string, modelId: string) => Promise<{ ok: boolean; providerId: string; modelId: string }>
     authorize: (
       providerId: string,
       method: number,

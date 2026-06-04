@@ -8,6 +8,7 @@ type Deferred = {
 }
 
 let getLoadingWindow: (() => BrowserWindow | null) | null = null
+let getStatusWindows: (() => Array<BrowserWindow | null>) | null = null
 let currentStatus: RuntimeLoadingStatus = createStatus('idle', 'Waiting to start runtime.', false, null)
 let deferred: Deferred = createDeferred()
 
@@ -35,8 +36,11 @@ function createDeferred(): Deferred {
 }
 
 function publish(status: RuntimeLoadingStatus) {
-  const win = getLoadingWindow?.()
-  if (win && !win.isDestroyed()) {
+  const windows = [getLoadingWindow?.(), ...(getStatusWindows?.() || [])]
+  const seen = new Set<number>()
+  for (const win of windows) {
+    if (!win || win.isDestroyed() || seen.has(win.id)) continue
+    seen.add(win.id)
     win.webContents.send('runtime:loading-status', status)
   }
 }
@@ -86,8 +90,10 @@ function startupFailureRemediation(phase: RuntimeLoadingPhase) {
 
 export function configureRuntimeInitialization(options: {
   getLoadingWindow: () => BrowserWindow | null
+  getStatusWindows?: () => Array<BrowserWindow | null>
 }) {
   getLoadingWindow = options.getLoadingWindow
+  getStatusWindows = options.getStatusWindows || null
 }
 
 export function getRuntimeInitializationStatus() {

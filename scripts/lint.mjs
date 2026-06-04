@@ -89,6 +89,9 @@ const privateSdkAccessPatterns = [
     guidance: 'Use OAuth2ClientOptions.redirectUri or GetTokenOptions.redirect_uri instead.',
   },
 ]
+const rendererArbitraryFontSizeLimit = 833
+const arbitraryFontSizePattern = /\btext-\[\d+px\]/g
+let rendererArbitraryFontSizeCount = 0
 
 function visit(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -146,6 +149,11 @@ function lintFile(fullPath) {
     }
   }
 
+  if (shouldLintStyle && relPath.startsWith('apps/desktop/src/renderer/')) {
+    rendererArbitraryFontSizeCount += content.match(arbitraryFontSizePattern)?.length || 0
+    if (ext === '.tsx') validateIconButtonLabels(relPath, content)
+  }
+
   if (/\b(?:opencowork|OpenCowork)\b/.test(content) && !isLegacyNamingAllowed(relPath)) {
     errors.push(`${relPath}: use "open-cowork" publicly; legacy "opencowork" is allowed only for documented back-compat namespaces`)
   }
@@ -160,6 +168,7 @@ function lintFile(fullPath) {
 }
 
 visit(root)
+validateRendererDesignSystemGates()
 validateArchitectureSdkVersionPolicy()
 
 if (errors.length) {
@@ -216,4 +225,58 @@ function validateArchitectureSdkVersionPolicy() {
     const message = err instanceof Error ? err.message : String(err)
     errors.push(`docs/architecture.md: unable to verify OpenCode SDK version policy: ${message}`)
   }
+}
+
+function validateRendererDesignSystemGates() {
+  if (rendererArbitraryFontSizeCount > rendererArbitraryFontSizeLimit) {
+    errors.push(
+      `apps/desktop/src/renderer: arbitrary font-size utility count is ${rendererArbitraryFontSizeCount}; `
+      + `limit is ${rendererArbitraryFontSizeLimit}. Use text tokens/classes or lower the ratchet intentionally.`,
+    )
+  }
+}
+
+function validateIconButtonLabels(relPath, content) {
+  const iconButtonPattern = /<IconButton\b/g
+  for (const match of content.matchAll(iconButtonPattern)) {
+    const start = match.index || 0
+    const tag = readJsxOpeningTag(content, start)
+    if (!tag) continue
+    if (/\blabel\s*=/.test(tag)) continue
+    const lineNo = content.slice(0, start).split('\n').length
+    errors.push(`${relPath}:${lineNo} IconButton must include a label prop`)
+  }
+}
+
+function readJsxOpeningTag(content, start) {
+  let quote = null
+  let expressionDepth = 0
+
+  for (let index = start; index < content.length; index += 1) {
+    const char = content[index]
+    const prev = content[index - 1]
+
+    if (quote) {
+      if (char === quote && prev !== '\\') quote = null
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === '{') {
+      expressionDepth += 1
+      continue
+    }
+    if (char === '}') {
+      expressionDepth = Math.max(0, expressionDepth - 1)
+      continue
+    }
+    if (char === '>' && expressionDepth === 0) {
+      return content.slice(start, index)
+    }
+  }
+
+  return null
 }

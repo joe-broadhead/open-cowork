@@ -8,7 +8,11 @@ import { SettingsPanel } from './sidebar/SettingsPanel'
 import { configureI18n } from '../helpers/i18n'
 
 async function expectNoA11yViolations(container: HTMLElement) {
-  const result = await axe(container)
+  const result = await axe(container, {
+    rules: {
+      'color-contrast': { enabled: true },
+    },
+  })
   expect(result.violations).toEqual([])
 }
 

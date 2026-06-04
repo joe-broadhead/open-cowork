@@ -104,7 +104,10 @@ const {
   getAppIsQuitting: () => appIsQuitting,
   log,
 })
-configureRuntimeInitialization({ getLoadingWindow })
+configureRuntimeInitialization({
+  getLoadingWindow,
+  getStatusWindows: () => [getMainWindow()],
+})
 
 const eventSubscriptions = createRuntimeEventSubscriptionManager({
   getMainWindow,

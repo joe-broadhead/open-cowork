@@ -56,6 +56,7 @@ function resetSessionStore() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  document.body.replaceChildren()
   resetSessionStore()
   installQuestionApi()
 })
@@ -124,6 +125,40 @@ describe('SessionQuestionDock', () => {
     await user.click(screen.getByRole('button', { name: /About:/ }))
     expect(screen.getByText('Read file')).toBeInTheDocument()
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+  })
+
+  it('uses instant scoped-tool scrolling when reduced motion is enabled', async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    const target = document.createElement('div')
+    target.dataset.toolCallId = 'tool-call-1'
+    Object.defineProperty(target, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    document.body.append(target)
+    const request: PendingQuestion = {
+      ...baseRequest,
+      tool: {
+        messageId: 'message-1',
+        callId: 'tool-call-1',
+      },
+    }
+
+    render(<SessionQuestionDock request={request} />)
+
+    await user.click(screen.getByRole('button', { name: /About:/ }))
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'center' })
   })
 
   it('rejects the active question through the question IPC', async () => {

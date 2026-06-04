@@ -42,7 +42,7 @@ describe('CommandPalette', () => {
       />,
     )
 
-    const search = screen.getByRole('combobox', { name: 'Search command palette' })
+    const search = screen.getByRole('searchbox', { name: 'Search command palette' })
     expect(search).toHaveAttribute('aria-controls', 'command-palette-results')
     expect(screen.getByRole('listbox', { name: 'Command palette results' })).toBeTruthy()
 
@@ -76,7 +76,7 @@ describe('CommandPalette', () => {
       />,
     )
 
-    const search = screen.getByRole('combobox', { name: 'Search command palette' })
+    const search = screen.getByRole('searchbox', { name: 'Search command palette' })
     await user.type(search, 'governance')
 
     expect(screen.queryByRole('option', { name: /Governance/ })).not.toBeInTheDocument()
