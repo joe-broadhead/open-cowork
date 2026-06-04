@@ -207,9 +207,10 @@ describe('SettingsPanel', () => {
     await screen.findByText('Settings')
     await user.click(screen.getByRole('button', { name: /Permissions/ }))
 
-    await user.click(within(screen.getByRole('group', { name: 'Shell commands' })).getByRole('button', { name: 'Allow' }))
-    await user.click(within(screen.getByRole('group', { name: 'File editing' })).getByRole('button', { name: 'Allow' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'Shell commands' })).getByRole('tab', { name: 'Allow' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'File editing' })).getByRole('tab', { name: 'Allow' }))
 
+    await user.click(screen.getByRole('button', { name: /Advanced/ }))
     const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
     expect(toolingBridge).toHaveAttribute('aria-checked', 'true')
 
@@ -245,7 +246,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Advanced/ }))
     await user.type(screen.getByLabelText('Model ID'), 'deepseek/deepseek-v4-flash:free')
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
@@ -284,7 +285,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Advanced/ }))
     await user.click(screen.getByRole('button', { name: 'Use main model' }))
     await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
@@ -300,7 +301,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Workflows/ }))
+    await user.click(screen.getByRole('button', { name: /Automations/ }))
 
     expect(screen.queryByRole('switch', { name: 'Improvement proposals' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Scheduled consolidation' })).not.toBeInTheDocument()
@@ -345,7 +346,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Model/ }))
 
     expect(screen.getByText('Cloud profile runtime')).toBeInTheDocument()
     expect(screen.queryByText('Permissions')).not.toBeInTheDocument()
@@ -382,7 +383,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Model/ }))
     const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
     await user.type(apiKeyInput, 'sk-or-user-edit')
 
@@ -464,7 +465,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Model/ }))
     await user.click(screen.getByRole('button', { name: /GitHub Copilot/ }))
     await user.click(await screen.findByRole('button', { name: 'Sign in with GitHub Copilot' }))
 
@@ -503,7 +504,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
 
     await screen.findByText('Settings')
-    await user.click(screen.getByRole('button', { name: /Models/ }))
+    await user.click(screen.getByRole('button', { name: /Model/ }))
 
     const apiKeyInput = await screen.findByPlaceholderText('sk-or-...')
     expect(apiKeyInput).toHaveValue('')

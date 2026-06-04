@@ -3,6 +3,7 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { Badge, Button, EmptyState, Skeleton, type BadgeTone } from '../ui'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -36,12 +37,12 @@ function triggerLabel(trigger: WorkflowTrigger) {
   return `Monthly at ${time}`
 }
 
-function statusTone(status: WorkflowSummary['status']) {
-  if (status === 'active') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'
-  if (status === 'running') return 'border-sky-400/30 bg-sky-500/10 text-sky-100'
-  if (status === 'failed') return 'border-red-400/30 bg-red-500/10 text-red-100'
-  if (status === 'paused') return 'border-amber-400/30 bg-amber-500/10 text-amber-100'
-  return 'border-border bg-muted text-muted'
+function statusTone(status: WorkflowSummary['status']): BadgeTone {
+  if (status === 'active') return 'success'
+  if (status === 'running') return 'accent'
+  if (status === 'failed') return 'danger'
+  if (status === 'paused') return 'warning'
+  return 'neutral'
 }
 
 function runStatusTone(status?: WorkflowRun['status'] | null) {
@@ -203,15 +204,16 @@ export function WorkflowsPage({ onOpenThread }: Props) {
               Save repeatable work from a Workflow Designer setup thread, then run it manually, on a schedule, or from a webhook.
             </p>
           </div>
-          <button
+          <Button
             type="button"
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => void startDraft()}
-              disabled={busyId === 'new' || workflowDraftBlocked}
-              title={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
-            >
+            variant="primary"
+            leftIcon="plus"
+            onClick={() => void startDraft()}
+            disabled={busyId === 'new' || workflowDraftBlocked}
+            disabledReason={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : null}
+          >
             {busyId === 'new' ? 'Starting...' : 'Add workflow'}
-          </button>
+          </Button>
         </div>
         {feedback ? (
           <div className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-secondary">
@@ -222,31 +224,33 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
       <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
         {loading && payload.workflows.length === 0 ? (
-          <div className="text-sm text-muted">Loading workflows...</div>
+          <div className="grid gap-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton key={index} variant="card" className="h-40" />
+            ))}
+          </div>
         ) : activeWorkflows.length === 0 ? (
-          <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-surface/40 px-6 text-center">
-            <div>
-              <h2 className="font-display text-role-section-title font-bold text-primary">No workflows yet</h2>
-              <p className="mt-2 max-w-md text-sm text-muted">
-                {workflowListBlocked && workflowListReason
-                  ? workflowListReason
-                  : workflowDraftBlocked
-                  ? activeWorkspaceIsLocal
-                    ? 'Workflow setup requires the in-app OpenCode config source because it uses Cowork’s Workflow Designer agent and Workflows tool.'
-                    : 'Cloud workflow creation is managed by the cloud workspace. Existing workflows will appear here when available.'
-                  : 'Start with a thread. The Workflow Designer agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
-              </p>
-              <button
-                type="button"
-                className="mt-5 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+          <EmptyState
+            icon="workflow"
+            title="No workflows yet"
+            body={workflowListBlocked && workflowListReason
+              ? workflowListReason
+              : workflowDraftBlocked
+                ? activeWorkspaceIsLocal
+                  ? 'Workflow setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.'
+                  : 'Cloud workflow creation is managed by the cloud workspace. Existing workflows will appear here when available.'
+                : 'Start with a setup thread. The Workflow Designer agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
+            action={(
+              <Button
+                variant="primary"
                 onClick={() => void startDraft()}
                 disabled={workflowDraftBlocked}
-                title={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : undefined}
+                disabledReason={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : null}
               >
                 Add workflow
-              </button>
-            </div>
-          </div>
+              </Button>
+            )}
+          />
         ) : (
           <div className="grid gap-4">
             {activeWorkflows.map((workflow) => (
@@ -255,28 +259,28 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="min-w-0 font-display text-role-card-title font-bold text-primary">{workflow.title}</h2>
-                      <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${statusTone(workflow.status)}`}>
+                      <Badge tone={statusTone(workflow.status)} className="uppercase">
                         {workflow.status}
-                      </span>
+                      </Badge>
                     </div>
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-secondary">{workflow.instructions}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {workflow.draftSessionId ? (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted" onClick={() => onOpenThread(workflow.draftSessionId!)}>
+                      <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.draftSessionId!)}>
                         Open setup
-                      </button>
+                      </Button>
                     ) : null}
                     {workflow.latestRunSessionId ? (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted" onClick={() => onOpenThread(workflow.latestRunSessionId!)}>
+                      <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.latestRunSessionId!)}>
                         Open latest run
-                      </button>
+                      </Button>
                     ) : null}
-                    <button
-                      type="button"
-                      className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={busyId === workflow.id || workflow.status === 'running' || workflowActionBlocked}
-                      title={workflowActionReason || undefined}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busyId === workflow.id || workflow.status === 'running'}
+                      disabledReason={workflowActionBlocked ? workflowActionReason : null}
                       onClick={() => void runAction(workflow.id, () => (
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.runNow(workflow.id)
@@ -284,31 +288,31 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                       ), 'Workflow run started.')}
                     >
                       Run
-                    </button>
+                    </Button>
                     {workflow.status === 'paused' ? (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                      <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.resume(workflow.id)
                           : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
                       ), 'Workflow resumed.')}>
                         Resume
-                      </button>
+                      </Button>
                     ) : (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-sm text-secondary hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                      <Button size="sm" variant="secondary" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.pause(workflow.id)
                           : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
                       ), 'Workflow paused.')}>
                         Pause
-                      </button>
+                      </Button>
                     )}
-                    <button type="button" className="rounded-md border border-red-400/30 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60" disabled={workflowActionBlocked} title={workflowActionReason || undefined} onClick={() => void runAction(workflow.id, () => (
+                    <Button size="sm" variant="danger" disabledReason={workflowActionBlocked ? workflowActionReason : null} onClick={() => void runAction(workflow.id, () => (
                       activeWorkspaceIsLocal
                         ? window.coworkApi.workflows.archive(workflow.id)
                         : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
                     ), 'Workflow archived.')}>
                       Archive
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -343,13 +347,13 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                 {workflow.webhookUrl ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-base/40 p-3">
                     <code className="min-w-0 flex-1 truncate text-xs text-secondary">{workflow.webhookUrl}</code>
-                    <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-secondary hover:bg-muted" onClick={() => void copyWebhook(workflow)}>
+                    <Button size="sm" variant="secondary" onClick={() => void copyWebhook(workflow)}>
                       Copy curl
-                    </button>
+                    </Button>
                     {activeWorkspaceIsLocal ? (
-                      <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-secondary hover:bg-muted" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), 'Webhook secret regenerated.')}>
+                      <Button size="sm" variant="secondary" onClick={() => void runAction(workflow.id, () => window.coworkApi.workflows.regenerateWebhookSecret(workflow.id), 'Webhook secret regenerated.')}>
                         Regenerate
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 ) : null}

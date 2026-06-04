@@ -13,6 +13,7 @@ import type {
 } from '@open-cowork/shared'
 import { CustomMcpForm } from '../plugins/CustomMcpForm'
 import { CustomSkillForm } from '../plugins/CustomSkillForm'
+import { Button, Icon, Input, SegmentedControl, Skeleton, Tooltip } from '../ui'
 import { useSessionStore } from '../../stores/session'
 import { confirmMcpRemoval, confirmSkillRemoval } from '../../helpers/destructive-actions'
 import { SkillSelectionCard, ToolSelectionCard } from './CapabilitySelectionCard'
@@ -66,6 +67,7 @@ export function CapabilitiesPage({
   const [workflowList, setWorkflowList] = useState<WorkflowListPayload | null>(null)
   const [selectedToolDetail, setSelectedToolDetail] = useState<CapabilityTool | null>(null)
   const [selectedSkillBundle, setSelectedSkillBundle] = useState<CapabilitySkillBundle | null>(null)
+  const [loading, setLoading] = useState(true)
   const relationshipEnabled = isCapabilityRelationshipGraphEnabled()
 
   const currentProjectDirectory = useMemo(
@@ -82,20 +84,36 @@ export function CapabilitiesPage({
   )
 
   const loadAll = () => {
-    window.coworkApi.capabilities.tools(toolOptions).then(setTools)
-    window.coworkApi.capabilities.skills(contextOptions).then(setSkills)
-    window.coworkApi.custom.listMcps(contextOptions).then(setCustomMcps)
-    window.coworkApi.custom.listSkills(contextOptions).then(setCustomSkills)
-    window.coworkApi.tools.list(toolOptions).then(setRuntimeTools).catch(() => setRuntimeTools([]))
-    if (relationshipEnabled) {
-      window.coworkApi.agents.list(contextOptions).then(setCustomAgents).catch(() => setCustomAgents([]))
-      window.coworkApi.app.builtinAgents().then(setBuiltInAgents).catch(() => setBuiltInAgents([]))
-      window.coworkApi.workflows.list().then(setWorkflowList).catch(() => setWorkflowList(null))
-    } else {
-      setCustomAgents([])
-      setBuiltInAgents([])
-      setWorkflowList(null)
-    }
+    setLoading(true)
+    const base = Promise.all([
+      window.coworkApi.capabilities.tools(toolOptions),
+      window.coworkApi.capabilities.skills(contextOptions),
+      window.coworkApi.custom.listMcps(contextOptions),
+      window.coworkApi.custom.listSkills(contextOptions),
+      window.coworkApi.tools.list(toolOptions).catch(() => []),
+    ]).then(([nextTools, nextSkills, nextMcps, nextCustomSkills, nextRuntimeTools]) => {
+      setTools(nextTools)
+      setSkills(nextSkills)
+      setCustomMcps(nextMcps)
+      setCustomSkills(nextCustomSkills)
+      setRuntimeTools(nextRuntimeTools)
+    })
+    const relationships = relationshipEnabled
+      ? Promise.all([
+          window.coworkApi.agents.list(contextOptions).catch(() => []),
+          window.coworkApi.app.builtinAgents().catch(() => []),
+          window.coworkApi.workflows.list().catch(() => null),
+        ]).then(([nextCustomAgents, nextBuiltInAgents, nextWorkflowList]) => {
+          setCustomAgents(nextCustomAgents)
+          setBuiltInAgents(nextBuiltInAgents)
+          setWorkflowList(nextWorkflowList)
+        })
+      : Promise.resolve().then(() => {
+          setCustomAgents([])
+          setBuiltInAgents([])
+          setWorkflowList(null)
+        })
+    Promise.all([base, relationships]).finally(() => setLoading(false))
   }
 
   useEffect(() => {
@@ -300,62 +318,75 @@ export function CapabilitiesPage({
     : t('capabilities.addTool', 'Add tool')
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+      <div className="feature-page-shell">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-display text-role-page-title font-bold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-role-page-title font-bold text-text">{t('capabilities.title', 'Tools & Skills')}</h1>
+              <GlossaryHelp />
+            </div>
             <p className="text-[13px] text-text-secondary mt-1">
-              {t('capabilities.subtitle', 'Inspect the tools and skill bundles available in the current OpenCode context, including bundled, machine, project, and custom additions.')}
+              {t('capabilities.subtitle', 'Inspect the tools and skills available in the current workspace, including bundled, machine, project, and custom additions.')}
             </p>
           </div>
-          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">{t('agentsPage.backToChat', 'Back to chat')}</button>
+          <Button variant="ghost" size="sm" onClick={onClose}>{t('agentsPage.backToChat', 'Back to chat')}</Button>
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div className="feature-toolbar mb-3">
           <div className="flex-1">
-            <input
-              type="text"
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              leftIcon="search"
+              clearable
+              onClear={() => setSearch('')}
               placeholder={searchPlaceholder}
-              className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
-          <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-            {([
+          <SegmentedControl
+            label={t('capabilities.tabLabel', 'Capability view')}
+            value={tab}
+            onChange={(value) => setTab(value as Tab)}
+            options={([
               'map',
               ...(relationshipEnabled ? ['relationships' as const] : []),
               'tools',
               'skills',
-            ] as const).map((value) => (
-              <button
-                key={value}
-                onClick={() => setTab(value)}
-                className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors capitalize ${tab === value ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
-              >
-                {value === 'map'
-                  ? t('capabilities.tab.map', 'Map')
-                  : value === 'relationships'
-                    ? t('capabilities.tab.relationships', 'Relationships')
-                    : value === 'tools'
-                      ? t('capabilities.tab.tools', 'Tools')
-                      : t('capabilities.tab.skills', 'Skills')}
-              </button>
+            ] as const).map((value) => ({
+              value,
+              label: value === 'map'
+                ? t('capabilities.tab.map', 'Tools & Skills')
+                : value === 'relationships'
+                  ? t('capabilities.tab.relationships', 'Relationships')
+                  : value === 'tools'
+                    ? t('capabilities.tab.tools', 'Tools')
+                    : t('capabilities.tab.skills', 'Skills'),
+            }))}
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon="plus"
+            onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
+          >
+            {addButtonLabel}
+          </Button>
+        </div>
+        {!relationshipEnabled ? (
+          <div className="mb-6 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-[11px] text-text-muted">
+            {t('capabilities.relationshipsDisabled', 'The relationship view is available behind the Tools & Skills relationship feature flag. The main tools and skills lists remain available here.')}
+          </div>
+        ) : (
+          <div className="mb-6" />
+        )}
+
+        {loading && tools.length === 0 && skills.length === 0 ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} variant="card" className="h-36" />
             ))}
           </div>
-          <button
-            onClick={() => tab === 'skills' ? setSkillForm('new') : setMcpForm('new')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
-            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
-            </svg>
-            {addButtonLabel}
-          </button>
-        </div>
-
-        {tab === 'relationships' && relationshipEnabled ? (
+        ) : tab === 'relationships' && relationshipEnabled ? (
           <CapabilityRelationshipView
             rows={relationshipRows}
             allRowsCount={allRelationshipRows.length}
@@ -490,6 +521,23 @@ export function CapabilitiesPage({
         )}
       </div>
     </div>
+  )
+}
+
+function GlossaryHelp() {
+  return (
+    <Tooltip
+      side="bottom"
+      content={(
+        <span>
+          MCP means Model Context Protocol. Tools let agents call integrations. Skills are reusable instructions. Capabilities are the combined tools and skills an agent can use.
+        </span>
+      )}
+    >
+      <button type="button" aria-label={t('capabilities.glossary', 'Glossary')} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text">
+        <Icon name="circle-help" size={16} />
+      </button>
+    </Tooltip>
   )
 }
 

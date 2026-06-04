@@ -15,15 +15,22 @@ import { useSessionStore } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { mergeFetchedProviderCredentials, stripMaskedProviderCredentials } from '../provider/credential-merge'
+import { Badge, Button, Dialog, Input, Skeleton } from '../ui'
 import { AppearancePreview } from './SettingsAppearancePanel'
 import { WorkflowSettingsPanel } from './SettingsWorkflowsPanel'
 import { LanguagePicker } from './SettingsLanguagePicker'
 import { ModelsPanel } from './SettingsModelsPanel'
-import { PermissionsPanel } from './SettingsPermissionsPanel'
+import { PermissionsPanel, RuntimeConfigPanel } from './SettingsPermissionsPanel'
 import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
 
-type SettingsTab = 'appearance' | 'models' | 'permissions' | 'workflows' | 'storage' | 'pairing'
+type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'workflows' | 'storage' | 'pairing'
+type SettingsSearchEntry = {
+  id: string
+  tab: SettingsTab
+  label: string
+  keywords: string
+}
 
 function describeSettingsPanelError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -97,6 +104,7 @@ export function SettingsPanel({
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [tab, setTab] = useState<SettingsTab>('appearance')
+  const [search, setSearch] = useState('')
   const [appearance, setAppearance] = useState<AppearancePreferences>(getAppearancePreferences())
   const [storageStats, setStorageStats] = useState<SandboxStorageStats | null>(null)
   const [runningCleanup, setRunningCleanup] = useState<SandboxCleanupResult['mode'] | null>(null)
@@ -107,6 +115,10 @@ export function SettingsPanel({
   const workspaceOptions = activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId }
   const dirtyProviderCredentialKeys = useRef<Record<string, Set<string>>>({})
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const scrollPositionsRef = useRef<Partial<Record<SettingsTab, number>>>({})
+  const tabRef = useRef<SettingsTab>('appearance')
+  const pendingSearchTargetRef = useRef<string | null>(null)
 
   const markProviderCredentialDirty = (providerId: string, key: string) => {
     const keys = dirtyProviderCredentialKeys.current[providerId] || new Set<string>()
@@ -117,7 +129,7 @@ export function SettingsPanel({
   useEffect(() => {
     // Fast close-reopen cycles can land these resolves into an unmounted
     // component; guard with a cancelled flag so we don't setState on a
-    // disposed instance. The default settings load is masked; the Models tab
+    // disposed instance. The default settings load is masked; the model section
     // fetches only the active provider's descriptor-aware masked bag below.
     let cancelled = false
     Promise.all([
@@ -183,19 +195,86 @@ export function SettingsPanel({
   const tabs = useMemo(
     () => [
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
-        { id: 'models' as const, label: t('settings.tab.models', 'Models'), description: t('settings.tab.modelsDescription', 'Provider, model, and credentials') },
+        { id: 'model' as const, label: t('settings.tab.model', 'Model'), description: t('settings.tab.modelDescription', 'Provider, primary model, and credentials') },
+        { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime bridge') },
         ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
-        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Workflows'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
+        { id: 'workflows' as const, label: t('settings.tab.workflows', 'Automations'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
         ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
       ],
     [activeWorkspaceIsLocal],
   )
 
+  const searchEntries = useMemo<SettingsSearchEntry[]>(
+    () => [
+      { id: 'settings-appearance-theme', tab: 'appearance', label: t('settings.search.theme', 'Theme and appearance'), keywords: 'theme color fonts language appearance' },
+      { id: 'settings-model-provider', tab: 'model', label: t('settings.search.provider', 'Provider'), keywords: 'provider model credentials authentication api key oauth sign in' },
+      { id: 'settings-model-primary', tab: 'model', label: t('settings.search.primaryModel', 'Primary model'), keywords: 'model catalog refresh context provider' },
+      { id: 'settings-model-test', tab: 'model', label: t('settings.models.testConnection', 'Test connection'), keywords: 'test connection credential api key validate provider' },
+      { id: 'settings-advanced-small-model', tab: 'advanced', label: t('settings.search.smallModel', 'Small model'), keywords: 'small model lightweight title sdk' },
+      { id: 'settings-advanced-runtime-config', tab: 'advanced', label: t('settings.permissions.runtimeConfigSourceTitle', 'OpenCode config source'), keywords: 'runtime config bridge opencode machine app isolated developer config bridge' },
+      ...(activeWorkspaceIsLocal ? [
+        { id: 'settings-permissions-shell', tab: 'permissions' as const, label: t('settings.permissions.bashTitle', 'Shell commands'), keywords: 'shell terminal bash permission approve deny allow' },
+        { id: 'settings-permissions-files', tab: 'permissions' as const, label: t('settings.permissions.fileWriteTitle', 'File editing'), keywords: 'files write edit permission approve deny allow' },
+      ] : []),
+      { id: 'settings-workflows', tab: 'workflows', label: t('settings.search.automations', 'Automation notifications'), keywords: 'workflow automation run background launch login notifications quiet hours' },
+      ...(activeWorkspaceIsLocal ? [
+        { id: 'settings-pairing', tab: 'pairing' as const, label: t('settings.search.pairing', 'Pairing'), keywords: 'gateway mobile pairing qr code desktop' },
+        { id: 'settings-storage', tab: 'storage' as const, label: t('settings.search.storage', 'Storage cleanup'), keywords: 'storage sandbox artifacts cleanup disk' },
+      ] : []),
+    ],
+    [activeWorkspaceIsLocal],
+  )
+
+  const searchResults = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return []
+    return searchEntries.filter((entry) => `${entry.label} ${entry.keywords}`.toLowerCase().includes(query)).slice(0, 6)
+  }, [search, searchEntries])
+
   useEffect(() => {
     if (tabs.some((entry) => entry.id === tab)) return
     setTab('appearance')
   }, [tab, tabs])
+
+  useEffect(() => {
+    tabRef.current = tab
+  }, [tab])
+
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+    const targetId = pendingSearchTargetRef.current
+    if (targetId) {
+      pendingSearchTargetRef.current = null
+      window.requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
+      })
+      return
+    }
+    const nextTop = scrollPositionsRef.current[tab] || 0
+    window.requestAnimationFrame(() => {
+      if (contentRef.current) contentRef.current.scrollTop = nextTop
+    })
+  }, [tab])
+
+  const selectTab = (nextTab: SettingsTab) => {
+    if (contentRef.current) {
+      scrollPositionsRef.current[tabRef.current] = contentRef.current.scrollTop
+    }
+    tabRef.current = nextTab
+    setTab(nextTab)
+  }
+
+  const jumpToSearchResult = (entry: SettingsSearchEntry) => {
+    pendingSearchTargetRef.current = entry.id
+    if (entry.tab === tab) {
+      pendingSearchTargetRef.current = null
+      document.getElementById(entry.id)?.scrollIntoView({ block: 'start' })
+      return
+    }
+    selectTab(entry.tab)
+  }
 
   const persistSettings = async (options: { showSaved?: boolean } = {}) => {
     if (!settings) return false
@@ -307,108 +386,188 @@ export function SettingsPanel({
     })
   }
 
-  if (!settings || !config) return null
+  if (!settings || !config) {
+    return (
+      <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={onClose}>
+        <div className="settings-dialog-loading" aria-label={t('settings.loading', 'Loading settings...')}>
+          <Skeleton variant="text" className="w-40" />
+          <Skeleton variant="block" className="h-10 w-full" />
+          <Skeleton variant="card" className="h-48 w-full" />
+        </div>
+      </Dialog>
+    )
+  }
+
+  const activeTab = tabs.find((entry) => entry.id === tab) || tabs[0]
+  const footer = (
+    <div className="settings-dialog-footer">
+      <div className="min-w-0 text-[11px]">
+        <div className="text-text-muted">
+          {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
+          {!activeWorkspaceIsLocal
+            ? ` ${t('settings.cloudSaveHint', 'Only portable cloud preferences are saved for this workspace.')}`
+            : ''}
+        </div>
+        {saveError ? (
+          <div className="mt-1 text-red">
+            {saveError}
+          </div>
+        ) : null}
+      </div>
+      <Button
+        variant={saved ? 'secondary' : 'primary'}
+        onClick={() => void handleSave()}
+        leftIcon={saved ? 'check' : undefined}
+      >
+        {saved ? t('settings.saved', 'Saved') : t('settings.saveChanges', 'Save Changes')}
+      </Button>
+    </div>
+  )
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
-        <div>
-          <div className="text-[14px] font-semibold text-text">{t('settings.title', 'Settings')}</div>
-          <div className="text-[11px] text-text-muted mt-0.5">
-            {activeWorkspaceIsLocal
-              ? t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')
-              : t('settings.cloudSubtitle', 'Tune portable cloud workspace preferences. Runtime and credentials are policy-managed.')}
-          </div>
-        </div>
-        <button onClick={onClose} className="text-[11px] text-text-muted hover:text-text-secondary cursor-pointer transition-colors">{t('settings.done', 'Done')}</button>
-      </div>
-
-      <div className="flex-1 min-h-0 flex">
-        <div className="w-[190px] shrink-0 border-e border-border-subtle px-3 py-4 flex flex-col gap-2">
-          {tabs.map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => setTab(entry.id)}
-              className="text-start rounded-2xl px-3 py-3 transition-colors cursor-pointer"
-              style={{
-                background: tab === entry.id ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent',
-                border: `1px solid ${tab === entry.id ? 'var(--color-accent)' : 'transparent'}`,
-              }}
-            >
-              <div className="text-[12px] font-semibold text-text">{entry.label}</div>
-              <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{entry.description}</div>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="flex-1 overflow-y-auto px-5 py-5">
-            {tab === 'appearance' && (
-              <div className="flex flex-col gap-5">
-                <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
-                <LanguagePicker />
-              </div>
-            )}
-            {tab === 'models' && (
-              activeWorkspaceIsLocal ? (
-                <ModelsPanel
-                  config={config}
-                  settings={settings}
-                  update={update}
-                  updateProviderCredential={updateProviderCredential}
-                  onConfigRefreshed={setConfig}
-                  onPersistSettings={() => persistSettings({ showSaved: false })}
-                />
-              ) : (
-                <CloudModelsPolicyPanel settings={settings} />
-              )
-            )}
-            {tab === 'permissions' && (
-              <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
-            )}
-            {tab === 'workflows' && (
-              <WorkflowSettingsPanel settings={settings} update={update} />
-            )}
-            {tab === 'storage' && (
-              <StoragePanel
-                stats={storageStats}
-                runningCleanup={runningCleanup}
-                lastCleanup={lastCleanup}
-                onCleanup={runCleanup}
-              />
-            )}
-            {tab === 'pairing' && (
-              <SettingsPairingPanel />
-            )}
-          </div>
-
-          <div className="px-5 py-4 border-t border-border-subtle flex items-center justify-between gap-4">
-            <div className="text-[11px]">
-              <div className="text-text-muted">
-                {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
-                {!activeWorkspaceIsLocal
-                  ? ` ${t('settings.cloudSaveHint', 'Only portable cloud preferences are saved for this workspace.')}`
-                  : ''}
-              </div>
-              {saveError ? (
-                <div className="mt-1" style={{ color: 'var(--color-red)' }}>
-                  {saveError}
-                </div>
-              ) : null}
+    <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={onClose} footer={footer}>
+      <div className="settings-dialog-shell">
+        <div className="settings-dialog-intro">
+          <div className="min-w-0">
+            <div className="text-[12px] text-text-muted">
+              {activeWorkspaceIsLocal
+                ? t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')
+                : t('settings.cloudSubtitle', 'Tune portable cloud workspace preferences. Runtime and credentials are policy-managed.')}
             </div>
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 rounded-xl text-[12px] font-semibold cursor-pointer transition-all"
-              style={{
-                background: saved ? 'color-mix(in srgb, var(--color-green) 15%, transparent)' : 'var(--color-accent)',
-                color: saved ? 'var(--color-green)' : 'var(--color-accent-foreground)',
-              }}
-            >
-              {saved ? t('settings.saved', '✓ Saved') : t('settings.saveChanges', 'Save Changes')}
-            </button>
           </div>
+          <Badge tone={activeWorkspaceIsLocal ? 'accent' : 'neutral'}>
+            {activeWorkspaceIsLocal ? t('settings.localWorkspace', 'Local workspace') : t('settings.cloudWorkspace', 'Cloud workspace')}
+          </Badge>
+        </div>
+
+        <div className="settings-dialog-layout">
+          <aside className="settings-section-rail" aria-label={t('settings.sections', 'Settings sections')}>
+            <Input
+              aria-label={t('settings.searchLabel', 'Search settings')}
+              value={search}
+              leftIcon="search"
+              clearable
+              onClear={() => setSearch('')}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchResults[0]) {
+                  event.preventDefault()
+                  jumpToSearchResult(searchResults[0])
+                }
+              }}
+              placeholder={t('settings.searchPlaceholder', 'Search settings')}
+            />
+            {search.trim() ? (
+              <div className="settings-search-results">
+                {searchResults.length ? searchResults.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="settings-search-result"
+                    onClick={() => jumpToSearchResult(entry)}
+                  >
+                    <span>{entry.label}</span>
+                    <span>{tabs.find((candidate) => candidate.id === entry.tab)?.label}</span>
+                  </button>
+                )) : (
+                  <div className="px-2 py-2 text-[11px] text-text-muted">{t('settings.searchNoResults', 'No settings match that search.')}</div>
+                )}
+              </div>
+            ) : null}
+            <nav className="settings-section-list">
+              {tabs.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => selectTab(entry.id)}
+                  aria-current={tab === entry.id ? 'page' : undefined}
+                  className="settings-section-button"
+                >
+                  <span>{entry.label}</span>
+                  <span>{entry.description}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          <section className="settings-content-pane" aria-labelledby="settings-active-section-title">
+            <div className="settings-content-heading">
+              <div>
+                <h3 id="settings-active-section-title" className="font-display text-role-section-title font-bold text-text">{activeTab?.label}</h3>
+                <p className="mt-1 text-[12px] text-text-muted">{activeTab?.description}</p>
+              </div>
+            </div>
+            <div ref={contentRef} className="settings-content-scroll">
+              {tab === 'appearance' && (
+                <div id="settings-appearance-theme" className="flex flex-col gap-5 scroll-mt-4">
+                  <AppearancePreview appearance={appearance} onUpdate={updateAppearance} />
+                  <LanguagePicker />
+                </div>
+              )}
+              {tab === 'model' && (
+                activeWorkspaceIsLocal ? (
+                  <ModelsPanel
+                    mode="model"
+                    config={config}
+                    settings={settings}
+                    update={update}
+                    updateProviderCredential={updateProviderCredential}
+                    onConfigRefreshed={setConfig}
+                    onPersistSettings={() => persistSettings({ showSaved: false })}
+                  />
+                ) : (
+                  <CloudModelsPolicyPanel settings={settings} />
+                )
+              )}
+              {tab === 'advanced' && (
+                activeWorkspaceIsLocal ? (
+                  <div className="flex flex-col gap-5">
+                    <ModelsPanel
+                      mode="advanced"
+                      config={config}
+                      settings={settings}
+                      update={update}
+                      updateProviderCredential={updateProviderCredential}
+                      onConfigRefreshed={setConfig}
+                      onPersistSettings={() => persistSettings({ showSaved: false })}
+                    />
+                    <div id="settings-advanced-runtime-config" className="scroll-mt-4">
+                      <RuntimeConfigPanel settings={settings} update={update} />
+                    </div>
+                  </div>
+                ) : (
+                  <CloudModelsPolicyPanel settings={settings} />
+                )
+              )}
+              {tab === 'permissions' && (
+                <div>
+                  <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
+                </div>
+              )}
+              {tab === 'workflows' && (
+                <div id="settings-workflows" className="scroll-mt-4">
+                  <WorkflowSettingsPanel settings={settings} update={update} />
+                </div>
+              )}
+              {tab === 'storage' && (
+                <div id="settings-storage" className="scroll-mt-4">
+                  <StoragePanel
+                    stats={storageStats}
+                    runningCleanup={runningCleanup}
+                    lastCleanup={lastCleanup}
+                    onCleanup={runCleanup}
+                  />
+                </div>
+              )}
+              {tab === 'pairing' && (
+                <div id="settings-pairing" className="scroll-mt-4">
+                  <SettingsPairingPanel />
+                </div>
+              )}
+            </div>
+          </section>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

@@ -171,7 +171,7 @@ describe('ThreadsPage', () => {
 
     await screen.findByText('Weekly chart report')
     await user.click(screen.getByRole('checkbox', { name: 'Select thread' }))
-    await user.click(screen.getByRole('button', { name: 'Apply' }))
+    await user.click(screen.getByRole('button', { name: 'Add tag' }))
     await waitFor(() => expect(api.threads.tags.apply).toHaveBeenCalledWith(['thread-1'], ['tag-1']))
 
     await user.click(screen.getByRole('button', { name: 'Reports' }))

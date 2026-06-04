@@ -7,6 +7,7 @@ import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { credentialFieldIsSecret } from '../provider/credential-merge'
+import { EmptyState } from '../ui'
 
 function describeCapabilityError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -35,9 +36,11 @@ export function StatBox({ label, value }: { label: string; value: string }) {
 
 export function EmptyGrid({ message }: { message: string }) {
   return (
-    <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
-      {message}
-    </div>
+    <EmptyState
+      icon="blocks"
+      title={t('capabilities.emptyTitle', 'Nothing to show')}
+      body={message}
+    />
   )
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AgentCatalog,
   BuiltInAgentDetail,
@@ -7,12 +7,12 @@ import type {
   RuntimeAgentDescriptor,
 } from '@open-cowork/shared'
 import { AgentBuilderPage } from './AgentBuilderPage'
-import { AgentTemplatePicker } from './AgentTemplatePicker'
 import {
   BuiltInSelectionCard,
   CustomSelectionCard,
   RuntimeSelectionCard,
 } from './AgentSelectionCard'
+import { Button, EmptyState, Input, SegmentedControl, Skeleton } from '../ui'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -55,9 +55,9 @@ export function AgentsPage({
   const [selected, setSelected] = useState<SelectedEntry | null>(null)
   const [creating, setCreating] = useState(false)
   const [creatingSeed, setCreatingSeed] = useState<Partial<CustomAgentConfig> | null>(null)
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
 
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
@@ -72,27 +72,36 @@ export function AgentsPage({
     [projectDirectory],
   )
 
-  const refresh = () => {
-    window.coworkApi.agents.list(contextOptions).then(setCustoms)
-    window.coworkApi.agents.catalog(contextOptions).then(setCatalog)
-    window.coworkApi.app.builtinAgents().then(setBuiltinDetails)
-    window.coworkApi.agents.runtime().then(setRuntimeAgents).catch(() => setRuntimeAgents([]))
-  }
+  const refresh = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      window.coworkApi.agents.list(contextOptions),
+      window.coworkApi.agents.catalog(contextOptions),
+      window.coworkApi.app.builtinAgents(),
+      window.coworkApi.agents.runtime().catch(() => []),
+    ])
+      .then(([nextCustoms, nextCatalog, nextBuiltIns, nextRuntimeAgents]) => {
+        setCustoms(nextCustoms)
+        setCatalog(nextCatalog)
+        setBuiltinDetails(nextBuiltIns)
+        setRuntimeAgents(nextRuntimeAgents)
+      })
+      .finally(() => setLoading(false))
+  }, [contextOptions])
 
   useEffect(() => {
     refresh()
     const unsubscribe = window.coworkApi.on.runtimeReady(() => refresh())
     return unsubscribe
-  }, [projectDirectory])
+  }, [refresh])
 
   useEffect(() => {
     if (!initialDraft) return
-    // External seeders (command palette) bypass the template picker —
-    // the draft they hand us is the intent.
+    // External seeders (command palette) bypass starter suggestions; the
+    // draft they hand us is the intent.
     setSelected(null)
     setCreatingSeed(initialDraft)
     setCreating(true)
-    setTemplatePickerOpen(false)
   }, [initialDraft])
 
   // Any runtime-registered agent that isn't also a built-in or a Cowork
@@ -232,67 +241,73 @@ export function AgentsPage({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+      <div className="feature-page-shell">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display text-role-page-title font-bold text-text">{t('agentsPage.title', 'Agents')}</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              {t('agentsPage.subtitle', 'Compose specialists from skills, tools, and instructions. Click any card to open it in the builder.')}
+              {t('agentsPage.subtitle', 'Compose specialists from skills, tools, and instructions. A skill is reusable guidance; a tool lets an agent act through an integration.')}
             </p>
           </div>
-          <button onClick={onClose} className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer">
+          <Button variant="ghost" size="sm" onClick={onClose}>
             {t('agentsPage.backToChat', 'Back to chat')}
-          </button>
+          </Button>
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div className="feature-toolbar mb-6">
           <div className="flex-1">
-            <input
-              type="text"
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              leftIcon="search"
+              clearable
+              onClear={() => setSearch('')}
               placeholder={t('agentsPage.search', 'Search agents, skills, tools, or instructions…')}
-              className="w-full px-4 py-2.5 rounded-xl bg-elevated border border-border-subtle text-[13px] text-text placeholder:text-text-muted outline-none focus:border-border"
             />
           </div>
-          <div className="flex rounded-lg border border-border-subtle overflow-hidden">
-            {(['all', 'custom', 'builtin', 'runtime', 'opencode'] as const).map((value) => (
-              <button
-                key={value}
-                onClick={() => setFilter(value)}
-                className={`px-3 py-1.5 text-[12px] font-medium cursor-pointer transition-colors capitalize ${filter === value ? 'bg-surface-active text-text' : 'text-text-muted hover:text-text-secondary'}`}
-              >
-                {value === 'builtin' ? 'Built-in' : value === 'opencode' ? 'OpenCode' : value}
-              </button>
-            ))}
-          </div>
-          <button
+          <SegmentedControl
+            label={t('agentsPage.filterLabel', 'Agent filter')}
+            value={filter}
+            onChange={(value) => setFilter(value as Filter)}
+            options={(['all', 'custom', 'builtin', 'runtime', 'opencode'] as const).map((value) => ({
+              value,
+              label: value === 'builtin' ? 'Built-in' : value === 'opencode' ? 'OpenCode' : value[0]!.toUpperCase() + value.slice(1),
+              disabled: value === 'runtime' && runtimeUnknown.length === 0,
+            }))}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon="arrow-down"
             onClick={onImportAgent}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:bg-surface-hover cursor-pointer border border-border-subtle text-text-secondary"
             title={t('agentsPage.importTitle', 'Import a custom agent from a .cowork-agent.json file')}
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3,5 5,7 7,5" /><line x1="5" y1="7" x2="5" y2="1.5" /><line x1="1.5" y1="8.5" x2="8.5" y2="8.5" />
-            </svg>
             {t('agentsPage.import', 'Import')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon="plus"
             onClick={() => {
               setSelected(null)
-              setTemplatePickerOpen(true)
+              setCreatingSeed(null)
+              setCreating(true)
               onClearDraft?.()
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium hover:opacity-90 cursor-pointer"
-            style={{ background: 'var(--color-accent)', color: 'var(--color-accent-foreground)' }}
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="5" y1="1.5" x2="5" y2="8.5" /><line x1="1.5" y1="5" x2="8.5" y2="5" />
-            </svg>
             New agent
-          </button>
+          </Button>
         </div>
 
-        {showCustoms && (
+        {loading && !catalog ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} variant="card" className="h-40" />
+            ))}
+          </div>
+        ) : null}
+
+        {!(loading && !catalog) && showCustoms && (
           <ListSection
             label="Custom agents"
             sublabel="Built by you — edit, enable, or delete from the card."
@@ -328,7 +343,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {showBuiltIns && (
+        {!(loading && !catalog) && showBuiltIns && (
           <ListSection
             label="Built-in agents"
             sublabel="Open Cowork specialists built from bundled skills and tools."
@@ -346,7 +361,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {showRuntime && (
+        {!(loading && !catalog) && showRuntime && (
           <ListSection
             label="Runtime-registered agents"
             sublabel="Agents registered by an SDK plugin that bypass Cowork's catalog."
@@ -364,7 +379,7 @@ export function AgentsPage({
           </ListSection>
         )}
 
-        {showOpenCode && (
+        {!(loading && !catalog) && showOpenCode && (
           <ListSection
             label="OpenCode defaults"
             sublabel="Native OpenCode agents that own core execution behavior."
@@ -382,18 +397,6 @@ export function AgentsPage({
           </ListSection>
         )}
       </div>
-
-      {templatePickerOpen && catalog && (
-        <AgentTemplatePicker
-          catalog={catalog}
-          onPick={(seed) => {
-            setTemplatePickerOpen(false)
-            setCreatingSeed(seed)
-            setCreating(true)
-          }}
-          onCancel={() => setTemplatePickerOpen(false)}
-        />
-      )}
     </div>
   )
 }
@@ -440,9 +443,11 @@ function ListSection({
         <p className="text-[12px] text-text-muted mt-0.5">{sublabel}</p>
       </div>
       {empty ? (
-        <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
-          {emptyState}
-        </div>
+        <EmptyState
+          icon="bot"
+          title={label}
+          body={emptyState}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">{children}</div>
       )}

@@ -58,7 +58,7 @@ describe('focused accessibility smoke', () => {
     expect(document.documentElement).toHaveAttribute('lang', 'ar')
     expect(document.documentElement).toHaveAttribute('dir', 'rtl')
     expect(await screen.findByText('الإعدادات')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'اللغة' })).toHaveValue('ar')
+    expect(screen.getByRole('button', { name: 'اللغة: العربية' })).toHaveTextContent('العربية')
     await expectNoA11yViolations(container)
   })
 })

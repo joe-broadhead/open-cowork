@@ -7,6 +7,7 @@ import { writeTextToClipboard } from '../../helpers/clipboard'
 import { confirmAppReset } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
+import { Card } from '../ui'
 import { SettingsUpdatesPanel } from './SettingsUpdatesPanel'
 import { panelCardCls, sectionLabelCls } from './settings-panel-styles'
 
@@ -120,10 +121,11 @@ export function StoragePanel({
         <div className="text-[11px] text-text-muted leading-relaxed">
           {t('settings.storage.supportDescription', "Copies a plaintext report (config, runtime inputs, recent log lines) to your clipboard. Credentials are masked / redacted so it's safe to paste into a bug report.")}
         </div>
-        <button
+        <Card
+          interactive
           onClick={() => void handleExportDiagnostics()}
           disabled={diagnosticsStatus === 'working'}
-          className="w-full rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait text-start"
+          className="settings-action-card"
         >
           <div className="text-[12px] font-semibold text-text">
             {diagnosticsStatus === 'working'
@@ -137,7 +139,7 @@ export function StoragePanel({
           <div className="text-[11px] text-text-muted mt-1">
             {t('settings.storage.diagnosticsHint', 'Useful when filing an issue — include this bundle in your report.')}
           </div>
-        </button>
+        </Card>
       </div>
 
       <span className={sectionLabelCls}>{t('settings.storage.sandboxStorage', 'Sandbox Storage')}</span>
@@ -158,10 +160,11 @@ export function StoragePanel({
       <div className={panelCardCls}>
         <div className="text-[12px] font-semibold text-text">{t('settings.storage.cleanup', 'Cleanup')}</div>
         <div className="flex flex-col gap-3">
-          <button
+          <Card
+            interactive
             onClick={() => void onCleanup('old-unreferenced')}
-            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
             disabled={runningCleanup !== null}
+            className="settings-action-card"
           >
             <div className="text-[12px] font-semibold text-text">
               {runningCleanup === 'old-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearOld', 'Clear old sandbox artifacts')}
@@ -169,12 +172,13 @@ export function StoragePanel({
             <div className="text-[11px] text-text-muted mt-1">
               {t('settings.storage.clearOldDescription', 'Removes unreferenced sandbox workspaces older than {{days}} days.', { days: String(stats.staleThresholdDays) })}
             </div>
-          </button>
+          </Card>
 
-          <button
+          <Card
+            interactive
             onClick={() => void onCleanup('all-unreferenced')}
-            className="w-full text-start rounded-2xl border border-border-subtle p-3 transition-colors cursor-pointer hover:bg-surface-hover"
             disabled={runningCleanup !== null}
+            className="settings-action-card"
           >
             <div className="text-[12px] font-semibold text-text">
               {runningCleanup === 'all-unreferenced' ? t('settings.storage.cleaning', 'Cleaning…') : t('settings.storage.clearAll', 'Clear all unused sandbox artifacts')}
@@ -182,7 +186,7 @@ export function StoragePanel({
             <div className="text-[11px] text-text-muted mt-1">
               {t('settings.storage.clearAllDescription', 'Removes every unreferenced sandbox workspace while keeping active thread workspaces intact.')}
             </div>
-          </button>
+          </Card>
         </div>
 
         {lastCleanup ? (
@@ -204,22 +208,19 @@ export function StoragePanel({
         <div className="text-[11px] text-text-muted leading-relaxed">
           {t('settings.reset.description', 'Deletes every thread, credential, custom agent, skill, and MCP from this machine. The app relaunches into the first-run flow. Useful before uninstalling or for a clean-slate downstream demo; destructive and cannot be undone.')}
         </div>
-        <button
+        <Card
+          interactive
           onClick={() => void handleResetAppData()}
           disabled={resetting}
-          className="w-full text-start rounded-2xl border p-3 transition-colors cursor-pointer hover:bg-surface-hover disabled:opacity-60 disabled:cursor-wait"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--color-red) 40%, var(--color-border-subtle))',
-            background: 'color-mix(in srgb, var(--color-red) 6%, transparent)',
-          }}
+          className="settings-action-card settings-danger-card"
         >
-          <div className="text-[12px] font-semibold" style={{ color: 'var(--color-red)' }}>
+          <div className="text-[12px] font-semibold text-red">
             {resetting ? t('settings.reset.resetting', 'Resetting…') : t('settings.reset.button', 'Reset app data')}
           </div>
           <div className="text-[11px] text-text-muted mt-1">
             {t('settings.reset.requiresConfirm', 'Requires explicit confirmation. The app will close and relaunch.')}
           </div>
-        </button>
+        </Card>
       </div>
     </div>
   )

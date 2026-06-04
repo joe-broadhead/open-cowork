@@ -30,7 +30,7 @@ const VIRTUALIZE_THRESHOLD = 80
 // just seeds initial scrollbar height.
 const CHAT_ROW_ESTIMATE_PX = 140
 const THREAD_MAX_WIDTH_WITH_INSPECTOR = 820
-const THREAD_MAX_WIDTH = 900
+const THREAD_MAX_WIDTH = 'var(--measure)'
 
 export function ChatView() {
   const currentView = useSessionStore((s) => s.currentView)

@@ -477,7 +477,7 @@ export function ChatInput() {
 
   return (
     <div className="px-6 pb-4 pt-2">
-      <div className="max-w-[900px] mx-auto">
+      <div className="measure-column">
         <ChatInputAttachments
           attachments={attachments}
           onRemove={(id) => setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))}

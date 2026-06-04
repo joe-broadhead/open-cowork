@@ -431,8 +431,47 @@ function installAppApi(options: {
   return { api, listeners }
 }
 
+function installMatchMedia(matchesInitial: boolean) {
+  let matches = matchesInitial
+  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  const mediaQueryList = {
+    media: '(max-width: 860px)',
+    get matches() {
+      return matches
+    },
+    onchange: null,
+    addEventListener: vi.fn((event: string, callback: (event: MediaQueryListEvent) => void) => {
+      if (event === 'change') listeners.add(callback)
+    }),
+    removeEventListener: vi.fn((event: string, callback: (event: MediaQueryListEvent) => void) => {
+      if (event === 'change') listeners.delete(callback)
+    }),
+    addListener: vi.fn((callback: (event: MediaQueryListEvent) => void) => listeners.add(callback)),
+    removeListener: vi.fn((callback: (event: MediaQueryListEvent) => void) => listeners.delete(callback)),
+    dispatchEvent: vi.fn(() => true),
+  } as unknown as MediaQueryList
+
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => mediaQueryList),
+  })
+
+  return {
+    mediaQueryList,
+    setMatches(nextMatches: boolean) {
+      matches = nextMatches
+      const event = { matches, media: mediaQueryList.media } as MediaQueryListEvent
+      listeners.forEach((listener) => listener(event))
+    },
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: undefined,
+  })
   resetSessionStore()
   mockLoadSessionMessages.mockImplementation(async (sessionId: string) => {
     useSessionStore.getState().setCurrentSession(sessionId)
@@ -440,6 +479,34 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('auto-collapses the sidebar below the narrow-window breakpoint', async () => {
+    const matchMedia = installMatchMedia(true)
+    installAppApi()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('home-page')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(useSessionStore.getState().sidebarCollapsed).toBe(true)
+    })
+
+    act(() => {
+      useSessionStore.getState().toggleSidebar()
+    })
+    expect(useSessionStore.getState().sidebarCollapsed).toBe(false)
+
+    act(() => {
+      matchMedia.setMatches(false)
+    })
+    expect(useSessionStore.getState().sidebarCollapsed).toBe(false)
+
+    act(() => {
+      matchMedia.setMatches(true)
+    })
+    expect(useSessionStore.getState().sidebarCollapsed).toBe(true)
+    expect(matchMedia.mediaQueryList.addEventListener).toHaveBeenCalledWith('change', expect.any(Function))
+  })
+
   it('bootstraps the shell, applies config side effects, and reports renderer errors', async () => {
     const user = userEvent.setup()
     const { api } = installAppApi()

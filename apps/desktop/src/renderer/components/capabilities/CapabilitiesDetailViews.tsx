@@ -23,15 +23,15 @@ import {
   ToolCredentialsCard,
   ToolIntegrationToggleCard,
 } from './capabilities-page-components.tsx'
+import { Badge, Button } from '../ui'
 
 type AvailableToolMethod = { id: string; description: string }
 
 function CapabilitiesBackButton({ onBack }: { onBack: () => void }) {
   return (
-    <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-text-muted hover:text-text-secondary cursor-pointer mb-6">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><polyline points="7,2 3,6 7,10" /></svg>
+    <Button onClick={onBack} variant="ghost" size="sm" leftIcon="chevron-left" className="mb-6">
       Tools & Skills
-    </button>
+    </Button>
   )
 }
 
@@ -58,49 +58,47 @@ export function CapabilityToolDetailView({
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+      <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
 
         <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{ color: 'var(--color-accent)', background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)' }}>
+                <Badge tone="accent">
                   {prettyKind(selectedTool)}
-                </span>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                  color: selectedTool.source === 'custom' ? 'var(--color-amber)' : 'var(--color-green)',
-                  background: selectedTool.source === 'custom'
-                    ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                    : 'color-mix(in srgb, var(--color-green) 12%, transparent)',
-                }}>
+                </Badge>
+                <Badge tone={selectedTool.source === 'custom' ? 'warning' : 'success'}>
                   {selectedTool.source === 'custom' ? 'Installed' : 'Built-in'}
-                </span>
+                </Badge>
               </div>
               <h1 className="text-[20px] font-semibold text-text mb-1">{selectedTool.name}</h1>
               <p className="text-[13px] text-text-secondary leading-relaxed">{selectedTool.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
+              <Button
                 onClick={onCreateAgent}
-                className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                variant="secondary"
+                size="sm"
               >
                 Create agent
-              </button>
+              </Button>
               {custom ? (
                 <>
-                  <button
+                  <Button
                     onClick={onEditTool}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                    variant="secondary"
+                    size="sm"
                   >
                     Edit tool
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => void onRemoveTool()}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                    variant="danger"
+                    size="sm"
                   >
                     Remove tool
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>
@@ -190,14 +188,15 @@ export function CapabilityToolDetailView({
               {linkedSkills.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedSkills.map((skill) => (
-                    <button
+                    <Button
                       key={skill.name}
                       type="button"
                       onClick={() => onOpenSkill(skill.name)}
-                      className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary hover:text-accent hover:bg-surface-hover cursor-pointer"
+                      variant="secondary"
+                      size="sm"
                     >
                       {skill.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (
@@ -251,48 +250,44 @@ export function CapabilitySkillDetailView({
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[1200px] mx-auto px-8 py-8">
+      <div className="feature-page-shell">
         <CapabilitiesBackButton onBack={onBack} />
 
         <div className="rounded-2xl border border-border-subtle bg-surface p-5 mb-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium" style={{
-                  color: selectedSkill.source === 'custom'
-                    ? 'var(--color-amber)'
-                    : 'var(--color-accent)',
-                  background: selectedSkill.source === 'custom'
-                    ? 'color-mix(in srgb, var(--color-amber) 12%, transparent)'
-                    : 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
-                }}>
+                <Badge tone={selectedSkill.source === 'custom' ? 'warning' : 'accent'}>
                   {prettySkillKind(selectedSkill)}
-                </span>
+                </Badge>
               </div>
               <h1 className="text-[20px] font-semibold text-text mb-1">{selectedSkill.label}</h1>
               <p className="text-[13px] text-text-secondary leading-relaxed">{selectedSkill.description}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
+              <Button
                 onClick={onCreateAgent}
-                className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                variant="secondary"
+                size="sm"
               >
                 Create agent
-              </button>
+              </Button>
               {custom ? (
                 <>
-                  <button
+                  <Button
                     onClick={onEditSkill}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-accent hover:bg-surface-hover"
+                    variant="secondary"
+                    size="sm"
                   >
                     Edit skill
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => void onRemoveSkill()}
-                    className="px-3 py-2 rounded-lg text-[12px] font-medium cursor-pointer border border-border-subtle text-text-muted hover:text-red"
+                    variant="danger"
+                    size="sm"
                   >
                     Remove skill
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>
@@ -332,14 +327,15 @@ export function CapabilitySkillDetailView({
               {linkedTools.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {linkedTools.map((tool) => (
-                    <button
+                    <Button
                       key={tool.id}
                       type="button"
                       onClick={() => onOpenTool(tool.id)}
-                      className="px-2 py-1 rounded-md border border-border-subtle text-[10px] text-text-secondary hover:text-accent hover:bg-surface-hover cursor-pointer"
+                      variant="secondary"
+                      size="sm"
                     >
                       {tool.name}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : (

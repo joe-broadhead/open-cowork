@@ -68,6 +68,7 @@ export function SegmentedControl({
               aria-selected={selected}
               tabIndex={selected ? 0 : -1}
               disabled={isDisabled || option.disabled}
+              title={option.disabledReason}
               className="ui-segmented-option"
               onClick={() => {
                 if (!option.disabled) onChange(option.value)
