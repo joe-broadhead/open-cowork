@@ -2026,6 +2026,7 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
     assert.equal(html.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')
     const csp = html.headers.get('content-security-policy') || ''
     assert.match(csp, /script-src 'self' 'nonce-/)
+    assert.match(csp, /font-src 'self'/)
     assert.match(csp, /object-src 'none'/)
     assert.doesNotMatch(csp, /unsafe-inline/)
 
@@ -2036,6 +2037,27 @@ test('cloud HTTP server applies security headers and exact-match non-credentiale
     assert.equal(mismatched.headers.get('x-content-type-options'), 'nosniff')
   } finally {
     await server.close()
+  }
+})
+
+test('cloud HTTP server serves only allow-listed Cloud Web font assets', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const font = await fetch(`${baseUrl}/assets/fonts/mona-sans-latin-wght-normal.woff2`)
+    assert.equal(font.status, 200)
+    assert.equal(font.headers.get('content-type'), 'font/woff2')
+    assert.equal(font.headers.get('cache-control'), 'public, max-age=86400')
+    assert.ok((await font.arrayBuffer()).byteLength > 1024, 'font response has woff2 bytes')
+
+    const unknown = await fetch(`${baseUrl}/assets/fonts/not-a-font.woff2`)
+    assert.equal(unknown.status, 404)
+    assert.match(JSON.stringify(await readJson(unknown)), /not found/i)
+
+    const traversal = await fetch(`${baseUrl}/assets/fonts/..%2Fpackage.json`)
+    assert.equal(traversal.status, 404)
+  } finally {
+    await fixture.server.close()
   }
 })
 

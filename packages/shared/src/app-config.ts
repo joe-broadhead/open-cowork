@@ -107,6 +107,20 @@ export interface PublicBrandingThemeTokens {
   warn?: string
   danger?: string
   ok?: string
+  surfaceHover?: string
+  surfaceActive?: string
+  borderSubtle?: string
+  elevated?: string
+  textSecondary?: string
+  accentHover?: string
+  accentForeground?: string
+  green?: string
+  amber?: string
+  red?: string
+  info?: string
+  shadowCard?: string
+  shadowElevated?: string
+  bgImage?: string
 }
 
 export interface PublicDashboardCopyConfig {
@@ -139,6 +153,35 @@ export interface PublicBrandingConfig {
   theme?: PublicBrandingThemeTokens
   dashboard?: PublicDashboardCopyConfig
   managedOrgConnectionLabels?: ManagedOrgConnectionLabels
+}
+
+const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
+  background: '#1b1b26',
+  surface: 'rgba(141, 164, 245, 0.04)',
+  mutedSurface: '#23232f',
+  border: 'rgba(180, 194, 250, 0.07)',
+  text: '#e8e9f3',
+  mutedText: '#8a8da0',
+  accent: '#8da4f5',
+  accentStrong: '#a7b6f8',
+  focus: 'rgba(141, 164, 245, 0.55)',
+  warn: '#fcb07a',
+  danger: '#fc92b4',
+  ok: '#7fcfa0',
+  surfaceHover: 'rgba(141, 164, 245, 0.08)',
+  surfaceActive: 'rgba(141, 164, 245, 0.15)',
+  borderSubtle: 'rgba(180, 194, 250, 0.035)',
+  elevated: '#23232f',
+  textSecondary: '#b0b3c6',
+  accentHover: '#a7b6f8',
+  accentForeground: '#0f0f18',
+  green: '#7fcfa0',
+  amber: '#fcb07a',
+  red: '#fc92b4',
+  info: '#82cadc',
+  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18)',
+  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%)',
 }
 
 export const GATEWAY_PRODUCT_MODES = [
@@ -265,20 +308,7 @@ export const DEFAULT_PUBLIC_BRANDING: PublicBrandingConfig = {
   privacyUrl: '',
   securityUrl: '',
   legalUrl: '',
-  theme: {
-    background: '#f5f6f3',
-    surface: '#ffffff',
-    mutedSurface: '#ecefed',
-    border: '#d8ddd7',
-    text: '#18211c',
-    mutedText: '#66736b',
-    accent: '#2d6b56',
-    accentStrong: '#1f503f',
-    focus: 'rgba(45, 107, 86, 0.28)',
-    warn: '#8a5a14',
-    danger: '#9d3630',
-    ok: '#1f6b46',
-  },
+  theme: DEFAULT_PUBLIC_BRANDING_DARK_THEME,
   dashboard: {
     title: 'Workspace',
     subtitle: 'Cloud control plane state for this signed-in org.',

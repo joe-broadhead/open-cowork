@@ -42,6 +42,7 @@ import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
+import { CLOUD_WEB_FONT_ASSET_PREFIX, CLOUD_WEB_FONT_CACHE_CONTROL, getCloudWebFontAsset } from './web-font-assets.ts'
 import type {
   ApiTokenScope,
   ChannelProviderId,
@@ -228,6 +229,7 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
     'content-security-policy': [
       "default-src 'self'",
       "connect-src 'self'",
+      "font-src 'self'",
       "img-src 'self' data: https:",
       `style-src ${styleSrc}`,
       `script-src ${scriptSrc}`,
@@ -236,6 +238,16 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
       "frame-ancestors 'none'",
       "form-action 'self'",
     ].join('; '),
+  })
+  res.end(body)
+}
+
+function writeFont(res: ServerResponse, body: Buffer, origin?: string | null) {
+  writeCorsHeaders(res, origin)
+  res.writeHead(200, {
+    'content-type': 'font/woff2',
+    'cache-control': CLOUD_WEB_FONT_CACHE_CONTROL,
+    'content-length': String(body.byteLength),
   })
   res.end(body)
 }
@@ -1855,6 +1867,16 @@ export class CloudHttpServer {
       if ((url.pathname === '/' || url.pathname === '/index.html') && req.method === 'GET') {
         const nonce = randomBytes(16).toString('base64url')
         writeHtml(res, 200, cloudBrowserAppHtml(this.options.policy, this.options.publicBranding, nonce), requestOptions.corsOrigin, nonce)
+        return
+      }
+
+      if (url.pathname.startsWith(CLOUD_WEB_FONT_ASSET_PREFIX) && req.method === 'GET') {
+        const font = getCloudWebFontAsset(url.pathname)
+        if (!font) {
+          writeError(res, 404, 'Cloud Web font asset was not found.', requestOptions.corsOrigin)
+          return
+        }
+        writeFont(res, font, requestOptions.corsOrigin)
         return
       }
 

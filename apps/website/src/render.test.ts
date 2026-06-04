@@ -60,6 +60,14 @@ test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Diagnostics/)
   assert.match(html, /data-route-panel="threads"/)
   assert.match(html, /data-route-panel="byok"/)
+  assert.match(html, /color-scheme: dark/)
+  assert.match(html, /font-family: 'Mona Sans Variable'/)
+  assert.match(html, /\/assets\/fonts\/mona-sans-latin-wght-normal\.woff2/)
+  assert.match(html, /--color-base: #1b1b26;/)
+  assert.match(html, /--focus: rgba\(141, 164, 245, 0\.55\);/)
+  assert.match(html, /--warn: #fcb07a;/)
+  assert.match(html, /--danger: #fc92b4;/)
+  assert.match(html, /--ok: #7fcfa0;/)
 })
 
 test('cloud website app shell exposes typed route metadata', () => {
@@ -253,6 +261,8 @@ test('cloud website renders deployer public branding', () => {
     privacyUrl: 'https://legal.acme.example/privacy',
     theme: {
       accent: '#0f6b4b',
+      accentHover: '#13845d',
+      elevated: '#101820',
     },
     dashboard: {
       title: 'Acme workspace',
@@ -272,9 +282,125 @@ test('cloud website renders deployer public branding', () => {
   assert.match(branded, /Acme workspace/)
   assert.match(branded, /Issue scoped Acme tokens/)
   assert.match(branded, /Acme Desktop token/)
+  assert.match(branded, /--color-accent: #0f6b4b;/)
+  assert.match(branded, /--color-accent-hover: #13845d;/)
+  assert.match(branded, /--color-elevated: #101820;/)
   assert.match(branded, /--accent: #0f6b4b;/)
   assert.match(branded, /https:\/\/support\.acme\.example\/cowork/)
   assert.match(branded, /https:\/\/legal\.acme\.example\/privacy/)
+})
+
+test('cloud website preserves legacy partial public branding themes', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Legacy Cowork',
+    shortName: 'LC',
+    theme: {
+      background: '#f5f6f3',
+      surface: '#ffffff',
+      mutedSurface: '#ecefed',
+      border: '#d8ddd7',
+      text: '#18211c',
+      mutedText: '#66736b',
+      accent: '#0f6b4b',
+      accentStrong: '#13845d',
+    },
+  })
+
+  assert.match(branded, /--color-elevated: #ffffff;/)
+  assert.match(branded, /color-scheme: light/)
+  assert.match(branded, /--surface: #ffffff;/)
+  assert.match(branded, /--muted-surface: #ecefed;/)
+  assert.match(branded, /--color-accent-hover: #13845d;/)
+  assert.match(branded, /--color-accent-foreground: #fff;/)
+  assert.match(branded, /--focus: rgba\(45, 107, 86, 0\.28\);/)
+  assert.match(branded, /--warn: #8a5a14;/)
+  assert.match(branded, /--danger: #9d3630;/)
+  assert.match(branded, /--ok: #1f6b46;/)
+  assert.match(branded, /--bg-image: none;/)
+  assert.doesNotMatch(branded, /--surface: #23232f;/)
+})
+
+test('cloud website classifies shorthand and rgb light branding tokens', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Shorthand Cowork',
+    shortName: 'SC',
+    theme: {
+      background: '#fff',
+      surface: 'rgb(255, 255, 255)',
+      text: 'rgb(24, 33, 28)',
+      accent: '#2d6b56',
+    },
+  })
+
+  assert.match(branded, /color-scheme: light/)
+  assert.match(branded, /--color-base: #fff;/)
+  assert.match(branded, /--color-elevated: rgb\(255, 255, 255\);/)
+  assert.match(branded, /--text: rgb\(24, 33, 28\);/)
+  assert.match(branded, /--focus: rgba\(45, 107, 86, 0\.28\);/)
+  assert.doesNotMatch(branded, /color-scheme: dark/)
+
+  const named = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Named Cowork',
+    shortName: 'NC',
+    theme: {
+      background: 'white',
+      surface: 'hsl(0, 0%, 100%)',
+      text: 'black',
+      accent: '#2d6b56',
+    },
+  })
+
+  assert.match(named, /color-scheme: light/)
+  assert.match(named, /--color-base: white;/)
+  assert.match(named, /--color-elevated: hsl\(0, 0%, 100%\);/)
+  assert.match(named, /--text: black;/)
+  assert.match(named, /--focus: rgba\(45, 107, 86, 0\.28\);/)
+})
+
+test('cloud website preserves dark defaults for partial dark branding overrides', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Dark Cowork',
+    shortName: 'DC',
+    theme: {
+      background: '#101010',
+    },
+  })
+
+  assert.match(branded, /color-scheme: dark/)
+  assert.match(branded, /--color-base: #101010;/)
+  assert.match(branded, /--color-elevated: #23232f;/)
+  assert.match(branded, /--text: #e8e9f3;/)
+  assert.match(branded, /--focus: rgba\(141, 164, 245, 0\.55\);/)
+  assert.doesNotMatch(branded, /--color-elevated: #ffffff;/)
+  assert.doesNotMatch(branded, /--text: #18211c;/)
 })
 
 test('cloud website drops unsafe public branding URLs', () => {

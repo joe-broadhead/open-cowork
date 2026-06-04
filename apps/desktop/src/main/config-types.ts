@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/shared'
+import { DEFAULT_DARK_PUBLIC_BRANDING_THEME, DEFAULT_TOOL_TRACE_RULES, type ToolTraceConfig } from '@open-cowork/shared'
 import type {
   AgentStarterTemplate,
   BrandingConfig,
@@ -595,20 +595,7 @@ const DEFAULT_CLOUD_PUBLIC_BRANDING: PublicBrandingConfig = {
   privacyUrl: '',
   securityUrl: '',
   legalUrl: '',
-  theme: {
-    background: '#f5f6f3',
-    surface: '#ffffff',
-    mutedSurface: '#ecefed',
-    border: '#d8ddd7',
-    text: '#18211c',
-    mutedText: '#66736b',
-    accent: '#2d6b56',
-    accentStrong: '#1f503f',
-    focus: 'rgba(45, 107, 86, 0.28)',
-    warn: '#8a5a14',
-    danger: '#9d3630',
-    ok: '#1f6b46',
-  },
+  theme: DEFAULT_DARK_PUBLIC_BRANDING_THEME,
   dashboard: {
     title: 'Workspace',
     subtitle: 'Cloud control plane state for this signed-in org.',

@@ -273,6 +273,36 @@ test('cloud public branding resolves from config and env JSON', () => {
   assert.equal(branding.managedOrgConnectionLabels?.gatewayToken, 'Gateway token')
 })
 
+test('cloud public branding derives desktop theme keys from legacy theme overlays', () => {
+  const branding = resolveCloudPublicBranding(DEFAULT_CONFIG, {
+    OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON: JSON.stringify({
+      theme: {
+        background: '#f5f6f3',
+        surface: '#ffffff',
+        mutedSurface: '#ecefed',
+        border: '#d8ddd7',
+        text: '#18211c',
+        mutedText: '#66736b',
+        accent: '#0f6b4b',
+        accentStrong: '#13845d',
+      },
+    }),
+  })
+
+  assert.equal(branding.theme?.elevated, '#ffffff')
+  assert.equal(branding.theme?.surfaceHover, '#ecefed')
+  assert.equal(branding.theme?.surfaceActive, '#ecefed')
+  assert.equal(branding.theme?.borderSubtle, '#d8ddd7')
+  assert.equal(branding.theme?.textSecondary, '#66736b')
+  assert.equal(branding.theme?.accentHover, '#13845d')
+  assert.equal(branding.theme?.accentForeground, '#fff')
+  assert.equal(branding.theme?.green, '#1f6b46')
+  assert.equal(branding.theme?.amber, '#8a5a14')
+  assert.equal(branding.theme?.red, '#9d3630')
+  assert.equal(branding.theme?.focus, 'rgba(45, 107, 86, 0.28)')
+  assert.equal(branding.theme?.bgImage, 'none')
+})
+
 test('cloud public branding ignores unsafe env URLs', () => {
   const config = {
     ...DEFAULT_CONFIG,

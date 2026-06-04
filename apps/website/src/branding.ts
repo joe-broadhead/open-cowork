@@ -1,4 +1,12 @@
-import type { PublicBrandingConfig } from '@open-cowork/shared'
+import {
+  DEFAULT_DARK_PUBLIC_BRANDING_THEME,
+  derivePublicBrandingThemeTokens,
+  isLegacyLightPublicBrandingTheme,
+  isPublicBrandingColorToken,
+  LEGACY_LIGHT_PUBLIC_BRANDING_THEME,
+  PUBLIC_BRANDING_THEME_TOKEN_KEYS,
+  type PublicBrandingConfig,
+} from '@open-cowork/shared'
 import { escapeHtml } from './html-utils.ts'
 
 export const DEFAULT_WEBSITE_PUBLIC_BRANDING: PublicBrandingConfig = {
@@ -8,20 +16,7 @@ export const DEFAULT_WEBSITE_PUBLIC_BRANDING: PublicBrandingConfig = {
   privacyUrl: '',
   securityUrl: '',
   legalUrl: '',
-  theme: {
-    background: '#f5f6f3',
-    surface: '#ffffff',
-    mutedSurface: '#ecefed',
-    border: '#d8ddd7',
-    text: '#18211c',
-    mutedText: '#66736b',
-    accent: '#2d6b56',
-    accentStrong: '#1f503f',
-    focus: 'rgba(45, 107, 86, 0.28)',
-    warn: '#8a5a14',
-    danger: '#9d3630',
-    ok: '#1f6b46',
-  },
+  theme: DEFAULT_DARK_PUBLIC_BRANDING_THEME,
   dashboard: {
     title: 'Workspace',
     subtitle: 'Cloud control plane state for this signed-in org.',
@@ -61,19 +56,11 @@ function safeBrandingUrl(value: unknown, allowMailto = false) {
   return undefined
 }
 
-const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>([
-  'background',
-  'surface',
-  'mutedSurface',
-  'border',
-  'text',
-  'mutedText',
-  'accent',
-  'accentStrong',
-  'focus',
-  'warn',
-  'danger',
-  'ok',
+const PUBLIC_BRANDING_THEME_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>(PUBLIC_BRANDING_THEME_TOKEN_KEYS)
+const PUBLIC_BRANDING_THEME_COMPLEX_CSS_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['theme']>>([
+  'shadowCard',
+  'shadowElevated',
+  'bgImage',
 ])
 const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
   'title',
@@ -100,6 +87,27 @@ function pickObjectStrings<T extends object>(value: unknown, allowedKeys: Set<ke
   ) as Partial<T>
 }
 
+function publicBrandingCssToken(value: string | undefined) {
+  return value && /^[#A-Za-z0-9(),.%\s-]+$/.test(value) ? value : undefined
+}
+
+function publicBrandingColorToken(value: string | undefined) {
+  const token = publicBrandingCssToken(value)
+  return token && isPublicBrandingColorToken(token) ? token : undefined
+}
+
+function cleanPublicBrandingTheme(value: unknown) {
+  const theme = pickObjectStrings<NonNullable<PublicBrandingConfig['theme']>>(value, PUBLIC_BRANDING_THEME_KEYS)
+  return Object.fromEntries(
+    Object.entries(theme).filter(([key, entry]) => {
+      if (PUBLIC_BRANDING_THEME_COMPLEX_CSS_KEYS.has(key as keyof NonNullable<PublicBrandingConfig['theme']>)) {
+        return Boolean(publicBrandingCssToken(entry))
+      }
+      return Boolean(publicBrandingColorToken(entry))
+    }),
+  ) as Partial<NonNullable<PublicBrandingConfig['theme']>>
+}
+
 function cleanPublicBranding(input?: PublicBrandingConfig | null): Partial<PublicBrandingConfig> {
   if (!input) return {}
   const cleaned: Partial<PublicBrandingConfig> = {}
@@ -115,7 +123,7 @@ function cleanPublicBranding(input?: PublicBrandingConfig | null): Partial<Publi
   if (privacyUrl) cleaned.privacyUrl = privacyUrl
   if (securityUrl) cleaned.securityUrl = securityUrl
   if (legalUrl) cleaned.legalUrl = legalUrl
-  const theme = pickObjectStrings<NonNullable<PublicBrandingConfig['theme']>>(input.theme, PUBLIC_BRANDING_THEME_KEYS)
+  const theme = cleanPublicBrandingTheme(input.theme)
   const dashboard = pickObjectStrings<NonNullable<PublicBrandingConfig['dashboard']>>(input.dashboard, PUBLIC_BRANDING_DASHBOARD_KEYS)
   const labels = pickObjectStrings<NonNullable<PublicBrandingConfig['managedOrgConnectionLabels']>>(
     input.managedOrgConnectionLabels,
@@ -129,6 +137,7 @@ function cleanPublicBranding(input?: PublicBrandingConfig | null): Partial<Publi
 
 export function resolvePublicBranding(input?: PublicBrandingConfig | null): PublicBrandingConfig {
   const cleaned = cleanPublicBranding(input)
+  const cleanedTheme = cleaned.theme ? derivePublicBrandingThemeTokens(cleaned.theme) : undefined
   return {
     ...DEFAULT_WEBSITE_PUBLIC_BRANDING,
     ...cleaned,
@@ -141,7 +150,7 @@ export function resolvePublicBranding(input?: PublicBrandingConfig | null): Publ
     legalUrl: cleaned.legalUrl || DEFAULT_WEBSITE_PUBLIC_BRANDING.legalUrl,
     theme: {
       ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.theme || {}),
-      ...(cleaned.theme || {}),
+      ...(cleanedTheme || {}),
     },
     dashboard: {
       ...(DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}),
@@ -156,20 +165,67 @@ export function resolvePublicBranding(input?: PublicBrandingConfig | null): Publ
 
 export function publicBrandingCss(branding: PublicBrandingConfig) {
   const theme = branding.theme || {}
-  const cssToken = (value: string | undefined) => value && /^[#A-Za-z0-9(),.%\s-]+$/.test(value) ? value : undefined
+  const cssToken = publicBrandingCssToken
+  const colorToken = publicBrandingColorToken
+  const defaultTheme = DEFAULT_DARK_PUBLIC_BRANDING_THEME
+  const legacySurfaceOverride = colorToken(theme.surface) && theme.surface !== defaultTheme.surface && theme.elevated === defaultTheme.elevated
+  const legacyAccentOverride = colorToken(theme.accent) && theme.accent !== defaultTheme.accent && theme.accentForeground === defaultTheme.accentForeground
+  const legacyLightOverride = legacySurfaceOverride && isLegacyLightPublicBrandingTheme(theme)
+  const legacyLightFallback: NonNullable<PublicBrandingConfig['theme']> = legacyLightOverride
+    ? LEGACY_LIGHT_PUBLIC_BRANDING_THEME
+    : {}
+  const elevated = legacySurfaceOverride
+    ? colorToken(theme.surface)
+    : colorToken(theme.elevated || theme.mutedSurface || theme.surface)
+  const accentHover = colorToken(
+    theme.accentHover === defaultTheme.accentHover && theme.accentStrong && theme.accentStrong !== defaultTheme.accentStrong
+      ? theme.accentStrong
+      : theme.accentHover || theme.accentStrong || theme.accent,
+  )
+  const accentForeground = legacyAccentOverride ? '#fff' : colorToken(theme.accentForeground)
+  const warn = colorToken(legacyLightOverride && theme.warn === defaultTheme.warn ? legacyLightFallback.warn : theme.warn)
+  const danger = colorToken(legacyLightOverride && theme.danger === defaultTheme.danger ? legacyLightFallback.danger : theme.danger)
+  const ok = colorToken(legacyLightOverride && theme.ok === defaultTheme.ok ? legacyLightFallback.ok : theme.ok)
+  const green = colorToken(legacyLightOverride && theme.green === defaultTheme.green ? legacyLightFallback.ok : theme.green || ok)
+  const amber = colorToken(legacyLightOverride && theme.amber === defaultTheme.amber ? legacyLightFallback.warn : theme.amber || warn)
+  const red = colorToken(legacyLightOverride && theme.red === defaultTheme.red ? legacyLightFallback.danger : theme.red || danger)
+  const focus = colorToken(legacyLightOverride && theme.focus === defaultTheme.focus ? legacyLightFallback.focus : theme.focus)
+  const shadowCard = cssToken(legacyLightOverride && theme.shadowCard === defaultTheme.shadowCard ? legacyLightFallback.shadowCard : theme.shadowCard)
+  const shadowElevated = cssToken(legacyLightOverride && theme.shadowElevated === defaultTheme.shadowElevated ? legacyLightFallback.shadowElevated : theme.shadowElevated)
+  const bgImage = cssToken(legacyLightOverride && theme.bgImage === defaultTheme.bgImage ? legacyLightFallback.bgImage : theme.bgImage)
   const tokens: Record<string, string | undefined> = {
-    '--bg': cssToken(theme.background),
-    '--surface': cssToken(theme.surface),
-    '--muted-surface': cssToken(theme.mutedSurface),
-    '--line': cssToken(theme.border),
-    '--text': cssToken(theme.text),
-    '--muted': cssToken(theme.mutedText),
-    '--accent': cssToken(theme.accent),
-    '--accent-strong': cssToken(theme.accentStrong),
-    '--focus': cssToken(theme.focus),
-    '--warn': cssToken(theme.warn),
-    '--danger': cssToken(theme.danger),
-    '--ok': cssToken(theme.ok),
+    '--color-base': colorToken(theme.background),
+    '--color-surface': colorToken(theme.surface),
+    '--color-surface-hover': colorToken(theme.surfaceHover),
+    '--color-surface-active': colorToken(theme.surfaceActive),
+    '--color-elevated': elevated,
+    '--color-border': colorToken(theme.border),
+    '--color-border-subtle': colorToken(theme.borderSubtle),
+    '--color-text': colorToken(theme.text),
+    '--color-text-secondary': colorToken(theme.textSecondary),
+    '--color-text-muted': colorToken(theme.mutedText),
+    '--color-accent': colorToken(theme.accent),
+    '--color-accent-hover': accentHover,
+    '--color-accent-foreground': accentForeground,
+    '--color-green': green,
+    '--color-amber': amber,
+    '--color-red': red,
+    '--color-info': colorToken(theme.info),
+    '--shadow-card': shadowCard,
+    '--shadow-elevated': shadowElevated,
+    '--bg-image': bgImage,
+    '--bg': colorToken(theme.background),
+    '--surface': elevated || colorToken(theme.surface),
+    '--muted-surface': colorToken(theme.mutedSurface) || elevated,
+    '--line': colorToken(theme.border),
+    '--text': colorToken(theme.text),
+    '--muted': colorToken(theme.mutedText),
+    '--accent': colorToken(theme.accent),
+    '--accent-strong': accentHover,
+    '--focus': focus,
+    '--warn': warn || amber,
+    '--danger': danger || red,
+    '--ok': ok || green,
   }
   return Object.entries(tokens)
     .filter(([, value]) => typeof value === 'string' && value.trim())

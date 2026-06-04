@@ -418,6 +418,16 @@ test('config normalization applies layer precedence without loader state', () =>
       cloud: {
         role: 'worker',
         defaultProfile: 'focused-agent',
+        publicBranding: {
+          theme: {
+            surface: '#ffffff',
+            mutedSurface: '#ecefed',
+            border: '#d8ddd7',
+            mutedText: '#66736b',
+            accent: '#0f6b4b',
+            accentStrong: '#13845d',
+          },
+        },
         profiles: {
           'focused-agent': {
             agents: ['data-analyst'],
@@ -449,6 +459,15 @@ test('config normalization applies layer precedence without loader state', () =>
   assert.equal(config.cloud.profiles['focused-agent']?.agents?.[0], 'data-analyst')
   assert.equal(config.cloud.profiles['focused-agent']?.features?.workflows, false)
   assert.equal(config.cloud.runtime.configSource, 'app')
+  assert.equal(config.cloud.publicBranding.theme?.elevated, '#ffffff')
+  assert.equal(config.cloud.publicBranding.theme?.surfaceHover, '#ecefed')
+  assert.equal(config.cloud.publicBranding.theme?.accentHover, '#13845d')
+  assert.equal(config.cloud.publicBranding.theme?.accentForeground, '#fff')
+  assert.equal(config.cloud.publicBranding.theme?.focus, 'rgba(45, 107, 86, 0.28)')
+  assert.equal(config.cloud.publicBranding.theme?.amber, '#8a5a14')
+  assert.equal(config.cloud.publicBranding.theme?.red, '#9d3630')
+  assert.equal(config.cloud.publicBranding.theme?.green, '#1f6b46')
+  assert.equal(config.cloud.publicBranding.theme?.bgImage, 'none')
 })
 
 test('public branding keeps logoDataUrl fallback when logoAsset cannot resolve', () => {
