@@ -128,6 +128,16 @@ export class CloudHttpError extends Error {
   }
 }
 
+type AuthAccountingOperation = 'check_backoff' | 'record_failure'
+
+function isRequestPolicyError(error: unknown): error is CloudHttpError | CloudServiceError {
+  return error instanceof CloudHttpError || error instanceof CloudServiceError
+}
+
+function authAccountingErrorType(error: unknown) {
+  return error instanceof Error && error.name ? error.name : typeof error
+}
+
 type RouteContext = {
   principal: CloudPrincipal
   authSource: 'cookie' | 'resolver'
@@ -1729,12 +1739,49 @@ export class CloudHttpServer {
     }
   }
 
+  private async recordAuthAccountingError(operation: AuthAccountingOperation, error: unknown) {
+    await recordCloudMetric(this.options.observability, {
+      name: 'open_cowork_cloud_auth_accounting_errors_total',
+      value: 1,
+      unit: '1',
+      attributes: {
+        'cloud.auth.accounting.operation': operation,
+        'error.type': authAccountingErrorType(error),
+      },
+    })
+  }
+
+  private async checkAuthBackoff(source: string, scopes: string[]) {
+    const results = await Promise.allSettled(scopes.map((scope) => (
+      this.options.service.checkCloudAuthBackoff({ scope, source })
+    )))
+    for (const result of results) {
+      if (result.status === 'rejected' && isRequestPolicyError(result.reason)) {
+        throw result.reason
+      }
+    }
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        await this.recordAuthAccountingError('check_backoff', result.reason)
+      }
+    }
+  }
+
+  private async recordAuthFailure(source: string, scopes: string[]) {
+    const results = await Promise.allSettled(scopes.map((scope) => (
+      this.options.service.recordCloudAuthFailure({ scope, source })
+    )))
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        await this.recordAuthAccountingError('record_failure', result.reason)
+      }
+    }
+  }
+
   private async resolvePrincipal(req: IncomingMessage, auth: CloudAuthResolver) {
     const source = requestSource(req, this.options.trustProxyHeaders, this.options.trustedProxyCidrs)
     const scopes = authFailureScopes(req, this.options.trustProxyHeaders, this.options.trustedProxyCidrs)
-    await Promise.all(scopes.map((scope) => (
-      this.options.service.checkCloudAuthBackoff({ scope, source })
-    )))
+    await this.checkAuthBackoff(source, scopes)
     try {
       return await auth(req)
     } catch (error) {
@@ -1744,9 +1791,7 @@ export class CloudHttpServer {
           ? error.status
           : 401
       if (status === 401) {
-        await Promise.all(scopes.map((scope) => (
-          this.options.service.recordCloudAuthFailure({ scope, source })
-        )))
+        await this.recordAuthFailure(source, scopes)
       }
       throw error
     }

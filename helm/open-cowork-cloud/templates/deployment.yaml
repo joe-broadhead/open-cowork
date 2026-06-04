@@ -25,6 +25,15 @@
 {{- end }}
 {{- end }}
 {{- if eq $.Values.cloud.deploymentTier "public_production" }}
+{{- if $.Values.cloud.allowInsecureAuth }}
+{{- fail "cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true; insecure auth overrides are local/demo-only." }}
+{{- end }}
+{{- if $.Values.cloud.allowInsecurePublicAuth }}
+{{- fail "cloud.deploymentTier=public_production rejects cloud.allowInsecurePublicAuth=true; public insecure auth overrides are local/demo-only." }}
+{{- end }}
+{{- if not $.Values.cloud.cookieSecure }}
+{{- fail "cloud.deploymentTier=public_production requires cloud.cookieSecure=true for browser session cookies." }}
+{{- end }}
 {{- if not $.Values.roles.web.enabled }}
 {{- fail "cloud.deploymentTier=public_production requires roles.web.enabled=true." }}
 {{- end }}
@@ -132,6 +141,9 @@ spec:
       labels:
         {{- include "open-cowork-cloud.selectorLabels" $ | nindent 8 }}
         app.kubernetes.io/component: {{ $roleName }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
     spec:
       serviceAccountName: {{ include "open-cowork-cloud.serviceAccountName" $ }}
       automountServiceAccountToken: {{ $.Values.serviceAccount.automountServiceAccountToken }}
