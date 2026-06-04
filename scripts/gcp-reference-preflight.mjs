@@ -64,6 +64,13 @@ function truthyArgOrEnv(argName, envName) {
   return value === '1' || value === 'true' || value === 'yes'
 }
 
+function listArgOrEnv(argName, envName) {
+  return argOrEnv(argName, envName)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
 function redactGcpEvidence(value, key = '') {
   if (Array.isArray(value)) {
     return value.map((item) => redactGcpEvidence(item, key))
@@ -79,21 +86,44 @@ function redactGcpEvidence(value, key = '') {
   if (typeof value !== 'string') return value
 
   const normalizedKey = key.toLowerCase()
+  if (normalizedKey.includes('role')) {
+    return value
+      .replace(/projects\/[^/\s]+\/roles\//g, 'projects/PROJECT/roles/')
+      .replace(/organizations\/[^/\s]+\/roles\//g, 'organizations/ORG/roles/')
+  }
   if (normalizedKey.includes('project')) return 'PROJECT'
   if (normalizedKey.includes('account')) return 'ACCOUNT'
+  if (normalizedKey.includes('member')) return 'MEMBER'
+  if (normalizedKey.includes('bucket')) return 'OPEN_COWORK_BUCKET'
+  if (normalizedKey.includes('secret')) return 'SECRET_NAME'
+  if (normalizedKey.includes('instance')) return 'INSTANCE'
   if (normalizedKey.includes('region')) return 'REGION'
+  if (normalizedKey.includes('location')) return 'LOCATION'
   if (normalizedKey.includes('servicename')) return 'SERVICE'
   if (normalizedKey === 'url' || normalizedKey.includes('url')) return 'https://cowork.example.com'
-  return value
+  return value.replace(/\b[a-z][a-z0-9-]{4,}[a-z0-9]:[a-z][a-z0-9-]*[a-z0-9]:[a-z][a-z0-9-]*[a-z0-9]\b/gi, 'PROJECT:REGION:INSTANCE')
 }
 
 function redactGcpText(text) {
   return text
     .replace(/--project\s+\S+/g, '--project PROJECT')
+    .replace(/\bprojects get-iam-policy\s+\S+/g, 'projects get-iam-policy PROJECT')
     .replace(/projects\/[^/\s]+/g, 'projects/PROJECT')
+    .replace(/organizations\/[^/\s]+\/roles\//g, 'organizations/ORG/roles/')
+    .replace(/projects\/PROJECT\/secrets\/[^/\s,)]+(?:\/versions\/[^/\s,)]+)?/g, 'projects/PROJECT/secrets/SECRET_NAME')
+    .replace(/projects\/PROJECT\/instances\/[^/\s,)]+/g, 'projects/PROJECT/instances/INSTANCE')
+    .replace(/projects\/PROJECT\/buckets\/[^/\s,)]+/g, 'projects/PROJECT/buckets/OPEN_COWORK_BUCKET')
+    .replace(/\bbuckets\/[^/\s,)]+/g, 'buckets/OPEN_COWORK_BUCKET')
     .replace(/\bproject\s+[^:\s,]+/gi, 'project PROJECT')
     .replace(/--region\s+\S+/g, '--region REGION')
+    .replace(/--secret\s+\S+/g, '--secret SECRET_NAME')
+    .replace(/gs:\/\/[^/\s]+/g, 'gs://OPEN_COWORK_BUCKET')
+    .replace(/Cloud SQL instance\s+\S+/g, 'Cloud SQL instance INSTANCE')
+    .replace(/Cloud Storage bucket\s+\S+/g, 'Cloud Storage bucket OPEN_COWORK_BUCKET')
+    .replace(/instances describe\s+\S+/g, 'instances describe INSTANCE')
+    .replace(/secrets describe\s+\S+/g, 'secrets describe SECRET_NAME')
     .replace(/services describe\s+\S+/g, 'services describe SERVICE')
+    .replace(/serviceAccount:[^\s,]+\.svc\.id\.goog\[[^\]]+\]/g, 'serviceAccount:PROJECT.svc.id.goog[NAMESPACE/KSA]')
     .replace(/\bservice\s+\S+\s+did not/gi, 'service SERVICE did not')
     .replace(/https:\/\/[^\s)]+/g, 'https://cowork.example.com')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'ACCOUNT')
@@ -123,6 +153,11 @@ function gcloudValue(args) {
   } catch {
     return ''
   }
+}
+
+function gcloudJson(args) {
+  const output = runGcloud([...args, '--format=json'])
+  return output ? JSON.parse(output) : {}
 }
 
 function requireGcloud() {
@@ -171,6 +206,157 @@ function maybeCheckCloudRunService(project, region, serviceName) {
   return { serviceName, url: url || null }
 }
 
+function maybeCheckCloudSql(project) {
+  const sqlInstance = argOrEnv('sql-instance', 'OPEN_COWORK_GCP_SQL_INSTANCE')
+  if (!sqlInstance) return null
+  const instance = gcloudJson([
+    'sql',
+    'instances',
+    'describe',
+    sqlInstance,
+    '--project',
+    project,
+  ])
+  const backupConfiguration = instance?.settings?.backupConfiguration || {}
+  const connectionName = instance?.connectionName || ''
+  if (!connectionName) {
+    throw new Error(`Cloud SQL instance ${sqlInstance} did not return a connectionName.`)
+  }
+  if (backupConfiguration.enabled !== true) {
+    throw new Error(`Cloud SQL instance ${sqlInstance} must have automated backups enabled before production preflight passes.`)
+  }
+  const pointInTimeRecoveryEnabled = backupConfiguration.pointInTimeRecoveryEnabled === true
+  if (!pointInTimeRecoveryEnabled && !truthyArgOrEnv('allow-no-pitr', 'OPEN_COWORK_GCP_ALLOW_NO_PITR')) {
+    throw new Error(`Cloud SQL instance ${sqlInstance} must have point-in-time recovery enabled, or set OPEN_COWORK_GCP_ALLOW_NO_PITR=true for a documented non-production exception.`)
+  }
+  return {
+    sqlInstance,
+    connectionName,
+    backupsEnabled: true,
+    pointInTimeRecoveryEnabled,
+  }
+}
+
+function maybeCheckBucket(project) {
+  const bucket = argOrEnv('bucket', 'OPEN_COWORK_GCP_BUCKET')
+  if (!bucket) return null
+  const parsed = gcloudJson([
+    'storage',
+    'buckets',
+    'describe',
+    `gs://${bucket}`,
+    '--project',
+    project,
+  ])
+  const versioningEnabled = parsed?.versioning?.enabled === true || parsed?.versioning_enabled === true
+  if (!versioningEnabled && !truthyArgOrEnv('allow-unversioned-bucket', 'OPEN_COWORK_GCP_ALLOW_UNVERSIONED_BUCKET')) {
+    throw new Error(`Cloud Storage bucket ${bucket} must have object versioning enabled, or set OPEN_COWORK_GCP_ALLOW_UNVERSIONED_BUCKET=true for a documented non-production exception.`)
+  }
+  return {
+    bucket,
+    location: parsed?.location || '',
+    versioningEnabled,
+  }
+}
+
+function maybeCheckSecrets(project) {
+  const secrets = listArgOrEnv('secrets', 'OPEN_COWORK_GCP_SECRETS')
+  if (secrets.length === 0) return []
+  return secrets.map((secret) => {
+    const parsed = gcloudJson([
+      'secrets',
+      'describe',
+      secret,
+      '--project',
+      project,
+    ])
+    return {
+      secret,
+      replication: parsed?.replication ? 'configured' : 'unknown',
+    }
+  })
+}
+
+function normalizeServiceAccountEmail(project, value) {
+  if (!value) return ''
+  return value.includes('@') ? value : `${value}@${project}.iam.gserviceaccount.com`
+}
+
+function policyHasBinding(policy, role, member) {
+  const bindings = Array.isArray(policy?.bindings) ? policy.bindings : []
+  return bindings.some((binding) => {
+    if (binding.role !== role) return false
+    return Array.isArray(binding.members) && binding.members.includes(member)
+  })
+}
+
+function maybeCheckGkeIam(project) {
+  const requireGkeIam = truthyArgOrEnv('require-gke-iam', 'OPEN_COWORK_GCP_REQUIRE_GKE_IAM')
+  const serviceAccountEmail = normalizeServiceAccountEmail(
+    project,
+    argOrEnv('gcp-service-account', 'OPEN_COWORK_GCP_GSA_EMAIL'),
+  )
+  if (!serviceAccountEmail) {
+    if (requireGkeIam) {
+      throw new Error('Set OPEN_COWORK_GCP_GSA_EMAIL or pass --gcp-service-account when OPEN_COWORK_GCP_REQUIRE_GKE_IAM=true.')
+    }
+    return null
+  }
+
+  runGcloud([
+    'iam',
+    'service-accounts',
+    'describe',
+    serviceAccountEmail,
+    '--project',
+    project,
+    '--format=value(email)',
+  ])
+
+  const namespace = argOrEnv('ksa-namespace', 'OPEN_COWORK_GCP_KSA_NAMESPACE') || 'open-cowork'
+  const ksaName = argOrEnv('ksa-name', 'OPEN_COWORK_GCP_KSA_NAME') || 'open-cowork-cloud'
+  const workloadIdentityMember = `serviceAccount:${project}.svc.id.goog[${namespace}/${ksaName}]`
+  const serviceAccountPolicy = gcloudJson([
+    'iam',
+    'service-accounts',
+    'get-iam-policy',
+    serviceAccountEmail,
+    '--project',
+    project,
+  ])
+  const workloadIdentityBound = policyHasBinding(
+    serviceAccountPolicy,
+    'roles/iam.workloadIdentityUser',
+    workloadIdentityMember,
+  )
+  if (!workloadIdentityBound && requireGkeIam) {
+    throw new Error(`GCP service account ${serviceAccountEmail} must grant roles/iam.workloadIdentityUser to ${workloadIdentityMember}.`)
+  }
+
+  const projectPolicy = gcloudJson([
+    'projects',
+    'get-iam-policy',
+    project,
+  ])
+  const projectMember = `serviceAccount:${serviceAccountEmail}`
+  const overlayProjectRoles = listArgOrEnv('required-project-roles', 'OPEN_COWORK_GCP_REQUIRED_PROJECT_ROLES')
+  const rolesToCheck = Array.from(new Set(['roles/cloudsql.client', ...overlayProjectRoles]))
+  const missingProjectRoles = rolesToCheck.filter((role) => !policyHasBinding(projectPolicy, role, projectMember))
+  if (missingProjectRoles.length > 0 && requireGkeIam) {
+    throw new Error(`GCP service account ${serviceAccountEmail} is missing project IAM roles: ${missingProjectRoles.join(', ')}`)
+  }
+
+  return {
+    serviceAccountEmail,
+    namespace,
+    ksaName,
+    workloadIdentityMember,
+    workloadIdentityBound,
+    checkedProjectRoles: rolesToCheck,
+    missingProjectRoles,
+  }
+}
+
 function main() {
   requireGcloud()
   const account = runGcloud(['auth', 'list', '--filter=status:ACTIVE', '--format=value(account)'])
@@ -212,6 +398,10 @@ function main() {
     region,
     cloudRunServiceName,
   )
+  const cloudSql = maybeCheckCloudSql(project)
+  const bucket = maybeCheckBucket(project)
+  const secrets = maybeCheckSecrets(project)
+  const gkeIam = maybeCheckGkeIam(project)
 
   const report = {
     ok: true,
@@ -222,6 +412,10 @@ function main() {
     optionalApis,
     referenceFiles: files,
     cloudRun,
+    cloudSql,
+    bucket,
+    secrets,
+    gkeIam,
   }
   const output = truthyArgOrEnv('redacted', 'OPEN_COWORK_GCP_REDACT_OUTPUT')
     ? { redacted: true, ...redactGcpEvidence(report) }
