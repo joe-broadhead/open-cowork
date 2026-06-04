@@ -330,8 +330,11 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
       contentType: 'text/html; charset=utf-8',
       body: html,
     }))
+    const fontRequests: string[] = []
     await page.route('https://cloud.example.test/assets/fonts/*.woff2', (route: any) => {
-      const body = readCloudWebFontAsset(new URL(route.request().url()).pathname)
+      const pathname = new URL(route.request().url()).pathname
+      fontRequests.push(pathname)
+      const body = readCloudWebFontAsset(pathname)
       return route.fulfill(body
         ? { status: 200, contentType: 'font/woff2', body }
         : { status: 404, contentType: 'text/plain; charset=utf-8', body: 'Not found' })
@@ -344,6 +347,9 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     })
 
     await page.goto(pageUrl, { waitUntil: 'load' })
+    await page.evaluate(() => document.fonts?.ready)
+    assert.ok(fontRequests.some((path) => path.endsWith('/mona-sans-latin-wght-normal.woff2')), 'Mona Sans font route was requested')
+    assert.ok(fontRequests.some((path) => path.endsWith('/hubot-sans-latin-wght-normal.woff2')), 'Hubot Sans font route was requested')
     try {
       await page.waitForSelector('body[data-auth="signed-in"]', { timeout: 10_000 })
     } catch (error) {
