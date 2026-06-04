@@ -30,6 +30,11 @@ function run(command, args, options = {}) {
   execFileSync(command, args, { stdio: 'inherit', ...options })
 }
 
+function runCapture(command, args, options = {}) {
+  log(`${command} ${args.join(' ')}`)
+  return execFileSync(command, args, { encoding: 'utf8', ...options })
+}
+
 function expectFailure(command, args, expectedText, options = {}) {
   log(`expect failure: ${command} ${args.join(' ')}`)
   const result = spawnSync(command, args, { encoding: 'utf8', ...options })
@@ -61,6 +66,29 @@ function assertNotIncludes(path, text) {
   const contents = read(path)
   if (contents.includes(text)) {
     throw new Error(`${path} must not include ${text}`)
+  }
+}
+
+function extractRenderedChecksums(manifest, name) {
+  const pattern = new RegExp(`${name}: ([a-f0-9]{64})`, 'g')
+  return Array.from(manifest.matchAll(pattern), (match) => match[1])
+}
+
+function assertConfigChecksumRollsPods(label, renderBase, renderChanged) {
+  const baseConfig = extractRenderedChecksums(renderBase, 'checksum/config')
+  const changedConfig = extractRenderedChecksums(renderChanged, 'checksum/config')
+  const baseSecret = extractRenderedChecksums(renderBase, 'checksum/secret')
+  if (baseConfig.length === 0) {
+    throw new Error(`${label} deployment must include checksum/config pod-template annotations.`)
+  }
+  if (baseSecret.length === 0) {
+    throw new Error(`${label} deployment must include checksum/secret pod-template annotations.`)
+  }
+  if (baseConfig.length !== changedConfig.length) {
+    throw new Error(`${label} rendered deployment count changed during checksum comparison.`)
+  }
+  if (baseConfig.every((checksum, index) => checksum === changedConfig[index])) {
+    throw new Error(`${label} checksum/config must change when ConfigMap-backed values change.`)
   }
 }
 
@@ -207,6 +235,9 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'gcr.io/cloud-sql-connectors/cloud-sql-proxy')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'tag: "2.22.0"')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'maxSigtermDelay: ""')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production rejects cloud.allowInsecurePublicAuth=true')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires cloud.cookieSecure=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.web.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.worker.enabled=true')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.deploymentTier=public_production requires roles.scheduler.enabled=true')
@@ -232,6 +263,8 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'networkPolicy:')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'automountServiceAccountToken: false')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'automountServiceAccountToken: {{ $.Values.serviceAccount.automountServiceAccountToken }}')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'checksum/config')
+  assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'checksum/secret')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'mountPath: /tmp')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'mountPath: {{ $.Values.cloud.root }}')
   assertIncludes('helm/open-cowork-cloud/templates/networkpolicy.yaml', 'kind: NetworkPolicy')
@@ -261,6 +294,8 @@ function staticHelmChecks() {
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'automountServiceAccountToken: false')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'serviceAccountName: {{ include "open-cowork-gateway.serviceAccountName" . }}')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'checksum/config')
+  assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'checksum/secret')
   assertIncludes('helm/open-cowork-gateway/templates/serviceaccount.yaml', 'kind: ServiceAccount')
   assertIncludes('helm/open-cowork-gateway/templates/serviceaccount.yaml', 'automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}')
   assertIncludes('helm/open-cowork-gateway/templates/deployment.yaml', 'mountPath: /tmp')
@@ -362,6 +397,63 @@ function validateHelm() {
       '--set',
       'cloud.objectStore.bucket=open-cowork-ci',
     ])
+    assertConfigChecksumRollsPods(
+      'open-cowork-cloud',
+      runCapture('helm', [
+        'template',
+        'open-cowork-cloud-checksum',
+        cloudChart,
+        '--set',
+        'image.repository=example.com/open-cowork-cloud',
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.profile=checksum-a',
+        '--set',
+        'cloud.auth.mode=oidc',
+        '--set',
+        'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+        '--set',
+        'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKey=ci-secret-key',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+      ]),
+      runCapture('helm', [
+        'template',
+        'open-cowork-cloud-checksum',
+        cloudChart,
+        '--set',
+        'image.repository=example.com/open-cowork-cloud',
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.profile=checksum-b',
+        '--set',
+        'cloud.auth.mode=oidc',
+        '--set',
+        'cloud.auth.oidcIssuerUrl=https://issuer.example.com',
+        '--set',
+        'cloud.auth.oidcClientId=open-cowork-cloud-ci',
+        '--set',
+        'cloud.controlPlaneUrl=postgres://postgres:postgres@postgres:5432/open_cowork_cloud',
+        '--set',
+        'cloud.secretKey=ci-secret-key',
+        '--set',
+        'cloud.cookieSecret=ci-cookie-secret',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+      ]),
+    )
     run('helm', [
       'template',
       'open-cowork-cloud-gcp-proxy',
@@ -665,6 +757,72 @@ function validateHelm() {
       ],
       'cloud.deploymentTier=public_production web role must set roles.web.autoProcessCommands=false'
     )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-insecure-auth-override',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.allowInsecureAuth=true',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'cloud.existingSecret=open-cowork-cloud-secrets',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production rejects cloud.allowInsecureAuth=true'
+    )
+    expectFailure(
+      'helm',
+      [
+        'template',
+        'unsafe-public-cloud-insecure-cookie',
+        cloudChart,
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'cloud.deploymentTier=public_production',
+        '--set',
+        'cloud.cookieSecure=false',
+        '--set',
+        'cloud.auth.mode=header',
+        '--set',
+        'cloud.auth.signupMode=invite',
+        '--set',
+        'cloud.publicUrl=https://cloud.example.com',
+        '--set',
+        'roles.worker.enabled=true',
+        '--set',
+        'roles.scheduler.enabled=true',
+        '--set',
+        'cloud.existingSecret=open-cowork-cloud-secrets',
+        '--set',
+        'cloud.objectStore.kind=s3',
+        '--set',
+        'cloud.objectStore.bucket=open-cowork-ci',
+        '--set',
+        'cloud.checkpoints.enabled=true',
+      ],
+      'cloud.deploymentTier=public_production requires cloud.cookieSecure=true'
+    )
 
     run('helm', [
       'lint',
@@ -697,6 +855,47 @@ function validateHelm() {
       '--set',
       'gateway.telegram.botToken=ci-telegram-token',
     ])
+    assertConfigChecksumRollsPods(
+      'open-cowork-gateway',
+      runCapture('helm', [
+        'template',
+        'open-cowork-gateway-checksum',
+        gatewayChart,
+        '--set',
+        'image.repository=example.com/open-cowork-gateway',
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'gateway.logLevel=info',
+      ]),
+      runCapture('helm', [
+        'template',
+        'open-cowork-gateway-checksum',
+        gatewayChart,
+        '--set',
+        'image.repository=example.com/open-cowork-gateway',
+        '--set',
+        'image.tag=ci',
+        '--set',
+        'gateway.cloudBaseUrl=https://cloud.example.com',
+        '--set',
+        'gateway.serviceToken=ci-gateway-token',
+        '--set',
+        'gateway.adminToken=ci-gateway-admin-token',
+        '--set',
+        'gateway.telegram.botToken=ci-telegram-token',
+        '--set',
+        'gateway.logLevel=warn',
+      ]),
+    )
     run('helm', [
       'template',
       'open-cowork-gateway-shared-config',

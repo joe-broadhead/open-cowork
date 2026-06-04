@@ -1263,6 +1263,97 @@ test('cloud HTTP server returns machine-readable rate-limit and auth-backoff res
   }
 })
 
+test('cloud HTTP server preserves auth failures when auth accounting storage fails', async () => {
+  const accountingMetrics: string[] = []
+  const fixture = createFixture({
+    auth: () => {
+      throw new CloudHttpError(401, 'not authorized')
+    },
+    observability: {
+      log() {},
+      metric(record) {
+        if (record.name === 'open_cowork_cloud_auth_accounting_errors_total') {
+          accountingMetrics.push(String(record.attributes?.['cloud.auth.accounting.operation'] || ''))
+        }
+      },
+      span() {},
+    },
+    abuse: testAbuseConfig({
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+      authBackoff: { enabled: true, windowMs: 60_000, maxFailures: 1, backoffMs: 60_000 },
+    }),
+  })
+  const service = fixture.service as CloudSessionService & {
+    checkCloudAuthBackoff: CloudSessionService['checkCloudAuthBackoff']
+    recordCloudAuthFailure: CloudSessionService['recordCloudAuthFailure']
+  }
+  service.checkCloudAuthBackoff = async () => {
+    throw new Error('auth accounting store unavailable')
+  }
+  service.recordCloudAuthFailure = async () => {
+    throw new Error('auth accounting store unavailable')
+  }
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/config`)
+    assert.equal(response.status, 401)
+    const body = await readJson(response)
+    assert.equal(body.error, 'not authorized')
+    assert.deepEqual(accountingMetrics.sort(), ['check_backoff', 'record_failure'])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP server preserves auth backoff when another auth scope has accounting storage failure', async () => {
+  let authCalled = false
+  const fixture = createFixture({
+    auth: () => {
+      authCalled = true
+      return {
+        tenantId: 'tenant-1',
+        tenantName: 'Tenant 1',
+        orgId: 'tenant-1',
+        userId: 'user-1',
+        accountId: 'user-1',
+        email: 'user@example.test',
+        role: 'owner',
+        authSource: 'local',
+      }
+    },
+    abuse: testAbuseConfig({
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+      authBackoff: { enabled: true, windowMs: 60_000, maxFailures: 1, backoffMs: 60_000 },
+    }),
+  })
+  const service = fixture.service as CloudSessionService & {
+    checkCloudAuthBackoff: CloudSessionService['checkCloudAuthBackoff']
+  }
+  service.checkCloudAuthBackoff = async ({ scope }) => {
+    if (scope.startsWith('auth:')) {
+      throw new CloudHttpError(429, 'Too many rejected cloud authentication attempts. Try again later.', {
+        policyCode: 'auth.backoff',
+        retryAfterMs: 60_000,
+      })
+    }
+    throw new Error('auth accounting store unavailable')
+  }
+
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/config`, {
+      headers: { authorization: 'Bearer invalid-token' },
+    })
+    assert.equal(response.status, 429)
+    assert.equal(authCalled, false)
+    const body = await readJson(response)
+    assert.equal(asRecord(body.verdict).policyCode, 'auth.backoff')
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server auth backoff applies to the source when bearer tokens rotate', async () => {
   const fixture = createFixture({
     auth: () => {
