@@ -92,6 +92,22 @@ function assertConfigChecksumRollsPods(label, renderBase, renderChanged) {
   }
 }
 
+function assertDefaultCloudHelmBrandingUsesRuntimeTheme(renderedManifest) {
+  const match = renderedManifest.match(/OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON:\s*(.+)/)
+  if (!match) {
+    throw new Error('open-cowork-cloud rendered ConfigMap must include OPEN_COWORK_CLOUD_PUBLIC_BRANDING_JSON.')
+  }
+  const renderedValue = match[1]
+  if (!renderedValue.includes('Open Cowork Cloud')) {
+    throw new Error('open-cowork-cloud default public branding must preserve the product name.')
+  }
+  for (const forbidden of ['\\"theme\\"', '"theme"', '#f5f6f3', '#2d6b56']) {
+    if (renderedValue.includes(forbidden)) {
+      throw new Error('open-cowork-cloud default public branding must not override the shared Cloud Web theme.')
+    }
+  }
+}
+
 function assertPublicTemplateSafe(path) {
   const contents = read(path)
   const forbiddenPatterns = [
@@ -215,6 +231,8 @@ function validateCompose() {
 function staticHelmChecks() {
   assertNotIncludes('helm/open-cowork-cloud/values.yaml', 'tag: latest')
   assertNotIncludes('helm/open-cowork-gateway/values.yaml', 'tag: latest')
+  assertNotIncludes('helm/open-cowork-cloud/values.yaml', 'background: "#f5f6f3"')
+  assertNotIncludes('helm/open-cowork-cloud/values.yaml', 'accent: "#2d6b56"')
   assertIncludes('helm/open-cowork-cloud/values.yaml', 'digest: ""')
   assertIncludes('helm/open-cowork-gateway/values.yaml', 'digest: ""')
   assertIncludes('helm/open-cowork-cloud/templates/deployment.yaml', 'cloud.auth.mode=none requires explicit cloud.allowInsecureAuth=true')
@@ -372,7 +390,7 @@ function validateHelm() {
       '--set',
       'cloud.auth.oidcClientId=open-cowork-cloud-ci',
     ])
-    run('helm', [
+    const defaultCloudRender = runCapture('helm', [
       'template',
       'open-cowork-cloud',
       cloudChart,
@@ -397,6 +415,7 @@ function validateHelm() {
       '--set',
       'cloud.objectStore.bucket=open-cowork-ci',
     ])
+    assertDefaultCloudHelmBrandingUsesRuntimeTheme(defaultCloudRender)
     assertConfigChecksumRollsPods(
       'open-cowork-cloud',
       runCapture('helm', [

@@ -61,6 +61,8 @@ cloud:
   trustProxyHeaders: false
   trustedProxyCidrs: []
   branding:
+    # The stock chart does not set a palette. Cloud Web inherits the shared
+    # Desktop-aligned dark theme unless downstream values intentionally override it.
     productName: Open Cowork Cloud
     shortName: OC
     logoUrl: ""
@@ -68,15 +70,6 @@ cloud:
     privacyUrl: ""
     securityUrl: ""
     legalUrl: ""
-    theme:
-      background: "#f5f6f3"
-      surface: "#ffffff"
-      mutedSurface: "#ecefed"
-      border: "#d8ddd7"
-      text: "#18211c"
-      mutedText: "#66736b"
-      accent: "#2d6b56"
-      accentStrong: "#1f503f"
     dashboard:
       title: Workspace
       subtitle: Cloud control plane state for this signed-in org.

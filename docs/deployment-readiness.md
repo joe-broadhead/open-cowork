@@ -72,6 +72,9 @@ provider control plane.
   `gateway.branding` for headless channel surfaces so all three clients expose
   the same downstream product name, logo, legal links, support links, and
   managed connection labels.
+- The stock Helm chart intentionally omits `cloud.branding.theme`; Cloud Web
+  inherits the shared Desktop-aligned dark theme unless a downstream deployment
+  deliberately supplies its own public theme tokens.
 - Use `cloudDesktop.preconfiguredConnections` for managed-org Desktop builds
   instead of hardcoding cloud URLs in renderer code.
 - Use `gateway.providers[]` for channel provider bindings and credential refs.
