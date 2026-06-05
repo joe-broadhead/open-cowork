@@ -317,7 +317,13 @@ export async function handleChannelsApiRoute(input: {
         answers: Array.isArray(body.answers) ? body.answers : undefined,
         reject: body.reject === true,
       })
-      const processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
+      let processed = 0
+      let processingError: string | null = null
+      try {
+        processed = await tools.processSessionCommandIfConfigured(options, context.principal.tenantId, result.interaction.sessionId)
+      } catch (error) {
+        processingError = error instanceof Error ? error.message : String(error)
+      }
       await tools.writeSessionCommandMutationResponse(
         res,
         options,
@@ -326,7 +332,10 @@ export async function handleChannelsApiRoute(input: {
         result.command,
         processed,
         result.beforeProjectionSequence,
-        { interaction: tools.publicChannelInteraction(result.interaction) },
+        {
+          interaction: tools.publicChannelInteraction(result.interaction),
+          ...(processingError ? { processingError } : {}),
+        },
       )
       return true
     }

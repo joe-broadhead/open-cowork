@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { accessSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { UI_THEME_PRESETS } from '@open-cowork/shared'
 import { CLOUD_WEB_ROUTES } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
 import {
@@ -19,6 +21,7 @@ import {
 
 const CI = Boolean(process.env.CI)
 const desktopRequire = createRequire(new URL('../../desktop/package.json', import.meta.url))
+const BUILT_REACT_CLIENT_PATH = fileURLToPath(new URL('../dist/client/open-cowork-cloud-react.js', import.meta.url))
 const FONT_ASSET_SPECS = {
   'mona-sans-latin-wght-normal.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2',
   'mona-sans-latin-wght-italic.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-italic.woff2',
@@ -43,6 +46,10 @@ function readCloudWebFontAsset(pathname: string) {
   const fileName = pathname.split('/').pop() || ''
   const spec = FONT_ASSET_SPECS[fileName as keyof typeof FONT_ASSET_SPECS]
   return spec ? readFileSync(desktopRequire.resolve(spec)) : null
+}
+
+function readBuiltReactClientAsset() {
+  return pathExists(BUILT_REACT_CLIENT_PATH) ? readFileSync(BUILT_REACT_CLIENT_PATH, 'utf8') : null
 }
 
 async function loadChromium() {
@@ -325,12 +332,14 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     }, 'real-browser-test-nonce')
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     const pageUrl = 'https://cloud.example.test/'
+    const builtReactClient = readBuiltReactClientAsset()
     await page.route(pageUrl, (route: any) => route.fulfill({
       status: 200,
       contentType: 'text/html; charset=utf-8',
       body: html,
     }))
     const fontRequests: string[] = []
+    const reactClientRequests: string[] = []
     await page.route('https://cloud.example.test/assets/fonts/*.woff2', (route: any) => {
       const pathname = new URL(route.request().url()).pathname
       fontRequests.push(pathname)
@@ -338,6 +347,14 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
       return route.fulfill(body
         ? { status: 200, contentType: 'font/woff2', body }
         : { status: 404, contentType: 'text/plain; charset=utf-8', body: 'Not found' })
+    })
+    await page.route('https://cloud.example.test/assets/open-cowork-cloud-react.js', (route: any) => {
+      reactClientRequests.push(new URL(route.request().url()).pathname)
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/javascript; charset=utf-8',
+        body: builtReactClient || 'document.getElementById("open-cowork-cloud-react-root")?.setAttribute("data-react-status", "test-hydrated");',
+      })
     })
     await page.addInitScript(browserMocksScript(state))
     const pageErrors: string[] = []
@@ -350,6 +367,58 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     await page.evaluate(() => document.fonts?.ready)
     assert.ok(fontRequests.some((path) => path.endsWith('/mona-sans-latin-wght-normal.woff2')), 'Mona Sans font route was requested')
     assert.ok(fontRequests.some((path) => path.endsWith('/hubot-sans-latin-wght-normal.woff2')), 'Hubot Sans font route was requested')
+    assert.deepEqual(reactClientRequests, ['/assets/open-cowork-cloud-react.js'])
+    if (builtReactClient) {
+      try {
+        await page.waitForFunction(() => document.getElementById('open-cowork-cloud-react-root')?.dataset.reactStatus === 'hydrated', undefined, { timeout: 10_000 })
+      } catch (error) {
+        const debug = await page.evaluate(() => ({
+          rootStatus: document.getElementById('open-cowork-cloud-react-root')?.dataset.reactStatus || null,
+          hasShell: Boolean(document.querySelector('[data-cloud-react-shell]')),
+          shellAttr: document.querySelector('[data-cloud-react-shell]')?.getAttribute('data-cloud-react-shell') || null,
+          scripts: Array.from(document.scripts).map((script) => ({ src: script.src, type: script.type, nonce: script.nonce ? 'present' : 'missing' })),
+          requests: (window as any).__cloudWebRequests || [],
+        }))
+        throw new Error(`Built React client did not mount: ${JSON.stringify({ pageErrors, debug })}`, {
+          cause: error,
+        })
+      }
+    }
+    assert.equal(await page.locator('#open-cowork-cloud-react-root').getAttribute('data-react-status'), builtReactClient ? 'hydrated' : 'test-hydrated')
+    if (builtReactClient) {
+      await page.waitForSelector('body[data-react-workbench="active"]', { timeout: 10_000 })
+      await page.waitForSelector('body[data-react-shell="active"]', { timeout: 10_000 })
+      await page.waitForSelector('body[data-react-workbench-surfaces="active"]', { timeout: 10_000 })
+      await page.waitForSelector('body[data-react-admin-surfaces="active"]', { timeout: 10_000 })
+      await page.locator('#cloud-theme-preset').selectOption('frappe')
+      try {
+        await page.waitForFunction((accent: string) => (
+          document.documentElement.dataset.uiTheme === 'frappe'
+          && document.documentElement.style.getPropertyValue('--color-accent') === accent
+        ), UI_THEME_PRESETS.frappe.dark.accent)
+      } catch (error) {
+        const debug = await page.evaluate(() => {
+          const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement | null
+          return {
+            theme: document.documentElement.dataset.uiTheme || null,
+            accent: document.documentElement.style.getPropertyValue('--color-accent') || null,
+            selectValue: select?.value || null,
+            selectDisabled: select?.disabled || false,
+            selectLocked: select?.dataset.tenantBrandingLocked || null,
+            storedTheme: localStorage.getItem('open-cowork-cloud-ui-theme'),
+          }
+        })
+        throw new Error(`Cloud Web real browser smoke did not apply selected theme: ${JSON.stringify(debug)}`, {
+          cause: error,
+        })
+      }
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.uiTheme), 'frappe')
+      assert.equal(
+        await page.evaluate(() => document.documentElement.style.getPropertyValue('--color-accent')),
+        UI_THEME_PRESETS.frappe.dark.accent,
+      )
+    }
+    assert.equal(await page.locator('[data-cloud-react-shell]').getAttribute('data-cloud-react-shell'), 'ssr')
     try {
       await page.waitForSelector('body[data-auth="signed-in"]', { timeout: 10_000 })
     } catch (error) {
@@ -364,10 +433,33 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
       })
     }
     await page.waitForFunction(() => document.querySelectorAll('#thread-list [role="row"]').length > 0)
-    assert.equal(await page.locator('[data-route-panel="threads"]').getAttribute('aria-hidden'), 'false')
-    assert.match(await page.locator('#chat-timeline').textContent() || '', /Workspace summary for Cloud thread 1/)
+    assert.equal(await page.locator('[data-route-panel="chat"]').getAttribute('aria-hidden'), 'false')
+    assert.equal(await page.locator('[data-route-panel="threads"]').getAttribute('aria-hidden'), 'true')
+    assert.equal(await page.locator('body').getAttribute('data-chat-state'), 'empty')
+    assert.match(await page.locator('#chat-session-title').textContent() || '', /What shall we cowork on today/)
+    assert.equal(await page.locator('#chat-inspector').isHidden(), true)
+    await page.locator('#sidebar-thread-list button').first().click()
+    await page.waitForFunction(() => document.body.dataset.chatState === 'thread')
+    assert.match(await page.locator('#chat-timeline').textContent() || '', /Workspace summary for Cloud thread/)
+    await page.locator('[data-route-link="agents"]').click()
+    await page.waitForFunction(() => document.body.dataset.route === 'agents')
+    assert.match(await page.locator('#workbench-agent-list').textContent() || '', /build/)
+    await page.locator('[data-route-link="capabilities"]').click()
+    await page.waitForFunction(() => document.body.dataset.route === 'capabilities')
+    assert.match(await page.locator('#tool-list').textContent() || '', /Shell/)
+    assert.match(await page.locator('#capability-policy-note').textContent() || '', /Local stdio MCPs are Desktop-only/)
+    await page.locator('[data-route-link="workflows"]').click()
+    await page.waitForFunction(() => document.body.dataset.route === 'workflows')
+    assert.match(await page.locator('#workflow-detail').textContent() || '', /Latest run/)
+    await page.locator('[data-route-link="artifacts"]').click()
+    await page.waitForFunction(() => document.body.dataset.route === 'artifacts')
+    assert.match(await page.locator('#artifact-list').textContent() || '', /summary\.txt/)
 
     for (const route of CLOUD_WEB_ROUTES) {
+      const adminOpen = await page.locator('[data-admin-nav]').getAttribute('open')
+      if (route.surface === 'admin' && adminOpen === null) {
+        await page.locator('[data-admin-nav] summary').click()
+      }
       await page.locator(`[data-route-link="${route.id}"]`).click()
       await page.waitForFunction((routeId: string) => document.body.dataset.route === routeId, route.id)
       assert.equal(await page.locator(`[data-route-panel="${route.id}"]`).getAttribute('aria-hidden'), 'false')
@@ -376,8 +468,21 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     await page.setViewportSize({ width: 390, height: 844 })
     await page.locator('[data-route-link="diagnostics"]').click()
     await page.waitForFunction(() => document.body.dataset.route === 'diagnostics')
-    await page.getByRole('button', { name: 'Prepare bundle' }).click()
-    await page.waitForFunction(() => document.querySelector('#diagnostics-bundle')?.textContent?.includes('secrets-redacted'))
+    await page.locator('#prepare-diagnostics').click()
+    try {
+      await page.waitForFunction(() => document.querySelector('#diagnostics-bundle')?.textContent?.includes('secrets-redacted'), undefined, { timeout: 10_000 })
+    } catch (error) {
+      const debug = await page.evaluate(() => ({
+        route: document.body.dataset.route || null,
+        buttonDisabled: (document.querySelector('#prepare-diagnostics') as HTMLButtonElement | null)?.disabled ?? null,
+        bundleText: document.querySelector('#diagnostics-bundle')?.textContent || null,
+        statusText: document.querySelector('#status')?.textContent || null,
+        requests: (window as any).__cloudWebRequests || [],
+      }))
+      throw new Error(`Diagnostics bundle did not render: ${JSON.stringify({ pageErrors, debug })}`, {
+        cause: error,
+      })
+    }
 
     const mobile = await page.evaluate(() => ({
       viewportWidth: window.innerWidth,

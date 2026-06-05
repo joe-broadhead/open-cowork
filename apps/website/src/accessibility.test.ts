@@ -60,6 +60,10 @@ test('cloud web static shell has labelled controls, landmarks, and valid interac
   assert.ok(document.querySelector('main.main'), 'main landmark exists')
   assert.equal(document.querySelector('nav[aria-label="Cloud Web sections"]')?.tagName, 'NAV')
   assert.equal(document.querySelector('#chat-timeline')?.getAttribute('aria-live'), 'polite')
+  assert.ok(document.querySelector('[data-workbench-pane="threads"]'), 'thread pane is labelled')
+  assert.ok(document.querySelector('[data-workbench-pane="conversation"]'), 'conversation pane is labelled')
+  assert.ok(document.querySelector('[data-workbench-pane="review"]'), 'review pane is labelled')
+  assert.equal(document.querySelector('[data-action-cluster="true"]')?.getAttribute('role'), 'toolbar')
 
   for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-route-link]')) {
     assert.ok(link.href.includes('#'), `route link has hash href: ${link.textContent}`)
@@ -73,7 +77,12 @@ test('cloud web static shell has labelled controls, landmarks, and valid interac
 
   for (const control of document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea')) {
     if (control.type === 'hidden') continue
-    const labelled = Boolean(control.closest('label')?.textContent?.trim() || control.getAttribute('aria-label') || control.getAttribute('aria-labelledby'))
+    const labelled = Boolean(
+      control.closest('label')?.textContent?.trim()
+      || (control.id && document.querySelector(`label[for="${control.id}"]`)?.textContent?.trim())
+      || control.getAttribute('aria-label')
+      || control.getAttribute('aria-labelledby'),
+    )
     assert.equal(labelled, true, `${control.tagName.toLowerCase()} ${control.name || control.id} is labelled`)
   }
 
@@ -90,7 +99,8 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
   assert.match(css, /\.nav-links a\[data-active="true"\]:focus-visible\s*\{[\s\S]*box-shadow: var\(--ring-selected\), var\(--ring-focus\);/)
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/)
   assert.match(css, /@media \(max-width: 920px\)/)
-  assert.match(css, /\.workbench-split\s*\{[\s\S]*grid-template-columns: minmax\(0, 1\.4fr\) minmax\(280px, 0\.6fr\)/)
+  assert.match(css, /\.workbench-split\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(320px, 360px\)/)
+  assert.match(css, /@media \(max-width: 920px\)\s*\{[\s\S]*\.ui-workbench-layout,\s*\.ui-workbench-layout--with-review\s*\{[\s\S]*grid-template-columns: 1fr;/)
   assert.match(css, /@media \(max-width: 920px\)\s*\{[\s\S]*\.form-grid\s*\{\s*grid-template-columns: 1fr;/)
   assert.ok(contrast('#e8e9f3', '#1b1b26') >= 4.5, 'body text contrasts with background')
   assert.ok(contrast('#8a8da0', '#23232f') >= 4.5, 'muted text contrasts with elevated surface')
@@ -101,26 +111,37 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
 test('cloud web hydrated shell manages route focus state and admin visibility for keyboard users', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
-    const threadsLink = harness.document.querySelector('[data-route-link="threads"]')
-    assert.equal(threadsLink?.getAttribute('aria-current'), 'page')
-    assert.equal(harness.document.querySelector('[data-route-panel="threads"]')?.getAttribute('aria-hidden'), 'false')
+    const chatLink = harness.document.querySelector('[data-route-link="chat"]')
+    const adminNav = harness.document.querySelector('[data-admin-nav]') as HTMLDetailsElement | null
+    assert.equal(chatLink?.getAttribute('aria-current'), 'page')
+    assert.equal(adminNav?.open, false)
+    assert.equal(harness.document.querySelector('[data-route-panel="chat"]')?.getAttribute('aria-hidden'), 'false')
 
-    harness.clickText('[data-route-link]', 'Chat')
+    harness.clickText('[data-route-link]', 'History')
     await waitFor(() => {
-      assert.equal(harness.document.body.dataset.route, 'chat')
-      assert.equal(harness.document.querySelector('[data-route-link="chat"]')?.getAttribute('aria-current'), 'page')
-      assert.equal(harness.document.querySelector('[data-route-panel="threads"]')?.getAttribute('aria-hidden'), 'true')
+      assert.equal(harness.document.body.dataset.route, 'threads')
+      assert.equal(harness.document.querySelector('[data-route-link="threads"]')?.getAttribute('aria-current'), 'page')
+      assert.equal(harness.document.querySelector('[data-route-panel="chat"]')?.getAttribute('aria-hidden'), 'true')
     })
 
-    harness.clickText('button', 'New thread')
+    harness.clickText('button', 'New chat')
     await waitFor(() => {
-      const active = harness.document.activeElement as HTMLInputElement | null
-      assert.equal(active?.name, 'profileName')
+      assert.equal(harness.document.body.dataset.route, 'chat')
+      const active = harness.document.activeElement as HTMLTextAreaElement | null
+      assert.equal(active?.name, 'text')
+      assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
+    })
+
+    harness.clickText('[data-route-link]', 'Connections')
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.route, 'connections')
+      assert.equal(adminNav?.open, true)
+      assert.equal(harness.document.querySelector('[data-route-link="connections"]')?.getAttribute('aria-current'), 'page')
     })
 
     const selectedThread = harness.document.querySelector('#thread-list .row-link') as HTMLButtonElement | null
     assert.ok(selectedThread)
-    assert.equal(selectedThread.getAttribute('aria-pressed'), 'true')
+    assert.equal(selectedThread.getAttribute('aria-pressed'), 'false')
     assert.equal(harness.document.querySelector('button[role="row"]'), null)
   } finally {
     harness.close()

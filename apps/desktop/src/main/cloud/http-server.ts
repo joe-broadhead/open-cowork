@@ -42,7 +42,7 @@ import type { CloudRuntimePolicy } from './cloud-config.ts'
 import type { CloudObservabilityAdapter } from './observability.ts'
 import type { CloudReadinessReport } from './readiness.ts'
 import { CloudSseReplayHub, CloudSseStreamRegistry } from './sse-replay.ts'
-import { CLOUD_WEB_FONT_ASSET_PREFIX, CLOUD_WEB_FONT_CACHE_CONTROL, getCloudWebFontAsset } from './web-font-assets.ts'
+import { resolveCloudWebStaticAsset } from './web-static-assets.ts'
 import type {
   ApiTokenScope,
   ChannelProviderId,
@@ -51,7 +51,7 @@ import type {
   SessionCommandRecord,
   WorkspaceEventRecord,
 } from './control-plane-store.ts'
-import { recordCloudHttpRequest, recordCloudMetric } from './observability.ts'
+import { recordCloudHttpRequest, recordCloudLog, recordCloudMetric } from './observability.ts'
 import type { CloudCookieSession, CloudSessionCookieManager } from './session-cookie-auth.ts'
 import {
   InMemoryWorkflowWebhookSecurityStore,
@@ -242,11 +242,11 @@ function writeHtml(res: ServerResponse, status: number, body: string, origin?: s
   res.end(body)
 }
 
-function writeFont(res: ServerResponse, body: Buffer, origin?: string | null) {
+function writeBinary(res: ServerResponse, body: Buffer, contentType: string, cacheControl: string, origin?: string | null) {
   writeCorsHeaders(res, origin)
   res.writeHead(200, {
-    'content-type': 'font/woff2',
-    'cache-control': CLOUD_WEB_FONT_CACHE_CONTROL,
+    'content-type': contentType,
+    'cache-control': cacheControl,
     'content-length': String(body.byteLength),
   })
   res.end(body)
@@ -1870,14 +1870,16 @@ export class CloudHttpServer {
         return
       }
 
-      if (url.pathname.startsWith(CLOUD_WEB_FONT_ASSET_PREFIX) && req.method === 'GET') {
-        const font = getCloudWebFontAsset(url.pathname)
-        if (!font) {
-          writeError(res, 404, 'Cloud Web font asset was not found.', requestOptions.corsOrigin)
+      if (req.method === 'GET') {
+        const asset = resolveCloudWebStaticAsset(url.pathname)
+        if (asset?.status === 'ok') {
+          writeBinary(res, asset.body, asset.contentType, asset.cacheControl, requestOptions.corsOrigin)
           return
         }
-        writeFont(res, font, requestOptions.corsOrigin)
-        return
+        if (asset) {
+          writeError(res, 404, asset.message, requestOptions.corsOrigin)
+          return
+        }
       }
 
       if (url.pathname === '/livez' || url.pathname === '/healthz') {
@@ -1973,6 +1975,20 @@ export class CloudHttpServer {
         })
         return
       }
+      await recordCloudLog(this.options.observability, {
+        level: 'error',
+        name: 'cloud.http.unexpected_error',
+        message: error instanceof Error ? error.message : String(error),
+        attributes: {
+          request_id: requestId,
+          'http.request.method': req.method || 'GET',
+          'url.path': url.pathname,
+          'cloud.role': this.options.policy.role,
+          'cloud.profile': this.options.policy.profileName,
+          error_name: error instanceof Error ? error.name : typeof error,
+          error_message: error instanceof Error ? error.message : String(error),
+        },
+      })
       writeError(res, 500, 'Internal server error.', requestOptions.corsOrigin)
     }
   }

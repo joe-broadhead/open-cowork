@@ -71,6 +71,7 @@ describe('DiffViewer', () => {
     render(<DiffViewer sessionId="session-1" messageId="message-1" onClose={onClose} />)
 
     expect(screen.getByRole('dialog', { name: 'Changes from this message' })).toBeInTheDocument()
+    expect(document.querySelector('[data-diff-view="true"]')).toBeInTheDocument()
     expect(screen.getByText('Loading changes...')).toBeInTheDocument()
 
     await screen.findByText('2 file(s) changed')

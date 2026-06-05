@@ -8,6 +8,17 @@ export function cloudWebsiteComponentStyles() {
       color: var(--accent-strong);
       text-decoration: underline;
     }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     button {
       min-height: var(--control-h-md);
       border: var(--border-width-1) solid var(--color-border);
@@ -34,7 +45,7 @@ export function cloudWebsiteComponentStyles() {
     }
     button:hover:not(:disabled) {
       background: var(--color-surface-hover);
-      border-color: var(--color-border);
+      border-color: var(--color-border-strong);
     }
     button:active:not(:disabled) {
       transform: translateY(var(--border-width-1));
@@ -123,16 +134,19 @@ export function cloudWebsiteComponentStyles() {
       min-width: 0;
       display: grid;
       gap: var(--space-3);
-      border: var(--border-width-1) solid var(--color-border-subtle);
+      border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-lg);
-      background: color-mix(in srgb, var(--color-elevated) 78%, transparent);
+      background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       color: var(--text);
       padding: var(--space-4);
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadow), var(--surface-highlight);
     }
     .panel h3 {
       margin: 0;
+      font-family: var(--font-display);
       font-size: var(--text-md);
+      font-weight: 650;
+      letter-spacing: var(--tracking-tight);
       line-height: var(--lh-md);
     }
     .parity-grid,
@@ -148,10 +162,50 @@ export function cloudWebsiteComponentStyles() {
       min-width: 0;
       display: grid;
       gap: var(--space-2);
-      border: var(--border-width-1) solid var(--color-border-subtle);
+      border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-sm);
       background: color-mix(in srgb, var(--color-surface) 76%, transparent);
       padding: var(--space-3);
+    }
+    .agent-card,
+    .capability-card {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-3);
+      align-items: start;
+      border: var(--border-width-1) solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+      padding: var(--space-3);
+      box-shadow: var(--shadow-card), var(--surface-highlight);
+    }
+    .capability-card {
+      grid-template-columns: 1fr;
+    }
+    .surface-card-main {
+      display: grid;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .surface-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .surface-card-header strong {
+      overflow: hidden;
+      color: var(--text);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .surface-card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: var(--space-2);
     }
     .parity-card[data-parity-availability="intentionally-unavailable"],
     .parity-card[data-parity-availability="desktop-only"] {
@@ -211,17 +265,18 @@ export function cloudWebsiteComponentStyles() {
     }
     .table-shell {
       display: grid;
-      border: var(--border-width-1) solid var(--color-border-subtle);
-      border-radius: var(--radius-sm);
+      border: var(--border-width-1) solid var(--color-border);
+      border-radius: var(--radius-lg);
       overflow: hidden;
-      background: color-mix(in srgb, var(--color-elevated) 74%, transparent);
+      background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+      box-shadow: var(--shadow-card), var(--surface-highlight);
       min-width: 0;
     }
-    .table-row {
-      display: grid;
-      grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(120px, 0.7fr);
-      gap: var(--space-3);
-      min-height: 44px;
+        .table-row {
+          display: grid;
+          grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(120px, 0.7fr);
+          gap: var(--space-3);
+          min-height: calc(var(--control-h-sm) + var(--space-2));
       align-items: center;
       padding: 0 var(--space-3);
       border-top: var(--border-width-1) solid var(--color-border-subtle);
@@ -232,21 +287,29 @@ export function cloudWebsiteComponentStyles() {
       border-top: 0;
     }
     .table-head {
-      min-height: 36px;
+      min-height: var(--control-h-md);
       background: var(--color-surface-hover);
       color: var(--muted);
       font-size: var(--text-xs);
       font-weight: 750;
       line-height: var(--lh-xs);
     }
-    .table-row > [role="cell"] {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .thread-row {
-      width: 100%;
-      text-align: left;
+        .table-row > [role="cell"] {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .thread-list-panel .table-shell {
+          border-radius: var(--radius-lg);
+          background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
+        }
+        .thread-list-panel .table-row {
+          grid-template-columns: minmax(0, 1fr) auto;
+          min-width: 0;
+        }
+        .thread-row {
+          width: 100%;
+          text-align: left;
       border-left: 0;
       border-right: 0;
       border-bottom: 0;
@@ -257,10 +320,18 @@ export function cloudWebsiteComponentStyles() {
     .thread-row:hover:not(:disabled) {
       background: var(--color-surface-hover);
     }
-    .thread-row[data-selected="true"] {
-      background: var(--color-surface-active);
-      box-shadow: inset 3px 0 0 var(--accent);
-    }
+        .thread-row[data-selected="true"] {
+          background: var(--color-surface-active);
+          box-shadow: inset 3px 0 0 var(--accent);
+        }
+        .thread-row-meta {
+          display: block;
+          margin-top: 1px;
+          overflow: hidden;
+          color: var(--muted);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
     .row-link {
       min-height: 0;
       width: 100%;
@@ -286,8 +357,8 @@ export function cloudWebsiteComponentStyles() {
       color: var(--muted);
     }
     .row {
-      min-height: 52px;
-      border: var(--border-width-1) solid var(--color-border-subtle);
+      min-height: calc(var(--control-h-md) + var(--space-3));
+      border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-sm);
       padding: var(--space-2) var(--space-3);
       display: grid;
@@ -298,7 +369,7 @@ export function cloudWebsiteComponentStyles() {
       min-width: 0;
     }
     .row.compact {
-      min-height: 44px;
+      min-height: calc(var(--control-h-sm) + var(--space-2));
     }
     .row-actions {
       display: flex;
@@ -366,6 +437,9 @@ export function cloudWebsiteComponentStyles() {
       .table-row {
         min-width: 620px;
       }
+      .thread-list-panel .table-row {
+        min-width: 0;
+      }
       .form-grid {
         grid-template-columns: 1fr;
       }
@@ -376,7 +450,14 @@ export function cloudWebsiteComponentStyles() {
       .row {
         grid-template-columns: 1fr;
       }
+      .agent-card,
+      .capability-card {
+        grid-template-columns: 1fr;
+      }
       .row-actions {
+        justify-content: flex-start;
+      }
+      .surface-card-actions {
         justify-content: flex-start;
       }
     }`

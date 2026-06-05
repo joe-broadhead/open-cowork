@@ -7,6 +7,8 @@ import {
   Button,
   Card,
   Dialog,
+  ActionCluster,
+  DiffView,
   EmptyState,
   Icon,
   IconButton,
@@ -18,6 +20,7 @@ import {
   Skeleton,
   Textarea,
   Tooltip,
+  WorkbenchLayout,
 } from '.'
 import { PrimitiveGallery } from './PrimitiveGallery'
 
@@ -308,6 +311,40 @@ describe('Card, Badge, Tooltip, Kbd, EmptyState, Skeleton', () => {
     expect(screen.getByText('Nothing here')).toBeInTheDocument()
     expect(screen.getByTestId('skeleton')).toHaveAttribute('aria-hidden', 'true')
     vi.useRealTimers()
+  })
+})
+
+describe('Workbench IA primitives', () => {
+  it('renders the shared layout, action cluster, and diff review surface', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn()
+    const { container } = render(
+      <WorkbenchLayout
+        leftLabel="Threads"
+        mainLabel="Conversation"
+        reviewLabel="Review"
+        leftPane={<div>Thread list</div>}
+        mainPane={<div>Active conversation</div>}
+        reviewPane={(
+          <DiffView
+            title="Review"
+            subtitle="1 file changed"
+            files={[{ id: 'file-1', path: 'src/app.ts', status: 'modified', additions: 3, deletions: 1 }]}
+          />
+        )}
+        actionCluster={<ActionCluster label="Thread actions" items={[{ id: 'review', label: 'Review', icon: 'file-diff', onAction: onReview }]} />}
+      />,
+    )
+
+    expect(container.querySelector('[data-workbench-layout="true"]')).toBeInTheDocument()
+    expect(container.querySelector('[data-workbench-pane="threads"]')).toHaveTextContent('Thread list')
+    expect(container.querySelector('[data-workbench-pane="conversation"]')).toHaveTextContent('Active conversation')
+    expect(container.querySelector('[data-workbench-pane="review"]')).toHaveTextContent('src/app.ts')
+    expect(screen.getByRole('toolbar', { name: 'Thread actions' })).toBeInTheDocument()
+    expect(container.querySelector('[data-diff-view="true"]')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Review' }))
+    expect(onReview).toHaveBeenCalledTimes(1)
   })
 })
 

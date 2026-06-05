@@ -1,7 +1,29 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { CLOUD_WEB_AUTH_REQUIRED_EVENT } from './app-api.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { createCloudWebBrowserHarness, waitFor } from './browser-test-harness.ts'
+
+async function selectFirstCloudThread(harness: { document: Document }) {
+  await waitFor(() => assert.ok(harness.document.querySelector('#sidebar-thread-list button')))
+  ;(harness.document.querySelector('#sidebar-thread-list button') as HTMLButtonElement).click()
+  await waitFor(() => assert.equal(harness.document.body.dataset.chatState, 'thread'))
+}
+
+async function readBrowserBlobText(harness: { window: { FileReader: typeof FileReader } }, blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new harness.window.FileReader()
+    reader.addEventListener('load', () => resolve(String(reader.result || '')))
+    reader.addEventListener('error', () => reject(reader.error || new Error('download blob could not be read')))
+    reader.readAsText(blob)
+  })
+}
+
+function assertStreamAfterSequence(url: string, minimumSequence: number) {
+  const after = new URL(url, 'https://cloud.example.test').searchParams.get('after')
+  assert.ok(after)
+  assert.ok(Number(after) >= minimumSequence, `expected stream cursor ${after} to be >= ${minimumSequence}`)
+}
 
 test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
   const harness = await createCloudWebBrowserHarness({ signedOut: true }).start()
@@ -33,11 +55,69 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
   }
 })
 
+test('cloud web browser disables member invite controls outside invite signup mode', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', signupMode: 'disabled' }).start()
+  try {
+    await waitFor(() => assert.match(harness.document.querySelector('#member-invite-notice')?.textContent || '', /only when signup mode is invite/))
+    const email = harness.document.querySelector('#member-invite-form input[name="email"]') as HTMLInputElement
+    const role = harness.document.querySelector('#member-invite-form select[name="role"]') as HTMLSelectElement
+    const submit = harness.document.querySelector('#member-invite-form button[type="submit"]') as HTMLButtonElement
+    assert.equal(email.disabled, true)
+    assert.equal(role.disabled, true)
+    assert.equal(submit.disabled, true)
+    assert.match(submit.title, /signup mode is invite/)
+    const makeAdmin = [...harness.document.querySelectorAll('#member-list button')]
+      .find((button) => button.textContent === 'Make admin') as HTMLButtonElement
+    assert.equal(makeAdmin.disabled, true)
+    assert.match(makeAdmin.title, /signup mode is invite/)
+
+    email.value = 'teammate@example.test'
+    harness.submit('#member-invite-form')
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members'), undefined)
+    assert.match(harness.document.querySelector('#status')?.textContent || '', /signup mode is invite/)
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser keeps disabled member role controls locked', async () => {
+  const harness = createCloudWebBrowserHarness({ role: 'admin', memberCount: 6 })
+  harness.state.members = harness.state.members.map((member: Record<string, unknown>) => {
+    if (member.accountId === 'acct-2') return { ...member, role: 'member', status: 'disabled' }
+    if (member.accountId === 'acct-6') return { ...member, role: 'admin', status: 'disabled' }
+    return member
+  })
+  await harness.start()
+  try {
+    const rows = [...harness.document.querySelectorAll('#member-list .member-row')]
+    const disabledMemberRow = rows.find((row) => row.textContent?.includes('member@example.test'))
+    const disabledAdminRow = rows.find((row) => row.textContent?.includes('member-6@example.test'))
+    assert.ok(disabledMemberRow)
+    assert.ok(disabledAdminRow)
+
+    const buttonIn = (row: Element, label: string) => [...row.querySelectorAll('button')]
+      .find((button) => button.textContent === label) as HTMLButtonElement
+    const makeAdmin = buttonIn(disabledMemberRow, 'Make admin')
+    const makeMember = buttonIn(disabledAdminRow, 'Make member')
+    assert.equal(makeAdmin.disabled, true)
+    assert.equal(makeMember.disabled, true)
+
+    makeAdmin.click()
+    makeMember.click()
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members/acct-2/update'), undefined)
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members/acct-6/update'), undefined)
+  } finally {
+    harness.close()
+  }
+})
+
 test('cloud web browser exercises every route declared in the route API matrix', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
     assert.ok(Array.isArray(harness.bootstrap.adminSurfaces))
+    const adminNav = harness.document.querySelector('[data-admin-nav]') as HTMLDetailsElement | null
+    assert.equal(adminNav?.open, false)
 
     for (const entry of CLOUD_WEB_ROUTE_API_MATRIX) {
       const link = harness.document.querySelector(`[data-route-link="${entry.routeId}"]`) as HTMLElement | null
@@ -51,6 +131,7 @@ test('cloud web browser exercises every route declared in the route API matrix',
         assert.equal(harness.document.body.dataset.route, entry.routeId)
         assert.equal(panel.getAttribute('aria-hidden'), 'false')
       })
+      assert.equal(adminNav?.open, entry.surface === 'admin')
       if (entry.surface === 'admin') {
         const surface = panel.querySelector(`[data-admin-surface-route="${entry.routeId}"]`)
         assert.ok(surface, `${entry.routeId} renders an admin surface contract card`)
@@ -81,17 +162,83 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'chat'))
     assert.match(harness.document.querySelector('[data-parity-route="chat"]')?.textContent || '', /Runtime Status/)
     assert.match(harness.document.querySelector('[data-parity-route="chat"]')?.textContent || '', /Approvals & Questions/)
+    assert.equal(harness.document.body.dataset.chatState, 'empty')
+    assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
+    assert.equal((harness.document.querySelector('#chat-inspector') as HTMLElement).hidden, true)
+    await selectFirstCloudThread(harness)
+    const workbench = harness.document.querySelector('.cloud-chat-workbench') as HTMLElement
+    assert.ok(harness.document.querySelector('[data-workbench-pane="threads"]'))
+    assert.ok(harness.document.querySelector('[data-workbench-layout="true"]'))
+    assert.ok(harness.document.querySelector('[data-workbench-pane="conversation"]'))
+    assert.ok(harness.document.querySelector('[data-workbench-pane="review"]'))
+    assert.equal(workbench.dataset.reviewOpen, 'false')
+    assert.equal(workbench.classList.contains('ui-workbench-layout--with-review'), false)
+    assert.ok(harness.document.querySelector('[data-action-cluster="true"]'))
+    assert.ok(harness.document.querySelector('#chat-inspector-detail [data-diff-view="true"], #chat-inspector-detail[data-diff-view="true"]'))
     assert.match(harness.document.querySelector('.message-bubble[data-role="system"]')?.textContent || '', /Cloud policy loaded/)
     assert.match(harness.document.querySelector('.message-bubble[data-role="error"]')?.textContent || '', /Provider warning/)
+
+    const inspector = harness.document.querySelector('#chat-inspector') as HTMLElement
+    const inspectorToggle = harness.document.querySelector('#chat-inspector-toggle') as HTMLButtonElement
+    inspectorToggle.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    await waitFor(() => {
+      assert.equal(inspector.hidden, false)
+      assert.equal(workbench.dataset.reviewOpen, 'true')
+      assert.equal(workbench.classList.contains('ui-workbench-layout--with-review'), true)
+      assert.equal(inspectorToggle.getAttribute('aria-expanded'), 'true')
+    })
+    ;(harness.document.querySelector('#chat-inspector-close') as HTMLButtonElement)
+      .dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    await waitFor(() => {
+      assert.equal(inspector.hidden, true)
+      assert.equal(workbench.dataset.reviewOpen, 'false')
+      assert.equal(workbench.classList.contains('ui-workbench-layout--with-review'), false)
+      assert.equal(inspectorToggle.getAttribute('aria-expanded'), 'false')
+    })
+
+    harness.clickText('[data-route-link]', 'Agents')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'agents'))
+    assert.ok(harness.document.querySelector('#workbench-agent-list .agent-card'))
+    assert.equal(harness.document.querySelector('#workbench-agent-list > .row'), null)
 
     harness.clickText('[data-route-link]', 'Tools & Skills')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'capabilities'))
     assert.match(harness.document.querySelector('[data-parity-route="capabilities"]')?.textContent || '', /Local Stdio MCPs/)
+    assert.ok(harness.document.querySelector('#tool-list .capability-card'))
+    assert.ok(harness.document.querySelector('#skill-list .capability-card'))
+    assert.equal(harness.document.querySelector('#tool-list > .row'), null)
     assert.match(harness.document.querySelector('#capability-policy-note')?.textContent || '', /Local stdio MCPs are Desktop-only/)
 
     harness.clickText('[data-route-link]', 'Workflows')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'workflows'))
     assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Latest run/)
+    const workflowForm = harness.document.querySelector('#workflow-form') as HTMLFormElement
+    ;(workflowForm.elements.namedItem('title') as HTMLInputElement).value = 'Daily triage'
+    ;(workflowForm.elements.namedItem('agentName') as HTMLInputElement).value = 'data-analyst'
+    ;(workflowForm.elements.namedItem('triggerType') as HTMLSelectElement).value = 'schedule'
+    ;(workflowForm.elements.namedItem('toolIds') as HTMLInputElement).value = 'shell'
+    ;(workflowForm.elements.namedItem('skillNames') as HTMLInputElement).value = 'analysis'
+    ;(workflowForm.elements.namedItem('instructions') as HTMLTextAreaElement).value = 'Summarize the day.'
+    harness.submit('#workflow-form')
+    const isWorkflowCreateRequest = (request: { method: string, path: string }) => (
+      request.method === 'POST' && request.path.startsWith('/api/workflows')
+    )
+    await waitFor(() => assert.ok(harness.lastRequest(isWorkflowCreateRequest)))
+    const createdWorkflowRequest = harness.lastRequest(isWorkflowCreateRequest)
+    const createdWorkflowBody = createdWorkflowRequest?.body as Record<string, unknown>
+    assert.equal(createdWorkflowBody.triggerType, undefined)
+    assert.deepEqual(createdWorkflowBody.triggers, [{
+      id: 'schedule-web',
+      type: 'schedule',
+      enabled: true,
+      schedule: {
+        type: 'daily',
+        timezone: 'UTC',
+        runAtHour: 9,
+        runAtMinute: 0,
+      },
+    }])
+    await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Workflow created/))
   } finally {
     harness.close()
   }
@@ -103,12 +250,32 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
   try {
     const startThread = locked.document.querySelector('#workbench-agent-list button.primary') as HTMLButtonElement
     assert.equal(startThread.disabled, true)
-    assert.match(startThread.title, /Start thread disables/)
+    assert.match(startThread.title, /Start chat disables/)
     const runNow = locked.document.querySelector('#workflow-detail button.primary') as HTMLButtonElement
     assert.equal(runNow.disabled, true)
     assert.match(runNow.title, /Workflow controls disable/)
+    const workflowSubmit = locked.document.querySelector('#workflow-form button[type="submit"]') as HTMLButtonElement
+    assert.equal(workflowSubmit.disabled, true)
+    assert.match(workflowSubmit.title, /Workflow controls are disabled/)
+    locked.submit('#workflow-form')
+    assert.equal(locked.lastRequest((request) => request.method === 'POST' && request.path === '/api/workflows'), undefined)
+    assert.match(locked.document.querySelector('#status')?.textContent || '', /Workflow controls are disabled/)
   } finally {
     locked.close()
+  }
+})
+
+test('cloud web browser clears signed-in UI when AppAPI reports auth required after hydration', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    harness.window.dispatchEvent(new harness.window.CustomEvent(CLOUD_WEB_AUTH_REQUIRED_EVENT))
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.auth, 'signed-out')
+      assert.equal(harness.document.body.dataset.route, 'org')
+    })
+    assert.match(harness.document.querySelector('#status')?.textContent || '', /Sign in required/)
+  } finally {
+    harness.close()
   }
 })
 
@@ -116,28 +283,42 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
     await waitFor(() => assert.match(harness.document.querySelector('#thread-list')?.textContent || '', /Cloud thread 1/))
-    assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Workspace summary for Cloud thread 1/)
-    assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Approval/)
-    assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Question/)
+    assert.equal(harness.document.body.dataset.chatState, 'empty')
+    assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
+    assert.equal((harness.document.querySelector('#chat-timeline') as HTMLElement).hidden, true)
+    assert.equal((harness.document.querySelector('#chat-inspector') as HTMLElement).hidden, true)
 
-    const profile = harness.document.querySelector('#session-form input[name="profileName"]') as HTMLInputElement
-    profile.value = 'default'
-    harness.submit('#session-form')
-    await waitFor(() => assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Created browser thread/))
-    assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions'))
-
+    harness.clickText('button', 'New chat')
+    await waitFor(() => {
+      assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
+      assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).disabled, false)
+    })
+    const agent = harness.document.querySelector('#composer-agent') as HTMLSelectElement
+    await waitFor(() => assert.match(agent.textContent || '', /build/))
+    await waitFor(() => assert.match(harness.document.querySelector('#composer-agent-chips')?.textContent || '', /build/))
+    harness.clickText('#composer-agent-chips button', '@build')
+    assert.equal(agent.value, 'build')
     const message = harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement
     message.value = 'Continue the work.'
     harness.submit('#prompt-form')
+    await waitFor(() => assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Created browser thread/))
+    assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions'))
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Live answer from cloud/))
-    assert.ok(harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path)))
+    const promptRequest = harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))
+    assert.ok(promptRequest)
+    assert.equal((promptRequest.body as Record<string, unknown>).agent, 'build')
 
     const sessionId = harness.sessions[0].sessionId
+    const liveStreamAfterSequence = harness.views[sessionId].projection.sequence
     harness.views[sessionId].projection.view.messages.push({ id: 'live-update', role: 'assistant', content: 'SSE live update arrived.', order: 30 })
     harness.views[sessionId].projection.sequence += 1
-    const sessionSource = harness.eventSources.find((source) => source.url.includes(`/api/sessions/${sessionId}/events`))
-    assert.ok(sessionSource)
-    sessionSource.emit('assistant.message', { type: 'assistant.message', sessionId, sequence: harness.views[sessionId].projection.sequence })
+    let sessionSource = harness.eventSources.find((source) => source.url.includes(`/api/sessions/${sessionId}/events`))
+    await waitFor(() => {
+      sessionSource = harness.eventSources.find((source) => source.url.includes(`/api/sessions/${sessionId}/events`))
+      assert.ok(sessionSource)
+    })
+    assertStreamAfterSequence(sessionSource!.url, liveStreamAfterSequence)
+    sessionSource!.emit('assistant.message', { type: 'assistant.message', sessionId, sequence: harness.views[sessionId].projection.sequence })
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /SSE live update arrived/))
 
     const reloaded = createCloudWebBrowserHarness({ role: 'admin' })
@@ -146,7 +327,13 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
       Object.assign(reloaded.views, harness.views)
       await reloaded.start()
       await waitFor(() => assert.equal(reloaded.document.body.dataset.auth, 'signed-in'))
+      await selectFirstCloudThread(reloaded)
       await waitFor(() => assert.match(reloaded.document.querySelector('#chat-timeline')?.textContent || '', /SSE live update arrived/))
+      await waitFor(() => {
+        const reloadedSource = reloaded.eventSources.find((source) => source.url.includes(`/api/sessions/${sessionId}/events`))
+        assert.ok(reloadedSource)
+        assertStreamAfterSequence(reloadedSource.url, reloaded.views[sessionId].projection.sequence)
+      })
     } finally {
       reloaded.close()
     }
@@ -212,6 +399,7 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
   }).start()
   try {
     await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    await selectFirstCloudThread(harness)
 
     assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100)
     assert.equal(harness.document.querySelectorAll('#token-list > .row').length, 100)
@@ -242,6 +430,34 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
     harness.clickText('#diagnostics button', 'Prepare bundle')
     await waitFor(() => assert.match(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /secrets-redacted/))
     assert.doesNotMatch(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /leaked-secret|signed\?token=/)
+
+    const blobs = new Map<string, Blob>()
+    const downloads: Array<{ download: string, href: string }> = []
+    Object.defineProperty(harness.window.URL, 'createObjectURL', {
+      configurable: true,
+      value: (blob: Blob) => {
+        const href = `blob:https://cloud.example.test/diagnostics-${blobs.size}`
+        blobs.set(href, blob)
+        return href
+      },
+    })
+    harness.document.addEventListener('click', (event: Event) => {
+      const link = (event.target as Element | null)?.closest?.('a') as HTMLAnchorElement | null
+      if (link?.download) downloads.push({ download: link.download, href: link.href })
+    }, true)
+    harness.clickText('#diagnostics-bundle button', 'Download bundle')
+    await waitFor(() => assert.equal(downloads.length, 1))
+    assert.equal(downloads[0]?.download, 'open-cowork-diagnostics.json')
+    const downloadedBlob = blobs.get(downloads[0]?.href || '')
+    assert.ok(downloadedBlob)
+    const downloaded = await new Promise<string>((resolve, reject) => {
+      const reader = new harness.window.FileReader()
+      reader.addEventListener('load', () => resolve(String(reader.result || '')))
+      reader.addEventListener('error', () => reject(reader.error || new Error('diagnostics download could not be read')))
+      reader.readAsText(downloadedBlob)
+    })
+    assert.match(downloaded || '', /secrets-redacted/)
+    assert.doesNotMatch(downloaded || '', /leaked-secret|signed\?token=/)
   } finally {
     harness.close()
   }
@@ -250,6 +466,7 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
 test('cloud web browser handles approvals, questions, artifacts, and workflow runs', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
+    await selectFirstCloudThread(harness)
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Run read-only tests/))
 
     harness.clickText('.runtime-card[data-kind="approval"] button', 'Allow')
@@ -266,6 +483,7 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
     await waitFor(() => {
       assert.equal(harness.document.body.dataset.route, 'artifacts')
       assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
+      assert.ok(harness.document.querySelector('#artifact-detail [data-diff-view="true"], #artifact-detail[data-diff-view="true"]'))
     })
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts(?:\?|$)/.test(request.path)))
 
@@ -324,6 +542,27 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/admin/worker-pools?limit=100'))
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/admin/workers?limit=100'))
 
+    const downloads: Blob[] = []
+    Object.defineProperty(harness.window.URL, 'createObjectURL', {
+      configurable: true,
+      value: (blob: Blob) => {
+        downloads.push(blob)
+        return `blob:https://cloud.example.test/export-${downloads.length}`
+      },
+    })
+    harness.clickText('#export-audit', 'Export')
+    harness.clickText('#export-usage', 'Export usage')
+    await waitFor(() => assert.equal(downloads.length, 2))
+    const auditExportText = await readBrowserBlobText(harness, downloads[0])
+    const usageExportText = await readBrowserBlobText(harness, downloads[1])
+    const auditExport = JSON.parse(auditExportText) as { events?: unknown[] }
+    const usageExport = JSON.parse(usageExportText) as { summary?: unknown, events?: unknown[] }
+    assert.equal(auditExport.events?.length, 1)
+    assert.equal(usageExport.events?.length, 1)
+    assert.ok(usageExport.summary)
+    assert.doesNotMatch(auditExportText, /leaked-secret|signed\?token=/)
+    assert.doesNotMatch(usageExportText, /leaked-secret/)
+
     harness.clickText('#diagnostics button', 'Prepare bundle')
     await waitFor(() => assert.match(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /secrets-redacted/))
     assert.doesNotMatch(harness.document.querySelector('#diagnostics-bundle')?.textContent || '', /sk-test-secret|occ_created_token/)
@@ -343,12 +582,27 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     policyBlocked.close()
   }
 
+  const billingDisabled = await createCloudWebBrowserHarness({ role: 'admin', billingEnabled: false }).start()
+  try {
+    await waitFor(() => assert.match(billingDisabled.document.querySelector('#billing-summary')?.textContent || '', /billing disabled/))
+    assert.equal((billingDisabled.document.querySelector('#billing-plan-select') as HTMLSelectElement).disabled, true)
+    assert.equal((billingDisabled.document.querySelector('#billing-form button[type="submit"]') as HTMLButtonElement).disabled, true)
+    assert.equal((billingDisabled.document.querySelector('#billing-portal') as HTMLButtonElement).disabled, true)
+    const billingRequestCount = billingDisabled.requests.filter((request) => request.method === 'POST' && request.path.startsWith('/api/billing/')).length
+    billingDisabled.submit('#billing-form')
+    billingDisabled.clickText('#billing-portal', 'Open portal')
+    await waitFor(() => assert.match(billingDisabled.document.querySelector('#status')?.textContent || '', /Billing is not available/))
+    assert.equal(billingDisabled.requests.filter((request) => request.method === 'POST' && request.path.startsWith('/api/billing/')).length, billingRequestCount)
+  } finally {
+    billingDisabled.close()
+  }
+
   const billingBlocked = await createCloudWebBrowserHarness({
     role: 'admin',
     promptFailure: { status: 402, error: 'Billing subscription inactive.' },
   }).start()
   try {
-    await waitFor(() => assert.match(billingBlocked.document.querySelector('#chat-session-title')?.textContent || '', /Cloud thread 1/))
+    await waitFor(() => assert.match(billingBlocked.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/))
     ;(billingBlocked.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value = 'Run more work.'
     billingBlocked.submit('#prompt-form')
     await waitFor(() => assert.match(billingBlocked.document.querySelector('#status')?.textContent || '', /Billing subscription inactive/))
@@ -361,7 +615,7 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     promptFailure: { status: 429, error: 'Quota exceeded.' },
   }).start()
   try {
-    await waitFor(() => assert.match(quotaBlocked.document.querySelector('#chat-session-title')?.textContent || '', /Cloud thread 1/))
+    await waitFor(() => assert.match(quotaBlocked.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/))
     ;(quotaBlocked.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value = 'Run more work.'
     quotaBlocked.submit('#prompt-form')
     await waitFor(() => assert.match(quotaBlocked.document.querySelector('#status')?.textContent || '', /Quota exceeded/))

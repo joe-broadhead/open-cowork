@@ -27,7 +27,13 @@
       "@open-cowork/gateway-testing": ["./packages/gateway-testing/src/index.ts"],
       "@open-cowork/gateway-testing/*": ["./packages/gateway-testing/src/*"],
       "@open-cowork/shared": ["./packages/shared/src/index.ts"],
-      "@open-cowork/shared/*": ["./packages/shared/src/*"]
+      "@open-cowork/shared/*": ["./packages/shared/src/*"],
+      "@open-cowork/ui": ["./packages/ui/src/index.ts"],
+      "@open-cowork/ui/app-api": ["./packages/ui/src/AppApiProvider.tsx"],
+      "@open-cowork/ui/badge": ["./packages/ui/src/Badge.tsx"],
+      "@open-cowork/ui/card": ["./packages/ui/src/Card.tsx"],
+      "@open-cowork/ui/primitive-gallery": ["./packages/ui/src/PrimitiveGallery.tsx"],
+      "@open-cowork/ui/*": ["./packages/ui/src/*"]
     },
     "strict": true,
     "esModuleInterop": true,

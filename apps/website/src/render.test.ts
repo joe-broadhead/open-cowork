@@ -10,7 +10,7 @@ import {
 import { CLOUD_WEB_ROUTES, CLOUD_WEB_ROUTE_GROUPS, DEFAULT_CLOUD_WEB_ROUTE, findCloudWebRoute } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientStateContract } from './client-contract.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
-import { cloudWebsiteClientScript, cloudWebsiteHtml } from './render.ts'
+import { cloudWebsiteHtml } from './render.ts'
 import { canManageOrg } from './roles.ts'
 import {
   CLOUD_WEB_THREAD_PAGE_SIZE,
@@ -35,6 +35,8 @@ import {
   cloudWebWorkbenchParityForRoute,
   cloudWebWorkbenchRouteSummary,
 } from './workbench-parity.ts'
+import { DEFAULT_WEBSITE_PUBLIC_BRANDING } from './branding.ts'
+import { cloudThemePresetOptions } from './cloud-theme.ts'
 
 const html = cloudWebsiteHtml({
   role: 'web',
@@ -75,11 +77,12 @@ function adminSurfaceDocRow(entry: (typeof CLOUD_WEB_ADMIN_SURFACE_MATRIX)[numbe
 test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Open Cowork Cloud/)
   assert.match(html, /Workbench/)
-  assert.match(html, /Threads/)
-  assert.match(html, /Chat/)
+  assert.match(html, /History/)
+  assert.match(html, /Home/)
   assert.match(html, /Tools &amp; Skills/)
   assert.match(html, /Artifacts/)
-  assert.match(html, /Admin/)
+  assert.match(html, /Admin controls/)
+  assert.match(html, /data-admin-nav/)
   assert.match(html, /Org/)
   assert.match(html, /Members/)
   assert.match(html, /BYOK/)
@@ -90,14 +93,37 @@ test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Diagnostics/)
   assert.match(html, /data-route-panel="threads"/)
   assert.match(html, /data-route-panel="byok"/)
+  assert.match(html, /What shall we cowork on today\?/)
+  assert.match(html, /class="cloud-composer chat-composer-shell"/)
+  assert.match(html, /class="composer-toolbar"/)
+  assert.match(html, /data-workbench-pane="threads"/)
+  assert.match(html, /data-workbench-layout="true"/)
+  assert.match(html, /data-workbench-pane="conversation"/)
+  assert.match(html, /data-workbench-pane="review"/)
+  assert.match(html, /data-action-cluster="true"/)
+  assert.match(html, /data-diff-view="true"/)
+  assert.match(html, /\.ui-badge\s*\{/)
+  assert.match(html, /\.ui-badge--danger\s*\{/)
+  assert.match(html, /id="chat-inspector"[\s\S]*hidden/)
+  assert.match(html, /id="composer-agent-chips"/)
   assert.match(html, /color-scheme: dark/)
   assert.match(html, /font-family: 'Mona Sans Variable'/)
   assert.match(html, /\/assets\/fonts\/mona-sans-latin-wght-normal\.woff2/)
+  assert.match(html, /id="open-cowork-cloud-react-root" data-cloud-react-root="true" data-react-status="ssr"/)
+  assert.match(html, /data-cloud-react-shell="ssr"/)
+  assert.match(html, /data-cloud-react-shell-content="ssr"/)
+  assert.match(html, /<script type="module" src="\/assets\/open-cowork-cloud-react\.js" data-cloud-react-client="vite"><\/script>/)
   assert.match(html, /--color-base: #1b1b26;/)
   assert.match(html, /--cloud-shell-sidebar-w: 248px;/)
   assert.match(html, /font-variant-numeric: tabular-nums;/)
   assert.match(html, /\.nav-links a\[data-active="true"\]/)
   assert.match(html, /box-shadow: var\(--ring-selected\);/)
+  assert.match(html, /\.admin-nav:not\(\[open\]\) \.nav-links/)
+  assert.match(html, /class="cloud-theme-switcher"/)
+  assert.doesNotMatch(html, /body\[data-surface="workbench"\] \.topbar\s*\{[\s\S]*display: none;/)
+  assert.match(html, /\.agent-card,/)
+  assert.match(html, /\.capability-card/)
+  assert.match(html, /\.agent-chip\[data-active="true"\]/)
   assert.match(html, /\.panel \{[\s\S]*border-radius: var\(--radius-lg\);/)
   assert.match(html, /\.pill\[data-kind="info"\]/)
   assert.match(html, /\.message-bubble\[data-role="user"\]/)
@@ -118,7 +144,7 @@ test('cloud website renders workbench and admin shell surfaces', () => {
 })
 
 test('cloud website app shell exposes typed route metadata', () => {
-  assert.equal(DEFAULT_CLOUD_WEB_ROUTE, 'threads')
+  assert.equal(DEFAULT_CLOUD_WEB_ROUTE, 'chat')
   assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.id), ['workbench', 'admin'])
   assert.equal(findCloudWebRoute('threads')?.surface, 'workbench')
   assert.equal(findCloudWebRoute('byok')?.requiresAdmin, true)
@@ -249,10 +275,8 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.match(html, /"api":/)
   assert.match(html, /"routeMatrix":/)
   assert.match(html, /"adminSurfaces":/)
-  assert.match(cloudWebsiteClientScript(), /endpoint\(id, fallback\)/)
-  assert.match(cloudWebsiteClientScript(), /sessionSelectionGeneration/)
-  assert.match(cloudWebsiteClientScript(), /isCurrentSessionSelection/)
-  assert.match(cloudWebsiteClientScript(), /selectionGeneration/)
+  assert.doesNotMatch(html, /<script[^>]*>[\s\S]*const bootstrap = JSON\.parse/)
+  assert.match(html, /<script type="module" src="\/assets\/open-cowork-cloud-react\.js" data-cloud-react-client="vite"><\/script>/)
   const stateContract: CloudWebClientStateContract = {
     authStatus: 'loading',
     activeRoute: DEFAULT_CLOUD_WEB_ROUTE,
@@ -343,6 +367,42 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveries')?.path, '/api/channels/deliveries?limit=50')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryRetry')?.path, '/api/channels/deliveries/:deliveryId/retry')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'channelDeliveryDeadLetter')?.path, '/api/channels/deliveries/:deliveryId/dead-letter')
+})
+
+test('cloud website exposes shared theme presets with tenant branding precedence', () => {
+  const match = html.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
+  assert.ok(match)
+  const bootstrap = JSON.parse(match[1])
+  assert.equal(bootstrap.theme.defaultPreset, 'mercury')
+  assert.equal(bootstrap.theme.tenantBrandingLocked, false)
+  assert.equal(bootstrap.theme.presets.length, 17)
+  assert.deepEqual(bootstrap.theme.presets.map((preset: { id: string }) => preset.id), cloudThemePresetOptions().map((preset) => preset.id))
+  assert.match(html, /id="cloud-theme-preset"/)
+  assert.match(html, /<option value="mercury" selected>Mercury<\/option>/)
+
+  const defaultedBranding = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: { chat: true },
+    publicBranding: DEFAULT_WEBSITE_PUBLIC_BRANDING,
+  })
+  const defaultedBrandingMatch = defaultedBranding.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
+  assert.ok(defaultedBrandingMatch)
+  assert.equal(JSON.parse(defaultedBrandingMatch[1]).theme.tenantBrandingLocked, false)
+  assert.doesNotMatch(defaultedBranding, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
+
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: { chat: true },
+  }, {
+    productName: 'Locked Brand',
+    theme: { accent: '#0f6b4b' },
+  })
+  const brandedMatch = branded.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
+  assert.ok(brandedMatch)
+  assert.equal(JSON.parse(brandedMatch[1]).theme.tenantBrandingLocked, true)
+  assert.match(branded, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {
@@ -558,59 +618,29 @@ test('cloud website serializes bootstrap JSON for raw script parsing', () => {
 })
 
 test('cloud website client avoids persistent browser secret storage', () => {
-  const script = cloudWebsiteClientScript()
-  assert.equal(script.includes('localStorage'), false)
-  assert.equal(script.includes('sessionStorage'), false)
-  assert.equal(script.includes('indexedDB'), false)
+  assert.doesNotMatch(html, /sessionStorage|indexedDB/)
+  assert.match(html, /id="open-cowork-cloud-bootstrap" type="application\/json"/)
 })
 
-test('cloud website binds actions through the client script', () => {
+test('cloud website binds actions through the React module client', () => {
   assert.equal(html.includes('onclick='), false)
-  assert.doesNotThrow(() => new Function(cloudWebsiteClientScript()))
-  assert.match(cloudWebsiteClientScript(), /signin-inline/)
-  assert.match(cloudWebsiteClientScript(), /\/api\/config/)
-  assert.match(cloudWebsiteClientScript(), /\/api\/workspace/)
-  assert.match(cloudWebsiteClientScript(), /\/api\/sessions/)
-  assert.match(cloudWebsiteClientScript(), /\/view/)
-  assert.match(cloudWebsiteClientScript(), /new EventSource/)
-  assert.match(cloudWebsiteClientScript(), /sessionEventTypes/)
-  assert.match(cloudWebsiteClientScript(), /createCloudSessionFromForm/)
-  assert.match(cloudWebsiteClientScript(), /promptSelectedSession/)
-  assert.match(cloudWebsiteClientScript(), /respondToPermission/)
-  assert.match(cloudWebsiteClientScript(), /answerQuestion/)
-  assert.match(cloudWebsiteClientScript(), /rejectQuestion/)
-  assert.match(cloudWebsiteClientScript(), /openArtifact/)
-  assert.match(cloudWebsiteClientScript(), /safeArtifactMetadata/)
-  assert.match(cloudWebsiteClientScript(), /safeOperationalMetadata/)
-  assert.match(cloudWebsiteClientScript(), /safeOperationalText/)
-  assert.match(cloudWebsiteClientScript(), /renderWorkbenchAgents/)
-  assert.match(cloudWebsiteClientScript(), /renderCapabilities/)
-  assert.match(cloudWebsiteClientScript(), /renderWorkflows/)
-  assert.match(cloudWebsiteClientScript(), /startAgentThread/)
-  assert.match(cloudWebsiteClientScript(), /createWorkflowFromForm/)
-  assert.match(cloudWebsiteClientScript(), /runWorkflow/)
-  assert.match(cloudWebsiteClientScript(), /setRoute/)
-  assert.match(cloudWebsiteClientScript(), /providerSettingsFromForm/)
-  assert.match(cloudWebsiteClientScript(), /updateBindingProviderFields/)
-  assert.match(cloudWebsiteClientScript(), /renderMembers/)
-  assert.match(cloudWebsiteClientScript(), /renderAdminPolicy/)
-  assert.match(cloudWebsiteClientScript(), /adminWorkerPools/)
-  assert.match(cloudWebsiteClientScript(), /renderAudit/)
-  assert.match(cloudWebsiteClientScript(), /inviteMember/)
-  assert.match(cloudWebsiteClientScript(), /updateMember/)
-  assert.match(cloudWebsiteClientScript(), /loadGatewayOps/)
-  assert.match(cloudWebsiteClientScript(), /retryDelivery/)
-  assert.match(cloudWebsiteClientScript(), /deadLetterDelivery/)
-  assert.match(cloudWebsiteClientScript(), /loadDiagnostics/)
-  assert.match(cloudWebsiteClientScript(), /exportUsageEvents/)
+  assert.match(html, /data-cloud-react-root="true"/)
+  assert.match(html, /data-cloud-react-shell="ssr"/)
+  assert.match(html, /data-route-link="chat"/)
+  assert.match(html, /id="signin-inline"/)
+  assert.match(html, /id="prompt-form"/)
+  assert.match(html, /id="member-invite-form"/)
+  assert.match(html, /id="binding-form"/)
+  assert.match(html, /id="prepare-diagnostics"/)
 })
 
-test('cloud website renders cloud thread controls without local host path affordances', () => {
+test('cloud website renders chat-first controls without local host path affordances', () => {
   assert.match(html, /id="thread-list"/)
   assert.match(html, /id="session-form"/)
   assert.match(html, /Git repository URL/)
   assert.match(html, /Uploaded snapshot/)
   assert.match(html, /id="prompt-form"/)
+  assert.match(html, /id="composer-agent"/)
   assert.match(html, /id="chat-timeline"/)
   assert.match(html, /id="workbench-agent-list"/)
   assert.match(html, /id="capability-filter"/)
@@ -731,8 +761,6 @@ test('cloud website artifact metadata redacts transient artifact bodies and URLs
     artifactId: 'artifact-1',
     filename: 'result.txt',
   })
-  assert.match(cloudWebsiteClientScript(), /URL\.createObjectURL/)
-  assert.match(cloudWebsiteClientScript(), /URL\.revokeObjectURL/)
 })
 
 test('cloud website thread helper handles status filters and thousands-sized lists', () => {
@@ -774,11 +802,8 @@ test('cloud website thread helper handles status filters and thousands-sized lis
 })
 
 test('cloud website disables dynamic admin actions for member roles', () => {
-  const script = cloudWebsiteClientScript()
-  assert.match(script, /adminSurfaceText\('byok', 'disabledReason'/)
-  assert.match(script, /Validate', \(\) => validateByok\(secret\.providerId\), 'secondary', byokLocked, byokLocked \? byokAdminReason : ''\)/)
-  assert.match(script, /Revoke', \(\) => revokeToken\(token\.tokenId\), 'danger', tokenLocked, tokenLocked \? tokenAdminReason : ''\)/)
   assert.match(html, /data-requires-admin="true"/)
+  assert.match(html, /data-admin-control="true"/)
 })
 
 test('cloud website renders signed-out, member, admin, and policy-disabled states', () => {

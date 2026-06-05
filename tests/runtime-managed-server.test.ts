@@ -13,6 +13,7 @@ import {
   createManagedOpencodeServer,
   type ManagedOpencodeSupervisorFork,
 } from '../apps/desktop/src/main/runtime-managed-server.ts'
+import { createNodeManagedOpencodeServer } from '../apps/desktop/src/main/runtime-node-managed-server.ts'
 import {
   buildManagedOpencodeClientConfig,
   getNativeOpencodeAuthPath,
@@ -153,6 +154,26 @@ while true; do sleep 1; done
   if (existsSync(pidFile)) {
     const pid = Number.parseInt(readFileSync(pidFile, 'utf8'), 10)
     await waitForProcessExit(pid)
+  }
+})
+
+test('node managed opencode server handles child startup exit without IPC crash', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'open-cowork-runtime-node-exit-'))
+  const executable = writeExecutable(root, 'exit-opencode', 'exit 42\n')
+
+  try {
+    await assert.rejects(
+      createNodeManagedOpencodeServer({
+        env: { PATH: process.env.PATH || '' },
+        hostname: '127.0.0.1',
+        opencodeBinPath: executable,
+        port: 0,
+        timeout: 5000,
+      }),
+      /Server exited with code 42/,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })
 

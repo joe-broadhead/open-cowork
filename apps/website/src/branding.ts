@@ -163,6 +163,16 @@ export function resolvePublicBranding(input?: PublicBrandingConfig | null): Publ
   }
 }
 
+export function hasPublicBrandingThemeOverride(input?: PublicBrandingConfig | null): boolean {
+  const cleanedTheme = cleanPublicBrandingTheme(input?.theme)
+  if (Object.keys(cleanedTheme).length === 0) return false
+
+  const derivedTheme = derivePublicBrandingThemeTokens(cleanedTheme)
+  return PUBLIC_BRANDING_THEME_TOKEN_KEYS.some((key) => {
+    return derivedTheme[key] !== undefined && derivedTheme[key] !== DEFAULT_DARK_PUBLIC_BRANDING_THEME[key]
+  })
+}
+
 export function publicBrandingCss(branding: PublicBrandingConfig) {
   const theme = branding.theme || {}
   const cssToken = publicBrandingCssToken
@@ -201,6 +211,7 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
     '--color-elevated': elevated,
     '--color-border': colorToken(theme.border),
     '--color-border-subtle': colorToken(theme.borderSubtle),
+    '--color-border-strong': colorToken(theme.borderStrong || theme.border),
     '--color-text': colorToken(theme.text),
     '--color-text-secondary': colorToken(theme.textSecondary),
     '--color-text-muted': colorToken(theme.mutedText),

@@ -21,8 +21,12 @@ const WORKSPACE_SOURCE_INVENTORY = {
   minimumPercent: 90,
   roots: [
     { path: 'apps/gateway/dist', extensions: ['.js', '.mjs'] },
-    { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'] },
-    { path: 'apps/website/src', extensions: ['.ts', '.tsx'] },
+    // Keep library modules in the ratchet; exclude the executable entrypoint
+    // and type-only output that cannot be meaningfully imported in Node tests.
+    { path: 'apps/standalone-gateway/dist', extensions: ['.js', '.mjs'], excludeFileNames: ['main.js', 'types.js'] },
+    // Workspace Node uses Node's strip-types runner, which cannot load TSX.
+    // Cloud Web TSX is covered by the browser/Vite gates instead.
+    { path: 'apps/website/src', extensions: ['.ts'] },
     { path: 'mcps/agents/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/charts/dist', extensions: ['.js', '.mjs'] },
     { path: 'mcps/clock/dist', extensions: ['.js', '.mjs'] },
@@ -234,6 +238,7 @@ function collectInventoryFiles(inventory, suiteName) {
   for (const root of inventory.roots || []) {
     const rootPath = root.path
     const extensions = root.extensions || ['.ts', '.tsx', '.js', '.mjs']
+    const excludeFileNames = new Set(root.excludeFileNames || [])
     let rootStats
     try {
       rootStats = statSync(rootPath)
@@ -243,17 +248,18 @@ function collectInventoryFiles(inventory, suiteName) {
     if (!rootStats.isDirectory()) {
       throw new Error(`${suiteName} coverage inventory root is not a directory: ${rootPath}`)
     }
-    collectInventoryDirectory(rootPath, extensions, files)
+    collectInventoryDirectory(rootPath, extensions, files, excludeFileNames)
   }
   return files
 }
 
-function collectInventoryDirectory(directory, extensions, files) {
+function collectInventoryDirectory(directory, extensions, files, excludeFileNames = new Set()) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name).replace(/\\/g, '/')
+    if (excludeFileNames.has(entry.name)) continue
     if (entry.isDirectory()) {
       if (['node_modules', 'coverage', 'test', 'tests', '__tests__'].includes(entry.name)) continue
-      collectInventoryDirectory(path, extensions, files)
+      collectInventoryDirectory(path, extensions, files, excludeFileNames)
       continue
     }
     if (!entry.isFile()) continue

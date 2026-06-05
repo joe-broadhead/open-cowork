@@ -4,12 +4,13 @@ Open Cowork separates color from structure.
 
 The canonical typed token source is
 `packages/shared/src/design-tokens.ts`. It exports `DESIGN_TOKENS`,
-`DEFAULT_DARK_BRAND_THEME`, and `emitRootTokensCss()`. Desktop keeps the
-matching CSS variables in `apps/desktop/src/renderer/styles/globals.css`; Cloud
-Web emits the same structural variables from `emitRootTokensCss()` and layers
-public branding color tokens on top. `tests/design-tokens-sync.test.ts`
-drift-gates the shared module against Desktop globals and the default Cloud Web
-dark branding theme.
+`DEFAULT_DARK_BRAND_THEME`, and `emitRootTokensCss()`. Desktop imports the
+generated CSS partial at
+`apps/desktop/src/renderer/styles/generated/design-tokens.css`, produced by
+`pnpm design-tokens:build`; Cloud Web emits the same structural variables from
+`emitRootTokensCss()` and layers public branding color tokens on top.
+`tests/design-tokens-sync.test.ts` drift-gates the generated Desktop partial
+against the shared module and the default Cloud Web dark branding theme.
 
 Color tokens stay in the runtime `BrandThemeTokens` and public branding
 contracts so downstream themes can vary by brand and color scheme. Structural
@@ -45,12 +46,36 @@ needs a local exception.
 | `--space-4` | 16px |
 | `--space-5` | 20px |
 | `--space-6` | 24px |
+| `--space-7` | 28px |
 | `--space-8` | 32px |
+| `--space-9` | 36px |
 | `--space-10` | 40px |
 | `--space-12` | 48px |
 
 Tailwind spacing utilities such as `gap-3`, `p-4`, and `mt-6` resolve to this
 scale.
+
+## Borders And Elevation
+
+Surfaces use three border tiers so the UI stays crisp across all presets:
+
+| Token | Role |
+| --- | --- |
+| `--color-border-subtle` | inner dividers, dense list separators |
+| `--color-border` | default card, table, input, and panel hairlines |
+| `--color-border-strong` | focused, active, selected, or elevated containers |
+
+Cards and panels combine `--shadow-card` with a subtle inset top highlight;
+dialogs and popovers reserve `--shadow-elevated`.
+
+## Tracking
+
+Display type uses small negative tracking instead of oversized weight:
+
+| Token | Value | Role |
+| --- | ---: | --- |
+| `--tracking-tight` | -0.01em | `xl` and `2xl` headings |
+| `--tracking-display` | -0.02em | `3xl` and hero headings |
 
 ## Shape
 
@@ -70,7 +95,8 @@ and `--dur-3` for larger surface changes. `prefers-reduced-motion: reduce`
 sets all three durations to `0ms`.
 
 Use `--ease-out` for most interface exits/entries and `--ease-emphasized`
-only when a surface needs a clearer snap.
+only when a surface needs a clearer snap. Use `--ease-spring` only for small
+menu/toast entrance polish.
 
 ## Layers And Controls
 
@@ -94,9 +120,14 @@ Control heights are `--control-h-sm` at 28px, `--control-h-md` at 32px, and
 | Surface | Source path | Contract |
 | --- | --- | --- |
 | Shared package | `packages/shared/src/design-tokens.ts` | Canonical typed token values, default dark brand theme, public branding bridge, and CSS emitter. |
-| Desktop | `apps/desktop/src/renderer/styles/globals.css` | Hand-authored CSS variables and font-face declarations that must match the shared token module. |
-| Cloud Web | `apps/website/src/styles.ts` | Zero-build inline CSS that imports `emitRootTokensCss()`, serves Mona Sans / Hubot Sans from `/assets/fonts/*.woff2`, and overlays public branding variables. |
-| Drift gate | `tests/design-tokens-sync.test.ts` | Fails when Desktop globals, shared tokens, font package assumptions, or default public branding drift. |
+| Shared React UI | `packages/ui/src/` | Token-backed `WorkbenchLayout`, `ActionCluster`, `DiffView`, and primitive components consumed by Desktop and Cloud Web. |
+| Desktop | `apps/desktop/src/renderer/styles/generated/design-tokens.css` | Generated `:root` CSS variables imported by `globals.css`; do not hand-edit. |
+| Cloud Web | `apps/website/src/styles.ts` and `apps/website/src/style-shared-ui.ts` | Inline shell CSS imports `emitRootTokensCss()`, serves Mona Sans / Hubot Sans from `/assets/fonts/*.woff2`, overlays public branding variables, and styles the shared workbench/review primitives used by the Vite React client. |
+| Drift gate | `tests/design-tokens-sync.test.ts` | Fails when generated Desktop tokens, shared tokens, font package assumptions, or default public branding drift. |
+
+Run `pnpm design-tokens:build` after editing `DESIGN_TOKENS`. CI also runs
+`pnpm design-tokens:check` through `pnpm lint`, so stale generated CSS fails
+instead of silently drifting.
 
 ## Public Branding Theme Keys
 
@@ -109,8 +140,8 @@ Supported keys are:
 
 `background`, `surface`, `mutedSurface`, `border`, `text`, `mutedText`,
 `accent`, `accentStrong`, `focus`, `warn`, `danger`, `ok`, `surfaceHover`,
-`surfaceActive`, `borderSubtle`, `elevated`, `textSecondary`, `accentHover`,
-`accentForeground`, `green`, `amber`, `red`, `info`, `shadowCard`,
+`surfaceActive`, `borderSubtle`, `borderStrong`, `elevated`, `textSecondary`,
+`accentHover`, `accentForeground`, `green`, `amber`, `red`, `info`, `shadowCard`,
 `shadowElevated`, and `bgImage`.
 
 Downstream builders should override only the color/brand keys they own and let
