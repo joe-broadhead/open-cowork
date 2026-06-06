@@ -28,6 +28,7 @@ import type {
 } from './managed-worker-types.ts'
 import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
+import { InMemoryChannelProviderEventsDomain } from './in-memory-domains/channel-provider-events.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import {
   generateChannelInteractionToken,
@@ -39,6 +40,8 @@ import {
 } from './control-plane-tokens.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
 import { workspaceEventCursor, type WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
+import { channelScopeKey, channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
+import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -79,8 +82,6 @@ export type ControlPlaneCommandKind = 'prompt' | 'abort' | 'permission.respond' 
 export type ControlPlaneCommandStatus = 'pending' | 'running' | 'acked' | 'failed'
 export type WorkerRole = 'all-in-one' | 'web' | 'worker' | 'scheduler'
 export type WorkReaperAction = 'retried' | 'failed' | 'released'
-export type ChannelProviderKind = 'telegram' | 'slack' | 'email' | 'discord' | 'whatsapp' | 'signal' | 'webhook' | 'cli'
-export type ChannelProviderId = ChannelProviderKind | `${ChannelProviderKind}-${string}` | `${string}-${string}`
 export type HeadlessAgentStatus = 'active' | 'disabled'
 export type ChannelBindingStatus = 'active' | 'disabled' | 'auth_required' | 'error'
 export type ChannelIdentityRole = ControlPlaneRole | 'approver' | 'viewer'
@@ -1207,6 +1208,8 @@ export type ControlPlaneStore = {
   listChannelDeliveries(input: ListChannelDeliveriesInput): MaybePromise<ChannelDeliveryRecord[]>
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
+  claimChannelProviderEvent(input: ClaimChannelProviderEventInput): MaybePromise<ChannelProviderEventClaimResult>
+  completeChannelProviderEvent(input: CompleteChannelProviderEventInput): MaybePromise<ChannelProviderEventRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
   getSession(tenantId: string, userId: string, sessionId: string): MaybePromise<SessionRecord | null>
   getSessionForTenant(tenantId: string, sessionId: string): MaybePromise<SessionRecord | null>
@@ -1463,16 +1466,6 @@ function quotaRetryAfterMs(nowMs: number, startedAtMs: number, windowMs: number)
   return Math.max(1, startedAtMs + windowMs - nowMs)
 }
 
-function normalizeProvider(value: unknown): ChannelProviderId {
-  const provider = normalizeText(value, 64, 'Channel provider') as ChannelProviderId
-  if (isChannelProviderId(provider)) return provider
-  throw new Error(`Unsupported channel provider ${provider}.`)
-}
-function isChannelProviderId(value: string): value is ChannelProviderId {
-  return ['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(value)
-    || (/^[a-z][a-z0-9_-]{1,63}$/.test(value) && value.includes('-'))
-}
-
 function normalizeBillingStatus(value: unknown): BillingSubscriptionStatus {
   const status = normalizeText(value || 'incomplete', 32, 'Billing subscription status') as BillingSubscriptionStatus
   return BILLING_SUBSCRIPTION_STATUSES.has(status) ? status : 'incomplete'
@@ -1499,14 +1492,6 @@ function normalizeChannelIdentityRole(value: unknown): ChannelIdentityRole {
     throw new Error(`Unsupported channel identity role ${role}.`)
   }
   return role
-}
-
-function channelScopeKey(provider: ChannelProviderId, externalWorkspaceId: string | null, externalId: string) {
-  return key(provider, externalWorkspaceId || '', externalId)
-}
-
-function channelThreadKey(provider: ChannelProviderId, externalWorkspaceId: string | null, externalChatId: string, externalThreadId: string) {
-  return key(provider, externalWorkspaceId || '', externalChatId, externalThreadId)
 }
 
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
@@ -1558,6 +1543,9 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     sessions: () => this.sessions.values(),
     workflowRuns: () => this.workflowRuns.values(),
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
+  })
+  private readonly channelProviderEventsDomain = new InMemoryChannelProviderEventsDomain({
+    orgExists: (orgId) => this.orgs.has(orgId),
   })
 
   private orgIdForTenant(tenantId: string) {
@@ -2878,6 +2866,14 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     delivery.nextAttemptAt = (input.nextAttemptAt || input.updatedAt || new Date()).toISOString()
     delivery.updatedAt = updatedAt
     return clone(delivery)
+  }
+
+  claimChannelProviderEvent(input: ClaimChannelProviderEventInput): ChannelProviderEventClaimResult {
+    return this.channelProviderEventsDomain.claim(input)
+  }
+
+  completeChannelProviderEvent(input: CompleteChannelProviderEventInput): ChannelProviderEventRecord | null {
+    return this.channelProviderEventsDomain.complete(input)
   }
 
   createSession(input: CreateSessionInput): SessionRecord {

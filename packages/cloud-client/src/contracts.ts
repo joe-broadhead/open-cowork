@@ -63,6 +63,8 @@ export type CloudChannelProviderId = CloudChannelProviderKind | `${CloudChannelP
 export type CloudChannelIdentityRole = 'owner' | 'admin' | 'member' | 'approver' | 'viewer'
 export type CloudChannelIdentityStatus = 'active' | 'disabled' | 'pending'
 export type CloudChannelDeliveryStatus = 'pending' | 'claimed' | 'sent' | 'failed' | 'dead'
+export type CloudChannelProviderEventType = 'message' | 'command' | 'interaction'
+export type CloudChannelProviderEventStatus = 'received' | 'processing' | 'processed' | 'failed'
 export type CloudByokSecretStatus = 'pending_validation' | 'active' | 'disabled' | 'expired' | 'invalid' | 'unsupported'
 
 export type CloudByokSecretMetadata = {
@@ -189,6 +191,32 @@ export type ChannelDeliveryRecord = {
   lastError: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type ChannelProviderEventRecord = {
+  eventId: string
+  orgId: string
+  provider: CloudChannelProviderId
+  providerInstanceId: string
+  externalWorkspaceId: string | null
+  providerEventId: string
+  eventType: CloudChannelProviderEventType
+  status: CloudChannelProviderEventStatus
+  claimedBy: string | null
+  claimExpiresAt: string | null
+  attemptCount: number
+  retryable: boolean
+  lastError: string | null
+  metadata: Record<string, unknown>
+  processedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChannelProviderEventClaimResult = {
+  event: ChannelProviderEventRecord
+  claimed: boolean
+  duplicate: boolean
 }
 
 export type ChannelActorInput = {
@@ -703,7 +731,24 @@ export type CloudTransportAdapter = {
     bindingId: string
     text: string
     agent?: string | null
+    commandId?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
+  claimChannelProviderEvent?(input: {
+    provider: CloudChannelProviderId
+    providerInstanceId: string
+    externalWorkspaceId?: string | null
+    providerEventId: string
+    eventType: CloudChannelProviderEventType
+    claimedBy: string
+    ttlMs?: number | null
+    metadata?: Record<string, unknown>
+  }): Promise<ChannelProviderEventClaimResult>
+  completeChannelProviderEvent?(eventId: string, input: {
+    claimedBy: string
+    status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
+    retryable?: boolean
+    lastError?: string | null
+  }): Promise<ChannelProviderEventRecord | null>
   updateChannelCursor?(input: {
     bindingId: string
     lastEventSequence: number

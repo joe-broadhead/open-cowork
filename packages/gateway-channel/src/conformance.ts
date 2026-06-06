@@ -103,10 +103,12 @@ export async function runChannelProviderConformance(
   }
 
   await check("send text", async () => {
+    const deliveryId = "provider-conformance-text";
     const sent = await provider.sendText(input.target, "provider conformance text", {
-      deliveryId: "provider-conformance-text",
+      deliveryId,
     });
     validateSentMessage(sent, input.target, provider);
+    validateProviderDeliveryId(sent, deliveryId);
   });
 
   if (provider.capabilities.messageEditing) {
@@ -117,13 +119,15 @@ export async function runChannelProviderConformance(
 
   if (provider.capabilities.inlineButtons) {
     await check("send buttons", async () => {
+      const deliveryId = "provider-conformance-buttons";
       const sent = await provider.sendButtons(input.target, "provider conformance buttons", [
         [{ label: "Approve", token: createProviderToken("p") }],
         [{ label: "Deny", token: createProviderToken("p"), style: "danger" }],
       ], {
-        deliveryId: "provider-conformance-buttons",
+        deliveryId,
       });
       validateSentMessage(sent, input.target, provider);
+      validateProviderDeliveryId(sent, deliveryId);
     });
   }
 
@@ -261,6 +265,12 @@ export function validateSentMessage(
     violations.push("sentAt must be a valid Date");
   }
   if (violations.length > 0) throw new Error(violations.join("; "));
+}
+
+function validateProviderDeliveryId(sent: SentMessage, expectedDeliveryId: string): void {
+  if (sent.providerDeliveryId !== undefined && sent.providerDeliveryId !== expectedDeliveryId) {
+    throw new Error(`sent providerDeliveryId ${sent.providerDeliveryId} does not match deliveryId ${expectedDeliveryId}`);
+  }
 }
 
 function validateProviderCapabilities(provider: ChannelProvider): void {

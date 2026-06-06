@@ -5,7 +5,7 @@ import type {
   SentMessage,
 } from '@open-cowork/gateway-channel'
 import { chunkText } from '@open-cowork/gateway-channel'
-import type { ChannelDeliveryRecord, CloudChannelProviderId } from '@open-cowork/cloud-client'
+import { isCloudTransportError, type ChannelDeliveryRecord, type CloudChannelProviderId } from '@open-cowork/cloud-client'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'
@@ -16,6 +16,7 @@ import { createGatewayProviderRegistry, type GatewayProviderRegistry, type Provi
 import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } from './session-stream-manager.js'
 
 const MAX_DELIVERY_ATTEMPTS = 5
+const PROVIDER_EVENT_CLAIM_TTL_MS = 5 * 60_000
 
 export type GatewayRuntime = {
   readonly metrics: GatewayMetrics
@@ -49,7 +50,7 @@ export function createGatewayRuntime(
     streams,
     async start() {
       if (started) return
-      await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, providers, streams, metrics))
+      await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, providers, streams, metrics, claimedBy))
       started = true
       if (options.subscribeDeliveries !== false) {
         deliverySubscriptions.push(cloud.subscribeDeliveries({
@@ -112,21 +113,48 @@ async function handleMessage(
   providers: GatewayProviderRegistry,
   streams: GatewaySessionStreamManager,
   metrics: GatewayMetrics,
+  claimedBy: string,
 ) {
   metrics.incomingMessages += 1
   const provider = message.provider as CloudChannelProviderId
   const externalWorkspaceId = providerConfig.externalWorkspaceId ?? null
   const externalUserId = message.sender.providerUserId
+  let claimedEvent: { eventId: string } | null = null
+  let sideEffectCommitted = false
 
   try {
     const registration = providers.get(providerConfig.id)
     if (!registration) throw new Error(`Unknown gateway provider ${providerConfig.id}.`)
+    const eventClaim = await cloud.claimProviderEvent({
+      provider,
+      providerInstanceId: providerConfig.id,
+      externalWorkspaceId,
+      providerEventId: providerEventIdForMessage(message),
+      eventType: providerEventTypeForMessage(message),
+      claimedBy,
+      ttlMs: PROVIDER_EVENT_CLAIM_TTL_MS,
+      metadata: providerEventMetadata(message, providerConfig),
+    })
+    if (!eventClaim.claimed) return
+    claimedEvent = { eventId: eventClaim.event.eventId }
+
     if (await routeGatewayInteraction({ cloud, provider: registration.provider, providerConfig, message, metrics })) {
+      sideEffectCommitted = true
+      await cloud.completeProviderEvent(claimedEvent.eventId, {
+        claimedBy,
+        status: 'processed',
+      })
       return
     }
 
     const text = message.text.trim()
-    if (!text) return
+    if (!text) {
+      await cloud.completeProviderEvent(claimedEvent.eventId, {
+        claimedBy,
+        status: 'processed',
+      })
+      return
+    }
 
     const identity = await cloud.resolveIdentity({
       provider,
@@ -152,13 +180,27 @@ async function handleMessage(
       bindingId: bound.binding.bindingId,
       text,
       agent: providerConfig.defaultAgent,
+      commandId: claimedEvent.eventId,
       identityId: identity.identityId,
       provider,
       externalWorkspaceId,
       externalUserId,
     })
+    sideEffectCommitted = true
     metrics.promptedMessages += 1
+    await cloud.completeProviderEvent(claimedEvent.eventId, {
+      claimedBy,
+      status: 'processed',
+    })
   } catch (error) {
+    if (claimedEvent && !sideEffectCommitted) {
+      await cloud.completeProviderEvent(claimedEvent.eventId, {
+        claimedBy,
+        status: 'failed',
+        retryable: providerEventFailureIsRetryable(error),
+        lastError: error instanceof Error ? error.message : String(error),
+      }).catch(() => {})
+    }
     metrics.errors += 1
     throw error
   }
@@ -216,8 +258,11 @@ async function sendDelivery(provider: ChannelProvider, delivery: ChannelDelivery
       ? delivery.payload.message
       : JSON.stringify(delivery.payload)
   let sent: SentMessage | null = null
-  for (const chunk of chunkText(text, provider.capabilities.maxTextLength)) {
-    sent = await provider.sendText(target, chunk)
+  const chunks = chunkText(text, provider.capabilities.maxTextLength)
+  for (const [index, chunk] of chunks.entries()) {
+    sent = await provider.sendText(target, chunk, {
+      deliveryId: chunks.length === 1 ? delivery.deliveryId : `${delivery.deliveryId}:chunk:${index + 1}`,
+    })
   }
   if (!sent) throw new Error('Channel delivery payload was empty.')
   return sent
@@ -246,4 +291,38 @@ function readDeliveryTarget(delivery: ChannelDeliveryRecord, provider: Pick<Chan
 
 function stringField(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function providerEventIdForMessage(message: IncomingChannelMessage) {
+  return stringField(message.providerEventId)
+    || stringField(message.providerMessageId)
+    || stringField(message.interaction?.id)
+    || message.id
+}
+
+function providerEventTypeForMessage(message: IncomingChannelMessage) {
+  if (message.interaction) return 'interaction'
+  if (message.isCommand) return 'command'
+  return 'message'
+}
+
+function providerEventMetadata(message: IncomingChannelMessage, providerConfig: GatewayProviderConfig) {
+  return {
+    providerKind: message.providerKind || providerConfig.kind,
+    providerMessageId: stringField(message.providerMessageId),
+    targetChatId: stringField(message.target.chatId),
+    targetThreadId: stringField(message.target.threadId),
+    senderUserId: stringField(message.sender.providerUserId),
+    command: stringField(message.command),
+    attachmentCount: message.attachments.length,
+    interactionKind: message.interaction?.kind || null,
+    receivedAt: message.receivedAt.toISOString(),
+  }
+}
+
+function providerEventFailureIsRetryable(error: unknown) {
+  if (isCloudTransportError(error)) {
+    return ['network', 'abort', 'timeout', 'server', 'http', 'rate_limited', 'sse', 'request'].includes(error.kind)
+  }
+  return false
 }

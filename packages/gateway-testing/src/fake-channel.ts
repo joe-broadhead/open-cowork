@@ -92,7 +92,7 @@ export class FakeChannelProvider implements ChannelProvider {
   async sendText(target: ChannelTarget, text: string, _options?: SendOptions): Promise<SentMessage> {
     assertTextWithinLimit(text, this.capabilities.maxTextLength);
     this.sent.push({ kind: "text", target, text, options: _options });
-    return sent(target, this.sent.length, this.now());
+    return sent(target, this.sent.length, this.now(), _options?.deliveryId);
   }
 
   async editText(target: ChannelTarget, messageId: string, text: string): Promise<void> {
@@ -118,14 +118,15 @@ export class FakeChannelProvider implements ChannelProvider {
     target: ChannelTarget,
     text: string,
     buttons: ChannelButton[][],
+    options?: SendOptions,
   ): Promise<SentMessage> {
     if (!this.capabilities.inlineButtons) {
       throw new Error("Fake channel provider does not support inline buttons");
     }
     assertTextWithinLimit(text, this.capabilities.maxTextLength);
     assertButtonsWithinLimits(buttons, this.capabilities);
-    this.sent.push({ kind: "buttons", target, text, buttons });
-    return sent(target, this.sent.length, this.now());
+    this.sent.push({ kind: "buttons", target, text, buttons, options });
+    return sent(target, this.sent.length, this.now(), options?.deliveryId);
   }
 
   async answerInteraction(interactionId: string, text?: string, alert?: boolean): Promise<void> {
@@ -148,13 +149,14 @@ export class FakeChannelProvider implements ChannelProvider {
   }
 }
 
-function sent(target: ChannelTarget, id: number, sentAt: Date): SentMessage {
+function sent(target: ChannelTarget, id: number, sentAt: Date, providerDeliveryId?: string): SentMessage {
   return {
     provider: target.provider,
     providerKind: target.providerKind,
     chatId: target.chatId,
     threadId: target.threadId,
     messageId: String(id),
+    providerDeliveryId,
     sentAt
   };
 }

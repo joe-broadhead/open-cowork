@@ -124,6 +124,11 @@ workspace authorities:
   In this mode Gateway never imports the OpenCode SDK, starts OpenCode, or owns
   control-plane Postgres state. The current `apps/gateway` daemon is this mode
   and must use `productMode=cloud_channel`.
+  Gateway-owned memory is only a fast path for provider SDK state, replay
+  caches, delivery drains, and stream subscriptions; durable idempotency lives
+  in Cloud. Inbound provider messages must claim a Cloud provider-event record
+  before any session bind or prompt, and outbound provider sends must carry the
+  Cloud delivery id as the downstream idempotency key.
 - **Standalone Team Gateway** is a Gateway-owned execution authority for
   private VPS/server/Kubernetes deployments. It may supervise a private
   OpenCode runtime and own Gateway Postgres/control-plane state, but it must

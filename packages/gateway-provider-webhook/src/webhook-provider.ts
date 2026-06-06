@@ -192,7 +192,7 @@ export class WebhookProvider implements ChannelProvider {
     });
   }
 
-  async sendButtons(target: ChannelTarget, text: string, buttons: ChannelButton[][]): Promise<SentMessage> {
+  async sendButtons(target: ChannelTarget, text: string, buttons: ChannelButton[][], options?: SendOptions): Promise<SentMessage> {
     if (!this.capabilities.inlineButtons) {
       throw new Error(`${this.id} bridge does not support inline buttons`);
     }
@@ -202,7 +202,8 @@ export class WebhookProvider implements ChannelProvider {
       type: "buttons",
       target,
       text,
-      buttons
+      buttons,
+      options
     });
   }
 
@@ -229,15 +230,22 @@ export class WebhookProvider implements ChannelProvider {
     });
   }
 
-  private async deliver(payload: Record<string, unknown> & { target?: ChannelTarget }): Promise<SentMessage> {
+  private async deliver(payload: Record<string, unknown> & { target?: ChannelTarget; options?: SendOptions }): Promise<SentMessage> {
     if (payload.target && payload.target.provider !== this.id) {
       throw new Error(`Webhook bridge ${this.id} cannot deliver target for provider ${payload.target.provider}`);
     }
     const normalizedTarget = payload.target ? normalizeOutboundTarget(payload.target, this.id, this.kind) : undefined;
     const normalizedPayload = normalizedTarget ? { ...payload, target: normalizedTarget } : payload;
     const fetchImpl = this.config.fetch ?? globalThis.fetch;
-    const deliveryId = randomUUID();
-    const body = JSON.stringify({ deliveryId, provider: this.id, providerKind: this.kind, ...normalizedPayload });
+    const deliveryId = deliveryIdForPayload(normalizedPayload);
+    const body = JSON.stringify({
+      deliveryId,
+      idempotencyKey: deliveryId,
+      provider: this.id,
+      providerInstanceId: this.id,
+      providerKind: this.kind,
+      ...normalizedPayload
+    });
     const response = await withWebhookRetry(async () => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), normalizeDeliveryTimeoutMs(this.config.deliveryTimeoutMs));
@@ -879,6 +887,10 @@ function serializeOutgoingFile(file: OutgoingFile): Record<string, unknown> {
     mimeType: cleanOptionalString(file.mimeType, "Webhook outgoing file.mimeType", 255),
     dataBase64: Buffer.from(file.data).toString("base64")
   };
+}
+
+function deliveryIdForPayload(payload: { options?: SendOptions }): string {
+  return cleanOptionalString(payload.options?.deliveryId, "Webhook delivery options.deliveryId", 512) ?? randomUUID();
 }
 
 async function responseJson(response: Response): Promise<Record<string, unknown>> {

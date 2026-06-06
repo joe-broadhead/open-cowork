@@ -189,6 +189,7 @@ export async function enqueueChannelPrompt(
     bindingId: string
     text: string
     agent?: string | null
+    commandId?: string | null
   },
 ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
   await options.ensurePrincipal(principal)
@@ -225,7 +226,7 @@ export async function enqueueChannelPrompt(
   let command: SessionCommandRecord
   try {
     command = await options.store.enqueueSessionCommand({
-      commandId: options.ids.randomUUID(),
+      commandId: input.commandId || options.ids.randomUUID(),
       tenantId: principal.tenantId,
       userId: session.userId,
       sessionId: binding.sessionId,

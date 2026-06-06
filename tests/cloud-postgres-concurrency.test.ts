@@ -133,6 +133,7 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '007_scale_foundation',
         '008_managed_workers',
         '009_managed_work_claims',
+        '011_channel_provider_events',
         '010_managed_work_reaper_indexes',
       ])
     } finally {
@@ -874,6 +875,52 @@ test('real Postgres cloud store keeps channel identities, cursors, and delivery 
       status: 'sent',
       updatedAt: new Date('2026-01-01T00:00:02.000Z'),
     }))?.status, 'sent')
+  })
+})
+
+test('real Postgres cloud store atomically claims one provider event across gateways', {
+  skip: POSTGRES_SKIP,
+}, async () => {
+  await withPostgresStore(async (store, ids) => {
+    const org = await store.ensureOrgForTenant({ tenantId: ids.tenantId, name: 'Provider events' })
+    const claims = await Promise.all(Array.from({ length: 8 }, (_, index) => (
+      store.claimChannelProviderEvent({
+        orgId: org.orgId,
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: `${ids.tenantId}-event`,
+        eventType: 'message',
+        claimedBy: `gateway-${index}`,
+        ttlMs: 30_000,
+        now: new Date('2026-01-01T00:00:00.000Z'),
+      })
+    )))
+    assert.equal(claims.filter((claim) => claim.claimed).length, 1)
+    assert.equal(claims.filter((claim) => claim.duplicate).length, 7)
+    const winner = claims.find((claim) => claim.claimed)
+    assert.ok(winner)
+    assert.equal(winner.event.status, 'processing')
+    assert.equal((await store.completeChannelProviderEvent({
+      orgId: org.orgId,
+      eventId: winner.event.eventId,
+      claimedBy: winner.event.claimedBy,
+      status: 'processed',
+      updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+    }))?.status, 'processed')
+    const duplicate = await store.claimChannelProviderEvent({
+      orgId: org.orgId,
+      provider: 'telegram',
+      providerInstanceId: 'telegram-prod',
+      externalWorkspaceId: 'bot-1',
+      providerEventId: `${ids.tenantId}-event`,
+      eventType: 'message',
+      claimedBy: 'gateway-late',
+      now: new Date('2026-01-01T00:00:02.000Z'),
+    })
+    assert.equal(duplicate.claimed, false)
+    assert.equal(duplicate.duplicate, true)
+    assert.equal(duplicate.event.status, 'processed')
   })
 })
 

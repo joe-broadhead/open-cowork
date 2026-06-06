@@ -9,6 +9,9 @@ import type {
   ChannelIdentityRole,
   ChannelIdentityStatus,
   ChannelInteractionRecord,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
+  ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
   HeadlessAgentRecord,
@@ -97,6 +100,7 @@ export type CloudChannelServiceDelegate = {
     bindingId: string
     text: string
     agent?: string | null
+    commandId?: string | null
   }): Promise<{
     binding: ChannelSessionBindingRecord
     command: SessionCommandRecord
@@ -146,6 +150,23 @@ export type CloudChannelServiceDelegate = {
     lastError?: string | null
     nextAttemptAt?: Date | null
   }): Promise<PublicChannelDeliveryRecord | null>
+  claimChannelProviderEvent(principal: CloudPrincipal, input: {
+    provider: ChannelProviderId
+    providerInstanceId: string
+    externalWorkspaceId?: string | null
+    providerEventId: string
+    eventType: ChannelProviderEventType
+    claimedBy: string
+    ttlMs?: number | null
+    metadata?: Record<string, unknown>
+  }): Promise<ChannelProviderEventClaimResult>
+  completeChannelProviderEvent(principal: CloudPrincipal, input: {
+    eventId: string
+    claimedBy: string
+    status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
+    retryable?: boolean
+    lastError?: string | null
+  }): Promise<ChannelProviderEventRecord | null>
 }
 
 export class CloudChannelService {
@@ -209,5 +230,11 @@ export class CloudChannelService {
   }
   ackDelivery(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['ackChannelDelivery']>[1]) {
     return this.delegate.ackChannelDelivery(principal, input)
+  }
+  claimProviderEvent(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['claimChannelProviderEvent']>[1]) {
+    return this.delegate.claimChannelProviderEvent(principal, input)
+  }
+  completeProviderEvent(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['completeChannelProviderEvent']>[1]) {
+    return this.delegate.completeChannelProviderEvent(principal, input)
   }
 }

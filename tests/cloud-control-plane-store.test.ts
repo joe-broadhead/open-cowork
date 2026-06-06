@@ -1289,6 +1289,124 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
   })?.status, 'sent')
 
+  const firstProviderEvent = store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-1',
+    eventType: 'message',
+    claimedBy: 'gateway-1',
+    ttlMs: 30_000,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+    metadata: { providerMessageId: 'message-1', attachmentCount: 0 },
+  })
+  assert.equal(firstProviderEvent.claimed, true)
+  assert.equal(firstProviderEvent.duplicate, false)
+  assert.equal(firstProviderEvent.event.status, 'processing')
+  assert.equal(firstProviderEvent.event.attemptCount, 1)
+  assert.equal(store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-1',
+    eventType: 'message',
+    claimedBy: 'gateway-2',
+    now: new Date('2026-01-01T00:00:01.000Z'),
+  }).claimed, false)
+  assert.equal(store.completeChannelProviderEvent({
+    orgId: org.orgId,
+    eventId: firstProviderEvent.event.eventId,
+    claimedBy: 'gateway-1',
+    status: 'processed',
+    updatedAt: new Date('2026-01-01T00:00:02.000Z'),
+  })?.status, 'processed')
+  assert.equal(store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-1',
+    eventType: 'message',
+    claimedBy: 'gateway-2',
+    now: new Date('2026-01-01T00:00:03.000Z'),
+  }).duplicate, true)
+
+  const expired = store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-expired',
+    eventType: 'message',
+    claimedBy: 'gateway-1',
+    ttlMs: 1_000,
+    now: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  const reclaimed = store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-expired',
+    eventType: 'message',
+    claimedBy: 'gateway-2',
+    now: new Date('2026-01-01T00:00:02.000Z'),
+  })
+  assert.equal(reclaimed.claimed, true)
+  assert.equal(reclaimed.event.eventId, expired.event.eventId)
+  assert.equal(reclaimed.event.attemptCount, 2)
+
+  const failed = store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-failed',
+    eventType: 'command',
+    claimedBy: 'gateway-1',
+    now: new Date('2026-01-01T00:00:00.000Z'),
+  })
+  assert.equal(store.completeChannelProviderEvent({
+    orgId: org.orgId,
+    eventId: failed.event.eventId,
+    claimedBy: 'gateway-1',
+    status: 'failed',
+    retryable: true,
+    lastError: 'temporary outage token=secret',
+    updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+  })?.retryable, true)
+  assert.equal(store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-failed',
+    eventType: 'command',
+    claimedBy: 'gateway-2',
+    now: new Date('2026-01-01T00:00:02.000Z'),
+  }).claimed, true)
+  assert.equal(store.completeChannelProviderEvent({
+    orgId: org.orgId,
+    eventId: failed.event.eventId,
+    claimedBy: 'gateway-2',
+    status: 'failed',
+    retryable: false,
+    lastError: 'forbidden',
+    updatedAt: new Date('2026-01-01T00:00:03.000Z'),
+  })?.retryable, false)
+  assert.equal(store.claimChannelProviderEvent({
+    orgId: org.orgId,
+    provider: 'telegram',
+    providerInstanceId: 'telegram-prod',
+    externalWorkspaceId: 'bot-1',
+    providerEventId: 'event-failed',
+    eventType: 'command',
+    claimedBy: 'gateway-3',
+    now: new Date('2026-01-01T00:00:04.000Z'),
+  }).claimed, false)
+
   const secondInteraction = store.createChannelInteraction({
     interactionId: 'interaction-2',
     orgId: org.orgId,

@@ -242,7 +242,10 @@ describe("WebhookProvider", () => {
         }),
         body: expect.objectContaining({
           deliveryId: expect.any(String),
+          idempotencyKey: expect.any(String),
           provider: "whatsapp",
+          providerInstanceId: "whatsapp",
+          providerKind: "whatsapp",
           type: "buttons",
           target: {
             provider: "whatsapp",
@@ -260,7 +263,59 @@ describe("WebhookProvider", () => {
     expect((deliveries[0]?.body as { deliveryId?: string }).deliveryId).toBe(
       deliveries[0]?.headers["x-open-cowork-gateway-delivery-id"],
     );
+    expect((deliveries[0]?.body as { idempotencyKey?: string }).idempotencyKey).toBe(
+      deliveries[0]?.headers["x-open-cowork-gateway-delivery-id"],
+    );
     expect(deliveries[0]?.headers["x-open-cowork-gateway-webhook-secret"]).toBe(undefined);
+    expect(deliveries[0]?.headers["x-open-cowork-gateway-webhook-signature"]).toBe(
+      signWebhookDeliveryPayload(
+        deliveries[0]?.rawBody || "",
+        "secret",
+        deliveries[0]?.headers["x-open-cowork-gateway-webhook-timestamp"] || "",
+      ),
+    );
+  });
+
+  it("uses caller supplied delivery ids as downstream idempotency keys", async () => {
+    const deliveries: Array<{ headers: Record<string, string>; rawBody: string; body: unknown }> = [];
+    const provider = new WebhookProvider({
+      providerId: "webhook-support",
+      deliveryUrl: "https://bridge.example.test/gateway",
+      sharedSecret: "secret",
+      fetch: async (_input, init) => {
+        const rawBody = String(init?.body);
+        deliveries.push({
+          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          rawBody,
+          body: JSON.parse(rawBody)
+        });
+        return new Response(JSON.stringify({ messageId: "bridge-message-id" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+    });
+
+    const sent = await provider.sendText(
+      { provider: "webhook-support", chatId: "team-chat" },
+      "hello",
+      { deliveryId: "cloud-delivery-1" },
+    );
+
+    expect(sent).toMatchObject({
+      providerDeliveryId: "cloud-delivery-1",
+      messageId: "bridge-message-id"
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.headers["x-open-cowork-gateway-delivery-id"]).toBe("cloud-delivery-1");
+    expect(deliveries[0]?.body).toMatchObject({
+      deliveryId: "cloud-delivery-1",
+      idempotencyKey: "cloud-delivery-1",
+      provider: "webhook-support",
+      providerInstanceId: "webhook-support",
+      providerKind: "webhook",
+      type: "text"
+    });
     expect(deliveries[0]?.headers["x-open-cowork-gateway-webhook-signature"]).toBe(
       signWebhookDeliveryPayload(
         deliveries[0]?.rawBody || "",

@@ -146,10 +146,12 @@ export class CliProvider implements ChannelProvider {
   private async writeEvent(type: string, target: ChannelTarget, payload: Record<string, unknown>): Promise<SentMessage> {
     const messageId = randomUUID();
     const sentAt = this.now();
+    const providerDeliveryId = deliveryIdFromPayload(payload);
     this.writeJson({
       type,
       target: normalizeTarget(target),
       messageId,
+      providerDeliveryId,
       sentAt: sentAt.toISOString(),
       ...payload
     });
@@ -159,6 +161,7 @@ export class CliProvider implements ChannelProvider {
       chatId: target.chatId,
       threadId: target.threadId,
       messageId,
+      providerDeliveryId,
       sentAt
     };
   }
@@ -272,6 +275,11 @@ function cleanString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
+}
+
+function deliveryIdFromPayload(payload: Record<string, unknown>): string | undefined {
+  const options = payload.options;
+  return isRecord(options) ? cleanString(options.deliveryId) : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
