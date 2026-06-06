@@ -6,6 +6,7 @@ export async function exportStandaloneGatewayBackup(repository: Pick<StandaloneG
     format: "open-cowork-standalone-gateway-backup-v1",
     exportedAt: new Date().toISOString(),
     sessions: snapshot.sessions,
+    identities: snapshot.identities,
     jobs: snapshot.jobs,
     audits: snapshot.audits,
   };

@@ -1,4 +1,4 @@
-export const STANDALONE_GATEWAY_SCHEMA_VERSION = 1;
+export const STANDALONE_GATEWAY_SCHEMA_VERSION = 2;
 
 export const standaloneGatewayMigrations = [{
   id: "0001_standalone_gateway_core",
@@ -117,6 +117,76 @@ CREATE INDEX IF NOT EXISTS standalone_gateway_jobs_claim_idx
   ON standalone_gateway_jobs (status, available_at, claim_expires_at);
 CREATE INDEX IF NOT EXISTS standalone_gateway_audit_created_idx
   ON standalone_gateway_audit_events (created_at DESC);
+`,
+}, {
+  id: "0002_standalone_gateway_identity_authorization",
+  sql: `
+ALTER TABLE standalone_gateway_channel_identities
+  ADD COLUMN IF NOT EXISTS provider_workspace_id text NOT NULL DEFAULT '';
+
+ALTER TABLE standalone_gateway_channel_identities
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
+
+DO $$
+DECLARE
+  legacy_constraint_name text;
+BEGIN
+  FOR legacy_constraint_name IN
+    SELECT constraint_row.conname
+    FROM pg_constraint constraint_row
+    JOIN pg_class table_row ON table_row.oid = constraint_row.conrelid
+    WHERE table_row.relname = 'standalone_gateway_channel_identities'
+      AND constraint_row.contype = 'u'
+      AND (
+        SELECT array_agg(attribute_row.attname::text ORDER BY constraint_column.ordinality)
+        FROM unnest(constraint_row.conkey) WITH ORDINALITY AS constraint_column(attnum, ordinality)
+        JOIN pg_attribute attribute_row
+          ON attribute_row.attrelid = table_row.oid
+         AND attribute_row.attnum = constraint_column.attnum
+      ) = ARRAY['provider', 'external_user_id']
+  LOOP
+    EXECUTE format('ALTER TABLE standalone_gateway_channel_identities DROP CONSTRAINT %I', legacy_constraint_name);
+  END LOOP;
+END $$;
+
+ALTER TABLE standalone_gateway_sessions
+  ADD COLUMN IF NOT EXISTS provider_workspace_id text NOT NULL DEFAULT '';
+
+DROP INDEX IF EXISTS standalone_gateway_sessions_provider_thread_unique;
+DROP INDEX IF EXISTS standalone_gateway_sessions_provider_thread_idx;
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_sessions_provider_workspace_thread_idx
+  ON standalone_gateway_sessions (provider, provider_workspace_id, external_chat_id, external_thread_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_sessions_provider_workspace_thread_unique
+  ON standalone_gateway_sessions (provider, provider_workspace_id, external_chat_id, external_thread_id);
+
+ALTER TABLE standalone_gateway_channel_identities
+  DROP CONSTRAINT IF EXISTS standalone_gateway_channel_identities_provider_external_user_id_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_channel_identities_provider_workspace_user_unique
+  ON standalone_gateway_channel_identities (provider, provider_workspace_id, external_user_id);
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_channel_identities_prompt_auth_idx
+  ON standalone_gateway_channel_identities (provider, status, role);
+
+DO $$
+BEGIN
+  ALTER TABLE standalone_gateway_channel_identities
+    ADD CONSTRAINT standalone_gateway_channel_identities_role_check
+    CHECK (role IN ('owner', 'admin', 'member', 'approver', 'viewer'));
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE standalone_gateway_channel_identities
+    ADD CONSTRAINT standalone_gateway_channel_identities_status_check
+    CHECK (status IN ('active', 'disabled'));
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
 `,
 }];
 

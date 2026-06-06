@@ -5,6 +5,8 @@ import type {
 } from "@open-cowork/gateway-channel";
 
 export type StandaloneGatewayStatus = "idle" | "running" | "blocked" | "failed" | "completed";
+export type StandaloneGatewayIdentityRole = "owner" | "admin" | "member" | "approver" | "viewer";
+export type StandaloneGatewayIdentityStatus = "active" | "disabled";
 export type StandaloneGatewayEventType =
   | "session.created"
   | "user.message"
@@ -67,6 +69,7 @@ export interface StandaloneGatewaySessionRecord {
   status: StandaloneGatewayStatus;
   provider: ChannelProviderId;
   providerKind: ChannelProviderKind;
+  providerWorkspaceId: string | null;
   channelBindingId: string;
   externalUserId: string;
   externalChatId: string;
@@ -117,9 +120,27 @@ export interface StandaloneGatewayAuditRecord {
   createdAt: string;
 }
 
+export interface StandaloneGatewayChannelIdentityRecord {
+  identityId: string;
+  provider: ChannelProviderId;
+  externalUserId: string;
+  providerWorkspaceId: string | null;
+  role: StandaloneGatewayIdentityRole;
+  status: StandaloneGatewayIdentityStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StandaloneGatewayIdentityAuthorizationSummary {
+  total: number;
+  active: number;
+  promptCapable: number;
+}
+
 export interface StandaloneGatewayDashboardSnapshot {
   generatedAt: string;
   sessions: StandaloneGatewaySessionRecord[];
+  identities: StandaloneGatewayChannelIdentityRecord[];
   jobs: StandaloneGatewayJobRecord[];
   audits: StandaloneGatewayAuditRecord[];
 }
@@ -127,6 +148,7 @@ export interface StandaloneGatewayDashboardSnapshot {
 export interface StandalonePromptInput {
   provider: ChannelProviderId;
   providerKind: ChannelProviderKind;
+  providerWorkspaceId?: string | null;
   channelBindingId: string;
   target: ChannelTarget;
   externalUserId: string;

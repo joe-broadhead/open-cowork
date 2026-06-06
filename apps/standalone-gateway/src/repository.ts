@@ -1,13 +1,18 @@
 import { randomUUID } from "node:crypto";
 
+import { redactSecretRecord, redactSecretText } from "./redaction.js";
 import type {
   StandaloneGatewayAuditRecord,
+  StandaloneGatewayChannelIdentityRecord,
   StandaloneGatewayDaemonLease,
   StandaloneGatewayDashboardSnapshot,
   StandaloneGatewayEventRecord,
   StandaloneGatewayEventType,
   StandaloneGatewayJobKind,
   StandaloneGatewayJobRecord,
+  StandaloneGatewayIdentityAuthorizationSummary,
+  StandaloneGatewayIdentityRole,
+  StandaloneGatewayIdentityStatus,
   StandaloneGatewaySessionRecord,
   StandalonePromptInput,
 } from "./types.js";
@@ -24,6 +29,17 @@ export interface StandaloneGatewayRepository {
   enqueueJob(input: { kind: StandaloneGatewayJobKind; sessionId?: string | null; payload?: Record<string, unknown>; availableAt?: Date; now?: Date }): Promise<StandaloneGatewayJobRecord>;
   claimNextJob(input: { claimedBy: string; ttlMs: number; now?: Date }): Promise<StandaloneGatewayJobRecord | null>;
   finishJob(input: { jobId: string; claimToken: string; status: "completed" | "failed" | "dead"; lastError?: string | null; now?: Date }): Promise<StandaloneGatewayJobRecord>;
+  findChannelIdentity(input: { provider: string; externalUserId: string; providerWorkspaceId?: string | null }): Promise<StandaloneGatewayChannelIdentityRecord | null>;
+  upsertChannelIdentity(input: {
+    identityId?: string;
+    provider: string;
+    externalUserId: string;
+    providerWorkspaceId?: string | null;
+    role: StandaloneGatewayIdentityRole;
+    status?: StandaloneGatewayIdentityStatus;
+    now?: Date;
+  }): Promise<StandaloneGatewayChannelIdentityRecord>;
+  identityAuthorizationSummary(input?: { providers?: readonly string[] }): Promise<StandaloneGatewayIdentityAuthorizationSummary>;
   listSessions(limit?: number): Promise<StandaloneGatewaySessionRecord[]>;
   dashboardSnapshot(limit?: number): Promise<StandaloneGatewayDashboardSnapshot>;
   recordAudit(action: string, actor: string, metadata?: Record<string, unknown>, now?: Date): Promise<StandaloneGatewayAuditRecord>;
@@ -35,6 +51,7 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
   private readonly events = new Map<string, StandaloneGatewayEventRecord[]>();
   private readonly jobs = new Map<string, StandaloneGatewayJobRecord>();
   private readonly leases = new Map<string, StandaloneGatewayDaemonLease>();
+  private readonly identities = new Map<string, StandaloneGatewayChannelIdentityRecord>();
   private readonly audits: StandaloneGatewayAuditRecord[] = [];
 
   async migrate(): Promise<void> {}
@@ -80,8 +97,10 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
 
   async findOrCreateSession(input: StandalonePromptInput & { title?: string; now?: Date }): Promise<StandaloneGatewaySessionRecord> {
     const externalThreadId = input.target.threadId || input.target.chatId;
+    const providerWorkspaceId = normalizeWorkspaceId(input.providerWorkspaceId);
     const existing = [...this.sessions.values()].find((session) =>
       session.provider === input.provider &&
+      session.providerWorkspaceId === providerWorkspaceId &&
       session.externalChatId === input.target.chatId &&
       session.externalThreadId === externalThreadId
     );
@@ -94,6 +113,7 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
       status: "idle",
       provider: input.provider,
       providerKind: input.providerKind,
+      providerWorkspaceId,
       channelBindingId: input.channelBindingId,
       externalUserId: input.externalUserId,
       externalChatId: input.target.chatId,
@@ -192,6 +212,52 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     return cloneJob(updated);
   }
 
+  async findChannelIdentity(input: { provider: string; externalUserId: string; providerWorkspaceId?: string | null }): Promise<StandaloneGatewayChannelIdentityRecord | null> {
+    const workspaceId = normalizeWorkspaceId(input.providerWorkspaceId);
+    const exact = this.identities.get(identityKey(input.provider, workspaceId, input.externalUserId));
+    if (exact) return cloneIdentity(exact);
+    return null;
+  }
+
+  async upsertChannelIdentity(input: {
+    identityId?: string;
+    provider: string;
+    externalUserId: string;
+    providerWorkspaceId?: string | null;
+    role: StandaloneGatewayIdentityRole;
+    status?: StandaloneGatewayIdentityStatus;
+    now?: Date;
+  }): Promise<StandaloneGatewayChannelIdentityRecord> {
+    const role = normalizeIdentityRole(input.role);
+    const status = normalizeIdentityStatus(input.status || "active");
+    const providerWorkspaceId = normalizeWorkspaceId(input.providerWorkspaceId);
+    const key = identityKey(input.provider, providerWorkspaceId, input.externalUserId);
+    const existing = this.identities.get(key);
+    const now = (input.now || new Date()).toISOString();
+    const identity: StandaloneGatewayChannelIdentityRecord = {
+      identityId: existing?.identityId || input.identityId || randomUUID(),
+      provider: input.provider as StandaloneGatewayChannelIdentityRecord["provider"],
+      externalUserId: input.externalUserId,
+      providerWorkspaceId,
+      role,
+      status,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    this.identities.set(key, identity);
+    return cloneIdentity(identity);
+  }
+
+  async identityAuthorizationSummary(input: { providers?: readonly string[] } = {}): Promise<StandaloneGatewayIdentityAuthorizationSummary> {
+    const providers = input.providers?.length ? new Set(input.providers) : null;
+    const identities = [...this.identities.values()].filter((identity) => !providers || providers.has(identity.provider));
+    return {
+      total: identities.length,
+      active: identities.filter((identity) => identity.status === "active").length,
+      promptCapable: identities.filter((identity) => canIdentityPrompt(identity)).length,
+    };
+  }
+
   async listSessions(limit = 50): Promise<StandaloneGatewaySessionRecord[]> {
     return [...this.sessions.values()]
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
@@ -203,6 +269,7 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     return {
       generatedAt: new Date().toISOString(),
       sessions: await this.listSessions(limit),
+      identities: [...this.identities.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, limit).map(cloneIdentity),
       jobs: [...this.jobs.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, limit).map(cloneJob),
       audits: this.audits.slice(-limit).reverse().map((audit) => ({ ...audit, metadata: { ...audit.metadata } })),
     };
@@ -228,26 +295,40 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
 }
 
 export function redactRecord(input: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(input).map(([key, value]) => [
-    key,
-    redactValue(key, value),
-  ]));
-}
-
-function redactValue(key: string, value: unknown): unknown {
-  if (/token|secret|password|credential|authorization|api[_-]?key/i.test(key)) return "[redacted]";
-  if (typeof value === "string") return redactText(value);
-  if (Array.isArray(value)) return value.map((entry) => redactValue(key, entry));
-  if (value && typeof value === "object") return redactRecord(value as Record<string, unknown>);
-  return value;
+  return redactSecretRecord(input);
 }
 
 function redactText(value: string): string {
-  return value
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]")
-    .replace(/(token|secret|password|api[_-]?key)=([^&\s]+)/gi, "$1=[redacted]");
+  return redactSecretText(value);
 }
 
 function cloneJob(job: StandaloneGatewayJobRecord): StandaloneGatewayJobRecord {
   return { ...job, payload: { ...job.payload } };
+}
+
+export function canIdentityPrompt(identity: Pick<StandaloneGatewayChannelIdentityRecord, "role" | "status">): boolean {
+  return identity.status === "active" && (identity.role === "owner" || identity.role === "admin" || identity.role === "member");
+}
+
+export function normalizeIdentityRole(value: string): StandaloneGatewayIdentityRole {
+  if (value === "owner" || value === "admin" || value === "member" || value === "approver" || value === "viewer") return value;
+  throw new Error(`Unsupported standalone gateway identity role ${value}.`);
+}
+
+export function normalizeIdentityStatus(value: string): StandaloneGatewayIdentityStatus {
+  if (value === "active" || value === "disabled") return value;
+  throw new Error(`Unsupported standalone gateway identity status ${value}.`);
+}
+
+export function normalizeWorkspaceId(value: string | null | undefined): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || null;
+}
+
+function identityKey(provider: string, providerWorkspaceId: string | null, externalUserId: string): string {
+  return `${provider}\0${providerWorkspaceId || ""}\0${externalUserId}`;
+}
+
+function cloneIdentity(identity: StandaloneGatewayChannelIdentityRecord): StandaloneGatewayChannelIdentityRecord {
+  return { ...identity };
 }

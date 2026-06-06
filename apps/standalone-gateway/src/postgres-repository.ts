@@ -1,16 +1,27 @@
 import { randomUUID } from "node:crypto";
 
 import { standaloneGatewayMigrations } from "./schema.js";
-import { redactRecord } from "./repository.js";
+import {
+  canIdentityPrompt,
+  normalizeIdentityRole,
+  normalizeIdentityStatus,
+  normalizeWorkspaceId,
+  redactRecord,
+} from "./repository.js";
+import { redactSecretText } from "./redaction.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
 import type {
   StandaloneGatewayAuditRecord,
+  StandaloneGatewayChannelIdentityRecord,
   StandaloneGatewayDaemonLease,
   StandaloneGatewayDashboardSnapshot,
   StandaloneGatewayEventRecord,
   StandaloneGatewayEventType,
   StandaloneGatewayJobKind,
   StandaloneGatewayJobRecord,
+  StandaloneGatewayIdentityAuthorizationSummary,
+  StandaloneGatewayIdentityRole,
+  StandaloneGatewayIdentityStatus,
   StandaloneGatewaySessionRecord,
   StandalonePromptInput,
 } from "./types.js";
@@ -34,7 +45,16 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
   constructor(private readonly pool: PgLikePool) {}
 
   async migrate(): Promise<void> {
+    await this.pool.query(`CREATE TABLE IF NOT EXISTS standalone_gateway_schema_migrations (
+      id text PRIMARY KEY,
+      applied_at timestamptz NOT NULL DEFAULT now()
+    )`);
     for (const migration of standaloneGatewayMigrations) {
+      const applied = await this.pool.query(
+        "SELECT id FROM standalone_gateway_schema_migrations WHERE id = $1",
+        [migration.id],
+      );
+      if (applied.rows.length > 0) continue;
       await this.withTransaction(async (client) => {
         await client.query(migration.sql);
         await client.query(
@@ -97,14 +117,15 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
   async findOrCreateSession(input: StandalonePromptInput & { title?: string; now?: Date }): Promise<StandaloneGatewaySessionRecord> {
     const now = (input.now || new Date()).toISOString();
     const externalThreadId = input.target.threadId || input.target.chatId;
+    const providerWorkspaceId = normalizeWorkspaceId(input.providerWorkspaceId) || "";
     return this.withTransaction(async (client) => {
       const result = await client.query<SessionRow>(
         `INSERT INTO standalone_gateway_sessions (
            session_id, title, status, provider, provider_kind, channel_binding_id,
-           external_user_id, external_chat_id, external_thread_id, created_at, updated_at
+           provider_workspace_id, external_user_id, external_chat_id, external_thread_id, created_at, updated_at
          )
-         VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8, $9, $9)
-         ON CONFLICT (provider, external_chat_id, external_thread_id) DO UPDATE
+         VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8, $9, $10, $10)
+         ON CONFLICT (provider, provider_workspace_id, external_chat_id, external_thread_id) DO UPDATE
          SET updated_at = standalone_gateway_sessions.updated_at
          RETURNING *`,
         [
@@ -113,6 +134,7 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
           input.provider,
           input.providerKind,
           input.channelBindingId,
+          providerWorkspaceId,
           input.externalUserId,
           input.target.chatId,
           externalThreadId,
@@ -236,10 +258,73 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
            updated_at = $5
        WHERE job_id = $1 AND claim_token = $2
        RETURNING *`,
-      [input.jobId, input.claimToken, input.status, input.lastError || null, (input.now || new Date()).toISOString()],
+      [input.jobId, input.claimToken, input.status, input.lastError ? redactSecretText(input.lastError) : null, (input.now || new Date()).toISOString()],
     );
     if (!result.rows[0]) throw new Error("Cannot finish standalone gateway job with a stale claim token.");
     return jobFromRow(result.rows[0]);
+  }
+
+  async findChannelIdentity(input: { provider: string; externalUserId: string; providerWorkspaceId?: string | null }): Promise<StandaloneGatewayChannelIdentityRecord | null> {
+    const providerWorkspaceId = normalizeWorkspaceId(input.providerWorkspaceId) || "";
+    const result = await this.pool.query<IdentityRow>(
+      `SELECT *
+       FROM standalone_gateway_channel_identities
+       WHERE provider = $1
+         AND external_user_id = $2
+         AND provider_workspace_id = $3
+       LIMIT 1`,
+      [input.provider, input.externalUserId, providerWorkspaceId],
+    );
+    return result.rows[0] ? identityFromRow(result.rows[0]) : null;
+  }
+
+  async upsertChannelIdentity(input: {
+    identityId?: string;
+    provider: string;
+    externalUserId: string;
+    providerWorkspaceId?: string | null;
+    role: StandaloneGatewayIdentityRole;
+    status?: StandaloneGatewayIdentityStatus;
+    now?: Date;
+  }): Promise<StandaloneGatewayChannelIdentityRecord> {
+    const now = (input.now || new Date()).toISOString();
+    const result = await this.pool.query<IdentityRow>(
+      `INSERT INTO standalone_gateway_channel_identities (
+         identity_id, provider, provider_workspace_id, external_user_id, role, status, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+       ON CONFLICT (provider, provider_workspace_id, external_user_id) DO UPDATE
+       SET role = EXCLUDED.role,
+           status = EXCLUDED.status,
+           updated_at = EXCLUDED.updated_at
+       RETURNING *`,
+      [
+        input.identityId || randomUUID(),
+        input.provider,
+        normalizeWorkspaceId(input.providerWorkspaceId) || "",
+        input.externalUserId,
+        normalizeIdentityRole(input.role),
+        normalizeIdentityStatus(input.status || "active"),
+        now,
+      ],
+    );
+    return identityFromRow(result.rows[0]!);
+  }
+
+  async identityAuthorizationSummary(input: { providers?: readonly string[] } = {}): Promise<StandaloneGatewayIdentityAuthorizationSummary> {
+    const providers = input.providers?.length ? [...new Set(input.providers)] : null;
+    const result = await this.pool.query<IdentityRow>(
+      providers
+        ? "SELECT * FROM standalone_gateway_channel_identities WHERE provider = ANY($1::text[])"
+        : "SELECT * FROM standalone_gateway_channel_identities",
+      providers ? [providers] : undefined,
+    );
+    const identities = result.rows.map(identityFromRow);
+    return {
+      total: identities.length,
+      active: identities.filter((identity) => identity.status === "active").length,
+      promptCapable: identities.filter(canIdentityPrompt).length,
+    };
   }
 
   async listSessions(limit = 50): Promise<StandaloneGatewaySessionRecord[]> {
@@ -252,14 +337,16 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
 
   async dashboardSnapshot(limit = 50): Promise<StandaloneGatewayDashboardSnapshot> {
     const safeLimit = Math.max(1, Math.min(200, limit));
-    const [sessions, jobs, audits] = await Promise.all([
+    const [sessions, identities, jobs, audits] = await Promise.all([
       this.listSessions(safeLimit),
+      this.pool.query<IdentityRow>("SELECT * FROM standalone_gateway_channel_identities ORDER BY updated_at DESC LIMIT $1", [safeLimit]),
       this.pool.query<JobRow>("SELECT * FROM standalone_gateway_jobs ORDER BY updated_at DESC LIMIT $1", [safeLimit]),
       this.pool.query<AuditRow>("SELECT * FROM standalone_gateway_audit_events ORDER BY created_at DESC LIMIT $1", [safeLimit]),
     ]);
     return {
       generatedAt: new Date().toISOString(),
       sessions,
+      identities: identities.rows.map(identityFromRow),
       jobs: jobs.rows.map(jobFromRow),
       audits: audits.rows.map(auditFromRow),
     };
@@ -318,6 +405,7 @@ type SessionRow = {
   status: StandaloneGatewaySessionRecord["status"];
   provider: StandaloneGatewaySessionRecord["provider"];
   provider_kind: StandaloneGatewaySessionRecord["providerKind"];
+  provider_workspace_id?: string | null;
   channel_binding_id: string;
   external_user_id: string;
   external_chat_id: string;
@@ -352,6 +440,17 @@ type JobRow = {
   updated_at: string | Date;
 };
 
+type IdentityRow = {
+  identity_id: string;
+  provider: StandaloneGatewayChannelIdentityRecord["provider"];
+  provider_workspace_id?: string | null;
+  external_user_id: string;
+  role: StandaloneGatewayIdentityRole;
+  status?: StandaloneGatewayIdentityStatus;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
 type AuditRow = {
   audit_id: string;
   action: string;
@@ -378,6 +477,7 @@ function sessionFromRow(row: SessionRow): StandaloneGatewaySessionRecord {
     status: row.status,
     provider: row.provider,
     providerKind: row.provider_kind,
+    providerWorkspaceId: normalizeWorkspaceId(row.provider_workspace_id),
     channelBindingId: row.channel_binding_id,
     externalUserId: row.external_user_id,
     externalChatId: row.external_chat_id,
@@ -412,6 +512,19 @@ function jobFromRow(row: JobRow): StandaloneGatewayJobRecord {
     attemptCount: Number(row.attempt_count),
     availableAt: iso(row.available_at),
     lastError: row.last_error,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+function identityFromRow(row: IdentityRow): StandaloneGatewayChannelIdentityRecord {
+  return {
+    identityId: row.identity_id,
+    provider: row.provider,
+    externalUserId: row.external_user_id,
+    providerWorkspaceId: normalizeWorkspaceId(row.provider_workspace_id),
+    role: normalizeIdentityRole(row.role),
+    status: normalizeIdentityStatus(row.status || "active"),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };

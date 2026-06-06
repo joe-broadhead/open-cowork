@@ -14,6 +14,7 @@
     "test": "pnpm build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
     "start": "node dist/main.js serve",
     "doctor": "node dist/main.js doctor",
+    "identity": "node dist/main.js identity",
     "smoke": "node dist/main.js smoke"
   },
   "dependencies": {

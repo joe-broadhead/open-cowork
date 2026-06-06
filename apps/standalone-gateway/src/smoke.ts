@@ -6,6 +6,11 @@ import { createStandaloneGatewayRuntime } from "./runtime.js";
 
 export async function runStandaloneGatewaySmoke(): Promise<{ ok: true; sessionCount: number; promptCount: number }> {
   const repository = new InMemoryStandaloneGatewayRepository();
+  await repository.upsertChannelIdentity({
+    provider: "cli-standalone",
+    externalUserId: "smoke-user",
+    role: "member",
+  });
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const runtime = createStandaloneGatewayRuntime({ repository, opencode });
   const provider = new FakeChannelProvider({ id: "cli-standalone" });

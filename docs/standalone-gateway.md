@@ -118,12 +118,55 @@ The signed webhook provider can bridge custom channels. It requires
 `OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_SHARED_SECRET` and validates incoming
 provider payloads before they can prompt private OpenCode.
 
+Provider webhook verification authenticates the provider request, not the human
+or channel actor. Standalone Gateway denies every inbound prompt until the
+sender has an active prompt-capable identity in Gateway Postgres.
+
+Bootstrap the first identity before accepting traffic:
+
+```bash
+pnpm --filter @open-cowork/standalone-gateway identity -- \
+  upsert \
+  --provider webhook \
+  --external-user-id "$CHANNEL_USER_ID" \
+  --role admin
+```
+
+For provider workspaces such as Slack teams or Discord guilds, scope the
+identity when the provider supplies that workspace id:
+
+```bash
+pnpm --filter @open-cowork/standalone-gateway identity -- \
+  upsert \
+  --provider slack-prod \
+  --provider-workspace-id "$SLACK_TEAM_ID" \
+  --external-user-id "$SLACK_USER_ID" \
+  --role member
+```
+
+An unscoped identity only authorizes provider messages that do not include a
+provider workspace id. It is not a global fallback for every workspace on the
+same provider.
+
+Roles are deliberately small:
+
+- `owner` and `admin` can prompt, approve, and manage identities.
+- `member` can prompt from their channel identity.
+- `approver` can approve/respond when approval flows are wired, but cannot start
+  private OpenCode work.
+- `viewer` and disabled identities cannot prompt.
+
+The doctor check fails until at least one active `owner`, `admin`, or `member`
+identity exists. Denied prompt attempts are audited as
+`standalone.prompt.denied` without storing message text.
+
 ## Backup And Retention
 
 Backups must cover:
 
 - Postgres database
 - artifact storage path or bucket
+- exported standalone manifest rows for sessions, identities, jobs, and audits
 - private env/secret inventory, stored separately from the backup manifest
 
 Retention windows are explicit:
