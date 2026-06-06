@@ -372,7 +372,7 @@ function assertReleaseWorkflowContract() {
 
   assertMatches(
     releaseWorkflowPath,
-    / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
+    / {2}release-policy:\n[\s\S]*? {4}steps:\n {6}- uses: actions\/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10[\s\S]*? {6}- name: Verify release artifacts\n[\s\S]*?node scripts\/verify-release-artifact-matrix\.mjs/,
     'release-policy checks out repository source before running the release artifact matrix script',
   )
 
