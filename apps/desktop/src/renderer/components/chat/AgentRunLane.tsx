@@ -205,7 +205,7 @@ function ProgressBar({ progress, tone, running }: { progress: number; tone: stri
       aria-hidden="true"
     >
       <span
-        className="absolute top-0 start-0 bottom-0 rounded-full"
+        className={`absolute top-0 start-0 bottom-0 rounded-full ${running ? 'ui-progress-shimmer' : ''}`}
         style={{
           width,
           background: running

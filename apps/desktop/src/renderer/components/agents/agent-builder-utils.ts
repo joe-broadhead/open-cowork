@@ -48,7 +48,7 @@ export function agentTone(color?: AgentColor | string | null): string {
   }
 }
 
-// Three effective scopes derived from the tool loadout:
+// Three effective scopes derived from selected tools:
 //   read-only  — nothing the agent can do writes anywhere
 //   standard   — one or two write-capable tools (normal working set)
 //   powerful   — three or more write-capable tools (broad blast radius)
@@ -80,7 +80,7 @@ export function scopeTone(scope: AgentScope): string {
 }
 
 // When a user attaches a skill that references tools not currently in the
-// agent's loadout, surface an actionable hint. Returns the tool ids the
+// agent's selected capabilities, surface an actionable hint. Returns the tool ids the
 // skill needs that the agent doesn't have.
 export function resolveMissingSkillTools(
   skillName: string,
@@ -260,11 +260,8 @@ export function compileAgentPreview(
   }
 }
 
-// Three derived attributes visualised on the agent card — cheap,
-// five-segment meters that translate loadout scale into "this agent is
-// broad vs narrow, far-reaching vs focused, autonomous vs short-leash".
-// They exist to make the card feel like a character profile without
-// inventing real RPG stats.
+// Legacy derived attributes used by older compact cards. The primary
+// builder summary now uses the deterministic shared capability profile.
 export interface AgentAttributes {
   breadth: number  // 0..5 — skills coverage
   range: number    // 0..5 — tool count (reach)

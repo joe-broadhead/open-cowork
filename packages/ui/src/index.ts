@@ -1,5 +1,6 @@
 export { AppApiProvider, useAppApi, type AppApiProviderProps } from './AppApiProvider.js'
 export { ActionCluster, type ActionClusterItem, type ActionClusterProps } from './ActionCluster.js'
+export { AgentCapabilityProfileView, type AgentCapabilityProfileViewProps } from './AgentCapabilityProfileView.js'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge.js'
 export {
   Button,

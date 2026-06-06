@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, normalizeWorkspaceId, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
@@ -274,12 +274,16 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     }
   }
 
-  const renderRow = (session: typeof filtered[number]) => {
+  const renderRow = (session: typeof filtered[number], rowIndex?: number) => {
     const isActive = session.id === currentSessionId
     const isEditing = editingId === session.id
     const sessionKey = sessionWorkspaceKey(activeWorkspaceId, session.id)
     const isAwaitingQuestion = awaitingQuestionSessions.has(sessionKey)
     const isBusy = busySessions.has(sessionKey) && !isAwaitingQuestion
+    const staggered = typeof rowIndex === 'number' && rowIndex < 20
+    const rowStyle = staggered
+      ? ({ '--polish-row-index': rowIndex } as CSSProperties)
+      : undefined
     return (
       <div key={session.id} className="relative group">
         {isEditing ? (
@@ -301,7 +305,10 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                 onKeyDown={activeWorkspaceIsLocal ? (e) => openMenuFromKeyboard(e, session.id) : undefined}
                 aria-haspopup={activeWorkspaceIsLocal ? 'menu' : undefined}
                 aria-expanded={activeWorkspaceIsLocal ? menuId === session.id : undefined}
-                className={`w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate transition-colors cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+                data-active={isActive ? 'true' : undefined}
+                data-polish-stagger={staggered ? 'true' : undefined}
+                style={rowStyle}
+                className={`ui-polish-list-row w-full text-start px-3 py-[7px] rounded-md text-[13px] truncate cursor-pointer flex items-center justify-between gap-1 ${isActive ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
                 <span className="truncate flex-1">
                   <span className="flex items-center gap-1.5">
                     {isAwaitingQuestion ? (
@@ -414,7 +421,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
         </div>
       ) : (
         <div className="flex flex-col gap-px">
-          {filtered.map((session) => renderRow(session))}
+          {filtered.map((session, index) => renderRow(session, index))}
         </div>
       )}
 

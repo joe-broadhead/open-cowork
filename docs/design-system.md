@@ -21,6 +21,11 @@ motion, elevation, and content measures. Theme color values stay inside the
 color without forking layout. Borders use three tiers:
 `--color-border-subtle` for dividers, `--color-border` for default hairlines,
 and `--color-border-strong` for focused, active, or elevated containers.
+The Mercury polish layer extends the same token source with material and
+motion primitives: `--specular`, `--shadow-1` / `--shadow-2` / `--shadow-3`,
+`--glass-*`, `--glow-*`, the glowing `--ring-focus`, and `--dur-4`. These
+tokens are derived from the active theme and must be consumed from shared CSS
+variables rather than duplicated per app.
 
 Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `pnpm lint` ratchets the existing renderer count and fails if the count increases.
 
@@ -40,6 +45,22 @@ should happen in the package:
   review-first artifacts/diffs.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
+
+## Agent Builder
+
+The Agent Builder summary uses the shared deterministic capability profile:
+`computeAgentCapabilityProfile()` in
+`packages/shared/src/agent-capability-profile.ts` and
+`AgentCapabilityProfileView` in `packages/ui`. The five axes are Reach
+(selected tools), Skills (selected skills), Context (provider-reported model
+context window), Autonomy (max steps), and Precision (temperature). The score
+is the weighted rollup from the Mercury prototype; it must stay pure,
+provider-agnostic, and free of model-name hardcoding.
+
+Model selection is provider-aware but persistence is unchanged. The builder
+reads `config.providers.available`, shows connected state and catalog metadata,
+uses `app.refreshProviderCatalog(providerId)` for live refreshes, and keeps the
+advanced free-text model ID fallback for power users and uncataloged models.
 
 Desktop and Cloud Web both expose the same workbench structure through
 `data-workbench-pane="threads"`, `data-workbench-pane="conversation"`,
@@ -69,6 +90,6 @@ Command-style pickers should expose the result list as `role="listbox"` with `ro
 
 ## Motion
 
-Motion durations are tokenized as `--dur-1`, `--dur-2`, and `--dur-3`. Global CSS collapses transitions, animations, and smooth scrolling under `prefers-reduced-motion: reduce`, including inline transition styles. Renderer tests cover reduced-motion scrolling for chat source jumps.
+Motion durations are tokenized as `--dur-1`, `--dur-2`, `--dur-3`, and `--dur-4`. Global CSS collapses transitions, animations, and smooth scrolling under `prefers-reduced-motion: reduce`, including inline transition styles. Renderer tests cover reduced-motion scrolling for chat source jumps.
 
 When adding JavaScript-driven motion, check `window.matchMedia('(prefers-reduced-motion: reduce)')` and provide an instant path.

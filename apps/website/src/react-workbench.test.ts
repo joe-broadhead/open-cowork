@@ -33,3 +33,22 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)
 })
+
+test('React workbench marks only post-prompt assistant messages as streaming', () => {
+  const session = makeSession(2)
+  const view = makeSessionView(session, 10, 0)
+  view.projection.view.isGenerating = true
+  view.projection.view.messages = [
+    { id: 'user-1', role: 'user', content: 'First prompt', order: 1 },
+    { id: 'assistant-1', role: 'assistant', content: 'Finished answer', order: 2 },
+    { id: 'user-2', role: 'user', content: 'Follow up', order: 3 },
+  ]
+
+  const waitingHtml = renderToStaticMarkup(createElement(CloudChatTimeline, { view }))
+  assert.doesNotMatch(waitingHtml, /data-streaming="true"/)
+
+  view.projection.view.messages.push({ id: 'assistant-2', role: 'assistant', content: 'Streaming answer', order: 4 })
+  const streamingHtml = renderToStaticMarkup(createElement(CloudChatTimeline, { view }))
+  assert.match(streamingHtml, /data-streaming="true"/)
+  assert.match(streamingHtml, /Streaming answer/)
+})

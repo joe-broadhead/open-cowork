@@ -1,5 +1,7 @@
 export function cloudWebsiteLayoutStyles() {
   return String.raw`    .shell {
+      position: relative;
+      z-index: 1;
       height: 100vh;
       min-height: 100vh;
       display: grid;

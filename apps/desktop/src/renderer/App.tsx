@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
+import { flushSync } from 'react-dom'
 import type { AppMetadata, CustomAgentConfig, EffectiveAppSettings, PublicAppConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
 import { Sidebar } from './components/layout/Sidebar'
 import { TitleBar } from './components/layout/TitleBar'
@@ -42,6 +43,17 @@ import {
 type AgentBuilderSeed = Partial<CustomAgentConfig> | null
 
 const UI_PRIMITIVES_HASH = '#/ui-primitives'
+
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (callback: () => void) => unknown
+}
+
+function canUseViewTransition() {
+  return Boolean(
+    (document as ViewTransitionDocument).startViewTransition
+    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+}
 
 function initialAppView(): AppView {
   if (typeof window !== 'undefined' && window.location.hash === UI_PRIMITIVES_HASH) return 'ui-primitives'
@@ -125,6 +137,16 @@ export function App() {
   // page reload (which would collapse the Settings panel mid-edit).
   const [localeVersion, setLocaleVersion] = useState(0)
   useEffect(() => subscribeLocale(() => setLocaleVersion((n) => n + 1)), [])
+  const navigateView = useCallback((nextView: AppView) => {
+    const apply = () => setView(nextView)
+    if (canUseViewTransition()) {
+      ;(document as ViewTransitionDocument).startViewTransition?.(() => {
+        flushSync(apply)
+      })
+      return
+    }
+    apply()
+  }, [])
   useOpenCodeEvents()
   const [rendererErrorNotice, setRendererErrorNotice] = useRendererErrorNotice()
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
@@ -199,22 +221,22 @@ export function App() {
       } else {
         await window.coworkApi.session.activate(session.id)
       }
-      setView('chat')
+      navigateView('chat')
       return session
     } catch (err) {
       reportAppError('Could not create a new thread. Try again.', err, 'session-create')
       return null
     }
-  }, [addSession, reportAppError, setCurrentSession])
+  }, [addSession, navigateView, reportAppError, setCurrentSession])
 
   const openExistingThread = useCallback(async (sessionId: string, workspaceId?: string) => {
-    setView('chat')
+    navigateView('chat')
     if (workspaceId) {
       await loadSessionMessages(sessionId, { workspaceId })
     } else {
       await loadSessionMessages(sessionId)
     }
-  }, [])
+  }, [navigateView])
 
   const ensureSidebarVisible = useCallback(() => {
     const state = useSessionStore.getState()
@@ -265,7 +287,7 @@ export function App() {
     setResourceNavigationNotice(null)
 
     if (action.routeKey === 'workspace') {
-      setView('home')
+      navigateView('home')
       return
     }
 
@@ -276,7 +298,7 @@ export function App() {
     }
 
     if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
-      setView('workflows')
+      navigateView('workflows')
       return
     }
 
@@ -286,12 +308,12 @@ export function App() {
     }
 
     if (action.routeKey === 'diagnostics') {
-      setView('health')
+      navigateView('health')
       return
     }
 
     if (action.routeKey === 'capability') {
-      setView('capabilities')
+      navigateView('capabilities')
       return
     }
 
@@ -299,7 +321,7 @@ export function App() {
       status: 'unavailable',
       message: action.message || 'Exact navigation for this resource is not available yet.',
     })
-  }, [activateExactWorkspace, openExistingThread, openSidebarSettings])
+  }, [activateExactWorkspace, navigateView, openExistingThread, openSidebarSettings])
 
   const openResourceNavigationTarget = useCallback(async (detail: unknown) => {
     try {
@@ -376,7 +398,7 @@ export function App() {
     createAndActivateSession,
     openSidebarSearch,
     openSidebarSettings,
-    setView,
+    setView: navigateView,
     setAuthenticated,
     setShowCommandPalette,
   })
@@ -391,11 +413,11 @@ export function App() {
 
   useEffect(() => {
     const listener = () => {
-      if (window.location.hash === UI_PRIMITIVES_HASH) setView('ui-primitives')
+      if (window.location.hash === UI_PRIMITIVES_HASH) navigateView('ui-primitives')
     }
     window.addEventListener('hashchange', listener)
     return () => window.removeEventListener('hashchange', listener)
-  }, [])
+  }, [navigateView])
 
   // If the current thread disappears while the chat view is active —
   // deleted from the sidebar, reset, or reverted to null by a runtime
@@ -404,9 +426,9 @@ export function App() {
   // user would see a blank pane with no way back.
   useEffect(() => {
     if (view === 'chat' && !currentSessionId) {
-      setView('home')
+      navigateView('home')
     }
-  }, [view, currentSessionId])
+  }, [currentSessionId, navigateView, view])
 
   useEffect(() => {
     if (view !== 'chat' || !pendingComposerInsert) return
@@ -634,14 +656,14 @@ export function App() {
         {!sidebarCollapsed && (
           <Sidebar
             currentView={view}
-            onViewChange={setView}
+            onViewChange={navigateView}
             searchRequestNonce={sidebarSearchNonce}
             settingsRequestNonce={sidebarSettingsNonce}
             branding={config.branding.sidebar}
           />
         )}
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
-          <ViewErrorBoundary resetKey={view} onBackHome={() => setView('home')}>
+          <ViewErrorBoundary resetKey={view} onBackHome={() => navigateView('home')}>
             {view === 'home' && (
               <HomePage
                 brandName={config.branding.name}
@@ -670,8 +692,8 @@ export function App() {
                 <AgentsPage
                   initialDraft={agentBuilderSeed}
                   onClearDraft={() => setAgentBuilderSeed(null)}
-                  onClose={() => setView('chat')}
-                  onOpenCapabilities={() => setView('capabilities')}
+                  onClose={() => navigateView('chat')}
+                  onOpenCapabilities={() => navigateView('capabilities')}
                   onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
                 />
               </Suspense>
@@ -679,10 +701,10 @@ export function App() {
             {view === 'capabilities' && (
               <Suspense fallback={null}>
                 <CapabilitiesPage
-                  onClose={() => setView('chat')}
+                  onClose={() => navigateView('chat')}
                   onCreateAgent={(seed) => {
                     setAgentBuilderSeed(seed)
-                    setView('agents')
+                    navigateView('agents')
                   }}
                 />
               </Suspense>
@@ -706,18 +728,18 @@ export function App() {
           resetKey="command-palette"
           onBackHome={() => {
             setShowCommandPalette(false)
-            setView('home')
+            navigateView('home')
           }}
         >
           <Suspense fallback={null}>
             <CommandPalette
               onClose={() => setShowCommandPalette(false)}
-              onNavigate={setView}
+              onNavigate={navigateView}
               onCreateThread={createAndActivateSession}
               onEnsureSession={ensureActiveSession}
               onInsertComposer={(text) => {
                 setPendingComposerInsert(text)
-                setView('chat')
+                navigateView('chat')
               }}
               onSetAgentMode={setAgentMode}
               onOpenSettings={openSidebarSettings}

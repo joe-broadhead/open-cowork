@@ -68,6 +68,22 @@ Surfaces use three border tiers so the UI stays crisp across all presets:
 Cards and panels combine `--shadow-card` with a subtle inset top highlight;
 dialogs and popovers reserve `--shadow-elevated`.
 
+The Mercury polish layer adds physical-material primitives without changing the
+theme palette:
+
+| Token | Role |
+| --- | --- |
+| `--specular` / `--specular-strong` | 1px inset light lines for elevated or active material surfaces |
+| `--shadow-1` | tight contact shadow for small lifted controls |
+| `--shadow-2` | alias to the per-theme `--shadow-card` ramp |
+| `--shadow-3` | alias to the per-theme `--shadow-elevated` ramp |
+| `--glass-bg`, `--glass-blur`, `--glass-border` | floating-surface glass treatment for dialogs, menus, palettes, tooltips, and toasts |
+| `--glow-accent`, `--glow-soft` | accent-derived glow for active, streaming, and focus moments |
+
+`--shadow-card` and `--shadow-elevated` remain the canonical per-theme shadow
+sources. The new `--shadow-2` and `--shadow-3` aliases preserve the character
+of all 17 presets while giving component code a consistent three-tier ramp.
+
 ## Tracking
 
 Display type uses small negative tracking instead of oversized weight:
@@ -91,12 +107,14 @@ Display type uses small negative tracking instead of oversized weight:
 ## Motion
 
 Use `--dur-1` for small hover changes, `--dur-2` for panel/toast transitions,
-and `--dur-3` for larger surface changes. `prefers-reduced-motion: reduce`
-sets all three durations to `0ms`.
+`--dur-3` for larger surface changes, and `--dur-4` for app-shell or hero
+surface choreography. `prefers-reduced-motion: reduce` sets all four durations
+to `0ms`.
 
 Use `--ease-out` for most interface exits/entries and `--ease-emphasized`
-only when a surface needs a clearer snap. Use `--ease-spring` only for small
-menu/toast entrance polish.
+only when a surface needs a clearer snap. Use `--ease-spring` for polished
+press, menu, disclosure, and app-shell motion where the movement is short,
+GPU-friendly, and reduced-motion safe.
 
 ## Layers And Controls
 
@@ -146,5 +164,5 @@ Supported keys are:
 
 Downstream builders should override only the color/brand keys they own and let
 the shared structural tokens continue to define layout density, control heights,
-radii, typography scale, and shadows. Do not reintroduce Cloud Web-only spacing
-or typography scales.
+radii, typography scale, shadows, glass, glow, and motion. Do not reintroduce
+Cloud Web-only spacing or typography scales.

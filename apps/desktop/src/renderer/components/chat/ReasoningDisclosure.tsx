@@ -37,7 +37,7 @@ export function ReasoningDisclosure({
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-label={ariaLabel}
-        className="group inline-flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-text-muted transition-colors hover:text-text"
+        className="reasoning-disclosure-trigger group inline-flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[12px] text-text-muted transition-colors hover:text-text"
       >
         <span className="inline-flex items-center gap-2">
           <span className="font-medium">{label}</span>
@@ -59,7 +59,7 @@ export function ReasoningDisclosure({
       </button>
       {open && (
         <div
-          className={`mt-1 max-w-full min-w-0 overflow-hidden rounded-md border-l ${compact ? 'px-3 py-2' : 'px-3 py-2.5'}`}
+          className={`reasoning-disclosure-panel mt-1 max-w-full min-w-0 overflow-hidden rounded-md border-l ${compact ? 'px-3 py-2' : 'px-3 py-2.5'}`}
           style={{
             borderColor: 'color-mix(in srgb, var(--color-accent) 42%, var(--color-border-subtle))',
             background: 'color-mix(in srgb, var(--color-surface-active) 58%, transparent)',

@@ -8,6 +8,7 @@ import {
   Card,
   Dialog,
   ActionCluster,
+  AgentCapabilityProfileView,
   DiffView,
   EmptyState,
   Icon,
@@ -346,6 +347,72 @@ describe('Workbench IA primitives', () => {
     await user.click(screen.getByRole('button', { name: 'Review' }))
     expect(onReview).toHaveBeenCalledTimes(1)
   })
+
+  it('focus-manages the review pane as a narrow drawer', async () => {
+    const user = userEvent.setup()
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(max-width: 920px)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    function DrawerHarness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <div>
+          <button type="button" onClick={() => setOpen(true)}>Open review</button>
+          <WorkbenchLayout
+            mainLabel="Conversation"
+            reviewLabel="Review drawer"
+            mainPane={<div>Active conversation</div>}
+            reviewOpen={open}
+            reviewPane={(
+              <div>
+                <button type="button">First action</button>
+                <button type="button" onClick={() => setOpen(false)}>Close drawer</button>
+              </div>
+            )}
+          />
+        </div>
+      )
+    }
+
+    try {
+      render(<DrawerHarness />)
+      const opener = screen.getByRole('button', { name: 'Open review' })
+      await user.click(opener)
+      const drawer = screen.getByRole('complementary', { name: 'Review drawer' })
+      await waitFor(() => expect(document.activeElement).toBe(drawer))
+
+      const firstAction = screen.getByRole('button', { name: 'First action' })
+      const closeAction = screen.getByRole('button', { name: 'Close drawer' })
+      firstAction.focus()
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+      expect(document.activeElement).toBe(closeAction)
+
+      fireEvent.keyDown(document, { key: 'Tab' })
+      expect(document.activeElement).toBe(firstAction)
+
+      await user.click(closeAction)
+      await waitFor(() => expect(document.activeElement).toBe(opener))
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: originalMatchMedia,
+      })
+    }
+  })
 })
 
 describe('SegmentedControl', () => {
@@ -377,6 +444,30 @@ describe('SegmentedControl', () => {
     expect(screen.getByRole('tablist', { name: 'Empty segments' })).toBeInTheDocument()
     expect(screen.queryByRole('tab')).not.toBeInTheDocument()
     expect(screen.getByText('No segments available.')).toBeInTheDocument()
+  })
+})
+
+describe('AgentCapabilityProfileView', () => {
+  it('renders the deterministic profile score, radar, and legend', () => {
+    render(
+      <AgentCapabilityProfileView
+        profile={{
+          score: 56,
+          label: 'Broad',
+          axes: [
+            { id: 'reach', label: 'Reach', value: 3, weight: 0.24, raw: '3 tools', description: 'External surfaces.' },
+            { id: 'skills', label: 'Skills', value: 2, weight: 0.24, raw: '2 skills', description: 'Methods.' },
+            { id: 'context', label: 'Context', value: 3, weight: 0.20, raw: '200K ctx', description: 'Window.' },
+            { id: 'autonomy', label: 'Autonomy', value: 2.2727, weight: 0.16, raw: '30 steps', description: 'Runway.' },
+            { id: 'precision', label: 'Precision', value: 4, weight: 0.16, raw: 'temp 0.20', description: 'Determinism.' },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Agent capability profile: 56 out of 100, Broad')).toBeInTheDocument()
+    expect(screen.getByText('Capability profile')).toBeInTheDocument()
+    expect(screen.getByText('200K ctx')).toBeInTheDocument()
   })
 })
 

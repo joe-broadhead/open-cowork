@@ -59,8 +59,8 @@ export function draftFromCustomAgent(agent: CustomAgentSummary): CustomAgentConf
 
 export function draftFromBuiltInAgent(agent: BuiltInAgentDetail): CustomAgentConfig {
   // Built-ins expose tools across overlapping arrays. Merge the native
-  // OpenCode tool ids and Cowork-configured MCP ids so the loadout mirrors
-  // the effective agent surface shown elsewhere in the catalog.
+  // OpenCode tool ids and Cowork-configured MCP ids so the capability
+  // summary mirrors the effective agent surface shown elsewhere in the catalog.
   const instructions = agent.instructions.trim()
     ? agent.instructions
     : agent.source === 'opencode'

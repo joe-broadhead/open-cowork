@@ -783,7 +783,7 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
               <div role="row">
                 <div role="gridcell" aria-colspan={5} className="grid gap-2 p-4">
                   {Array.from({ length: 5 }).map((_, index) => (
-                    <Skeleton key={index} variant="block" className="h-12" />
+                    <Skeleton key={index} variant="row" />
                   ))}
                 </div>
               </div>

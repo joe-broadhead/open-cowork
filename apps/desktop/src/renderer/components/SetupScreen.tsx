@@ -415,7 +415,10 @@ export function SetupScreen({
             ))}
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface">
-            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${progressPercent}%` }} />
+            <div
+              className={`h-full rounded-full bg-accent transition-[width] ${connectionTest.status === 'testing' ? 'ui-progress-shimmer' : ''}`}
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
           <p className="mt-2 text-xs text-text-muted">
             {runtimeProgressLabel(visibleRuntimeProgress, connectionTest.message)}
