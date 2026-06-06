@@ -7,25 +7,33 @@
   "main": "dist/render.js",
   "types": "dist/render.d.ts",
   "scripts": {
-    "build": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
-    "typecheck": "pnpm --filter @open-cowork/shared build && tsc --noEmit",
-    "test": "node --no-warnings --experimental-strip-types --test src/*.test.ts",
-    "test:browser": "pnpm --filter @open-cowork/shared build && pnpm run test:browser:run",
+    "build": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && tsc --noEmit && vite build && node ../../scripts/minify-cloud-react-client.mjs",
+    "typecheck": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && tsc --noEmit",
+    "test": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && node --no-warnings --experimental-strip-types --test src/*.test.ts",
+    "test:browser": "pnpm run build && pnpm run test:browser:run",
     "test:browser:dom": "node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts",
     "test:browser:real": "node --no-warnings --experimental-strip-types --test src/browser-real-e2e.spec.ts",
     "test:browser:run": "pnpm run test:browser:dom && pnpm run test:browser:real",
-    "test:a11y": "pnpm --filter @open-cowork/shared build && pnpm run test:a11y:run",
+    "test:a11y": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && pnpm run test:a11y:run",
     "test:a11y:run": "node --no-warnings --experimental-strip-types --test src/accessibility.test.ts",
-    "perf:check": "pnpm --filter @open-cowork/shared build && pnpm run perf:check:run",
+    "perf:check": "pnpm --filter @open-cowork/shared build && pnpm --filter @open-cowork/ui build && pnpm run perf:check:run",
     "perf:check:run": "node --no-warnings --experimental-strip-types --test src/performance.test.ts"
   },
   "dependencies": {
-    "@open-cowork/shared": "workspace:*"
+    "@open-cowork/shared": "workspace:*",
+    "@open-cowork/ui": "workspace:*",
+    "lucide-react": "^1.17.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
     "@types/node": "^22.12.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "jsdom": "26.1.0",
     "playwright-core": "^1.59.1",
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.0",
+    "vite": "^8.0.10"
   }
 }

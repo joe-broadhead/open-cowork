@@ -32,6 +32,7 @@ export type CloudWebThreadProjection = {
 export type CloudWebThreadView = {
   session?: CloudWebThreadSession
   projection?: {
+    sequence?: number | null
     view?: CloudWebThreadProjection | null
   } | null
 }

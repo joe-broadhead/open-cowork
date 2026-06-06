@@ -10,6 +10,12 @@ export type CloudWorkerCheckpointHooks = {
   saveAfterCommand?: (lease: WorkerLeaseRecord) => Promise<void>
 }
 
+const MAX_STALE_CHECKPOINT_RETRIES = 3
+
+function isStaleCheckpointError(error: unknown) {
+  return error instanceof Error && /checkpoint version is stale/i.test(error.message)
+}
+
 export class CloudWorkerLeaseLostError extends Error {
   constructor() {
     super('Cloud worker lost its session lease during command execution.')
@@ -145,7 +151,7 @@ export class CloudWorker {
           reservedMinutes: 1,
         })
       }
-      lease = await this.store.checkpointSession(lease)
+      lease = await this.checkpointLease(lease)
       await this.checkpointHooks.saveAfterCommand?.(lease)
       this.leases.set(this.leaseKey(tenantId, sessionId), lease)
       processed += 1
@@ -231,7 +237,7 @@ export class CloudWorker {
       event,
       leaseToken: lease.leaseToken,
     })
-    lease = await this.store.checkpointSession(lease)
+    lease = await this.checkpointLease(lease)
     await this.checkpointHooks.saveAfterCommand?.(lease)
     this.leases.set(this.leaseKey(tenantId, sessionId), lease)
     return true
@@ -256,6 +262,28 @@ export class CloudWorker {
     if (!this.checkpointHooks.restoreBeforeCommands || this.restoredLeaseTokens.has(lease.leaseToken)) return
     await this.checkpointHooks.restoreBeforeCommands(lease)
     this.restoredLeaseTokens.add(lease.leaseToken)
+  }
+
+  private async checkpointLease(lease: WorkerLeaseRecord): Promise<WorkerLeaseRecord> {
+    let current = lease
+    for (let attempt = 0; attempt < MAX_STALE_CHECKPOINT_RETRIES; attempt += 1) {
+      try {
+        return await this.store.checkpointSession(current)
+      } catch (error) {
+        if (!isStaleCheckpointError(error) || attempt === MAX_STALE_CHECKPOINT_RETRIES - 1) {
+          throw error
+        }
+        await recordCloudWorkerMetric(this.observability, {
+          name: 'open_cowork_cloud_worker_checkpoint_stale_retries_total',
+          workerId: this.workerId,
+          tenantId: current.tenantId,
+          sessionId: current.sessionId,
+          status: 'retry',
+        })
+        current = await this.store.renewSessionLease(current, new Date(), this.leaseTtlMs)
+      }
+    }
+    return current
   }
 
   private async getOrClaimLease(tenantId: string, sessionId: string): Promise<WorkerLeaseRecord | null> {

@@ -36,20 +36,20 @@ export type CloudWebRouteGroup = {
   routes: CloudWebRoute[]
 }
 
-export const DEFAULT_CLOUD_WEB_ROUTE: CloudWebRouteId = 'threads'
+export const DEFAULT_CLOUD_WEB_ROUTE: CloudWebRouteId = 'chat'
 
 export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
   {
     id: 'threads',
-    label: 'Threads',
+    label: 'History',
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: cloudWebWorkbenchRouteSummary('threads', 'Cloud threads from web, desktop, and gateway.'),
+    summary: cloudWebWorkbenchRouteSummary('threads', 'Recent conversations from web, desktop, and gateway.'),
   },
   {
     id: 'chat',
-    label: 'Chat',
+    label: 'Home',
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,

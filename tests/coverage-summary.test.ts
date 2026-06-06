@@ -291,6 +291,14 @@ test('coverage summary reports the enforced shipped workspace ratchet', () => {
   })
   assert.ok(DEFAULT_INPUTS.includes(WORKSPACE_NODE_COVERAGE_INPUT))
   assert.equal(WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.minimumPercent, 90)
+  assert.deepEqual(
+    WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.roots.find((root) => root.path === 'apps/website/src')?.extensions,
+    ['.ts'],
+  )
+  assert.deepEqual(
+    WORKSPACE_NODE_COVERAGE_INPUT.sourceInventory.roots.find((root) => root.path === 'apps/standalone-gateway/dist')?.excludeFileNames,
+    ['main.js', 'types.js'],
+  )
   for (const expectedPrefix of [
     'apps/gateway/dist/',
     'apps/standalone-gateway/dist/',

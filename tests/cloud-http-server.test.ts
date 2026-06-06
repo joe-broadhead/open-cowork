@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { DEFAULT_CONFIG, type CloudAbuseConfig, type CloudBillingConfig } from '../apps/desktop/src/main/config-types.ts'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
 import { CloudArtifactService } from '../apps/desktop/src/main/cloud/artifact-service.ts'
 import type { BillingAdapter } from '../apps/desktop/src/main/cloud/billing-adapter.ts'
 import { createApiTokenCloudAuthResolver, createManagedWorkerCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
@@ -32,6 +36,7 @@ import {
   signWorkflowWebhookPayload,
   type WorkflowWebhookSecurityStore,
 } from '../apps/desktop/src/main/workflow/workflow-webhook-server.ts'
+import { invalidateRuntimeCatalogSnapshotCache } from '../apps/desktop/src/main/runtime-catalog-snapshot.ts'
 
 const TEST_COOKIE_KEY = 'not-a-real-cookie-key-for-tests'
 
@@ -2061,6 +2066,23 @@ test('cloud HTTP server serves only allow-listed Cloud Web font assets', async (
   }
 })
 
+test('cloud HTTP server serves the allow-listed Cloud Web React client asset', async () => {
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const asset = await fetch(`${baseUrl}/assets/open-cowork-cloud-react.js`)
+    assert.equal(asset.status, 200)
+    assert.equal(asset.headers.get('content-type'), 'application/javascript; charset=utf-8')
+    assert.equal(asset.headers.get('cache-control'), 'no-store')
+    assert.match(await asset.text(), /open-cowork-cloud-react-root|cloud-react-probe|reactStatus/)
+
+    const unknown = await fetch(`${baseUrl}/assets/not-the-react-client.js`)
+    assert.equal(unknown.status, 404)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server authenticates bearer API tokens and rejects revoked tokens', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Tenant 1' })
@@ -3391,6 +3413,109 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   }
 })
 
+test('cloud HTTP channel interaction callbacks acknowledge accepted runtime-processing failures', async () => {
+  const fixture = createFixture({ policy: policyWithRemoteApprovalResponses() })
+  fixture.runtime.respondToPermission = async (input) => {
+    throw new Error(`Permission request not found: ${input.permissionId}`)
+  }
+  const baseUrl = await fixture.server.listen()
+  const headers = { 'content-type': 'application/json' }
+
+  try {
+    const agentResponse = await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        agentId: 'agent-callback-processing',
+        name: 'Callback Processing',
+        profileName: 'full',
+      }),
+    })
+    assert.equal(agentResponse.status, 201)
+
+    const bindingResponse = await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        bindingId: 'binding-callback-processing',
+        agentId: 'agent-callback-processing',
+        provider: 'telegram',
+        displayName: 'Telegram',
+        status: 'active',
+      }),
+    })
+    assert.equal(bindingResponse.status, 201)
+    const binding = asRecord((await readJson(bindingResponse)).binding)
+
+    const identityResponse = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalUserId: 'callback-user',
+        role: 'member',
+        status: 'active',
+      }),
+    })
+    assert.equal(identityResponse.status, 200)
+    const identity = asRecord((await readJson(identityResponse)).identity)
+
+    const bindResponse = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        channelBindingId: binding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'callback-chat',
+        externalThreadId: 'callback-thread',
+        title: 'Callback processing',
+      }),
+    })
+    assert.equal(bindResponse.status, 200)
+    const cloudSession = asRecord(asRecord((await readJson(bindResponse)).session).session)
+
+    const interactionResponse = await fetch(`${baseUrl}/api/channels/interactions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        interactionId: 'interaction-callback-processing',
+        agentId: 'agent-callback-processing',
+        sessionId: cloudSession.sessionId,
+        provider: 'telegram',
+        kind: 'permission',
+        targetId: 'permission-missing',
+        tokenSecret: 'callback-secret',
+      }),
+    })
+    assert.equal(interactionResponse.status, 201)
+    const issuedInteraction = await readJson(interactionResponse)
+
+    const approvalResponse = await fetch(`${baseUrl}/api/channels/interactions/resolve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        identityId: identity.identityId,
+        token: issuedInteraction.plaintextToken,
+        response: { allowed: true },
+      }),
+    })
+    assert.equal(approvalResponse.status, 202)
+    const approval = await readJson(approvalResponse)
+    assert.equal(asRecord(approval.command).kind, 'permission.respond')
+    assert.equal(approval.processed, 0)
+    assert.match(String(approval.processingError), /Permission request not found: permission-missing/)
+    assert.equal(asRecord(approval.interaction).status, 'used')
+    assert.equal(approval.projectionFence, null)
+
+    const view = asRecord(asRecord(approval.view).projection).view
+    assert.match(String(asRecord(view).lastError), /Permission request not found: permission-missing/)
+    assert.deepEqual(fixture.runtime.permissions, [])
+  } finally {
+    await fixture.server.close()
+  }
+})
+
 test('cloud HTTP server attaches request ids and emits observability records', async () => {
   const logs: unknown[] = []
   const metrics: unknown[] = []
@@ -4294,6 +4419,37 @@ test('cloud HTTP exposes worker heartbeat visibility for operators', async () =>
 })
 
 test('cloud HTTP exposes a read-only capability catalog filtered by profile allowlists', async () => {
+  const previousConfigPath = process.env.OPEN_COWORK_CONFIG_PATH
+  const configDir = await mkdtemp(join(tmpdir(), 'open-cowork-capabilities-'))
+  const configPath = join(configDir, 'open-cowork.config.json')
+  await writeFile(configPath, JSON.stringify({
+    tools: [{
+      id: 'charts',
+      name: 'Charts',
+      description: 'Render chart artifacts.',
+      kind: 'mcp',
+      namespace: 'charts',
+      patterns: ['mcp__charts__*'],
+    }],
+    mcps: [{
+      name: 'charts',
+      type: 'local',
+      description: 'Charts MCP',
+      authMode: 'none',
+      command: ['node', 'charts.js'],
+    }],
+    agents: [{
+      name: 'data-analyst',
+      label: 'data-analyst',
+      description: 'Analyze data.',
+      instructions: 'Analyze data.',
+      toolIds: ['charts'],
+    }],
+  }), 'utf8')
+  process.env.OPEN_COWORK_CONFIG_PATH = configPath
+  clearConfigCaches()
+  invalidateRuntimeCatalogSnapshotCache()
+
   const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
   const fixture = createFixture({
     policy: {
@@ -4325,6 +4481,11 @@ test('cloud HTTP exposes a read-only capability catalog filtered by profile allo
     assert.equal(skills.some((skill) => asRecord(skill).toolIds && asArray(asRecord(skill).toolIds).includes('charts')), true)
   } finally {
     await fixture.server.close()
+    if (previousConfigPath === undefined) delete process.env.OPEN_COWORK_CONFIG_PATH
+    else process.env.OPEN_COWORK_CONFIG_PATH = previousConfigPath
+    clearConfigCaches()
+    invalidateRuntimeCatalogSnapshotCache()
+    await rm(configDir, { recursive: true, force: true })
   }
 })
 

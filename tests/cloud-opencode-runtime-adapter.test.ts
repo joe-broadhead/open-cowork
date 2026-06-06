@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import { createCloudPathProvider } from '../apps/desktop/src/main/cloud/path-provider.ts'
+import { createSdkCloudRuntimeAdapter } from '../apps/desktop/src/main/cloud/runtime-adapter.ts'
 import {
   buildNodeOpencodeCloudRuntimeClientConfig,
   createNodeOpencodeCloudRuntimeAdapter,
@@ -20,6 +21,55 @@ function writeExecutable(root: string, name: string, source: string) {
   chmodSync(path, 0o755)
   return path
 }
+
+test('cloud SDK runtime adapter only forwards native OpenCode message ids', async () => {
+  const promptInputs: unknown[] = []
+  const parts = [{ type: 'text' as const, text: 'hello' }]
+  const adapter = createSdkCloudRuntimeAdapter({
+    session: {
+      async create() {
+        return {
+          data: {
+            id: 'ses_1',
+            title: 'Session',
+            time: { created: Date.now(), updated: Date.now() },
+          },
+        }
+      },
+      async promptAsync(input) {
+        promptInputs.push(input)
+      },
+      async abort() {},
+    },
+  })
+
+  await adapter.promptSession({
+    sessionId: 'ses_1',
+    parts,
+    agent: 'build',
+    messageId: 'cmd-1',
+  })
+  await adapter.promptSession({
+    sessionId: 'ses_1',
+    parts,
+    agent: 'build',
+    messageId: 'msg_valid',
+  })
+
+  assert.deepEqual(promptInputs, [
+    {
+      sessionID: 'ses_1',
+      parts,
+      agent: 'build',
+    },
+    {
+      sessionID: 'ses_1',
+      parts,
+      agent: 'build',
+      messageID: 'msg_valid',
+    },
+  ])
+})
 
 test('cloud OpenCode event translator maps SDK message, status, idle, and error events', () => {
   assert.deepEqual(translateOpencodeRuntimeEvent({

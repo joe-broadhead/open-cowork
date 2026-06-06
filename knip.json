@@ -54,7 +54,7 @@
         "src/*.test.ts"
       ],
       "project": [
-        "src/**/*.ts"
+        "src/**/*.{ts,tsx}"
       ]
     },
     "apps/gateway": {
@@ -82,6 +82,14 @@
       ],
       "project": [
         "src/**/*.ts"
+      ]
+    },
+    "packages/ui": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}"
       ]
     },
     "packages/cloud-client": {

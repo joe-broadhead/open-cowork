@@ -568,6 +568,7 @@ export function Sidebar({
       <aside
         className="flex w-[252px] flex-col shrink-0 border-e border-border-subtle transition-[width] duration-200"
         style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
+        data-workbench-pane="threads"
       >
           <SidebarBrandTop top={branding?.top} />
           <WorkspaceSwitcher />

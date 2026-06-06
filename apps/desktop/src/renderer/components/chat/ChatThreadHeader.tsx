@@ -1,5 +1,6 @@
 import type { Session } from '../../stores/session'
 import { t } from '../../helpers/i18n'
+import { ActionCluster } from '../ui'
 
 type ChatThreadHeaderProps = {
   currentSession: Session | null
@@ -80,12 +81,30 @@ export function ChatThreadHeader({
           )}
         </div>
       </div>
-      <button
-        onClick={onToggleInspector}
-        className="shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border border-border-subtle text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer"
-      >
-        {inspectorOpen ? 'Hide Context' : 'Show Context'}
-      </button>
+      <ActionCluster
+        label={t('chat.threadActions', 'Thread actions')}
+        className="desktop-thread-action-cluster shrink-0"
+        items={[
+          {
+            id: 'context',
+            label: inspectorOpen ? 'Hide Context' : 'Show Context',
+            icon: 'panel-left',
+            pressed: inspectorOpen,
+            title: inspectorOpen ? 'Hide the review pane' : 'Show the review pane',
+            onAction: onToggleInspector,
+          },
+          {
+            id: 'review',
+            label: 'Review',
+            icon: 'file-diff',
+            hidden: !currentSession?.changeSummary || currentSession.changeSummary.files <= 0,
+            pressed: inspectorOpen,
+            tone: 'primary',
+            title: 'Review changed files and artifacts',
+            onAction: onToggleInspector,
+          },
+        ]}
+      />
     </div>
   )
 }
