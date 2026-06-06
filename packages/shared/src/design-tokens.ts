@@ -2,12 +2,13 @@ import type { BrandThemeTokens, PublicBrandingThemeTokens } from './app-config.j
 
 export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
   base: '#1b1b26',
-  surface: 'rgba(141, 164, 245, 0.04)',
-  surfaceHover: 'rgba(141, 164, 245, 0.08)',
-  surfaceActive: 'rgba(141, 164, 245, 0.15)',
+  surface: 'rgba(141, 164, 245, 0.055)',
+  surfaceHover: 'rgba(141, 164, 245, 0.10)',
+  surfaceActive: 'rgba(141, 164, 245, 0.17)',
   elevated: '#23232f',
-  border: 'rgba(180, 194, 250, 0.07)',
-  borderSubtle: 'rgba(180, 194, 250, 0.035)',
+  border: 'rgba(180, 194, 250, 0.12)',
+  borderSubtle: 'rgba(180, 194, 250, 0.04)',
+  borderStrong: 'rgba(180, 194, 250, 0.18)',
   text: '#e8e9f3',
   textSecondary: '#b0b3c6',
   textMuted: '#8a8da0',
@@ -18,9 +19,9 @@ export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
   red: '#fc92b4',
   info: '#82cadc',
   accentForeground: '#0f0f18',
-  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18)',
-  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%)',
+  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.16)',
+  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.30), 0 18px 44px rgba(0, 0, 0, 0.24)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.05), transparent 55%)',
 }
 
 export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
@@ -39,6 +40,7 @@ export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
   'surfaceHover',
   'surfaceActive',
   'borderSubtle',
+  'borderStrong',
   'elevated',
   'textSecondary',
   'accentHover',
@@ -69,6 +71,7 @@ export function brandThemeToPublicBrandingTheme(theme: BrandThemeTokens): Public
     surfaceHover: theme.surfaceHover,
     surfaceActive: theme.surfaceActive,
     borderSubtle: theme.borderSubtle,
+    borderStrong: theme.borderStrong || theme.border,
     elevated: theme.elevated,
     textSecondary: theme.textSecondary,
     accentHover: theme.accentHover,
@@ -90,6 +93,7 @@ export const LEGACY_LIGHT_PUBLIC_BRANDING_THEME: PublicBrandingThemeTokens = {
   surface: '#ffffff',
   mutedSurface: '#ecefed',
   border: '#d8ddd7',
+  borderStrong: '#b9c4bc',
   text: '#18211c',
   mutedText: '#66736b',
   accent: '#2d6b56',
@@ -435,6 +439,7 @@ export function derivePublicBrandingThemeTokens(theme: PublicBrandingThemeTokens
   assign('surfaceHover', derived.mutedSurface || derived.surface)
   assign('surfaceActive', derived.mutedSurface || derived.surface)
   assign('borderSubtle', derived.border)
+  assign('borderStrong', derived.border)
   assign('textSecondary', derived.mutedText)
   assign('accentHover', derived.accentStrong || derived.accent)
   assign('accentForeground', token(derived.accent) ? '#fff' : undefined)
@@ -481,9 +486,15 @@ export const DESIGN_TOKENS = {
     4: '16px',
     5: '20px',
     6: '24px',
+    7: '28px',
     8: '32px',
+    9: '36px',
     10: '40px',
     12: '48px',
+  },
+  tracking: {
+    tight: '-0.01em',
+    display: '-0.02em',
   },
   radius: {
     xs: '6px',
@@ -497,9 +508,17 @@ export const DESIGN_TOKENS = {
     card: DEFAULT_DARK_BRAND_THEME.shadowCard,
     elevated: DEFAULT_DARK_BRAND_THEME.shadowElevated,
   },
+  elevation: {
+    popover: 'var(--shadow-elevated)',
+  },
+  ring: {
+    focus: '0 0 0 2px color-mix(in srgb, var(--color-accent) 55%, transparent)',
+    selected: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent)',
+  },
   ease: {
     out: 'cubic-bezier(0.2, 0, 0, 1)',
     emphasized: 'cubic-bezier(0.3, 0, 0, 1)',
+    spring: 'cubic-bezier(0.16, 1, 0.3, 1)',
   },
   duration: {
     1: '120ms',
@@ -529,6 +548,18 @@ export const DESIGN_TOKENS = {
   borderWidth: {
     1: '1px',
   },
+  primitive: {
+    tooltipMaxW: 'calc((var(--space-12) * 5) + var(--space-5))',
+    popoverMaxH: 'calc((var(--space-12) * 6) + var(--space-8))',
+    dialogMaxH: 'calc(var(--space-12) * 15)',
+    dialogWSm: 'calc((var(--space-10) * 10) + var(--space-5))',
+    dialogWMd: 'calc((var(--space-12) * 11) + var(--space-8))',
+    dialogWLg: 'calc((var(--space-12) * 15) + var(--space-10))',
+  },
+  measure: {
+    default: '840px',
+    wide: '1200px',
+  },
 } as const
 
 function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
@@ -540,6 +571,7 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ['--color-elevated', tokens.color.elevated],
     ['--color-border', tokens.color.border],
     ['--color-border-subtle', tokens.color.borderSubtle],
+    ['--color-border-strong', tokens.color.borderStrong || tokens.color.border],
     ['--color-text', tokens.color.text],
     ['--color-text-secondary', tokens.color.textSecondary],
     ['--color-text-muted', tokens.color.textMuted],
@@ -556,16 +588,28 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ...Object.entries(tokens.text).map(([name, value]) => [`--text-${name}`, value] as [string, string]),
     ...Object.entries(tokens.lineHeight).map(([name, value]) => [`--lh-${name}`, value] as [string, string]),
     ...Object.entries(tokens.space).map(([name, value]) => [`--space-${name}`, value] as [string, string]),
+    ...Object.entries(tokens.tracking).map(([name, value]) => [`--tracking-${name}`, value] as [string, string]),
     ...Object.entries(tokens.radius).map(([name, value]) => [`--radius-${name}`, value] as [string, string]),
     ['--shadow-card', tokens.shadow.card],
     ['--shadow-elevated', tokens.shadow.elevated],
     ['--bg-image', tokens.color.bgImage],
+    ['--elevation-popover', tokens.elevation.popover],
+    ['--ring-focus', tokens.ring.focus],
+    ['--ring-selected', tokens.ring.selected],
     ...Object.entries(tokens.ease).map(([name, value]) => [`--ease-${name}`, value] as [string, string]),
     ...Object.entries(tokens.duration).map(([name, value]) => [`--dur-${name}`, value] as [string, string]),
     ...Object.entries(tokens.z).map(([name, value]) => [`--z-${name}`, value] as [string, string]),
     ...Object.entries(tokens.controlHeight).map(([name, value]) => [`--control-h-${name}`, value] as [string, string]),
     ...Object.entries(tokens.borderWidth).map(([name, value]) => [`--border-width-${name}`, value] as [string, string]),
     ...Object.entries(tokens.iconSize).map(([name, value]) => [`--icon-size-${name}`, value] as [string, string]),
+    ['--primitive-tooltip-max-w', tokens.primitive.tooltipMaxW],
+    ['--primitive-popover-max-h', tokens.primitive.popoverMaxH],
+    ['--primitive-dialog-max-h', tokens.primitive.dialogMaxH],
+    ['--primitive-dialog-w-sm', tokens.primitive.dialogWSm],
+    ['--primitive-dialog-w-md', tokens.primitive.dialogWMd],
+    ['--primitive-dialog-w-lg', tokens.primitive.dialogWLg],
+    ['--measure', tokens.measure.default],
+    ['--measure-wide', tokens.measure.wide],
   ]
 }
 

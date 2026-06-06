@@ -10,7 +10,7 @@ function sourceFiles(dir = SRC_ROOT): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) return sourceFiles(path)
-    if (entry.isFile() && extname(entry.name) === '.ts' && !entry.name.endsWith('.test.ts')) return [path]
+    if (entry.isFile() && ['.ts', '.tsx'].includes(extname(entry.name)) && !/\.test\.tsx?$/.test(entry.name)) return [path]
     return []
   })
 }
@@ -23,26 +23,34 @@ test('cloud web workbench production source stays split into bounded modules', (
   const files = new Map(sourceFiles().map((path) => [relative(SRC_ROOT, path), lineCount(path)]))
   const requiredModules = [
     'admin-surface-matrix.ts',
+    'app-api.ts',
     'app-shell.ts',
     'branding.ts',
     'client-contract.ts',
-    'client-script.ts',
-    'client/admin-script.ts',
-    'client/bindings-script.ts',
-    'client/byok-script.ts',
-    'client/common-script.ts',
-    'client/data-script.ts',
-    'client/gateway-script.ts',
-    'client/ops-script.ts',
-    'client/session-pagination-script.ts',
-    'client/surfaces-script.ts',
-    'client/workbench-script.ts',
+    'cloud-theme-client.ts',
+    'cloud-theme.ts',
     'html-utils.ts',
+    'react-admin-surfaces.tsx',
+    'react-client-asset.ts',
+    'react-client.tsx',
+    'react-project-source.ts',
+    'react-shell.ts',
+    'react-shell-controller.tsx',
+    'react-state.ts',
+    'react-workbench-app.tsx',
+    'react-workbench-controller.ts',
+    'react-workbench-forms.ts',
+    'react-workbench-hooks.ts',
+    'react-workbench-review.tsx',
+    'react-workbench-surfaces.tsx',
+    'react-workbench.ts',
     'render.ts',
+    'route-markup.ts',
     'runtime-workbench.ts',
     'style-chat.ts',
     'style-components.ts',
     'style-layout.ts',
+    'style-shared-ui.ts',
     'styles.ts',
     'surface-workbench.ts',
     'thread-workbench.ts',
@@ -53,17 +61,8 @@ test('cloud web workbench production source stays split into bounded modules', (
   }
 
   const explicitBudgets: Record<string, number> = {
+    'browser-test-harness.ts': 650,
     'render.ts': 800,
-    'client-script.ts': 80,
-    'client/admin-script.ts': 350,
-    'client/bindings-script.ts': 180,
-    'client/byok-script.ts': 160,
-    'client/common-script.ts': 750,
-    'client/data-script.ts': 500,
-    'client/gateway-script.ts': 180,
-    'client/ops-script.ts': 260,
-    'client/surfaces-script.ts': 340,
-    'client/workbench-script.ts': 1_100,
     'styles.ts': 700,
   }
   for (const [path, lines] of files) {

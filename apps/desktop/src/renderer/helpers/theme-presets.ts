@@ -1,9 +1,10 @@
-import type { BrandThemeDefinition } from '@open-cowork/shared'
 import {
+  refineThemeTokens,
   UI_THEME_PRESETS,
+  type BrandThemeDefinition,
   type ResolvedColorScheme,
   type ThemeTokens,
-} from './theme-preset-data'
+} from '@open-cowork/shared'
 
 export { UI_THEME_PRESETS }
 export type { ResolvedColorScheme, ThemeTokens }
@@ -48,8 +49,8 @@ export function registerExtraThemes(themes: BrandThemeDefinition[] | undefined |
       label: theme.label || theme.id,
       description: theme.description || '',
       swatches: theme.swatches || [],
-      dark: theme.dark,
-      light: theme.light,
+      dark: refineThemeTokens(theme.dark, 'dark'),
+      light: theme.light ? refineThemeTokens(theme.light, 'light') : undefined,
     })
   }
 }

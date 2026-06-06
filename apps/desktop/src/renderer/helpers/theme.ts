@@ -127,6 +127,7 @@ function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme) {
   root.style.setProperty('--color-elevated', tokens.elevated)
   root.style.setProperty('--color-border', tokens.border)
   root.style.setProperty('--color-border-subtle', tokens.borderSubtle)
+  root.style.setProperty('--color-border-strong', tokens.borderStrong || tokens.border)
   root.style.setProperty('--color-text', tokens.text)
   root.style.setProperty('--color-text-secondary', tokens.textSecondary)
   root.style.setProperty('--color-text-muted', tokens.textMuted)

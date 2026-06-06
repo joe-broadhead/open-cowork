@@ -7,7 +7,7 @@ import {
   DEFAULT_DARK_PUBLIC_BRANDING_THEME,
   DEFAULT_PUBLIC_BRANDING,
   derivePublicBrandingThemeTokens,
-  DESIGN_TOKENS,
+  emitRootTokensCss,
   isLegacyLightPublicBrandingTheme,
 } from '../packages/shared/dist/index.js'
 
@@ -24,77 +24,51 @@ function namedBlock(source: string, name: string) {
 
 function desktopTokenDeclarations() {
   const globals = readFileSync('apps/desktop/src/renderer/styles/globals.css', 'utf8')
+  const generated = readFileSync('apps/desktop/src/renderer/styles/generated/design-tokens.css', 'utf8')
   return {
-    theme: declarations(namedBlock(globals, '@theme')),
-    root: declarations(namedBlock(globals, ':root')),
+    generated,
+    globals,
+    theme: declarations(namedBlock(globals, '@theme inline')),
+    root: declarations(namedBlock(generated, ':root')),
   }
 }
 
 function expectedThemeTokens() {
   return new Map<string, string>([
-    ['--color-base', DESIGN_TOKENS.color.base],
-    ['--color-surface', DESIGN_TOKENS.color.surface],
-    ['--color-surface-hover', DESIGN_TOKENS.color.surfaceHover],
-    ['--color-surface-active', DESIGN_TOKENS.color.surfaceActive],
-    ['--color-elevated', DESIGN_TOKENS.color.elevated],
-    ['--color-border', DESIGN_TOKENS.color.border],
-    ['--color-border-subtle', DESIGN_TOKENS.color.borderSubtle],
-    ['--color-text', DESIGN_TOKENS.color.text],
-    ['--color-text-secondary', DESIGN_TOKENS.color.textSecondary],
-    ['--color-text-muted', DESIGN_TOKENS.color.textMuted],
-    ['--color-accent', DESIGN_TOKENS.color.accent],
-    ['--color-accent-hover', DESIGN_TOKENS.color.accentHover],
-    ['--color-green', DESIGN_TOKENS.color.green],
-    ['--color-amber', DESIGN_TOKENS.color.amber],
-    ['--color-red', DESIGN_TOKENS.color.red],
-    ['--color-info', DESIGN_TOKENS.color.info],
-    ['--color-accent-foreground', DESIGN_TOKENS.color.accentForeground],
+    ['--color-base', 'var(--color-base)'],
+    ['--color-surface', 'var(--color-surface)'],
+    ['--color-surface-hover', 'var(--color-surface-hover)'],
+    ['--color-surface-active', 'var(--color-surface-active)'],
+    ['--color-elevated', 'var(--color-elevated)'],
+    ['--color-border', 'var(--color-border)'],
+    ['--color-border-subtle', 'var(--color-border-subtle)'],
+    ['--color-border-strong', 'var(--color-border-strong)'],
+    ['--color-text', 'var(--color-text)'],
+    ['--color-text-secondary', 'var(--color-text-secondary)'],
+    ['--color-text-muted', 'var(--color-text-muted)'],
+    ['--color-accent', 'var(--color-accent)'],
+    ['--color-accent-hover', 'var(--color-accent-hover)'],
+    ['--color-green', 'var(--color-green)'],
+    ['--color-amber', 'var(--color-amber)'],
+    ['--color-red', 'var(--color-red)'],
+    ['--color-info', 'var(--color-info)'],
+    ['--color-accent-foreground', 'var(--color-accent-foreground)'],
   ])
 }
 
 function expectedRootTokens() {
-  return new Map<string, string>([
-    ['--font-ui', DESIGN_TOKENS.fontFamily.ui],
-    ['--font-display', DESIGN_TOKENS.fontFamily.display],
-    ['--font-mono', DESIGN_TOKENS.fontFamily.mono],
-    ...Object.entries(DESIGN_TOKENS.text).map(([name, value]) => [`--text-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.lineHeight).map(([name, value]) => [`--lh-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.space).map(([name, value]) => [`--space-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.radius).map(([name, value]) => [`--radius-${name}`, value] as [string, string]),
-    ['--shadow-card', DESIGN_TOKENS.shadow.card],
-    ['--shadow-elevated', DESIGN_TOKENS.shadow.elevated],
-    ['--bg-image', DESIGN_TOKENS.color.bgImage],
-    ...Object.entries(DESIGN_TOKENS.ease).map(([name, value]) => [`--ease-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.duration).map(([name, value]) => [`--dur-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.z).map(([name, value]) => [`--z-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.controlHeight).map(([name, value]) => [`--control-h-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.borderWidth).map(([name, value]) => [`--border-width-${name}`, value] as [string, string]),
-    ...Object.entries(DESIGN_TOKENS.iconSize).map(([name, value]) => [`--icon-size-${name}`, value] as [string, string]),
-  ])
+  return declarations(namedBlock(emitRootTokensCss(), ':root'))
 }
 
-function ownedRootToken(name: string) {
-  return [
-    '--font-',
-    '--text-',
-    '--lh-',
-    '--space-',
-    '--radius-',
-    '--shadow-',
-    '--bg-image',
-    '--ease-',
-    '--dur-',
-    '--z-',
-    '--control-h-',
-    '--border-width-',
-    '--icon-size-',
-  ].some((prefix) => name === prefix || name.startsWith(prefix))
-}
-
-test('shared design tokens match desktop globals.css', () => {
+test('shared design tokens generate the desktop root token CSS', () => {
   const desktop = desktopTokenDeclarations()
   const theme = expectedThemeTokens()
   const root = expectedRootTokens()
+  const generatedHeader = '/* Generated by scripts/generate-design-token-css.ts from packages/shared/src/design-tokens.ts. Do not edit. */'
+
+  assert.match(desktop.globals, /@import "\.\/generated\/design-tokens\.css";/, 'desktop globals imports generated root tokens')
+  assert.doesNotMatch(desktop.globals, /--font-ui:/, 'desktop globals no longer hand-maintains root tokens')
+  assert.equal(desktop.generated, `${generatedHeader}\n${emitRootTokensCss()}\n`, 'generated desktop token CSS is emitted from shared tokens')
 
   for (const [name, value] of theme) {
     assert.equal(desktop.theme.get(name), value, `${name} matches desktop @theme`)
@@ -110,7 +84,6 @@ test('shared design tokens match desktop globals.css', () => {
 
   const expectedRootNames = new Set(root.keys())
   for (const name of desktop.root.keys()) {
-    if (!ownedRootToken(name)) continue
     assert.ok(expectedRootNames.has(name), `${name} is represented by shared design tokens`)
   }
 })

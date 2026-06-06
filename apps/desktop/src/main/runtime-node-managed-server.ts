@@ -34,7 +34,18 @@ export function forkNodeManagedOpencodeSupervisor(modulePath: string): ManagedOp
     stdout: child.stdout,
     stderr: child.stderr,
     postMessage(message) {
-      child.send(message)
+      if (!child.connected) return
+      const reportSendError = (error: Error | null) => {
+        if (!error || message.type === 'shutdown' || child.listenerCount('error') === 0) return
+        child.emit('error', error)
+      }
+      try {
+        child.send(message, reportSendError)
+      } catch (error) {
+        if (message.type !== 'shutdown' && child.listenerCount('error') > 0) {
+          child.emit('error', error as Error)
+        }
+      }
     },
     kill() {
       return child.kill()

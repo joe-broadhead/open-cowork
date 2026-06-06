@@ -88,6 +88,10 @@ function toIsoTimestamp(value: unknown) {
   return new Date().toISOString()
 }
 
+function opencodeMessageId(value: string | null | undefined) {
+  return typeof value === 'string' && value.startsWith('msg') ? value : null
+}
+
 export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntimeAdapter {
   return {
     async createSession() {
@@ -102,11 +106,12 @@ export function createSdkCloudRuntimeAdapter(client: SdkLikeClient): CloudRuntim
       }
     },
     async promptSession(input) {
+      const messageId = opencodeMessageId(input.messageId)
       await client.session.promptAsync({
         sessionID: input.sessionId,
         parts: input.parts,
         agent: input.agent,
-        ...(input.messageId ? { messageID: input.messageId } : {}),
+        ...(messageId ? { messageID: messageId } : {}),
       }, { throwOnError: true, signal: input.signal })
     },
     async abortSession(input) {

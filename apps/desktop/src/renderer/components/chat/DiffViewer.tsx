@@ -3,6 +3,7 @@ import type { SessionFileDiff } from '@open-cowork/shared'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { t } from '../../helpers/i18n'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
+import { DiffView } from '../ui'
 import { DiffFileRow, ViewModeToggle, type ViewMode } from './DiffViewerRows'
 
 interface Props {
@@ -45,6 +46,7 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
 
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, { onEscape: onClose })
+  const title = messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')
 
   return (
     <>
@@ -53,52 +55,47 @@ export function DiffViewer({ sessionId, messageId, onClose }: Props) {
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')}
+        aria-label={title}
         className="fixed top-[8%] left-1/2 -translate-x-1/2 z-50 w-[960px] max-w-[95vw] max-h-[85vh] rounded-xl shadow-2xl overflow-hidden flex flex-col theme-popover"
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--color-border-subtle)' }}>
-          <div className="min-w-0">
-            <div className="text-[14px] font-semibold text-text">
-              {messageId ? t('diff.changesFromMessage', 'Changes from this message') : t('diff.changes', 'Changes')}
-            </div>
-            {!loading && (
-              <div className="text-[11px] text-text-muted mt-0.5">
-                {t('diff.filesChanged', '{{count}} file(s) changed', { count: String(diffs.length) })}
-              </div>
+        <DiffView
+          title={title}
+          subtitle={!loading ? t('diff.filesChanged', '{{count}} file(s) changed', { count: String(diffs.length) }) : undefined}
+          className="desktop-diff-view flex-1 min-h-0"
+          actions={(
+            <>
+              <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+              <button
+                onClick={onClose}
+                aria-label={t('diff.closeChanges', 'Close changes')}
+                title={t('common.close', 'Close')}
+                className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none ps-1"
+              >&times;</button>
+            </>
+          )}
+        >
+          <div className="flex-1 overflow-y-auto">
+            {loading && (
+              <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
             )}
+
+            {!loading && diffs.length === 0 && (
+              <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
+            )}
+
+            {diffs.map((diff) => (
+              <DiffFileRow
+                key={diff.file}
+                sessionId={sessionId}
+                diff={diff}
+                expanded={expandedFile === diff.file}
+                filePath={diff.file}
+                onToggle={handleToggleFile}
+                viewMode={viewMode}
+              />
+            ))}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-            <button
-              onClick={onClose}
-              aria-label={t('diff.closeChanges', 'Close changes')}
-              title={t('common.close', 'Close')}
-              className="text-text-muted hover:text-text cursor-pointer text-[18px] leading-none ps-1"
-            >&times;</button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {loading && (
-            <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.loading', 'Loading changes...')}</div>
-          )}
-
-          {!loading && diffs.length === 0 && (
-            <div className="px-4 py-8 text-[12px] text-text-muted text-center">{t('diff.noChanges', 'No file changes in this session')}</div>
-          )}
-
-          {diffs.map((diff) => (
-            <DiffFileRow
-              key={diff.file}
-              sessionId={sessionId}
-              diff={diff}
-              expanded={expandedFile === diff.file}
-              filePath={diff.file}
-              onToggle={handleToggleFile}
-              viewMode={viewMode}
-            />
-          ))}
-        </div>
+        </DiffView>
       </div>
     </>
   )

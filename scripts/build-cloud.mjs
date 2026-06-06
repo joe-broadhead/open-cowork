@@ -1,11 +1,15 @@
-import { mkdir } from 'node:fs/promises'
+import { copyFile, mkdir } from 'node:fs/promises'
 import { builtinModules } from 'node:module'
+import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const outfile = resolve(repoRoot, 'apps/desktop/dist/cloud/open-cowork-cloud.mjs')
+const supervisorOutfile = resolve(repoRoot, 'apps/desktop/dist/cloud/runtime-managed-server-supervisor.js')
+const cloudAssetsDir = resolve(repoRoot, 'apps/desktop/dist/cloud/assets')
+const cloudReactClientAsset = 'open-cowork-cloud-react.js'
 const builtins = new Set([
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
@@ -45,7 +49,21 @@ const cloudElectronShimPlugin = {
   },
 }
 
+function runPnpm(args) {
+  const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  })
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(' ')} failed with status ${result.status ?? 'unknown'}`)
+  }
+}
+
+runPnpm(['--filter', '@open-cowork/website', 'build'])
+
 await mkdir(dirname(outfile), { recursive: true })
+await mkdir(cloudAssetsDir, { recursive: true })
 
 await build({
   entryPoints: [resolve(repoRoot, 'scripts/open-cowork-cloud.ts')],
@@ -58,5 +76,22 @@ await build({
   packages: 'external',
   external: [...builtins],
   plugins: [cloudElectronShimPlugin],
+  logLevel: 'info',
+})
+
+await copyFile(
+  resolve(repoRoot, 'apps/website/dist/client', cloudReactClientAsset),
+  resolve(cloudAssetsDir, cloudReactClientAsset),
+)
+
+await build({
+  entryPoints: [resolve(repoRoot, 'apps/desktop/src/main/runtime-managed-server-supervisor.ts')],
+  outfile: supervisorOutfile,
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node22',
+  packages: 'external',
+  external: [...builtins],
   logLevel: 'info',
 })

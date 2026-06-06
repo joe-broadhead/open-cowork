@@ -153,6 +153,9 @@ test('cloud web browser keeps large admin surfaces bounded across route transiti
   }).start()
   try {
     await waitFor(() => assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100))
+    await waitFor(() => assert.ok(harness.document.querySelector('#sidebar-thread-list button')))
+    ;(harness.document.querySelector('#sidebar-thread-list button') as HTMLButtonElement).click()
+    await waitFor(() => assert.equal(harness.document.body.dataset.chatState, 'thread'))
     budget('browser bootstrap with large admin fixtures', performance.now() - start, 8000)
 
     const routeStart = performance.now()

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { UI_THEME_PRESETS } from './theme-preset-data'
+import { getThemeTokens } from './theme-presets'
 
 type HexColor = `#${string}`
 
@@ -32,6 +33,53 @@ function contrastRatio(foreground: HexColor, background: HexColor) {
 }
 
 describe('theme preset contrast', () => {
+  it('keeps the complete 17-preset catalog available', () => {
+    expect(Object.keys(UI_THEME_PRESETS)).toHaveLength(17)
+  })
+
+  it('uses shared built-in preset tokens without re-refining them in the runtime registry', () => {
+    expect(getThemeTokens('mercury', 'dark')).toEqual(UI_THEME_PRESETS.mercury.dark)
+    expect(getThemeTokens('mercury', 'light')).toEqual(UI_THEME_PRESETS.mercury.light)
+  })
+
+  it('derives complete crisp border tiers for every preset and scheme', () => {
+    const failures: string[] = []
+
+    for (const [themeId, preset] of Object.entries(UI_THEME_PRESETS)) {
+      for (const scheme of ['dark', 'light'] as const) {
+        const tokens = preset[scheme]
+        for (const tokenName of ['border', 'borderSubtle', 'borderStrong'] as const) {
+          if (!tokens[tokenName]?.trim()) {
+            failures.push(`${themeId}.${scheme}.${tokenName} is missing`)
+          }
+        }
+        if (tokens.borderStrong === tokens.border) {
+          failures.push(`${themeId}.${scheme}.borderStrong must be a distinct tier`)
+        }
+      }
+    }
+
+    expect(failures).toEqual([])
+  })
+
+  it('keeps preset gradients dialed down after refinement', () => {
+    const failures: string[] = []
+    const rgbaPattern = /rgba\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*([0-9.]+)\s*\)/g
+
+    for (const [themeId, preset] of Object.entries(UI_THEME_PRESETS)) {
+      for (const scheme of ['dark', 'light'] as const) {
+        const { bgImage } = preset[scheme]
+        const alphas = Array.from(bgImage.matchAll(rgbaPattern), (match) => Number.parseFloat(match[1] || '0'))
+        const tooStrong = alphas.filter((value) => Number.isFinite(value) && value > 0.08)
+        if (tooStrong.length > 0) {
+          failures.push(`${themeId}.${scheme}.bgImage has alpha > 0.08: ${tooStrong.join(', ')}`)
+        }
+      }
+    }
+
+    expect(failures).toEqual([])
+  })
+
   it('keeps every built-in theme readable against its base color', () => {
     const failures: string[] = []
     const checks = [

@@ -62,6 +62,16 @@ export type CloudWebClientBootstrap = {
   profileName: string
   features: Record<string, boolean>
   publicBranding: PublicBrandingConfig
+  theme?: {
+    defaultPreset: string
+    tenantBrandingLocked: boolean
+    presets: Array<{
+      id: string
+      label: string
+      description: string
+      swatches: string[]
+    }>
+  }
   routes: CloudWebRoute[]
   defaultRoute: string
   api: CloudWebEndpoint[]

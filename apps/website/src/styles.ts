@@ -3,6 +3,7 @@ import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteChatStyles } from './style-chat.ts'
 import { cloudWebsiteComponentStyles } from './style-components.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
+import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
 
 const FONT_UNICODE_RANGE = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD'
 
@@ -54,8 +55,9 @@ function cloudWebsiteBaseStyles(branding: PublicBrandingConfig) {
 ${publicBrandingCss(branding)}
       --cloud-shell-sidebar-w: 248px;
       --shadow: var(--shadow-card);
+      --surface-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent);
       --field-bg: color-mix(in srgb, var(--color-base) 72%, var(--color-elevated) 28%);
-      --field-border: color-mix(in srgb, var(--color-border) 78%, var(--color-text-muted) 22%);
+      --field-border: var(--color-border);
       --ring-focus: 0 0 0 2px var(--focus);
       --ring-selected: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 70%, transparent);
       --tone-neutral-bg: color-mix(in srgb, var(--color-surface-hover) 88%, transparent);
@@ -102,10 +104,10 @@ ${publicBrandingCss(branding)}
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
-        animation-duration: 0.01ms !important;
+        animation-duration: 0ms !important;
         animation-iteration-count: 1 !important;
         scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
+        transition-duration: 0ms !important;
       }
     }`
 }
@@ -116,5 +118,6 @@ ${cloudWebsiteBaseStyles(branding)}
 ${cloudWebsiteLayoutStyles()}
 ${cloudWebsiteComponentStyles()}
 ${cloudWebsiteChatStyles()}
+${cloudWebsiteSharedUiStyles()}
 `
 }
