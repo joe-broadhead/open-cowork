@@ -185,7 +185,7 @@ export class TelegramProvider implements ChannelProvider {
       disable_notification: options?.disableNotification
     }));
 
-    return toSentMessage(target, sent.message_id);
+    return toSentMessage(target, sent.message_id, options?.deliveryId);
   }
 
   async editText(
@@ -212,6 +212,7 @@ export class TelegramProvider implements ChannelProvider {
     target: ChannelTarget,
     text: string,
     buttons: ChannelButton[][],
+    options?: SendOptions,
   ): Promise<SentMessage> {
     validateTelegramButtons(buttons);
     const keyboard = new InlineKeyboard();
@@ -227,7 +228,7 @@ export class TelegramProvider implements ChannelProvider {
       reply_markup: keyboard
     }));
 
-    return toSentMessage(target, sent.message_id);
+    return toSentMessage(target, sent.message_id, options?.deliveryId);
   }
 
   async answerInteraction(interactionId: string, text?: string, alert?: boolean): Promise<void> {
@@ -569,13 +570,14 @@ function toThreadId(threadId: string | null | undefined): number | undefined {
   return Number.isSafeInteger(numeric) ? numeric : undefined;
 }
 
-function toSentMessage(target: ChannelTarget, messageId: number): SentMessage {
+function toSentMessage(target: ChannelTarget, messageId: number, providerDeliveryId?: string): SentMessage {
   return {
     provider: target.provider,
     providerKind: target.providerKind ?? "telegram",
     chatId: target.chatId,
     threadId: target.threadId,
     messageId: String(messageId),
+    providerDeliveryId,
     sentAt: new Date()
   };
 }

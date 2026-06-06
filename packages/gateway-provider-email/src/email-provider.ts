@@ -151,7 +151,7 @@ export class EmailProvider implements ChannelProvider {
     }
   }
 
-  async sendText(target: ChannelTarget, text: string, _options?: SendOptions): Promise<SentMessage> {
+  async sendText(target: ChannelTarget, text: string, options?: SendOptions): Promise<SentMessage> {
     const messageId = emailMessageId();
     const result = await this.transport.send({
       from: this.config.from,
@@ -168,6 +168,7 @@ export class EmailProvider implements ChannelProvider {
       chatId: target.chatId,
       threadId: target.threadId || messageId,
       messageId: result?.messageId || messageId,
+      providerDeliveryId: options?.deliveryId,
       sentAt: new Date()
     };
   }

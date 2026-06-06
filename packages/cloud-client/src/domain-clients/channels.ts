@@ -5,10 +5,14 @@ export type {
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelInteractionRecord,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
   ChannelSessionBindingRecord,
   CloudChannelDeliveryStatus,
   CloudChannelIdentityRole,
   CloudChannelIdentityStatus,
+  CloudChannelProviderEventStatus,
+  CloudChannelProviderEventType,
   CloudChannelProviderId,
   CloudChannelProviderKind,
   HeadlessAgentRecord,
@@ -23,10 +27,14 @@ import type {
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelInteractionRecord,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
   ChannelSessionBindingRecord,
   CloudChannelDeliveryStatus,
   CloudChannelIdentityRole as ChannelIdentityRole,
   CloudChannelIdentityStatus as ChannelIdentityStatus,
+  CloudChannelProviderEventStatus,
+  CloudChannelProviderEventType,
   CloudChannelPromptMutationResponse,
   CloudChannelInteractionMutationResponse,
   CloudChannelProviderId as ChannelProviderId,
@@ -98,7 +106,24 @@ export type CloudChannelsClient = {
     bindingId: string
     text: string
     agent?: string | null
+    commandId?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
+  claimChannelProviderEvent(input: {
+    provider: ChannelProviderId
+    providerInstanceId: string
+    externalWorkspaceId?: string | null
+    providerEventId: string
+    eventType: CloudChannelProviderEventType
+    claimedBy: string
+    ttlMs?: number | null
+    metadata?: Record<string, unknown>
+  }): Promise<ChannelProviderEventClaimResult>
+  completeChannelProviderEvent(eventId: string, input: {
+    claimedBy: string
+    status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
+    retryable?: boolean
+    lastError?: string | null
+  }): Promise<ChannelProviderEventRecord | null>
   updateChannelCursor(input: {
     bindingId: string
     lastEventSequence: number
@@ -213,6 +238,18 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
         method: 'POST',
         body: input,
       })
+    },
+    claimChannelProviderEvent(input) {
+      return request('/api/channels/provider-events/claim', {
+        method: 'POST',
+        body: input,
+      })
+    },
+    async completeChannelProviderEvent(eventId, input) {
+      return (await request<{ event: ChannelProviderEventRecord | null }>(`/api/channels/provider-events/${encodePath(eventId)}/complete`, {
+        method: 'POST',
+        body: input,
+      })).event
     },
     async updateChannelCursor(input) {
       try {

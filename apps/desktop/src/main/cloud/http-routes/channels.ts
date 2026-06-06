@@ -233,6 +233,7 @@ export async function handleChannelsApiRoute(input: {
         bindingId,
         text,
         agent: tools.readString(body.agent),
+        commandId: tools.readString(body.commandId),
         identityId: tools.readString(body.identityId),
         provider: tools.readChannelProvider(body.provider),
         externalWorkspaceId: tools.readString(body.externalWorkspaceId),
@@ -337,6 +338,55 @@ export async function handleChannelsApiRoute(input: {
           ...(processingError ? { processingError } : {}),
         },
       )
+      return true
+    }
+  }
+
+  if (collection === 'provider-events') {
+    if (itemId === 'claim' && !itemAction && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const provider = tools.readChannelProvider(body.provider)
+      const providerInstanceId = tools.readString(body.providerInstanceId)
+      const providerEventId = tools.readString(body.providerEventId)
+      const eventType = tools.readEnum(body.eventType, ['message', 'command', 'interaction'] as const)
+      const claimedBy = tools.readString(body.claimedBy)
+      if (!provider || !providerInstanceId || !providerEventId || !eventType || !claimedBy) {
+        tools.writeError(res, 400, 'Provider event claim requires provider, providerInstanceId, providerEventId, eventType, and claimedBy.', options.corsOrigin)
+        return true
+      }
+      const result = await options.service.claimChannelProviderEvent(context.principal, {
+        provider,
+        providerInstanceId,
+        externalWorkspaceId: tools.readString(body.externalWorkspaceId),
+        providerEventId,
+        eventType,
+        claimedBy,
+        ttlMs: tools.readNonNegativeInteger(body.ttlMs),
+        metadata: tools.readRecord(body.metadata) || {},
+      })
+      tools.writeJson(res, 200, result, options.corsOrigin)
+      return true
+    }
+    if (itemId && itemAction === 'complete' && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const status = tools.readEnum(body.status, ['processed', 'failed'] as const)
+      const claimedBy = tools.readString(body.claimedBy)
+      if (!status || !claimedBy) {
+        tools.writeError(res, 400, 'Provider event completion requires claimedBy and status processed or failed.', options.corsOrigin)
+        return true
+      }
+      const event = await options.service.completeChannelProviderEvent(context.principal, {
+        eventId: itemId,
+        claimedBy,
+        status,
+        retryable: body.retryable === undefined ? undefined : body.retryable === true,
+        lastError: tools.readString(body.lastError),
+      })
+      if (!event) {
+        tools.writeError(res, 404, 'Provider event claim was not found.', options.corsOrigin)
+        return true
+      }
+      tools.writeJson(res, 200, { event }, options.corsOrigin)
       return true
     }
   }

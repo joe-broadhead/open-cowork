@@ -4,6 +4,9 @@ import type {
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelInteractionRecord,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
+  ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
   HeadlessAgentRecord,
@@ -26,6 +29,7 @@ import {
 } from './channel-domain-context.ts'
 import * as deliveryActions from './channel-delivery-actions.ts'
 import * as interactionActions from './channel-interaction-actions.ts'
+import * as providerEventActions from './channel-provider-event-actions.ts'
 import * as sessionActions from './channel-session-actions.ts'
 
 export type {
@@ -171,6 +175,7 @@ export class CloudChannelDomainService {
       bindingId: string
       text: string
       agent?: string | null
+      commandId?: string | null
     },
   ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     return sessionActions.enqueueChannelPrompt(this.options, principal, input)
@@ -259,5 +264,34 @@ export class CloudChannelDomainService {
     },
   ): Promise<PublicChannelDeliveryRecord | null> {
     return deliveryActions.ackChannelDelivery(this.options, principal, input)
+  }
+
+  claimChannelProviderEvent(
+    principal: CloudPrincipal,
+    input: {
+      provider: ChannelProviderId
+      providerInstanceId: string
+      externalWorkspaceId?: string | null
+      providerEventId: string
+      eventType: ChannelProviderEventType
+      claimedBy: string
+      ttlMs?: number | null
+      metadata?: Record<string, unknown>
+    },
+  ): Promise<ChannelProviderEventClaimResult> {
+    return providerEventActions.claimChannelProviderEvent(this.options, principal, input)
+  }
+
+  completeChannelProviderEvent(
+    principal: CloudPrincipal,
+    input: {
+      eventId: string
+      claimedBy: string
+      status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
+      retryable?: boolean
+      lastError?: string | null
+    },
+  ): Promise<ChannelProviderEventRecord | null> {
+    return providerEventActions.completeChannelProviderEvent(this.options, principal, input)
   }
 }

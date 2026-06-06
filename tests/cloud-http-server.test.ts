@@ -3297,6 +3297,84 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(auditPayload.includes(String(issuedInteraction.plaintextToken)), false)
     assert.equal(auditPayload.includes(String(issuedQuestion.plaintextToken)), false)
 
+    const providerEventClaimResponse = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: 'provider-event-1',
+        eventType: 'message',
+        claimedBy: 'gateway-1',
+        ttlMs: 30_000,
+        metadata: {
+          providerMessageId: 'message-1',
+          attachmentCount: 0,
+        },
+      }),
+    })
+    assert.equal(providerEventClaimResponse.status, 200)
+    const providerEventClaim = await readJson(providerEventClaimResponse)
+    assert.equal(providerEventClaim.claimed, true)
+    assert.equal(providerEventClaim.duplicate, false)
+    const providerEvent = asRecord(providerEventClaim.event)
+    assert.equal(providerEvent.status, 'processing')
+
+    const duplicateBeforeComplete = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: 'provider-event-1',
+        eventType: 'message',
+        claimedBy: 'gateway-2',
+      }),
+    })
+    assert.equal(duplicateBeforeComplete.status, 200)
+    assert.equal((await readJson(duplicateBeforeComplete)).claimed, false)
+
+    const wrongClaimantComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({ claimedBy: 'gateway-2', status: 'processed' }),
+    })
+    assert.equal(wrongClaimantComplete.status, 404)
+
+    const missingClaimantComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({ status: 'processed' }),
+    })
+    assert.equal(missingClaimantComplete.status, 400)
+
+    const providerEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({ claimedBy: 'gateway-1', status: 'processed' }),
+    })
+    assert.equal(providerEventComplete.status, 200)
+    assert.equal(asRecord((await readJson(providerEventComplete)).event).status, 'processed')
+
+    const duplicateAfterComplete = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod',
+        externalWorkspaceId: 'bot-1',
+        providerEventId: 'provider-event-1',
+        eventType: 'message',
+        claimedBy: 'gateway-3',
+      }),
+    })
+    assert.equal(duplicateAfterComplete.status, 200)
+    const duplicateAfterCompleteBody = await readJson(duplicateAfterComplete)
+    assert.equal(duplicateAfterCompleteBody.claimed, false)
+    assert.equal(asRecord(duplicateAfterCompleteBody.event).status, 'processed')
+
     const deliveryResponse = await fetch(`${baseUrl}/api/channels/deliveries`, {
       method: 'POST',
       headers,

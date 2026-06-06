@@ -87,6 +87,8 @@ function channelStore(overrides: Partial<ChannelControlPlaneStore> = {}): Channe
     listChannelDeliveries: unusedStoreAction,
     claimNextChannelDelivery: unusedStoreAction,
     ackChannelDelivery: unusedStoreAction,
+    claimChannelProviderEvent: unusedStoreAction,
+    completeChannelProviderEvent: unusedStoreAction,
     getSession: unusedStoreAction,
     getSessionProjection: unusedStoreAction,
     enqueueSessionCommand: unusedStoreAction,
@@ -219,6 +221,8 @@ test('cloud domain services expose testable seams without an HTTP server', async
     async deadLetterChannelDelivery() { return null },
     async claimNextChannelDelivery() { return null },
     async ackChannelDelivery() { return null },
+    async claimChannelProviderEvent() { throw new Error('not needed') },
+    async completeChannelProviderEvent() { return null },
   })
 
   const workflow = new CloudWorkflowService({

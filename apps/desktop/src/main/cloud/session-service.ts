@@ -40,6 +40,9 @@ import type {
   ChannelIdentityRecord,
   ChannelInteractionRecord,
   ChannelCursorUpdateResult,
+  ChannelProviderEventClaimResult,
+  ChannelProviderEventRecord,
+  ChannelProviderEventType,
   ChannelProviderId,
   ChannelSessionBindingRecord,
   ClaimedWorkflowRunRecord,
@@ -1550,6 +1553,7 @@ export class CloudSessionService {
       bindingId: string
       text: string
       agent?: string | null
+      commandId?: string | null
     },
   ): Promise<{ binding: ChannelSessionBindingRecord, command: SessionCommandRecord, beforeProjectionSequence: number }> {
     return this.channelDomain.enqueueChannelPrompt(principal, input)
@@ -1641,6 +1645,35 @@ export class CloudSessionService {
     },
   ): Promise<PublicChannelDeliveryRecord | null> {
     return this.channelDomain.ackChannelDelivery(principal, input)
+  }
+
+  async claimChannelProviderEvent(
+    principal: CloudPrincipal,
+    input: {
+      provider: ChannelProviderId
+      providerInstanceId: string
+      externalWorkspaceId?: string | null
+      providerEventId: string
+      eventType: ChannelProviderEventType
+      claimedBy: string
+      ttlMs?: number | null
+      metadata?: Record<string, unknown>
+    },
+  ): Promise<ChannelProviderEventClaimResult> {
+    return this.channelDomain.claimChannelProviderEvent(principal, input)
+  }
+
+  async completeChannelProviderEvent(
+    principal: CloudPrincipal,
+    input: {
+      eventId: string
+      claimedBy: string
+      status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
+      retryable?: boolean
+      lastError?: string | null
+    },
+  ): Promise<ChannelProviderEventRecord | null> {
+    return this.channelDomain.completeChannelProviderEvent(principal, input)
   }
 
   async listSettingMetadata(principal: CloudPrincipal) {

@@ -68,20 +68,27 @@ describe("FakeChannelProvider", () => {
       threadId: "thread-1"
     };
 
-    await expect(provider.sendText(target, "hello")).resolves.toMatchObject({
+    await expect(provider.sendText(target, "hello", { deliveryId: "delivery-text-1" })).resolves.toMatchObject({
       provider: "cli",
       chatId: "local-test",
       threadId: "thread-1",
-      messageId: "1"
+      messageId: "1",
+      providerDeliveryId: "delivery-text-1"
     });
-    await provider.sendButtons(target, "approve?", [[{ label: "Approve", token: "p:abc123" }]]);
+    await expect(provider.sendButtons(
+      target,
+      "approve?",
+      [[{ label: "Approve", token: "p:abc123" }]],
+      { deliveryId: "delivery-buttons-1" },
+    )).resolves.toMatchObject({ providerDeliveryId: "delivery-buttons-1" });
     await provider.answerInteraction("callback-1", "Approved");
     await provider.sendFile(target, { filename: "result.txt", data: new TextEncoder().encode("ok") });
 
     expect(provider.sent).toHaveLength(3);
     expect(provider.sent[1]).toMatchObject({
       text: "approve?",
-      buttons: [[{ label: "Approve", token: "p:abc123" }]]
+      buttons: [[{ label: "Approve", token: "p:abc123" }]],
+      options: { deliveryId: "delivery-buttons-1" }
     });
     expect(provider.sent[2]).toMatchObject({
       file: { filename: "result.txt" }

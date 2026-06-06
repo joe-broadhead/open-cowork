@@ -25,11 +25,13 @@ import type {
   ChannelProviderId,
   ClaimDueWorkflowRunInput,
   ClaimChannelDeliveryInput,
+  ClaimChannelProviderEventInput,
   ClaimRateLimitInput,
   ClaimedWorkflowRunRecord,
   CloudWorkflowRecord,
   CloudWorkflowRunRecord,
   CommandQueueQuota,
+  CompleteChannelProviderEventInput,
   ConsumeUsageQuotaInput,
   CompleteWorkflowRunInput,
   ControlPlaneRole,
@@ -108,16 +110,10 @@ import type {
 } from '../workflow/workflow-webhook-server.ts'
 import { runPostgresControlPlaneMigrations } from './postgres-migrations.ts'
 import { workspaceEventCursorFromRow } from './workspace-event-cursor.ts'
+import { normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import { usageEventFromRow, billingSubscriptionFromRow } from './postgres-domains/billing.ts'
 import { byokSecretFromRow } from './postgres-domains/byok.ts'
-import {
-  channelBindingFromRow,
-  channelDeliveryFromRow,
-  channelIdentityFromRow,
-  channelInteractionFromRow,
-  channelSessionBindingFromRow,
-  headlessAgentFromRow,
-} from './postgres-domains/channels.ts'
+import { channelBindingFromRow, channelDeliveryFromRow, channelIdentityFromRow, channelInteractionFromRow, channelSessionBindingFromRow, headlessAgentFromRow } from './postgres-domains/channels.ts'
 import {
   accountFromRow,
   apiTokenFromRow,
@@ -145,6 +141,7 @@ import { webhookAuthFailureFromRow } from './postgres-domains/webhooks.ts'
 import { workflowFromRow, workflowRunFromRow } from './postgres-domains/workflows.ts'
 import { assertPostgresCommandEnqueueQuotas, assertPostgresCommandQueueQuota, assertPostgresConcurrentSessionQuota, assertPostgresWorkflowRunQuota, checkPostgresActiveWorkerQuota, listPostgresRunnableSessions } from './postgres-store-domains/quotas.ts'
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
+import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -290,19 +287,6 @@ function retryAfterMs(nowMs: number, windowStartedAtMs: number, windowMs: number
   return Math.max(1, windowStartedAtMs + windowMs - nowMs)
 }
 
-function normalizeProvider(value: unknown): ChannelProviderId {
-  const provider = normalizeText(value, 64, 'Channel provider') as ChannelProviderId
-  if (!isChannelProviderId(provider)) {
-    throw new Error(`Unsupported channel provider ${provider}.`)
-  }
-  return provider
-}
-
-function isChannelProviderId(value: string): value is ChannelProviderId {
-  if (['telegram', 'slack', 'email', 'discord', 'whatsapp', 'signal', 'webhook', 'cli'].includes(value)) return true
-  return /^[a-z][a-z0-9_-]{1,63}$/.test(value) && value.includes('-')
-}
-
 function normalizeByokProviderId(value: unknown) {
   const providerId = normalizeText(value, BYOK_PROVIDER_ID_MAX_LENGTH, 'BYOK provider id').toLowerCase()
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(providerId)) throw new Error(`Unsupported BYOK provider id ${providerId}.`)
@@ -313,6 +297,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly pool: PgPool
   private readonly ownsPool: boolean
   private readonly managedWorkers: PostgresManagedWorkersRepository
+  private readonly channelProviderEvents: PostgresChannelProviderEventsRepository
   private readonly quotaDeps = {
     lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
     consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
@@ -325,6 +310,10 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       pool: this.pool,
       withTransaction: (fn) => this.withTransaction(fn),
       recordAuditEvent: (executor, input) => this.recordAuditEventWithExecutor(executor, input),
+    })
+    this.channelProviderEvents = new PostgresChannelProviderEventsRepository({
+      pool: this.pool,
+      withTransaction: (fn) => this.withTransaction(fn),
     })
   }
 
@@ -2029,6 +2018,14 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       ],
     )
     return result.rows[0] ? channelDeliveryFromRow(result.rows[0]) : null
+  }
+
+  async claimChannelProviderEvent(input: ClaimChannelProviderEventInput) {
+    return this.channelProviderEvents.claim(input)
+  }
+
+  async completeChannelProviderEvent(input: CompleteChannelProviderEventInput) {
+    return this.channelProviderEvents.complete(input)
   }
 
   async createSession(input: {

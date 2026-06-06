@@ -3,6 +3,7 @@ import type {
   ChannelDeliveryRecord,
   ChannelIdentityRecord,
   ChannelInteractionRecord,
+  ChannelProviderEventRecord,
   ChannelProviderId,
   ChannelSessionBindingRecord,
   HeadlessAgentRecord,
@@ -113,6 +114,28 @@ export function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
     claimExpiresAt: isoOrNull(row.claim_expires_at),
     nextAttemptAt: iso(row.next_attempt_at),
     lastError: stringOrNull(row.last_error),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  }
+}
+
+export function channelProviderEventFromRow(row: QueryRow): ChannelProviderEventRecord {
+  return {
+    eventId: String(row.event_id),
+    orgId: String(row.org_id),
+    provider: String(row.provider) as ChannelProviderId,
+    providerInstanceId: String(row.provider_instance_id),
+    externalWorkspaceId: stringOrNull(row.external_workspace_id),
+    providerEventId: String(row.provider_event_id),
+    eventType: String(row.event_type) as ChannelProviderEventRecord['eventType'],
+    status: String(row.status) as ChannelProviderEventRecord['status'],
+    claimedBy: stringOrNull(row.claimed_by),
+    claimExpiresAt: isoOrNull(row.claim_expires_at),
+    attemptCount: numberValue(row.attempt_count),
+    retryable: row.retryable === true,
+    lastError: stringOrNull(row.last_error),
+    metadata: jsonRecord(row.metadata),
+    processedAt: isoOrNull(row.processed_at),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   }

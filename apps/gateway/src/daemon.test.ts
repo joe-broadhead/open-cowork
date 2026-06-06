@@ -25,6 +25,44 @@ function resolveGatewayConfig(
   })
 }
 
+function signedWebhookHeaders(rawBody: string, sharedSecret: string, timestamp = String(Math.floor(Date.now() / 1000))) {
+  return {
+    'content-type': 'application/json',
+    'x-open-cowork-gateway-webhook-timestamp': timestamp,
+    'x-open-cowork-gateway-webhook-signature': `v1=${createHmac('sha256', sharedSecret).update(`v1:${timestamp}:${rawBody}`).digest('hex')}`,
+  }
+}
+
+function providerEventRecord(input: {
+  provider: string
+  providerInstanceId: string
+  externalWorkspaceId?: string | null
+  providerEventId: string
+  eventType: 'message' | 'command' | 'interaction'
+  claimedBy?: string | null
+  status?: 'processing' | 'processed' | 'failed'
+}) {
+  return {
+    eventId: `event-${input.providerInstanceId}-${input.providerEventId}-${input.eventType}`,
+    orgId: 'tenant-1',
+    provider: input.provider,
+    providerInstanceId: input.providerInstanceId,
+    externalWorkspaceId: input.externalWorkspaceId || null,
+    providerEventId: input.providerEventId,
+    eventType: input.eventType,
+    status: input.status || 'processing',
+    claimedBy: input.claimedBy || null,
+    claimExpiresAt: input.claimedBy ? new Date(Date.now() + 30_000).toISOString() : null,
+    attemptCount: 1,
+    retryable: true,
+    lastError: null,
+    metadata: {},
+    processedAt: input.status === 'processed' ? new Date().toISOString() : null,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  } as never
+}
+
 test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake webhook', async () => {
   const prompted: string[] = []
   const cloud: CloudGateway = {
@@ -83,6 +121,23 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     async prompt(input) {
       prompted.push(input.text)
       return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
+    },
+    async claimProviderEvent(input) {
+      return {
+        event: providerEventRecord(input),
+        claimed: true,
+        duplicate: false,
+      }
+    },
+    async completeProviderEvent(eventId, input) {
+      return providerEventRecord({
+        provider: 'fake',
+        providerInstanceId: 'fake',
+        providerEventId: eventId,
+        eventType: 'message',
+        claimedBy: input.claimedBy,
+        status: input.status,
+      })
     },
     async abortSession() { return { command: { commandId: 'cmd-abort' } as never, processed: 1, view: {} as never } },
     async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
@@ -166,6 +221,518 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     await http.close()
     await runtime.stop()
   }
+})
+
+test('gateway runtime claims provider events before prompting and skips duplicate claims', async () => {
+  const prompted: Array<{ text: string, commandId?: string | null }> = []
+  const claims: Array<{ providerEventId: string, providerInstanceId: string, eventType: string }> = []
+  const completed: Array<{ eventId: string, status: string }> = []
+  const seen = new Set<string>()
+  const cloud: CloudGateway = {
+    async resolveIdentity(input) {
+      return {
+        identityId: `identity-${input.externalUserId}`,
+        orgId: 'tenant-1',
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId || null,
+        externalUserId: input.externalUserId,
+        accountId: null,
+        role: 'member',
+        status: 'active',
+        metadata: {},
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async bindSession(input) {
+      return {
+        binding: {
+          bindingId: 'session-binding-1',
+          orgId: 'tenant-1',
+          agentId: 'agent-1',
+          channelBindingId: input.channelBindingId,
+          provider: input.provider,
+          externalWorkspaceId: input.externalWorkspaceId || null,
+          externalThreadId: input.externalThreadId,
+          externalChatId: input.externalChatId,
+          sessionId: 'session-1',
+          lastEventSequence: 0,
+          lastWorkspaceSequence: 0,
+          lastChatMessageId: null,
+          status: 'active',
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        session: {
+          session: { sessionId: 'session-1' },
+          projection: null,
+        },
+      } as never
+    },
+    async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
+    async prompt(input) {
+      prompted.push({ text: input.text, commandId: input.commandId })
+      return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
+    },
+    async claimProviderEvent(input) {
+      claims.push({
+        providerEventId: input.providerEventId,
+        providerInstanceId: input.providerInstanceId,
+        eventType: input.eventType,
+      })
+      const key = `${input.providerInstanceId}:${input.eventType}:${input.providerEventId}`
+      if (seen.has(key)) {
+        return {
+          event: providerEventRecord({ ...input, status: 'processed' }),
+          claimed: false,
+          duplicate: true,
+        }
+      }
+      seen.add(key)
+      return {
+        event: providerEventRecord(input),
+        claimed: true,
+        duplicate: false,
+      }
+    },
+    async completeProviderEvent(eventId, input) {
+      completed.push({ eventId, status: input.status })
+      return providerEventRecord({
+        provider: 'cli',
+        providerInstanceId: 'fake',
+        providerEventId: eventId,
+        eventType: 'message',
+        claimedBy: input.claimedBy,
+        status: input.status,
+      })
+    },
+    async abortSession() { return { command: { commandId: 'cmd-abort' } as never, processed: 1, view: {} as never } },
+    async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
+    async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
+    async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
+    async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
+    subscribeSessionEvents() { return { close() {} } },
+    subscribeDeliveries() { return { close() {} } },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
+    async ackDelivery() { return null },
+    artifactUrl() { return 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1' },
+  }
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+
+  await runtime.start()
+  try {
+    await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it', chatId: 'chat-1', userId: 'user-1' })
+    await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it again', chatId: 'chat-1', userId: 'user-1' })
+
+    assert.deepEqual(prompted, [{ text: 'ship it', commandId: 'event-fake-provider-event-1-message' }])
+    assert.deepEqual(claims, [
+      { providerEventId: 'provider-event-1', providerInstanceId: 'fake', eventType: 'message' },
+      { providerEventId: 'provider-event-1', providerInstanceId: 'fake', eventType: 'message' },
+    ])
+    assert.deepEqual(completed, [
+      { eventId: 'event-fake-provider-event-1-message', status: 'processed' },
+    ])
+    assert.equal(runtime.metrics.incomingMessages, 2)
+    assert.equal(runtime.metrics.promptedMessages, 1)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime does not make an already prompted provider event retryable when completion fails', async () => {
+  const prompted: Array<{ text: string, commandId?: string | null }> = []
+  const completed: Array<{ eventId: string, status: string }> = []
+  const seen = new Set<string>()
+  const cloud: CloudGateway = {
+    async resolveIdentity(input) {
+      return {
+        identityId: `identity-${input.externalUserId}`,
+        orgId: 'tenant-1',
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId || null,
+        externalUserId: input.externalUserId,
+        accountId: null,
+        role: 'member',
+        status: 'active',
+        metadata: {},
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async bindSession(input) {
+      return {
+        binding: {
+          bindingId: 'session-binding-1',
+          orgId: 'tenant-1',
+          agentId: 'agent-1',
+          channelBindingId: input.channelBindingId,
+          provider: input.provider,
+          externalWorkspaceId: input.externalWorkspaceId || null,
+          externalThreadId: input.externalThreadId,
+          externalChatId: input.externalChatId,
+          sessionId: 'session-1',
+          lastEventSequence: 0,
+          lastWorkspaceSequence: 0,
+          lastChatMessageId: null,
+          status: 'active',
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        session: {
+          session: { sessionId: 'session-1' },
+          projection: null,
+        },
+      } as never
+    },
+    async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
+    async prompt(input) {
+      prompted.push({ text: input.text, commandId: input.commandId })
+      return { binding: { bindingId: input.bindingId } as never, command: { commandId: input.commandId || 'cmd-1' } as never, processed: 1 }
+    },
+    async claimProviderEvent(input) {
+      const key = `${input.providerInstanceId}:${input.eventType}:${input.providerEventId}`
+      if (seen.has(key)) {
+        return {
+          event: providerEventRecord({ ...input, status: 'processing' }),
+          claimed: false,
+          duplicate: true,
+        }
+      }
+      seen.add(key)
+      return {
+        event: providerEventRecord(input),
+        claimed: true,
+        duplicate: false,
+      }
+    },
+    async completeProviderEvent(eventId, input) {
+      completed.push({ eventId, status: input.status })
+      if (input.status === 'processed') throw new Error('provider event completion unavailable')
+      return providerEventRecord({
+        provider: 'fake',
+        providerInstanceId: 'fake',
+        providerEventId: eventId,
+        eventType: 'message',
+        claimedBy: input.claimedBy,
+        status: input.status,
+      })
+    },
+    async abortSession() { return { command: { commandId: 'cmd-abort' } as never, processed: 1, view: {} as never } },
+    async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
+    async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
+    async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
+    async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
+    subscribeSessionEvents() { return { close() {} } },
+    subscribeDeliveries() { return { close() {} } },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
+    async ackDelivery() { return null },
+    artifactUrl() { return 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1' },
+  }
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+
+  await runtime.start()
+  try {
+    await assert.rejects(
+      () => runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it', chatId: 'chat-1', userId: 'user-1' }),
+      /provider event completion unavailable/,
+    )
+    await runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it again', chatId: 'chat-1', userId: 'user-1' })
+
+    assert.deepEqual(prompted, [{ text: 'ship it', commandId: 'event-fake-provider-event-1-message' }])
+    assert.deepEqual(completed, [
+      { eventId: 'event-fake-provider-event-1-message', status: 'processed' },
+    ])
+    assert.equal(runtime.metrics.promptedMessages, 1)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime marks claimed provider events failed when prompting fails', async () => {
+  const completed: Array<{ status: string, retryable?: boolean, lastError?: string | null }> = []
+  const cloud: CloudGateway = {
+    async resolveIdentity(input) {
+      return {
+        identityId: `identity-${input.externalUserId}`,
+        orgId: 'tenant-1',
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId || null,
+        externalUserId: input.externalUserId,
+        accountId: null,
+        role: 'member',
+        status: 'active',
+        metadata: {},
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async bindSession(input) {
+      return {
+        binding: {
+          bindingId: 'session-binding-1',
+          orgId: 'tenant-1',
+          agentId: 'agent-1',
+          channelBindingId: input.channelBindingId,
+          provider: input.provider,
+          externalWorkspaceId: input.externalWorkspaceId || null,
+          externalThreadId: input.externalThreadId,
+          externalChatId: input.externalChatId,
+          sessionId: 'session-1',
+          lastEventSequence: 0,
+          lastWorkspaceSequence: 0,
+          lastChatMessageId: null,
+          status: 'active',
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        session: {
+          session: { sessionId: 'session-1' },
+          projection: null,
+        },
+      } as never
+    },
+    async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
+    async prompt() {
+      throw new Error('OpenCode prompt unavailable')
+    },
+    async claimProviderEvent(input) {
+      return {
+        event: providerEventRecord(input),
+        claimed: true,
+        duplicate: false,
+      }
+    },
+    async completeProviderEvent(_eventId, input) {
+      completed.push({
+        status: input.status,
+        retryable: input.retryable,
+        lastError: input.lastError,
+      })
+      return providerEventRecord({
+        provider: 'cli',
+        providerInstanceId: 'fake',
+        providerEventId: 'provider-event-1',
+        eventType: 'message',
+        claimedBy: input.claimedBy,
+        status: input.status,
+      })
+    },
+    async abortSession() { return { command: { commandId: 'cmd-abort' } as never, processed: 1, view: {} as never } },
+    async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
+    async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
+    async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
+    async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
+    subscribeSessionEvents() { return { close() {} } },
+    subscribeDeliveries() { return { close() {} } },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
+    async ackDelivery() { return null },
+    artifactUrl() { return 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1' },
+  }
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+
+  await runtime.start()
+  try {
+    await assert.rejects(
+      () => runtime.providers.emitFake('fake', { id: 'provider-event-1', text: 'ship it', chatId: 'chat-1', userId: 'user-1' }),
+      /OpenCode prompt unavailable/,
+    )
+    assert.deepEqual(completed, [{
+      status: 'failed',
+      retryable: false,
+      lastError: 'OpenCode prompt unavailable',
+    }])
+    assert.equal(runtime.metrics.promptedMessages, 0)
+    assert.equal(runtime.metrics.errors, 1)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway webhook replay stays durable across runtime restarts through Cloud provider event claims', async () => {
+  const prompted: string[] = []
+  const claims: Array<{ providerEventId: string, providerInstanceId: string, eventType: string }> = []
+  const seen = new Set<string>()
+  const cloud: CloudGateway = {
+    async resolveIdentity(input) {
+      return {
+        identityId: `identity-${input.externalUserId}`,
+        orgId: 'tenant-1',
+        provider: input.provider,
+        externalWorkspaceId: input.externalWorkspaceId || null,
+        externalUserId: input.externalUserId,
+        accountId: null,
+        role: 'member',
+        status: 'active',
+        metadata: {},
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+      }
+    },
+    async bindSession(input) {
+      return {
+        binding: {
+          bindingId: 'session-binding-1',
+          orgId: 'tenant-1',
+          agentId: 'agent-1',
+          channelBindingId: input.channelBindingId,
+          provider: input.provider,
+          externalWorkspaceId: input.externalWorkspaceId || null,
+          externalThreadId: input.externalThreadId,
+          externalChatId: input.externalChatId,
+          sessionId: 'session-1',
+          lastEventSequence: 0,
+          lastWorkspaceSequence: 0,
+          lastChatMessageId: null,
+          status: 'active',
+          createdAt: new Date(0).toISOString(),
+          updatedAt: new Date(0).toISOString(),
+        },
+        session: {
+          session: { sessionId: 'session-1' },
+          projection: null,
+        },
+      } as never
+    },
+    async findSessionByThread() { return null },
+    async getSession() { return { session: { sessionId: 'session-1' }, projection: null } as never },
+    async prompt(input) {
+      prompted.push(input.text)
+      return { binding: { bindingId: input.bindingId } as never, command: { commandId: 'cmd-1' } as never, processed: 1 }
+    },
+    async claimProviderEvent(input) {
+      claims.push({
+        providerEventId: input.providerEventId,
+        providerInstanceId: input.providerInstanceId,
+        eventType: input.eventType,
+      })
+      const key = `${input.providerInstanceId}:${input.eventType}:${input.providerEventId}`
+      if (seen.has(key)) {
+        return {
+          event: providerEventRecord({ ...input, status: 'processed' }),
+          claimed: false,
+          duplicate: true,
+        }
+      }
+      seen.add(key)
+      return {
+        event: providerEventRecord(input),
+        claimed: true,
+        duplicate: false,
+      }
+    },
+    async completeProviderEvent(eventId, input) {
+      return providerEventRecord({
+        provider: 'webhook',
+        providerInstanceId: 'webhook',
+        providerEventId: eventId,
+        eventType: 'message',
+        claimedBy: input.claimedBy,
+        status: input.status,
+      })
+    },
+    async abortSession() { return { command: { commandId: 'cmd-abort' } as never, processed: 1, view: {} as never } },
+    async respondToPermission() { return { command: { commandId: 'cmd-permission' } as never, processed: 1 } },
+    async replyToQuestion() { return { command: { commandId: 'cmd-question' } as never, processed: 1 } },
+    async rejectQuestion() { return { command: { commandId: 'cmd-reject' } as never, processed: 1 } },
+    async createChannelInteraction() { return { interaction: { interactionId: 'interaction-1' } as never, plaintextToken: 'token-1' } },
+    async resolveChannelInteraction() { return { interaction: {}, command: { commandId: 'cmd-interaction' } as never, processed: 1 } },
+    subscribeSessionEvents() { return { close() {} } },
+    subscribeDeliveries() { return { close() {} } },
+    async updateCursor() { return { ok: false, reason: 'not_found' } },
+    async ackDelivery() { return null },
+    artifactUrl() { return 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1' },
+  }
+  const config = resolveGatewayConfig({
+    providers: [{
+      id: 'webhook',
+      kind: 'webhook',
+      channelBindingId: 'webhook-binding',
+      credentials: {
+        sharedSecret: 'webhook-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://bridge.example.test/outbound',
+      },
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+    OPEN_COWORK_GATEWAY_PORT: '0',
+    OPEN_COWORK_GATEWAY_ADMIN_TOKEN: 'admin-token',
+  })
+  const body = JSON.stringify({
+    id: 'signed-provider-event-1',
+    target: { chatId: 'chat-1' },
+    sender: { userId: 'user-1' },
+    text: 'ship it',
+  })
+  const headers = signedWebhookHeaders(body, 'webhook-secret')
+
+  async function postThroughFreshRuntime() {
+    const runtime = createGatewayRuntime(config, cloud, undefined, { subscribeDeliveries: false })
+    await runtime.start()
+    const http = createGatewayHttpServer(config, runtime)
+    const url = await http.listen()
+    try {
+      const response = await fetch(`${url}/webhooks/webhook`, {
+        method: 'POST',
+        headers,
+        body,
+      })
+      assert.equal(response.status, 202)
+    } finally {
+      await http.close()
+      await runtime.stop()
+    }
+  }
+
+  await postThroughFreshRuntime()
+  await postThroughFreshRuntime()
+
+  assert.deepEqual(prompted, ['ship it'])
+  assert.deepEqual(claims, [
+    { providerEventId: 'signed-provider-event-1', providerInstanceId: 'webhook', eventType: 'message' },
+    { providerEventId: 'signed-provider-event-1', providerInstanceId: 'webhook', eventType: 'message' },
+  ])
 })
 
 test('gateway diagnostics redact provider health errors', async () => {
@@ -1062,6 +1629,61 @@ test('gateway daemon rejects delivery admin controls without the admin token', a
   }
 })
 
+test('gateway runtime propagates stable Cloud delivery ids to provider sends', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery(deliveryId: string, input: Record<string, unknown>) {
+      acks.push({ deliveryId, input })
+      return { deliveryId, ...input } as never
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+  const provider = runtime.providers.get('fake')?.provider as {
+    capabilities: { maxTextLength: number }
+    sent: Array<{ text?: string, options?: { deliveryId?: string } }>
+  } | undefined
+  assert.ok(provider)
+
+  await runtime.start()
+  try {
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-single', payload: { text: 'short' } }))
+    await waitFor(() => acks.length === 1)
+    assert.equal(provider.sent[0]?.options?.deliveryId, 'delivery-single')
+    assert.equal(acks[0]?.input.status, 'sent')
+
+    provider.capabilities.maxTextLength = 100
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-chunked', payload: { text: 'x'.repeat(205) } }))
+    await waitFor(() => acks.length === 2)
+    assert.deepEqual(provider.sent.slice(1).map((entry) => entry.options?.deliveryId), [
+      'delivery-chunked:chunk:1',
+      'delivery-chunked:chunk:2',
+      'delivery-chunked:chunk:3',
+    ])
+    assert.equal(provider.sent.slice(1).every((entry) => (entry.text?.length ?? 0) <= 100), true)
+    assert.equal(acks[1]?.input.status, 'sent')
+  } finally {
+    await runtime.stop()
+  }
+})
+
 test('gateway runtime retries transient deliveries and marks permanent failures dead', async () => {
   let onDelivery: ((delivery: unknown) => void) | null = null
   const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []
@@ -1179,6 +1801,7 @@ test('gateway runtime drains in-flight deliveries before provider shutdown', asy
 function deliveryRecord(overrides: Partial<{
   deliveryId: string
   attemptCount: number
+  payload: Record<string, unknown>
 }> = {}) {
   return {
     deliveryId: overrides.deliveryId || 'delivery-1',
@@ -1192,7 +1815,7 @@ function deliveryRecord(overrides: Partial<{
       externalThreadId: 'thread-1',
     },
     eventType: 'workflow.completed',
-    payload: { text: 'delivery text' },
+    payload: overrides.payload ?? { text: 'delivery text' },
     status: 'claimed',
     attemptCount: overrides.attemptCount ?? 1,
     claimedBy: 'gateway:test',

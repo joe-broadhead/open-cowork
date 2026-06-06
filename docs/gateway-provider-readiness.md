@@ -104,6 +104,14 @@ the demo override.
   default; legacy shared-secret headers are local compatibility only.
 - Gateway service-token authority is separate from inbound actor authority.
   Cloud resolves the channel actor and enforces approval authority.
+- Production providers must map incoming messages, commands, and interactions
+  to stable provider event ids before Gateway prompts Cloud. Replaying the same
+  signed provider event after a Gateway restart must hit the Cloud
+  provider-event claim and produce no second prompt.
+- Provider sends must preserve the Cloud delivery id as the provider delivery
+  id when the provider API allows it. Webhook and bridge providers must also
+  send that value as `deliveryId`, `idempotencyKey`, and
+  `x-open-cowork-gateway-delivery-id`.
 - Diagnostics, logs, provider health, delivery summaries, and metrics must not
   expose raw provider tokens, webhook secrets, API tokens, local paths, or
   signed artifact URLs.

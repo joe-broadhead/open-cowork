@@ -4,8 +4,12 @@ import {
   type ChannelCursorUpdateResult,
   type ChannelDeliveryRecord,
   type ChannelIdentityRecord,
+  type ChannelProviderEventClaimResult,
+  type ChannelProviderEventRecord,
   type ChannelSessionBindingRecord,
   type CloudChannelInteractionMutationResponse,
+  type CloudChannelProviderEventStatus,
+  type CloudChannelProviderEventType,
   type CloudChannelProviderId,
   type CloudChannelPromptMutationResponse,
   type CloudSessionCommandAckResponse,
@@ -46,7 +50,24 @@ export type CloudGateway = {
     bindingId: string
     text: string
     agent?: string | null
+    commandId?: string | null
   }): Promise<CloudChannelPromptMutationResponse>
+  claimProviderEvent(input: {
+    provider: CloudChannelProviderId
+    providerInstanceId: string
+    externalWorkspaceId?: string | null
+    providerEventId: string
+    eventType: CloudChannelProviderEventType
+    claimedBy: string
+    ttlMs?: number | null
+    metadata?: Record<string, unknown>
+  }): Promise<ChannelProviderEventClaimResult>
+  completeProviderEvent(eventId: string, input: {
+    claimedBy: string
+    status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
+    retryable?: boolean
+    lastError?: string | null
+  }): Promise<ChannelProviderEventRecord | null>
   resolveChannelInteraction(input: ChannelActorInput & {
     token?: string | null
     externalInteractionId?: string | null
@@ -124,6 +145,14 @@ export function createCloudGateway(connection: GatewayCloudConnectionConfig, ada
     async prompt(input) {
       assertMethod(adapter.promptChannelSession, 'promptChannelSession')
       return adapter.promptChannelSession(input)
+    },
+    async claimProviderEvent(input) {
+      assertMethod(adapter.claimChannelProviderEvent, 'claimChannelProviderEvent')
+      return adapter.claimChannelProviderEvent(input)
+    },
+    async completeProviderEvent(eventId, input) {
+      assertMethod(adapter.completeChannelProviderEvent, 'completeChannelProviderEvent')
+      return adapter.completeChannelProviderEvent(eventId, input)
     },
     async resolveChannelInteraction(input) {
       assertMethod(adapter.resolveChannelInteraction, 'resolveChannelInteraction')

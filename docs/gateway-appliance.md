@@ -220,6 +220,29 @@ Gateway closes new Cloud delivery subscriptions, drains in-flight delivery
 sends, acknowledges completed deliveries, then stops providers. A restart
 resumes from Cloud-owned cursors and delivery records.
 
+Inbound provider events are also Cloud-owned. Before Gateway binds a channel
+thread or sends a prompt to Cloud, it claims a durable provider event keyed by
+organization, provider, provider instance, external workspace, event type, and
+the provider event id. A duplicate or already processed event becomes a no-op
+even if the Gateway process restarted and lost its provider-local replay cache.
+A processing claim can be reclaimed only after its lease expires, and a failed
+claim can be retried only when it was marked retryable.
+
+Production providers must send stable inbound event ids. Telegram uses
+`update_id`; Slack uses the signed event or interaction id; email and generic
+webhook/bridge providers must provide a stable message, delivery, or webhook
+`id`. Generic webhook payloads that omit `id` are accepted for developer
+convenience but cannot receive durable duplicate suppression after a process
+restart because the provider must synthesize a new event id.
+
+Outbound delivery idempotency flows the other direction. Cloud delivery ids are
+the canonical downstream idempotency keys. Gateway passes the Cloud
+`deliveryId` to provider sends; webhook and bridge providers include it as
+`deliveryId`, `idempotencyKey`, and
+`x-open-cowork-gateway-delivery-id`. Multi-part text deliveries use stable
+chunk ids in the form `<cloud-delivery-id>:chunk:<n>` so downstream bridges can
+dedupe each chunk without conflating it with the parent delivery.
+
 Session-event rendering is ordered by Cloud event sequence. If provider
 rendering fails transiently, Gateway reconnects from the last persisted cursor
 and prevents later queued events from jumping the failed event. If retry budget

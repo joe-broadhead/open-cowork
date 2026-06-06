@@ -144,7 +144,7 @@ export class SlackProvider implements ChannelProvider {
       unfurl_media: false,
       mrkdwn: options?.parseMode === "markdown"
     });
-    return sentMessage(target, stringField(result, "ts") || randomUUID());
+    return sentMessage(target, stringField(result, "ts") || randomUUID(), options?.deliveryId);
   }
 
   async editText(target: ChannelTarget, messageId: string, text: string, options?: SendOptions): Promise<void> {
@@ -173,7 +173,7 @@ export class SlackProvider implements ChannelProvider {
     return sentMessage(target, slackFileMessageTs(result) || stringField(result, "ts") || randomUUID());
   }
 
-  async sendButtons(target: ChannelTarget, text: string, buttons: ChannelButton[][]): Promise<SentMessage> {
+  async sendButtons(target: ChannelTarget, text: string, buttons: ChannelButton[][], options?: SendOptions): Promise<SentMessage> {
     validateSlackButtons(buttons);
     const result = await this.apiJson("chat.postMessage", {
       channel: target.chatId,
@@ -200,7 +200,7 @@ export class SlackProvider implements ChannelProvider {
         }))
       }))]
     });
-    return sentMessage(target, stringField(result, "ts") || randomUUID());
+    return sentMessage(target, stringField(result, "ts") || randomUUID(), options?.deliveryId);
   }
 
   async answerInteraction(_interactionId: string, _text?: string, _alert?: boolean): Promise<void> {
@@ -504,13 +504,14 @@ function validateSlackButtons(buttons: ChannelButton[][]): void {
   }
 }
 
-function sentMessage(target: ChannelTarget, messageId: string): SentMessage {
+function sentMessage(target: ChannelTarget, messageId: string, providerDeliveryId?: string): SentMessage {
   return {
     provider: target.provider,
     providerKind: target.providerKind ?? "slack",
     chatId: target.chatId,
     threadId: target.threadId || messageId,
     messageId,
+    providerDeliveryId,
     sentAt: new Date()
   };
 }

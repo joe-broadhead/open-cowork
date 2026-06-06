@@ -447,6 +447,29 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS cloud_channel_deliveries_claim_idx
     ON cloud_channel_deliveries (org_id, status, next_attempt_at, created_at)`,
+  `CREATE TABLE IF NOT EXISTS cloud_channel_provider_events (
+    event_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    provider text NOT NULL,
+    provider_instance_id text NOT NULL,
+    external_workspace_id text,
+    provider_event_id text NOT NULL,
+    event_type text NOT NULL,
+    status text NOT NULL,
+    claimed_by text,
+    claim_expires_at timestamptz,
+    attempt_count integer NOT NULL DEFAULT 0,
+    retryable boolean NOT NULL DEFAULT true,
+    last_error text,
+    metadata jsonb NOT NULL,
+    processed_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_provider_events_dedupe_idx
+    ON cloud_channel_provider_events (org_id, provider, provider_instance_id, COALESCE(external_workspace_id, ''), event_type, provider_event_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_provider_events_claim_idx
+    ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
 ] as const
 
 export const CLOUD_CONTROL_PLANE_BYOK_SECRETS_MIGRATION_ID = '004_byok_secrets'
@@ -685,6 +708,34 @@ export const CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS = [
       AND status IN ('queued', 'running')`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_MIGRATION_ID = '011_channel_provider_events'
+
+export const CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_channel_provider_events (
+    event_id text PRIMARY KEY,
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    provider text NOT NULL,
+    provider_instance_id text NOT NULL,
+    external_workspace_id text,
+    provider_event_id text NOT NULL,
+    event_type text NOT NULL,
+    status text NOT NULL,
+    claimed_by text,
+    claim_expires_at timestamptz,
+    attempt_count integer NOT NULL DEFAULT 0,
+    retryable boolean NOT NULL DEFAULT true,
+    last_error text,
+    metadata jsonb NOT NULL,
+    processed_at timestamptz,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS cloud_channel_provider_events_dedupe_idx
+    ON cloud_channel_provider_events (org_id, provider, provider_instance_id, COALESCE(external_workspace_id, ''), event_type, provider_event_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_provider_events_claim_idx
+    ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -727,5 +778,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
     statements: CLOUD_CONTROL_PLANE_MANAGED_WORK_REAPER_INDEXES_STATEMENTS,
     concurrentIndexes: ['cloud_worker_leases_reaper_idx', 'cloud_workflow_runs_reaper_idx'],
     transactional: false,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS,
   },
 ] as const
