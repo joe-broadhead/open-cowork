@@ -161,6 +161,11 @@ provider control plane.
   service mesh; internal pod/service traffic may remain private.
 - Do not send desktop bearer tokens, gateway service tokens, cookies, or BYOK
   setup requests over non-loopback HTTP.
+- For generic webhook/bridge providers, keep outbound delivery on the default
+  public policy: HTTPS only, no embedded credentials, host allowlists for
+  managed bridges, DNS/private-address rejection, and circuit health visible in
+  Gateway diagnostics. Enable private/internal delivery only in explicitly
+  risk-accepted deployments.
 
 ### Cloud Web Workbench
 

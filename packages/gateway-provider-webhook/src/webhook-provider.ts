@@ -1,8 +1,12 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import type {
   ChannelAttachment,
   ChannelButton,
   ChannelCapabilities,
+  ChannelProviderHealth,
   ChannelProviderKind,
   ChannelProviderId,
   ChannelProvider,
@@ -13,20 +17,55 @@ import type {
   SentMessage
 } from "@open-cowork/gateway-channel";
 import { channelProviderKindFromId, normalizeChannelCapabilities, normalizeChannelProviderIdentity } from "@open-cowork/gateway-channel";
+import {
+  boundedPositiveInt,
+  isAbortError,
+  isRetryableWebhookDeliveryError,
+  parseRetryAfterMs,
+  WebhookCircuitOpenError,
+  WebhookDeliveryBodyError,
+  WebhookDeliveryError,
+  WebhookDeliveryNetworkError,
+  WebhookDeliveryPolicyError,
+  WebhookDeliveryTimeoutError,
+  withWebhookRetry
+} from "./webhook-retry.js";
+import {
+  resolveWebhookDeliveryAddresses,
+  type ResolvedWebhookAddress,
+  type ResolveWebhookHostname,
+  validateWebhookDeliveryUrl
+} from "./webhook-url-policy.js";
+
+type NodeRequestFactory = (
+  url: URL,
+  options: RequestOptions,
+  callback: (response: IncomingMessage) => void,
+) => ClientRequest;
 
 export interface WebhookProviderConfig {
   providerId?: ChannelProviderId;
   providerKind?: ChannelProviderKind;
   deliveryUrl: string;
+  deliveryUrlAllowedHosts?: readonly string[];
   sharedSecret?: string;
   capabilities?: Partial<ChannelCapabilities>;
   maxSignatureAgeMs?: number;
   maxAttachmentBytes?: number;
   fetch?: typeof globalThis.fetch;
+  deliveryRequestForTests?: NodeRequestFactory;
+  resolveDeliveryHostname?: ResolveWebhookHostname;
+  allowPrivateDelivery?: boolean;
   now?: () => Date;
   retryAttempts?: number;
+  retryInitialDelayMs?: number;
+  retryMaxDelayMs?: number;
+  retryJitterRatio?: number;
+  random?: () => number;
   sleep?: (ms: number) => Promise<void>;
   deliveryTimeoutMs?: number;
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerCooldownMs?: number;
   legacySharedSecretHeader?: boolean;
   maxSeenIngressSignatures?: number;
   maxSeenIngressSignaturesPerScope?: number;
@@ -75,8 +114,9 @@ export interface WebhookIngressAuth {
 const maxWebhookAttachments = 20;
 const defaultMaxSignatureAgeMs = 5 * 60 * 1000;
 const defaultDeliveryTimeoutMs = 15_000;
-const maxWebhookRetryAttempts = 5;
-const maxWebhookRetryDelayMs = 10_000;
+const maxWebhookDeliveryResponseBytes = 64 * 1024;
+const defaultWebhookCircuitBreakerFailureThreshold = 5;
+const defaultWebhookCircuitBreakerCooldownMs = 30_000;
 const defaultMaxSeenIngressSignatures = 5_000;
 const defaultMaxSeenIngressSignaturesPerScope = 1_000;
 
@@ -90,6 +130,20 @@ type WebhookIngressReplayClaim = {
   entry: SeenWebhookSignature;
 };
 
+type WebhookCircuitState = {
+  failures: number;
+  openUntilMs: number;
+};
+
+type WebhookDeliveryRequest = {
+  deliveryId: string;
+  body: string;
+};
+
+type SignedWebhookDeliveryRequest = WebhookDeliveryRequest & {
+  headers: Record<string, string>;
+};
+
 export interface MapWebhookPayloadOptions {
   maxAttachmentBytes?: number;
 }
@@ -101,9 +155,17 @@ export class WebhookProvider implements ChannelProvider {
 
   private handler?: (message: IncomingChannelMessage) => Promise<void>;
   private readonly seenIngressSignatures = new Map<string, SeenWebhookSignature>();
+  private readonly deliveryUrl: URL;
+  private circuit: WebhookCircuitState = {
+    failures: 0,
+    openUntilMs: 0
+  };
 
   constructor(private readonly config: WebhookProviderConfig) {
-    validateWebhookDeliveryUrl(config.deliveryUrl);
+    this.deliveryUrl = validateWebhookDeliveryUrl(config.deliveryUrl, {
+      allowedHosts: config.deliveryUrlAllowedHosts,
+      allowPrivateDelivery: config.allowPrivateDelivery
+    });
     if (config.sharedSecret !== undefined) {
       validateHeaderValue(config.sharedSecret, "Webhook shared secret");
     }
@@ -132,6 +194,29 @@ export class WebhookProvider implements ChannelProvider {
 
   async stop(): Promise<void> {
     this.handler = undefined;
+  }
+
+  health(): ChannelProviderHealth {
+    if (this.circuit.openUntilMs <= 0) {
+      return {
+        ok: true,
+        state: "ready",
+        error: null
+      };
+    }
+    const nowMs = this.config.now?.().getTime() ?? Date.now();
+    if (nowMs >= this.circuit.openUntilMs) {
+      return {
+        ok: true,
+        state: "ready",
+        error: null
+      };
+    }
+    return {
+      ok: false,
+      state: "degraded",
+      error: `Webhook delivery circuit is open for ${Math.ceil(this.circuit.openUntilMs - nowMs)}ms`
+    };
   }
 
   async handleWebhookPayload(payload: unknown, auth: WebhookIngressAuth): Promise<void> {
@@ -236,7 +321,6 @@ export class WebhookProvider implements ChannelProvider {
     }
     const normalizedTarget = payload.target ? normalizeOutboundTarget(payload.target, this.id, this.kind) : undefined;
     const normalizedPayload = normalizedTarget ? { ...payload, target: normalizedTarget } : payload;
-    const fetchImpl = this.config.fetch ?? globalThis.fetch;
     const deliveryId = deliveryIdForPayload(normalizedPayload);
     const body = JSON.stringify({
       deliveryId,
@@ -246,42 +330,22 @@ export class WebhookProvider implements ChannelProvider {
       providerKind: this.kind,
       ...normalizedPayload
     });
-    const response = await withWebhookRetry(async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), normalizeDeliveryTimeoutMs(this.config.deliveryTimeoutMs));
-      const timestamp = String(Math.floor((this.config.now?.().getTime() ?? Date.now()) / 1000));
-      const signature = this.config.sharedSecret
-        ? signWebhookDeliveryPayload(body, this.config.sharedSecret, timestamp)
-        : null;
-      try {
-        const attempt = await fetchImpl(this.config.deliveryUrl, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-open-cowork-gateway-delivery-id": deliveryId,
-            ...(signature ? {
-              "x-open-cowork-gateway-webhook-timestamp": timestamp,
-              "x-open-cowork-gateway-webhook-signature": signature
-            } : {}),
-            ...(this.config.legacySharedSecretHeader && this.config.sharedSecret
-              ? { "x-open-cowork-gateway-webhook-secret": this.config.sharedSecret }
-              : {})
-          },
-          body,
-          signal: controller.signal
-        });
-        if (!attempt.ok) {
-          throw WebhookDeliveryError.fromResponse(attempt);
-        }
-        return attempt;
-      } finally {
-        clearTimeout(timeout);
-      }
+    const responseBody = await withWebhookRetry(async () => {
+      this.assertCircuitClosed();
+      const parsed = await this.fetchDelivery({ deliveryId, body });
+      this.recordCircuitSuccess();
+      return parsed;
     }, {
       attempts: this.config.retryAttempts,
-      sleep: this.config.sleep
+      initialDelayMs: this.config.retryInitialDelayMs,
+      maxDelayMs: this.config.retryMaxDelayMs,
+      jitterRatio: this.config.retryJitterRatio,
+      sleep: this.config.sleep,
+      random: this.config.random
+    }).catch((error) => {
+      this.recordCircuitFailure(error);
+      throw error;
     });
-    const responseBody = await responseJson(response);
     const target = normalizedTarget;
     const messageId = cleanOptionalString(responseBody.messageId, "Webhook delivery response.messageId", 512) ?? randomUUID();
     return {
@@ -292,6 +356,120 @@ export class WebhookProvider implements ChannelProvider {
       messageId,
       providerDeliveryId: deliveryId,
       sentAt: new Date()
+    };
+  }
+
+  private async fetchDelivery(input: WebhookDeliveryRequest): Promise<Record<string, unknown>> {
+    const timeoutMs = normalizeDeliveryTimeoutMs(this.config.deliveryTimeoutMs);
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new WebhookDeliveryTimeoutError(timeoutMs));
+      }, timeoutMs);
+    });
+    try {
+      const resolvedAddresses = await Promise.race([
+        resolveWebhookDeliveryAddresses(this.deliveryUrl, {
+          resolveHostname: this.config.resolveDeliveryHostname,
+          allowPrivateDelivery: this.config.allowPrivateDelivery
+        }),
+        timeoutPromise
+      ]);
+      const signed = {
+        ...input,
+        headers: this.deliveryHeaders(input)
+      };
+      if (this.config.fetch) {
+        const attempt = await this.config.fetch(pinnedDeliveryUrl(this.deliveryUrl, resolvedAddresses).toString(), {
+          method: "POST",
+          headers: {
+            ...signed.headers,
+            host: this.deliveryUrl.host
+          },
+          body: signed.body,
+          signal: controller.signal
+        });
+        if (!attempt.ok) {
+          throw WebhookDeliveryError.fromResponse(attempt);
+        }
+        return responseJson(attempt);
+      }
+      return postWebhookDeliveryWithPinnedAddress(this.deliveryUrl, resolvedAddresses, signed, {
+        signal: controller.signal,
+        request: this.config.deliveryRequestForTests
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new WebhookDeliveryTimeoutError(timeoutMs);
+      }
+      if (
+        error instanceof WebhookDeliveryError ||
+        error instanceof WebhookDeliveryTimeoutError ||
+        error instanceof WebhookDeliveryBodyError ||
+        error instanceof WebhookDeliveryPolicyError
+      ) {
+        throw error;
+      }
+      throw new WebhookDeliveryNetworkError(error);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  private deliveryHeaders(input: WebhookDeliveryRequest): Record<string, string> {
+    const timestamp = String(Math.floor((this.config.now?.().getTime() ?? Date.now()) / 1000));
+    const signature = this.config.sharedSecret
+      ? signWebhookDeliveryPayload(input.body, this.config.sharedSecret, timestamp)
+      : null;
+    return {
+      "content-type": "application/json",
+      "x-open-cowork-gateway-delivery-id": input.deliveryId,
+      ...(signature ? {
+        "x-open-cowork-gateway-webhook-timestamp": timestamp,
+        "x-open-cowork-gateway-webhook-signature": signature
+      } : {}),
+      ...(this.config.legacySharedSecretHeader && this.config.sharedSecret
+        ? { "x-open-cowork-gateway-webhook-secret": this.config.sharedSecret }
+        : {})
+    };
+  }
+
+  private assertCircuitClosed(): void {
+    if (this.circuit.openUntilMs <= 0) {
+      return;
+    }
+    const nowMs = this.config.now?.().getTime() ?? Date.now();
+    if (nowMs < this.circuit.openUntilMs) {
+      throw new WebhookCircuitOpenError(this.circuit.openUntilMs - nowMs);
+    }
+    this.circuit = {
+      failures: 0,
+      openUntilMs: 0
+    };
+  }
+
+  private recordCircuitSuccess(): void {
+    if (this.circuit.failures === 0 && this.circuit.openUntilMs === 0) {
+      return;
+    }
+    this.circuit = {
+      failures: 0,
+      openUntilMs: 0
+    };
+  }
+
+  private recordCircuitFailure(error: unknown): void {
+    if (error instanceof WebhookCircuitOpenError || !isRetryableWebhookDeliveryError(error)) {
+      return;
+    }
+    const threshold = boundedPositiveInt(this.config.circuitBreakerFailureThreshold, defaultWebhookCircuitBreakerFailureThreshold);
+    const cooldownMs = boundedPositiveInt(this.config.circuitBreakerCooldownMs, defaultWebhookCircuitBreakerCooldownMs);
+    const failures = this.circuit.failures + 1;
+    this.circuit = {
+      failures,
+      openUntilMs: failures >= threshold ? (this.config.now?.().getTime() ?? Date.now()) + cooldownMs : 0
     };
   }
 
@@ -404,62 +582,6 @@ export function signWebhookIngressPayload(rawBody: string, sharedSecret: string,
 
 export function signWebhookDeliveryPayload(rawBody: string, sharedSecret: string, timestamp: string): string {
   return signWebhookIngressPayload(rawBody, sharedSecret, timestamp);
-}
-
-export interface WebhookRetryOptions {
-  attempts?: number;
-  sleep?: (ms: number) => Promise<void>;
-}
-
-export async function withWebhookRetry<T>(
-  operation: () => Promise<T>,
-  options: WebhookRetryOptions = {},
-): Promise<T> {
-  const attempts = Math.max(1, Math.min(maxWebhookRetryAttempts, options.attempts ?? 3));
-  const sleep = options.sleep ?? delay;
-  let attempt = 0;
-
-  while (true) {
-    try {
-      return await operation();
-    } catch (error) {
-      attempt += 1;
-      const delayMs = webhookRetryDelayMs(error, attempt);
-      if (attempt >= attempts || delayMs === null) {
-        throw error;
-      }
-      await sleep(delayMs);
-    }
-  }
-}
-
-export function webhookRetryDelayMs(error: unknown, attempt: number): number | null {
-  if (!(error instanceof WebhookDeliveryError)) {
-    return null;
-  }
-  if (error.status === 429) {
-    return Math.min(error.retryAfterMs ?? cappedBackoffMs(attempt), maxWebhookRetryDelayMs);
-  }
-  if (error.status >= 500 && error.status < 600) {
-    return cappedBackoffMs(attempt);
-  }
-  return null;
-}
-
-class WebhookDeliveryError extends Error {
-  private constructor(
-    readonly status: number,
-    readonly retryAfterMs: number | null,
-  ) {
-    super(`Webhook delivery failed: ${status}`);
-  }
-
-  static fromResponse(response: Response): WebhookDeliveryError {
-    return new WebhookDeliveryError(
-      response.status,
-      parseRetryAfterMs(response.headers.get("retry-after")),
-    );
-  }
 }
 
 export function mapWebhookPayload(
@@ -693,32 +815,6 @@ function validateInteractionToken(token: string, label: string): void {
   }
 }
 
-function validateWebhookDeliveryUrl(value: string): void {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("Webhook delivery URL is not a valid URL");
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("Webhook delivery URL must use http or https");
-  }
-  if (url.protocol === "http:" && !isLocalHttpHost(url.hostname)) {
-    throw new Error("Webhook delivery URL must use https unless it targets localhost");
-  }
-  if (url.username || url.password) {
-    throw new Error("Webhook delivery URL must not include embedded credentials");
-  }
-}
-
-function isLocalHttpHost(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  return normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized === "[::1]";
-}
-
 function webhookReplayScopeFromRawBody(rawBody: string, providerId: ChannelProviderId): string {
   const fallback = replayScopeSegment(providerId);
   try {
@@ -849,31 +945,6 @@ function parseReceivedAt(value: unknown, fallback: Date): Date {
   return Number.isNaN(parsed.getTime()) ? fallback : parsed;
 }
 
-function parseRetryAfterMs(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) {
-    return Math.min(maxWebhookRetryDelayMs, Math.max(0, seconds * 1000));
-  }
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return Math.min(maxWebhookRetryDelayMs, Math.max(0, date.getTime() - Date.now()));
-  }
-  return null;
-}
-
-function cappedBackoffMs(attempt: number): number {
-  return Math.min(maxWebhookRetryDelayMs, 1000 * 2 ** Math.max(0, attempt - 1));
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 function serializeOutgoingFile(file: OutgoingFile): Record<string, unknown> {
   const filename = cleanRequiredString(file.filename, "Webhook outgoing file.filename", 255);
   if (!filename) {
@@ -893,8 +964,139 @@ function deliveryIdForPayload(payload: { options?: SendOptions }): string {
   return cleanOptionalString(payload.options?.deliveryId, "Webhook delivery options.deliveryId", 512) ?? randomUUID();
 }
 
+async function postWebhookDeliveryWithPinnedAddress(
+  url: URL,
+  resolvedAddresses: ResolvedWebhookAddress[],
+  input: SignedWebhookDeliveryRequest,
+  options: { signal: AbortSignal; request?: NodeRequestFactory },
+): Promise<Record<string, unknown>> {
+  const pinned = resolvedAddresses[0];
+  if (!pinned?.address || !pinned.family) {
+    throw new WebhookDeliveryPolicyError("Webhook delivery URL host cannot be resolved");
+  }
+  const requestFactory = options.request ?? (url.protocol === "http:" ? httpRequest : httpsRequest);
+  return new Promise((resolve, reject) => {
+    const requestOptions: RequestOptions = {
+      method: "POST",
+      agent: false,
+      signal: options.signal,
+      headers: {
+        ...input.headers,
+        "content-length": String(Buffer.byteLength(input.body, "utf8"))
+      },
+      lookup: pinnedLookup(url, pinned, "Webhook delivery URL") as unknown as RequestOptions["lookup"]
+    };
+    const request = requestFactory(url, requestOptions, (response) => {
+      const status = response.statusCode ?? 0;
+      if (status < 200 || status > 299) {
+        response.resume();
+        reject(new WebhookDeliveryError(status, parseRetryAfterMs(firstHeaderValue(response.headers["retry-after"]) ?? null)));
+        return;
+      }
+      nodeResponseJson(response).then(resolve, reject);
+    });
+    request.on("error", reject);
+    request.end(input.body);
+  });
+}
+
+function pinnedDeliveryUrl(url: URL, resolvedAddresses: ResolvedWebhookAddress[]): URL {
+  const pinned = resolvedAddresses[0];
+  if (!pinned?.address || !pinned.family) {
+    throw new WebhookDeliveryPolicyError("Webhook delivery URL host cannot be resolved");
+  }
+  const next = new URL(url.toString());
+  const host = pinned.family === 6 ? `[${pinned.address}]` : pinned.address;
+  next.host = url.port ? `${host}:${url.port}` : host;
+  return next;
+}
+
+function pinnedLookup(url: URL, pinned: ResolvedWebhookAddress, label: string) {
+  return (
+    hostname: string,
+    lookupOptions: unknown,
+    callback: PinnedLookupCallback,
+  ): void => {
+    if (normalizeHostnameForPolicy(hostname) !== normalizeHostnameForPolicy(url.hostname)) {
+      callback(new Error(`${label} host changed during request`));
+      return;
+    }
+    if (isRecord(lookupOptions) && lookupOptions.all === true) {
+      callback(null, [{ address: pinned.address, family: pinned.family }]);
+      return;
+    }
+    callback(null, pinned.address, pinned.family);
+  };
+}
+
+type PinnedLookupCallback = {
+  (error: Error | null, address?: string, family?: number): void;
+  (error: Error | null, addresses?: ResolvedWebhookAddress[]): void;
+};
+
+function normalizeHostnameForPolicy(value: unknown): string {
+  return String(value).trim().replace(/^\[/u, "").replace(/\]$/u, "").toLowerCase();
+}
+
+function firstHeaderValue(value: string | string[] | number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return String(Array.isArray(value) ? value[0] : value);
+}
+
+async function nodeResponseJson(response: IncomingMessage): Promise<Record<string, unknown>> {
+  const contentLength = firstHeaderValue(response.headers["content-length"]);
+  if (contentLength) {
+    const bytes = Number(contentLength);
+    if (Number.isFinite(bytes) && bytes > maxWebhookDeliveryResponseBytes) {
+      response.resume();
+      throw new WebhookDeliveryBodyError(`Webhook delivery response cannot exceed ${maxWebhookDeliveryResponseBytes} bytes`);
+    }
+  }
+  const bytes = await readBoundedNodeResponseBytes(response, maxWebhookDeliveryResponseBytes);
+  if (bytes.byteLength === 0) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown;
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function readBoundedNodeResponseBytes(response: IncomingMessage, maxBytes: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of response) {
+    const value = chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk));
+    total += value.byteLength;
+    if (total > maxBytes) {
+      response.destroy();
+      throw new WebhookDeliveryBodyError(`Webhook delivery response cannot exceed ${maxBytes} bytes`);
+    }
+    chunks.push(value);
+  }
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return buffer;
+}
+
 async function responseJson(response: Response): Promise<Record<string, unknown>> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength) {
+    const bytes = Number(contentLength);
+    if (Number.isFinite(bytes) && bytes > maxWebhookDeliveryResponseBytes) {
+      throw new WebhookDeliveryBodyError(`Webhook delivery response cannot exceed ${maxWebhookDeliveryResponseBytes} bytes`);
+    }
+  }
   const text = await response.text();
+  if (Buffer.byteLength(text, "utf8") > maxWebhookDeliveryResponseBytes) {
+    throw new WebhookDeliveryBodyError(`Webhook delivery response cannot exceed ${maxWebhookDeliveryResponseBytes} bytes`);
+  }
   if (!text) {
     return {};
   }

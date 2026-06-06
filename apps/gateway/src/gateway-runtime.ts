@@ -98,7 +98,6 @@ async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<
       promise,
       new Promise<null>((resolve) => {
         timeout = setTimeout(() => resolve(null), timeoutMs)
-        timeout.unref?.()
       }),
     ])
   } finally {
@@ -245,7 +244,7 @@ async function handleDelivery(
       status: shouldRetry ? 'failed' : 'dead',
       claimedBy: delivery.claimedBy,
       lastError: failure.message,
-      nextAttemptAt: shouldRetry ? new Date(Date.now() + deliveryRetryDelayMs(delivery.attemptCount)).toISOString() : null,
+      nextAttemptAt: shouldRetry ? new Date(Date.now() + deliveryRetryDelayMs(delivery.attemptCount, failure.retryAfterMs)).toISOString() : null,
     })
   }
 }
@@ -268,9 +267,12 @@ async function sendDelivery(provider: ChannelProvider, delivery: ChannelDelivery
   return sent
 }
 
-function deliveryRetryDelayMs(attemptCount: number) {
+function deliveryRetryDelayMs(attemptCount: number, retryAfterMs?: number) {
+  if (retryAfterMs !== undefined) return Math.max(0, Math.floor(retryAfterMs))
   const retryIndex = Math.max(0, attemptCount - 1)
-  return Math.min(60_000, 1000 * 2 ** retryIndex)
+  const base = Math.min(60_000, 1000 * 2 ** retryIndex)
+  const spread = base * 0.2
+  return Math.max(0, Math.floor(base - spread + Math.random() * spread * 2))
 }
 
 function findDeliveryProvider(providers: GatewayProviderRegistry, delivery: ChannelDeliveryRecord): ProviderRegistration | null {
