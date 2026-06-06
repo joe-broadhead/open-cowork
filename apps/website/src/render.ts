@@ -1,90 +1,33 @@
 import { canManageOrg, type WebsiteRole } from './roles.ts'
-import { CLOUD_WEB_ADMIN_SURFACE_MATRIX, cloudWebAdminSurfaceForRoute } from './admin-surface-matrix.ts'
-import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { CLOUD_WEB_ADMIN_SURFACE_MATRIX } from './admin-surface-matrix.ts'
+import { CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE } from './app-shell.ts'
 import { CLOUD_WEB_CLIENT_ENDPOINTS, type CloudWebClientBootstrap } from './client-contract.ts'
-import { DEFAULT_WEBSITE_PUBLIC_BRANDING, brandLinksMarkup, brandLogoMarkup, resolvePublicBranding } from './branding.ts'
-import { cloudWebsiteClientScript } from './client-script.ts'
+import {
+  DEFAULT_WEBSITE_PUBLIC_BRANDING,
+  brandLinksMarkup,
+  brandLogoMarkup,
+  hasPublicBrandingThemeOverride,
+  resolvePublicBranding,
+} from './branding.ts'
 import { escapeHtml, jsonScript } from './html-utils.ts'
 import { cloudWebsiteStyles } from './styles.ts'
+import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
-import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX, cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailability } from './workbench-parity.ts'
+import { routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
+import { DEFAULT_CLOUD_THEME_PRESET, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
+import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
-export { cloudWebsiteClientScript } from './client-script.ts'
-
-export type WebsiteBootstrapPolicy = {
-  role: string
-  profileName: string
-  features: Record<string, boolean>
-  publicBranding?: PublicBrandingConfig | null
-}
-
-function routeNavMarkup(route: CloudWebRoute) {
-  const authClass = route.requiresAuth ? ' signed-in-only' : ''
-  const adminClass = route.requiresAdmin ? ' admin-route' : ''
-  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" class="${authClass.trim()}${adminClass}">${escapeHtml(route.label)}</a>`
-}
-
-function routeGroupsMarkup() {
-  return CLOUD_WEB_ROUTE_GROUPS.map((group) => `<div class="nav-group" data-nav-group="${escapeHtml(group.id)}">
-          <div class="nav-heading">${escapeHtml(group.label)}</div>
-          <div class="nav-links">${group.routes.map(routeNavMarkup).join('')}</div>
-        </div>`).join('\n        ')
-}
-
-function routePanelAttrs(routeId: string, options: { signedIn?: boolean, admin?: boolean } = {}) {
-  const classes = ['section']
-  if (options.signedIn !== false) classes.push('signed-in-only')
-  if (options.admin) classes.push('admin-only-section')
-  const route = CLOUD_WEB_ROUTES.find((entry) => entry.id === routeId)
-  return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"`
-}
-
-const parityAvailabilityLabels: Record<CloudWebWorkbenchParityAvailability, { label: string, kind: string }> = {
-  shared: { label: 'Shared with Desktop', kind: 'ok' },
-  'cloud-only': { label: 'Cloud-only', kind: 'info' },
-  'desktop-only': { label: 'Desktop-only', kind: 'warn' },
-  'intentionally-unavailable': { label: 'Unavailable in Cloud', kind: 'warn' },
-}
-
-function routeParityMarkup(routeId: CloudWebRouteId) {
-  const entries = cloudWebWorkbenchParityForRoute(routeId)
-  if (!entries.length) return ''
-  return `<div class="parity-grid" data-parity-route="${escapeHtml(routeId)}" aria-label="Desktop and Cloud Web parity for ${escapeHtml(routeId)}">
-            ${entries.map((entry) => {
-              const availability = parityAvailabilityLabels[entry.availability]
-              const reason = entry.disabledReason ? `<small>${escapeHtml(entry.disabledReason)}</small>` : ''
-              return `<article class="parity-card" data-parity-concept="${escapeHtml(entry.conceptId)}" data-parity-availability="${escapeHtml(entry.availability)}">
-                <div class="runtime-card-header">
-                  <span class="pill" data-kind="${escapeHtml(availability.kind)}">${escapeHtml(availability.label)}</span>
-                  <strong>${escapeHtml(entry.label)}</strong>
-                </div>
-                <p>${escapeHtml(entry.cloudAffordance)}</p>
-                <small>${escapeHtml(entry.boundary)}</small>
-                ${reason}
-              </article>`
-            }).join('')}
-          </div>`
-}
-
-function routeAdminSurfaceMarkup(routeId: CloudWebRouteId) {
-  const entry = cloudWebAdminSurfaceForRoute(routeId)
-  if (!entry) return ''
-  return `<div class="surface-grid" data-admin-surface-route="${escapeHtml(routeId)}" aria-label="Cloud Web admin surface contract for ${escapeHtml(routeId)}">
-            <article class="surface-card">
-              <div class="runtime-card-header">
-                <span class="pill" data-kind="info">Admin surface</span>
-                <strong>${escapeHtml(entry.label)}</strong>
-              </div>
-              <p>${escapeHtml(entry.cloudAffordance)}</p>
-              <small>${escapeHtml(entry.sensitiveBoundary)}</small>
-              <small>${escapeHtml(entry.disabledReason)}</small>
-            </article>
-          </div>`
-}
+export type WebsiteBootstrapPolicy = { role: string; profileName: string; features: Record<string, boolean>; publicBranding?: PublicBrandingConfig | null }
 
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
-  const branding = resolvePublicBranding(publicBranding || policy.publicBranding)
+  const rawBranding = publicBranding || policy.publicBranding
+  const branding = resolvePublicBranding(rawBranding)
+  const tenantBrandingLocked = hasPublicBrandingThemeOverride(rawBranding)
+  const themePresets = cloudThemePresetOptions()
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
   const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
   const bootstrap: CloudWebClientBootstrap = {
@@ -92,6 +35,11 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     profileName: policy.profileName,
     features: policy.features,
     publicBranding: branding,
+    theme: {
+      defaultPreset: DEFAULT_CLOUD_THEME_PRESET,
+      tenantBrandingLocked,
+      presets: themePresets,
+    },
     routes: CLOUD_WEB_ROUTES,
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,
     api: CLOUD_WEB_CLIENT_ENDPOINTS,
@@ -101,18 +49,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     sessionEventTypes: [...CLOUD_SESSION_EVENT_TYPES],
   }
   const adminDefault = canManageOrg(policy.role as WebsiteRole)
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(branding.productName)}</title>
-  <style${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>
-${cloudWebsiteStyles(branding)}
-  </style>
-</head>
-<body data-auth="loading">
-  <div class="shell">
+  const shellMarkup = `<div class="shell" data-cloud-react-shell-content="ssr">
     <aside class="nav">
       <div class="brand">
         ${brandLogoMarkup(branding)}
@@ -121,12 +58,38 @@ ${cloudWebsiteStyles(branding)}
           <div class="meta" id="profile-name">${escapeHtml(policy.profileName)}</div>
         </div>
       </div>
+      <div class="workspace-card">
+        <div class="workspace-card-row">
+          <strong id="workspace-label">Cloud workspace</strong>
+          <span class="status" id="sidebar-status" data-kind="warn">Loading</span>
+        </div>
+        <div class="meta" id="workspace-meta">Syncs with web, desktop, and gateway</div>
+      </div>
+      <div class="sidebar-actions signed-in-only">
+        <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
+        <button type="button" data-thread-search-focus="true">Search</button>
+      </div>
+      <label class="sidebar-search signed-in-only">
+        <span>Search chats</span>
+        <input id="sidebar-thread-query" autocomplete="off" placeholder="Search chats...">
+      </label>
+      <div class="sidebar-thread-pane signed-in-only" aria-label="Recent chats" data-workbench-pane="threads">
+        <div class="sidebar-pane-header">
+          <span>Chats</span>
+          <small><span id="sidebar-thread-count">0</span></small>
+        </div>
+        <div class="sidebar-thread-list" id="sidebar-thread-list"></div>
+      </div>
       <nav class="nav-sections" aria-label="Cloud Web sections">
         ${routeGroupsMarkup()}
       </nav>
-      <div>
+      <div class="role-card">
         <div class="meta">Role</div>
         <strong id="role-name">${adminDefault ? 'admin' : 'member'}</strong>
+      </div>
+      <div class="sidebar-utility signed-in-only" aria-label="Workspace actions">
+        <button type="button" class="ghost" data-refresh-dashboard="true">Refresh</button>
+        <button type="button" class="ghost" data-logout-control="true">Sign out</button>
       </div>
       ${brandLinksMarkup(branding)}
     </aside>
@@ -137,6 +100,7 @@ ${cloudWebsiteStyles(branding)}
           <div class="meta" id="org-meta">Loading workspace</div>
         </div>
         <div class="topbar-actions">
+          ${cloudThemePresetSelectMarkup(tenantBrandingLocked)}
           <span class="status" id="status" data-kind="warn">Loading</span>
           <button id="refresh" type="button">Refresh</button>
           <button id="signin" class="primary signed-out-only" type="button">Sign in</button>
@@ -149,15 +113,15 @@ ${cloudWebsiteStyles(branding)}
         <section ${routePanelAttrs('threads')}>
           <div class="section-header">
             <div>
-              <h2>Threads</h2>
-              <div class="meta">Cloud workspace threads</div>
+              <h2>History</h2>
+              <div class="meta">Recent conversations and project-backed work</div>
             </div>
-            <button class="primary" id="new-thread-shortcut" type="button" data-chat-control="true">New thread</button>
+            <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
           </div>
           <div class="workbench-split">
             ${routeParityMarkup('threads')}
-            <div class="panel">
-              <div class="toolbar" aria-label="Thread filters">
+            <div class="panel thread-list-panel">
+              <div class="toolbar" aria-label="Chat filters">
                 <label><span>Search</span><input id="thread-query" autocomplete="off" placeholder="title, profile, project, tag"></label>
                 <label><span>Status</span><select id="thread-status">
                   <option value="all">All</option>
@@ -178,22 +142,20 @@ ${cloudWebsiteStyles(branding)}
                 <label><span>Tag/filter</span><input id="thread-tag" autocomplete="off" placeholder="tag or smart filter"></label>
                 <button id="refresh-threads" type="button">Refresh</button>
               </div>
-              <div class="table-shell" role="table" aria-label="Cloud threads">
+              <div class="table-shell" role="table" aria-label="Cloud chats">
                 <div class="table-row table-head" role="row">
-                  <span role="columnheader">Thread</span>
+                  <span role="columnheader">Chat</span>
                   <span role="columnheader">Status</span>
-                  <span role="columnheader">Project</span>
-                  <span role="columnheader">Updated</span>
                 </div>
                 <div id="thread-list"></div>
               </div>
               <div class="section-header">
-                <div class="meta"><span id="thread-count">0</span> thread(s). <span id="thread-limit-status">No threads loaded</span>.</div>
+                <div class="meta"><span id="thread-count">0</span> chat(s). <span id="thread-limit-status">No chats loaded</span>.</div>
                 <button id="thread-load-more" type="button" hidden>Load more</button>
               </div>
             </div>
             <form class="panel" id="session-form">
-              <h3>Create cloud thread</h3>
+              <h3>Start from a project</h3>
               <div class="form-grid">
                 <label><span>Profile</span><input name="profileName" autocomplete="off" value="${escapeHtml(policy.profileName)}" data-chat-control="true"></label>
                 <label><span>Git repository URL</span><input name="repositoryUrl" autocomplete="off" placeholder="https://github.com/org/repo.git" data-chat-control="true"></label>
@@ -201,8 +163,8 @@ ${cloudWebsiteStyles(branding)}
                 <label><span>Subdirectory</span><input name="subdirectory" autocomplete="off" placeholder="optional" data-chat-control="true"></label>
                 <label class="span"><span>Credential ref</span><input name="credentialRef" autocomplete="off" placeholder="secret://git/github-readonly" data-chat-control="true"></label>
                 <label><span>Snapshot title</span><input name="snapshotTitle" autocomplete="off" placeholder="Browser upload" data-chat-control="true"></label>
-                <label><span>Uploaded snapshot</span><input name="snapshotFiles" type="file" multiple webkitdirectory data-chat-control="true"></label>
-                <button class="primary span" type="submit" data-chat-control="true">Create thread</button>
+                <label class="span"><span>Uploaded snapshot</span><input name="snapshotFiles" type="file" multiple webkitdirectory data-chat-control="true"></label>
+                <button class="primary span" type="submit" data-chat-control="true">Start chat</button>
               </div>
               <p class="empty">Cloud policy validates git and uploaded snapshot sources before execution. Local desktop paths and local MCP details are not uploaded implicitly.</p>
             </form>
@@ -210,35 +172,63 @@ ${cloudWebsiteStyles(branding)}
         </section>
 
         <section ${routePanelAttrs('chat')}>
-          <div class="section-header">
-            <div>
-              <h2>Chat</h2>
-              <div class="meta">Selected cloud session</div>
-            </div>
-            <span class="pill" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'enabled' : 'disabled'}</span>
-          </div>
-          <div class="workbench-split">
+          <div class="cloud-chat-workbench ui-workbench-layout" aria-label="Cloud chat workbench" data-workbench-layout="true" data-review-open="false">
             ${routeParityMarkup('chat')}
-            <div class="panel chat-shell">
-              <div class="section-header">
+            <div class="chat-shell ui-workbench-layout__main" data-workbench-pane="conversation">
+              <div class="chat-session-header">
                 <div>
-                  <h3 id="chat-session-title">No thread selected</h3>
-                  <div class="meta" id="chat-session-meta">Select a cloud thread</div>
+                  <div class="home-eyebrow">${escapeHtml(branding.productName)}</div>
+                  <h2 id="chat-session-title">What shall we cowork on today?</h2>
+                  <div class="meta" id="chat-session-meta">Ask anything, or @mention an agent</div>
                 </div>
-                <span class="pill" id="chat-event-status">idle</span>
+                <div class="chat-session-actions" id="chat-managed-actions">
+                  <div class="ui-action-cluster cloud-chat-action-cluster" role="toolbar" aria-label="Cloud chat actions" data-action-cluster="true">
+                    <button class="ui-action-cluster__item" type="button" data-action-id="cloud-model" data-managed-control="true" disabled title="Model selection is managed by this cloud workspace">Cloud model</button>
+                    <button class="ui-action-cluster__item" type="button" data-action-id="reasoning" data-managed-control="true" disabled title="Reasoning is managed by this cloud workspace">Think Auto</button>
+                    <button class="ui-action-cluster__item" type="button" data-action-id="profile" data-managed-control="true" disabled title="Active cloud profile">${escapeHtml(policy.profileName)}</button>
+                  </div>
+                  <button class="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
+                </div>
               </div>
               <div class="timeline" id="chat-timeline" aria-live="polite">
-                <p class="empty">No thread selected.</p>
+                <p class="empty">Start a conversation from the composer.</p>
               </div>
+              <form class="cloud-composer chat-composer-shell" id="prompt-form" aria-label="Chat composer">
+                <label class="sr-only" for="chat-message-input">Message</label>
+                <div class="composer-input-chrome">
+                  <textarea id="chat-message-input" class="chat-composer-textarea" name="text" rows="1" disabled placeholder="Ask anything, or @mention an agent"></textarea>
+                </div>
+                <div class="composer-agent-chips" id="composer-agent-chips" aria-label="Agent shortcuts"></div>
+                <div class="composer-toolbar" aria-label="Chat controls">
+                  <div class="composer-toolbar-group">
+                    <button class="icon-button ghost" type="button" data-composer-attach="true" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from History" aria-label="Attach file"></button>
+                    <label class="composer-select-label"><span class="sr-only">Agent</span><select id="composer-agent" name="agent" disabled><option value="">Default agent</option></select></label>
+                  </div>
+                  <div class="composer-toolbar-group">
+                    <span class="pill" id="chat-event-status" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'ready' : 'disabled'}</span>
+                    <button class="composer-send" type="submit" disabled aria-label="Send message"><span class="sr-only">Send message</span></button>
+                  </div>
+                </div>
+              </form>
             </div>
-            <form class="panel" id="prompt-form">
-              <h3>Composer</h3>
-              <label class="span"><span>Message</span><textarea name="text" disabled placeholder="Select a cloud thread"></textarea></label>
-              <label><span>Agent</span><input name="agent" autocomplete="off" placeholder="optional agent override" disabled></label>
-              <div class="row compact"><strong>Profile</strong><span>${escapeHtml(policy.profileName)}</span></div>
-              <div class="row compact"><strong>Policy</strong><span>${policy.features.chat ? 'chat enabled' : 'chat disabled'}</span></div>
-              <button class="primary" type="submit" disabled>Send</button>
-            </form>
+            <aside class="chat-inspector ui-workbench-layout__review" id="chat-inspector" aria-label="Selected chat details" data-workbench-pane="review" hidden>
+              <div class="inspector-header">
+                <div>
+                  <h3>Context</h3>
+                  <div class="meta">Runtime details and artifacts</div>
+                </div>
+                <button class="ghost" id="chat-inspector-close" type="button" aria-label="Close context">Close</button>
+              </div>
+              <div class="inspector-tabs" role="tablist" aria-label="Chat detail tabs">
+                <button type="button" class="ghost" role="tab" id="chat-inspector-tab-context" aria-controls="chat-inspector-detail" aria-selected="true" data-chat-inspector-tab="context" data-active="true">Context</button>
+                <button type="button" class="ghost" role="tab" id="chat-inspector-tab-messages" aria-controls="chat-inspector-detail" aria-selected="false" tabindex="-1" data-chat-inspector-tab="messages">Messages</button>
+                <button type="button" class="ghost" role="tab" id="chat-inspector-tab-todos" aria-controls="chat-inspector-detail" aria-selected="false" tabindex="-1" data-chat-inspector-tab="todos">Todos</button>
+                <button type="button" class="ghost" role="tab" id="chat-inspector-tab-artifacts" aria-controls="chat-inspector-detail" aria-selected="false" tabindex="-1" data-chat-inspector-tab="artifacts">Artifacts</button>
+              </div>
+              <div class="list ui-diff-view cloud-review-pane" id="chat-inspector-detail" role="tabpanel" aria-labelledby="chat-inspector-tab-context" aria-label="Review" data-diff-view="true">
+                <p class="empty">Details appear after a conversation starts.</p>
+              </div>
+            </aside>
           </div>
         </section>
 
@@ -383,7 +373,7 @@ ${cloudWebsiteStyles(branding)}
             </div>
             <div class="panel">
               <h3>Inspector</h3>
-              <div class="list" id="artifact-detail">
+              <div class="list ui-diff-view cloud-artifact-review" id="artifact-detail" aria-label="Artifact metadata" data-diff-view="true">
                 <p class="empty">Choose Inspect on an artifact to load metadata.</p>
               </div>
             </div>
@@ -729,9 +719,23 @@ ${cloudWebsiteStyles(branding)}
         </section>
       </div>
     </main>
-  </div>
+  </div>`
+  const shellHtml = renderToStaticMarkup(createElement(CloudReactSsrShell, { shellHtml: shellMarkup }))
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(branding.productName)}</title>
+  <style${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>
+${cloudWebsiteStyles(branding)}
+  </style>
+</head>
+<body data-auth="loading">
+  <div id="open-cowork-cloud-react-root" data-cloud-react-root="true" data-react-status="ssr">${shellHtml}</div>
   <script${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''} id="open-cowork-cloud-bootstrap" type="application/json">${jsonScript(bootstrap)}</script>
-  <script${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''}>${cloudWebsiteClientScript()}</script>
+  <script${cspNonce ? ` nonce="${escapeHtml(cspNonce)}"` : ''} type="module" src="${escapeHtml(CLOUD_WEB_REACT_CLIENT_ASSET_PATH)}" data-cloud-react-client="vite"></script>
 </body>
 </html>`
 }

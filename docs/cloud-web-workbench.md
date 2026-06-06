@@ -22,8 +22,8 @@ loading/empty/error state contract.
 
 | Route id | Surface | Required role | Backing endpoint ids | Pagination / cursor | Redaction and disabled behavior |
 |---|---|---|---|---|---|
-| `threads` | Workbench | Member | `sessions`, `sessionView`, `projectSourceValidate`, `projectSnapshots` | Browser list is bounded by `CLOUD_WEB_THREAD_PAGE_SIZE`. The browser consumes `/api/sessions` cursor pages with Load more, preserves loaded pages across workspace SSE refreshes, and only displays total estimates returned by the backend. | Chat controls disable when policy blocks chat. Local host paths and local MCP process details are never sent as thread context. |
-| `chat` | Workbench | Member | `sessionView`, `sessionEvents`, `sessionPrompt`, `sessionPermissionRespond`, `sessionQuestionReply`, `sessionQuestionReject` | Session SSE resumes from the durable Cloud projection sequence. | Composer disables until a Cloud thread is selected. Runtime state is rendered from Cloud projections, not a browser-only projection model. |
+| `threads` | Workbench | Member | `sessions`, `sessionView`, `projectSourceValidate`, `projectSnapshots` | Browser list is bounded by `CLOUD_WEB_THREAD_PAGE_SIZE`. The browser consumes `/api/sessions` cursor pages with Load more, preserves loaded pages across workspace SSE refreshes, and only displays total estimates returned by the backend. | Chat controls disable when policy blocks chat. Local host paths and local MCP process details are never sent as chat context. |
+| `chat` | Workbench | Member | `sessionView`, `sessionEvents`, `sessionPrompt`, `sessionPermissionRespond`, `sessionQuestionReply`, `sessionQuestionReject` | Session SSE resumes from the durable Cloud projection sequence. | The composer can create a chat-only Cloud session on first send. Runtime state is rendered from Cloud projections, not a browser-only projection model. |
 | `agents` | Workbench | Member | `workspace`, `capabilitiesCatalog` | Capability filtering is local and performance-tested. | Agent metadata is cloud profile metadata only; local stdio MCP commands and secrets are not rendered. |
 | `capabilities` | Workbench | Member | `capabilitiesCatalog`, `capabilityTools`, `capabilitySkills` | Local capability filtering is bounded; API cursoring is deferred. | Machine-scoped MCPs are visible only as policy-limited metadata. |
 | `workflows` | Workbench | Member | `workflows`, `workflow`, `workflowRun`, `workflowPause`, `workflowResume`, `workflowArchive` | Workflow summary rendering is bounded to 100 workflows and 50 recent runs in the browser; run-history cursoring is deferred. | Workflow controls disable when profile policy blocks workflows. Rows never expose worker credentials or local paths. |
@@ -51,15 +51,15 @@ keeping Cloud Web honest about cloud-only and desktop-only boundaries.
 
 | Concept | Availability | Cloud route(s) | Cloud Web affordance | Product boundary |
 |---|---|---|---|---|
-| Threads | Shared with Desktop | `threads` | List, filter, page, create, and reopen tenant-scoped Cloud threads. | Cloud Web reads Cloud session records and projections through the Cloud API; Desktop may also show local sessions. |
-| Chat | Shared with Desktop | `chat` | Render the selected Cloud session timeline and send prompts through durable Cloud commands. | Cloud Web never builds a browser-only projection model or invokes local OpenCode runtime commands. |
+| Chat History | Shared with Desktop | `threads` | List, filter, page, and reopen tenant-scoped Cloud conversations. | Cloud Web reads Cloud session records and projections through the Cloud API; Desktop may also show local sessions. |
+| Chat | Shared with Desktop | `chat` | Render a chat-first Cloud session timeline, create a chat-only session on first send, and submit prompts through durable Cloud commands. | Cloud Web never builds a browser-only projection model or invokes local OpenCode runtime commands. |
 | Runtime Status | Shared with Desktop | `chat` | Show status, streaming state, cost, token usage, context, compactions, tool calls, task runs, todos, and errors from Cloud projections. | Cloud Web reports projected Cloud runtime state only; machine health and local model controls remain Desktop-owned. |
 | Approvals & Questions | Shared with Desktop | `chat` | Render pending and resolved approvals/questions and answer them through Cloud API endpoints. | Approval and question semantics remain OpenCode-owned; Cloud Web only submits tenant-scoped responses. |
-| Agents | Shared with Desktop | `agents` | Show profile-allowed agents, built-in/custom metadata, and a Start thread action. | Cloud Web displays policy-safe agent metadata and cannot edit local custom agent files. |
+| Agents | Shared with Desktop | `agents` | Show profile-allowed agents, built-in/custom metadata, and a Start chat action. | Cloud Web displays policy-safe agent metadata and cannot edit local custom agent files. |
 | Tools & Skills | Shared with Desktop | `capabilities` | Show allowed tools, skills, MCP metadata, linked agents, and policy verdicts. | Cloud Web renders cloud-safe capability metadata; runtime execution remains owned by OpenCode workers. |
-| Artifacts | Shared with Desktop | `artifacts`, `chat` | Show artifact cards, loaded-thread history, sanitized metadata, explicit view/download actions, and selected-thread previews. | Cloud Web fetches artifact bodies only after explicit user action and strips object-store internals from metadata. |
+| Artifacts | Shared with Desktop | `artifacts`, `chat` | Show artifact cards, loaded-chat history, sanitized metadata, explicit view/download actions, and selected-chat previews. | Cloud Web fetches artifact bodies only after explicit user action and strips object-store internals from metadata. |
 | Workflows | Shared with Desktop | `workflows`, `chat` | Create, list, run, pause, resume, archive, and inspect Cloud workflow definitions and run threads. | Cloud Web runs saved workflows through Cloud workflow APIs; local launch-at-login and native notifications remain Desktop settings. |
-| Cloud Project Sources | Cloud-only | `threads` | Create Cloud threads from allowed git repositories or explicit browser-uploaded snapshots. | Cloud policy validates git and snapshot sources before execution. |
+| Cloud Project Sources | Cloud-only | `threads` | Start project-backed Cloud chats from allowed git repositories or explicit browser-uploaded snapshots. | Cloud policy validates git and snapshot sources before execution. |
 | Local Filesystem | Unavailable in Cloud | `threads`, `artifacts` | Use git URLs, managed Cloud project sources, uploaded snapshots, and Cloud artifacts instead. | Browser sessions must not implicitly read or upload host paths from the user machine. |
 | Local Stdio MCPs | Unavailable in Cloud | `capabilities`, `agents` | Show only policy-safe MCP metadata that has been converted into the Cloud profile. | Cloud Web cannot spawn local stdio MCP processes or expose command lines, environment variables, or secret refs. |
 | Machine Runtime Config | Desktop-only | `chat`, `agents`, `capabilities` | Show current Cloud profile, feature flags, and projected runtime state. | Cloud Web does not configure the local machine runtime, provider defaults, local approvals mode, or desktop notification settings. |
@@ -89,7 +89,7 @@ assert every documented row against the typed source.
 
 Cloud Web must keep parity with Desktop Cloud for cloud workspaces:
 
-- start and continue Cloud threads
+- start and continue Cloud chats
 - hydrate from the full Cloud `SessionView` projection
 - render messages, task runs, tool calls, approvals, questions, todos,
   artifacts, cost, status, and errors
@@ -102,6 +102,45 @@ Cloud Web must keep parity with Desktop Cloud for cloud workspaces:
 
 The browser must not create a second projection model. It consumes Cloud
 snapshots and events through the shared API contract.
+
+## Shared IA Contract
+
+Cloud Web and Desktop share the same workbench IA vocabulary:
+
+- `data-workbench-pane="threads"` marks the thread list/sidebar.
+- `data-workbench-pane="conversation"` marks the active chat surface.
+- `data-workbench-pane="review"` marks the contextual review pane.
+- `data-action-cluster="true"` marks the consolidated chat/action toolbar.
+- `data-diff-view="true"` marks review-first artifact and diff surfaces.
+
+Desktop uses `WorkbenchLayout`, `ActionCluster`, and `DiffView` directly in
+the renderer. Cloud Web uses the same `@open-cowork/ui` primitives in the
+hydrated React client and preserves matching SSR hooks before hydration. The
+Cloud review pane presents runtime status and sanitized artifacts; artifact
+metadata remains review-first and fetches bodies only after explicit view or
+download actions. Desktop-only actions, such as local runtime or git-native
+controls, stay absent or disabled in Cloud per the parity matrix.
+
+## React Migration Scaffold
+
+Cloud Web renders the visible shell inside `#open-cowork-cloud-react-root`
+through a React SSR wrapper, then mounts a Vite-built React controller at
+`/assets/open-cowork-cloud-react.js`. The controller owns auth bootstrap,
+routing, workbench surfaces, admin/settings surfaces, and theme switching while
+portaling into stable SSR shell slots. The bootstrap contract stays unchanged:
+`#open-cowork-cloud-bootstrap` carries route, endpoint, parity, admin-surface,
+branding, role, and feature metadata, and the HTTP server keeps the same CSP
+nonce boundary.
+
+There are no remaining vanilla feature scripts under `apps/website/src/client`.
+Threads, chat, agents, capabilities, workflows, artifacts, admin/settings
+surfaces, and the browser theme switcher are React-owned in the browser bundle.
+New feature work must use the shared `AppAPI` contract from
+`packages/shared/src/app-api.ts`, `AppApiProvider` / `useAppApi()` from
+`@open-cowork/ui/app-api`, and the Cloud fetch/SSE adapter in
+`apps/website/src/app-api.ts`. The Cloud adapter may only request `/api/*` or
+`/auth/*` paths and may only open `/api/*` event streams. Desktop uses
+`apps/desktop/src/renderer/app-api.ts` as the IPC-backed adapter.
 
 `/api/sessions` cursors are opaque, scoped to the authenticated tenant, user,
 and active filters, and invalid or mismatched cursors fail closed with `400`.
@@ -165,6 +204,9 @@ parity, not pixel-perfect screenshots.
   workflows, and artifacts map to the Desktop/Cloud parity matrix.
 - Org, members, policy, BYOK, connections, gateway, billing, audit, usage, and
   diagnostics map to the admin/settings surface matrix.
+- `/assets/open-cowork-cloud-react.js` mounts the React controller for
+  `#open-cowork-cloud-react-root` and the root reports an explicit hydrated
+  status in browser smoke tests.
 - Loading, empty, error, disabled, confirmation, and one-time reveal states stay
   visible and consistent without exposing secrets.
 - Desktop-only boundaries remain explicit: no local host paths, local stdio MCP
@@ -173,3 +215,6 @@ parity, not pixel-perfect screenshots.
   controls, or unreachable keyboard focus targets.
 - `/assets/fonts/*.woff2` requests return `200 font/woff2` and computed fonts
   resolve to Mona Sans / Hubot Sans in the real-browser smoke.
+- `/assets/open-cowork-cloud-react.js` returns the Vite-built React client
+  asset, and the real-browser smoke verifies that the nonce'd module route is
+  requested and can mount the controller for `#open-cowork-cloud-react-root`.

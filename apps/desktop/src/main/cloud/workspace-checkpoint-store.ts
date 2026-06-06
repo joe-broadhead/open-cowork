@@ -212,7 +212,7 @@ async function collectRootFiles(
       const absolutePath = join(directory, entry.name)
       const stats = await lstat(absolutePath)
       if (stats.isSymbolicLink()) {
-        throw new Error(`Checkpoint root ${rootPath} contains unsupported symlink ${absolutePath}.`)
+        continue
       }
       if (stats.isDirectory()) {
         await visit(absolutePath)

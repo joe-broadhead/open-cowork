@@ -65,6 +65,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
+      '@open-cowork/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@opencode-ai/sdk':
         specifier: 1.15.5
         version: 1.15.5
@@ -275,10 +278,31 @@ importers:
       '@open-cowork/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@open-cowork/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      lucide-react:
+        specifier: ^1.17.0
+        version: 1.17.0(react@19.2.5)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.5(react@19.2.5)
     devDependencies:
       '@types/node':
         specifier: ^22.12.0
         version: 22.19.19
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.0))
       jsdom:
         specifier: 26.1.0
         version: 26.1.0
@@ -288,6 +312,9 @@ importers:
       typescript:
         specifier: ^6.0.0
         version: 6.0.3
+      vite:
+        specifier: ^8.0.10
+        version: 8.0.10(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(yaml@2.9.0)
 
   mcps/agents:
     dependencies:
@@ -556,6 +583,31 @@ importers:
 
   packages/shared:
     devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  packages/ui:
+    dependencies:
+      '@open-cowork/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.1.0
+        version: 19.2.3(@types/react@19.2.14)
+      lucide-react:
+        specifier: ^1.17.0
+        version: 1.17.0(react@19.2.5)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.5(react@19.2.5)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

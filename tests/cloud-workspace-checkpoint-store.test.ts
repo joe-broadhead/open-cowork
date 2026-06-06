@@ -89,7 +89,7 @@ test('workspace checkpoint store requires secret storage for secret-bearing root
   }), /SecretAdapter/)
 })
 
-test('workspace checkpoint store rejects symlinks inside checkpoint roots', async () => {
+test('workspace checkpoint store skips symlinks inside checkpoint roots', async () => {
   const root = await mkdtemp(join(tmpdir(), 'open-cowork-checkpoint-symlink-'))
   const paths = createCloudPathProvider(root)
   const workspacePath = paths.resolveWorkspacePath('tenant-1', 'session-1')
@@ -101,11 +101,13 @@ test('workspace checkpoint store rejects symlinks inside checkpoint roots', asyn
   await writeFixture(join(workspacePath, 'target.txt'), 'target')
   await symlink(join(workspacePath, 'target.txt'), join(workspacePath, 'link.txt'))
 
-  await assert.rejects(() => store.saveSessionCheckpoint({
+  const manifest = await store.saveSessionCheckpoint({
     tenantId: 'tenant-1',
     sessionId: 'session-1',
     roots: defaultCloudSessionCheckpointRoots(paths, 'tenant-1', 'session-1'),
-  }), /symlink/)
+  })
+
+  assert.deepEqual(manifest.entries.map((entry) => entry.relativePath), ['target.txt'])
 })
 
 test('workspace checkpoint restore rejects object tampering', async () => {

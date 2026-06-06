@@ -327,6 +327,10 @@ describe('ChatView', () => {
 
     render(<ChatView />)
 
+    expect(document.querySelector('[data-workbench-layout="true"]')).toBeInTheDocument()
+    expect(document.querySelector('[data-workbench-pane="conversation"]')).toBeInTheDocument()
+    expect(document.querySelector('[data-workbench-pane="review"]')).toHaveTextContent('Session inspector')
+    expect(screen.getByRole('toolbar', { name: 'Thread actions' })).toBeInTheDocument()
     expect(screen.getByText('Launch analysis')).toBeInTheDocument()
     expect(screen.getByText('/tmp/workspace/app')).toBeInTheDocument()
     expect(screen.getByText('+14')).toBeInTheDocument()

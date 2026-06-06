@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { fileURLToPath } from 'node:url'
+import { build as buildEsbuild } from 'esbuild'
 import { CLOUD_WEB_CLIENT_ENDPOINTS } from './client-contract.ts'
 import { CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
@@ -21,6 +24,40 @@ const require = createRequire(import.meta.url)
 const { JSDOM, VirtualConsole } = require('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => any
   VirtualConsole: new () => { on(event: string, listener: (error: Error) => void): void }
+}
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+let reactClientScriptPromise: Promise<string> | null = null
+
+function bundledReactClientScript() {
+  reactClientScriptPromise ||= buildEsbuild({
+    entryPoints: [resolve(repoRoot, 'apps/website/src/react-client.tsx')],
+    bundle: true,
+    write: false,
+    platform: 'browser',
+    format: 'iife',
+    globalName: 'OpenCoworkCloudReactTest',
+    target: 'es2022',
+    jsx: 'automatic',
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
+    plugins: [{
+      name: 'open-cowork-source-alias',
+      setup(build) {
+        build.onResolve({ filter: /^@open-cowork\/ui$/ }, () => ({
+          path: resolve(repoRoot, 'packages/ui/src/index.ts'),
+        }))
+        build.onResolve({ filter: /^@open-cowork\/ui\/app-api$/ }, () => ({
+          path: resolve(repoRoot, 'packages/ui/src/AppApiProvider.tsx'),
+        }))
+        build.onResolve({ filter: /^@open-cowork\/shared$/ }, () => ({
+          path: resolve(repoRoot, 'packages/shared/src/index.ts'),
+        }))
+      },
+    }],
+  }).then((result) => result.outputFiles[0]?.text || '')
+  return reactClientScriptPromise
 }
 
 type MockRole = 'owner' | 'admin' | 'member'
@@ -55,6 +92,8 @@ type BrowserHarnessOptions = {
   artifactCount?: number
   promptFailure?: { status: number, error: string, policyCode?: string }
   projectSourceDenied?: boolean
+  signupMode?: string
+  billingEnabled?: boolean
 }
 
 function parseJsonBody(value: unknown) {
@@ -249,6 +288,9 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({ ok: true })
     }
     if (request.method === 'GET' && request.pathname === '/api/billing/subscription') {
+      if (options.billingEnabled === false) {
+        return jsonResponse({ enabled: false, mode: 'self-host' })
+      }
       return jsonResponse({
         enabled: true,
         active: true,
@@ -276,7 +318,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({
         policy: {
           org: { orgId: 'org-1', name: 'Acme Cloud' },
-          signup: { mode: 'invite', allowedEmailDomains: ['example.test'] },
+          signup: { mode: options.signupMode || 'invite', allowedEmailDomains: ['example.test'] },
           profile: { name: 'default', label: 'Default' },
           features,
           allowedAgents: ['build', 'data-analyst'],
@@ -354,6 +396,25 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       })
     }
     if (request.method === 'GET' && request.pathname === '/api/workflows') return jsonResponse({ workflows: state.workflows.slice(0, limitFromRequest(request, 100)), runs: state.runs.slice(0, 50) })
+    if (request.method === 'POST' && request.pathname === '/api/workflows') {
+      const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+        ? request.body as Record<string, any>
+        : {}
+      const workflow = {
+        id: `workflow-${state.workflows.length + 1}`,
+        title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : 'Created workflow',
+        status: 'active',
+        agentName: typeof body.agentName === 'string' && body.agentName.trim() ? body.agentName.trim() : 'build',
+        instructions: typeof body.instructions === 'string' ? body.instructions : '',
+        skillNames: Array.isArray(body.skillNames) ? body.skillNames : [],
+        toolIds: Array.isArray(body.toolIds) ? body.toolIds : [],
+        triggers: Array.isArray(body.triggers) ? body.triggers : [],
+        createdAt: iso(12),
+        updatedAt: iso(12),
+      }
+      state.workflows = [workflow, ...state.workflows]
+      return jsonResponse({ workflow }, 201)
+    }
     const workflowRunMatch = request.pathname.match(/^\/api\/workflows\/([^/]+)\/run$/)
     if (request.method === 'POST' && workflowRunMatch) {
       const workflow = state.workflows.find((entry: any) => entry.id === workflowRunMatch[1]) || state.workflows[0]
@@ -507,11 +568,13 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
 
   const start = async () => {
     installBrowserMocks()
-    const clientScript = [...document.querySelectorAll('script')]
-      .find((script) => script.type !== 'application/json')
-      ?.textContent
-    assert.ok(clientScript, 'client script is present')
+    const clientScript = await bundledReactClientScript()
+    assert.ok(clientScript, 'React client script is bundled')
     window.eval(clientScript)
+    await waitFor(() => {
+      assert.equal(document.getElementById('open-cowork-cloud-react-root')?.dataset.reactStatus, 'hydrated')
+      assert.equal(document.body.dataset.reactShell, 'active')
+    }, 8000)
     await waitFor(() => {
       assert.notEqual(document.body.dataset.auth, 'loading')
     }, 8000)
@@ -520,7 +583,16 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         assert.doesNotMatch(document.querySelector('#thread-list')?.textContent || '', /No cloud threads loaded/)
         assert.doesNotMatch(document.querySelector('#workbench-agent-list')?.textContent || '', /No profile-allowed agents loaded|No agents loaded/)
         assert.doesNotMatch(document.querySelector('#workflow-list')?.textContent || '', /No workflows loaded/)
+        assert.equal(document.querySelector('#prompt-form')?.getAttribute('data-react-owned'), 'chat')
+        assert.equal(document.querySelector('#session-form')?.getAttribute('data-react-owned'), 'project-session')
       }, 8000)
+      if (role === 'admin' || role === 'owner') {
+        await waitFor(() => {
+          assert.ok(document.querySelector('#token-list > .row'))
+          assert.ok(document.querySelector('#member-list .member-row'))
+          assert.ok(document.querySelector('#delivery-list > .row'))
+        }, 8000)
+      }
     }
     return harness
   }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ModelInfoSnapshot, SessionView, TaskRun } from '@open-cowork/shared'
+import type { ModelInfoSnapshot, SessionArtifact, SessionView, TaskRun } from '@open-cowork/shared'
 import { useSessionStore, type Message } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
@@ -19,6 +19,7 @@ import {
   serializeToolPayload,
 } from './session-inspector-utils'
 import { getModelContextLimit } from '../../helpers/model-info'
+import { DiffView, type DiffViewFile } from '../ui'
 
 type InspectorTab = 'context' | 'messages' | 'todos' | 'artifacts'
 
@@ -149,6 +150,16 @@ function MessageList({ messages }: { messages: Message[] }) {
   )
 }
 
+function reviewFilesFromArtifacts(artifacts: SessionArtifact[]): DiffViewFile[] {
+  return artifacts.slice(0, 12).map((artifact, index) => ({
+    id: artifact.id || artifact.filePath || `artifact-${index}`,
+    path: artifact.filePath || artifact.filename || `artifact-${index + 1}`,
+    status: 'unknown',
+    synthetic: true,
+    meta: artifact.toolName || artifact.source || null,
+  }))
+}
+
 export function SessionInspector({ onClose }: InspectorProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
@@ -253,6 +264,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
     () => listSessionArtifacts(currentView, chartArtifacts),
     [currentView, chartArtifacts],
   )
+  const reviewFiles = useMemo(() => reviewFilesFromArtifacts(artifacts), [artifacts])
   const toolPayloads = [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
@@ -300,6 +312,16 @@ export function SessionInspector({ onClose }: InspectorProps) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+        <DiffView
+          title="Review"
+          subtitle={reviewFiles.length
+            ? `${reviewFiles.length} artifact${reviewFiles.length === 1 ? '' : 's'} ready for inspection`
+            : 'Artifacts, file changes, and task outputs appear here first.'}
+          files={reviewFiles}
+          empty="No artifacts to review yet."
+          className="mb-5"
+        />
+
         {tab === 'context' && (
           <div className="flex flex-col gap-5">
             <section>

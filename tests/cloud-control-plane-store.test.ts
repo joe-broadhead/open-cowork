@@ -413,6 +413,33 @@ test('cloud control plane commands are idempotent and owned by the current lease
   assert.equal(store.ackSessionCommand(takeoverLease, 'cmd-2').status, 'acked')
 })
 
+test('cloud control plane truncates redacted command failure summaries', () => {
+  const store = seededStore()
+  const lease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a')
+  assert.ok(lease)
+  store.enqueueSessionCommand({
+    commandId: 'cmd-long-error',
+    tenantId: 'tenant-1',
+    userId: 'user-1',
+    sessionId: 'session-1',
+    kind: 'prompt',
+    payload: { text: 'hello' },
+  })
+  assert.equal(store.claimNextSessionCommand(lease)?.commandId, 'cmd-long-error')
+
+  const failed = store.failSessionCommand(
+    lease,
+    'cmd-long-error',
+    `provider failed apiKey=${'a'.repeat(80)} ${'details '.repeat(200)}`,
+  )
+
+  assert.equal(failed.status, 'failed')
+  assert.ok(failed.lastErrorSummary)
+  assert.equal(failed.lastErrorSummary!.length, 512)
+  assert.equal(failed.lastErrorSummary!.includes('apiKey=aaaaaaaa'), false)
+  assert.equal(failed.lastErrorSummary!.endsWith('...'), true)
+})
+
 test('cloud control plane fences status, runtime binding, and event writes by worker lease token', () => {
   const store = seededStore()
   const firstLease = store.claimSessionLease('tenant-1', 'session-1', 'worker-a', new Date(), 1)

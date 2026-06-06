@@ -175,6 +175,14 @@ async function revokeGatewayToken({ adminClient, issuedToken, serviceToken, base
   const revokeApiToken = requireMethod(adminClient, 'revokeApiToken')
   const revoked = await revokeApiToken(issuedToken.tokenId)
   if (!revoked?.revokedAt) throw new Error('Gateway smoke token was not revoked.')
+  if (boolArg('skip-token-revocation', 'OPEN_COWORK_GATEWAY_SMOKE_SKIP_TOKEN_REVOCATION')) {
+    return {
+      tokenId: issuedToken.tokenId,
+      revokedAt: revoked.revokedAt,
+      skipped: true,
+      reason: 'explicit_skip',
+    }
+  }
 
   const response = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
     method: 'POST',

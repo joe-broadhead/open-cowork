@@ -16,7 +16,7 @@ import {
 } from './agent-run-filter-model'
 import { ChatThreadHeader } from './ChatThreadHeader'
 import { ChatTimelineItem } from './ChatTimelineItem'
-import { Button } from '../ui'
+import { Button, WorkbenchLayout } from '../ui'
 
 // Virtualize when the transcript gets long enough that inline
 // rendering starts to bite. Below the threshold we keep the simple
@@ -357,9 +357,8 @@ export function ChatView() {
   // now the single source of truth for "start a new thread."
   if (!currentSessionId) return null
 
-  return (
-    <div className="flex-1 flex min-h-0">
-      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+  const conversationPane = (
+    <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <ChatThreadHeader
           currentSession={currentSession}
           currentSessionId={currentSessionId}
@@ -451,9 +450,12 @@ export function ChatView() {
         )}
         <ChatInput />
       </div>
+  )
 
-      {inspectorOpen && <SessionInspector onClose={() => setInspectorOpen(false)} />}
-      {focusedTaskRun && (
+  const reviewPane = inspectorOpen
+    ? <SessionInspector onClose={() => setInspectorOpen(false)} />
+    : null
+  const overlays = focusedTaskRun ? (
         <TaskDrillIn
           rootTask={focusedTaskRun}
           allTaskRuns={taskRuns}
@@ -468,8 +470,18 @@ export function ChatView() {
           onOpenQuestion={openQuestionDock}
           onClose={onCloseFocusedTask}
         />
-      )}
-    </div>
+  ) : null
+
+  return (
+    <WorkbenchLayout
+      className="desktop-chat-workbench flex-1 min-h-0"
+      mainLabel={t('chat.conversationPane', 'Conversation')}
+      reviewLabel={t('chat.reviewPane', 'Review')}
+      mainPane={conversationPane}
+      reviewPane={reviewPane}
+      reviewOpen={inspectorOpen}
+      overlays={overlays}
+    />
   )
 }
 

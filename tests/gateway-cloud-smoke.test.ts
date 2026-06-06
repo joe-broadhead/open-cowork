@@ -3,7 +3,11 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 
 import { DEFAULT_CONFIG } from '../apps/desktop/src/main/config-types.ts'
-import { createApiTokenCloudAuthResolver } from '../apps/desktop/src/main/cloud/app.ts'
+import {
+  createApiTokenCloudAuthResolver,
+  createCompositeCloudAuthResolver,
+  createLocalCloudAuthResolver,
+} from '../apps/desktop/src/main/cloud/app.ts'
 import { resolveCloudRuntimePolicy } from '../apps/desktop/src/main/cloud/cloud-config.ts'
 import { InMemoryControlPlaneStore } from '../apps/desktop/src/main/cloud/in-memory-control-plane-store.ts'
 import { createCloudHttpServer } from '../apps/desktop/src/main/cloud/http-server.ts'
@@ -89,6 +93,7 @@ async function runGatewayCloudSmokeScript(input: {
   adminToken: string
   prompt: string
   timeoutMs?: number
+  skipTokenRevocation?: boolean
 }) {
   const args = [
     'scripts/gateway-cloud-smoke.mjs',
@@ -104,6 +109,7 @@ async function runGatewayCloudSmokeScript(input: {
       ...process.env,
       OPEN_COWORK_GATEWAY_SMOKE_ADMIN_TOKEN: input.adminToken,
       OPEN_COWORK_GATEWAY_SMOKE_PROMPT: input.prompt,
+      ...(input.skipTokenRevocation ? { OPEN_COWORK_GATEWAY_SMOKE_SKIP_TOKEN_REVOCATION: 'true' } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -534,6 +540,52 @@ test('gateway cloud smoke script validates self-host gateway against deployed cl
       .filter((token) => token.name.startsWith('Gateway deployment smoke '))
     assert.equal(issuedSmokeTokens.length, 1)
     assert.equal(typeof issuedSmokeTokens[0]?.revokedAt, 'string')
+  } finally {
+    await cloud.close()
+  }
+})
+
+test('gateway cloud smoke script can skip only the post-revocation probe for local auth fallback', async () => {
+  const store = new InMemoryControlPlaneStore()
+  const runtime = new FakeRuntime()
+  const policy = gatewayPolicy()
+  const service = new CloudSessionService(store, runtime, policy)
+  const worker = new CloudWorker(store, service, 'worker-local-smoke')
+  const cloud = createCloudHttpServer({
+    service,
+    worker,
+    policy,
+    auth: createCompositeCloudAuthResolver(
+      createApiTokenCloudAuthResolver(store),
+      createLocalCloudAuthResolver(),
+    ),
+    autoProcessCommands: true,
+    ssePollMs: 10,
+  })
+  const cloudUrl = await cloud.listen()
+
+  try {
+    const result = await runGatewayCloudSmokeScript({
+      cloudUrl,
+      adminToken: 'local-demo-admin-token',
+      prompt: 'gateway local auth fallback smoke fixture',
+      skipTokenRevocation: true,
+    })
+    assert.equal(result.exitCode, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean
+      results: {
+        tokenRevocation: {
+          skipped: boolean
+          reason: string
+          revokedAt: string
+        }
+      }
+    }
+    assert.equal(payload.ok, true)
+    assert.equal(payload.results.tokenRevocation.skipped, true)
+    assert.equal(payload.results.tokenRevocation.reason, 'explicit_skip')
+    assert.equal(typeof payload.results.tokenRevocation.revokedAt, 'string')
   } finally {
     await cloud.close()
   }

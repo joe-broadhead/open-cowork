@@ -1,0 +1,65 @@
+{
+  "name": "@open-cowork/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Open Cowork React UI primitives",
+  "author": "Joe Broadhead",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-broadhead/open-cowork.git",
+    "directory": "packages/ui"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./app-api": {
+      "types": "./dist/AppApiProvider.d.ts",
+      "import": "./dist/AppApiProvider.js"
+    },
+    "./badge": {
+      "types": "./dist/Badge.d.ts",
+      "import": "./dist/Badge.js"
+    },
+    "./card": {
+      "types": "./dist/Card.d.ts",
+      "import": "./dist/Card.js"
+    },
+    "./primitive-gallery": {
+      "types": "./dist/PrimitiveGallery.d.ts",
+      "import": "./dist/PrimitiveGallery.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "pnpm --filter @open-cowork/shared build && tsc",
+    "test": "pnpm build && node test/public-import-smoke.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "lucide-react": "^1.17.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "dependencies": {
+    "@open-cowork/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@open-cowork/shared": "workspace:*",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "lucide-react": "^1.17.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^6.0.3"
+  }
+}

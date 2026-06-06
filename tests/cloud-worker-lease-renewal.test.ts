@@ -262,6 +262,46 @@ test('cloud worker keeps a valid cached lease when cached renewal metrics fail',
   assert.equal(observability.metricNames.includes('open_cowork_cloud_worker_lease_renewals_total'), true)
 })
 
+test('cloud worker refreshes stale checkpoint leases advanced by runtime events', async () => {
+  const store = seedStore()
+  const runtime = new SlowSuccessfulRuntime(0)
+  const service = new CloudSessionService(
+    store,
+    runtime,
+    resolveCloudRuntimePolicy(DEFAULT_CONFIG),
+    undefined,
+    { randomUUID: () => 'test-id' },
+  )
+  const observability = new RecordingObservability()
+  const worker = new CloudWorker(store, service, 'worker-1', 3_000, {}, null, observability)
+  const originalCheckpointSession = store.checkpointSession.bind(store)
+  const originalRenewSessionLease = store.renewSessionLease.bind(store)
+  let checkpointAttempts = 0
+  let renewAttempts = 0
+
+  store.checkpointSession = (lease) => {
+    checkpointAttempts += 1
+    if (checkpointAttempts === 1) {
+      originalCheckpointSession(lease)
+      throw new Error('Checkpoint version is stale.')
+    }
+    return originalCheckpointSession(lease)
+  }
+  store.renewSessionLease = (lease, now, ttlMs) => {
+    renewAttempts += 1
+    return originalRenewSessionLease(lease, now, ttlMs)
+  }
+
+  assert.equal(await worker.processSessionCommands('tenant-1', 'session-1'), 1)
+  assert.equal(checkpointAttempts, 2)
+  assert.equal(renewAttempts, 1)
+  assert.deepEqual(runtime.messageIds, ['cmd-1'])
+  assert.equal(
+    observability.metrics.some((metric) => metric.name === 'open_cowork_cloud_worker_checkpoint_stale_retries_total'),
+    true,
+  )
+})
+
 test('cloud worker reaps expired leases in bounded batches and reports drain cap hits', async () => {
   const store = new InMemoryControlPlaneStore()
   store.createTenant({ tenantId: 'tenant-1', name: 'Acme' })

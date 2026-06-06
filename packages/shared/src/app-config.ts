@@ -15,6 +15,7 @@ export interface BrandThemeTokens {
   elevated: string
   border: string
   borderSubtle: string
+  borderStrong?: string
   text: string
   textSecondary: string
   textMuted: string
@@ -110,6 +111,7 @@ export interface PublicBrandingThemeTokens {
   surfaceHover?: string
   surfaceActive?: string
   borderSubtle?: string
+  borderStrong?: string
   elevated?: string
   textSecondary?: string
   accentHover?: string
@@ -157,9 +159,9 @@ export interface PublicBrandingConfig {
 
 const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
   background: '#1b1b26',
-  surface: 'rgba(141, 164, 245, 0.04)',
+  surface: 'rgba(141, 164, 245, 0.055)',
   mutedSurface: '#23232f',
-  border: 'rgba(180, 194, 250, 0.07)',
+  border: 'rgba(180, 194, 250, 0.12)',
   text: '#e8e9f3',
   mutedText: '#8a8da0',
   accent: '#8da4f5',
@@ -168,9 +170,10 @@ const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
   warn: '#fcb07a',
   danger: '#fc92b4',
   ok: '#7fcfa0',
-  surfaceHover: 'rgba(141, 164, 245, 0.08)',
-  surfaceActive: 'rgba(141, 164, 245, 0.15)',
-  borderSubtle: 'rgba(180, 194, 250, 0.035)',
+  surfaceHover: 'rgba(141, 164, 245, 0.10)',
+  surfaceActive: 'rgba(141, 164, 245, 0.17)',
+  borderSubtle: 'rgba(180, 194, 250, 0.04)',
+  borderStrong: 'rgba(180, 194, 250, 0.18)',
   elevated: '#23232f',
   textSecondary: '#b0b3c6',
   accentHover: '#a7b6f8',
@@ -179,9 +182,9 @@ const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
   amber: '#fcb07a',
   red: '#fc92b4',
   info: '#82cadc',
-  shadowCard: '0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 28px rgba(0, 0, 0, 0.18)',
-  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.28), 0 22px 56px rgba(0, 0, 0, 0.24)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%)',
+  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.16)',
+  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.30), 0 18px 44px rgba(0, 0, 0, 0.24)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.05), transparent 55%)',
 }
 
 export const GATEWAY_PRODUCT_MODES = [

@@ -51,6 +51,8 @@ function sourceWorkspacePackageDirs(): string[] {
 test('root node test scripts prepare generated shared artifacts before tests run', () => {
   assert.deepEqual(splitScriptSteps(requireScript('test:prepare')), [
     'pnpm build:shared',
+    'pnpm design-tokens:build',
+    'pnpm build:website',
     'node scripts/ensure-electron-binary.mjs',
   ])
 
@@ -85,21 +87,23 @@ test('root node test scripts prepare generated shared artifacts before tests run
   assert.equal(requireScript('test:coverage:renderer'), 'pnpm --filter @open-cowork/desktop test:coverage:renderer')
 
   assert.deepEqual(splitScriptSteps(requireScript('test:cloud-web')), [
-    'pnpm build:shared',
+    'pnpm --filter @open-cowork/website build',
     'pnpm --filter @open-cowork/website test:browser:run',
     'pnpm --filter @open-cowork/website test:a11y:run',
     'pnpm --filter @open-cowork/website perf:check:run',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:browser', websitePackageJson)), [
-    'pnpm --filter @open-cowork/shared build',
+    'pnpm run build',
     'pnpm run test:browser:run',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('test:a11y', websitePackageJson)), [
     'pnpm --filter @open-cowork/shared build',
+    'pnpm --filter @open-cowork/ui build',
     'pnpm run test:a11y:run',
   ])
   assert.deepEqual(splitScriptSteps(requireScript('perf:check', websitePackageJson)), [
     'pnpm --filter @open-cowork/shared build',
+    'pnpm --filter @open-cowork/ui build',
     'pnpm run perf:check:run',
   ])
   assert.equal(requireScript('test:browser:dom', websitePackageJson), 'node --no-warnings --experimental-strip-types --test src/browser-e2e.test.ts')
@@ -112,6 +116,7 @@ test('root node test scripts prepare generated shared artifacts before tests run
 test('root lint script runs all release gate checks', () => {
   assert.deepEqual(splitScriptSteps(requireScript('lint')), [
     'eslint . --max-warnings 0',
+    'pnpm design-tokens:check',
     'node scripts/lint.mjs',
     'node scripts/build-docs-mermaid-vendor.mjs --check',
     'node scripts/check-preload-channels.mjs',
@@ -199,6 +204,7 @@ test('root build and dist scripts preserve release build prerequisites', () => {
 
   assert.deepEqual(splitScriptSteps(requireScript('build')), [
     'pnpm build:packages',
+    'pnpm design-tokens:build',
     'pnpm build:mcps',
     'pnpm build:gateway',
     'pnpm build:standalone-gateway',
@@ -212,9 +218,29 @@ test('root build and dist scripts preserve release build prerequisites', () => {
   ])
 })
 
+test('desktop direct scripts prepare generated tokens and shared UI artifacts', () => {
+  assert.equal(requireScript('ui:build', desktopPackageJson), 'pnpm --filter @open-cowork/ui build')
+  assert.deepEqual(splitScriptSteps(requireScript('deps:build', desktopPackageJson)), [
+    'pnpm tokens:build',
+    'pnpm ui:build',
+  ])
+  assert.equal(requireScript('predev', desktopPackageJson), 'pnpm deps:build')
+  assert.equal(requireScript('prebuild', desktopPackageJson), 'pnpm deps:build')
+  assert.equal(requireScript('pretypecheck', desktopPackageJson), 'pnpm deps:build')
+  assert.deepEqual(splitScriptSteps(requireScript('test:renderer', desktopPackageJson)), [
+    'pnpm deps:build',
+    'vitest run --config vitest.renderer.config.ts',
+  ])
+  assert.deepEqual(splitScriptSteps(requireScript('test:coverage:renderer', desktopPackageJson)), [
+    'pnpm deps:build',
+    'vitest run --config vitest.renderer.config.ts --coverage',
+  ])
+})
+
 test('root typecheck script covers package, MCP, gateway, website, and desktop surfaces', () => {
   assert.deepEqual(splitScriptSteps(requireScript('typecheck')), [
     'pnpm build:packages',
+    'pnpm design-tokens:build',
     'pnpm typecheck:mcps',
     'pnpm typecheck:gateway',
     'pnpm typecheck:standalone-gateway',
