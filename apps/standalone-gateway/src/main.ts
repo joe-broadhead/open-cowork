@@ -5,6 +5,7 @@ import { runStandaloneGatewayDoctor } from "./doctor.js";
 import { createSdkOpenCodeAdapter } from "./opencode.js";
 import { createStandaloneGatewayPostgresRepository } from "./postgres-repository.js";
 import { createStandaloneProviderRegistry } from "./provider-registry.js";
+import { normalizeIdentityRole, normalizeIdentityStatus } from "./repository.js";
 import { createStandaloneGatewayRuntime } from "./runtime.js";
 import { createStandaloneGatewayServer } from "./server.js";
 import { runStandaloneGatewaySmoke } from "./smoke.js";
@@ -25,6 +26,25 @@ if (command === "smoke") {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     await repository.close?.();
     process.exitCode = result.ok ? 0 : 1;
+  } else if (command === "identity") {
+    const action = process.argv[3] || "";
+    if (action !== "upsert") {
+      throw new Error("Unknown standalone gateway identity command. Use: identity upsert --provider <id> --external-user-id <id> --role <owner|admin|member|approver|viewer> [--status <active|disabled>] [--provider-workspace-id <id>].");
+    }
+    const args = parseArgs(process.argv.slice(4));
+    const provider = requiredArg(args, "provider");
+    if (!config.providers.some((configuredProvider) => configuredProvider.enabled && configuredProvider.id === provider)) {
+      throw new Error(`Standalone Gateway provider ${provider} is not configured or enabled.`);
+    }
+    const identity = await repository.upsertChannelIdentity({
+      provider,
+      externalUserId: requiredArg(args, "external-user-id"),
+      providerWorkspaceId: args["provider-workspace-id"] || null,
+      role: normalizeIdentityRole(requiredArg(args, "role")),
+      status: normalizeIdentityStatus(args.status || "active"),
+    });
+    process.stdout.write(`${JSON.stringify({ ok: true, identity }, null, 2)}\n`);
+    await repository.close?.();
   } else if (command === "serve") {
     const ownerId = `${hostname()}:${process.pid}`;
     const lease = await repository.acquireDaemonLease({
@@ -83,4 +103,23 @@ if (command === "smoke") {
     await repository.close?.();
     process.exitCode = 1;
   }
+}
+
+function parseArgs(argv: string[]): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const key = argv[index];
+    if (!key?.startsWith("--")) throw new Error(`Unexpected argument ${key || ""}.`);
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${key}.`);
+    parsed[key.slice(2)] = value;
+    index += 1;
+  }
+  return parsed;
+}
+
+function requiredArg(args: Record<string, string>, key: string): string {
+  const value = args[key]?.trim();
+  if (!value) throw new Error(`Missing required --${key}.`);
+  return value;
 }

@@ -4,6 +4,7 @@ import type {
 } from "@open-cowork/shared";
 import { standaloneGatewaySchemaContainsProductionTables } from "./schema.js";
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
+import { redactSecretText } from "./redaction.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
 import type { StandaloneGatewayConfig } from "./types.js";
 
@@ -36,22 +37,12 @@ export interface StandaloneGatewayDoctorReport {
   redacted: true;
 }
 
-const SECRET_TEXT_PATTERNS = [
-  /\bAuthorization:\s*(?:Bearer|Basic)\s+\S+/gi,
-  /\b(?:token|secret|password|api[_-]?key)\s*[:=]\s*['"]?[A-Za-z0-9+/=_-]{8,}['"]?/gi,
-  /:\/\/([^:\s/@]+):([^@\s/]+)@/g,
-  /\b(?:sk|ghp|xoxb|occ|ocgw)-[A-Za-z0-9_-]{8,}\b/g,
-];
-
 function nowIso() {
   return new Date().toISOString();
 }
 
 function redact(value: string) {
-  return SECRET_TEXT_PATTERNS.reduce((text, pattern) => text.replace(pattern, (match, user) => {
-    if (typeof user === "string" && match.includes("://")) return `://${user}:[redacted]@`;
-    return "[redacted]";
-  }), value).slice(0, 2000);
+  return redactSecretText(value);
 }
 
 function timeline(
@@ -99,15 +90,19 @@ export async function runStandaloneGatewayDoctor(input: {
 }): Promise<StandaloneGatewayDoctorReport> {
   const repository = await input.repository.readiness();
   const opencode = await input.opencode.health();
+  const configuredProviderIds = input.config.providers.filter((provider) => provider.enabled).map((provider) => provider.id);
+  const identityAuthorization = await identityAuthorizationSummary(input.repository, repository.ok, configuredProviderIds);
   const schemaOk = standaloneGatewaySchemaContainsProductionTables();
   const productModeOk = input.config.productMode === "standalone";
   const providersOk = input.config.providers.length > 0;
+  const identitiesOk = identityAuthorization.summary.promptCapable > 0;
   const checks: StandaloneDoctorCheck[] = [
     legacyCheck("product-mode", productModeOk, `mode=${input.config.productMode}`),
     legacyCheck("postgres", repository.ok, repository.detail),
     legacyCheck("opencode-private", opencode.ok, opencode.detail),
     legacyCheck("schema", schemaOk, "standalone gateway schema covers sessions/events/jobs/leases/channel/artifact/team/audit tables"),
     legacyCheck("providers", providersOk, `${input.config.providers.length} provider(s) configured`),
+    legacyCheck("identity-authorization", identitiesOk, identityAuthorization.detail),
   ];
   const doctorChecks = [
     doctorCheck({
@@ -144,6 +139,17 @@ export async function runStandaloneGatewayDoctor(input: {
       remediation: "Configure at least one channel provider for Standalone Gateway traffic.",
       evidence: { providerCount: input.config.providers.length },
     }),
+    doctorCheck({
+      code: "standalone_gateway.identity_authorization",
+      status: identitiesOk ? "pass" : "fail",
+      message: identityAuthorization.detail,
+      remediation: "Bootstrap at least one owner, admin, or member identity before accepting Standalone Gateway channel traffic.",
+      evidence: {
+        total: identityAuthorization.summary.total,
+        active: identityAuthorization.summary.active,
+        promptCapable: identityAuthorization.summary.promptCapable,
+      },
+    }),
   ];
   const ok = doctorChecks.every((check) => check.status === "pass" || check.status === "skipped");
   return {
@@ -157,6 +163,7 @@ export async function runStandaloneGatewayDoctor(input: {
       timeline("storage-migration", repository.ok ? "passed" : "failed", "standalone_gateway.repository.readiness", repository.detail),
       timeline("health-auth", opencode.ok ? "passed" : "failed", "standalone_gateway.opencode.health", opencode.detail),
       timeline("cloud-gateway-connector", providersOk ? "passed" : "failed", "standalone_gateway.providers.configured", `${input.config.providers.length} provider(s) configured.`),
+      timeline("config-build", identitiesOk ? "passed" : "failed", "standalone_gateway.identity_authorization", identityAuthorization.detail),
       timeline(ok ? "ready" : "error", ok ? "passed" : "failed", ok ? "standalone_gateway.ready" : "standalone_gateway.not_ready", ok ? "Standalone Gateway doctor passed." : "Standalone Gateway doctor failed."),
     ],
     runtimeStatus: {
@@ -174,4 +181,39 @@ export async function runStandaloneGatewayDoctor(input: {
     },
     redacted: true,
   };
+}
+
+async function identityAuthorizationSummary(
+  repository: StandaloneGatewayRepository | Pick<StandaloneGatewayRepository, "readiness">,
+  repositoryOk: boolean,
+  providers: readonly string[],
+): Promise<{
+  summary: { total: number; active: number; promptCapable: number };
+  detail: string;
+}> {
+  const empty = { total: 0, active: 0, promptCapable: 0 };
+  if (!repositoryOk) {
+    return {
+      summary: empty,
+      detail: "Identity authorization could not be checked because the repository is not ready.",
+    };
+  }
+  if (!("identityAuthorizationSummary" in repository)) {
+    return {
+      summary: empty,
+      detail: "Identity authorization summary is unavailable for this repository.",
+    };
+  }
+  try {
+    const summary = await repository.identityAuthorizationSummary({ providers });
+    return {
+      summary,
+      detail: `${summary.promptCapable} prompt-capable active identity/identities configured`,
+    };
+  } catch (error) {
+    return {
+      summary: empty,
+      detail: `Identity authorization check failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }

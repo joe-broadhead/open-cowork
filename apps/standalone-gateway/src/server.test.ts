@@ -17,6 +17,11 @@ test("standalone server exposes health, readiness, and admin-gated dashboard", a
     OPEN_COWORK_STANDALONE_GATEWAY_WEBHOOK_DELIVERY_URL: "https://bridge.example.test/deliver",
   });
   const repository = new InMemoryStandaloneGatewayRepository();
+  await repository.upsertChannelIdentity({
+    provider: "webhook",
+    externalUserId: "user-1",
+    role: "member",
+  });
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const providers = createStandaloneProviderRegistry(config);
   const server = createStandaloneGatewayServer({ config, repository, opencode, providers });

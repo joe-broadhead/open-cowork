@@ -7,6 +7,7 @@ import type { IncomingChannelMessage } from "@open-cowork/gateway-channel";
 import { FakeStandaloneOpenCodeAdapter, type StandaloneOpenCodeAdapter } from "../dist/opencode.js";
 import { InMemoryStandaloneGatewayRepository } from "../dist/repository.js";
 import { createStandaloneGatewayRuntime } from "../dist/runtime.js";
+import type { StandaloneGatewayIdentityRole, StandaloneGatewayIdentityStatus } from "../dist/types.js";
 
 function message(id: string, text: string): IncomingChannelMessage {
   return {
@@ -36,8 +37,22 @@ const providerConfig = {
   settings: {},
 };
 
+async function authorize(
+  repository: InMemoryStandaloneGatewayRepository,
+  input: { role?: StandaloneGatewayIdentityRole; status?: StandaloneGatewayIdentityStatus; externalUserId?: string; providerWorkspaceId?: string } = {},
+) {
+  return repository.upsertChannelIdentity({
+    provider: "cli-standalone",
+    externalUserId: input.externalUserId || "user-1",
+    providerWorkspaceId: input.providerWorkspaceId,
+    role: input.role || "member",
+    status: input.status || "active",
+  });
+}
+
 test("standalone runtime prompts private OpenCode and persists projected events", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
   const opencode = new FakeStandaloneOpenCodeAdapter();
   const runtime = createStandaloneGatewayRuntime({ repository, opencode });
   const provider = new FakeChannelProvider({ id: "cli-standalone" });
@@ -53,6 +68,7 @@ test("standalone runtime prompts private OpenCode and persists projected events"
 
 test("standalone runtime serializes concurrent work for one channel session", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
   let createCount = 0;
   let activePrompts = 0;
   let maxActivePrompts = 0;
@@ -96,6 +112,7 @@ test("standalone runtime serializes concurrent work for one channel session", as
 
 test("standalone runtime records failed prompts durably", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
   const runtime = createStandaloneGatewayRuntime({
     repository,
     opencode: {
@@ -124,6 +141,7 @@ test("standalone runtime records failed prompts durably", async () => {
 
 test("standalone runtime records failed session creation durably", async () => {
   const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository);
   let promptCalled = false;
   const runtime = createStandaloneGatewayRuntime({
     repository,
@@ -152,3 +170,92 @@ test("standalone runtime records failed session creation durably", async () => {
   assert.equal(snapshot.sessions[0]?.opencodeSessionId, null);
   assert.equal(snapshot.audits[0]?.action, "standalone.prompt.failed");
 });
+
+test("standalone runtime isolates sessions by provider workspace", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository, { providerWorkspaceId: "workspace-a" });
+  await authorize(repository, { providerWorkspaceId: "workspace-b" });
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, {
+    ...message("message-a", "workspace a"),
+    raw: { workspace_id: "workspace-a" },
+  });
+  await runtime.handleMessage(provider, providerConfig, {
+    ...message("message-b", "workspace b"),
+    raw: { workspace_id: "workspace-b" },
+  });
+
+  const sessions = await repository.listSessions();
+  assert.equal(opencode.prompts.length, 2);
+  assert.equal(sessions.length, 2);
+  assert.deepEqual(new Set(sessions.map((session) => session.providerWorkspaceId)), new Set(["workspace-a", "workspace-b"]));
+});
+
+test("standalone runtime denies unknown identities before session creation", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-1", "do not prompt"));
+
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(opencode.prompts.length, 0);
+  assert.equal(snapshot.sessions.length, 0);
+  assert.equal(snapshot.audits[0]?.action, "standalone.prompt.denied");
+  assert.equal(snapshot.audits[0]?.metadata.reason, "identity_not_found");
+});
+
+for (const role of ["viewer", "approver"] as const) {
+  test(`standalone runtime denies ${role} identities before prompting`, async () => {
+    const repository = new InMemoryStandaloneGatewayRepository();
+    await authorize(repository, { role });
+    const opencode = new FakeStandaloneOpenCodeAdapter();
+    const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+    const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+    await runtime.handleMessage(provider, providerConfig, message(`message-${role}`, "do not prompt"));
+
+    const snapshot = await repository.dashboardSnapshot();
+    assert.equal(opencode.prompts.length, 0);
+    assert.equal(snapshot.sessions.length, 0);
+    assert.equal(snapshot.audits[0]?.metadata.reason, "role_not_allowed");
+    assert.equal(snapshot.audits[0]?.metadata.identityRole, role);
+  });
+}
+
+test("standalone runtime denies disabled identities before prompting", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  await authorize(repository, { role: "member", status: "disabled" });
+  const opencode = new FakeStandaloneOpenCodeAdapter();
+  const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+  const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+  await runtime.handleMessage(provider, providerConfig, message("message-disabled", "do not prompt"));
+
+  const snapshot = await repository.dashboardSnapshot();
+  assert.equal(opencode.prompts.length, 0);
+  assert.equal(snapshot.sessions.length, 0);
+  assert.equal(snapshot.audits[0]?.metadata.reason, "identity_disabled");
+  assert.equal(snapshot.audits[0]?.metadata.identityStatus, "disabled");
+});
+
+for (const role of ["member", "admin", "owner"] as const) {
+  test(`standalone runtime allows ${role} identities to prompt`, async () => {
+    const repository = new InMemoryStandaloneGatewayRepository();
+    await authorize(repository, { role });
+    const opencode = new FakeStandaloneOpenCodeAdapter();
+    const runtime = createStandaloneGatewayRuntime({ repository, opencode });
+    const provider = new FakeChannelProvider({ id: "cli-standalone" });
+
+    await runtime.handleMessage(provider, providerConfig, message(`message-${role}`, "prompt"));
+
+    const snapshot = await repository.dashboardSnapshot();
+    assert.equal(opencode.prompts.length, 1);
+    assert.equal(snapshot.sessions.length, 1);
+    assert.equal(snapshot.audits[0]?.action, "standalone.prompt");
+  });
+}

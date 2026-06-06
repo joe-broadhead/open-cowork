@@ -1,6 +1,7 @@
 import type { ChannelProvider, IncomingChannelMessage } from "@open-cowork/gateway-channel";
 
 import type { StandaloneOpenCodeAdapter } from "./opencode.js";
+import { canIdentityPrompt } from "./repository.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
 import type { StandaloneGatewayProviderConfig, StandaloneRuntimeEvent } from "./types.js";
 
@@ -31,12 +32,32 @@ export function createStandaloneGatewayRuntime(input: {
     async handleMessage(provider, providerConfig, message) {
       const text = message.text.trim();
       if (!text) return;
+      const providerWorkspaceId = providerWorkspaceIdFromMessage(message);
       const externalThreadId = message.target.threadId || message.target.chatId;
-      const sessionQueueKey = `${provider.id}\0${message.target.chatId}\0${externalThreadId}`;
+      const sessionQueueKey = `${provider.id}\0${providerWorkspaceId || ""}\0${message.target.chatId}\0${externalThreadId}`;
       await runSerialized(sessionQueueKey, async () => {
+        const identity = await repository.findChannelIdentity({
+          provider: provider.id,
+          externalUserId: message.sender.providerUserId,
+          providerWorkspaceId,
+        });
+        if (!identity || !canIdentityPrompt(identity)) {
+          await repository.recordAudit("standalone.prompt.denied", message.sender.providerUserId, {
+            provider: provider.id,
+            providerKind: provider.kind,
+            channelBindingId: providerConfig.channelBindingId,
+            providerWorkspaceId,
+            reason: identity ? promptDenyReason(identity) : "identity_not_found",
+            identityId: identity?.identityId,
+            identityRole: identity?.role,
+            identityStatus: identity?.status,
+          });
+          return;
+        }
         const session = await repository.findOrCreateSession({
           provider: provider.id,
           providerKind: provider.kind,
+          providerWorkspaceId,
           channelBindingId: providerConfig.channelBindingId,
           target: message.target,
           externalUserId: message.sender.providerUserId,
@@ -111,6 +132,31 @@ export function createStandaloneGatewayRuntime(input: {
       return processed;
     },
   };
+}
+
+function promptDenyReason(identity: { role: string; status: string }): string {
+  if (identity.status !== "active") return "identity_disabled";
+  return "role_not_allowed";
+}
+
+function providerWorkspaceIdFromMessage(message: IncomingChannelMessage): string | null {
+  const raw = objectRecord(message.raw);
+  return stringField(raw, "workspace_id")
+    || stringField(raw, "workspaceId")
+    || stringField(raw, "team_id")
+    || stringField(objectRecord(raw.team), "id")
+    || stringField(raw, "guild_id")
+    || stringField(raw, "server_id")
+    || null;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function appendRuntimeEvent(repository: StandaloneGatewayRepository, sessionId: string, event: StandaloneRuntimeEvent): Promise<void> {
