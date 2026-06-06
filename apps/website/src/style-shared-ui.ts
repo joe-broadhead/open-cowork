@@ -8,6 +8,7 @@ export function cloudWebsiteSharedUiStyles() {
       gap: var(--space-3);
       align-items: stretch;
       position: relative;
+      transition: grid-template-columns var(--dur-4) var(--ease-spring);
     }
     .ui-workbench-layout--with-review {
       grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
@@ -32,6 +33,12 @@ export function cloudWebsiteSharedUiStyles() {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      border: var(--border-width-1) solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--shadow-3), var(--specular-strong);
+      animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
     .ui-workbench-layout__actions {
       display: flex;
@@ -45,8 +52,9 @@ export function cloudWebsiteSharedUiStyles() {
       gap: var(--space-1);
       border: var(--border-width-1) solid var(--color-border-subtle);
       border-radius: var(--radius-lg);
-      background: color-mix(in srgb, var(--color-elevated) 78%, transparent);
-      box-shadow: var(--surface-highlight);
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--shadow-2), var(--specular);
       padding: var(--space-1);
       flex-wrap: wrap;
     }
@@ -70,6 +78,14 @@ export function cloudWebsiteSharedUiStyles() {
     }
     .ui-action-cluster__item--danger {
       color: var(--color-red);
+    }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .ui-workbench-layout__review,
+      .ui-action-cluster {
+        background: var(--color-elevated);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
     }
     .ui-badge {
       display: inline-flex;
@@ -196,6 +212,14 @@ export function cloudWebsiteSharedUiStyles() {
       .ui-workbench-layout--with-left,
       .ui-workbench-layout--with-left.ui-workbench-layout--with-review {
         grid-template-columns: 1fr;
+      }
+      .ui-workbench-layout__review:not([hidden]) {
+        position: fixed;
+        inset: var(--space-3);
+        z-index: var(--z-modal);
+        width: auto;
+        max-height: calc(100dvh - var(--space-6));
+        outline: none;
       }
       body[data-chat-state="thread"] .chat-inspector:not([hidden]) {
         position: fixed;

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { DisabledHint } from './DisabledHint.js'
 import { cn, nextEnabledIndex } from './utils.js'
 
@@ -36,11 +36,15 @@ export function SegmentedControl({
   const disabledId = disabledReason ? `${id}-disabled` : undefined
   const emptyId = emptyReason ? `${id}-empty` : undefined
   const describedBy = [disabledId, emptyId].filter(Boolean).join(' ') || undefined
+  const selectedIndex = options.findIndex((option) => option.value === value)
+  const thumbStyle = {
+    '--ui-segment-count': Math.max(1, options.length),
+    '--ui-segment-index': Math.max(0, selectedIndex),
+  } as CSSProperties
 
   useEffect(() => {
-    const selectedIndex = options.findIndex((option) => option.value === value)
     if (selectedIndex >= 0) setActiveIndex(selectedIndex)
-  }, [options, value])
+  }, [selectedIndex])
 
   const move = (direction: 1 | -1) => {
     const next = nextEnabledIndex(options, activeIndex, direction)
@@ -56,7 +60,9 @@ export function SegmentedControl({
         aria-label={label}
         aria-describedby={describedBy}
         className="ui-segmented-control"
+        style={thumbStyle}
       >
+        {options.length > 0 ? <span aria-hidden="true" className="ui-segmented-thumb" /> : null}
         {options.map((option, index) => {
           const selected = option.value === value
           return (

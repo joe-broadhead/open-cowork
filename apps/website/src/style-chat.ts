@@ -19,6 +19,8 @@ export function cloudWebsiteChatStyles() {
       padding: var(--space-3);
       max-width: 880px;
       min-width: 0;
+      box-shadow: var(--shadow-2), var(--specular);
+      animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
     .runtime-card[data-kind="approval"], .runtime-card[data-kind="question"] {
       border-color: var(--tone-warn-border);
@@ -53,6 +55,8 @@ export function cloudWebsiteChatStyles() {
       padding: var(--space-2) var(--space-3);
       max-width: 880px;
       min-width: 0;
+      box-shadow: var(--specular);
+      animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
     .runtime-detail summary {
       cursor: pointer;
@@ -168,7 +172,7 @@ export function cloudWebsiteChatStyles() {
       border: var(--border-width-1) solid var(--color-border-strong);
       border-radius: 18px;
       background: linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 84%, var(--color-base) 16%), color-mix(in srgb, var(--color-elevated) 64%, var(--color-base) 36%));
-      box-shadow: var(--shadow-elevated), var(--surface-highlight);
+      box-shadow: var(--shadow-3), var(--specular-strong);
       overflow: hidden;
       transition:
         border-color var(--dur-1) var(--ease-out),
@@ -176,7 +180,7 @@ export function cloudWebsiteChatStyles() {
     }
     .cloud-composer:focus-within {
       border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border) 66%);
-      box-shadow: var(--shadow-elevated), var(--ring-focus);
+      box-shadow: var(--shadow-3), var(--ring-focus), var(--specular-strong);
     }
     .composer-input-chrome {
       padding: var(--space-4) var(--space-4) var(--space-3);
@@ -213,6 +217,7 @@ export function cloudWebsiteChatStyles() {
       border-color: color-mix(in srgb, var(--color-accent) 36%, var(--color-border) 64%);
       background: var(--color-surface-active);
       color: var(--text);
+      box-shadow: var(--glow-soft);
     }
     .composer-toolbar {
       display: flex;
@@ -276,6 +281,7 @@ export function cloudWebsiteChatStyles() {
       background: var(--color-surface-active);
       border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border) 66%);
       color: var(--text);
+      box-shadow: var(--glow-soft), var(--specular);
     }
     .chat-inspector {
       min-width: 0;
@@ -320,8 +326,9 @@ export function cloudWebsiteChatStyles() {
       padding: var(--space-3) var(--space-4);
       background: color-mix(in srgb, var(--color-elevated) 72%, transparent);
       color: var(--text);
-      box-shadow: var(--shadow-card), var(--surface-highlight);
+      box-shadow: var(--shadow-1), var(--specular);
       min-width: 0;
+      animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
     .message-bubble[data-role="assistant"] {
       border-color: transparent;
@@ -337,6 +344,36 @@ export function cloudWebsiteChatStyles() {
       border-color: var(--color-border-strong);
       border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xs) var(--radius-xl);
       background: var(--color-surface-active);
+      box-shadow: var(--shadow-2), var(--specular);
+    }
+    .message-bubble[data-streaming="true"] {
+      border-color: color-mix(in srgb, var(--accent) 34%, var(--color-border) 66%);
+      box-shadow: var(--glow-soft), var(--shadow-2), var(--specular-strong);
+    }
+    .message-bubble[data-role="assistant"][data-streaming="true"] {
+      border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-xs);
+      background: color-mix(in srgb, var(--color-elevated) 58%, transparent);
+      padding: var(--space-3) var(--space-4);
+    }
+    .message-bubble[data-streaming="true"] p:last-of-type {
+      background: linear-gradient(100deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%);
+      background-size: 220% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: ui-stream-shimmer 2.4s linear infinite;
+    }
+    .message-bubble[data-streaming="true"] p:last-of-type::after {
+      content: "";
+      display: inline-block;
+      width: var(--space-2);
+      height: 1em;
+      margin-inline-start: var(--space-1);
+      transform: translateY(0.16em);
+      border-radius: var(--radius-xs);
+      background: var(--accent);
+      box-shadow: var(--glow-soft);
+      animation: ui-stream-caret 1s steps(2, start) infinite;
     }
     .message-bubble[data-role="system"] {
       border-style: dashed;

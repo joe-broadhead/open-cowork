@@ -2,7 +2,7 @@ import { type ComponentPropsWithoutRef } from 'react'
 import { cn } from './utils.js'
 
 export type SkeletonProps = ComponentPropsWithoutRef<'span'> & {
-  variant?: 'text' | 'block' | 'card'
+  variant?: 'text' | 'block' | 'card' | 'row' | 'message' | 'table'
 }
 
 export function Skeleton({

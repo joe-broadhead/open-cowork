@@ -133,6 +133,7 @@ import type {
 
 export * from './app-config.js'
 export * from './app-api.js'
+export * from './agent-capability-profile.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './capabilities.js'

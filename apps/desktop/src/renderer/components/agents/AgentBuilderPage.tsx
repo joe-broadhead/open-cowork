@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   AgentCatalog,
   CustomAgentConfig,
+  ProviderModelDescriptor,
+  PublicAppConfig,
+} from '@open-cowork/shared'
+import {
+  computeAgentCapabilityProfile,
 } from '@open-cowork/shared'
 import { AgentCard } from './AgentCard'
 import { AgentAvatar } from './AgentAvatar'
@@ -9,7 +14,13 @@ import { t } from '../../helpers/i18n'
 import { AgentStaticPreview } from './AgentStaticPreview'
 import { AgentCapabilitiesTab } from './AgentCapabilitiesTab'
 import { InstructionsTab } from './InstructionsTab'
-import { InferenceTab, ScopeRow, WorkbenchTabs, type WorkbenchTab } from './AgentBuilderPrimitives'
+import {
+  InferenceTab,
+  ScopeRow,
+  WorkbenchTabs,
+  resolveAgentBuilderModelSelection,
+  type WorkbenchTab,
+} from './AgentBuilderPrimitives'
 import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
 import {
   applyTemplate,
@@ -24,6 +35,7 @@ import { getStarterTemplates } from './starter-templates'
 type Props = {
   target: BuilderTarget
   catalog: AgentCatalog
+  appConfig?: PublicAppConfig | null
   existingCustomNames: string[]
   projectDirectory: string | null
   onCancel: () => void
@@ -38,6 +50,7 @@ type Props = {
 export function AgentBuilderPage({
   target,
   catalog,
+  appConfig,
   existingCustomNames,
   projectDirectory,
   onCancel,
@@ -58,7 +71,7 @@ export function AgentBuilderPage({
   }, [target])
 
   // For built-in agents, overlay the catalog with synthetic entries for
-  // their native tools so the loadout renders properly named tiles
+  // their native tools so the selected-capabilities summary renders named tiles
   // instead of amber "missing" warnings. Custom / runtime / new flows
   // use the catalog as-is.
   const effectiveCatalog = useMemo(() => {
@@ -71,8 +84,19 @@ export function AgentBuilderPage({
   const [draft, setDraft] = useState<CustomAgentConfig>(initialDraft)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<WorkbenchTab>('instructions')
+  const [tab, setTab] = useState<WorkbenchTab>('capabilities')
   const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory)
+  const providers = appConfig?.providers.available || []
+  const defaultProviderId = appConfig?.providers.defaultProvider || null
+  const [catalogOverrides, setCatalogOverrides] = useState<Record<string, ProviderModelDescriptor[]>>({})
+  const selectedModel = useMemo(
+    () => resolveAgentBuilderModelSelection(draft.model, providers, defaultProviderId, catalogOverrides).model,
+    [catalogOverrides, defaultProviderId, draft.model, providers],
+  )
+  const capabilityProfile = useMemo(
+    () => computeAgentCapabilityProfile(draft, selectedModel),
+    [draft, selectedModel],
+  )
 
   useEffect(() => {
     setDraft(initialDraft)
@@ -134,6 +158,10 @@ export function AgentBuilderPage({
     })
   }
 
+  const refreshProviderCatalog = async (providerId: string) => {
+    return window.coworkApi.app.refreshProviderCatalog(providerId)
+  }
+
   const toggleSkill = (skillName: string) => {
     setDraft((current) => ({
       ...current,
@@ -160,7 +188,7 @@ export function AgentBuilderPage({
   const startBlank = () => {
     if (target.kind !== 'new') return
     setDraft(buildInitialAgentDraft({ kind: 'new', seed: null }))
-    setTab('instructions')
+    setTab('capabilities')
   }
 
   const applyStarter = (template: AgentTemplate) => {
@@ -169,7 +197,7 @@ export function AgentBuilderPage({
       kind: 'new',
       seed: applyTemplate(template, effectiveCatalog),
     }))
-    setTab('instructions')
+    setTab('capabilities')
   }
 
   const handleSave = async (options: { testAfterSave?: boolean } = {}) => {
@@ -257,8 +285,8 @@ export function AgentBuilderPage({
               )}
               <Badge tone="neutral">
                 {target.kind === 'builtin'
-                  ? 'Built-in — tune via the builtInAgents config block'
-                  : 'Runtime-registered — managed by SDK plugin'}
+                  ? 'Built-in - tune via the builtInAgents config block'
+                  : 'Runtime-registered - managed by SDK plugin'}
               </Badge>
             </div>
           )}
@@ -304,6 +332,9 @@ export function AgentBuilderPage({
           <AgentCard
             draft={draft}
             catalog={effectiveCatalog}
+            capabilityProfile={capabilityProfile}
+            readinessIssues={issues}
+            selectedModelName={selectedModel?.name || selectedModel?.id || null}
             typeLabel={typeLabel}
             readOnly={readOnly}
             onNameChange={(name) => setDraft((current) => ({ ...current, name }))}
@@ -343,6 +374,13 @@ export function AgentBuilderPage({
                 <InferenceTab
                   draft={draft}
                   readOnly={readOnly}
+                  providers={providers}
+                  defaultProviderId={defaultProviderId}
+                  catalogOverrides={catalogOverrides}
+                  onProviderCatalogRefresh={(providerId, models) => {
+                    setCatalogOverrides((current) => ({ ...current, [providerId]: models }))
+                  }}
+                  onRefreshProviderCatalog={refreshProviderCatalog}
                   onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
                 />
               )}
@@ -398,7 +436,7 @@ function StarterTemplatePanel({
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold text-text">{t('agentTemplate.startBlank', 'Start from blank')}</div>
               <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
-                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions — design the agent from scratch.')}
+                {t('agentTemplate.startBlankHint', 'No pre-selected tools or instructions - design the agent from scratch.')}
               </div>
             </div>
           </div>

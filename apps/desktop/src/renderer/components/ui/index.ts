@@ -1,5 +1,6 @@
 export { Badge, type BadgeProps, type BadgeTone } from '@open-cowork/ui'
 export { ActionCluster, type ActionClusterItem, type ActionClusterProps } from '@open-cowork/ui'
+export { AgentCapabilityProfileView, type AgentCapabilityProfileViewProps } from '@open-cowork/ui'
 export {
   Button,
   IconButton,

@@ -18,6 +18,25 @@ function hashRoute() {
   return window.location.hash.replace(/^#/, '')
 }
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (callback: () => void) => unknown
+}
+
+function canUseViewTransition() {
+  return Boolean(
+    (document as ViewTransitionDocument).startViewTransition
+    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+}
+
+function runViewTransition(callback: () => void) {
+  if (canUseViewTransition()) {
+    ;(document as ViewTransitionDocument).startViewTransition?.(callback)
+    return
+  }
+  callback()
+}
+
 function routeById(routes: CloudWebRoute[], routeId: string | null | undefined) {
   return routes.find((route) => route.id === routeId) || null
 }
@@ -220,7 +239,9 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
       if (replace) window.history.replaceState(null, '', nextHash)
       else window.history.pushState(null, '', nextHash)
     }
-    applyRouteDom(route)
+    const routeChanged = activeRouteIdRef.current !== null && activeRouteIdRef.current !== route.id
+    if (routeChanged) runViewTransition(() => applyRouteDom(route))
+    else applyRouteDom(route)
   }, [applyRouteDom, resolveRoute])
 
   const signOut = useCallback((message = 'Sign in required') => {

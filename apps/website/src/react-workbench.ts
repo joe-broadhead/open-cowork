@@ -1,4 +1,4 @@
-import { createElement, type FormEvent, type ReactNode } from 'react'
+import { createElement, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import {
   CLOUD_WEB_THREAD_PAGE_SIZE,
   cloudWebThreadProjectLabel,
@@ -17,6 +17,14 @@ import {
 } from './runtime-workbench.ts'
 
 const h = createElement
+
+type PolishRowStyle = CSSProperties & {
+  '--polish-row-index'?: string
+}
+
+function polishRowStyle(index: number): PolishRowStyle | undefined {
+  return index < 20 ? { '--polish-row-index': String(index) } : undefined
+}
 
 function text(value: unknown, fallback = '') {
   return String(value ?? fallback)
@@ -124,14 +132,16 @@ export type CloudThreadListProps = {
 function threadRows({ sessions, views, filters, selectedSessionId, limit = CLOUD_WEB_THREAD_PAGE_SIZE, onSelect }: CloudThreadListProps) {
   const rows = filterCloudWebThreads(sessions, views, filters, limit)
   return rows.length
-    ? rows.map((session) => {
+    ? rows.map((session, index) => {
       const projection = cloudWebThreadProjection(views[session.sessionId])
       const status = cloudWebThreadStatus(session, projection)
       return h('div', {
-        className: 'table-row react-thread-row',
+        className: 'table-row react-thread-row ui-polish-list-row',
         role: 'row',
         key: session.sessionId,
         'data-selected': selectedSessionId === session.sessionId ? 'true' : 'false',
+        'data-polish-stagger': index < 20 ? 'true' : undefined,
+        style: polishRowStyle(index),
       },
       h('span', { role: 'cell' },
         h('button', {
@@ -162,15 +172,17 @@ export function CloudSidebarThreadList({ sessions, views, filters, selectedSessi
   const rows = filterCloudWebThreads(sessions, views, filters, limit)
   return h('div', { className: 'react-sidebar-thread-list' },
     rows.length
-      ? rows.map((session) => {
+      ? rows.map((session, index) => {
         const projection = cloudWebThreadProjection(views[session.sessionId])
         const status = cloudWebThreadStatus(session, projection)
         return h('button', {
-          className: 'sidebar-thread-row',
+          className: 'sidebar-thread-row ui-polish-list-row',
           type: 'button',
           key: session.sessionId,
           onClick: () => onSelect?.(session.sessionId),
           'data-selected': selectedSessionId === session.sessionId ? 'true' : 'false',
+          'data-polish-stagger': index < 20 ? 'true' : undefined,
+          style: polishRowStyle(index),
         },
         h('span', { className: 'sidebar-thread-main' },
           h('strong', null, session.title || session.sessionId),
@@ -210,15 +222,32 @@ export type CloudRuntimeActionProps = {
 
 export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, onInspectArtifact, pendingAction }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
   const projection = runtimeProjection(view)
+  const messages = list<Record<string, unknown>>(projection.messages)
+  const latestUserOrder = messages.reduce((max, message, index) => {
+    if (text(message.role, 'assistant').toLowerCase() !== 'user') return max
+    return Math.max(max, cloudWebRuntimeOrder(message, index))
+  }, -Infinity)
+  const latestAssistantOrder = messages.reduce((max, message, index) => {
+    if (text(message.role, 'assistant').toLowerCase() !== 'assistant') return max
+    return Math.max(max, cloudWebRuntimeOrder(message, index))
+  }, -Infinity)
   const entries: Array<{ kind: string; order: number; node: ReactNode }> = [
-    ...list<Record<string, unknown>>(projection.messages).map((message, index) => ({
-      kind: 'message',
-      order: cloudWebRuntimeOrder(message, index),
-      node: h('article', { className: 'message-bubble', 'data-role': text(message.role, 'assistant'), key: text(message.id, `message-${index}`) },
+    ...messages.map((message, index) => {
+      const order = cloudWebRuntimeOrder(message, index)
+      const role = text(message.role, 'assistant')
+      const streaming = Boolean(projection.isGenerating)
+        && role.toLowerCase() === 'assistant'
+        && order === latestAssistantOrder
+        && order > latestUserOrder
+      return {
+        kind: 'message',
+        order,
+        node: h('article', { className: 'message-bubble', 'data-role': role, 'data-streaming': streaming ? 'true' : undefined, key: text(message.id, `message-${index}`) },
         h('div', { className: 'message-heading' }, roleLabel(message.role)),
         h('p', null, messageContent(message) || '(empty message)'),
         list(message.attachments).length ? detailsNode('Attachments', message.attachments) : null),
-    })),
+      }
+    }),
     ...list<Record<string, unknown>>(projection.toolCalls).map((tool, index) => ({
       kind: 'tool',
       order: cloudWebRuntimeOrder(tool, 1_000 + index),

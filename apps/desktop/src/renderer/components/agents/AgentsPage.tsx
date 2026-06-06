@@ -4,6 +4,7 @@ import type {
   BuiltInAgentDetail,
   CustomAgentConfig,
   CustomAgentSummary,
+  PublicAppConfig,
   RuntimeAgentDescriptor,
 } from '@open-cowork/shared'
 import { AgentBuilderPage } from './AgentBuilderPage'
@@ -50,6 +51,7 @@ export function AgentsPage({
 }) {
   const [customs, setCustoms] = useState<CustomAgentSummary[]>([])
   const [catalog, setCatalog] = useState<AgentCatalog | null>(null)
+  const [appConfig, setAppConfig] = useState<PublicAppConfig | null>(null)
   const [builtinDetails, setBuiltinDetails] = useState<BuiltInAgentDetail[]>([])
   const [runtimeAgents, setRuntimeAgents] = useState<RuntimeAgentDescriptor[]>([])
   const [selected, setSelected] = useState<SelectedEntry | null>(null)
@@ -79,12 +81,14 @@ export function AgentsPage({
       window.coworkApi.agents.catalog(contextOptions),
       window.coworkApi.app.builtinAgents(),
       window.coworkApi.agents.runtime().catch(() => []),
+      window.coworkApi.app.config(),
     ])
-      .then(([nextCustoms, nextCatalog, nextBuiltIns, nextRuntimeAgents]) => {
+      .then(([nextCustoms, nextCatalog, nextBuiltIns, nextRuntimeAgents, nextConfig]) => {
         setCustoms(nextCustoms)
         setCatalog(nextCatalog)
         setBuiltinDetails(nextBuiltIns)
         setRuntimeAgents(nextRuntimeAgents)
+        setAppConfig(nextConfig)
       })
       .finally(() => setLoading(false))
   }, [contextOptions])
@@ -180,6 +184,7 @@ export function AgentsPage({
                 : { kind: 'new', seed: creatingSeed }
         }
         catalog={catalog}
+        appConfig={appConfig}
         existingCustomNames={customs.map((entry) => entry.name)}
         projectDirectory={projectDirectory}
         onCancel={() => {

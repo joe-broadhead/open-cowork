@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig } from '@open-cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
@@ -30,6 +30,23 @@ const catalog: AgentCatalog = {
       patterns: ['mcp__charts__*'],
     },
   ],
+}
+
+const baseAppConfig: PublicAppConfig = {
+  branding: {
+    appId: 'com.opencowork.desktop',
+    name: 'Open Cowork',
+    dataDirName: 'Open Cowork',
+    helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+  },
+  permissions: { bash: 'allow', fileWrite: 'allow' },
+  providers: {
+    defaultProvider: null,
+    defaultModel: null,
+    available: [],
+  },
+  auth: { mode: 'none', enabled: false },
+  agentStarterTemplates: [],
 }
 
 function renderBuilder(props: Partial<ComponentProps<typeof AgentBuilderPage>> = {}) {
@@ -98,13 +115,15 @@ describe('AgentBuilderPage', () => {
 
     expect(screen.getByRole('button', { name: 'Create agent' })).toBeDisabled()
     expect(screen.getByText('Complete these before saving')).toBeInTheDocument()
+    expect(screen.getByText('Selected capabilities')).toBeInTheDocument()
+    expect(screen.queryByText(/loadout/i)).not.toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText('agent-id'), 'market-analyst')
     await user.type(
       screen.getByPlaceholderText('What is this agent specialised to do?'),
       'Prepares market analysis briefings.',
     )
-    await user.click(screen.getByRole('button', { name: 'Tools & Skills' }))
+    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
     await user.click(screen.getAllByRole('button', { name: /Research Kit/ })[0]!)
     await user.click(screen.getByRole('button', { name: 'Add tools' }))
 
@@ -139,14 +158,52 @@ describe('AgentBuilderPage', () => {
       },
     })
 
-    expect(screen.getByText('Built-in — tune via the builtInAgents config block')).toBeInTheDocument()
+    expect(screen.getByText('Built-in - tune via the builtInAgents config block')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Instructions' }))
     expect(screen.getByText(/uses OpenCode's native built-in prompt/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Tools & Skills' }))
+    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
     expect(screen.getAllByText('Web Search').length).toBeGreaterThan(0)
     expect(create).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it('uses refreshed model metadata in the summary capability profile', async () => {
+    const user = userEvent.setup()
+    const refreshProviderCatalog = vi.fn(async () => [{
+      id: 'mercury/ultra',
+      name: 'Mercury Ultra',
+      featured: true,
+      limit: { context: 1_000_000 },
+    }])
+    renderBuilder({
+      appConfig: {
+        ...baseAppConfig,
+        providers: {
+          defaultProvider: 'openrouter',
+          defaultModel: null,
+          available: [{
+            id: 'openrouter',
+            name: 'OpenRouter',
+            description: 'Aggregated model catalog.',
+            credentials: [],
+            connected: true,
+            models: [],
+          }],
+        },
+      },
+    })
+    window.coworkApi.app.refreshProviderCatalog = refreshProviderCatalog
+
+    await user.click(screen.getByRole('button', { name: 'Model & behavior' }))
+    await user.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(refreshProviderCatalog).toHaveBeenCalledWith('openrouter'))
+
+    await user.selectOptions(screen.getByLabelText('Model'), 'mercury/ultra')
+
+    expect(screen.getByText('Mercury Ultra')).toBeInTheDocument()
+    expect(screen.getAllByText('1M ctx').length).toBeGreaterThanOrEqual(1)
   })
 })

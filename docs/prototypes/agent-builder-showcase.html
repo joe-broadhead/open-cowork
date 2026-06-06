@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Builder · character-sheet layout (prototype)</title>
+<style>
+@import url('https://cdn.jsdelivr.net/npm/@fontsource-variable/mona-sans/index.css');
+@import url('https://cdn.jsdelivr.net/npm/@fontsource-variable/hubot-sans/index.css');
+
+/* ── Mercury tokens + polish layer (matches the approved showcase) ── */
+:root{
+  --color-base:#1b1b26;
+  --color-accent:#8da4f5;          /* role color overrides this live */
+  --color-accent-2:#b8a3ff;
+  --color-text:#e8e9f3;
+  --color-text-secondary:#b0b3c6;
+  --color-text-muted:#8a8da0;
+  --color-accent-foreground:#0f0f18;
+  --color-green:#7fcfa0; --color-amber:#fcb07a; --color-red:#fc92b4; --color-info:#82cadc;
+  --surface:color-mix(in srgb,var(--color-accent) 5%,transparent);
+  --surface-hover:color-mix(in srgb,var(--color-accent) 9%,transparent);
+  --surface-active:color-mix(in srgb,var(--color-accent) 16%,transparent);
+  --elevated:color-mix(in srgb,var(--color-base) 86%,#fff 5%);
+  --border:color-mix(in srgb,var(--color-accent) 13%,transparent);
+  --border-subtle:color-mix(in srgb,var(--color-accent) 6%,transparent);
+  --border-strong:color-mix(in srgb,var(--color-accent) 24%,transparent);
+  --font-ui:'Mona Sans Variable','Mona Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-display:'Hubot Sans Variable','Hubot Sans',var(--font-ui);
+  --font-mono:'SF Mono','JetBrains Mono',ui-monospace,monospace;
+  --r-sm:8px; --r-md:10px; --r-lg:14px; --r-xl:18px; --r-2xl:22px; --r-full:9999px;
+  --ease-spring:cubic-bezier(.16,1,.3,1); --ease-out:cubic-bezier(.2,0,0,1);
+  --d1:120ms; --d2:180ms; --d3:240ms; --d4:420ms;
+  --specular:inset 0 1px 0 color-mix(in srgb,#fff 7%,transparent);
+  --specular-strong:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent);
+  --shadow-1:0 1px 1px rgba(0,0,0,.30),0 2px 4px rgba(0,0,0,.16);
+  --shadow-2:0 1px 1px rgba(0,0,0,.34),0 8px 20px rgba(0,0,0,.22);
+  --shadow-3:0 2px 6px rgba(0,0,0,.40),0 24px 60px rgba(0,0,0,.34);
+  --glass-bg:color-mix(in srgb,var(--elevated) 74%,transparent);
+  --glass-blur:blur(22px) saturate(1.5);
+  --glow-soft:0 0 24px color-mix(in srgb,var(--color-accent) 24%,transparent);
+  --glow:0 0 0 1px color-mix(in srgb,var(--color-accent) 50%,transparent),0 0 22px color-mix(in srgb,var(--color-accent) 34%,transparent);
+  --ring:0 0 0 2px color-mix(in srgb,var(--color-accent) 60%,transparent),0 0 16px color-mix(in srgb,var(--color-accent) 30%,transparent);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-ui);background:var(--color-base);color:var(--color-text);
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+/* atmosphere */
+.atmos{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.atmos::before{content:"";position:absolute;inset:-30%;
+  background:radial-gradient(38% 36% at 20% 10%,color-mix(in srgb,var(--color-accent) 22%,transparent),transparent 60%),
+    radial-gradient(34% 38% at 84% 6%,color-mix(in srgb,var(--color-accent-2) 16%,transparent),transparent 62%),
+    radial-gradient(48% 44% at 62% 100%,color-mix(in srgb,var(--color-info) 10%,transparent),transparent 60%);
+  filter:blur(22px);opacity:.45;animation:drift 28s var(--ease-spring) infinite alternate}
+.atmos::after{content:"";position:absolute;inset:0;mix-blend-mode:overlay;opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+@keyframes drift{to{transform:translate3d(2%,1.5%,0) scale(1.08)}}
+
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:22px 26px 80px}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.title{font-family:var(--font-display);font-weight:720;letter-spacing:-.02em;font-size:21px;display:flex;align-items:center;gap:10px}
+.title .mark{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(140deg,var(--color-accent),var(--color-accent-2));color:var(--color-accent-foreground);
+  box-shadow:var(--specular-strong),var(--glow-soft)}
+.title .mark svg{width:17px;height:17px}
+.title .sub{font-family:var(--font-ui);font-weight:500;font-size:12px;color:var(--color-text-muted);letter-spacing:0}
+.flex1{flex:1}
+.rm{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-muted);cursor:pointer;background:none;border:0}
+.sw{width:34px;height:20px;border-radius:var(--r-full);background:var(--surface-active);border:1px solid var(--border);position:relative}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:var(--r-full);background:var(--color-text-secondary);transition:transform var(--d2) var(--ease-spring)}
+.rm[aria-pressed=true] .sw::after{transform:translateX(14px);background:var(--color-accent)}
+
+/* buttons */
+.btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center;
+  font-family:var(--font-ui);font-weight:580;font-size:13px;height:36px;padding:0 16px;border-radius:var(--r-sm);
+  border:1px solid transparent;color:var(--color-text);transition:transform var(--d2) var(--ease-spring),background var(--d2),box-shadow var(--d2),border-color var(--d2)}
+.btn svg{width:16px;height:16px}.btn:active{transform:scale(.96)}
+.btn.secondary{background:var(--surface);border-color:var(--border);box-shadow:var(--specular)}
+.btn.secondary:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.btn.primary{position:relative;overflow:hidden;color:var(--color-accent-foreground);
+  background:linear-gradient(140deg,var(--color-accent),var(--color-accent-2));
+  box-shadow:var(--specular-strong),var(--shadow-1),0 0 0 1px color-mix(in srgb,var(--color-accent) 40%,transparent)}
+.btn.primary:hover{transform:translateY(-1px);box-shadow:var(--specular-strong),var(--shadow-2),var(--glow-soft)}
+.btn.primary::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(105deg,transparent 30%,color-mix(in srgb,#fff 45%,transparent) 48%,transparent 62%);
+  transform:translateX(-120%);transition:transform var(--d4) var(--ease-out)}
+.btn.primary:hover::after{transform:translateX(120%)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none}
+.btn:disabled::after{display:none}
+
+/* ── role strip ── */
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-muted);font-weight:680;margin:0 0 10px}
+.roles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px}
+.role{position:relative;overflow:hidden;cursor:pointer;text-align:left;border-radius:var(--r-lg);padding:14px;
+  background:var(--surface);border:1px solid var(--border-subtle);box-shadow:var(--specular);
+  transition:transform var(--d2) var(--ease-spring),border-color var(--d2),box-shadow var(--d2)}
+.role:hover{transform:translateY(-3px);border-color:var(--border-strong);box-shadow:var(--shadow-1),var(--specular)}
+.role[aria-pressed=true]{border-color:var(--cc);box-shadow:0 0 0 1px var(--cc),0 0 22px color-mix(in srgb,var(--cc) 28%,transparent),var(--specular)}
+.role::before{content:"";position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity var(--d3);
+  background:linear-gradient(130deg,color-mix(in srgb,var(--cc) 14%,transparent),transparent 55%)}
+.role[aria-pressed=true]::before{opacity:1}
+.role .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;margin-bottom:10px;
+  background:color-mix(in srgb,var(--cc) 18%,transparent);color:var(--cc);border:1px solid color-mix(in srgb,var(--cc) 30%,transparent)}
+.role .ic svg{width:18px;height:18px}
+.role h3{font-size:13px;font-weight:640;font-family:var(--font-display)}
+.role p{font-size:11px;color:var(--color-text-muted);margin-top:3px;line-height:1.45}
+.role .focus{margin-top:9px;font-size:10px;font-weight:640;letter-spacing:.05em;text-transform:uppercase;color:var(--cc)}
+
+/* ── main grid ── */
+.grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:22px;align-items:start}
+
+/* summary card (left) */
+.sheet{position:sticky;top:18px;border-radius:var(--r-2xl);overflow:hidden;
+  background:var(--glass-bg);backdrop-filter:var(--glass-blur);border:1px solid var(--border-strong);
+  box-shadow:var(--specular-strong),var(--shadow-3)}
+.sheet-hero{position:relative;padding:22px 20px 16px;text-align:center;overflow:hidden}
+.sheet-hero::before{content:"";position:absolute;inset:0;opacity:.45;pointer-events:none;
+  background:radial-gradient(80% 60% at 50% -10%,color-mix(in srgb,var(--color-accent) 24%,transparent),transparent 60%)}
+.portrait{position:relative;width:88px;height:88px;margin:2px auto 12px;border-radius:24px;display:grid;place-items:center;
+  font-family:var(--font-display);font-weight:760;font-size:32px;color:var(--color-accent-foreground);
+  background:linear-gradient(150deg,var(--color-accent),var(--color-accent-2));
+  box-shadow:var(--specular-strong),var(--glow);transition:transform var(--d4) var(--ease-spring)}
+.agent-name{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.01em;margin-top:4px}
+.agent-name[contenteditable]:focus{outline:none;box-shadow:var(--ring);border-radius:6px}
+.agent-role{font-size:11px;font-weight:640;letter-spacing:.06em;text-transform:uppercase;color:var(--color-accent);margin-top:3px}
+
+/* capability score */
+.score{position:relative;z-index:1;margin:12px 16px 4px;padding:12px 14px;border-radius:var(--r-lg);
+  background:color-mix(in srgb,var(--color-base) 50%,transparent);border:1px solid var(--border);box-shadow:var(--specular)}
+.score .row{display:flex;align-items:baseline;justify-content:space-between}
+.score .lab{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-muted);font-weight:680}
+.score .scope{font-size:10px;font-weight:640;color:var(--color-accent)}
+.score .val{font-family:var(--font-display);font-weight:760;font-size:26px;color:var(--color-text);
+  font-variant-numeric:tabular-nums}
+.score .val small{font-size:13px;color:var(--color-text-muted);font-weight:600;margin-left:1px}
+.score .bar{margin-top:8px;height:7px;border-radius:var(--r-full);background:color-mix(in srgb,var(--color-text-muted) 18%,transparent);overflow:hidden}
+.score .fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--color-accent),var(--color-accent-2));
+  box-shadow:0 0 12px var(--color-accent);transition:width var(--d4) var(--ease-spring)}
+.score .def{font-size:10px;color:var(--color-text-muted);margin-top:7px;line-height:1.4}
+
+/* radar + legend */
+.radar{padding:4px 14px 0}
+.radar svg{width:100%;height:172px;display:block}
+.axis-ring{fill:none;stroke:color-mix(in srgb,var(--color-text-muted) 12%,transparent);stroke-width:1}
+.axis-line{stroke:color-mix(in srgb,var(--color-text-muted) 18%,transparent);stroke-width:1}
+.stat-shape{fill:color-mix(in srgb,var(--color-accent) 22%,transparent);stroke:var(--color-accent);stroke-width:1.5;
+  filter:drop-shadow(0 0 8px color-mix(in srgb,var(--color-accent) 50%,transparent));transition:all var(--d4) var(--ease-spring)}
+.stat-dot{fill:var(--color-accent)}
+.axis-label{fill:var(--color-text-secondary);font-size:9px;font-weight:640;font-family:var(--font-ui)}
+.legend{padding:2px 16px 16px;display:flex;flex-direction:column;gap:5px}
+.legend .lg{display:flex;align-items:center;gap:8px;font-size:11px}
+.legend .lg .k{width:74px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.05em;font-size:10px;font-weight:640}
+.legend .lg .v{color:var(--color-text);font-weight:560}
+.legend .lg .mini{flex:1;height:5px;border-radius:var(--r-full);background:color-mix(in srgb,var(--color-text-muted) 16%,transparent);overflow:hidden}
+.legend .lg .mini i{display:block;height:100%;background:var(--color-accent);box-shadow:0 0 8px color-mix(in srgb,var(--color-accent) 50%,transparent);transition:width var(--d4) var(--ease-spring)}
+
+/* loadout summary chips */
+.loadout{padding:2px 16px 14px}
+.loadout h4{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-muted);font-weight:680;margin:10px 0 7px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;min-height:18px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:560;padding:4px 9px;border-radius:var(--r-full);
+  background:var(--surface-active);border:1px solid var(--border);color:var(--color-text);animation:snap var(--d3) var(--ease-spring) both}
+.chip svg{width:12px;height:12px;color:var(--color-accent)}
+.chip.skill{background:color-mix(in srgb,var(--color-info) 14%,transparent);border-color:color-mix(in srgb,var(--color-info) 30%,transparent)}
+.chip.skill svg{color:var(--color-info)}
+@keyframes snap{0%{transform:scale(.8);opacity:0}60%{transform:scale(1.05);opacity:1}100%{transform:scale(1)}}
+.chips .none{font-size:11px;color:var(--color-text-muted);font-style:italic}
+
+/* readiness checklist */
+.ready{margin:0 16px 16px;padding:12px 14px;border-radius:var(--r-lg);background:color-mix(in srgb,var(--color-base) 45%,transparent);border:1px solid var(--border)}
+.ready h4{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-muted);font-weight:680;margin-bottom:9px}
+.check{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--color-text-muted);padding:3px 0}
+.check .box{width:16px;height:16px;border-radius:5px;border:1px solid var(--border-strong);display:grid;place-items:center;flex:none;transition:all var(--d2) var(--ease-spring)}
+.check .box svg{width:11px;height:11px;color:var(--color-accent-foreground);opacity:0;transform:scale(.5);transition:all var(--d2) var(--ease-spring)}
+.check.done{color:var(--color-text)}
+.check.done .box{background:var(--color-green);border-color:var(--color-green);box-shadow:0 0 10px color-mix(in srgb,var(--color-green) 50%,transparent)}
+.check.done .box svg{opacity:1;transform:scale(1)}
+.save-row{padding:0 16px 18px}
+
+/* ── build panel (right) ── */
+.panel{border-radius:var(--r-2xl);overflow:hidden;background:var(--surface);border:1px solid var(--border-subtle);box-shadow:var(--specular)}
+.tabs{display:flex;gap:2px;padding:6px;border-bottom:1px solid var(--border-subtle);position:relative;background:color-mix(in srgb,var(--color-base) 30%,transparent)}
+.tabs .thumb{position:absolute;z-index:0;top:6px;bottom:6px;border-radius:var(--r-sm);background:var(--surface-active);
+  box-shadow:var(--specular),0 1px 2px rgba(0,0,0,.25);transition:transform var(--d3) var(--ease-spring),width var(--d3) var(--ease-spring)}
+.tabs button{position:relative;z-index:1;appearance:none;border:0;background:none;cursor:pointer;color:var(--color-text-muted);
+  font-family:var(--font-ui);font-weight:560;font-size:13px;padding:8px 16px;border-radius:var(--r-sm);
+  display:inline-flex;align-items:center;gap:7px;transition:color var(--d2)}
+.tabs button svg{width:15px;height:15px}
+.tabs button[aria-selected=true]{color:var(--color-text)}
+.tab-body{padding:18px}
+.view{display:none;animation:vin var(--d3) var(--ease-out) both}
+.view.active{display:block}
+@keyframes vin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* inventory grids */
+.inv-head{display:flex;align-items:center;justify-content:space-between;margin:2px 0 10px}
+.inv-head h3{font-family:var(--font-display);font-size:14px;font-weight:640}
+.inv-head .count{font-size:11px;color:var(--color-text-muted)}
+.inv{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:22px}
+.item{position:relative;cursor:pointer;text-align:left;border-radius:var(--r-md);padding:11px 12px;
+  background:var(--elevated);border:1px solid var(--border);box-shadow:var(--specular);
+  transition:transform var(--d2) var(--ease-spring),border-color var(--d2),box-shadow var(--d2)}
+.item:hover{transform:translateY(-2px);border-color:var(--border-strong);box-shadow:var(--shadow-1),var(--specular)}
+.item.on{border-color:var(--color-accent);box-shadow:var(--glow),var(--specular)}
+.item.on.ability{border-color:var(--color-info);box-shadow:0 0 0 1px color-mix(in srgb,var(--color-info) 50%,transparent),0 0 18px color-mix(in srgb,var(--color-info) 30%,transparent),var(--specular)}
+.item .top{display:flex;align-items:center;gap:9px}
+.item .glyph{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;
+  background:var(--surface-active);color:var(--color-accent);border:1px solid var(--border)}
+.item.ability .glyph{color:var(--color-info)}
+.item .glyph svg{width:16px;height:16px}
+.item .nm{font-size:12.5px;font-weight:600}
+.item .ds{font-size:10.5px;color:var(--color-text-muted);margin-top:5px;line-height:1.45}
+.item .eq{position:absolute;top:9px;right:9px;width:18px;height:18px;border-radius:var(--r-full);display:grid;place-items:center;
+  background:var(--color-accent);color:var(--color-accent-foreground);opacity:0;transform:scale(.4);transition:all var(--d2) var(--ease-spring)}
+.item.on .eq{opacity:1;transform:scale(1)}
+.item.on.ability .eq{background:var(--color-info)}
+.item .eq svg{width:11px;height:11px}
+
+/* model + behavior */
+.tune{display:flex;flex-direction:column;gap:20px}
+.stat .lab{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px}
+.stat .lab .nm{font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px}
+.stat .lab .nm svg{width:14px;height:14px;color:var(--color-accent)}
+.stat .lab .v{font-family:var(--font-mono);font-size:12px;color:var(--color-accent);font-weight:600}
+.stat .ends{display:flex;justify-content:space-between;font-size:10px;color:var(--color-text-muted);margin-top:6px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:7px;border-radius:var(--r-full);
+  background:linear-gradient(90deg,var(--color-accent) var(--p,50%),color-mix(in srgb,var(--color-text-muted) 18%,transparent) var(--p,50%));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:var(--r-full);
+  background:var(--color-text);border:3px solid var(--color-accent);box-shadow:0 0 10px color-mix(in srgb,var(--color-accent) 60%,transparent),var(--shadow-1);cursor:pointer;transition:transform var(--d2) var(--ease-spring)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.18)}
+input[type=range]:focus-visible{box-shadow:var(--ring)}
+/* provider + model picker (auto-populated from the configured provider) */
+.mh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-muted);font-weight:680;margin:0 0 10px}
+.prov{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.pchip{cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:560;padding:7px 12px;border-radius:var(--r-full);
+  background:var(--surface);border:1px solid var(--border);box-shadow:var(--specular);color:var(--color-text);
+  transition:transform var(--d2) var(--ease-spring),border-color var(--d2),box-shadow var(--d2)}
+.pchip:hover{transform:translateY(-1px);border-color:var(--border-strong)}
+.pchip.on{border-color:var(--color-accent);box-shadow:var(--glow),var(--specular)}
+.pchip .pd{width:6px;height:6px;border-radius:var(--r-full);background:var(--color-green);box-shadow:0 0 8px var(--color-green)}
+.pchip.off{opacity:.62}
+.pchip.off .pd{background:var(--color-text-muted);box-shadow:none}
+.modellist{display:flex;flex-direction:column;gap:8px}
+.mrow{cursor:pointer;display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:var(--r-md);
+  background:var(--elevated);border:1px solid var(--border);box-shadow:var(--specular);
+  transition:transform var(--d2) var(--ease-spring),border-color var(--d2),box-shadow var(--d2)}
+.mrow:hover{transform:translateY(-1px);border-color:var(--border-strong)}
+.mrow.on{border-color:var(--color-accent);box-shadow:var(--glow),var(--specular)}
+.mrow .mn{font-size:13px;font-weight:600}
+.mrow .meta{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--color-text-muted);flex-wrap:wrap;justify-content:flex-end}
+.mtag{font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;border-radius:var(--r-full);border:1px solid var(--border);color:var(--color-text-muted)}
+.mtag.feat{color:var(--color-amber);border-color:color-mix(in srgb,var(--color-amber) 34%,transparent)}
+.mtag.def{color:var(--color-accent);border-color:color-mix(in srgb,var(--color-accent) 40%,transparent)}
+.mtag.rea{color:var(--color-info);border-color:color-mix(in srgb,var(--color-info) 34%,transparent)}
+.ctxpill{font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary)}
+.connect{text-align:center;padding:24px 18px;border:1px dashed var(--border-strong);border-radius:var(--r-lg);background:var(--surface);color:var(--color-text-muted);font-size:12.5px;line-height:1.6}
+.variant{margin-top:14px}
+.variant .vlab{font-size:11px;color:var(--color-text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.vseg{display:inline-flex;gap:3px;padding:3px;border-radius:var(--r-md);background:var(--surface);border:1px solid var(--border-subtle)}
+.vseg button{appearance:none;border:0;background:none;cursor:pointer;color:var(--color-text-muted);font-family:var(--font-ui);font-size:12px;font-weight:560;padding:5px 11px;border-radius:var(--r-sm);transition:all var(--d2)}
+.vseg button.on{background:var(--surface-active);color:var(--color-text);box-shadow:var(--specular)}
+
+/* instructions */
+.brief{width:100%;min-height:300px;resize:vertical;border-radius:var(--r-lg);padding:14px 16px;
+  background:var(--elevated);border:1px solid var(--border);box-shadow:var(--specular);color:var(--color-text);
+  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;outline:none;transition:border-color var(--d2),box-shadow var(--d2)}
+.brief:focus{border-color:color-mix(in srgb,var(--color-accent) 55%,transparent);box-shadow:var(--ring),var(--specular)}
+.hint{font-size:11px;color:var(--color-text-muted);margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.hint svg{width:14px;height:14px;color:var(--color-accent)}
+
+/* reduced motion */
+html.rm *,html.rm *::before,html.rm *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
+@media (max-width:900px){.grid{grid-template-columns:1fr}.sheet{position:static}.roles{grid-template-columns:repeat(2,1fr)}.inv{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="atmos" aria-hidden="true"></div>
+<div class="wrap">
+
+  <div class="top">
+    <div class="title">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-5h6v5"/></svg></span>
+      Agent Builder <span class="sub">— a clear, focused way to compose a specialist</span>
+    </div>
+    <span class="flex1"></span>
+    <button class="rm" id="rm" aria-pressed="false"><span class="sw"></span> Reduced motion</button>
+  </div>
+
+  <!-- ROLE / TEMPLATE -->
+  <p class="eyebrow">1 · Start from a role</p>
+  <div class="roles" id="roles"></div>
+
+  <!-- BUILD -->
+  <div class="grid">
+
+    <!-- summary card -->
+    <aside class="sheet">
+      <div class="sheet-hero">
+        <div class="portrait" id="portrait">DA</div>
+        <div class="agent-name" id="name" contenteditable="true" spellcheck="false">Untitled agent</div>
+        <div class="agent-role" id="roleName">Data Analyst</div>
+      </div>
+
+      <div class="score">
+        <div class="row"><span class="lab">Capability score</span><span class="scope" id="scope">Focused</span></div>
+        <div class="val" id="scoreVal">0<small>/100</small></div>
+        <div class="bar"><span class="fill" id="scoreFill" style="width:0%"></span></div>
+        <div class="def">Weighted rollup of the five attributes below — same configuration always produces the same score.</div>
+      </div>
+
+      <div class="radar"><svg id="radar" viewBox="0 0 220 184" aria-label="Attribute breakdown"></svg></div>
+      <div class="legend" id="legend"></div>
+
+      <div class="loadout">
+        <h4>Tools</h4>
+        <div class="chips" id="toolChips"></div>
+        <h4>Skills</h4>
+        <div class="chips" id="skillChips"></div>
+      </div>
+
+      <div class="ready">
+        <h4>Before you create</h4>
+        <div class="check" data-q="name"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Has a name</div>
+        <div class="check" data-q="role"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Role selected</div>
+        <div class="check" data-q="brief"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Instructions written</div>
+        <div class="check" data-q="cap"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> At least one tool or skill</div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn primary" id="save" style="width:100%" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+          Create agent
+        </button>
+      </div>
+    </aside>
+
+    <!-- build panel -->
+    <section class="panel">
+      <div class="tabs" id="tabs">
+        <span class="thumb" id="tabThumb"></span>
+        <button aria-selected="true" data-v="cap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg> Capabilities</button>
+        <button aria-selected="false" data-v="model"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M2 8h4M10 8h12"/><circle cx="16" cy="16" r="2"/><path d="M2 16h12M18 16h4"/></svg> Model &amp; behavior</button>
+        <button aria-selected="false" data-v="brief"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg> Instructions</button>
+      </div>
+
+      <div class="tab-body">
+        <!-- CAPABILITIES -->
+        <div class="view active" data-v="cap">
+          <div class="inv-head"><h3>Tools</h3><span class="count" id="toolCount">0 selected</span></div>
+          <div class="inv" id="tools"></div>
+          <div class="inv-head"><h3>Skills</h3><span class="count" id="skillCount">0 selected</span></div>
+          <div class="inv" id="skills"></div>
+        </div>
+
+        <!-- MODEL & BEHAVIOR -->
+        <div class="view" data-v="model">
+          <div class="mh">Provider</div>
+          <div class="prov" id="prov"></div>
+          <div class="mh">Model <span style="text-transform:none;font-weight:500">— auto-loaded from the selected provider</span></div>
+          <div id="modelArea"></div>
+          <div id="variantArea"></div>
+
+          <div class="mh" style="margin-top:22px">Behavior</div>
+          <div class="tune">
+            <div class="stat">
+              <div class="lab"><span class="nm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Temperature</span><span class="v" id="tempV">0.20</span></div>
+              <input type="range" id="temp" min="0" max="100" value="20" />
+              <div class="ends"><span>0.0 · precise, reproducible</span><span>1.0 · creative, varied</span></div>
+            </div>
+            <div class="stat">
+              <div class="lab"><span class="nm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Max steps (autonomy)</span><span class="v" id="stepV">30</span></div>
+              <input type="range" id="step" min="5" max="60" value="30" />
+              <div class="ends"><span>5 · returns often</span><span>60 · runs long unattended</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INSTRUCTIONS -->
+        <div class="view" data-v="brief">
+          <div class="hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg> The agent's instructions — who it is, how it works, what it must never do. (system prompt)</div>
+          <textarea class="brief" id="brief" spellcheck="false"></textarea>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const root=document.documentElement;
+
+/* ============================================================================
+   DETERMINISTIC ATTRIBUTE MODEL  (spec — implement verbatim)
+   Every attribute is a PURE function of exactly one config field, normalised
+   to 0..5. No randomness, no hidden inputs → the same config always yields the
+   same readout.
+
+     Reach     = tools selected           → min(5, count)              external surfaces it can touch
+     Skills    = skills selected          → min(5, count)              specialised methods available
+     Context   = model context window     → ≤16K 1 / ≤64K 2 / ≤200K 3 / ≤500K 4 / >500K 5 ; unknown 3
+                 (PROVIDER-AGNOSTIC: from the selected model's reported context limit. NO hardcoded
+                  model names — models load from the user's configured provider.)
+     Autonomy  = max steps (5..60)        → (steps-5)/55 * 5           independent runway before returning
+     Precision = 1 - temperature (0..1)   → (1-temp) * 5               output determinism / reproducibility
+
+   NOTE on the model: we deliberately do NOT score model "intelligence". Ranking arbitrary
+   provider models (Anthropic / OpenAI / Google / local …) on a capability scale isn't possible
+   deterministically — a cheap 1M-context model is not "smarter" than a 200K frontier one. We
+   score only the CONTEXT WINDOW (objective + comparable across providers). Reasoning support and
+   cost are shown as info in the picker, never folded into the score.
+
+   Capability score (0..100) = weighted rollup of the five normalised axes (weights sum to 1):
+     w = { Reach:.24, Skills:.24, Context:.20, Autonomy:.16, Precision:.16 }
+     score = round( Σ (axis/5) * w[axis] * 100 )
+
+   The radar is the breakdown; the score is the rollup of the same numbers.
+   ========================================================================== */
+const WEIGHTS={Reach:.24,Skills:.24,Context:.20,Autonomy:.16,Precision:.16};
+
+const ROLES=[
+  {id:'data-analyst',label:'Data Analyst',color:'#82cadc',focus:'Evidence · charts',init:'DA',
+   desc:'Answer business questions with data. Query, summarise, chart.',tools:['charts','sql'],skills:['chart-creator'],temp:20,step:30,
+   brief:'You are a data analyst. Stakeholders ask questions; you answer with evidence.\n\n- Lead with a one-sentence executive answer.\n- Cite the source/query for each claim.\n- Build a chart when it helps; flag caveats (sample, range, segment).'},
+  {id:'research-assistant',label:'Research Assistant',color:'#8da4f5',focus:'Gather · synthesise',init:'RA',
+   desc:'Gather and synthesise sources into concise, cited briefs.',tools:['web','vector'],skills:['summarizer','citation'],temp:50,step:40,
+   brief:'You are a research assistant. Given a topic, gather sources and produce a concise brief.\n\n- Cast wide, then narrow to credible/primary sources.\n- 3–5 bullet executive summary, then findings by theme.\n- Sources section with links + dates. Never fabricate authority.'},
+  {id:'writer',label:'Writer',color:'#7fcfa0',focus:'Draft · in your voice',init:'WR',
+   desc:'Draft prose — emails, memos, briefs — in your voice.',tools:[],skills:['outline'],temp:70,step:20,
+   brief:'You are a writer. Produce drafts that sound human, specific, direct.\n\n- Plain language, short sentences, cut filler.\n- Match the register asked for.\n- One draft only. Draft — never send or post anywhere.'},
+  {id:'generalist',label:'Generalist',color:'#b0b3c6',focus:'Balanced · flexible',init:'GE',
+   desc:'Balanced starter — pick the problem, pick the tools.',tools:[],skills:[],temp:40,step:25,
+   brief:'You are a focused assistant. Answer what is asked and stop.\n\n- Clarify if ambiguous, otherwise act.\n- Cite sources for factual claims.\n- Keep responses proportional to the question.'},
+];
+const TOOLS=[
+  {id:'charts',nm:'Charts',ds:'Render Vega charts from data',ic:'<path d="M4 20V10M10 20V4M16 20v-8M20 20H2"/>'},
+  {id:'sql',nm:'SQL Query',ds:'Run read queries on warehouses',ic:'<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>'},
+  {id:'web',nm:'Web Search',ds:'Search and fetch web pages',ic:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'},
+  {id:'vector',nm:'Vector Search',ds:'Semantic search over a corpus',ic:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="M8 7l8 1M8 8l1 8"/>'},
+  {id:'files',nm:'File Reader',ds:'Read project files & docs',ic:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'},
+  {id:'http',nm:'HTTP Request',ds:'Call external APIs',ic:'<path d="M4 12h16M4 12l5-5M4 12l5 5"/><circle cx="19" cy="12" r="2"/>'},
+];
+const SKILLS=[
+  {id:'chart-creator',nm:'Chart Creator',ds:'Pick the right chart for the data',ic:'<path d="M3 3v18h18"/><path d="M7 14l3-4 3 2 5-7"/>'},
+  {id:'summarizer',nm:'Summariser',ds:'Condense long sources to essence',ic:'<path d="M4 6h16M4 12h10M4 18h7"/>'},
+  {id:'citation',nm:'Citation Builder',ds:'Format sources with dates/links',ic:'<path d="M7 7h4v6a4 4 0 0 1-4 4M13 7h4v6a4 4 0 0 1-4 4"/>'},
+  {id:'outline',nm:'Outline Writer',ds:'Structure before drafting',ic:'<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>'},
+  {id:'fact-check',nm:'Fact Checker',ds:'Verify claims against sources',ic:'<path d="M12 2 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6z"/><path d="M9 12l2 2 4-4"/>'},
+  {id:'data-clean',nm:'Data Cleaner',ds:'Normalise & dedupe messy data',ic:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>'},
+];
+// Provider + model catalogue. In the REAL app this is NOT hardcoded: providers come from
+// config.providers.available and each provider's models from
+//   coworkApi.providers.refreshProviderCatalog(providerId) → ProviderModelDescriptor[]
+//   (id, name, reasoning, variants, limit.context, cost, featured, defaultModel).
+// Here a few providers are mocked to show the list re-populating per provider. ctx = context window.
+const PROVIDERS=[
+  {id:'anthropic',name:'Anthropic',connected:true,default:'sonnet',models:[
+    {id:'opus',name:'Claude Opus 4.x',ctx:200000,reasoning:true,featured:true,variants:['standard','extended thinking'],cost:'$$$'},
+    {id:'sonnet',name:'Claude Sonnet 4.x',ctx:200000,reasoning:true,featured:true,variants:['standard','extended thinking'],cost:'$$'},
+    {id:'haiku',name:'Claude Haiku 4.x',ctx:200000,reasoning:false,cost:'$'},
+  ]},
+  {id:'openai',name:'OpenAI',connected:true,default:'frontier',models:[
+    {id:'frontier',name:'GPT (frontier)',ctx:400000,reasoning:true,featured:true,variants:['low','medium','high'],cost:'$$$'},
+    {id:'mini',name:'GPT (mini)',ctx:128000,reasoning:true,variants:['low','medium','high'],cost:'$'},
+  ]},
+  {id:'google',name:'Google',connected:false,default:'pro',models:[
+    {id:'pro',name:'Gemini Pro',ctx:1000000,reasoning:true,featured:true,cost:'$$'},
+    {id:'flash',name:'Gemini Flash',ctx:1000000,reasoning:false,cost:'$'},
+  ]},
+  {id:'ollama',name:'Ollama · local',connected:true,default:'llama',models:[
+    {id:'llama',name:'Llama 3.x 70B',ctx:131072,reasoning:false,cost:'free'},
+    {id:'qwen',name:'Qwen 2.5 32B',ctx:32768,reasoning:false,cost:'free'},
+  ]},
+  {id:'openrouter',name:'OpenRouter',connected:false,default:null,models:[]},
+];
+function curProvider(){return PROVIDERS.find(x=>x.id===state.provider)}
+function curModel(){const p=curProvider();return p?(p.models.find(m=>m.id===state.model)||null):null}
+function ctxScore(ctx){if(!ctx)return 3;return ctx<=16000?1:ctx<=64000?2:ctx<=200000?3:ctx<=500000?4:5}
+function fmtCtx(c){return !c?'—':c>=1000000?(c/1000000)+'M ctx':Math.round(c/1000)+'K ctx'}
+
+const state={role:'data-analyst',name:'Untitled agent',brief:'',tools:new Set(),skills:new Set(),temp:20,step:30,provider:'anthropic',model:'sonnet',variant:null,briefTouched:false,nameTouched:false};
+
+/* ── attribute model (the spec above, implemented) ── */
+function attrs(){const m=curModel();
+  return {
+    Reach:     Math.min(5, state.tools.size),
+    Skills:    Math.min(5, state.skills.size),
+    Context:   ctxScore(m && m.ctx),
+    Autonomy:  (state.step-5)/55*5,
+    Precision: (1-state.temp/100)*5,
+  };
+}
+function capabilityScore(){const a=attrs();
+  let s=0;for(const k in WEIGHTS)s+=(a[k]/5)*WEIGHTS[k];return Math.round(s*100)}
+function scopeLabel(score){return score>=75?'Comprehensive':score>=50?'Broad':score>=25?'Focused':'Minimal'}
+
+/* legend raw-value descriptions (so the numbers are concrete, not abstract) */
+function rawDesc(){const m=curModel();return {
+  Reach:`${state.tools.size} tool${state.tools.size===1?'':'s'}`,
+  Skills:`${state.skills.size} skill${state.skills.size===1?'':'s'}`,
+  Context:m?fmtCtx(m.ctx):'no model',
+  Autonomy:`${state.step} steps`,
+  Precision:`temp ${(state.temp/100).toFixed(2)}`,
+}}
+
+/* ── render role cards ── */
+const elRoles=document.getElementById('roles');
+elRoles.innerHTML=ROLES.map(c=>`
+  <button class="role" data-id="${c.id}" style="--cc:${c.color}" aria-pressed="${c.id===state.role}">
+    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${c.id==='data-analyst'?'<path d="M4 20V10M10 20V4M16 20v-8M20 20H2"/>':c.id==='research-assistant'?'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>':c.id==='writer'?'<path d="M14 4l6 6-9 9H5v-6z"/>':'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'}</svg></span>
+    <h3>${c.label}</h3><p>${c.desc}</p><div class="focus">${c.focus}</div>
+  </button>`).join('');
+
+/* ── inventory ── */
+function invItem(x,kind){const on=kind==='tool'?state.tools.has(x.id):state.skills.has(x.id);
+  return `<button class="item ${kind==='skill'?'ability':''} ${on?'on':''}" data-id="${x.id}" data-kind="${kind}">
+    <span class="eq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <span class="top"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${x.ic}</svg></span><span class="nm">${x.nm}</span></span>
+    <div class="ds">${x.ds}</div></button>`}
+function renderInv(){
+  document.getElementById('tools').innerHTML=TOOLS.map(x=>invItem(x,'tool')).join('');
+  document.getElementById('skills').innerHTML=SKILLS.map(x=>invItem(x,'skill')).join('');
+}
+function renderModel(){
+  document.getElementById('prov').innerHTML=PROVIDERS.map(p=>
+    `<button class="pchip ${p.id===state.provider?'on':''} ${p.connected?'':'off'}" data-prov="${p.id}"><span class="pd"></span>${p.name}${p.connected?'':' · not connected'}</button>`).join('');
+  const p=curProvider(),area=document.getElementById('modelArea'),varea=document.getElementById('variantArea');
+  if(!p||!p.connected||!p.models.length){
+    area.innerHTML=`<div class="connect">No models loaded — <strong>${p?p.name:'this provider'}</strong> isn't connected.<br>Add its credentials to load the catalogue.<div><button class="btn secondary" disabled>Connect ${p?p.name:''}</button></div></div>`;
+    varea.innerHTML='';return;
+  }
+  area.innerHTML='<div class="modellist">'+p.models.map(m=>{
+    const tags=[m.featured?'<span class="mtag feat">Featured</span>':'',m.id===p.default?'<span class="mtag def">Default</span>':'',m.reasoning?'<span class="mtag rea">Reasoning</span>':''].join('');
+    return `<button class="mrow ${m.id===state.model?'on':''}" data-model="${m.id}"><span class="mn">${m.name}</span><span class="meta">${tags}<span class="ctxpill">${fmtCtx(m.ctx)}</span><span>${m.cost}</span></span></button>`;
+  }).join('')+'</div>';
+  const m=curModel();
+  if(m&&m.variants&&m.variants.length){
+    varea.innerHTML='<div class="variant"><div class="vlab"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--color-info)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/><path d="M9 21h6"/></svg> Variant · reasoning mode (provider-specific)</div><div class="vseg" id="vseg">'+
+      m.variants.map(v=>`<button data-v="${v}" class="${(state.variant||m.variants[0])===v?'on':''}">${v}</button>`).join('')+'</div></div>';
+  } else varea.innerHTML='';
+}
+
+/* ── radar ── */
+const AX=['Reach','Skills','Context','Autonomy','Precision'];
+const AXSHORT={Reach:'Reach',Skills:'Skills',Context:'Context',Autonomy:'Autonomy',Precision:'Precision'};
+function drawRadar(){
+  const a=attrs(),cx=110,cy=88,R=58,svg=document.getElementById('radar');
+  const pt=(i,r)=>{const ang=(-90+i*72)*Math.PI/180;return [cx+Math.cos(ang)*r, cy+Math.sin(ang)*r]};
+  let g='';
+  [0.25,0.5,0.75,1].forEach(f=>{g+=`<polygon class="axis-ring" points="${AX.map((_,i)=>pt(i,R*f).join(',')).join(' ')}"/>`});
+  AX.forEach((_,i)=>{const[x,y]=pt(i,R);g+=`<line class="axis-line" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"/>`});
+  g+=`<polygon class="stat-shape" points="${AX.map((k,i)=>pt(i,R*(a[k]/5)).join(',')).join(' ')}"/>`;
+  AX.forEach((k,i)=>{const[x,y]=pt(i,R*(a[k]/5));g+=`<circle class="stat-dot" cx="${x}" cy="${y}" r="2.4"/>`});
+  AX.forEach((k,i)=>{const[x,y]=pt(i,R+15);const anchor=Math.abs(x-cx)<4?'middle':x<cx?'end':'start';
+    g+=`<text class="axis-label" x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="middle">${AXSHORT[k]}</text>`});
+  svg.innerHTML=g;
+}
+
+/* ── sync ── */
+function chip(x,kind){return `<span class="chip ${kind}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${x.ic}</svg>${x.nm}</span>`}
+let shownScore=0;
+function sync(){
+  const c=ROLES.find(x=>x.id===state.role);
+  root.style.setProperty('--color-accent',c.color);
+  document.getElementById('portrait').childNodes[0].nodeValue=c.init;
+  document.getElementById('roleName').textContent=c.label;
+
+  const tEls=[...state.tools].map(id=>chip(TOOLS.find(t=>t.id===id),'tool'));
+  const sEls=[...state.skills].map(id=>chip(SKILLS.find(s=>s.id===id),'skill'));
+  document.getElementById('toolChips').innerHTML=tEls.length?tEls.join(''):'<span class="none">No tools selected</span>';
+  document.getElementById('skillChips').innerHTML=sEls.length?sEls.join(''):'<span class="none">No skills selected</span>';
+  document.getElementById('toolCount').textContent=state.tools.size+' selected';
+  document.getElementById('skillCount').textContent=state.skills.size+' selected';
+
+  // score (animated, but value is deterministic)
+  const target=capabilityScore();
+  document.getElementById('scoreFill').style.width=target+'%';
+  document.getElementById('scope').textContent=scopeLabel(target);
+  const sv=document.getElementById('scoreVal'),start=shownScore,delta=target-start,t0=performance.now();
+  function tick(now){const k=Math.min(1,(now-t0)/420),e=1-Math.pow(1-k,3);
+    sv.innerHTML=Math.round(start+delta*e)+'<small>/100</small>';if(k<1)requestAnimationFrame(tick);else shownScore=target}
+  requestAnimationFrame(tick);
+
+  // legend
+  const a=attrs(),rd=rawDesc();
+  document.getElementById('legend').innerHTML=AX.map(k=>
+    `<div class="lg"><span class="k">${k}</span><span class="mini"><i style="width:${a[k]/5*100}%"></i></span><span class="v">${rd[k]}</span></div>`).join('');
+
+  // tuning labels
+  document.getElementById('tempV').textContent=(state.temp/100).toFixed(2);
+  document.getElementById('stepV').textContent=state.step;
+  document.getElementById('temp').style.setProperty('--p',state.temp+'%');
+  document.getElementById('step').style.setProperty('--p',((state.step-5)/55*100)+'%');
+
+  // readiness
+  const q={name:state.nameTouched&&state.name.trim()&&state.name!=='Untitled agent',role:!!state.role,brief:state.brief.trim().length>20,cap:state.tools.size+state.skills.size>0};
+  document.querySelectorAll('.check').forEach(el=>el.classList.toggle('done',!!q[el.dataset.q]));
+  document.getElementById('save').disabled=!(q.name&&q.role&&q.brief&&q.cap);
+
+  drawRadar();
+}
+
+/* ── apply a role ── */
+function applyRole(id){const c=ROLES.find(x=>x.id===id);state.role=id;
+  state.tools=new Set(c.tools);state.skills=new Set(c.skills);state.temp=c.temp;state.step=c.step;
+  if(!state.briefTouched){state.brief=c.brief;document.getElementById('brief').value=c.brief;}
+  document.getElementById('temp').value=c.temp;document.getElementById('step').value=c.step;
+  document.querySelectorAll('.role').forEach(b=>b.setAttribute('aria-pressed',b.dataset.id===id));
+  renderInv();sync();
+}
+
+/* ── events ── */
+elRoles.addEventListener('click',e=>{const b=e.target.closest('.role');if(b)applyRole(b.dataset.id)});
+document.addEventListener('click',e=>{
+  const it=e.target.closest('.item');if(it){const id=it.dataset.id,set=it.dataset.kind==='tool'?state.tools:state.skills;set.has(id)?set.delete(id):set.add(id);renderInv();sync();return}
+  const pc=e.target.closest('.pchip');if(pc){const p=PROVIDERS.find(x=>x.id===pc.dataset.prov);if(p){state.provider=p.id;state.model=(p.connected&&p.models.length)?(p.default||p.models[0].id):null;state.variant=null;renderModel();sync()}return}
+  const mr=e.target.closest('.mrow');if(mr){state.model=mr.dataset.model;state.variant=null;renderModel();sync();return}
+  const vb=e.target.closest('.vseg button');if(vb){state.variant=vb.dataset.v;renderModel();sync();return}
+});
+document.getElementById('temp').addEventListener('input',e=>{state.temp=+e.target.value;sync()});
+document.getElementById('step').addEventListener('input',e=>{state.step=+e.target.value;sync()});
+document.getElementById('brief').addEventListener('input',e=>{state.brief=e.target.value;state.briefTouched=true;sync()});
+const nameEl=document.getElementById('name');
+nameEl.addEventListener('input',()=>{state.name=nameEl.textContent;state.nameTouched=true;sync()});
+nameEl.addEventListener('focus',()=>{if(!state.nameTouched)nameEl.textContent=''});
+
+/* tabs */
+const tabs=document.getElementById('tabs'),thumb=document.getElementById('tabThumb');
+function moveThumb(b){thumb.style.width=b.offsetWidth+'px';thumb.style.transform=`translateX(${b.offsetLeft-6}px)`}
+tabs.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.dataset.v===b.dataset.v));moveThumb(b)});
+window.addEventListener('load',()=>moveThumb(tabs.querySelector('[aria-selected=true]')));
+setTimeout(()=>moveThumb(tabs.querySelector('[aria-selected=true]')),100);
+
+/* reduced motion */
+document.getElementById('rm').addEventListener('click',function(){const on=this.getAttribute('aria-pressed')==='true';this.setAttribute('aria-pressed',String(!on));root.classList.toggle('rm',!on)});
+
+/* create */
+document.getElementById('save').addEventListener('click',function(){if(this.disabled)return;const p=document.getElementById('portrait');p.style.transform='scale(1.08)';setTimeout(()=>p.style.transform='',380)});
+
+/* init */
+renderModel();applyRole('data-analyst');state.brief=ROLES[0].brief;document.getElementById('brief').value=state.brief;sync();
+</script>
+</body>
+</html>

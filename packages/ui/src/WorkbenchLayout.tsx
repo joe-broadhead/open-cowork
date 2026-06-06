@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { cn } from './utils.js'
 
 export type WorkbenchLayoutProps = {
@@ -14,6 +14,23 @@ export type WorkbenchLayoutProps = {
   className?: string
 }
 
+const WORKBENCH_DRAWER_QUERY = '(max-width: 920px)'
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'summary',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+function isDrawerMode() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia(WORKBENCH_DRAWER_QUERY).matches
+}
+
 export function WorkbenchLayout({
   leftPane,
   mainPane,
@@ -26,6 +43,54 @@ export function WorkbenchLayout({
   reviewOpen = Boolean(reviewPane),
   className,
 }: WorkbenchLayoutProps) {
+  const reviewRef = useRef<HTMLElement | null>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const isReviewVisible = Boolean(reviewOpen && reviewPane)
+
+  useEffect(() => {
+    if (!isReviewVisible || !isDrawerMode()) return undefined
+    const review = reviewRef.current
+    if (!review) return undefined
+
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    restoreFocusRef.current = previous && !review.contains(previous) ? previous : restoreFocusRef.current
+    review.focus({ preventScroll: true })
+
+    const focusableWithinReview = () => Array.from(review.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      .filter((element) => element.tabIndex !== -1 && element.getAttribute('aria-hidden') !== 'true')
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const focusable = focusableWithinReview()
+      if (focusable.length === 0) {
+        event.preventDefault()
+        review.focus({ preventScroll: true })
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable.at(-1)
+      if (!first || !last) return
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === review)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      const restoreTarget = restoreFocusRef.current
+      if (restoreTarget && document.contains(restoreTarget) && review.contains(document.activeElement)) {
+        restoreTarget.focus({ preventScroll: true })
+      }
+      restoreFocusRef.current = null
+    }
+  }, [isReviewVisible])
+
   return (
     <section
       className={cn(
@@ -47,7 +112,14 @@ export function WorkbenchLayout({
         {mainPane}
       </section>
       {reviewPane ? (
-        <aside className="ui-workbench-layout__review" aria-label={reviewLabel} data-workbench-pane="review" hidden={!reviewOpen}>
+        <aside
+          ref={reviewRef}
+          className="ui-workbench-layout__review"
+          aria-label={reviewLabel}
+          data-workbench-pane="review"
+          hidden={!isReviewVisible}
+          tabIndex={isReviewVisible ? -1 : undefined}
+        >
           {reviewPane}
         </aside>
       ) : null}

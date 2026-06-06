@@ -95,7 +95,7 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
   const document = staticDocument()
   const css = cssText(document)
   assert.match(css, /a:focus-visible/)
-  assert.match(css, /--ring-focus: 0 0 0 2px var\(--focus\);/)
+  assert.match(css, /--ring-focus: 0 0 0 2px var\(--focus\), 0 0 16px color-mix\(in srgb, var\(--accent\) 30%, transparent\);/)
   assert.match(css, /\.nav-links a\[data-active="true"\]:focus-visible\s*\{[\s\S]*box-shadow: var\(--ring-selected\), var\(--ring-focus\);/)
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/)
   assert.match(css, /@media \(max-width: 920px\)/)

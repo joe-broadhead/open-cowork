@@ -41,27 +41,63 @@ export function cloudWebsiteComponentStyles() {
         border-color var(--dur-1) var(--ease-out),
         color var(--dur-1) var(--ease-out),
         box-shadow var(--dur-1) var(--ease-out),
-        transform var(--dur-1) var(--ease-out);
+        transform var(--dur-2) var(--ease-spring);
     }
     button:hover:not(:disabled) {
       background: var(--color-surface-hover);
       border-color: var(--color-border-strong);
     }
     button:active:not(:disabled) {
-      transform: translateY(var(--border-width-1));
+      transform: scale(0.96);
+    }
+    .ui-progress-shimmer {
+      background-image: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--accent) 56%, transparent),
+        var(--accent),
+        color-mix(in srgb, var(--accent) 56%, transparent)
+      ) !important;
+      background-size: 220% 100% !important;
+      box-shadow: var(--glow-soft);
+      animation: ui-progress-shimmer 1.25s linear infinite;
     }
     button.primary {
+      position: relative;
+      overflow: hidden;
       background: var(--accent);
       border-color: color-mix(in srgb, var(--accent) 82%, var(--text) 18%);
       color: var(--color-accent-foreground);
+      box-shadow: var(--shadow-1), var(--specular);
+    }
+    button.primary::after {
+      content: "";
+      position: absolute;
+      inset-block: -35%;
+      inset-inline-start: -70%;
+      width: 42%;
+      transform: skewX(-18deg) translateX(0);
+      background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 42%, transparent), transparent);
+      opacity: 0;
+      pointer-events: none;
+    }
+    button.primary > * {
+      position: relative;
+      z-index: 1;
     }
     button.primary:hover:not(:disabled) {
       background: var(--accent-strong);
       border-color: var(--accent-strong);
+      box-shadow: var(--glow-accent), var(--shadow-2), var(--specular-strong);
+      transform: translateY(calc(-1 * var(--border-width-1)));
+    }
+    button.primary:hover:not(:disabled)::after {
+      opacity: 1;
+      animation: ui-primary-sheen var(--dur-4) var(--ease-out) both;
     }
     button.secondary {
       background: var(--color-elevated);
       color: var(--accent);
+      box-shadow: var(--shadow-1), var(--specular);
     }
     button.ghost {
       background: transparent;
@@ -139,7 +175,7 @@ export function cloudWebsiteComponentStyles() {
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       color: var(--text);
       padding: var(--space-4);
-      box-shadow: var(--shadow), var(--surface-highlight);
+      box-shadow: var(--shadow-2), var(--specular);
     }
     .panel h3 {
       margin: 0;
@@ -169,6 +205,7 @@ export function cloudWebsiteComponentStyles() {
     }
     .agent-card,
     .capability-card {
+      position: relative;
       min-width: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -178,7 +215,19 @@ export function cloudWebsiteComponentStyles() {
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       padding: var(--space-3);
-      box-shadow: var(--shadow-card), var(--surface-highlight);
+      box-shadow: var(--shadow-2), var(--specular);
+      transition:
+        background var(--dur-1) var(--ease-out),
+        border-color var(--dur-1) var(--ease-out),
+        box-shadow var(--dur-2) var(--ease-out),
+        transform var(--dur-2) var(--ease-spring);
+    }
+    .agent-card:hover,
+    .capability-card:hover {
+      border-color: var(--color-border-strong);
+      background: color-mix(in srgb, var(--color-elevated) 74%, var(--color-surface-hover) 26%);
+      box-shadow: var(--shadow-3), var(--specular-strong);
+      transform: translateY(calc(-1 * var(--border-width-1)));
     }
     .capability-card {
       grid-template-columns: 1fr;
@@ -269,7 +318,7 @@ export function cloudWebsiteComponentStyles() {
       border-radius: var(--radius-lg);
       overflow: hidden;
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
-      box-shadow: var(--shadow-card), var(--surface-highlight);
+      box-shadow: var(--shadow-2), var(--specular);
       min-width: 0;
     }
         .table-row {
@@ -308,6 +357,7 @@ export function cloudWebsiteComponentStyles() {
           min-width: 0;
         }
         .thread-row {
+          position: relative;
           width: 100%;
           text-align: left;
       border-left: 0;
@@ -319,10 +369,11 @@ export function cloudWebsiteComponentStyles() {
     }
     .thread-row:hover:not(:disabled) {
       background: var(--color-surface-hover);
+      transform: translateX(var(--space-1));
     }
         .thread-row[data-selected="true"] {
           background: var(--color-surface-active);
-          box-shadow: inset 3px 0 0 var(--accent);
+          box-shadow: var(--glow-soft), inset 3px 0 0 var(--accent);
         }
         .thread-row-meta {
           display: block;
@@ -357,6 +408,7 @@ export function cloudWebsiteComponentStyles() {
       color: var(--muted);
     }
     .row {
+      position: relative;
       min-height: calc(var(--control-h-md) + var(--space-3));
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-sm);
@@ -367,6 +419,63 @@ export function cloudWebsiteComponentStyles() {
       align-items: center;
       background: var(--color-surface);
       min-width: 0;
+      transition:
+        background var(--dur-1) var(--ease-out),
+        border-color var(--dur-1) var(--ease-out),
+        box-shadow var(--dur-2) var(--ease-out),
+        transform var(--dur-2) var(--ease-spring);
+    }
+    .row:hover {
+      background: var(--color-surface-hover);
+      border-color: var(--color-border-strong);
+      transform: translateX(var(--space-1));
+    }
+    .ui-polish-list-row,
+    .thread-row,
+    .sidebar-thread-row,
+    .row {
+      position: relative;
+      transition:
+        background var(--dur-1) var(--ease-out),
+        border-color var(--dur-1) var(--ease-out),
+        color var(--dur-1) var(--ease-out),
+        box-shadow var(--dur-2) var(--ease-out),
+        transform var(--dur-2) var(--ease-spring);
+    }
+    .ui-polish-list-row::before,
+    .thread-row::before,
+    .sidebar-thread-row::before,
+    .row::before {
+      content: "";
+      position: absolute;
+      inset-block: var(--space-2);
+      inset-inline-start: 0;
+      width: 2px;
+      border-radius: var(--radius-full);
+      background: var(--accent);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 42%, transparent);
+      opacity: 0;
+      transform: scaleY(0);
+      transform-origin: center;
+      transition:
+        opacity var(--dur-2) var(--ease-out),
+        transform var(--dur-2) var(--ease-spring);
+      pointer-events: none;
+    }
+    .ui-polish-list-row:hover:not(:disabled)::before,
+    .thread-row:hover:not(:disabled)::before,
+    .sidebar-thread-row:hover:not(:disabled)::before,
+    .row:hover::before,
+    .ui-polish-list-row[aria-pressed="true"]::before,
+    .ui-polish-list-row[data-selected="true"]::before,
+    .thread-row[data-selected="true"]::before,
+    .sidebar-thread-row[data-selected="true"]::before {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    .ui-polish-list-row[data-polish-stagger] {
+      animation: ui-polish-row-in var(--dur-4) var(--ease-spring) both;
+      animation-delay: calc(var(--polish-row-index, 0) * 24ms);
     }
     .row.compact {
       min-height: calc(var(--control-h-sm) + var(--space-2));
