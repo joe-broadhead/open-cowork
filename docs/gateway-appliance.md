@@ -243,6 +243,28 @@ the canonical downstream idempotency keys. Gateway passes the Cloud
 chunk ids in the form `<cloud-delivery-id>:chunk:<n>` so downstream bridges can
 dedupe each chunk without conflating it with the parent delivery.
 
+Webhook and bridge outbound delivery is fail-closed by default. Delivery URLs
+must use HTTPS except for loopback development, cannot contain embedded
+credentials, and cannot target private or reserved IP literals. Before every
+send, the provider resolves the configured host, rejects private/reserved
+answers, rejects localhost names that rebind to public addresses, and pins the
+HTTP/S request to the validated address. Use delivery host allowlists for
+managed bridge deployments. Private/internal bridge delivery requires an
+explicit `allowPrivateDelivery` deployment option and should be treated as a
+risk-bearing internal mode in downstream diagnostics and runbooks.
+For env-based appliance config, use
+`OPEN_COWORK_GATEWAY_WEBHOOK_ALLOW_PRIVATE_DELIVERY=true` or
+`OPEN_COWORK_GATEWAY_<BRIDGE>_ALLOW_PRIVATE_DELIVERY=true` for bridge providers,
+and scope public bridge hosts with `*_DELIVERY_ALLOWED_HOSTS`.
+
+Gateway delivery retries use bounded exponential backoff with jitter. Webhook
+providers retry HTTP 429/5xx, network, and timeout failures; HTTP 429 respects
+`Retry-After` within the configured maximum delay. Persistent transient
+failures open a provider delivery circuit, stop hot-looping the downstream
+bridge, and surface the circuit as degraded provider health in `/ready` and
+`/diagnostics`. URL/DNS policy failures and oversized delivery responses are
+permanent and should dead-letter instead of retrying.
+
 Session-event rendering is ordered by Cloud event sequence. If provider
 rendering fails transiently, Gateway reconnects from the last persisted cursor
 and prevents later queued events from jumping the failed event. If retry budget

@@ -4,6 +4,10 @@ import { signWebhookDeliveryPayload } from "@open-cowork/gateway-provider-webhoo
 import { DiscordProvider } from "@open-cowork/gateway-provider-discord";
 
 describe("DiscordProvider", () => {
+  async function resolvePublicBridgeHostname() {
+    return [{ address: "93.184.216.34", family: 4 }];
+  }
+
   it("declares Discord bridge capabilities", () => {
     const provider = new DiscordProvider({
       deliveryUrl: "https://bridge.example.test/discord",
@@ -37,6 +41,7 @@ describe("DiscordProvider", () => {
     const provider = new DiscordProvider({
       deliveryUrl: "https://bridge.example.test/discord",
       sharedSecret: "secret",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async (_input, init) => {
         const rawBody = String(init?.body);
         deliveries.push({

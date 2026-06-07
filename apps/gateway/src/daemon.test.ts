@@ -2,6 +2,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 
+import {
+  WebhookCircuitOpenError,
+  WebhookDeliveryPolicyError,
+} from '@open-cowork/gateway-provider-webhook'
 import type { CloudGateway } from '../dist/index.js'
 import {
   createGatewayHttpServer,
@@ -965,6 +969,17 @@ test('gateway provider registry wires fake, first-party, bridge, and CLI provide
         deliveryUrl: 'https://bridge.example.test/outbound',
       },
     }, {
+      id: 'webhook-internal',
+      kind: 'webhook',
+      channelBindingId: 'webhook-internal-binding',
+      credentials: {
+        sharedSecret: 'webhook-internal-secret',
+      },
+      settings: {
+        deliveryUrl: 'https://10.1.2.3/outbound',
+        allowPrivateDelivery: true,
+      },
+    }, {
       id: 'discord',
       kind: 'discord',
       channelBindingId: 'discord-binding',
@@ -1036,6 +1051,11 @@ test('gateway provider registry wires fake, first-party, bridge, and CLI provide
     id: 'webhook',
     kind: 'webhook',
     provider: 'webhook',
+    providerKind: 'webhook',
+  }, {
+    id: 'webhook-internal',
+    kind: 'webhook',
+    provider: 'webhook-internal',
     providerKind: 'webhook',
   }, {
     id: 'discord',
@@ -1737,6 +1757,66 @@ test('gateway runtime retries transient deliveries and marks permanent failures 
     assert.equal(acks[1]?.input.status, 'dead')
     assert.equal(acks[1]?.input.nextAttemptAt, null)
     assert.doesNotMatch(String(acks[1]?.input.lastError), /super-secret-token/)
+  } finally {
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime treats webhook circuit failures as retryable and URL policy failures as permanent', async () => {
+  let onDelivery: ((delivery: unknown) => void) | null = null
+  const acks: Array<{ deliveryId: string, input: Record<string, unknown> }> = []
+  const cloud = {
+    subscribeDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
+      onDelivery = input.onDelivery
+      return { close() {} }
+    },
+    async ackDelivery(deliveryId: string, input: Record<string, unknown>) {
+      acks.push({ deliveryId, input })
+      return { deliveryId, ...input } as never
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+  const provider = runtime.providers.get('fake')?.provider
+  assert.ok(provider)
+  const failures = [
+    new WebhookCircuitOpenError(5000),
+    new WebhookDeliveryPolicyError('Webhook delivery URL resolved to a private or reserved address'),
+  ]
+  provider.sendText = async () => {
+    const failure = failures.shift()
+    if (failure) throw failure
+    throw new Error('test exhausted failures')
+  }
+
+  await runtime.start()
+  try {
+    const beforeCircuitMs = Date.now()
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-circuit', attemptCount: 1 }))
+    await waitFor(() => acks.length === 1)
+    assert.equal(acks[0]?.input.status, 'failed')
+    assert.equal(typeof acks[0]?.input.nextAttemptAt, 'string')
+    const nextAttemptMs = Date.parse(String(acks[0]?.input.nextAttemptAt))
+    assert.ok(nextAttemptMs - beforeCircuitMs >= 4900)
+    assert.match(String(acks[0]?.input.lastError), /circuit is open/)
+
+    onDelivery?.(deliveryRecord({ deliveryId: 'delivery-policy', attemptCount: 1 }))
+    await waitFor(() => acks.length === 2)
+    assert.equal(acks[1]?.input.status, 'dead')
+    assert.equal(acks[1]?.input.nextAttemptAt, null)
+    assert.match(String(acks[1]?.input.lastError), /private or reserved address/)
   } finally {
     await runtime.stop()
   }

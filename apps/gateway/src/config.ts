@@ -586,10 +586,12 @@ function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | n
       credentials: cleanStringRecord({
         sharedSecret: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_SHARED_SECRET) || undefined,
       }),
-      settings: {
+      settings: cleanRecord({
         deliveryUrl: webhookDeliveryUrl,
+        deliveryUrlAllowedHosts: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_DELIVERY_ALLOWED_HOSTS) || undefined,
+        allowPrivateDelivery: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_ALLOW_PRIVATE_DELIVERY) || undefined,
         maxAttachmentBytes: readString(env.OPEN_COWORK_GATEWAY_WEBHOOK_MAX_ATTACHMENT_BYTES) || undefined,
-      },
+      }),
     })
   }
 
@@ -607,6 +609,8 @@ function readProvidersFromEnv(env: GatewayEnv, gatewayPublicBaseUrl?: string | n
       }),
       settings: cleanRecord({
         deliveryUrl,
+        deliveryUrlAllowedHosts: readString(env[`${prefix}_DELIVERY_ALLOWED_HOSTS`]) || undefined,
+        allowPrivateDelivery: readString(env[`${prefix}_ALLOW_PRIVATE_DELIVERY`]) || undefined,
         maxAttachmentBytes: readString(env[`${prefix}_MAX_ATTACHMENT_BYTES`]) || undefined,
       }),
     })

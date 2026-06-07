@@ -164,9 +164,11 @@ function createProvider(config: GatewayProviderConfig, gateway: GatewayConfig): 
     return new WebhookProvider({
       providerId: channelProviderConfigId(config),
       deliveryUrl: requiredSetting(config, 'deliveryUrl'),
+      deliveryUrlAllowedHosts: optionalStringList(config.settings.deliveryUrlAllowedHosts),
       sharedSecret: config.credentials.sharedSecret,
       maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
       deliveryTimeoutMs: gateway.timeouts.webhookDeliveryMs,
+      allowPrivateDelivery: readBoolean(config.settings.allowPrivateDelivery, false),
     })
   }
 
@@ -235,9 +237,11 @@ function bridgeProviderConfig(config: GatewayProviderConfig, gateway: GatewayCon
   return {
     providerId: channelProviderConfigId(config),
     deliveryUrl: requiredSetting(config, 'deliveryUrl'),
+    deliveryUrlAllowedHosts: optionalStringList(config.settings.deliveryUrlAllowedHosts),
     sharedSecret: requiredCredential(config, 'sharedSecret'),
     maxAttachmentBytes: optionalNumber(config.settings.maxAttachmentBytes) || optionalNumberString(config.settings.maxAttachmentBytes) || gateway.server.maxRequestBodyBytes,
     deliveryTimeoutMs: gateway.timeouts.webhookDeliveryMs,
+    allowPrivateDelivery: readBoolean(config.settings.allowPrivateDelivery, false),
   }
 }
 
@@ -322,6 +326,18 @@ function optionalNumberString(value: unknown) {
   const text = typeof value === 'string' ? value.trim() : ''
   const parsed = text ? Number(text) : NaN
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function optionalStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+      .map((entry) => entry.trim())
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map((entry) => entry.trim()).filter(Boolean)
+  }
+  return undefined
 }
 
 function readBoolean(value: unknown, fallback: boolean) {

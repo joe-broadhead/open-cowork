@@ -20,6 +20,14 @@ describe("WebhookProvider", () => {
     };
   }
 
+  async function resolvePublicBridgeHostname() {
+    return [{ address: "93.184.216.34", family: 4 }];
+  }
+
+  async function resolvePrivateBridgeHostname() {
+    return [{ address: "10.1.2.3", family: 4 }];
+  }
+
   it("advertises only the attachment capabilities implemented by the generic bridge", () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway"
@@ -51,9 +59,135 @@ describe("WebhookProvider", () => {
     })).toThrow("Webhook delivery URL must not include embedded credentials");
 
     expect(() => new WebhookProvider({
+      deliveryUrl: "https://10.1.2.3/gateway"
+    })).toThrow("Webhook delivery URL must not target a private or reserved IP literal");
+
+    expect(() => new WebhookProvider({
+      deliveryUrl: "https://[::ffff:127.0.0.1]/gateway"
+    })).toThrow("Webhook delivery URL must not target a private or reserved IP literal");
+
+    expect(() => new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      deliveryUrlAllowedHosts: ["*.example.com"]
+    })).toThrow("Webhook delivery URL host is not allowed");
+
+    expect(() => new WebhookProvider({
+      deliveryUrl: "https://bridge.example.com/gateway",
+      deliveryUrlAllowedHosts: ["*.example.com"]
+    })).not.toThrow();
+
+    expect(() => new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
       sharedSecret: "secret\nvalue"
     })).toThrow("Webhook shared secret cannot contain control characters");
+  });
+
+  it("rejects private or rebound DNS resolutions before bridge delivery", async () => {
+    let calls = 0;
+    const privateProvider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePrivateBridgeHostname,
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 200 });
+      }
+    });
+
+    await expect(privateProvider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery URL resolved to a private or reserved address",
+    );
+    expect(calls).toBe(0);
+
+    const mixedProvider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: async () => [
+        { address: "93.184.216.34", family: 4 },
+        { address: "10.1.2.3", family: 4 }
+      ],
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 200 });
+      }
+    });
+    await expect(mixedProvider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery URL resolved to a private or reserved address",
+    );
+    expect(calls).toBe(0);
+
+    const reboundLocalhostProvider = new WebhookProvider({
+      deliveryUrl: "http://localhost:3000/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 200 });
+      }
+    });
+    await expect(reboundLocalhostProvider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery URL localhost resolved to a public address",
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("treats transient DNS resolver failures as retryable network errors", async () => {
+    let calls = 0;
+    const error = new Error("temporary DNS failure") as Error & { code: string };
+    error.code = "EAI_AGAIN";
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      retryAttempts: 1,
+      resolveDeliveryHostname: async () => {
+        throw error;
+      },
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 200 });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery network error",
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("bounds DNS resolution by the delivery timeout", async () => {
+    let calls = 0;
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      deliveryTimeoutMs: 10,
+      retryAttempts: 1,
+      resolveDeliveryHostname: async () => new Promise(() => {}),
+      fetch: async () => {
+        calls += 1;
+        return new Response("", { status: 200 });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery timed out after 100ms",
+    );
+    expect(calls).toBe(0);
+  });
+
+  it("allows explicit private delivery mode without weakening the default policy", async () => {
+    let calls = 0;
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.internal.example/gateway",
+      allowPrivateDelivery: true,
+      resolveDeliveryHostname: resolvePrivateBridgeHostname,
+      fetch: async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ messageId: "internal-message-id" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).resolves.toMatchObject({
+      messageId: "internal-message-id"
+    });
+    expect(calls).toBe(1);
   });
 
   it("maps signed bridge payloads to provider-neutral messages", () => {
@@ -204,6 +338,7 @@ describe("WebhookProvider", () => {
       providerId: "whatsapp",
       deliveryUrl: "https://bridge.example.test/gateway",
       sharedSecret: "secret",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async (input, init) => {
         const rawBody = String(init?.body);
         deliveries.push({
@@ -233,9 +368,10 @@ describe("WebhookProvider", () => {
     });
     expect(deliveries).toEqual([
       {
-        url: "https://bridge.example.test/gateway",
+        url: "https://93.184.216.34/gateway",
         headers: expect.objectContaining({
           "content-type": "application/json",
+          host: "bridge.example.test",
           "x-open-cowork-gateway-delivery-id": expect.any(String),
           "x-open-cowork-gateway-webhook-signature": expect.any(String),
           "x-open-cowork-gateway-webhook-timestamp": expect.any(String)
@@ -282,6 +418,7 @@ describe("WebhookProvider", () => {
       providerId: "webhook-support",
       deliveryUrl: "https://bridge.example.test/gateway",
       sharedSecret: "secret",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async (_input, init) => {
         const rawBody = String(init?.body);
         deliveries.push({
@@ -330,6 +467,7 @@ describe("WebhookProvider", () => {
     const provider = new WebhookProvider({
       providerId: "slack",
       deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async (_input, init) => {
         deliveries.push({
           body: JSON.parse(String(init?.body))
@@ -406,6 +544,7 @@ describe("WebhookProvider", () => {
     const provider = new WebhookProvider({
       providerId: "slack",
       deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async (_input, init) => {
         deliveries.push({
           body: JSON.parse(String(init?.body))
@@ -456,6 +595,7 @@ describe("WebhookProvider", () => {
   it("rejects unsafe bridge delivery response ids before they enter gateway state", async () => {
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       fetch: async () => new Response(JSON.stringify({ messageId: "bridge\nmessage" }), {
         status: 200,
         headers: { "content-type": "application/json" }
@@ -473,6 +613,7 @@ describe("WebhookProvider", () => {
     let calls = 0;
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       sleep: async (ms) => {
         sleeps.push(ms);
       },
@@ -502,12 +643,97 @@ describe("WebhookProvider", () => {
     expect(deliveryIds[1]).toBe(deliveryIds[0]);
   });
 
+  it("pins the resolved bridge address for production HTTP delivery", async () => {
+    const lookups: Array<{ address?: string; family?: number; addresses?: Array<{ address: string; family: number }>; error?: Error | null }> = [];
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
+      deliveryRequestForTests: (_url, options, callback) => ({
+        on() {
+          return this;
+        },
+        end() {
+          const lookup = options.lookup as unknown as {
+            (
+              hostname: string,
+              options: unknown,
+              callback: (error: Error | null, address?: string, family?: number) => void,
+            ): void;
+            (
+              hostname: string,
+              options: unknown,
+              callback: (error: Error | null, addresses?: Array<{ address: string; family: number }>) => void,
+            ): void;
+          };
+          lookup("bridge.example.test", {}, (error, address, family) => {
+            lookups.push({ error, address, family });
+          });
+          lookup("bridge.example.test", { all: true }, (error, addresses) => {
+            lookups.push({ error, addresses });
+          });
+          callback({
+            statusCode: 200,
+            headers: { "content-type": "application/json" },
+            resume() {},
+            destroy() {},
+            async *[Symbol.asyncIterator]() {
+              yield Buffer.from(JSON.stringify({ messageId: "bridge-message-id" }));
+            }
+          } as never);
+        }
+      } as never)
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).resolves.toMatchObject({
+      messageId: "bridge-message-id"
+    });
+    expect(lookups).toEqual([
+      { error: null, address: "93.184.216.34", family: 4 },
+      { error: null, addresses: [{ address: "93.184.216.34", family: 4 }] }
+    ]);
+  });
+
+  it("retries network and timeout delivery failures with bounded jitter", async () => {
+    const sleeps: number[] = [];
+    let calls = 0;
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
+      retryInitialDelayMs: 1000,
+      retryJitterRatio: 0.2,
+      random: () => 0.75,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw new TypeError("ECONNRESET");
+        }
+        if (calls === 2) {
+          throw { name: "AbortError" };
+        }
+        return new Response(JSON.stringify({ messageId: "bridge-message-id" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).resolves.toMatchObject({
+      messageId: "bridge-message-id"
+    });
+    expect(calls).toBe(3);
+    expect(sleeps).toEqual([1100, 2200]);
+  });
+
   it("caps bridge retry attempts and retry-after delays", async () => {
     const sleeps: number[] = [];
     let calls = 0;
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
       retryAttempts: 99,
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       sleep: async (ms) => {
         sleeps.push(ms);
       },
@@ -532,6 +758,7 @@ describe("WebhookProvider", () => {
     let calls = 0;
     const provider = new WebhookProvider({
       deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
       sleep: async () => {
         throw new Error("sleep should not be called");
       },
@@ -545,6 +772,55 @@ describe("WebhookProvider", () => {
       "Webhook delivery failed: 400",
     );
     expect(calls).toBe(1);
+  });
+
+  it("opens and recovers a bridge circuit after repeated transient delivery failures", async () => {
+    let nowMs = 0;
+    let healthy = false;
+    let calls = 0;
+    const provider = new WebhookProvider({
+      deliveryUrl: "https://bridge.example.test/gateway",
+      resolveDeliveryHostname: resolvePublicBridgeHostname,
+      retryAttempts: 1,
+      circuitBreakerFailureThreshold: 2,
+      circuitBreakerCooldownMs: 5000,
+      now: () => new Date(nowMs),
+      fetch: async () => {
+        calls += 1;
+        return healthy
+          ? new Response(JSON.stringify({ messageId: "bridge-message-id" }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          })
+          : new Response("", { status: 500 });
+      }
+    });
+
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery failed: 500",
+    );
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery failed: 500",
+    );
+    expect(calls).toBe(2);
+    expect(provider.health()).toMatchObject({
+      ok: false,
+      state: "degraded",
+      error: "Webhook delivery circuit is open for 5000ms"
+    });
+
+    healthy = true;
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).rejects.toThrow(
+      "Webhook delivery circuit is open for 5000ms",
+    );
+    expect(calls).toBe(2);
+
+    nowMs = 6000;
+    await expect(provider.sendText({ provider: "webhook", chatId: "team-chat" }, "hello")).resolves.toMatchObject({
+      messageId: "bridge-message-id"
+    });
+    expect(calls).toBe(3);
+    expect(provider.health()).toMatchObject({ ok: true, state: "ready", error: null });
   });
 
   it("dispatches incoming payloads through the started handler", async () => {
