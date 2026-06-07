@@ -3,7 +3,7 @@ import type { EffectiveAppSettings, WorkflowListPayload, WorkflowRun, WorkflowSu
 import { formatDate as formatLocalizedDate } from '../../helpers/i18n'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
-import { Badge, Button, EmptyState, Skeleton, type BadgeTone } from '../ui'
+import { Badge, Button, EmptyState, Skeleton, StudioPageHeader, type BadgeTone } from '../ui'
 
 type Props = {
   onOpenThread: (sessionId: string) => void
@@ -95,6 +95,14 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     [payload.workflows],
   )
   const archivedCount = payload.workflows.length - activeWorkflows.length
+  const activeCount = useMemo(
+    () => activeWorkflows.filter((workflow) => workflow.status === 'active').length,
+    [activeWorkflows],
+  )
+  const runningCount = useMemo(
+    () => activeWorkflows.filter((workflow) => workflow.status === 'running').length,
+    [activeWorkflows],
+  )
 
   const refresh = async (generation = refreshGenerationRef.current + 1) => {
     refreshGenerationRef.current = generation
@@ -144,7 +152,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
     setFeedback(null)
     try {
       if (workflowActionBlocked) {
-        setFeedback(workflowActionReason || 'Workflow runs are disabled by this workspace policy.')
+        setFeedback(workflowActionReason || 'Playbook runs are disabled by this workspace policy.')
         return
       }
       const result = await action()
@@ -163,11 +171,11 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
   const startDraft = async () => {
     if (!activeWorkspaceIsLocal) {
-      setFeedback('Cloud workflow creation is managed by the cloud workspace. Existing cloud workflows can be run when policy allows it.')
+      setFeedback('Cloud playbook creation is managed by the cloud workspace. Existing cloud playbooks can be run when policy allows it.')
       return
     }
     if (workflowDraftBlocked) {
-      setFeedback('Switch OpenCode config source to In app before adding workflows. Workflow setup uses Cowork’s Workflow Designer agent and Workflows tool.')
+      setFeedback('Switch OpenCode config source to In app before adding playbooks. Setup still uses Cowork’s Workflow Designer agent and Workflows tool.')
       return
     }
     setBusyId('new')
@@ -197,24 +205,27 @@ export function WorkflowsPage({ onOpenThread }: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-base text-primary">
       <div className="border-b border-border px-6 py-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="font-display text-role-page-title font-bold text-primary">Workflows</h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted">
-              Save repeatable work from a Workflow Designer setup thread, then run it manually, on a schedule, or from a webhook.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="primary"
-            leftIcon="plus"
-            onClick={() => void startDraft()}
-            disabled={busyId === 'new' || workflowDraftBlocked}
-            disabledReason={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : null}
-          >
-            {busyId === 'new' ? 'Starting...' : 'Add workflow'}
-          </Button>
-        </div>
+        <StudioPageHeader
+          eyebrow="Playbooks"
+          title="Playbooks"
+          description="Save repeatable work from a Workflow Designer setup chat, then run it manually, on a schedule, or from a webhook."
+          meta={(
+            <div className="flex flex-wrap gap-2 text-2xs text-text-muted">
+              <span>{activeCount} active</span>
+              <span>{runningCount} running</span>
+              {archivedCount > 0 ? <span>{archivedCount} archived</span> : null}
+            </div>
+          )}
+          actions={[{
+            id: 'add-playbook',
+            children: busyId === 'new' ? 'Starting...' : 'Add playbook',
+            onClick: () => void startDraft(),
+            variant: 'primary',
+            leftIcon: 'plus',
+            disabled: busyId === 'new' || workflowDraftBlocked,
+            disabledReason: !activeWorkspaceIsLocal ? 'Cloud playbook creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Playbook setup requires the in-app OpenCode config source.' : null,
+          }]}
+        />
         {feedback ? (
           <div className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm text-secondary">
             {feedback}
@@ -232,22 +243,22 @@ export function WorkflowsPage({ onOpenThread }: Props) {
         ) : activeWorkflows.length === 0 ? (
           <EmptyState
             icon="workflow"
-            title="No workflows yet"
+            title="No playbooks yet"
             body={workflowListBlocked && workflowListReason
               ? workflowListReason
               : workflowDraftBlocked
                 ? activeWorkspaceIsLocal
-                  ? 'Workflow setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.'
-                  : 'Cloud workflow creation is managed by the cloud workspace. Existing workflows will appear here when available.'
-                : 'Start with a setup thread. The Workflow Designer agent will help clarify the task, tools, skills, agent, schedule, and webhook trigger before saving anything.'}
+                  ? 'Playbook setup requires the in-app OpenCode config source because it uses the Workflow Designer agent and Workflows tool.'
+                  : 'Cloud playbook creation is managed by the cloud workspace. Existing playbooks will appear here when available.'
+                : 'Start with a setup chat. The Workflow Designer agent will clarify the task, tools, skills, coworker, schedule, and webhook trigger before saving anything.'}
             action={(
               <Button
                 variant="primary"
                 onClick={() => void startDraft()}
                 disabled={workflowDraftBlocked}
-                disabledReason={!activeWorkspaceIsLocal ? 'Cloud workflow creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Workflow setup requires the in-app OpenCode config source.' : null}
+                disabledReason={!activeWorkspaceIsLocal ? 'Cloud playbook creation is managed by this cloud workspace.' : workflowDraftBlocked ? 'Playbook setup requires the in-app OpenCode config source.' : null}
               >
-                Add workflow
+                Add playbook
               </Button>
             )}
           />
@@ -268,7 +279,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                   <div className="flex flex-wrap gap-2">
                     {workflow.draftSessionId ? (
                       <Button size="sm" variant="secondary" onClick={() => onOpenThread(workflow.draftSessionId!)}>
-                        Open setup
+                        Open setup chat
                       </Button>
                     ) : null}
                     {workflow.latestRunSessionId ? (
@@ -285,7 +296,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.runNow(workflow.id)
                           : window.coworkApi.workflows.runNow(workflow.id, workspaceOptions)
-                      ), 'Workflow run started.')}
+                      ), 'Playbook run started.')}
                     >
                       Run
                     </Button>
@@ -294,7 +305,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.resume(workflow.id)
                           : window.coworkApi.workflows.resume(workflow.id, workspaceOptions)
-                      ), 'Workflow resumed.')}>
+                      ), 'Playbook resumed.')}>
                         Resume
                       </Button>
                     ) : (
@@ -302,7 +313,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                         activeWorkspaceIsLocal
                           ? window.coworkApi.workflows.pause(workflow.id)
                           : window.coworkApi.workflows.pause(workflow.id, workspaceOptions)
-                      ), 'Workflow paused.')}>
+                      ), 'Playbook paused.')}>
                         Pause
                       </Button>
                     )}
@@ -310,7 +321,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                       activeWorkspaceIsLocal
                         ? window.coworkApi.workflows.archive(workflow.id)
                         : window.coworkApi.workflows.archive(workflow.id, workspaceOptions)
-                    ), 'Workflow archived.')}>
+                    ), 'Playbook archived.')}>
                       Archive
                     </Button>
                   </div>
@@ -318,10 +329,10 @@ export function WorkflowsPage({ onOpenThread }: Props) {
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border border-border bg-base/40 p-3">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Execution</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Lead coworker</div>
                     <div className="mt-1 text-sm text-primary">{workflow.agentName || 'build'}</div>
                     <div className="mt-1 text-xs text-muted">
-                      {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || 'Uses selected tools and skills from the setup thread'}
+                      {[...workflow.skillNames, ...workflow.toolIds].slice(0, 4).join(', ') || 'Uses selected tools and skills from the setup chat'}
                     </div>
                   </div>
                   <div className="rounded-md border border-border bg-base/40 p-3">
@@ -362,7 +373,7 @@ export function WorkflowsPage({ onOpenThread }: Props) {
           </div>
         )}
         {archivedCount > 0 ? (
-          <div className="mt-4 text-xs text-muted">{archivedCount} archived workflow{archivedCount === 1 ? '' : 's'} hidden.</div>
+          <div className="mt-4 text-xs text-muted">{archivedCount} archived playbook{archivedCount === 1 ? '' : 's'} hidden.</div>
         ) : null}
       </div>
     </div>

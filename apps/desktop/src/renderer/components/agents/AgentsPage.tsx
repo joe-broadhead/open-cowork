@@ -13,7 +13,7 @@ import {
   CustomSelectionCard,
   RuntimeSelectionCard,
 } from './AgentSelectionCard'
-import { Button, EmptyState, Input, SegmentedControl, Skeleton } from '../ui'
+import { Button, EmptyState, Input, SegmentedControl, Skeleton, StudioPageHeader } from '../ui'
 import { confirmAgentRemoval } from '../../helpers/destructive-actions'
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
@@ -222,14 +222,14 @@ export function AgentsPage({
     if (!result) return
     const decoded = decodeAgentBundle(result.content)
     if (!decoded.ok) {
-      window.alert(t('agentsPage.importFailed', 'Could not import {{filename}}: {{error}}', { filename: result.filename, error: decoded.error }))
+      window.alert(t('studioTeamPage.importFailed', 'Could not import {{filename}}: {{error}}', { filename: result.filename, error: decoded.error }))
       return
     }
     const existingNames = new Set(customs.map((entry) => entry.name))
     let targetName = decoded.bundle.name
     if (existingNames.has(targetName)) {
       const replace = window.confirm(
-        t('agentsPage.importConflict', 'A custom agent named "{{name}}" already exists. Replace it with the imported one?', { name: targetName }),
+        t('studioTeamPage.importConflict', 'A custom coworker named "{{name}}" already exists. Replace it with the imported one?', { name: targetName }),
       )
       if (!replace) return
     }
@@ -247,17 +247,25 @@ export function AgentsPage({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="feature-page-shell">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="font-display text-role-page-title font-bold text-text">{t('agentsPage.title', 'Agents')}</h1>
-            <p className="text-[13px] text-text-secondary mt-1">
-              {t('agentsPage.subtitle', 'Compose specialists from skills, tools, and instructions. A skill is reusable guidance; a tool lets an agent act through an integration.')}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            {t('agentsPage.backToChat', 'Back to chat')}
-          </Button>
-        </div>
+        <StudioPageHeader
+          className="mb-6"
+          eyebrow={t('studioTeamPage.eyebrow', 'Team')}
+          title={t('studioTeamPage.title', 'Coworkers')}
+          description={t('studioTeamPage.subtitle', 'Compose OpenCode agents into a coworker roster with clear roles, skills, tools, and chat assignment affordances.')}
+          meta={(
+            <div className="flex flex-wrap gap-2 text-2xs text-text-muted">
+              <span>{customs.length} {t('studioTeamPage.customCount', 'custom')}</span>
+              <span>{filteredBuiltIns.length} {t('studioTeamPage.builtInCount', 'built-in')}</span>
+              {runtimeUnknown.length > 0 ? <span>{runtimeUnknown.length} {t('studioTeamPage.runtimeCount', 'runtime')}</span> : null}
+            </div>
+          )}
+          actions={[{
+            id: 'back-to-chat',
+            children: t('agentsPage.backToChat', 'Back to chat'),
+            onClick: onClose,
+            variant: 'ghost',
+          }]}
+        />
 
         <div className="feature-toolbar mb-6">
           <div className="flex-1">
@@ -267,11 +275,11 @@ export function AgentsPage({
               leftIcon="search"
               clearable
               onClear={() => setSearch('')}
-              placeholder={t('agentsPage.search', 'Search agents, skills, tools, or instructions…')}
+              placeholder={t('studioTeamPage.search', 'Search coworkers, skills, tools, or instructions...')}
             />
           </div>
           <SegmentedControl
-            label={t('agentsPage.filterLabel', 'Agent filter')}
+            label={t('studioTeamPage.filterLabel', 'Coworker filter')}
             value={filter}
             onChange={(value) => setFilter(value as Filter)}
             options={(['all', 'custom', 'builtin', 'runtime', 'opencode'] as const).map((value) => ({
@@ -285,7 +293,7 @@ export function AgentsPage({
             size="sm"
             leftIcon="arrow-down"
             onClick={onImportAgent}
-            title={t('agentsPage.importTitle', 'Import a custom agent from a .cowork-agent.json file')}
+            title={t('studioTeamPage.importTitle', 'Import a custom coworker from a .cowork-agent.json file')}
           >
             {t('agentsPage.import', 'Import')}
           </Button>
@@ -300,7 +308,7 @@ export function AgentsPage({
               onClearDraft?.()
             }}
           >
-            New agent
+            {t('studioTeamPage.newCoworker', 'New coworker')}
           </Button>
         </div>
 
@@ -314,11 +322,11 @@ export function AgentsPage({
 
         {!(loading && !catalog) && showCustoms && (
           <ListSection
-            label="Custom agents"
-            sublabel="Built by you — edit, enable, or delete from the card."
+            label={t('studioTeamPage.customSection', 'Custom coworkers')}
+            sublabel={t('studioTeamPage.customSectionHelp', 'Built by you; edit, enable, export, or delete from the card.')}
             emptyState={customs.length === 0
-              ? 'No custom agents yet. Click “New agent” to build your first specialist.'
-              : 'No custom agents matched your search.'}
+              ? t('studioTeamPage.noCustom', 'No custom coworkers yet. Create one to package a repeatable role, instructions, skills, and tools.')
+              : t('studioTeamPage.noCustomMatch', 'No custom coworkers matched your search.')}
             empty={filteredCustoms.length === 0}
           >
             {filteredCustoms.map((agent) => (
@@ -350,9 +358,9 @@ export function AgentsPage({
 
         {!(loading && !catalog) && showBuiltIns && (
           <ListSection
-            label="Built-in agents"
-            sublabel="Open Cowork specialists built from bundled skills and tools."
-            emptyState="No built-in agents matched your search."
+            label={t('studioTeamPage.builtInSection', 'Built-in coworkers')}
+            sublabel={t('studioTeamPage.builtInSectionHelp', 'Open Cowork specialists built from bundled skills and tools.')}
+            emptyState={t('studioTeamPage.noBuiltInMatch', 'No built-in coworkers matched your search.')}
             empty={filteredBuiltIns.length === 0}
           >
             {filteredBuiltIns.map((agent) => (
@@ -368,9 +376,9 @@ export function AgentsPage({
 
         {!(loading && !catalog) && showRuntime && (
           <ListSection
-            label="Runtime-registered agents"
-            sublabel="Agents registered by an SDK plugin that bypass Cowork's catalog."
-            emptyState="No runtime agents matched your search."
+            label={t('studioTeamPage.runtimeSection', 'Runtime-registered coworkers')}
+            sublabel={t('studioTeamPage.runtimeSectionHelp', 'Coworkers registered by an SDK plugin; OpenCode still owns their runtime behavior.')}
+            emptyState={t('studioTeamPage.noRuntimeMatch', 'No runtime coworkers matched your search.')}
             empty={filteredRuntime.length === 0}
           >
             {filteredRuntime.map((agent) => (
@@ -388,7 +396,7 @@ export function AgentsPage({
           <ListSection
             label="OpenCode defaults"
             sublabel="Native OpenCode agents that own core execution behavior."
-            emptyState="No OpenCode agents matched your search."
+            emptyState={t('studioTeamPage.noOpenCodeMatch', 'No OpenCode defaults matched your search.')}
             empty={filteredOpenCode.length === 0}
           >
             {filteredOpenCode.map((agent) => (

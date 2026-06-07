@@ -230,8 +230,8 @@ describe('capabilities-page-support', () => {
       methodsCount: 1,
     })
     expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual([
-      'Agent: chart-agent',
-      'Agent: reporter',
+      'Coworker: chart-agent',
+      'Coworker: reporter',
       'Skill: Research Skill',
     ])
 
@@ -323,30 +323,30 @@ describe('capabilities-page-support', () => {
 
     const chartRow = rows.find((row) => row.id === 'tool:charts')
     expect(chartRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
-      'Agent: reporter',
-      'Workflow: Daily Report',
+      'Coworker: reporter',
+      'Playbook: Daily Report',
     ]))
     expect(chartRow?.consumers
-      .filter((consumer) => consumer.kind === 'workflow' && consumer.name === 'Workflow: Daily Report')
+      .filter((consumer) => consumer.kind === 'workflow' && consumer.name === 'Playbook: Daily Report')
       .map((consumer) => consumer.id)
       .sort()).toEqual(['workflow:workflow-daily', 'workflow:workflow-daily-copy'])
     expect(chartRow?.consumers.map((consumer) => consumer.name)).not.toEqual(expect.arrayContaining([
-      'Agent: disabled-reporter',
-      'Agent: invalid-reporter',
-      'Workflow: Disabled Agent Report',
+      'Coworker: disabled-reporter',
+      'Coworker: invalid-reporter',
+      'Playbook: Disabled Agent Report',
     ]))
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
     expect(browserRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
-      'Agent: reporter',
-      'Workflow: Daily Report',
+      'Coworker: reporter',
+      'Playbook: Daily Report',
     ]))
-    expect(browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter')).toHaveLength(1)
+    expect(browserRow?.consumers.filter((consumer) => consumer.name === 'Coworker: reporter')).toHaveLength(1)
 
     const researchRow = rows.find((row) => row.id === 'skill:research')
     expect(researchRow?.consumers.map((consumer) => consumer.name)).toEqual(expect.arrayContaining([
-      'Agent: reporter',
-      'Workflow: Daily Report',
+      'Coworker: reporter',
+      'Playbook: Daily Report',
     ]))
   })
 
@@ -374,7 +374,7 @@ describe('capabilities-page-support', () => {
     })
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
-    const reporterConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: reporter') || []
+    const reporterConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Coworker: reporter') || []
     expect(reporterConsumers).toHaveLength(1)
     expect(reporterConsumers[0]?.id).toBe('agent:reporter')
   })
@@ -403,7 +403,7 @@ describe('capabilities-page-support', () => {
     })
 
     const browserRow = rows.find((row) => row.id === 'tool:browser')
-    const dataOpsConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Agent: data-ops') || []
+    const dataOpsConsumers = browserRow?.consumers.filter((consumer) => consumer.name === 'Coworker: data-ops') || []
     expect(dataOpsConsumers).toHaveLength(1)
     expect(dataOpsConsumers[0]?.id).toBe('agent:data-ops')
   })

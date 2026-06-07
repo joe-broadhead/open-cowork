@@ -329,14 +329,14 @@ describe('CapabilitiesPage', () => {
     expect(api.listWorkflows).not.toHaveBeenCalled()
     expect(screen.queryByRole('tab', { name: 'Relationships' })).not.toBeInTheDocument()
 
-    const toolSearch = screen.getByPlaceholderText('Search tools, skills, linked capabilities, or agents…')
+    const toolSearch = screen.getByPlaceholderText('Search tools, skills, linked capabilities, or coworkers...')
     await user.type(toolSearch, 'report')
     expect(screen.getAllByText('Chart MCP').length).toBeGreaterThan(0)
     expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
 
     await user.clear(toolSearch)
     await user.click(screen.getByRole('tab', { name: 'Skills' }))
-    expect(await screen.findByPlaceholderText('Search skills, descriptions, or agents…')).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('Search skills, descriptions, or coworkers...')).toBeInTheDocument()
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
 
     api.unmount()
@@ -372,18 +372,18 @@ describe('CapabilitiesPage', () => {
     const consumerMatrix = await screen.findByRole('table', { name: 'Consumer access matrix' })
     const capabilityMatrix = screen.getByRole('table', { name: 'Tool and skill access matrix' })
     expect(screen.getByText('Dependency graph')).toBeInTheDocument()
-    expect(within(consumerMatrix).getAllByText('Workflow: Daily Report')).toHaveLength(2)
+    expect(within(consumerMatrix).getAllByText('Playbook: Daily Report')).toHaveLength(2)
     expect(within(capabilityMatrix).getAllByText('Chart MCP').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Credential missing').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Copy consumers' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Copy consumers' }))
     await waitFor(() => {
-      expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Workflow: Daily Report'))
+      expect(window.coworkApi.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('Playbook: Daily Report'))
     })
 
-    const search = screen.getByPlaceholderText('Search capabilities, consumers, risks, credentials, or policies…')
+    const search = screen.getByPlaceholderText('Search capabilities, coworkers, playbooks, risks, credentials, or policies...')
     await user.type(search, 'daily report')
-    expect(screen.getAllByText('Workflow: Daily Report').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Playbook: Daily Report').length).toBeGreaterThan(0)
     expect(screen.queryByText('Shell tools')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Open tool' }))
@@ -410,7 +410,7 @@ describe('CapabilitiesPage', () => {
     const user = userEvent.setup()
     renderCapabilitiesPage()
 
-    const search = await screen.findByPlaceholderText('Search tools, skills, linked capabilities, or agents…')
+    const search = await screen.findByPlaceholderText('Search tools, skills, linked capabilities, or coworkers...')
     await user.type(search, 'collects sources')
     expect(screen.getAllByText('Chart MCP').length).toBeGreaterThan(0)
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
@@ -422,7 +422,7 @@ describe('CapabilitiesPage', () => {
     expect(screen.queryByText('Research Skill')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Skills' }))
-    const skillSearch = await screen.findByPlaceholderText('Search skills, descriptions, or agents…')
+    const skillSearch = await screen.findByPlaceholderText('Search skills, descriptions, or coworkers...')
     await user.clear(skillSearch)
     await user.type(skillSearch, 'chart mcp')
     expect(screen.getByText('Research Skill')).toBeInTheDocument()
@@ -455,7 +455,7 @@ describe('CapabilitiesPage', () => {
       })
     })
 
-    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    await user.click(screen.getByRole('button', { name: 'Create coworker' }))
     expect(api.onCreateAgent).toHaveBeenCalledWith(expect.objectContaining({
       name: 'charts-agent',
       toolIds: ['charts'],
@@ -822,7 +822,7 @@ describe('CapabilitiesPage', () => {
     expect(api.skillBundleFile).toHaveBeenCalledWith('research', 'README.md', { directory: '/work/project' })
     expect(await screen.findByText('Reference note')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    await user.click(screen.getByRole('button', { name: 'Create coworker' }))
     expect(api.onCreateAgent).toHaveBeenCalledWith(expect.objectContaining({
       name: 'research-agent',
       toolIds: ['charts'],

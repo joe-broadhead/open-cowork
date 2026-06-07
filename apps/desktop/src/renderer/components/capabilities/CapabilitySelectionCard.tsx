@@ -187,7 +187,7 @@ export function ToolSelectionCard({
       description={tool.description}
       stats={[
         { label: methodsCount === 1 ? 'method' : 'methods', value: String(methodsCount) },
-        { label: tool.agentNames.length === 1 ? 'agent' : 'agents', value: String(tool.agentNames.length) },
+        { label: tool.agentNames.length === 1 ? 'coworker' : 'coworkers', value: String(tool.agentNames.length) },
         ...(linkedSkills.length > 0 ? [{ label: linkedSkills.length === 1 ? 'skill' : 'skills', value: String(linkedSkills.length), tone: 'var(--color-amber)' }] : []),
         ...(tool.scope ? [{ label: tool.scope === 'project' ? 'Project' : 'Machine', value: '' }] : []),
       ].filter((entry) => entry.label !== '' || entry.value !== '')}
@@ -281,7 +281,7 @@ export function SkillSelectionCard({
       description={skill.description}
       stats={[
         { label: toolCount === 1 ? 'tool' : 'tools', value: String(toolCount) },
-        { label: skill.agentNames.length === 1 ? 'agent' : 'agents', value: String(skill.agentNames.length) },
+        { label: skill.agentNames.length === 1 ? 'coworker' : 'coworkers', value: String(skill.agentNames.length) },
       ]}
       bodyExtra={linkedTools.length > 0 ? <LinkedToolPills tools={linkedTools} /> : undefined}
       footer={

@@ -242,7 +242,7 @@ function agentConsumerFromName(
   return {
     id: `agent:${canonicalName}`,
     kind: 'agent',
-    name: `Agent: ${canonicalName || safeText(agentName).trim()}`,
+    name: `Coworker: ${canonicalName || safeText(agentName).trim()}`,
     source,
   }
 }
@@ -405,7 +405,7 @@ function consumerDependencies(input: {
       skillsByToolId,
     })
     rememberAgent(agent.name, dependency)
-    push(agentConsumerFromName(agent.name, 'Custom agent loadout', agentNameIndex), dependency)
+    push(agentConsumerFromName(agent.name, 'Custom coworker loadout', agentNameIndex), dependency)
   }
 
   for (const agent of input.builtInAgents || []) {
@@ -422,8 +422,8 @@ function consumerDependencies(input: {
     })
     rememberAgent(agent.name, dependency)
     push({
-      ...agentConsumerFromName(agent.name, 'Built-in agent loadout', agentNameIndex),
-      name: `Agent: ${agent.label || canonicalAgentName(agent.name, agentNameIndex)}`,
+      ...agentConsumerFromName(agent.name, 'Built-in coworker loadout', agentNameIndex),
+      name: `Coworker: ${agent.label || canonicalAgentName(agent.name, agentNameIndex)}`,
     }, dependency)
   }
 
@@ -436,8 +436,8 @@ function consumerDependencies(input: {
     push({
       id: `workflow:${workflow.id}`,
       kind: 'workflow',
-      name: `Workflow: ${workflow.title}`,
-      source: 'Workflow execution plan',
+      name: `Playbook: ${workflow.title}`,
+      source: 'Playbook execution plan',
     }, dependency)
   }
 
@@ -474,7 +474,7 @@ export function buildCapabilityRelationshipRows(input: {
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of tool.agentNames || []) {
       if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
-      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent tool loadout', agentNameIndex))
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Coworker tool loadout', agentNameIndex))
     }
     for (const skill of linkedSkillsForTool(tool, input.skills)) {
       addConsumer(consumers, { id: `skill:${skill.name}`, kind: 'skill', name: `Skill: ${skill.label}`, source: 'Skill requires tool' })
@@ -545,7 +545,7 @@ export function buildCapabilityRelationshipRows(input: {
     const consumers = new Map<string, CapabilityConsumer>()
     for (const agentName of skill.agentNames || []) {
       if (isDisabledBuiltInOnlyAgentName(agentName, agentNameIndex, disabledBuiltInAgentNames)) continue
-      addConsumer(consumers, agentConsumerFromName(agentName, 'Agent skill loadout', agentNameIndex))
+      addConsumer(consumers, agentConsumerFromName(agentName, 'Coworker skill loadout', agentNameIndex))
     }
     for (const projected of projectedConsumers) {
       if (!projected.dependencies.skillNames.has(skill.name)) continue

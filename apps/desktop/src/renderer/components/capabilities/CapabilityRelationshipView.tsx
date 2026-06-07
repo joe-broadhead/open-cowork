@@ -46,6 +46,12 @@ function statusTone(state: string) {
   return 'var(--color-green)'
 }
 
+function consumerKindLabel(kind: string) {
+  if (kind === 'agent') return t('capabilities.relationships.kindCoworker', 'coworker')
+  if (kind === 'workflow') return t('capabilities.relationships.kindPlaybook', 'playbook')
+  return kind
+}
+
 function consumerMatrixKey(consumer: { kind: string; id: string }) {
   return `${consumer.kind}:${consumer.id}`
 }
@@ -137,7 +143,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
           <div>
             <div className="text-[12px] font-semibold text-text">{t('capabilities.relationships.consumerMatrixTitle', 'Consumer access matrix')}</div>
             <div className="mt-0.5 text-[11px] text-text-muted">
-              {t('capabilities.relationships.consumerMatrixSubtitle', 'Rows are agents and workflows; cells summarize the tools and skills they inherit or request.')}
+              {t('capabilities.relationships.consumerMatrixSubtitle', 'Rows are coworkers and playbooks; cells summarize the OpenCode tools and skills they inherit or request.')}
             </div>
           </div>
           <button
@@ -168,7 +174,7 @@ export function CapabilityRelationshipView({ rows, allRowsCount, onOpenTool, onO
                   <tr key={row.id} className="border-b border-border-subtle align-top last:border-b-0">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-text">{row.name}</div>
-                      <div className="mt-1 text-[11px] capitalize text-text-muted">{row.kind}</div>
+                      <div className="mt-1 text-[11px] capitalize text-text-muted">{consumerKindLabel(row.kind)}</div>
                       <div className="mt-1 text-[11px] text-text-secondary">{row.source}</div>
                     </td>
                     <td className="px-4 py-3">

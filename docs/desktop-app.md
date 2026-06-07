@@ -3,11 +3,11 @@
 Open Cowork is being simplified around the surfaces that users already
 understand and that map cleanly onto OpenCode:
 
-- `Home` — start a chat, attach context, choose a model, or @mention an agent
-- `Chat` — the OpenCode session transcript, approvals, questions, files, and delegated agent work
-- `Threads` — searchable history and saved work context
-- `Workflows` — repeatable tasks created from Workflow Designer setup threads, with manual, scheduled, and webhook runs
-- `Agents` — built-in and custom OpenCode agents with curated tools and skills
+- `Home` — start a chat, attach context, choose a model, or @mention a coworker
+- `Chat` — the OpenCode session transcript, approvals, questions, files, and delegated coworker work
+- `Projects` — searchable project-chat history and saved work context
+- `Playbooks` — workflow-backed repeatable tasks created from Workflow Designer setup chats, with manual, scheduled, and webhook runs
+- `Team` — built-in and custom OpenCode agents presented as coworkers with curated tools and skills
 - `Tools & Skills` — MCP tools, OpenCode skills, credentials, and capability relationships
 - `Settings` — appearance, models, permissions, storage, and workflow run behavior
 
@@ -22,24 +22,24 @@ skill and agent.
 
 ```mermaid
 flowchart TD
-    Home["Home<br/>composer · attachments · @agent pills"]
+    Home["Home<br/>composer · attachments · @coworker pills"]
     Chat["Chat<br/>session UI · streamed events · approvals"]
-    Threads["Threads<br/>search · facets · tags · saved context"]
-    Workflows["Workflows<br/>setup threads · triggers · runs"]
-    Agents["Agents<br/>built-in + custom"]
+    Projects["Projects<br/>search · facets · tags · saved context"]
+    Playbooks["Playbooks<br/>setup chats · triggers · runs"]
+    Team["Team<br/>built-in + custom coworkers"]
     ToolsSkills["Tools & Skills<br/>MCPs · skills · credentials"]
     Settings["Settings<br/>models · permissions · storage"]
 
     Home -->|submit prompt| Chat
-    Home -->|open recent work| Threads
-    Threads -->|open thread| Chat
-    Chat -->|@agent| Agents
+    Home -->|open recent work| Projects
+    Projects -->|open project chat| Chat
+    Chat -->|@coworker| Team
     Chat -->|tool calls and artifacts| ToolsSkills
-    Workflows -->|run thread| Chat
-    Workflows -->|uses agents| Agents
-    Workflows -->|uses tools and skills| ToolsSkills
+    Playbooks -->|run chat| Chat
+    Playbooks -->|uses coworkers| Team
+    Playbooks -->|uses tools and skills| ToolsSkills
     Settings -->|configure providers| Chat
-    Settings -->|configure routing| Workflows
+    Settings -->|configure routing| Playbooks
 ```
 
 ## Product Language And Density Standards
@@ -48,21 +48,21 @@ Open Cowork should read like a focused workbench, not an inventory of internal
 runtime kinds. Use these terms in user-facing copy:
 
 - **Chat** for direct OpenCode sessions.
-- **Agent** for a reusable OpenCode worker profile.
+- **Coworker** for a reusable OpenCode agent profile in user-facing Studio copy.
 - **Tool** for MCP/native capability access.
 - **Skill** for packaged OpenCode instructions.
-- **Workflow** for recurring or repeatable work saved from a Workflow Designer setup thread.
+- **Playbook** for recurring or repeatable work saved from a Workflow Designer setup chat and backed by a workflow definition.
 - **Run** for one execution of a workflow.
 - **Artifact** for generated files, charts, reports, or delivery drafts.
 - **OpenCode** for execution-engine details that matter to users.
 
 Avoid presenting dormant implementation concepts such as team dashboards,
 incident-control dashboards, or unsupervised autonomous learning loops as current product features. If a feature
-does not help a user start work, delegate to an agent, curate tools/skills, or
-review a workflow, it does not belong in the primary app navigation.
+does not help a user start work, delegate to a coworker, curate tools/skills, or
+review a playbook, it does not belong in the primary app navigation.
 
-Shared visible statuses should stay consistent across Chat, Threads, and
-Workflows: `active`, `running`, `failed`, `paused`, and `archived`.
+Shared visible statuses should stay consistent across Chat, Projects, and
+Playbooks: `active`, `running`, `failed`, `paused`, and `archived`.
 
 Workspace copy should also stay stable:
 
@@ -99,14 +99,14 @@ action and avoid marketing copy.
 
 ## Home
 
-![Home composer with greeting, @-agent suggestion pills, and the execution status strip](assets/auto/home.png)
+![Home composer with greeting, @mention coworker suggestions, and the execution status strip](assets/auto/home.png)
 
 Home is the fastest path into useful work:
 
 - model and reasoning controls match the in-thread composer
 - file attachments use the same validation path as Chat
-- @agent suggestion pills pre-fill native OpenCode agent mentions
-- recent threads let users return to active work without a separate overview page
+- coworker suggestion cards pre-fill native OpenCode agent mentions
+- recent project chats let users return to active work without a separate overview page
 
 Submitting from Home creates or activates an OpenCode session and routes
 directly into Chat. Home should not accumulate status dashboards or secondary
@@ -114,7 +114,7 @@ workflow-monitoring cards.
 
 ## Chat
 
-![Chat composer mid-thread with the @-mention picker open over the sub-agent list](assets/auto/chat-mention-picker.png)
+![Chat composer mid-chat with the @-mention picker open over the coworker list](assets/auto/chat-mention-picker.png)
 
 Chat is the runtime surface. OpenCode owns execution; Open Cowork projects the
 events into a desktop-friendly transcript with:
@@ -122,60 +122,62 @@ events into a desktop-friendly transcript with:
 - streamed assistant output
 - tool calls and artifacts
 - approvals and questions
-- sub-agent task cards
+- coworker task cards backed by OpenCode child-session delegation
 - model, agent mode, reasoning, and attachment controls
 - session inspection and export helpers
 
 The transcript should stay faithful to OpenCode history. Do not invent a
 second execution model in the renderer.
 
-## Threads
+## Projects
 
-Threads is the place to find prior work. It should optimize for fast recall:
+Projects is the place to find prior project chats and saved work context. It
+is backed by OpenCode session/thread state and should optimize for fast recall:
 
 - search
 - project and status facets
 - saved filters where they are useful
-- metadata that helps users decide which thread to reopen
+- metadata that helps users decide which project chat to reopen
 
-Threads can link to workflow runs, but it should stay focused on recall and
+Projects can link to playbook runs, but it should stay focused on recall and
 reopening work.
 
-## Workflows
+## Playbooks
 
-![Workflows page showing the Add workflow setup-thread entry point](assets/auto/workflows-overview.png)
+![Playbooks page showing the Add playbook setup-chat entry point](assets/auto/workflows-overview.png)
 
-Workflows are saved repeatable tasks created from normal OpenCode threads.
+Playbooks are saved repeatable tasks created from normal OpenCode chats and
+stored as workflow definitions.
 They own:
 
-- setup-thread creation with the Workflow Designer agent
+- setup-chat creation with the Workflow Designer agent
 - manual, scheduled, and webhook triggers
 - local webhook URLs, authorization-header examples, and secret rotation
-- run status, summaries, and linked run threads
+- run status, summaries, and linked run chats
 
 The execution path still goes through OpenCode-native agents and approvals:
 
 - Workflow Designer clarifies and saves the workflow through the Workflows MCP
-- the selected agent executes each saved run
-- specialist agents can still be called through OpenCode-native delegation
+- the selected lead coworker executes each saved run
+- specialist coworkers can still be called through OpenCode-native delegation
 
-Workflows should feel like a simple list of saved repeatable tasks, not a
+Playbooks should feel like a simple list of saved repeatable tasks, not a
 separate agent runtime or operations dashboard.
 
-## Agents
+## Team
 
-![Agents page showing built-in and custom agents in a portrait grid](assets/auto/agents.png)
+![Team page showing built-in and custom coworkers in a portrait grid](assets/auto/agents.png)
 
-Agents are OpenCode-native agent configurations composed by Open Cowork. The
-Agents surface should make it clear:
+Coworkers are OpenCode-native agent configurations composed by Open Cowork. The
+Team surface should make it clear:
 
-- what the agent is for
+- what the coworker is for
 - which tools and skills it can use
 - whether it is built-in, configured, custom, or runtime-provided
 - what model and reasoning settings it prefers
-- where it can be used from Chat or Workflows
+- where it can be used from Chat or Playbooks
 
-Agent UI can have a playful character feel, but the stats must stay grounded in
+Team UI can have a polished character feel, but the stats must stay grounded in
 real permissions, skills, tools, and runtime settings.
 
 ## Tools & Skills
@@ -186,12 +188,12 @@ Tools & Skills is the capability catalog. It should answer:
 
 - which MCP/native tools are available
 - which skills are installed
-- which agents and workflows use each capability
+- which coworkers and playbooks use each capability
 - which credentials or permissions are required
 - whether a capability is bundled, configured, or custom
 
 Skills should be grouped and highlighted by the tools they use so users can
-understand the real authority behind an agent or workflow.
+understand the real authority behind a coworker or playbook.
 
 ## Settings
 

@@ -56,7 +56,7 @@ export function CapabilityMapView({
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         <CapabilityMetric label={t('capabilities.metricTools', 'Tools')} value={tools.length} detail={t('capabilities.metricToolsDetail', 'Runtime actions')} tone="var(--color-accent)" />
-        <CapabilityMetric label={t('capabilities.metricSkills', 'Skills')} value={skills.length} detail={t('capabilities.metricSkillsDetail', 'Agent workflows')} tone="var(--color-amber)" />
+        <CapabilityMetric label={t('capabilities.metricSkills', 'Skills')} value={skills.length} detail={t('capabilities.metricSkillsDetail', 'Coworker and playbook access')} tone="var(--color-amber)" />
         <CapabilityMetric label={t('capabilities.metricCustom', 'Custom')} value={customCount} detail={t('capabilities.metricCustomDetail', 'User additions')} tone="var(--color-green)" />
         <CapabilityMetric label={t('capabilities.metricProject', 'Project')} value={projectCount} detail={t('capabilities.metricProjectDetail', 'Scoped here')} tone="var(--color-info)" />
       </div>
@@ -65,7 +65,7 @@ export function CapabilityMapView({
         <div className="min-w-0">
           <div className="text-[12px] font-semibold text-text">{t('capabilities.mapTitle', 'Tool and skill map')}</div>
           <div className="text-[11px] text-text-muted mt-0.5">
-            {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access and agent workflows stay visible together.')}
+            {t('capabilities.mapSubtitle', 'Tools are grouped with the skills that depend on them, so runtime access for coworkers and playbooks stays visible together.')}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
