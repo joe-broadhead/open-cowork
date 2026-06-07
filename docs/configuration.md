@@ -135,13 +135,13 @@ ship one desktop app that can connect to different cloud orgs.
       "securityUrl": "https://security.acme.example/cowork",
       "legalUrl": "https://legal.acme.example/terms",
       "theme": {
-        "background": "#1b1b26",
-        "elevated": "#23232f",
-        "surface": "rgba(141, 164, 245, 0.04)",
-        "text": "#e8e9f3",
-        "accent": "#8da4f5",
-        "accentHover": "#a7b6f8",
-        "accentForeground": "#0f0f18"
+        "background": "#181516",
+        "elevated": "#242021",
+        "surface": "rgba(239, 220, 206, 0.06)",
+        "text": "#f0e9e1",
+        "accent": "#cfa0e6",
+        "accentHover": "#e0b7f0",
+        "accentForeground": "#1b121d"
       },
       "managedOrgConnectionLabels": {
         "desktopToken": "Acme Desktop token",
@@ -159,8 +159,8 @@ dashboard renders it directly, and the gateway returns it from health/readiness
 metadata for provider setup tooling. Helm deployments can set the equivalent
 `cloud.branding` and `gateway.branding` values.
 
-Cloud Web defaults to the shared Desktop dark palette, Mona Sans / Hubot Sans
-font stacks, and the structural token scale from
+Cloud Web defaults to the shared Desktop Studio dark palette, Mona Sans /
+Hubot Sans font stacks, and the structural token scale from
 `packages/shared/src/design-tokens.ts`. Public branding may override color and
 brand presentation keys such as `background`, `surface`, `elevated`, `text`,
 `mutedText`, `accent`, `accentHover`, `accentForeground`, semantic tones,

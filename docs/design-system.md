@@ -21,11 +21,13 @@ motion, elevation, and content measures. Theme color values stay inside the
 color without forking layout. Borders use three tiers:
 `--color-border-subtle` for dividers, `--color-border` for default hairlines,
 and `--color-border-strong` for focused, active, or elevated containers.
-The Mercury polish layer extends the same token source with material and
+The Studio material layer extends the same token source with material and
 motion primitives: `--specular`, `--shadow-1` / `--shadow-2` / `--shadow-3`,
-`--glass-*`, `--glow-*`, the glowing `--ring-focus`, and `--dur-4`. These
-tokens are derived from the active theme and must be consumed from shared CSS
-variables rather than duplicated per app.
+`--glass-*`, `--glow-*`, the glowing `--ring-focus`, and `--dur-4`. It also
+defines shared Studio semantics such as `--studio-shell-*`, `--density-*`,
+`--coworker-*`, `--lane-*`, and `--review-*`. These tokens are derived from the
+active theme and must be consumed from shared CSS variables rather than
+duplicated per app.
 
 Avoid adding new Tailwind arbitrary font-size utilities such as `text-[13px]`. `pnpm lint` ratchets the existing renderer count and fails if the count increases.
 
@@ -43,6 +45,11 @@ should happen in the package:
 - `WorkbenchLayout`, `ActionCluster`, and `DiffView` for the shared
   workflow IA: threads/context, active conversation, top-right actions, and
   review-first artifacts/diffs.
+- `StudioShell`, `StudioPageHeader`, `CoworkerAvatar`, `CoworkerCard`,
+  `ComposerShell`, `TaskLane`, `ReviewPanel`, `ApprovalCard`, `ArtifactCard`,
+  `ProjectCard`, and `ChannelStatusCard` for the new Studio product language.
+  These are presentational primitives only; OpenCode still owns execution,
+  sessions, child sessions, approvals, questions, and tool semantics.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
 

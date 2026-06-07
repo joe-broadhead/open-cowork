@@ -10,6 +10,18 @@ import { Kbd } from './Kbd.js'
 import { Menu, Select } from './Select.js'
 import { SegmentedControl } from './SegmentedControl.js'
 import { Skeleton } from './Skeleton.js'
+import {
+  ApprovalCard,
+  ArtifactCard,
+  ChannelStatusCard,
+  ComposerShell,
+  CoworkerCard,
+  ProjectCard,
+  ReviewPanel,
+  StudioPageHeader,
+  StudioShell,
+  TaskLane,
+} from './StudioPrimitives.js'
 import { Tooltip } from './Tooltip.js'
 import { toast } from './Toaster.js'
 
@@ -65,6 +77,101 @@ export function PrimitiveGallery() {
               </div>
             ))}
           </div>
+        </GallerySection>
+
+        <GallerySection title="Studio Shell And Coworking Primitives">
+          <StudioShell
+            brand={{ name: 'Open Cowork', subtitle: 'Studio preview' }}
+            activeItemId="home"
+            navSections={[
+              {
+                id: 'primary',
+                label: 'Work',
+                items: [
+                  { id: 'home', label: 'Home', icon: 'home', badge: '3' },
+                  { id: 'projects', label: 'Projects', icon: 'folder' },
+                  { id: 'approvals', label: 'Approvals', icon: 'badge-check' },
+                ],
+              },
+              {
+                id: 'manage',
+                label: 'Manage',
+                items: [
+                  { id: 'team', label: 'Team', icon: 'users' },
+                  { id: 'playbooks', label: 'Playbooks', icon: 'workflow' },
+                  { id: 'tools', label: 'Tools & Skills', icon: 'wrench' },
+                ],
+              },
+            ]}
+            header={(
+              <StudioPageHeader
+                eyebrow="Studio"
+                title="What shall we cowork on today?"
+                description="Choose a lead coworker, add context, and keep OpenCode execution visible."
+                actions={[{ id: 'new', variant: 'primary', leftIcon: 'plus', children: 'New chat' }]}
+              />
+            )}
+          >
+            <div className="studio-preview-grid">
+              <CoworkerCard
+                name="Jordan"
+                role="Lead coworker"
+                tone="lead"
+                mode="Planning"
+                summary="Coordinates the session while OpenCode owns execution, tool calls, and approvals."
+                status={{ label: 'Ready', tone: 'success' }}
+                abilities={['OpenCode', 'Review', 'Artifacts']}
+              />
+              <ComposerShell
+                label="Message the studio"
+                placeholder="Ask the team to build, review, or research..."
+                helper="OpenCode remains the runtime source of truth."
+                actions={[{ id: 'send', type: 'submit', variant: 'primary', rightIcon: 'arrow-up', children: 'Send' }]}
+                onSubmit={(event) => event.preventDefault()}
+              />
+              <TaskLane
+                title="Delegation lane"
+                tone="delegated"
+                description="Specialists stay visibly connected to the lead session."
+                items={[
+                  { id: 'api', title: 'API review', meta: 'Specialist', status: { label: 'Running', tone: 'accent' } },
+                  { id: 'tests', title: 'Coverage pass', meta: 'Reviewer', status: { label: 'Waiting', tone: 'warning' } },
+                ]}
+              />
+              <ReviewPanel
+                title="Review queue"
+                summary="Production checks before handoff."
+                status={{ label: '2 findings', tone: 'warning' }}
+                actions={[{ id: 'open', children: 'Open review' }]}
+              >
+                <ApprovalCard
+                  title="Approve shell command"
+                  requester="OpenCode permission"
+                  body="The UI presents the wait state; OpenCode owns the approval contract."
+                  actions={[
+                    { id: 'deny', variant: 'secondary', children: 'Deny' },
+                    { id: 'allow', variant: 'primary', children: 'Allow' },
+                  ]}
+                />
+              </ReviewPanel>
+              <ProjectCard
+                title="Studio parity"
+                description="Desktop and Cloud share the same IA and visual vocabulary."
+                status={{ label: 'Active', tone: 'success' }}
+                meta="3 sessions"
+              />
+              <ArtifactCard
+                title="Roadmap brief"
+                description="Generated deliverable attached to the session."
+                status={{ label: 'Draft', tone: 'neutral' }}
+              />
+              <ChannelStatusCard
+                title="Cloud gateway"
+                description="External channels route into Open Cowork without becoming a second runtime."
+                status={{ label: 'Healthy', tone: 'success' }}
+              />
+            </div>
+          </StudioShell>
         </GallerySection>
 
         <GallerySection title="Icon Buttons">

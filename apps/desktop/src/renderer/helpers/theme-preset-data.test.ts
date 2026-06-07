@@ -33,11 +33,13 @@ function contrastRatio(foreground: HexColor, background: HexColor) {
 }
 
 describe('theme preset contrast', () => {
-  it('keeps the complete 17-preset catalog available', () => {
-    expect(Object.keys(UI_THEME_PRESETS)).toHaveLength(17)
+  it('keeps the complete 18-preset catalog available', () => {
+    expect(Object.keys(UI_THEME_PRESETS)).toHaveLength(18)
   })
 
   it('uses shared built-in preset tokens without re-refining them in the runtime registry', () => {
+    expect(getThemeTokens('studio', 'dark')).toEqual(UI_THEME_PRESETS.studio.dark)
+    expect(getThemeTokens('studio', 'light')).toEqual(UI_THEME_PRESETS.studio.light)
     expect(getThemeTokens('mercury', 'dark')).toEqual(UI_THEME_PRESETS.mercury.dark)
     expect(getThemeTokens('mercury', 'light')).toEqual(UI_THEME_PRESETS.mercury.light)
   })

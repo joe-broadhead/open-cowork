@@ -25,7 +25,7 @@ type RegistryEntry = {
 }
 
 const themeRegistry = new Map<string, RegistryEntry>()
-let defaultThemeId = 'mercury'
+let defaultThemeId = 'studio'
 
 // Seed the registry from the hardcoded presets on module load. Downstream
 // config can append or override entries after App boot.

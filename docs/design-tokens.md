@@ -4,8 +4,10 @@ Open Cowork separates color from structure.
 
 The canonical typed token source is
 `packages/shared/src/design-tokens.ts`. It exports `DESIGN_TOKENS`,
-`DEFAULT_DARK_BRAND_THEME`, and `emitRootTokensCss()`. Desktop imports the
-generated CSS partial at
+`DEFAULT_DARK_BRAND_THEME`, `DEFAULT_LIGHT_BRAND_THEME`, and
+`emitRootTokensCss()`. The default dark theme is the Studio graphite/plum
+palette; Mercury remains available as a named preset for existing users.
+Desktop imports the generated CSS partial at
 `apps/desktop/src/renderer/styles/generated/design-tokens.css`, produced by
 `pnpm design-tokens:build`; Cloud Web emits the same structural variables from
 `emitRootTokensCss()` and layers public branding color tokens on top.
@@ -68,8 +70,8 @@ Surfaces use three border tiers so the UI stays crisp across all presets:
 Cards and panels combine `--shadow-card` with a subtle inset top highlight;
 dialogs and popovers reserve `--shadow-elevated`.
 
-The Mercury polish layer adds physical-material primitives without changing the
-theme palette:
+The Studio material layer adds physical-material primitives without changing the
+active theme palette:
 
 | Token | Role |
 | --- | --- |
@@ -81,8 +83,8 @@ theme palette:
 | `--glow-accent`, `--glow-soft` | accent-derived glow for active, streaming, and focus moments |
 
 `--shadow-card` and `--shadow-elevated` remain the canonical per-theme shadow
-sources. The new `--shadow-2` and `--shadow-3` aliases preserve the character
-of all 17 presets while giving component code a consistent three-tier ramp.
+sources. The `--shadow-2` and `--shadow-3` aliases preserve the character of
+all 18 presets while giving component code a consistent three-tier ramp.
 
 ## Tracking
 
@@ -133,12 +135,30 @@ Z-index tokens reserve predictable stacking slots:
 Control heights are `--control-h-sm` at 28px, `--control-h-md` at 32px, and
 `--control-h-lg` at 40px.
 
+## Studio Semantics
+
+Studio-specific tokens are still presentation tokens. They describe shared
+Desktop and Cloud Web UI structure without taking ownership of OpenCode
+execution behavior.
+
+| Token family | Role |
+| --- | --- |
+| `--studio-shell-*` | shared shell, topbar, inspector, composer, and task-lane dimensions |
+| `--density-*` | compact, regular, and spacious gap/padding values for operational surfaces |
+| `--coworker-*` | semantic agent/coworker identity colors for lead, strategist, builder, reviewer, operator, and neutral identities |
+| `--lane-*` | planning, delegated, review, approval, and artifact lane colors |
+| `--review-*` | proposed, accepted, and blocked review outcome colors |
+
+Use these variables for visual identity and status only. Runtime status,
+delegation, approvals, questions, sessions, and tool semantics remain owned by
+OpenCode and the existing Open Cowork projection layer.
+
 ## Consumers
 
 | Surface | Source path | Contract |
 | --- | --- | --- |
 | Shared package | `packages/shared/src/design-tokens.ts` | Canonical typed token values, default dark brand theme, public branding bridge, and CSS emitter. |
-| Shared React UI | `packages/ui/src/` | Token-backed `WorkbenchLayout`, `ActionCluster`, `DiffView`, and primitive components consumed by Desktop and Cloud Web. |
+| Shared React UI | `packages/ui/src/` | Token-backed `WorkbenchLayout`, `ActionCluster`, `DiffView`, Studio shell/coworker/composer/lane/card primitives, and base primitive components consumed by Desktop and Cloud Web. |
 | Desktop | `apps/desktop/src/renderer/styles/generated/design-tokens.css` | Generated `:root` CSS variables imported by `globals.css`; do not hand-edit. |
 | Cloud Web | `apps/website/src/styles.ts` and `apps/website/src/style-shared-ui.ts` | Inline shell CSS imports `emitRootTokensCss()`, serves Mona Sans / Hubot Sans from `/assets/fonts/*.woff2`, overlays public branding variables, and styles the shared workbench/review primitives used by the Vite React client. |
 | Drift gate | `tests/design-tokens-sync.test.ts` | Fails when generated Desktop tokens, shared tokens, font package assumptions, or default public branding drift. |
@@ -151,8 +171,9 @@ instead of silently drifting.
 
 `cloud.publicBranding.theme` may override color and visual-brand values only.
 The default theme is the Desktop-aligned dark palette from
-`DEFAULT_DARK_BRAND_THEME`; legacy light partial overrides remain supported for
-existing deployments.
+`DEFAULT_DARK_BRAND_THEME`; `DEFAULT_LIGHT_BRAND_THEME` defines the matching
+warm light palette for presets and downstream full-theme overrides. Legacy
+light partial overrides remain supported for existing deployments.
 
 Supported keys are:
 

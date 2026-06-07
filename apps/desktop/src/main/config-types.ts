@@ -660,7 +660,7 @@ export const DEFAULT_CONFIG: OpenCoworkConfig = {
     dataDirName: 'cowork',
     helpUrl: '',
     projectNamespace: 'opencowork',
-    defaultTheme: 'mercury',
+    defaultTheme: 'studio',
     themes: [],
   },
   auth: {

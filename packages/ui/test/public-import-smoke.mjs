@@ -3,6 +3,8 @@ const appApi = await import('../dist/AppApiProvider.js')
 const badge = await import('../dist/Badge.js')
 const card = await import('../dist/Card.js')
 const primitiveGallery = await import('../dist/PrimitiveGallery.js')
+const studio = await import('../dist/StudioPrimitives.js')
+const studioSubpath = await import('@open-cowork/ui/studio')
 
 const requiredExports = [
   ['AppApiProvider', ui.AppApiProvider],
@@ -10,6 +12,10 @@ const requiredExports = [
   ['Button', ui.Button],
   ['Card', ui.Card],
   ['PrimitiveGallery', ui.PrimitiveGallery],
+  ['StudioShell', ui.StudioShell],
+  ['CoworkerCard', ui.CoworkerCard],
+  ['ComposerShell', ui.ComposerShell],
+  ['TaskLane', ui.TaskLane],
   ['WorkbenchLayout', ui.WorkbenchLayout],
 ]
 
@@ -33,4 +39,12 @@ if (card.Card !== ui.Card) {
 
 if (primitiveGallery.PrimitiveGallery !== ui.PrimitiveGallery) {
   throw new Error('Expected primitive-gallery subpath to match the public PrimitiveGallery export')
+}
+
+if (studio.StudioShell !== ui.StudioShell) {
+  throw new Error('Expected studio subpath to match the public StudioShell export')
+}
+
+if (studioSubpath.StudioShell !== ui.StudioShell) {
+  throw new Error('Expected package studio subpath to match the public StudioShell export')
 }

@@ -19,6 +19,35 @@ export { Kbd } from '@open-cowork/ui'
 export { Menu, Select, type MenuItem, type MenuProps, type SelectOption, type SelectProps } from '@open-cowork/ui'
 export { SegmentedControl, type SegmentedControlOption, type SegmentedControlProps } from '@open-cowork/ui'
 export { Skeleton, type SkeletonProps } from '@open-cowork/ui'
+export {
+  ApprovalCard,
+  ArtifactCard,
+  ChannelStatusCard,
+  ComposerShell,
+  CoworkerAvatar,
+  CoworkerCard,
+  ProjectCard,
+  ReviewPanel,
+  StudioPageHeader,
+  StudioShell,
+  TaskLane,
+  type ApprovalCardProps,
+  type ComposerShellProps,
+  type CoworkerAvatarProps,
+  type CoworkerCardProps,
+  type ReviewPanelProps,
+  type StudioAction,
+  type StudioLaneTone,
+  type StudioNavItem,
+  type StudioNavSection,
+  type StudioObjectCardProps,
+  type StudioPageHeaderProps,
+  type StudioShellProps,
+  type StudioStatusTone,
+  type StudioTone,
+  type TaskLaneItem,
+  type TaskLaneProps,
+} from '@open-cowork/ui'
 export { Tooltip, type TooltipProps } from '@open-cowork/ui'
 export { WorkbenchLayout, type WorkbenchLayoutProps } from '@open-cowork/ui'
 export {

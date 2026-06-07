@@ -22,6 +22,35 @@ export { PrimitiveGallery } from './PrimitiveGallery.js'
 export { Menu, Select, type MenuItem, type MenuProps, type SelectOption, type SelectProps } from './Select.js'
 export { SegmentedControl, type SegmentedControlOption, type SegmentedControlProps } from './SegmentedControl.js'
 export { Skeleton, type SkeletonProps } from './Skeleton.js'
+export {
+  ApprovalCard,
+  ArtifactCard,
+  ChannelStatusCard,
+  ComposerShell,
+  CoworkerAvatar,
+  CoworkerCard,
+  ProjectCard,
+  ReviewPanel,
+  StudioPageHeader,
+  StudioShell,
+  TaskLane,
+  type ApprovalCardProps,
+  type ComposerShellProps,
+  type CoworkerAvatarProps,
+  type CoworkerCardProps,
+  type ReviewPanelProps,
+  type StudioAction,
+  type StudioLaneTone,
+  type StudioNavItem,
+  type StudioNavSection,
+  type StudioObjectCardProps,
+  type StudioPageHeaderProps,
+  type StudioShellProps,
+  type StudioStatusTone,
+  type StudioTone,
+  type TaskLaneItem,
+  type TaskLaneProps,
+} from './StudioPrimitives.js'
 export { Tooltip, type TooltipProps } from './Tooltip.js'
 export { WorkbenchLayout, type WorkbenchLayoutProps } from './WorkbenchLayout.js'
 export { cn, nextEnabledIndex } from './utils.js'

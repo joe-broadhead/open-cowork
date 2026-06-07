@@ -15,6 +15,7 @@
       "@open-cowork/ui/badge": ["../../packages/ui/dist/Badge.d.ts"],
       "@open-cowork/ui/card": ["../../packages/ui/dist/Card.d.ts"],
       "@open-cowork/ui/primitive-gallery": ["../../packages/ui/dist/PrimitiveGallery.d.ts"],
+      "@open-cowork/ui/studio": ["../../packages/ui/dist/StudioPrimitives.d.ts"],
       "@open-cowork/ui/*": ["../../packages/ui/dist/*"]
     }
   },

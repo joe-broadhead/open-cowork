@@ -23,7 +23,7 @@ The two apps look different, but **not because they use different design tokens*
 | State | Zustand (`stores/session.ts`) | hand-rolled object mutation + `innerHTML` |
 | Data | `window.coworkApi.*` (preload IPC, 150+ channels) | `/api/*` HTTP + SSE only |
 | Tokens | `globals.css` `@theme` + `:root` | `styles.ts` CSS-in-strings via `branding.ts` |
-| Themes | **17 presets** (`renderer/helpers/theme-preset-data.ts`) | single server-set brand theme only |
+| Themes | **18 presets** (`renderer/helpers/theme-preset-data.ts`) | single server-set brand theme only |
 | Gates | design-tokens-sync, a11y | modularity (line budgets, forbidden imports), a11y (WCAG AAA), perf (10k sessions ≤350ms), render |
 
 **Single source of truth that matters:** `packages/shared/src/design-tokens.ts` exports `DESIGN_TOKENS` + `emitRootTokensCss()`. Both apps derive from the same default brand theme there. *Today the values are also hand-duplicated in `globals.css` (lines 40–57 and 100–171) and kept aligned by `tests/design-tokens-sync.test.ts`.* This means **one well-placed token change propagates to both apps** — the cheapest, highest-leverage lever we have.
@@ -32,7 +32,7 @@ The two apps look different, but **not because they use different design tokens*
 
 ## 2. Design principles (the "refinement contract")
 
-1. **Keep the palette and all 17 presets.** Indigo accent (`#8da4f5`), dark-first, every preset stays. Refinement changes *structure and ratios*, not hue.
+1. **Keep the existing palette catalog and add Studio as the default preset.** Mercury's indigo accent (`#8da4f5`) remains available for existing users while Studio's graphite/plum palette becomes the default.
 2. **Definition over decoration.** Crisper borders, calmer surfaces, less reliance on the gradient to do the visual work.
 3. **Functional color.** Accent and status colors earn their place (active, progress, success/warn/danger) — not as ambient tint.
 4. **Tighter hierarchy.** Stronger type contrast and consistent density so the eye knows where to go.
@@ -54,7 +54,7 @@ The faint borders are the #1 reason the UI feels soft. Introduce a clearer hairl
 | `--color-border-strong` | — *(new)* | `~0.18` alpha | Focused/active containers, table headers |
 | `--color-surface` | `rgba(141,164,245,0.04)` | keep, but add 1px inset top-highlight on elevated | Subtle "lift" without heavier shadows |
 
-> Implementation: derive border/surface alphas as **ratios off the preset's accent/border seed** so all 17 presets get the same crispness automatically (extend the preset schema with the three border tiers, default-derived for existing presets).
+> Implementation: derive border/surface alphas as **ratios off the preset's accent/border seed** so all 18 presets get the same crispness automatically (extend the preset schema with the three border tiers, default-derived for existing presets).
 
 ### 3.2 Spacing rhythm
 Scale is `1,2,3,4,5,6,8,10,12` (×4px) — solid but gappy above 24px. Fill the rhythm and standardize component insets.
@@ -139,7 +139,7 @@ apps/
 - **Render/redaction/branding/bootstrap-escaping (`render.test.ts`):** preserve the bootstrap JSON shape, branding overrides, and sanitizer boundary.
 
 ### 5.5 Theming payoff — *this is where "keep the themes" pays off*
-Once cloud is React on the shared token system, the **17 presets become available in Cloud Web too** (today they're desktop-only; cloud only gets a single server brand theme). A user-selectable theme switcher can be shared between both apps. Server-set branding (`PublicBrandingThemeTokens`) still overrides for white-label tenants. Net: themes are not just kept — they're **unified across both surfaces**.
+Once cloud is React on the shared token system, the **18 presets become available in Cloud Web too**. A user-selectable theme switcher can be shared between both apps. Server-set branding (`PublicBrandingThemeTokens`) still overrides for white-label tenants. Net: themes are not just kept — they're **unified across both surfaces**.
 
 ---
 
@@ -147,7 +147,7 @@ Once cloud is React on the shared token system, the **17 presets become availabl
 
 **Phase 0 — Token consolidation (low risk, high leverage).** Make `design-tokens.ts` the generator; both apps consume `emitRootTokensCss`. No visual change yet; unblocks everything.
 
-**Phase 1 — Visual refinement (Pillar A).** Border tiers, surface lift, spacing fill, type tracking, motion standardization, gradient dial-down, elevation. Lands in *both* apps at once via shared tokens. Update the 17 presets' border ratios. *Ship + screenshot diff per preset.*
+**Phase 1 — Visual refinement (Pillar A).** Border tiers, surface lift, spacing fill, type tracking, motion standardization, gradient dial-down, elevation. Lands in *both* apps at once via shared tokens. Update the 18 presets' border ratios. *Ship + screenshot diff per preset.*
 
 **Phase 2 — Extract `@open-cowork/ui`.** Move pure primitives out of desktop; desktop imports from the package (no behavior change). Add bundler to `apps/website`.
 

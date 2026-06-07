@@ -2,7 +2,7 @@ import { UI_THEME_PRESETS } from '@open-cowork/shared'
 import { escapeHtml } from './html-utils.ts'
 
 export const CLOUD_THEME_STORAGE_KEY = 'open-cowork-cloud-ui-theme'
-export const DEFAULT_CLOUD_THEME_PRESET = 'mercury'
+export const DEFAULT_CLOUD_THEME_PRESET = 'studio'
 
 export function cloudThemePresetOptions() {
   return Object.entries(UI_THEME_PRESETS).map(([id, preset]) => ({
