@@ -40,6 +40,21 @@ function dedupeArtifacts(artifacts: Array<SessionArtifact | null>) {
   return Array.from(map.values()).sort((left, right) => right.order - left.order)
 }
 
+function isChartToolName(toolName: string) {
+  return toolName === 'render_chart'
+    || toolName.startsWith('charts_')
+    || toolName.startsWith('charts.')
+    || toolName.startsWith('mcp__charts__')
+}
+
+function isChartImageArtifact(artifact: SessionArtifact) {
+  if (artifact.chart) return true
+  if (artifact.mime !== 'image/png') return false
+  const normalizedPath = artifact.filePath.replaceAll('\\', '/')
+  return isChartToolName(artifact.toolName)
+    || normalizedPath.includes('/chart-artifacts/')
+}
+
 export function listSessionArtifacts(
   view: SessionView,
   extras: SessionArtifact[] = [],
@@ -55,6 +70,16 @@ export function listSessionArtifacts(
     // treats them the same as any other artifact.
     ...extras,
   ])
+}
+
+export function listVisibleSessionArtifacts(
+  view: SessionView,
+  extras: SessionArtifact[] = [],
+  options: { canReadPrivateArtifacts: boolean },
+): SessionArtifact[] {
+  const artifacts = listSessionArtifacts(view, extras)
+  if (options.canReadPrivateArtifacts) return artifacts
+  return artifacts.filter((artifact) => isChartImageArtifact(artifact) || artifact.source === 'cloud')
 }
 
 export function listArtifactsForTools(tools: ToolCall[], taskRun?: TaskRun | null): SessionArtifact[] {

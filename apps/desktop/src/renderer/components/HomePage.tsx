@@ -18,10 +18,21 @@ import {
 } from './chat/chat-input-utils'
 import { useChatRuntimeSelection, useMentionableAgents, useReasoningVariantSelection } from './chat/useChatInputRuntime'
 import type { Attachment, InlinePickerState, MentionableAgent } from './chat/chat-input-types'
-import { Badge, Button, Card, EmptyState, Icon, IconButton } from './ui'
+import {
+  Badge,
+  Card,
+  CoworkerCard,
+  EmptyState,
+  Icon,
+  IconButton,
+  ProjectCard,
+  ReviewPanel,
+  TaskLane,
+  type StudioTone,
+} from './ui'
 
 // Home is the welcoming landing surface for the simplified core product:
-// start a normal chat, @mention an agent, or pick up recent work.
+// start a normal chat, @mention a coworker, or pick up recent work.
 
 interface Props {
   brandName: string
@@ -34,10 +45,10 @@ interface Props {
 // product voice is clearer with one line: it's the tagline for the
 // landing surface, not a random fortune-cookie. The i18n key stays
 // so downstream forks can retune the voice without patching this file.
-const GREETING_KEY = 'home.greeting.cowork'
-const GREETING_FALLBACK = 'What shall we cowork on today?'
+const GREETING_KEY = 'studioHome.greeting'
+const GREETING_FALLBACK = 'What should your team tackle today?'
 
-// Cap on how many suggestion pills and how many recent threads we
+// Cap on how many coworker cards and how many recent project chats we
 // show. Kept small deliberately — the page is "get started", not
 // "everything at once".
 const MAX_SUGGESTIONS = 4
@@ -574,28 +585,82 @@ function HomeComposer({
   )
 }
 
-function AgentSuggestions({ agents, onPick, label }: {
+function coworkerTone(index: number): StudioTone {
+  const tones: StudioTone[] = ['strategist', 'builder', 'reviewer', 'operator']
+  return tones[index % tones.length] || 'neutral'
+}
+
+function LeadCoworkers({
+  agents,
+  onPick,
+  label,
+  agentMode,
+  onSetAgentMode,
+}: {
   agents: Array<{ id: string; label: string; description: string }>
   onPick: (agentId: string) => void
+  agentMode: 'build' | 'plan'
+  onSetAgentMode: (mode: 'build' | 'plan') => void
   label: string
 }) {
-  if (agents.length === 0) return null
   return (
-    <div className="mt-6 flex items-center justify-center flex-wrap gap-2">
-      <span className="text-[11px] uppercase text-text-muted">
-        {label}
-      </span>
-      {agents.slice(0, MAX_SUGGESTIONS).map((agent) => (
-        <Button
-          key={agent.id}
-          type="button"
-          onClick={() => onPick(agent.id)}
-          variant="ghost"
-          size="sm"
-        >
-          @{agent.label}
-        </Button>
-      ))}
+    <div className="home-studio-section w-full mt-9">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] uppercase text-text-muted">{label}</div>
+          <div className="mt-1 text-[13px] text-text-secondary">
+            {t('home.coworkers.subtitle', 'Choose a lead mode or mention a specialist coworker from the OpenCode agent catalog.')}
+          </div>
+        </div>
+        <Badge tone="accent">{agentMode === 'build' ? t('home.coworkers.building', 'Build lead') : t('home.coworkers.planning', 'Plan lead')}</Badge>
+      </div>
+      <div className="home-coworker-grid">
+        <CoworkerCard
+          name={t('home.coworkers.build.name', 'Build')}
+          role={t('home.coworkers.build.role', 'Lead implementation coworker')}
+          summary={t('home.coworkers.build.summary', 'Best for concrete edits, tests, packaging, and production follow-through.')}
+          tone="builder"
+          mode={agentMode === 'build' ? t('home.coworkers.active', 'Active') : undefined}
+          status={{ label: agentMode === 'build' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'build' ? 'success' : 'neutral' }}
+          actions={[{
+            id: 'build',
+            children: t('home.coworkers.useBuild', 'Use Build'),
+            variant: agentMode === 'build' ? 'primary' : 'secondary',
+            onClick: () => onSetAgentMode('build'),
+          }]}
+        />
+        <CoworkerCard
+          name={t('home.coworkers.plan.name', 'Plan')}
+          role={t('home.coworkers.plan.role', 'Lead strategy coworker')}
+          summary={t('home.coworkers.plan.summary', 'Best for scoping, decomposing risky work, and deciding what should happen before code changes.')}
+          tone="strategist"
+          mode={agentMode === 'plan' ? t('home.coworkers.active', 'Active') : undefined}
+          status={{ label: agentMode === 'plan' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'plan' ? 'success' : 'neutral' }}
+          actions={[{
+            id: 'plan',
+            children: t('home.coworkers.usePlan', 'Use Plan'),
+            variant: agentMode === 'plan' ? 'primary' : 'secondary',
+            onClick: () => onSetAgentMode('plan'),
+          }]}
+        />
+        {agents.slice(0, MAX_SUGGESTIONS).map((agent, index) => (
+          <CoworkerCard
+            key={agent.id}
+            name={agent.label}
+            role={t('home.coworkers.specialistRole', 'Specialist coworker')}
+            summary={agent.description || t('home.coworkers.specialistSummary', 'Focused delegated work through an OpenCode agent.')}
+            tone={coworkerTone(index)}
+            mode={`@${agent.id}`}
+            status={{ label: t('home.coworkers.mentionable', 'Mentionable'), tone: 'accent' }}
+            actions={[{
+              id: agent.id,
+              children: `@${agent.label}`,
+              variant: 'ghost',
+              onClick: () => onPick(agent.id),
+            }]}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -638,7 +703,7 @@ function HomeCoachmark({ onDismiss }: { onDismiss: () => void }) {
     <div className="home-coachmark mt-7">
       <div className="flex min-w-0 items-center gap-2">
         <Icon name="sparkles" size={16} className="shrink-0 text-accent" />
-        <span className="min-w-0">{t('home.coachmark', 'Type a prompt, attach context, or @mention an agent — ⌘K for commands.')}</span>
+        <span className="min-w-0">{t('studioHome.coachmark', 'Type a prompt, attach context, or @mention a coworker — ⌘K for commands.')}</span>
       </div>
       <IconButton
         icon="x"
@@ -650,37 +715,96 @@ function HomeCoachmark({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
-function RecentThreads({ threads, onOpen }: {
+function RecentProjects({ threads, onOpen }: {
   threads: SessionInfo[]
   onOpen: (sessionId: string) => void
 }) {
   if (threads.length === 0) return null
   return (
     <div className="w-full mt-10">
-      <div className="text-[11px] uppercase text-text-muted mb-3">
-        {t('home.recent.title', 'Pick up where you left off')}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] uppercase text-text-muted">
+            {t('home.recent.title', 'Pick up where you left off')}
+          </div>
+          <div className="mt-1 text-[13px] text-text-secondary">
+            {t('home.recent.subtitle', 'Recent project chats stay backed by real OpenCode sessions.')}
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {threads.slice(0, MAX_RECENT_THREADS).map((thread) => (
-          <Card
+          <ProjectCard
             key={thread.id}
-            interactive
-            padding="md"
-            onClick={() => onOpen(thread.id)}
-          >
-            <div
-              className="home-recent-accent mb-3 transition-colors"
-              aria-hidden="true"
-            />
-            <div className="text-[13px] font-medium text-text truncate">
-              {thread.title || t('home.recent.untitled', 'Untitled thread')}
-            </div>
-            <div className="mt-1 text-[11px] text-text-muted truncate">
-              {thread.updatedAt ? formatDate(thread.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-            </div>
-          </Card>
+            title={thread.title || t('home.recent.untitled', 'Untitled project chat')}
+            description={thread.directory || t('home.recent.chatOnly', 'Chat-only project')}
+            status={{ label: t('home.recent.open', 'Open'), tone: 'accent' }}
+            meta={thread.updatedAt ? formatDate(thread.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null}
+            actions={[{
+              id: 'open',
+              children: t('home.recent.openChat', 'Open chat'),
+              onClick: () => onOpen(thread.id),
+              variant: 'secondary',
+              rightIcon: 'chevron-right',
+            }]}
+          />
         ))}
       </div>
+    </div>
+  )
+}
+
+function HomeReviewSnapshot({
+  pendingApprovals,
+  pendingQuestions,
+  taskCount,
+}: {
+  pendingApprovals: number
+  pendingQuestions: number
+  taskCount: number
+}) {
+  const totalInput = pendingApprovals + pendingQuestions
+  if (totalInput === 0 && taskCount === 0) return null
+  return (
+    <div className="w-full mt-8">
+      <ReviewPanel
+        title={t('home.review.title', 'Review Snapshot')}
+        summary={t('home.review.summary', 'Live review state from the active OpenCode session projection.')}
+        status={{ label: totalInput > 0 ? t('home.review.needsInput', 'Needs input') : t('home.review.clear', 'Clear'), tone: totalInput > 0 ? 'warning' : 'success' }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <TaskLane
+            title={t('home.review.decisions', 'Decisions')}
+            tone="approval"
+            items={[
+              ...(pendingApprovals > 0 ? [{
+                id: 'approvals',
+                title: t('home.review.approvals', 'Permission approvals'),
+                meta: t('home.review.pendingCount', '{{count}} pending', { count: pendingApprovals }),
+                status: { label: t('home.review.open', 'Open'), tone: 'warning' as const },
+              }] : []),
+              ...(pendingQuestions > 0 ? [{
+                id: 'questions',
+                title: t('home.review.questions', 'Questions'),
+                meta: t('home.review.pendingCount', '{{count}} pending', { count: pendingQuestions }),
+                status: { label: t('home.review.open', 'Open'), tone: 'warning' as const },
+              }] : []),
+            ]}
+            emptyLabel={t('home.review.noDecisions', 'No decisions waiting')}
+          />
+          <TaskLane
+            title={t('home.review.coworkers', 'Coworker Activity')}
+            tone="delegated"
+            items={taskCount > 0 ? [{
+              id: 'task-runs',
+              title: t('home.review.specialistLanes', 'Specialist lanes'),
+              meta: t('home.review.taskCount', '{{count}} task runs', { count: taskCount }),
+              status: { label: t('home.review.projected', 'Projected'), tone: 'accent' },
+            }] : []}
+            emptyLabel={t('home.review.noCoworkers', 'No delegated runs active')}
+          />
+        </div>
+      </ReviewPanel>
     </div>
   )
 }
@@ -706,6 +830,9 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
 
 export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
+  const currentView = useSessionStore((s) => s.currentView)
+  const agentMode = useSessionStore((s) => s.agentMode)
+  const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [submitting, setSubmitting] = useState(false)
   const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
   const [promptPrefill, setPromptPrefill] = useState<{ text: string; nonce: number } | null>(null)
@@ -780,19 +907,19 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
   const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
   const subtitle = configuredCopy(
     homeBranding?.subtitle,
-    'home.subtitle',
-    '{{brand}} · Ask anything, or @mention an agent',
+    'studioHome.subtitle',
+    '{{brand}} · Choose a lead coworker, @mention specialists, and review the work in one place',
     homeCopyVars,
   )
   const composerPlaceholder = configuredCopy(
     homeBranding?.composerPlaceholder,
-    'home.composer.placeholder',
-    'Ask anything, or @mention an agent',
+    'studioHome.composer.placeholder',
+    'Ask anything, or @mention a coworker',
     homeCopyVars,
   )
   const suggestionLabel = configuredCopy(homeBranding?.suggestionLabel, 'home.suggestions.title', 'Try', homeCopyVars)
   const agentNudgeLabel = firstRun && !homeBranding?.suggestionLabel
-    ? t('home.agentNudge', '@mention an agent')
+    ? t('studioHome.agentNudge', '@mention a coworker')
     : suggestionLabel
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
@@ -830,9 +957,21 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
 
         {firstRun && <FirstRunExamples onPick={handlePickExample} />}
 
-        <AgentSuggestions agents={suggestedAgents} onPick={handlePickAgent} label={agentNudgeLabel} />
+        <LeadCoworkers
+          agents={suggestedAgents}
+          onPick={handlePickAgent}
+          label={agentNudgeLabel}
+          agentMode={agentMode}
+          onSetAgentMode={setAgentMode}
+        />
 
-        <RecentThreads threads={recentThreads} onOpen={handleOpenThread} />
+        <HomeReviewSnapshot
+          pendingApprovals={currentView.pendingApprovals.length}
+          pendingQuestions={currentView.pendingQuestions.length}
+          taskCount={currentView.taskRuns.length}
+        />
+
+        <RecentProjects threads={recentThreads} onOpen={handleOpenThread} />
 
         <StatusStrip readyLabel={readyLabel} />
       </div>

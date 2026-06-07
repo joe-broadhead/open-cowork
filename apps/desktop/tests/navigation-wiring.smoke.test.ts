@@ -36,7 +36,7 @@ function makeThreadIndexFixture(index: number) {
   }
 }
 
-test('sidebar Threads button opens the indexed Threads workspace', async () => {
+test('sidebar Projects button opens the indexed Projects workspace', async () => {
   const fixtures = Array.from({ length: 6 }, (_, index) => makeThreadIndexFixture(index))
   const { page, cleanup } = await launchSmokeApp({
     seedBeforeLaunch: ({ dataRoot }) => {
@@ -46,8 +46,8 @@ test('sidebar Threads button opens the indexed Threads workspace', async () => {
 
   try {
     await waitForAppShell(page, 30_000)
-    await page.getByRole('button', { name: 'Threads', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Search threads' }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Projects', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Search projects' }).waitFor({ timeout: 10_000 })
     await page.locator('main').getByText('Threads workspace fixture 6', { exact: true }).waitFor({ timeout: 10_000 })
 
     const indexedCount = await page.evaluate(async () => {
@@ -168,11 +168,11 @@ test('home recent-thread CTA routes through the real session activation path', a
     await page.reload()
     await waitForAppShell(page, 30_000)
 
-    await page.locator('main').getByRole('button', { name: RECENT_SOURCE_TITLE }).click()
+    await page.locator('.studio-object-card').filter({ hasText: RECENT_SOURCE_TITLE }).getByRole('button', { name: 'Open chat' }).click()
     await page.getByText(RECENT_THREAD_MARKER, { exact: false }).waitFor({ timeout: 15_000 })
 
     await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-    await page.locator('main').getByRole('button', { name: RECENT_TARGET_TITLE }).click()
+    await page.locator('.studio-object-card').filter({ hasText: RECENT_TARGET_TITLE }).getByRole('button', { name: 'Open chat' }).click()
     await page.locator('main').getByText(RECENT_TARGET_TITLE, { exact: true }).waitFor({ timeout: 10_000 })
 
     const markerCount = await page.getByText(RECENT_THREAD_MARKER, { exact: false }).count()
@@ -232,7 +232,7 @@ test('search shortcut reveals the sidebar search when the sidebar is collapsed',
     await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ state: 'hidden', timeout: 10_000 })
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')))
-    await page.getByPlaceholder(/Search threads/i).waitFor({ timeout: 10_000 })
+    await page.getByPlaceholder(/Search projects and chats/i).waitFor({ timeout: 10_000 })
   } finally {
     await cleanup()
   }

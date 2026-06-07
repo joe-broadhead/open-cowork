@@ -18,6 +18,7 @@ import { useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
+import type { AppNavigationTarget } from './app-types'
 
 const mockLoadSessionMessages = vi.hoisted(() => vi.fn(async (_sessionId: string) => undefined))
 const mockUseOpenCodeEvents = vi.hoisted(() => vi.fn())
@@ -89,7 +90,7 @@ vi.mock('./components/layout/Sidebar', () => ({
     settingsRequestNonce,
   }: {
     currentView: string
-    onViewChange: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health') => void
+    onViewChange: (view: AppNavigationTarget) => void
     searchRequestNonce: number
     settingsRequestNonce: number
   }) => (
@@ -99,8 +100,8 @@ vi.mock('./components/layout/Sidebar', () => ({
       data-search-nonce={searchRequestNonce}
       data-settings-nonce={settingsRequestNonce}
     >
-      <button type="button" onClick={() => onViewChange('agents')}>Sidebar agents</button>
-      <button type="button" onClick={() => onViewChange('workflows')}>Sidebar workflows</button>
+      <button type="button" onClick={() => onViewChange('team')}>Sidebar team</button>
+      <button type="button" onClick={() => onViewChange('playbooks')}>Sidebar playbooks</button>
     </aside>
   ),
 }))
@@ -207,7 +208,7 @@ vi.mock('./components/CommandPalette', () => ({
     onToggleSearch,
   }: {
     onClose: () => void
-    onNavigate: (view: 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health') => void
+    onNavigate: (view: AppNavigationTarget) => void
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
@@ -217,7 +218,7 @@ vi.mock('./components/CommandPalette', () => ({
   }) => (
     <div data-testid="command-palette">
       <button type="button" onClick={onClose}>Close palette</button>
-      <button type="button" onClick={() => onNavigate('agents')}>Palette agents</button>
+      <button type="button" onClick={() => onNavigate('team')}>Palette team</button>
       <button type="button" onClick={() => void onCreateThread()}>Palette new thread</button>
       <button type="button" onClick={() => void onEnsureSession()}>Palette ensure session</button>
       <button type="button" onClick={() => onInsertComposer('Inserted prompt')}>Palette insert</button>
@@ -722,7 +723,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Palette settings' }))
     await waitFor(() => expect(screen.getByTestId('sidebar')).toHaveAttribute('data-settings-nonce', '1'))
 
-    await user.click(screen.getByRole('button', { name: 'Palette agents' }))
+    await user.click(screen.getByRole('button', { name: 'Palette team' }))
     expect(await screen.findByTestId('agents-page')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Palette ensure session' }))

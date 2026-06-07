@@ -75,7 +75,7 @@ describe('ThreadsPage', () => {
     expect(screen.getByText('Tool: charts.create')).toBeInTheDocument()
     expect(screen.getByText('Suggested: reporting')).toBeInTheDocument()
 
-    await user.type(screen.getByRole('textbox', { name: 'Search threads' }), 'revenue')
+    await user.type(screen.getByRole('textbox', { name: 'Search projects' }), 'revenue')
     await waitFor(() => expect(api.threads.search).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'revenue' })))
 
     await user.click(screen.getAllByRole('button', { name: /openrouter/ })[0]!)
@@ -113,7 +113,7 @@ describe('ThreadsPage', () => {
       expect(screen.getByText('Weekly chart report')).toBeInTheDocument()
       vi.mocked(api.threads.search).mockClear()
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Search threads' }), { target: { value: 'rev' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), { target: { value: 'rev' } })
       expect(api.threads.search).not.toHaveBeenCalled()
 
       await act(async () => {
@@ -129,7 +129,7 @@ describe('ThreadsPage', () => {
       expect(api.threads.search).toHaveBeenCalledWith(expect.objectContaining({ text: 'rev' }))
 
       vi.mocked(api.threads.search).mockClear()
-      fireEvent.change(screen.getByRole('textbox', { name: 'Search threads' }), { target: { value: 'revenue' } })
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), { target: { value: 'revenue' } })
       expect(api.threads.search).not.toHaveBeenCalled()
       fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
       await act(async () => {
@@ -170,7 +170,7 @@ describe('ThreadsPage', () => {
     render(<ThreadsPage onOpenThread={vi.fn()} />)
 
     await screen.findByText('Weekly chart report')
-    await user.click(screen.getByRole('checkbox', { name: 'Select thread' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Select project chat' }))
     await user.click(screen.getByRole('button', { name: 'Add tag' }))
     await waitFor(() => expect(api.threads.tags.apply).toHaveBeenCalledWith(['thread-1'], ['tag-1']))
 
@@ -178,7 +178,7 @@ describe('ThreadsPage', () => {
     await waitFor(() => expect(api.threads.search).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'report', tagIds: ['tag-1'] })))
 
     await user.click(screen.getByRole('button', { name: /Weekly chart report/ }))
-    const drawer = screen.getByRole('complementary', { name: 'Thread detail' })
+    const drawer = screen.getByRole('complementary', { name: 'Project detail' })
     await user.click(within(drawer).getByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(api.threads.suggestions.accept).toHaveBeenCalledWith('suggestion-1'))
   })

@@ -265,7 +265,7 @@ function ThreadBadges({ thread }: { thread: ThreadListItem }) {
     <div className="flex flex-wrap items-center gap-1.5">
       {thread.providerId ? <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Provider: {thread.providerId}</span> : null}
       {thread.actualAgents.slice(0, 2).map((agent) => (
-        <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Agent: {agent.name}</span>
+        <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Coworker: {agent.name}</span>
       ))}
       {thread.actualTools.slice(0, 2).map((tool) => (
         <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted">Tool: {tool.name}</span>
@@ -304,7 +304,7 @@ function ThreadRow({
           type="checkbox"
           checked={selected}
           onChange={onToggleSelected}
-          aria-label={t('threads.selectThread', 'Select thread')}
+          aria-label={t('threads.selectThread', 'Select project chat')}
           className="h-3.5 w-3.5 accent-[var(--color-accent)]"
         />
       </div>
@@ -402,7 +402,7 @@ function TagManager({
             <button
               type="button"
               aria-disabled={selectedIds.length === 0}
-              aria-label={t('threads.applyOrDropTag', 'Apply or drop selected threads onto {{name}}', { name: tag.name })}
+              aria-label={t('threads.applyOrDropTag', 'Apply or drop selected project chats onto {{name}}', { name: tag.name })}
               onClick={() => onApplyTag(tag.id)}
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => onDropTag(tag.id)}
@@ -492,7 +492,7 @@ function DetailDrawer({
   }, [thread?.sessionId])
   if (!thread) return null
   return (
-    <aside aria-label="Thread detail" className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
+    <aside aria-label="Project detail" className="threads-detail-panel shrink-0 border-s border-border-subtle bg-base">
       <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
         <h2 className="min-w-0 truncate text-[14px] font-semibold text-text">{thread.title}</h2>
         <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-[12px] text-text-muted hover:bg-surface-hover">Close</button>
@@ -507,15 +507,15 @@ function DetailDrawer({
             <span className="text-text-muted">Cost</span><span>{money(thread.usage.cost)}</span>
           </div>
           <Button type="button" onClick={() => onOpen(thread.sessionId)} className="mt-3" fullWidth>
-            Open thread
+            Open chat
           </Button>
         </section>
         <section>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Thread activity</h3>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">Coworker activity</h3>
           <div className="flex flex-wrap gap-1.5">
-            {thread.actualAgents.map((agent) => <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Agent: {agent.name} ×{agent.count}</span>)}
+            {thread.actualAgents.map((agent) => <span key={agent.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Coworker: {agent.name} ×{agent.count}</span>)}
             {thread.actualTools.map((tool) => <span key={tool.name} className="rounded bg-surface px-1.5 py-0.5 text-[10px]">Tool: {tool.name} ×{tool.count}</span>)}
-            {!thread.actualAgents.length && !thread.actualTools.length ? <span className="text-text-muted">No agent or tool usage recorded yet.</span> : null}
+            {!thread.actualAgents.length && !thread.actualTools.length ? <span className="text-text-muted">No coworker or tool usage recorded yet.</span> : null}
           </div>
         </section>
         <section>
@@ -547,7 +547,7 @@ function DetailDrawer({
                   </>
                 )}
               </div>
-            )) : <span className="text-text-muted">No suggestions for this thread.</span>}
+            )) : <span className="text-text-muted">No suggestions for this project chat.</span>}
           </div>
         </section>
       </div>
@@ -677,10 +677,10 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
 
   return (
     <div className="threads-page-shell flex h-full min-h-0 bg-base text-text">
-      <aside aria-label="Thread filters" className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
+      <aside aria-label="Project filters" className="threads-filter-panel flex shrink-0 flex-col border-e border-border-subtle bg-base">
         <div className="border-b border-border-subtle px-3 py-3">
-          <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Threads')}</div>
-          <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search history, metadata, tags, and saved filters.')}</div>
+          <div className="text-[15px] font-semibold text-text">{t('threads.title', 'Projects')}</div>
+          <div className="mt-1 text-[11px] text-text-muted">{t('threads.subtitle', 'Search project chats, metadata, tags, and saved filters.')}</div>
         </div>
         <div className="threads-filter-scroll min-h-0 flex-1 overflow-y-auto">
           <SmartFilters
@@ -722,29 +722,29 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
           <FacetGroup title="Projects" buckets={facets.projects} selected={query.projectLabels} onToggle={(value) => setQuery((current) => ({ ...current, projectLabels: toggleValue(current.projectLabels, value) }))} />
           <FacetGroup title="Providers" buckets={facets.providers} selected={query.providerIds} onToggle={(value) => setQuery((current) => ({ ...current, providerIds: toggleValue(current.providerIds, value) }))} />
           <FacetGroup title="Models" buckets={facets.models} selected={query.modelIds} onToggle={(value) => setQuery((current) => ({ ...current, modelIds: toggleValue(current.modelIds, value) }))} />
-          <FacetGroup title="Agents" buckets={facets.agents} selected={query.agents} onToggle={(value) => setQuery((current) => ({ ...current, agents: toggleValue(current.agents, value) }))} />
+          <FacetGroup title="Coworkers" buckets={facets.agents} selected={query.agents} onToggle={(value) => setQuery((current) => ({ ...current, agents: toggleValue(current.agents, value) }))} />
           <FacetGroup title="Tools" buckets={facets.tools} selected={query.tools} onToggle={(value) => setQuery((current) => ({ ...current, tools: toggleValue(current.tools, value) }))} />
           <FacetGroup title="MCPs" buckets={facets.mcps} selected={query.mcps} onToggle={(value) => setQuery((current) => ({ ...current, mcps: toggleValue(current.mcps, value) }))} />
-          <FacetGroup title="Thread tags" buckets={facets.tags} selected={query.tagIds} onToggle={(value) => setQuery((current) => ({ ...current, tagIds: toggleValue(current.tagIds, value) }))} />
+          <FacetGroup title="Project tags" buckets={facets.tags} selected={query.tagIds} onToggle={(value) => setQuery((current) => ({ ...current, tagIds: toggleValue(current.tagIds, value) }))} />
         </div>
       </aside>
       <section className="threads-results-panel flex min-w-0 flex-1 flex-col">
         <div className="border-b border-border-subtle px-4 py-3">
           <div className="threads-toolbar">
-            <label className="sr-only" htmlFor="threads-search">Search threads</label>
+            <label className="sr-only" htmlFor="threads-search">Search projects</label>
             <div className="min-w-0 flex-1">
               <Input
                 id="threads-search"
                 value={query.text}
                 onChange={(event) => setQuery((current) => ({ ...current, text: event.target.value }))}
-                placeholder={t('threads.searchPlaceholder', 'Search titles, projects, providers, agents, tools, tags, and suggestions')}
+                placeholder={t('threads.searchPlaceholder', 'Search titles, projects, providers, coworkers, tools, tags, and suggestions')}
                 leftIcon="search"
               />
             </div>
             <Select
               value={query.sort}
               onChange={(value) => setQuery((current) => ({ ...current, sort: value as ThreadSort }))}
-              label="Sort threads"
+              label="Sort projects"
               className="threads-sort-select"
               options={[
                 { value: 'updated_desc', label: 'Recently updated' },
@@ -765,16 +765,16 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
             ) : null}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-text-muted">
-            <span>{loading ? 'Loading...' : `${total} thread${total === 1 ? '' : 's'}`}</span>
-            {selectedIds.length ? <span>{selectedIds.length} selected. Use Add tag or Remove tag, or drag rows onto a tag.</span> : <span>Thread activity and suggestions are kept separate.</span>}
+            <span>{loading ? 'Loading...' : `${total} project chat${total === 1 ? '' : 's'}`}</span>
+            {selectedIds.length ? <span>{selectedIds.length} selected. Use Add tag or Remove tag, or drag rows onto a tag.</span> : <span>Project activity and suggestions are kept separate.</span>}
           </div>
         </div>
         {error ? <div role="alert" className="border-b border-red-400/30 bg-red-500/10 px-4 py-2 text-[12px] text-red-100">{error}</div> : null}
         <div className="scroll-shadow-x min-h-0 flex-1 overflow-auto">
-          <div role="grid" aria-label={t('threads.resultsGrid', 'Thread results')} className="min-w-[920px]">
+          <div role="grid" aria-label={t('threads.resultsGrid', 'Project results')} className="min-w-[920px]">
             <div role="row" className="grid grid-cols-[32px_minmax(220px,1.4fr)_160px_160px_120px] gap-3 border-b border-border-subtle px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
               <span role="columnheader" aria-label="Select" />
-              <span role="columnheader">Thread</span>
+              <span role="columnheader">Project chat</span>
               <span role="columnheader">Provider / model</span>
               <span role="columnheader">Tags</span>
               <span role="columnheader">Status</span>
@@ -804,10 +804,10 @@ export function ThreadsPage({ onOpenThread }: ThreadsPageProps) {
                 <div role="gridcell" aria-colspan={5} className="p-8 text-center text-[13px] text-text-muted">
                   <EmptyState
                     icon="search"
-                    title={hasFilters(query) ? 'No threads match your filters' : 'Your threads'}
+                    title={hasFilters(query) ? 'No project chats match your filters' : 'Your project chats'}
                     body={hasFilters(query)
                       ? 'Try clearing a filter or changing the search text.'
-                      : 'Threads you start or run through workflows will appear here.'}
+                      : 'Chats you start from Home or project directories will appear here.'}
                   />
                 </div>
               </div>

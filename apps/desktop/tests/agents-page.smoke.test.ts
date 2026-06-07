@@ -11,11 +11,11 @@ import { launchSmokeApp, waitForAppShell } from './smoke-helpers.ts'
 test('agents page renders built-in + custom sections with the import / new buttons', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
-    // Nav to Agents via the sidebar. Home no longer renders the old
+    // Nav to Team via the sidebar. Home no longer renders the old
     // dashboard heading, so wait for the actual shell controls instead
     // of stale copy from the previous landing page.
     await waitForAppShell(page)
-    await page.getByRole('button', { name: 'Agents', exact: true }).first().click()
+    await page.getByRole('button', { name: 'Team', exact: true }).first().click()
 
     // Header copy anchors the page after the view swap. We wait before
     // asserting anything else so the lazy-loaded AgentsPage has had a

@@ -58,7 +58,7 @@ export function ChatInputInlinePicker({
           background: 'color-mix(in srgb, var(--color-base) 88%, var(--color-text) 12%)',
         }}
       >
-        Sub-Agents
+        Coworkers
       </div>
       <div className="overflow-y-auto flex-1">
       {suggestions.map((item, index) => (

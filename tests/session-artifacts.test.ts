@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
-import { artifactForTool, listArtifactsForTools, listSessionArtifacts, sanitizeArtifactToolInput } from '../apps/desktop/src/renderer/components/chat/session-artifacts.ts'
+import { artifactForTool, listArtifactsForTools, listSessionArtifacts, listVisibleSessionArtifacts, sanitizeArtifactToolInput } from '../apps/desktop/src/renderer/components/chat/session-artifacts.ts'
 
 function tool(overrides: Partial<ToolCall>): ToolCall {
   return {
@@ -79,6 +79,67 @@ test('listSessionArtifacts includes cloud projection artifacts', () => {
   }]
 
   assert.equal(listSessionArtifacts(view)[0]?.cloudArtifactId, 'artifact-1')
+})
+
+test('listVisibleSessionArtifacts hides project file artifacts while preserving chart and cloud artifacts', () => {
+  const view = emptyView()
+  view.toolCalls = [
+    tool({
+      id: 'write-1',
+      input: { filePath: '/Users/alice/project/report.txt', content: 'hello' },
+      order: 10,
+    }),
+  ]
+  view.artifacts = [{
+    id: 'cloud-1',
+    toolId: 'cloud-artifact',
+    toolName: 'cloud.artifact',
+    filePath: 'cloud-artifact://cloud-1/result.txt',
+    filename: 'result.txt',
+    order: 4,
+    source: 'cloud',
+    cloudArtifactId: 'cloud-1',
+    mime: 'text/plain',
+  }, {
+    id: 'project-image',
+    toolId: 'write-image',
+    toolName: 'write',
+    filePath: '/Users/alice/project/screenshot.png',
+    filename: 'screenshot.png',
+    order: 8,
+    source: 'local',
+    mime: 'image/png',
+  }]
+  const chartArtifact = {
+    id: 'chart-1',
+    toolId: 'chart-tool',
+    toolName: 'charts.line',
+    filePath: '/private/chart-artifacts/chart-1.png',
+    filename: 'chart-1.png',
+    order: 6,
+    source: 'local' as const,
+    mime: 'image/png',
+    chart: { format: 'vega-lite' as const, spec: {} },
+  }
+  const chartArtifactWithoutMetadata = {
+    id: 'chart-2',
+    toolId: 'chart-tool-2',
+    toolName: 'charts.bar',
+    filePath: '/private/chart-artifacts/chart-2.png',
+    filename: 'chart-2.png',
+    order: 5,
+    source: 'local' as const,
+    mime: 'image/png',
+  }
+
+  assert.deepEqual(
+    listVisibleSessionArtifacts(view, [chartArtifact, chartArtifactWithoutMetadata], { canReadPrivateArtifacts: false }).map((artifact) => artifact.id),
+    ['chart-1', 'chart-2', 'cloud-1'],
+  )
+  assert.deepEqual(
+    listVisibleSessionArtifacts(view, [chartArtifact, chartArtifactWithoutMetadata], { canReadPrivateArtifacts: true }).map((artifact) => artifact.id),
+    ['session:write-1:/Users/alice/project/report.txt', 'project-image', 'chart-1', 'chart-2', 'cloud-1'],
+  )
 })
 
 test('sanitizeArtifactToolInput hides sandbox file paths behind artifact urls', () => {

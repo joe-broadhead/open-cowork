@@ -27,7 +27,7 @@ export function ChatThreadHeader({
     <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-text truncate">
-          {currentSession?.title || `Thread ${currentSessionId.slice(0, 8)}`}
+          {currentSession?.title || `Chat ${currentSessionId.slice(0, 8)}`}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {currentSession?.directory && (
@@ -41,11 +41,11 @@ export function ChatThreadHeader({
               onClick={onOpenParent}
               title={parentSession
                 ? `Jump to parent: ${parentSession.title || parentSession.id}`
-                : 'Jump to parent thread'}
+                : 'Jump to parent chat'}
               className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               <span>⑂</span>
-              <span>Forked from {parentSession?.title ? parentSession.title : 'thread'}</span>
+              <span>Forked from {parentSession?.title ? parentSession.title : 'chat'}</span>
             </button>
           )}
           {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (
@@ -82,12 +82,12 @@ export function ChatThreadHeader({
         </div>
       </div>
       <ActionCluster
-        label={t('chat.threadActions', 'Thread actions')}
+        label={t('chat.threadActions', 'Chat actions')}
         className="desktop-thread-action-cluster shrink-0"
         items={[
           {
             id: 'context',
-            label: inspectorOpen ? 'Hide Context' : 'Show Context',
+            label: inspectorOpen ? 'Hide Review' : 'Show Review',
             icon: 'panel-left',
             pressed: inspectorOpen,
             title: inspectorOpen ? 'Hide the review pane' : 'Show the review pane',

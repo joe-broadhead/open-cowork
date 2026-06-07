@@ -11,7 +11,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { LoadingScreen } from './components/LoadingScreen'
 import { SetupScreen } from './components/SetupScreen'
 import { HomePage } from './components/HomePage'
-import type { AppView } from './app-types'
+import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
 const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((m) => ({ default: m.ThreadsPage })))
@@ -19,6 +19,9 @@ const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
 const HealthCenterPage = lazy(() => import('./components/health/HealthCenterPage').then((m) => ({ default: m.HealthCenterPage })))
+const StudioApprovalsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioApprovalsPage })))
+const StudioArtifactsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioArtifactsPage })))
+const StudioChannelsPage = lazy(() => import('./components/studio/StudioUtilityPages').then((m) => ({ default: m.StudioChannelsPage })))
 const PrimitiveGallery = lazy(() => import('./components/ui/PrimitiveGallery').then((m) => ({ default: m.PrimitiveGallery })))
 const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
 import { useSessionStore } from './stores/session'
@@ -137,7 +140,9 @@ export function App() {
   // page reload (which would collapse the Settings panel mid-edit).
   const [localeVersion, setLocaleVersion] = useState(0)
   useEffect(() => subscribeLocale(() => setLocaleVersion((n) => n + 1)), [])
-  const navigateView = useCallback((nextView: AppView) => {
+  const navigateView = useCallback((target: AppNavigationTarget) => {
+    const nextView = normalizeAppView(target)
+    if (!nextView || nextView === 'settings') return
     const apply = () => setView(nextView)
     if (canUseViewTransition()) {
       ;(document as ViewTransitionDocument).startViewTransition?.(() => {
@@ -196,7 +201,7 @@ export function App() {
         setSessions(sessions || [])
       }
     } catch (err) {
-      reportAppError('Could not load your threads. Try refreshing the app.', err, 'sessions')
+      reportAppError('Could not load your projects. Try refreshing the app.', err, 'sessions')
     }
   }, [reportAppError, setSessions])
 
@@ -224,7 +229,7 @@ export function App() {
       navigateView('chat')
       return session
     } catch (err) {
-      reportAppError('Could not create a new thread. Try again.', err, 'session-create')
+      reportAppError('Could not create a new project chat. Try again.', err, 'session-create')
       return null
     }
   }, [addSession, navigateView, reportAppError, setCurrentSession])
@@ -298,7 +303,7 @@ export function App() {
     }
 
     if (action.routeKey === 'workflow' || action.routeKey === 'workflow-run') {
-      navigateView('workflows')
+      navigateView('playbooks')
       return
     }
 
@@ -313,7 +318,7 @@ export function App() {
     }
 
     if (action.routeKey === 'capability') {
-      navigateView('capabilities')
+      navigateView('tools')
       return
     }
 
@@ -677,36 +682,51 @@ export function App() {
                 <ChatView />
               </Suspense>
             )}
-            {view === 'threads' && (
+            {view === 'projects' && (
               <Suspense fallback={null}>
                 <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
-            {view === 'workflows' && (
+            {view === 'approvals' && (
+              <Suspense fallback={null}>
+                <StudioApprovalsPage onOpenChat={() => navigateView('chat')} onOpenHome={() => navigateView('home')} />
+              </Suspense>
+            )}
+            {view === 'playbooks' && (
               <Suspense fallback={null}>
                 <WorkflowsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
-            {view === 'agents' && (
+            {view === 'team' && (
               <Suspense fallback={null}>
                 <AgentsPage
                   initialDraft={agentBuilderSeed}
                   onClearDraft={() => setAgentBuilderSeed(null)}
                   onClose={() => navigateView('chat')}
-                  onOpenCapabilities={() => navigateView('capabilities')}
+                  onOpenCapabilities={() => navigateView('tools')}
                   onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
                 />
               </Suspense>
             )}
-            {view === 'capabilities' && (
+            {view === 'channels' && (
+              <Suspense fallback={null}>
+                <StudioChannelsPage onOpenSettings={openSidebarSettings} />
+              </Suspense>
+            )}
+            {view === 'tools' && (
               <Suspense fallback={null}>
                 <CapabilitiesPage
                   onClose={() => navigateView('chat')}
                   onCreateAgent={(seed) => {
                     setAgentBuilderSeed(seed)
-                    navigateView('agents')
+                    navigateView('team')
                   }}
                 />
+              </Suspense>
+            )}
+            {view === 'artifacts' && (
+              <Suspense fallback={null}>
+                <StudioArtifactsPage onOpenChat={() => navigateView('chat')} />
               </Suspense>
             )}
             {view === 'health' && (

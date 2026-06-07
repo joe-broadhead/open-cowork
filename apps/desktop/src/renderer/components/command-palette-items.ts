@@ -8,11 +8,12 @@ import type {
   CustomAgentSummary,
   SessionInfo,
 } from '@open-cowork/shared'
+import type { AppNavigationTarget } from '../app-types.ts'
 import { formatAgentLabel } from '../helpers/agent-label.ts'
 import { compactDescription } from '../helpers/format.ts'
 
-export type View = 'home' | 'chat' | 'threads' | 'workflows' | 'agents' | 'capabilities' | 'health' | 'ui-primitives'
-export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Agents'
+export type View = AppNavigationTarget
+export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Coworkers'
 const COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH = 96
 
 export type RuntimeCommand = {
@@ -32,7 +33,7 @@ export type PaletteItem = {
   run: () => Promise<boolean | void> | boolean | void
 }
 
-export const SECTION_ORDER: PaletteSection[] = ['Go To', 'Create', 'Modes', 'Commands', 'Agents']
+export const SECTION_ORDER: PaletteSection[] = ['Go To', 'Create', 'Modes', 'Commands', 'Coworkers']
 
 type NavigatorPlatformSource = {
   platform?: string
@@ -92,7 +93,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     .map((command) => ({
       id: `command:${command.name}`,
       title: command.name,
-      subtitle: compactDescription(command.description || 'Run a saved command in the active thread.', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
+      subtitle: compactDescription(command.description || 'Run a saved command in the active project chat.', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
       section: 'Commands' as const,
       badge: 'Command',
       keywords: `${command.name} ${command.description || ''}`.toLowerCase(),
@@ -125,7 +126,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
         id: `builtin-agent:${agent.name}`,
         title: agent.label,
         subtitle: compactDescription(agent.description, COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
-        section: 'Agents' as const,
+        section: 'Coworkers' as const,
         badge: 'Built-in',
         keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
         run: async () => {
@@ -140,8 +141,8 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       .map((agent) => ({
         id: `custom-agent:${agent.name}`,
         title: formatAgentLabel(agent.name),
-        subtitle: compactDescription(agent.description || 'Custom delegated agent', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
-        section: 'Agents' as const,
+        subtitle: compactDescription(agent.description || 'Custom delegated coworker', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
+        section: 'Coworkers' as const,
         badge: 'Custom',
         keywords: `${agent.name} ${agent.description || ''} ${agent.instructions}`.toLowerCase(),
         run: async () => {
@@ -157,50 +158,77 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     {
       id: 'nav:home',
       title: 'Home',
-      subtitle: 'Start a new conversation or pick up a recent thread.',
+      subtitle: 'Start a new chat or pick up recent work.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'home welcome new thread start',
+      keywords: 'home welcome new chat thread start',
       run: () => onNavigate('home'),
     },
     {
-      id: 'nav:threads',
-      title: 'Threads',
-      subtitle: 'Search, filter, tag, and rediscover past work.',
+      id: 'nav:projects',
+      title: 'Projects',
+      subtitle: 'Search, filter, tag, and rediscover project chats.',
       section: 'Go To',
       badge: 'Navigate',
       hint: formatShortcutLabel(SEARCH_THREADS_SHORTCUT, platform),
-      keywords: 'threads search history tags filters',
-      run: () => onNavigate('threads'),
+      keywords: 'projects chats threads search history tags filters work',
+      run: () => onNavigate('projects'),
     },
     {
-      id: 'nav:workflows',
-      title: 'Workflows',
-      subtitle: 'Repeatable work created from setup threads, schedules, and webhooks.',
+      id: 'nav:approvals',
+      title: 'Approvals',
+      subtitle: 'Review pending permissions and questions from the active coworking session.',
       section: 'Go To',
       badge: 'Navigate',
-      keywords: 'workflows setup thread workflow designer runs scheduled recurring webhook',
-      run: () => onNavigate('workflows'),
+      keywords: 'approvals permissions questions review needs input',
+      run: () => onNavigate('approvals'),
     },
     {
-      id: 'nav:agents',
-      title: 'Agents',
-      subtitle: 'Inspect built-in and custom agents.',
+      id: 'nav:playbooks',
+      title: 'Playbooks',
+      subtitle: 'Repeatable work created from setup chats, schedules, and webhooks.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'playbooks workflows setup chat thread workflow designer runs scheduled recurring webhook',
+      run: () => onNavigate('playbooks'),
+    },
+    {
+      id: 'nav:team',
+      title: 'Team',
+      subtitle: 'Inspect built-in and custom coworkers.',
       section: 'Go To',
       badge: 'Navigate',
       hint: 'Cmd + Shift + A',
-      keywords: 'agents built-in custom',
-      run: () => onNavigate('agents'),
+      keywords: 'team agents coworkers built-in custom',
+      run: () => onNavigate('team'),
     },
     {
-      id: 'nav:capabilities',
+      id: 'nav:channels',
+      title: 'Channels',
+      subtitle: 'Check Gateway and workspace channels for Desktop, Cloud, and external entry points.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'channels gateway workspace cloud desktop paired',
+      run: () => onNavigate('channels'),
+    },
+    {
+      id: 'nav:tools',
       title: 'Tools & Skills',
       subtitle: 'Browse tools, skills, and MCP-backed capabilities.',
       section: 'Go To',
       badge: 'Navigate',
       hint: 'Cmd + Shift + C',
       keywords: 'capabilities tools skills mcps',
-      run: () => onNavigate('capabilities'),
+      run: () => onNavigate('tools'),
+    },
+    {
+      id: 'nav:artifacts',
+      title: 'Artifacts',
+      subtitle: 'Review generated files, charts, and Cloud-safe artifacts for the active chat.',
+      section: 'Go To',
+      badge: 'Navigate',
+      keywords: 'artifacts files charts downloads review deliverables',
+      run: () => onNavigate('artifacts'),
     },
     {
       id: 'nav:health',
@@ -239,21 +267,21 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     ...navigationItems,
     {
       id: 'create:thread',
-      title: 'New Thread',
-      subtitle: 'Start a new blank thread with the current execution engine.',
+      title: 'New Chat',
+      subtitle: 'Start a new coworking chat with the current OpenCode runtime.',
       section: 'Create',
       badge: 'Create',
       hint: formatShortcutLabel(NEW_THREAD_SHORTCUT, platform),
-      keywords: 'new thread blank thread create',
+      keywords: 'new chat thread blank thread create',
       run: async () => !!(await onCreateThread()),
     },
     {
       id: 'create:project',
       title: 'Open Project',
-      subtitle: 'Choose a directory and start a project-bound thread.',
+      subtitle: 'Choose a directory and start a project-bound chat.',
       section: 'Create',
       badge: 'Create',
-      keywords: 'open project directory codebase thread',
+      keywords: 'open project directory codebase chat thread',
       run: async () => {
         const directory = await onSelectDirectory()
         if (!directory) return false
@@ -262,12 +290,12 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     },
     {
       id: 'create:search',
-      title: 'Search Threads',
-      subtitle: 'Search your recent threads and jump back into work.',
+      title: 'Search Projects',
+      subtitle: 'Search your recent project chats and jump back into work.',
       section: 'Create',
       badge: 'Action',
       hint: formatShortcutLabel(SEARCH_THREADS_SHORTCUT, platform),
-      keywords: 'search threads history',
+      keywords: 'search projects chats threads history',
       run: () => onToggleSearch(),
     },
     ...topLevelModes,
