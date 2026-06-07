@@ -1,27 +1,51 @@
 import type { BrandThemeTokens, PublicBrandingThemeTokens } from './app-config.js'
 
 export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
-  base: '#1b1b26',
-  surface: 'rgba(141, 164, 245, 0.055)',
-  surfaceHover: 'rgba(141, 164, 245, 0.10)',
-  surfaceActive: 'rgba(141, 164, 245, 0.17)',
-  elevated: '#23232f',
-  border: 'rgba(180, 194, 250, 0.12)',
-  borderSubtle: 'rgba(180, 194, 250, 0.04)',
-  borderStrong: 'rgba(180, 194, 250, 0.18)',
-  text: '#e8e9f3',
-  textSecondary: '#b0b3c6',
-  textMuted: '#8a8da0',
-  accent: '#8da4f5',
-  accentHover: '#a7b6f8',
-  green: '#7fcfa0',
-  amber: '#fcb07a',
-  red: '#fc92b4',
-  info: '#82cadc',
-  accentForeground: '#0f0f18',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(0, 0, 0, 0.16)',
-  shadowElevated: '0 2px 6px rgba(0, 0, 0, 0.30), 0 18px 44px rgba(0, 0, 0, 0.24)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.05), transparent 55%)',
+  base: '#181516',
+  surface: 'rgba(239, 220, 206, 0.06)',
+  surfaceHover: 'rgba(239, 220, 206, 0.11)',
+  surfaceActive: 'rgba(207, 160, 230, 0.18)',
+  elevated: '#242021',
+  border: 'rgba(239, 220, 206, 0.13)',
+  borderSubtle: 'rgba(239, 220, 206, 0.06)',
+  borderStrong: 'rgba(239, 220, 206, 0.22)',
+  text: '#f0e9e1',
+  textSecondary: '#d2c3b6',
+  textMuted: '#a8988e',
+  accent: '#cfa0e6',
+  accentHover: '#e0b7f0',
+  green: '#82d3a2',
+  amber: '#f0b86e',
+  red: '#ff9bb4',
+  info: '#8bc9d8',
+  accentForeground: '#1b121d',
+  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.30), 0 12px 28px rgba(0, 0, 0, 0.20)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.34), 0 24px 60px rgba(0, 0, 0, 0.28)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(207, 160, 230, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(139, 201, 216, 0.045), transparent 62%)',
+}
+
+export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
+  base: '#f7f1ea',
+  surface: 'rgba(129, 82, 154, 0.05)',
+  surfaceHover: 'rgba(129, 82, 154, 0.09)',
+  surfaceActive: 'rgba(129, 82, 154, 0.14)',
+  elevated: '#fffaf4',
+  border: 'rgba(70, 52, 44, 0.14)',
+  borderSubtle: 'rgba(70, 52, 44, 0.08)',
+  borderStrong: 'rgba(70, 52, 44, 0.24)',
+  text: '#241d1f',
+  textSecondary: '#5a4c48',
+  textMuted: '#746760',
+  accent: '#81529a',
+  accentHover: '#6d4085',
+  green: '#186a42',
+  amber: '#8b4e10',
+  red: '#a22f4d',
+  info: '#306f7b',
+  accentForeground: '#fffaf4',
+  shadowCard: '0 1px 1px rgba(54, 41, 33, 0.08), 0 10px 24px rgba(54, 41, 33, 0.08)',
+  shadowElevated: '0 2px 6px rgba(54, 41, 33, 0.10), 0 20px 48px rgba(54, 41, 33, 0.12)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(129, 82, 154, 0.08), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(48, 111, 123, 0.045), transparent 62%)',
 }
 
 export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
@@ -54,6 +78,23 @@ export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
   'bgImage',
 ] as const satisfies readonly (keyof PublicBrandingThemeTokens)[]
 
+function hexRgb(value: string) {
+  const match = value.match(/^#([0-9a-f]{6})$/i)
+  if (!match) return null
+  const hex = match[1] || ''
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16),
+  ] as const
+}
+
+function focusToken(theme: BrandThemeTokens) {
+  const rgb = hexRgb(theme.accent)
+  if (!rgb) return 'rgba(207, 160, 230, 0.52)'
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.52)`
+}
+
 export function brandThemeToPublicBrandingTheme(theme: BrandThemeTokens): PublicBrandingThemeTokens {
   return {
     background: theme.base,
@@ -64,7 +105,7 @@ export function brandThemeToPublicBrandingTheme(theme: BrandThemeTokens): Public
     mutedText: theme.textMuted,
     accent: theme.accent,
     accentStrong: theme.accentHover,
-    focus: 'rgba(141, 164, 245, 0.55)',
+    focus: focusToken(theme),
     warn: theme.amber,
     danger: theme.red,
     ok: theme.green,
@@ -455,6 +496,7 @@ export const DESIGN_TOKENS = {
   fontFamily: {
     ui: "'Mona Sans Variable', 'Mona Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     display: "'Hubot Sans Variable', 'Hubot Sans', var(--font-ui)",
+    editorial: "'Iowan Old Style', 'New York', Georgia, serif",
     mono: "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace",
   },
   text: {
@@ -555,6 +597,42 @@ export const DESIGN_TOKENS = {
     lg: '40px',
     xl: '48px',
   },
+  studio: {
+    shellSidebarW: '268px',
+    shellRailW: '72px',
+    topbarH: '64px',
+    inspectorW: '360px',
+    composerMinH: '148px',
+    taskLaneW: '320px',
+  },
+  density: {
+    compactGap: '8px',
+    compactPad: '12px',
+    regularGap: '12px',
+    regularPad: '16px',
+    spaciousGap: '16px',
+    spaciousPad: '24px',
+  },
+  coworker: {
+    lead: 'var(--color-accent)',
+    strategist: 'var(--color-info)',
+    builder: 'var(--color-green)',
+    reviewer: 'var(--color-amber)',
+    operator: 'var(--color-red)',
+    neutral: 'var(--color-text-secondary)',
+  },
+  lane: {
+    planning: 'var(--color-accent)',
+    delegated: 'var(--color-info)',
+    review: 'var(--color-amber)',
+    approval: 'var(--color-red)',
+    artifact: 'var(--color-green)',
+  },
+  review: {
+    proposed: 'var(--color-info)',
+    accepted: 'var(--color-green)',
+    blocked: 'var(--color-red)',
+  },
   iconSize: {
     sm: '16px',
     md: '20px',
@@ -599,6 +677,7 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ['--color-accent-foreground', tokens.color.accentForeground],
     ['--font-ui', tokens.fontFamily.ui],
     ['--font-display', tokens.fontFamily.display],
+    ['--font-editorial', tokens.fontFamily.editorial],
     ['--font-mono', tokens.fontFamily.mono],
     ...Object.entries(tokens.text).map(([name, value]) => [`--text-${name}`, value] as [string, string]),
     ...Object.entries(tokens.lineHeight).map(([name, value]) => [`--lh-${name}`, value] as [string, string]),
@@ -625,6 +704,11 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ...Object.entries(tokens.duration).map(([name, value]) => [`--dur-${name}`, value] as [string, string]),
     ...Object.entries(tokens.z).map(([name, value]) => [`--z-${name}`, value] as [string, string]),
     ...Object.entries(tokens.controlHeight).map(([name, value]) => [`--control-h-${name}`, value] as [string, string]),
+    ...Object.entries(tokens.studio).map(([name, value]) => [`--studio-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value] as [string, string]),
+    ...Object.entries(tokens.density).map(([name, value]) => [`--density-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value] as [string, string]),
+    ...Object.entries(tokens.coworker).map(([name, value]) => [`--coworker-${name}`, value] as [string, string]),
+    ...Object.entries(tokens.lane).map(([name, value]) => [`--lane-${name}`, value] as [string, string]),
+    ...Object.entries(tokens.review).map(([name, value]) => [`--review-${name}`, value] as [string, string]),
     ...Object.entries(tokens.borderWidth).map(([name, value]) => [`--border-width-${name}`, value] as [string, string]),
     ...Object.entries(tokens.iconSize).map(([name, value]) => [`--icon-size-${name}`, value] as [string, string]),
     ['--primitive-tooltip-max-w', tokens.primitive.tooltipMaxW],

@@ -34,7 +34,7 @@ function bootstrap(tenantBrandingLocked: boolean): CloudWebClientBootstrap {
     workbenchParity: [],
     sessionEventTypes: [],
     theme: {
-      defaultPreset: 'mercury',
+      defaultPreset: 'studio',
       tenantBrandingLocked,
       presets: cloudThemePresetOptions(),
     },
@@ -42,6 +42,11 @@ function bootstrap(tenantBrandingLocked: boolean): CloudWebClientBootstrap {
 }
 
 type ThemeDom = InstanceType<typeof JSDOM>
+
+function focusTokenForAccent(accent: string) {
+  const hex = accent.replace(/^#/, '')
+  return `rgba(${Number.parseInt(hex.slice(0, 2), 16)}, ${Number.parseInt(hex.slice(2, 4), 16)}, ${Number.parseInt(hex.slice(4, 6), 16)}, 0.52)`
+}
 
 function withThemeDom(run: (dom: ThemeDom) => void) {
   const originalDocument = globalThis.document
@@ -60,9 +65,9 @@ function withThemeDom(run: (dom: ThemeDom) => void) {
   }
 }
 
-test('cloud theme exposes the shared 17-preset catalog', () => {
+test('cloud theme exposes the shared 18-preset catalog', () => {
   const options = cloudThemePresetOptions()
-  assert.equal(options.length, 17)
+  assert.equal(options.length, 18)
   assert.deepEqual(options.map((option) => option.id), Object.keys(UI_THEME_PRESETS))
 })
 
@@ -111,4 +116,5 @@ test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
   assert.equal(document.documentElement.dataset.uiTheme, 'gruvbox')
   assert.equal(document.documentElement.style.getPropertyValue('--color-base'), UI_THEME_PRESETS.gruvbox.dark.base)
   assert.equal(document.documentElement.style.getPropertyValue('--accent'), UI_THEME_PRESETS.gruvbox.dark.accent)
+  assert.equal(document.documentElement.style.getPropertyValue('--focus'), focusTokenForAccent(UI_THEME_PRESETS.gruvbox.dark.accent))
 }))

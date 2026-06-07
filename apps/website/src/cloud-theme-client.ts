@@ -18,7 +18,7 @@ const TOKEN_CSS_VARS: Array<[keyof ThemeTokens, string[]]> = [
   ['text', ['--color-text', '--text']],
   ['textSecondary', ['--color-text-secondary']],
   ['textMuted', ['--color-text-muted', '--muted']],
-  ['accent', ['--color-accent', '--accent', '--focus']],
+  ['accent', ['--color-accent', '--accent']],
   ['accentHover', ['--color-accent-hover', '--accent-strong']],
   ['accentForeground', ['--color-accent-foreground']],
   ['green', ['--color-green', '--ok']],
@@ -29,6 +29,16 @@ const TOKEN_CSS_VARS: Array<[keyof ThemeTokens, string[]]> = [
   ['shadowElevated', ['--shadow-elevated']],
   ['bgImage', ['--bg-image']],
 ]
+
+function focusTokenForAccent(accent: string) {
+  const match = accent.match(/^#([0-9a-f]{6})$/i)
+  if (!match) return accent
+  const hex = match[1] || ''
+  const red = Number.parseInt(hex.slice(0, 2), 16)
+  const green = Number.parseInt(hex.slice(2, 4), 16)
+  const blue = Number.parseInt(hex.slice(4, 6), 16)
+  return `rgba(${red}, ${green}, ${blue}, 0.52)`
+}
 
 export function applyCloudThemePreset(presetId: string, scheme: 'dark' | 'light' = 'dark') {
   const resolvedPresetId = isCloudThemePreset(presetId) ? presetId : DEFAULT_CLOUD_THEME_PRESET
@@ -41,6 +51,7 @@ export function applyCloudThemePreset(presetId: string, scheme: 'dark' | 'light'
     if (!value) continue
     for (const cssVar of cssVars) root.style.setProperty(cssVar, value)
   }
+  root.style.setProperty('--focus', focusTokenForAccent(tokens.accent))
 }
 
 function storedCloudThemePreset() {

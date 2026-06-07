@@ -18,7 +18,7 @@ function renderStartupError(error: unknown) {
   body.replaceChildren()
 
   const shell = document.createElement('div')
-  shell.style.cssText = "height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;background:var(--color-base, #1b1b26);color:var(--color-text, #e8e9f3);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;padding:24px;"
+  shell.style.cssText = "height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;background:var(--color-base, #181516);color:var(--color-text, #f0e9e1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;padding:24px;"
 
   const panel = document.createElement('div')
   panel.style.cssText = 'max-width:720px;width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:24px 28px;box-shadow:0 10px 28px rgba(0,0,0,0.18);'

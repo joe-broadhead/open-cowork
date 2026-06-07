@@ -1,4 +1,5 @@
 import type { BrandThemeTokens } from './app-config.js'
+import { DEFAULT_DARK_BRAND_THEME, DEFAULT_LIGHT_BRAND_THEME } from './design-tokens.js'
 
 export type ResolvedColorScheme = 'dark' | 'light'
 
@@ -122,6 +123,19 @@ function refineThemeDefinition(theme: ThemeDefinitionSeed): ThemeDefinition {
 }
 
 const UI_THEME_PRESET_SEEDS = {
+  studio: {
+    label: 'Studio',
+    description: 'Warm graphite coworking studio — plum focus, cream typography, and calm operational contrast.',
+    swatches: ['#181516', '#cfa0e6', '#f0e9e1', '#8bc9d8'],
+    dark: {
+      ...DEFAULT_DARK_BRAND_THEME,
+      bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(207, 160, 230, 0.112), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(139, 201, 216, 0.072), transparent 62%)',
+    },
+    light: {
+      ...DEFAULT_LIGHT_BRAND_THEME,
+      bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(129, 82, 154, 0.128), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(48, 111, 123, 0.072), transparent 62%)',
+    },
+  },
   mercury: {
     label: 'Mercury',
     description: 'Signature indigo ink — soft night with a quiet violet aurora at the top.',

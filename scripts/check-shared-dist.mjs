@@ -27,7 +27,7 @@ if (staleModules.length > 0) {
   console.error([
     'packages/shared/dist contains stale JavaScript modules with no matching packages/shared/src/*.ts source:',
     ...staleModules.map((name) => `- ${name}.js`),
-    'Run pnpm build:shared to regenerate a clean shared package.',
+    'Run node scripts/clean-shared-dist.mjs && pnpm build:shared to regenerate a clean shared package.',
   ].join('\n'))
   process.exit(1)
 }

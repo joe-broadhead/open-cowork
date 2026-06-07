@@ -34,6 +34,10 @@
       "types": "./dist/PrimitiveGallery.d.ts",
       "import": "./dist/PrimitiveGallery.js"
     },
+    "./studio": {
+      "types": "./dist/StudioPrimitives.d.ts",
+      "import": "./dist/StudioPrimitives.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

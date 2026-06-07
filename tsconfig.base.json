@@ -33,6 +33,7 @@
       "@open-cowork/ui/badge": ["./packages/ui/src/Badge.tsx"],
       "@open-cowork/ui/card": ["./packages/ui/src/Card.tsx"],
       "@open-cowork/ui/primitive-gallery": ["./packages/ui/src/PrimitiveGallery.tsx"],
+      "@open-cowork/ui/studio": ["./packages/ui/src/StudioPrimitives.tsx"],
       "@open-cowork/ui/*": ["./packages/ui/src/*"]
     },
     "strict": true,

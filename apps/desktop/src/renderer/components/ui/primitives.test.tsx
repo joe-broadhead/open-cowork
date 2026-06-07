@@ -19,6 +19,7 @@ import {
   SegmentedControl,
   Select,
   Skeleton,
+  StudioShell,
   Textarea,
   Tooltip,
   WorkbenchLayout,
@@ -412,6 +413,44 @@ describe('Workbench IA primitives', () => {
         value: originalMatchMedia,
       })
     }
+  })
+})
+
+describe('Studio primitives', () => {
+  const navSections = [
+    {
+      id: 'workspace',
+      label: 'Workspace',
+      items: [
+        { id: 'chat', label: 'Chat' },
+        { id: 'agents', label: 'Coworkers' },
+      ],
+    },
+  ]
+
+  it('keeps StudioShell navigation app-owned without rendering inert buttons', async () => {
+    const user = userEvent.setup()
+    const onNavigate = vi.fn()
+
+    const { container, rerender } = render(
+      <StudioShell brand={{ name: 'Open Cowork' }} navSections={navSections} activeItemId="chat" header={<div>Studio status</div>}>
+        <p>Studio body</p>
+      </StudioShell>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Coworkers' })).not.toBeInTheDocument()
+    expect(screen.getByText('Coworkers').closest('.studio-nav__item')).toBeInTheDocument()
+    expect(container.querySelector('main')).not.toBeInTheDocument()
+    expect(container.querySelector('.studio-shell__topbar')?.tagName).toBe('DIV')
+
+    rerender(
+      <StudioShell brand={{ name: 'Open Cowork' }} navSections={navSections} activeItemId="chat" onNavigate={onNavigate}>
+        <p>Studio body</p>
+      </StudioShell>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Coworkers' }))
+    expect(onNavigate).toHaveBeenCalledWith(navSections[0].items[1])
   })
 })
 
