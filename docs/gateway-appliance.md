@@ -167,6 +167,11 @@ macOS and Mac mini:
 - Configure `OPEN_COWORK_GATEWAY_ADMIN_TOKEN` before exposing operator
   endpoints: `/metrics`, `/diagnostics`, `/deliveries`, and delivery retry or
   dead-letter actions.
+- Gateway `/deliveries` lists only enabled provider `channelBindingId` values
+  from the local daemon config. Retry and dead-letter actions are protected by
+  the Gateway admin token locally and by the Cloud service-token owner of the
+  last delivery claim in Cloud, so one gateway token cannot operate on another
+  gateway shard's backlog.
 - Public reverse proxies must strip untrusted
   `x-open-cowork-gateway-admin-token` headers and either block operator
   endpoints or require the Gateway admin bearer token.
@@ -264,6 +269,16 @@ failures open a provider delivery circuit, stop hot-looping the downstream
 bridge, and surface the circuit as degraded provider health in `/ready` and
 `/diagnostics`. URL/DNS policy failures and oversized delivery responses are
 permanent and should dead-letter instead of retrying.
+
+Operator delivery controls are intentionally shard-aware. The Gateway daemon
+subscribes to Cloud deliveries with its enabled `channelBindingId` list, so it
+does not claim unrelated provider backlog. Cloud records the API-token id that
+last claimed each delivery. A gateway-scoped token can list, retry, or
+dead-letter only deliveries last claimed by that same token; channel admins can
+perform broader channel-management recovery from Cloud. Gateway `/diagnostics`
+exposes a redacted `deliveryOperator` block with `listAllowed`, `retryAllowed`,
+`deadLetterAllowed`, the scoped `channelBindingIds`, and a reason when a control
+is unavailable.
 
 Session-event rendering is ordered by Cloud event sequence. If provider
 rendering fails transiently, Gateway reconnects from the last persisted cursor

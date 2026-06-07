@@ -181,6 +181,11 @@ const requiredMetrics = [
   'open_cowork_gateway_delivery_dead_letters_total',
   'open_cowork_gateway_session_streams',
   'open_cowork_gateway_stream_reconnects_total',
+  'open_cowork_gateway_provider_state',
+  'open_cowork_gateway_provider_inbound_failures_total',
+  'open_cowork_gateway_provider_delivery_retries_total',
+  'open_cowork_gateway_provider_delivery_dead_letters_total',
+  'open_cowork_gateway_provider_webhook_requests_total',
 ]
 
 const requiredAlertMetrics = [
@@ -202,6 +207,10 @@ const requiredAlertMetrics = [
   'pg_settings_max_connections',
   'open_cowork_gateway_delivery_retries_total',
   'open_cowork_gateway_delivery_dead_letters_total',
+  'open_cowork_gateway_provider_state',
+  'open_cowork_gateway_provider_inbound_failures_total',
+  'open_cowork_gateway_provider_delivery_retries_total',
+  'open_cowork_gateway_provider_delivery_dead_letters_total',
   'open_cowork_gateway_stream_reconnects_total',
 ]
 

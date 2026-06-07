@@ -59,8 +59,8 @@ Do not request:
    and gateway delivery id.
 4. Check Cloud metrics first: command age, projection lag, worker heartbeats,
    quota rejections, BYOK failures, and HTTP error rate.
-5. Check Gateway metrics next: stream reconnects, delivery retries, dead
-   letters, provider status, and session-stream count.
+5. Check Gateway metrics next: stream reconnects, aggregate and provider-labeled
+   delivery retries/dead letters, provider status, and session-stream count.
 6. Check object-store and Postgres health for artifact, checkpoint, or replay
    issues.
 7. Record outcome, mitigation, owner, and follow-up test.
@@ -156,9 +156,12 @@ For channel issues:
 3. Confirm webhook signatures or shared-secret/HMAC headers are present.
 4. Confirm the channel binding maps to the expected org, headless agent, and
    cloud profile.
-5. Check the durable delivery cursor and dead-letter queue.
-6. Retry dead-lettered deliveries only after reviewing the event body and
-   provider error.
+5. Check `/diagnostics.deliveryOperator` for enabled controls and scoped
+   `channelBindingIds`.
+6. Check the durable delivery cursor and dead-letter queue.
+7. Retry dead-lettered deliveries only after reviewing the event body and
+   provider error, and use the gateway token that last claimed the delivery
+   unless a channel admin is performing broader Cloud-side recovery.
 
 ## Desktop Sync Issue Handling
 

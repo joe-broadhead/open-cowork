@@ -1,5 +1,6 @@
 export type {
   CloudAdminPolicyOverview,
+  CloudApiTokenChannelBindingGrantRecord,
   CloudApiTokenRecord,
   CloudApiTokenScope,
   CloudAuditEventRecord,
@@ -9,6 +10,7 @@ export type {
 
 import type {
   CloudAdminPolicyOverview,
+  CloudApiTokenChannelBindingGrantRecord,
   CloudApiTokenRecord,
   CloudApiTokenScope,
   CloudAuditEventRecord,
@@ -24,8 +26,12 @@ export type CloudIdentityClient = {
     name: string
     scopes: CloudApiTokenScope[]
     expiresAt?: string | null
+    channelBindingIds?: readonly string[] | null
   }): Promise<CloudIssuedApiTokenRecord>
   revokeApiToken(tokenId: string): Promise<CloudApiTokenRecord | null>
+  grantApiTokenChannelBinding(tokenId: string, input: {
+    channelBindingId: string
+  }): Promise<{ grant: CloudApiTokenChannelBindingGrantRecord, token: CloudApiTokenRecord }>
   getAdminPolicy(): Promise<CloudAdminPolicyOverview>
   listOrgMembers(input?: { query?: string | null, limit?: number | null }): Promise<CloudOrgMemberRecord[]>
   inviteOrgMember(input: { email: string, role?: 'owner' | 'admin' | 'member' | null }): Promise<CloudOrgMemberRecord>
@@ -52,6 +58,15 @@ export function createCloudIdentityClient({ request }: CloudDomainClientContext)
       return (await request<{ token: CloudApiTokenRecord | null }>(`/api/api-tokens/${encodePath(tokenId)}`, {
         method: 'DELETE',
       })).token
+    },
+    grantApiTokenChannelBinding(tokenId, input) {
+      return request<{ grant: CloudApiTokenChannelBindingGrantRecord, token: CloudApiTokenRecord }>(
+        `/api/api-tokens/${encodePath(tokenId)}/channel-bindings`,
+        {
+          method: 'POST',
+          body: input,
+        },
+      )
     },
     async getAdminPolicy() {
       return (await request<{ policy: CloudAdminPolicyOverview }>('/api/admin/policy')).policy

@@ -439,6 +439,7 @@ export const CLOUD_CONTROL_PLANE_HEADLESS_CHANNELS_STATEMENTS = [
     status text NOT NULL,
     attempt_count integer NOT NULL DEFAULT 0,
     claimed_by text,
+    last_claimed_by text,
     claim_expires_at timestamptz,
     next_attempt_at timestamptz NOT NULL,
     last_error text,
@@ -736,6 +737,46 @@ export const CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS = [
     ON cloud_channel_provider_events (org_id, status, retryable, claim_expires_at, updated_at)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_DELIVERY_OWNER_MIGRATION_ID = '012_channel_delivery_owner'
+
+export const CLOUD_CONTROL_PLANE_DELIVERY_OWNER_STATEMENTS = [
+  `ALTER TABLE cloud_channel_deliveries
+    ADD COLUMN IF NOT EXISTS last_claimed_by text`,
+  `CREATE INDEX IF NOT EXISTS cloud_channel_deliveries_owner_idx
+    ON cloud_channel_deliveries (org_id, last_claimed_by, status, updated_at DESC)
+    WHERE last_claimed_by IS NOT NULL`,
+] as const
+
+export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID = '013_api_token_channel_binding_grants'
+
+export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_api_token_channel_binding_grants (
+    org_id text NOT NULL REFERENCES cloud_orgs(org_id) ON DELETE CASCADE,
+    token_id text NOT NULL REFERENCES cloud_api_tokens(token_id) ON DELETE CASCADE,
+    channel_binding_id text NOT NULL REFERENCES cloud_channel_bindings(binding_id) ON DELETE CASCADE,
+    created_at timestamptz NOT NULL,
+    PRIMARY KEY (org_id, token_id, channel_binding_id)
+  )`,
+  `INSERT INTO cloud_api_token_channel_binding_grants (
+    org_id, token_id, channel_binding_id, created_at
+   )
+   SELECT tokens.org_id, tokens.token_id, bindings.binding_id, now()
+   FROM cloud_api_tokens tokens
+   JOIN cloud_channel_bindings bindings ON bindings.org_id = tokens.org_id
+   WHERE tokens.revoked_at IS NULL
+     AND tokens.scopes @> '["gateway"]'::jsonb
+     AND NOT EXISTS (
+       SELECT 1
+       FROM cloud_schema_migrations
+       WHERE id = '${CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID}'
+     )
+   ON CONFLICT (org_id, token_id, channel_binding_id) DO NOTHING`,
+  `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_token_idx
+    ON cloud_api_token_channel_binding_grants (org_id, token_id, channel_binding_id)`,
+  `CREATE INDEX IF NOT EXISTS cloud_api_token_channel_binding_grants_binding_idx
+    ON cloud_api_token_channel_binding_grants (org_id, channel_binding_id, token_id)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -782,5 +823,13 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_CHANNEL_PROVIDER_EVENTS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_DELIVERY_OWNER_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_DELIVERY_OWNER_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS,
   },
 ] as const

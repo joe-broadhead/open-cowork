@@ -91,6 +91,7 @@ test('interaction router resolves channel button tokens through cloud and acknow
     alert: undefined,
   }])
   assert.equal(metrics.interactionsResolved, 1)
+  assert.equal(metrics.providerMetrics.fake?.interactionsResolved, 1)
 })
 
 test('interaction router resolves deny, answer, and reject fallback commands through cloud', async () => {
@@ -154,6 +155,7 @@ test('interaction router resolves deny, answer, and reject fallback commands thr
     })
   }
   assert.equal(metrics.interactionsResolved, 3)
+  assert.equal(metrics.providerMetrics.fake?.interactionsResolved, 3)
 })
 
 test('interaction router ignores ordinary channel messages', async () => {

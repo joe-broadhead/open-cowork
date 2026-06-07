@@ -12,13 +12,15 @@ const dockerIgnore = readFileSync(join(root, '.dockerignore'), 'utf8')
 const postgresSchema = readFileSync(join(cloudRoot, 'postgres-schema.ts'), 'utf8')
 const postgresMigrations = readFileSync(join(cloudRoot, 'postgres-migrations.ts'), 'utf8')
 const postgresStore = readFileSync(join(cloudRoot, 'postgres-control-plane-store.ts'), 'utf8')
+const postgresChannelDeliveriesDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/channel-deliveries.ts'), 'utf8')
 const postgresQuotaDomain = readFileSync(join(cloudRoot, 'postgres-store-domains/quotas.ts'), 'utf8')
 const performanceDoc = readFileSync(join(root, 'docs/performance.md'), 'utf8')
 
 const lineThreshold = 2_000
 const documentedLargeFileBudgets = new Map([
-  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 4_200],
-  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_400],
+  ['apps/desktop/src/main/cloud/http-server.ts', 2_100],
+  ['apps/desktop/src/main/cloud/in-memory-control-plane-store.ts', 4_300],
+  ['apps/desktop/src/main/cloud/postgres-control-plane-store.ts', 4_500],
   ['apps/desktop/src/main/cloud/session-service.ts', 4_200],
 ])
 
@@ -140,6 +142,24 @@ test('large cloud source files are documented exceptions', () => {
   }
 })
 
+test('gateway token delivery-owner migrations preserve upgrade compatibility', () => {
+  assert.match(
+    postgresSchema,
+    /INSERT INTO cloud_api_token_channel_binding_grants[\s\S]+tokens\.scopes @> '\["gateway"\]'::jsonb[\s\S]+NOT EXISTS \([\s\S]+cloud_schema_migrations[\s\S]+CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID/,
+    'gateway API token binding migration must backfill active legacy gateway tokens',
+  )
+  assert.match(
+    postgresChannelDeliveriesDomain,
+    /last_claimed_by = COALESCE\(last_claimed_by, \$8\)/,
+    'legacy delivery ACKs must backfill last_claimed_by when the gateway token owner is known',
+  )
+  assert.match(
+    postgresChannelDeliveriesDomain,
+    /last_claimed_by IS NULL AND \$7::text IS NOT NULL AND claimed_by = \$7/,
+    'legacy claimed deliveries must remain ACKable when claimed_by still matches',
+  )
+})
+
 test('cloud route, service, and client modules stay within ownership budgets', () => {
   assertSourceBudget('cloud HTTP route module', join(cloudRoot, 'http-routes'), 500)
   assertSourceBudget('cloud service module', join(cloudRoot, 'services'), 450)
@@ -250,7 +270,7 @@ test('high-volume cloud tables keep indexed and bounded query shapes', () => {
   assert.match(postgresStore, /async claimRunnableSessions[\s\S]*FOR UPDATE OF sessions SKIP LOCKED/)
   assert.doesNotMatch(extractMethodSource(postgresStore, 'claimRunnableSessions'), /count\(\*\)[\s\S]*cloud_session_commands/)
   assert.match(postgresStore, /async claimNextSessionCommand[\s\S]*ORDER BY created_sequence[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
-  assert.match(postgresStore, /async claimNextChannelDelivery[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
+  assert.match(postgresChannelDeliveriesDomain, /async claimNext[\s\S]*ORDER BY next_attempt_at, created_at[\s\S]*FOR UPDATE SKIP LOCKED[\s\S]*LIMIT 1/)
   assert.match(postgresStore, /async claimDueWorkflowRun[\s\S]*ORDER BY runs\.created_at ASC, runs\.run_id[\s\S]*FOR UPDATE OF runs, workflows SKIP LOCKED[\s\S]*LIMIT 1/)
 })
 

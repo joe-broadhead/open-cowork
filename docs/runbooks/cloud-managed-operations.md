@@ -18,8 +18,9 @@ Before routing traffic to a new deployment:
 3. Confirm `GET /api/workers/heartbeats` shows at least one fresh worker and
    one fresh scheduler heartbeat when those roles are enabled.
 4. Confirm the gateway returns `200` from `GET /health` and `GET /ready`.
-5. Confirm gateway `/metrics` includes provider count, delivery counters, and
-   error counters when metrics are enabled.
+5. Confirm gateway `/metrics` includes provider count, aggregate delivery
+   counters, provider-labeled counters, and error counters when metrics are
+   enabled.
 6. Confirm object-store writes work by creating a small artifact or running a
    checkpoint-enabled smoke session.
 7. Confirm BYOK status reads return metadata only and no plaintext keys.
@@ -186,13 +187,16 @@ Use this when stale-owner rejections or expired lease reaping spikes.
 Gateway delivery lag is operationally separate from cloud execution lag.
 
 1. Check gateway `/ready` for provider startup state.
-2. Check `/metrics` for `open_cowork_gateway_deliveries_received_total` and
-   `open_cowork_gateway_errors_total`.
-3. Inspect pending `cloud_channel_deliveries` rows by status and
-   `next_attempt_at`.
-4. For channel-provider outages, keep cloud sessions running and let deliveries
+2. Check `/metrics` for `open_cowork_gateway_deliveries_received_total`,
+   `open_cowork_gateway_errors_total`, and provider-labeled retry/dead-letter
+   counters by `provider_id` and `provider_kind`.
+3. Inspect gateway `/diagnostics.deliveryOperator` and confirm listing, retry,
+   dead-letter, and `channelBindingIds` match the affected provider shard.
+4. Inspect pending `cloud_channel_deliveries` rows by status, `next_attempt_at`,
+   `channel_binding_id`, and `last_claimed_by`.
+5. For channel-provider outages, keep cloud sessions running and let deliveries
    retry with backoff.
-5. For bad provider credentials, rotate the channel secret and restart only the
+6. For bad provider credentials, rotate the channel secret and restart only the
    affected gateway deployment.
 
 If gateway lag is caused by worker backlog, do not scale Gateway first. Fix
@@ -321,14 +325,20 @@ Use this when sign-in, token refresh, or browser callback handling fails.
 Use this when Telegram, Slack, email, webhook, or another channel provider
 fails while cloud sessions still execute.
 
-1. Check gateway `/ready` provider status and
-   `open_cowork_gateway_delivery_retries_total`.
+1. Check gateway `/ready` provider status,
+   `open_cowork_gateway_provider_state`, and provider-labeled retry/dead-letter
+   counters.
 2. Keep cloud workers running; failed channel delivery should retry or
    dead-letter without blocking execution.
 3. Rotate only the affected channel credential if provider auth failed.
-4. Use `/deliveries?status=failed` and retry/dead-letter controls after the
-   provider recovers.
-5. Notify users that desktop and web remain authoritative while chat delivery is
+4. Use `/deliveries?status=failed&channelBindingId=<binding>` from the affected
+   gateway. Retry/dead-letter controls are valid only for deliveries last
+   claimed by that gateway token unless an org channel admin performs broader
+   Cloud-side recovery.
+5. If `/diagnostics.deliveryOperator.disabledReason` is non-null, fix the
+   missing Cloud client capability, admin token, or provider binding before
+   replaying deliveries.
+6. Notify users that desktop and web remain authoritative while chat delivery is
    degraded.
 
 ## Webhook Abuse

@@ -111,6 +111,7 @@ export function channelDeliveryFromRow(row: QueryRow): ChannelDeliveryRecord {
     status: String(row.status) as ChannelDeliveryRecord['status'],
     attemptCount: numberValue(row.attempt_count),
     claimedBy: stringOrNull(row.claimed_by),
+    lastClaimedBy: stringOrNull(row.last_claimed_by),
     claimExpiresAt: isoOrNull(row.claim_expires_at),
     nextAttemptAt: iso(row.next_attempt_at),
     lastError: stringOrNull(row.last_error),

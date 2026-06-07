@@ -10,6 +10,7 @@ import type {
   CloudPrincipal,
   CloudSessionView,
 } from '../session-service.ts'
+import { resolveGatewayChannelBindingScope } from './channel-binding-scope.ts'
 import {
   assertGatewayAccess,
   CHANNEL_HOUR_MS,
@@ -40,6 +41,7 @@ export async function bindChannelSession(
   if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
   if (channelBinding.status !== 'active') throw new CloudServiceError(403, 'Channel binding is not active.')
   if (channelBinding.provider !== input.provider) throw new CloudServiceError(400, 'Channel provider does not match binding.')
+  await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
   const actor = await requireChannelActor(options, principal, input, 'prompt', {
     provider: channelBinding.provider,
     externalWorkspaceId: channelBinding.externalWorkspaceId,
@@ -142,14 +144,16 @@ export async function getChannelSessionByThread(
 ): Promise<{ binding: ChannelSessionBindingRecord, session: CloudSessionView } | null> {
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
+  const orgId = options.principalOrgId(principal)
   const binding = await options.store.findChannelSessionBindingByThread({
-    orgId: options.principalOrgId(principal),
+    orgId,
     provider: input.provider,
     externalWorkspaceId: input.externalWorkspaceId,
     externalChatId: input.externalChatId,
     externalThreadId: input.externalThreadId,
   })
   if (!binding) return null
+  await resolveGatewayChannelBindingScope(options, principal, [binding.channelBindingId])
   const session = await options.store.getSession(principal.tenantId, principal.userId, binding.sessionId)
   if (!session) throw new CloudServiceError(403, 'Channel thread lookup requires a session owned by the gateway principal.')
   return {
@@ -173,8 +177,12 @@ export async function updateChannelCursor(
 ): Promise<ChannelCursorUpdateResult> {
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
+  const orgId = options.principalOrgId(principal)
+  const binding = await options.store.getChannelSessionBinding(orgId, input.bindingId)
+  if (!binding) return { ok: false, reason: 'not_found' }
+  await resolveGatewayChannelBindingScope(options, principal, [binding.channelBindingId])
   return options.store.updateChannelCursor({
-    orgId: options.principalOrgId(principal),
+    orgId,
     bindingId: input.bindingId,
     lastEventSequence: input.lastEventSequence,
     lastWorkspaceSequence: input.lastWorkspaceSequence,
@@ -199,6 +207,7 @@ export async function enqueueChannelPrompt(
   if (!binding || binding.status !== 'active') throw new CloudServiceError(404, 'Channel session binding was not found.')
   const channelBinding = await options.store.getChannelBinding(orgId, binding.channelBindingId)
   if (!channelBinding) throw new CloudServiceError(404, 'Channel binding was not found.')
+  await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
   const actor = await requireChannelActor(options, principal, input, 'prompt', {
     provider: binding.provider,
     externalWorkspaceId: channelBinding.externalWorkspaceId,

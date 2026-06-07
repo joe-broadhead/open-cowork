@@ -235,6 +235,36 @@
       "type": "counter",
       "owner": "gateway",
       "description": "Gateway stream reconnects after cloud SSE or render failures."
+    },
+    {
+      "name": "open_cowork_gateway_provider_state",
+      "type": "gauge",
+      "owner": "gateway",
+      "description": "Provider lifecycle state by configured provider id, provider kind, and state."
+    },
+    {
+      "name": "open_cowork_gateway_provider_inbound_failures_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Inbound provider messages that failed before completion by configured provider id and kind."
+    },
+    {
+      "name": "open_cowork_gateway_provider_delivery_retries_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Channel deliveries marked for retry by configured provider id and kind."
+    },
+    {
+      "name": "open_cowork_gateway_provider_delivery_dead_letters_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Channel deliveries dead-lettered by configured provider id and kind."
+    },
+    {
+      "name": "open_cowork_gateway_provider_webhook_requests_total",
+      "type": "counter",
+      "owner": "gateway",
+      "description": "Webhook requests received by configured provider id and kind."
     }
   ]
 }

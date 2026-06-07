@@ -337,7 +337,7 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     })
     assert.deepEqual(runtime.permissions.at(-1), { permissionId: 'permission-interaction-wrapper', allowed: false })
 
-    const deliveryEvent = waitFor<{ deliveryId: string }>((resolve, reject) => cloudGateway.subscribeDeliveries({
+    const deliveryEvent = waitFor<{ deliveryId: string, claimedBy: string | null }>((resolve, reject) => cloudGateway.subscribeDeliveries({
       claimedBy: 'gateway-wrapper-smoke',
       ttlMs: 5_000,
       onDelivery: resolve,
@@ -361,8 +361,9 @@ test('gateway daemon prompts an in-process cloud session through fake provider w
     const delivery = await deliveryEvent.promise
     deliveryEvent.close()
     assert.equal(delivery.deliveryId, 'delivery-wrapper')
+    assert.equal(typeof delivery.claimedBy, 'string')
     assert.equal((await cloudGateway.ackDelivery(delivery.deliveryId, {
-      claimedBy: 'gateway-wrapper-smoke',
+      claimedBy: String(delivery.claimedBy),
       status: 'sent',
     }))?.status, 'sent')
 
@@ -527,8 +528,8 @@ test('gateway cloud smoke script validates self-host gateway against deployed cl
     assert.equal(payload.results.selfHost.delivery.retryInitialStatus, 'failed')
     assert.equal(payload.results.selfHost.delivery.retryStatus, 'sent')
     assert.equal(payload.results.selfHost.delivery.deadLetterStatus, 'dead')
-    assert.equal(payload.results.selfHost.delivery.gatewayOperatorRetryStatus >= 400, true)
-    assert.equal(payload.results.selfHost.delivery.gatewayOperatorDeadLetterStatus >= 400, true)
+    assert.equal(payload.results.selfHost.delivery.gatewayOperatorRetryStatus, 200)
+    assert.equal(payload.results.selfHost.delivery.gatewayOperatorDeadLetterStatus, 200)
     assert.deepEqual(payload.results.selfHost.operatorEndpoints, {
       metrics: 'admin_only',
       diagnostics: 'admin_only',

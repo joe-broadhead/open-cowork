@@ -29,6 +29,7 @@ import type {
 import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
 import { InMemoryChannelProviderEventsDomain } from './in-memory-domains/channel-provider-events.ts'
+import { InMemoryChannelDeliveriesDomain } from './in-memory-domains/channel-deliveries.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import {
   generateChannelInteractionToken,
@@ -246,6 +247,13 @@ export type ApiTokenRecord = {
   updatedAt: string
 }
 
+export type ApiTokenChannelBindingGrantRecord = {
+  orgId: string
+  tokenId: string
+  channelBindingId: string
+  createdAt: string
+}
+
 export type IssuedApiTokenRecord = {
   token: ApiTokenRecord
   plaintext: string
@@ -376,6 +384,7 @@ export type ChannelDeliveryRecord = {
   status: ChannelDeliveryStatus
   attemptCount: number
   claimedBy: string | null
+  lastClaimedBy: string | null
   claimExpiresAt: string | null
   nextAttemptAt: string
   lastError: string | null
@@ -726,6 +735,19 @@ export type RevokeApiTokenInput = {
   actor?: AuditActorInput
 }
 
+export type GrantApiTokenChannelBindingInput = {
+  orgId: string
+  tokenId: string
+  channelBindingId: string
+  createdAt?: Date
+  actor?: AuditActorInput
+}
+
+export type ListApiTokenChannelBindingGrantsInput = {
+  orgId: string
+  tokenId: string
+}
+
 export type RecordAuditEventInput = {
   eventId?: string
   orgId: string
@@ -914,6 +936,8 @@ export type CreateChannelDeliveryInput = {
 export type ClaimChannelDeliveryInput = {
   orgId: string
   claimedBy: string
+  lastClaimedBy?: string | null
+  channelBindingIds?: readonly string[] | null
   now?: Date
   ttlMs?: number
   quota?: Omit<ConsumeUsageQuotaInput, 'orgId'> | null
@@ -922,7 +946,9 @@ export type ClaimChannelDeliveryInput = {
 export type AckChannelDeliveryInput = {
   orgId: string
   deliveryId: string
+  channelBindingIds?: readonly string[] | null
   claimedBy?: string | null
+  lastClaimedBy?: string | null
   status: Extract<ChannelDeliveryStatus, 'sent' | 'failed' | 'dead'>
   lastError?: string | null
   nextAttemptAt?: Date | null
@@ -931,8 +957,11 @@ export type AckChannelDeliveryInput = {
 
 export type ListChannelDeliveriesInput = {
   orgId: string
+  deliveryId?: string | null
   status?: ChannelDeliveryStatus | null
   channelBindingId?: string | null
+  channelBindingIds?: readonly string[] | null
+  lastClaimedBy?: string | null
   limit?: number | null
 }
 
@@ -1130,6 +1159,8 @@ export type ControlPlaneStore = {
   listApiTokens(orgId: string): MaybePromise<ApiTokenRecord[]>
   findApiTokenByPlaintext(plaintext: string, now?: Date): MaybePromise<ApiTokenRecord | null>
   revokeApiToken(input: RevokeApiTokenInput): MaybePromise<ApiTokenRecord | null>
+  grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): MaybePromise<ApiTokenChannelBindingGrantRecord>
+  listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): MaybePromise<ApiTokenChannelBindingGrantRecord[]>
   createManagedWorkerPool(input: CreateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord>
   updateManagedWorkerPool(input: UpdateManagedWorkerPoolInput): MaybePromise<ManagedWorkerPoolRecord | null>
   getManagedWorkerPool(orgId: string, poolId: string): MaybePromise<ManagedWorkerPoolRecord | null>
@@ -1324,7 +1355,6 @@ const SMART_FILTER_QUERY_MAX_BYTES = 16_384
 const WORKFLOW_RUN_LIST_LIMIT = 100
 const CHANNEL_TEXT_MAX_LENGTH = 256
 const CHANNEL_METADATA_MAX_BYTES = 16_384
-const CHANNEL_DELIVERY_ERROR_MAX_LENGTH = 1024
 const BYOK_PROVIDER_ID_MAX_LENGTH = 64
 const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
 const BILLING_TEXT_MAX_LENGTH = 256
@@ -1504,6 +1534,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly accountsByEmail = new Map<string, string>()
   private readonly memberships = new Map<string, MembershipRecord>()
   private readonly apiTokens = new Map<string, ApiTokenRecord>()
+  private readonly apiTokenChannelBindingGrants = new Map<string, ApiTokenChannelBindingGrantRecord>()
   private readonly auditEvents = new Map<string, AuditEventRecord>()
   private readonly usageEvents = new Map<string, UsageEventRecord>()
   private readonly billingSubscriptions = new Map<string, BillingSubscriptionRecord>()
@@ -1523,7 +1554,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
   private readonly channelInteractionsByTokenHash = new Map<string, string>()
   private readonly channelInteractionsByExternal = new Map<string, string>()
-  private readonly channelDeliveries = new Map<string, ChannelDeliveryRecord>()
   private readonly sessions = new Map<string, SessionState>()
   private readonly heartbeats = new Map<string, WorkerHeartbeatRecord>()
   private readonly settings = new Map<string, SettingMetadataRecord>()
@@ -1546,6 +1576,22 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   })
   private readonly channelProviderEventsDomain = new InMemoryChannelProviderEventsDomain({
     orgExists: (orgId) => this.orgs.has(orgId),
+  })
+  private readonly channelDeliveriesDomain = new InMemoryChannelDeliveriesDomain({
+    orgExists: (orgId) => this.orgs.has(orgId),
+    getHeadlessAgent: (orgId, agentId) => {
+      const agent = this.headlessAgents.get(agentId)
+      return agent?.orgId === orgId ? agent : null
+    },
+    getChannelBinding: (orgId, bindingId) => {
+      const binding = this.channelBindings.get(bindingId)
+      return binding?.orgId === orgId ? binding : null
+    },
+    getChannelSessionBinding: (orgId, bindingId) => {
+      const binding = this.channelSessionBindings.get(bindingId)
+      return binding?.orgId === orgId ? binding : null
+    },
+    consumeUsageQuota: (input) => this.consumeUsageQuota(input),
   })
 
   private orgIdForTenant(tenantId: string) {
@@ -1825,6 +1871,42 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: input.revokedAt,
     })
     return clone(existing)
+  }
+
+  grantApiTokenChannelBinding(input: GrantApiTokenChannelBindingInput): ApiTokenChannelBindingGrantRecord {
+    const token = this.apiTokens.get(input.tokenId)
+    if (!token || token.orgId !== input.orgId) throw new Error(`Unknown API token ${input.tokenId}.`)
+    const binding = this.channelBindings.get(input.channelBindingId)
+    if (!binding || binding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
+    const grantKey = key(input.orgId, input.tokenId, input.channelBindingId)
+    const existing = this.apiTokenChannelBindingGrants.get(grantKey)
+    if (existing) return clone(existing)
+    const record: ApiTokenChannelBindingGrantRecord = {
+      orgId: input.orgId,
+      tokenId: input.tokenId,
+      channelBindingId: input.channelBindingId,
+      createdAt: nowIso(input.createdAt),
+    }
+    this.apiTokenChannelBindingGrants.set(grantKey, record)
+    this.recordAuditEvent({
+      orgId: input.orgId,
+      accountId: input.actor?.accountId || token.accountId,
+      actorType: input.actor?.actorType || 'system',
+      actorId: input.actor?.actorId || null,
+      eventType: 'api_token.channel_binding_granted',
+      targetType: 'api_token',
+      targetId: input.tokenId,
+      metadata: { channelBindingId: input.channelBindingId },
+      createdAt: input.createdAt,
+    })
+    return clone(record)
+  }
+
+  listApiTokenChannelBindingGrants(input: ListApiTokenChannelBindingGrantsInput): ApiTokenChannelBindingGrantRecord[] {
+    return [...this.apiTokenChannelBindingGrants.values()]
+      .filter((grant) => grant.orgId === input.orgId && grant.tokenId === input.tokenId)
+      .sort((left, right) => left.channelBindingId.localeCompare(right.channelBindingId))
+      .map((grant) => clone(grant))
   }
 
   createManagedWorkerPool(input: CreateManagedWorkerPoolInput): ManagedWorkerPoolRecord {
@@ -2761,111 +2843,19 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   createChannelDelivery(input: CreateChannelDeliveryInput): ChannelDeliveryRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    const agent = this.headlessAgents.get(input.agentId)
-    if (!agent || agent.orgId !== input.orgId) throw new Error(`Unknown headless agent ${input.agentId}.`)
-    const channelBinding = this.channelBindings.get(input.channelBindingId)
-    if (!channelBinding || channelBinding.orgId !== input.orgId) throw new Error(`Unknown channel binding ${input.channelBindingId}.`)
-    const provider = normalizeProvider(input.provider)
-    if (channelBinding.agentId !== agent.agentId) throw new Error('Channel delivery binding does not match headless agent.')
-    if (channelBinding.provider !== provider) throw new Error('Channel delivery provider does not match channel binding.')
-    if (input.sessionBindingId) {
-      const sessionBinding = this.channelSessionBindings.get(input.sessionBindingId)
-      if (!sessionBinding || sessionBinding.orgId !== input.orgId) throw new Error(`Unknown channel session binding ${input.sessionBindingId}.`)
-      if (
-        sessionBinding.agentId !== agent.agentId
-        || sessionBinding.channelBindingId !== channelBinding.bindingId
-        || sessionBinding.provider !== provider
-      ) {
-        throw new Error('Channel delivery session binding does not match channel binding.')
-      }
-    }
-    const existing = this.channelDeliveries.get(input.deliveryId)
-    if (existing) return clone(existing)
-    const now = nowIso(input.createdAt)
-    const record: ChannelDeliveryRecord = {
-      deliveryId: normalizeText(input.deliveryId, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery id'),
-      orgId: input.orgId,
-      agentId: normalizeText(input.agentId, CHANNEL_TEXT_MAX_LENGTH, 'Headless agent id'),
-      channelBindingId: normalizeText(input.channelBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel binding id'),
-      sessionBindingId: normalizeNullableText(input.sessionBindingId, CHANNEL_TEXT_MAX_LENGTH, 'Channel session binding id'),
-      provider,
-      target: normalizeRecord(input.target, 'Channel delivery target'),
-      eventType: normalizeText(input.eventType, CHANNEL_TEXT_MAX_LENGTH, 'Channel delivery event type'),
-      payload: normalizeRecord(input.payload, 'Channel delivery payload'),
-      status: input.status || 'pending',
-      attemptCount: 0,
-      claimedBy: null,
-      claimExpiresAt: null,
-      nextAttemptAt: (input.nextAttemptAt || input.createdAt || new Date()).toISOString(),
-      lastError: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-    this.channelDeliveries.set(record.deliveryId, record)
-    return clone(record)
+    return this.channelDeliveriesDomain.create(input)
   }
 
   listChannelDeliveries(input: ListChannelDeliveriesInput): ChannelDeliveryRecord[] {
-    const limit = Math.max(1, Math.min(200, input.limit || 50))
-    return Array.from(this.channelDeliveries.values())
-      .filter((delivery) => delivery.orgId === input.orgId)
-      .filter((delivery) => !input.status || delivery.status === input.status)
-      .filter((delivery) => !input.channelBindingId || delivery.channelBindingId === input.channelBindingId)
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
-      .slice(0, limit)
-      .map(clone)
+    return this.channelDeliveriesDomain.list(input)
   }
 
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): ChannelDeliveryRecord | null {
-    const now = input.now || new Date()
-    const nowMs = now.getTime()
-    const candidate = Array.from(this.channelDeliveries.values())
-      .filter((delivery) => delivery.orgId === input.orgId)
-      .filter((delivery) => (
-        (delivery.status === 'pending' && new Date(delivery.nextAttemptAt).getTime() <= nowMs)
-        || (delivery.status === 'failed' && new Date(delivery.nextAttemptAt).getTime() <= nowMs)
-        || (delivery.status === 'claimed' && delivery.claimExpiresAt && new Date(delivery.claimExpiresAt).getTime() <= nowMs)
-      ))
-      .sort((left, right) => left.nextAttemptAt.localeCompare(right.nextAttemptAt) || left.createdAt.localeCompare(right.createdAt))[0]
-    if (!candidate) return null
-    if (input.quota) {
-      const quota = this.consumeUsageQuota({
-        ...input.quota,
-        orgId: input.orgId,
-        now,
-      })
-      if (!quota.allowed) {
-        quotaExceeded({
-          message: 'Gateway delivery quota exceeded.',
-          policyCode: quota.policyCode || 'quota.gateway_deliveries_per_hour_exceeded',
-          retryAfterMs: quota.retryAfterMs,
-          limit: quota.limit,
-          used: quota.used,
-          resetAt: quota.resetAt,
-        })
-      }
-    }
-    candidate.status = 'claimed'
-    candidate.claimedBy = normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Delivery claimant')
-    candidate.claimExpiresAt = new Date(nowMs + (input.ttlMs || 30_000)).toISOString()
-    candidate.attemptCount += 1
-    candidate.updatedAt = now.toISOString()
-    return clone(candidate)
+    return this.channelDeliveriesDomain.claimNext(input)
   }
 
   ackChannelDelivery(input: AckChannelDeliveryInput): ChannelDeliveryRecord | null {
-    const delivery = this.channelDeliveries.get(input.deliveryId)
-    if (!delivery || delivery.orgId !== input.orgId) return null
-    if (input.claimedBy && delivery.claimedBy !== input.claimedBy) return null
-    const updatedAt = nowIso(input.updatedAt)
-    delivery.status = input.status
-    delivery.claimedBy = null
-    delivery.claimExpiresAt = null
-    delivery.lastError = input.lastError ? redactOperationalText(input.lastError, CHANNEL_DELIVERY_ERROR_MAX_LENGTH, 'Delivery error') : null
-    delivery.nextAttemptAt = (input.nextAttemptAt || input.updatedAt || new Date()).toISOString()
-    delivery.updatedAt = updatedAt
-    return clone(delivery)
+    return this.channelDeliveriesDomain.ack(input)
   }
 
   claimChannelProviderEvent(input: ClaimChannelProviderEventInput): ChannelProviderEventClaimResult {

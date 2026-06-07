@@ -60,6 +60,7 @@ export type CloudChannelServiceDelegate = {
   resolveChannelIdentity(principal: CloudPrincipal, input: {
     identityId?: string | null
     provider: ChannelProviderId
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     externalUserId: string
     accountId?: string | null
@@ -136,13 +137,14 @@ export type CloudChannelServiceDelegate = {
     deliveryId?: string | null
   }): Promise<PublicChannelDeliveryRecord>
   listChannelDeliveries(principal: CloudPrincipal, input?: {
+    deliveryId?: string | null
     status?: ChannelDeliveryRecord['status'] | null
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<PublicChannelDeliveryRecord[]>
   retryChannelDelivery(principal: CloudPrincipal, deliveryId: string): Promise<PublicChannelDeliveryRecord | null>
   deadLetterChannelDelivery(principal: CloudPrincipal, input: { deliveryId: string, lastError?: string | null }): Promise<PublicChannelDeliveryRecord | null>
-  claimNextChannelDelivery(principal: CloudPrincipal, input: { claimedBy: string, now?: Date, ttlMs?: number }): Promise<ChannelDeliveryRecord | null>
+  claimNextChannelDelivery(principal: CloudPrincipal, input: { claimedBy: string, now?: Date, ttlMs?: number, channelBindingIds?: readonly string[] | null }): Promise<ChannelDeliveryRecord | null>
   ackChannelDelivery(principal: CloudPrincipal, input: {
     deliveryId: string
     claimedBy?: string | null
@@ -153,6 +155,7 @@ export type CloudChannelServiceDelegate = {
   claimChannelProviderEvent(principal: CloudPrincipal, input: {
     provider: ChannelProviderId
     providerInstanceId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     providerEventId: string
     eventType: ChannelProviderEventType
@@ -162,6 +165,7 @@ export type CloudChannelServiceDelegate = {
   }): Promise<ChannelProviderEventClaimResult>
   completeChannelProviderEvent(principal: CloudPrincipal, input: {
     eventId: string
+    channelBindingId?: string | null
     claimedBy: string
     status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
     retryable?: boolean

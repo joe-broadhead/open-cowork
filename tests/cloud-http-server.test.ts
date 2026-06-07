@@ -2235,7 +2235,7 @@ test('cloud HTTP server keeps gateway-scoped tokens out of desktop API routes', 
     const channelDeliveries = await fetch(`${baseUrl}/api/channels/deliveries`, {
       headers: { authorization: `Bearer ${issued.plaintext}` },
     })
-    assert.notEqual(channelDeliveries.status, 403)
+    assert.equal(channelDeliveries.status, 403)
 
     store.createSession({
       tenantId: 'tenant-1',
@@ -2964,6 +2964,12 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     name: 'Gateway-only token',
     scopes: ['gateway'],
   })
+  const otherGatewayOnlyIssued = store.issueApiToken({
+    orgId: org.orgId,
+    accountId: account.accountId,
+    name: 'Other gateway-only token',
+    scopes: ['gateway'],
+  })
   store.createTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
   const org2 = store.ensureOrgForTenant({ tenantId: 'tenant-2', name: 'Tenant 2' })
   const account2 = store.createAccount({
@@ -3007,6 +3013,10 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
   }
   const gatewayOnlyHeaders = {
     authorization: `Bearer ${gatewayOnlyIssued.plaintext}`,
+    'content-type': 'application/json',
+  }
+  const otherGatewayOnlyHeaders = {
+    authorization: `Bearer ${otherGatewayOnlyIssued.plaintext}`,
     'content-type': 'application/json',
   }
   const tenant2Headers = {
@@ -3114,6 +3124,22 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const secondChannelBinding = asRecord((await readJson(secondBindingResponse)).binding)
     assert.equal(secondChannelBinding.credentialRef, undefined)
 
+    store.grantApiTokenChannelBinding({
+      orgId: org.orgId,
+      tokenId: gatewayOnlyIssued.token.tokenId,
+      channelBindingId: String(channelBinding.bindingId),
+    })
+    store.grantApiTokenChannelBinding({
+      orgId: org.orgId,
+      tokenId: otherGatewayOnlyIssued.token.tokenId,
+      channelBindingId: String(secondChannelBinding.bindingId),
+    })
+    store.grantApiTokenChannelBinding({
+      orgId: org.orgId,
+      tokenId: otherGatewayOnlyIssued.token.tokenId,
+      channelBindingId: String(channelBinding.bindingId),
+    })
+
     store.ensureUser({ tenantId: 'tenant-1', userId: 'other-user', email: 'other@example.test' })
     store.createSession({
       tenantId: 'tenant-1',
@@ -3171,6 +3197,180 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const secondWorkspaceSessionBinding = asRecord((await readJson(secondWorkspaceBindResponse)).binding)
     assert.equal(secondWorkspaceSessionBinding.externalWorkspaceId, 'bot-2')
     assert.notEqual(secondWorkspaceSessionBinding.bindingId, sessionBinding.bindingId)
+
+    const ungrantedGatewayBind = await fetch(`${baseUrl}/api/channels/sessions/bind`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        identityId: wrongWorkspaceIdentity.identityId,
+        channelBindingId: secondChannelBinding.bindingId,
+        provider: 'telegram',
+        externalChatId: 'chat-ungranted',
+        externalThreadId: 'thread-ungranted',
+        title: 'Ungrantable second workspace thread',
+      }),
+    })
+    assert.equal(ungrantedGatewayBind.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayBind)).error), /not authorized/)
+
+    const ungrantedGatewayThreadLookup = await fetch(
+      `${baseUrl}/api/channels/sessions/by-thread?provider=telegram&externalWorkspaceId=bot-2&externalChatId=chat-1&externalThreadId=thread-1`,
+      { headers: gatewayOnlyHeaders },
+    )
+    assert.equal(ungrantedGatewayThreadLookup.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayThreadLookup)).error), /not authorized/)
+
+    const ungrantedGatewayPrompt = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        identityId: wrongWorkspaceIdentity.identityId,
+        bindingId: secondWorkspaceSessionBinding.bindingId,
+        text: 'should not reach prompt queue',
+      }),
+    })
+    assert.equal(ungrantedGatewayPrompt.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayPrompt)).error), /not authorized/)
+
+    const ungrantedGatewayCursor = await fetch(`${baseUrl}/api/channels/cursor`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        bindingId: secondWorkspaceSessionBinding.bindingId,
+        lastEventSequence: 1,
+        lastWorkspaceSequence: 1,
+        lastChatMessageId: 'message-ungranted',
+      }),
+    })
+    assert.equal(ungrantedGatewayCursor.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayCursor)).error), /not authorized/)
+
+    const ungrantedGatewayIdentity = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        channelBindingId: secondChannelBinding.bindingId,
+        externalUserId: 'tg-user-ungranted-explicit',
+      }),
+    })
+    assert.equal(ungrantedGatewayIdentity.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayIdentity)).error), /not authorized/)
+
+    const ungrantedGatewayIdentityFallback = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        externalWorkspaceId: 'bot-2',
+        externalUserId: 'tg-user-ungranted-fallback',
+      }),
+    })
+    assert.equal(ungrantedGatewayIdentityFallback.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedGatewayIdentityFallback)).error), /not authorized/)
+
+    const grantedGatewayIdentity = await fetch(`${baseUrl}/api/channels/identities/resolve`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        channelBindingId: channelBinding.bindingId,
+        externalUserId: 'tg-user-granted',
+      }),
+    })
+    assert.equal(grantedGatewayIdentity.status, 200)
+    const grantedGatewayIdentityBody = asRecord((await readJson(grantedGatewayIdentity)).identity)
+    assert.equal(grantedGatewayIdentityBody.externalWorkspaceId, 'bot-1')
+    assert.equal(grantedGatewayIdentityBody.status, 'pending')
+
+    const ungrantedProviderEventClaim = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod-2',
+        channelBindingId: secondChannelBinding.bindingId,
+        externalWorkspaceId: 'bot-2',
+        providerEventId: 'provider-event-ungranted-explicit',
+        eventType: 'message',
+        claimedBy: 'gateway-1',
+      }),
+    })
+    assert.equal(ungrantedProviderEventClaim.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedProviderEventClaim)).error), /not authorized/)
+
+    const ungrantedProviderEventFallbackClaim = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod-2',
+        externalWorkspaceId: 'bot-2',
+        providerEventId: 'provider-event-ungranted-fallback',
+        eventType: 'message',
+        claimedBy: 'gateway-1',
+      }),
+    })
+    assert.equal(ungrantedProviderEventFallbackClaim.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedProviderEventFallbackClaim)).error), /not authorized/)
+
+    const secondProviderEventClaim = await fetch(`${baseUrl}/api/channels/provider-events/claim`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        provider: 'telegram',
+        providerInstanceId: 'telegram-prod-2',
+        channelBindingId: secondChannelBinding.bindingId,
+        providerEventId: 'provider-event-second-complete',
+        eventType: 'message',
+        claimedBy: 'gateway-2',
+      }),
+    })
+    assert.equal(secondProviderEventClaim.status, 200)
+    const secondProviderEvent = asRecord(asRecord(await readJson(secondProviderEventClaim)).event)
+
+    const ungrantedProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${secondProviderEvent.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        channelBindingId: secondChannelBinding.bindingId,
+        claimedBy: 'gateway-2',
+        status: 'processed',
+      }),
+    })
+    assert.equal(ungrantedProviderEventComplete.status, 403)
+    assert.match(String(asRecord(await readJson(ungrantedProviderEventComplete)).error), /not authorized/)
+
+    const ungrantedProviderEventCompleteByRecordedBinding = await fetch(`${baseUrl}/api/channels/provider-events/${secondProviderEvent.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        claimedBy: 'gateway-2',
+        status: 'processed',
+      }),
+    })
+    assert.equal(ungrantedProviderEventCompleteByRecordedBinding.status, 404)
+
+    const legacyProviderEventClaim = store.claimChannelProviderEvent({
+      orgId: org.orgId,
+      provider: 'telegram',
+      providerInstanceId: 'telegram-prod',
+      externalWorkspaceId: 'bot-1',
+      providerEventId: 'provider-event-legacy-complete',
+      eventType: 'message',
+      claimedBy: 'gateway-legacy',
+      ttlMs: 30_000,
+      metadata: { providerMessageId: 'legacy-message' },
+    })
+    const legacyProviderEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${legacyProviderEventClaim.event.eventId}/complete`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        claimedBy: 'gateway-legacy',
+        status: 'processed',
+      }),
+    })
+    assert.equal(legacyProviderEventComplete.status, 200)
 
     const wrongWorkspacePrompt = await fetch(`${baseUrl}/api/channels/sessions/prompt`, {
       method: 'POST',
@@ -3303,6 +3503,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
       body: JSON.stringify({
         provider: 'telegram',
         providerInstanceId: 'telegram-prod',
+        channelBindingId: channelBinding.bindingId,
         externalWorkspaceId: 'bot-1',
         providerEventId: 'provider-event-1',
         eventType: 'message',
@@ -3327,6 +3528,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
       body: JSON.stringify({
         provider: 'telegram',
         providerInstanceId: 'telegram-prod',
+        channelBindingId: channelBinding.bindingId,
         externalWorkspaceId: 'bot-1',
         providerEventId: 'provider-event-1',
         eventType: 'message',
@@ -3339,21 +3541,21 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const wrongClaimantComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
-      body: JSON.stringify({ claimedBy: 'gateway-2', status: 'processed' }),
+      body: JSON.stringify({ channelBindingId: channelBinding.bindingId, claimedBy: 'gateway-2', status: 'processed' }),
     })
     assert.equal(wrongClaimantComplete.status, 404)
 
     const missingClaimantComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
-      body: JSON.stringify({ status: 'processed' }),
+      body: JSON.stringify({ channelBindingId: channelBinding.bindingId, status: 'processed' }),
     })
     assert.equal(missingClaimantComplete.status, 400)
 
     const providerEventComplete = await fetch(`${baseUrl}/api/channels/provider-events/${providerEvent.eventId}/complete`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
-      body: JSON.stringify({ claimedBy: 'gateway-1', status: 'processed' }),
+      body: JSON.stringify({ channelBindingId: channelBinding.bindingId, claimedBy: 'gateway-1', status: 'processed' }),
     })
     assert.equal(providerEventComplete.status, 200)
     assert.equal(asRecord((await readJson(providerEventComplete)).event).status, 'processed')
@@ -3364,6 +3566,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
       body: JSON.stringify({
         provider: 'telegram',
         providerInstanceId: 'telegram-prod',
+        channelBindingId: channelBinding.bindingId,
         externalWorkspaceId: 'bot-1',
         providerEventId: 'provider-event-1',
         eventType: 'message',
@@ -3390,6 +3593,22 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
       }),
     })
     assert.equal(deliveryResponse.status, 201)
+
+    const ungrantedDeliveryCreate = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      method: 'POST',
+      headers: gatewayOnlyHeaders,
+      body: JSON.stringify({
+        deliveryId: 'delivery-ungranted-create',
+        agentId: 'agent-1',
+        channelBindingId: secondChannelBinding.bindingId,
+        sessionBindingId: secondWorkspaceSessionBinding.bindingId,
+        provider: 'telegram',
+        target: { externalChatId: 'chat-1', externalThreadId: 'thread-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-ungranted-create' },
+      }),
+    })
+    assert.equal(ungrantedDeliveryCreate.status, 403)
 
     const mismatchedDelivery = await fetch(`${baseUrl}/api/channels/deliveries`, {
       method: 'POST',
@@ -3423,9 +3642,27 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     })
     assert.equal(crossOrgDelivery.status, 404)
 
+    const ungrantedListResponse = await fetch(
+      `${baseUrl}/api/channels/deliveries?channelBindingId=${encodeURIComponent(String(secondChannelBinding.bindingId))}&limit=10`,
+      { headers: gatewayOnlyHeaders },
+    )
+    assert.equal(ungrantedListResponse.status, 403)
+    const ungrantedController = new AbortController()
+    const ungrantedStream = await fetch(
+      `${baseUrl}/api/channels/deliveries/stream?claimedBy=test-gateway&channelBindingId=${encodeURIComponent(String(secondChannelBinding.bindingId))}`,
+      {
+        headers: gatewayOnlyHeaders,
+        signal: ungrantedController.signal,
+      },
+    )
+    assert.equal(ungrantedStream.status, 200)
+    const ungrantedEvent = await readSseUntil(ungrantedStream, (event) => typeof event.error === 'string')
+    ungrantedController.abort()
+    assert.match(String(ungrantedEvent.error), /not authorized/)
+
     const controller = new AbortController()
     const stream = await fetch(`${baseUrl}/api/channels/deliveries/stream?claimedBy=test-gateway`, {
-      headers: { authorization: `Bearer ${issued.plaintext}` },
+      headers: gatewayOnlyHeaders,
       signal: controller.signal,
     })
     assert.equal(stream.status, 200)
@@ -3434,28 +3671,68 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     ))
     controller.abort()
     assert.equal(asRecord(deliveryEvent.delivery).status, 'claimed')
+    assert.equal(asRecord(deliveryEvent.delivery).claimedBy, 'test-gateway')
+    assert.equal(asRecord(deliveryEvent.delivery).lastClaimedBy, gatewayOnlyIssued.token.tokenId)
 
     const ackResponse = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/ack`, {
       method: 'POST',
-      headers,
+      headers: gatewayOnlyHeaders,
       body: JSON.stringify({ status: 'sent', claimedBy: 'test-gateway' }),
     })
     assert.equal(ackResponse.status, 200)
     assert.equal(asRecord((await readJson(ackResponse)).delivery).status, 'sent')
 
-    const listedDeliveries = await readJson(await fetch(`${baseUrl}/api/channels/deliveries?limit=10`, { headers }))
-    assert.equal(asArray(listedDeliveries.deliveries).some((delivery) => asRecord(delivery).deliveryId === 'delivery-1'), true)
-
-    const gatewayOnlyRetry = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/retry`, {
+    const defaultClaimantDeliveryResponse = await fetch(`${baseUrl}/api/channels/deliveries`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        deliveryId: 'delivery-default-claimant',
+        agentId: 'agent-1',
+        channelBindingId: channelBinding.bindingId,
+        sessionBindingId: sessionBinding.bindingId,
+        provider: 'telegram',
+        target: { externalChatId: 'chat-1', externalThreadId: 'thread-1' },
+        eventType: 'workflow.completed',
+        payload: { runId: 'run-default-claimant' },
+      }),
+    })
+    assert.equal(defaultClaimantDeliveryResponse.status, 201)
+    const defaultController = new AbortController()
+    const defaultStream = await fetch(`${baseUrl}/api/channels/deliveries/stream`, {
+      headers: gatewayOnlyHeaders,
+      signal: defaultController.signal,
+    })
+    assert.equal(defaultStream.status, 200)
+    const defaultClaimantEvent = await readSseUntil(defaultStream, (event) => (
+      asRecord(event.delivery).deliveryId === 'delivery-default-claimant'
+    ))
+    defaultController.abort()
+    assert.equal(asRecord(defaultClaimantEvent.delivery).claimedBy, gatewayOnlyIssued.token.tokenId)
+    assert.equal(asRecord(defaultClaimantEvent.delivery).lastClaimedBy, gatewayOnlyIssued.token.tokenId)
+    const defaultClaimantAck = await fetch(`${baseUrl}/api/channels/deliveries/delivery-default-claimant/ack`, {
       method: 'POST',
       headers: gatewayOnlyHeaders,
+      body: JSON.stringify({ status: 'sent' }),
+    })
+    assert.equal(defaultClaimantAck.status, 200)
+
+    const listedDeliveries = await readJson(await fetch(`${baseUrl}/api/channels/deliveries?limit=10`, { headers }))
+    assert.equal(asArray(listedDeliveries.deliveries).some((delivery) => asRecord(delivery).deliveryId === 'delivery-1'), true)
+    const gatewayListedDeliveries = await readJson(await fetch(`${baseUrl}/api/channels/deliveries?limit=10`, { headers: gatewayOnlyHeaders }))
+    assert.equal(asArray(gatewayListedDeliveries.deliveries).some((delivery) => asRecord(delivery).deliveryId === 'delivery-1'), true)
+    const otherGatewayListedDeliveries = await readJson(await fetch(`${baseUrl}/api/channels/deliveries?limit=10`, { headers: otherGatewayOnlyHeaders }))
+    assert.equal(asArray(otherGatewayListedDeliveries.deliveries).some((delivery) => asRecord(delivery).deliveryId === 'delivery-1'), false)
+
+    const otherGatewayRetry = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/retry`, {
+      method: 'POST',
+      headers: otherGatewayOnlyHeaders,
       body: JSON.stringify({}),
     })
-    assert.equal(gatewayOnlyRetry.status, 403)
+    assert.equal(otherGatewayRetry.status, 404)
 
     const retryDelivery = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/retry`, {
       method: 'POST',
-      headers,
+      headers: gatewayOnlyHeaders,
       body: JSON.stringify({}),
     })
     assert.equal(retryDelivery.status, 200)
@@ -3464,7 +3741,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     const tokenLikeErrorText = ['sk', 'production', 'secret', '1234567890'].join('-')
     const deadLetterDelivery = await fetch(`${baseUrl}/api/channels/deliveries/delivery-1/dead-letter`, {
       method: 'POST',
-      headers,
+      headers: gatewayOnlyHeaders,
       body: JSON.stringify({ lastError: `poison event token=${tokenLikeErrorText}` }),
     })
     assert.equal(deadLetterDelivery.status, 200)
@@ -3484,6 +3761,7 @@ test('cloud HTTP server exposes gateway channel identity, binding, interaction, 
     assert.equal(diagnosticsText.includes(issued.plaintext), false)
     assert.equal(diagnosticsText.includes(operatorIssued.plaintext), false)
     assert.equal(diagnosticsText.includes(gatewayOnlyIssued.plaintext), false)
+    assert.equal(diagnosticsText.includes(otherGatewayOnlyIssued.plaintext), false)
     assert.equal(diagnosticsText.includes(tokenLikeErrorText), false)
     assert.equal(diagnosticsText.includes('secret/telegram'), false)
   } finally {

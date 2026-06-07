@@ -98,8 +98,15 @@ test('cloud gateway wraps all required channel and session operations', async ()
       input.onEvent({ eventId: 'event-1', sequence: 1, type: 'assistant.message', payload: {} })
       return { close() { sessionClosed = true } }
     },
-    subscribeChannelDeliveries(input: { onDelivery: (delivery: unknown) => void }) {
-      calls.push('deliveries')
+    subscribeChannelDeliveries(input: {
+      claimedBy?: string
+      channelBindingIds?: readonly string[]
+      onDelivery: (delivery: unknown) => void
+    }) {
+      calls.push(`deliveries:${JSON.stringify({
+        claimedBy: input.claimedBy,
+        channelBindingIds: input.channelBindingIds,
+      })}`)
       input.onDelivery({ deliveryId: 'delivery-1' })
       return { close() { deliveriesClosed = true } }
     },
@@ -141,7 +148,11 @@ test('cloud gateway wraps all required channel and session operations', async ()
   await gateway.readArtifactAttachment?.('session-1', 'artifact-1')
   assert.equal(gateway.artifactUrl('session-1', 'artifact-1'), 'https://cloud.example.test/api/sessions/session-1/artifacts/artifact-1')
   const sessionEvents = gateway.subscribeSessionEvents({ sessionId: 'session-1', onEvent() {} })
-  const deliveries = gateway.subscribeDeliveries({ onDelivery() {} })
+  const deliveries = gateway.subscribeDeliveries({
+    claimedBy: 'gateway:test',
+    channelBindingIds: ['channel-binding-1'],
+    onDelivery() {},
+  })
   await gateway.updateCursor({ bindingId: 'binding-1', lastEventSequence: 5, lastWorkspaceSequence: 7 })
   await gateway.ackDelivery('delivery-1', { status: 'sent' })
   sessionEvents.close()
@@ -173,4 +184,5 @@ test('cloud gateway wraps all required channel and session operations', async ()
     'cursor',
     'ack',
   ])
+  assert.equal(calls.some((call) => call === 'deliveries:{"claimedBy":"gateway:test","channelBindingIds":["channel-binding-1"]}'), true)
 })

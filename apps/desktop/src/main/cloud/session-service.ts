@@ -34,6 +34,7 @@ import {
 import { InvalidSessionPageCursorError } from './control-plane-store.ts'
 import type {
   ApiTokenScope,
+  ApiTokenRecord,
   BillingSubscriptionRecord,
   ChannelBindingRecord,
   ChannelDeliveryRecord,
@@ -1494,6 +1495,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     input: {
       provider: ChannelProviderId
+      channelBindingId?: string | null
       externalWorkspaceId?: string | null
       externalUserId: string
       identityId?: string | null
@@ -1605,6 +1607,7 @@ export class CloudSessionService {
   async listChannelDeliveries(
     principal: CloudPrincipal,
     input: {
+      deliveryId?: string | null
       status?: ChannelDeliveryRecord['status'] | null
       channelBindingId?: string | null
       limit?: number | null
@@ -1629,7 +1632,7 @@ export class CloudSessionService {
 
   async claimNextChannelDelivery(
     principal: CloudPrincipal,
-    input: { claimedBy: string, ttlMs?: number, now?: Date },
+    input: { claimedBy: string, ttlMs?: number, now?: Date, channelBindingIds?: readonly string[] | null },
   ): Promise<ChannelDeliveryRecord | null> {
     return this.channelDomain.claimNextChannelDelivery(principal, input)
   }
@@ -1652,6 +1655,7 @@ export class CloudSessionService {
     input: {
       provider: ChannelProviderId
       providerInstanceId: string
+      channelBindingId?: string | null
       externalWorkspaceId?: string | null
       providerEventId: string
       eventType: ChannelProviderEventType
@@ -1667,6 +1671,7 @@ export class CloudSessionService {
     principal: CloudPrincipal,
     input: {
       eventId: string
+      channelBindingId?: string | null
       claimedBy: string
       status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
       retryable?: boolean
@@ -2290,7 +2295,7 @@ export class CloudSessionService {
     this.assertApiTokenAdmin(principal)
     const tokens = (await this.store.listApiTokens(this.principalOrgId(principal)))
       .slice(0, normalizedCloudListLimit(input.limit))
-    return tokens.map(publicApiToken)
+    return Promise.all(tokens.map((token) => this.publicApiTokenWithChannelBindings(token)))
   }
 
   async issueApiToken(
@@ -2299,11 +2304,13 @@ export class CloudSessionService {
       name: string
       scopes: ApiTokenScope[]
       expiresAt?: Date | null
+      channelBindingIds?: readonly string[] | null
     },
   ): Promise<IssuedPublicApiTokenRecord> {
     await this.ensurePrincipal(principal)
     this.assertApiTokenAdmin(principal)
     const scopes = enforceApiTokenScopePolicy(normalizeApiTokenScopes(input.scopes), this.identityPolicy)
+    const channelBindingIds = await this.normalizeApiTokenChannelBindingIds(principal, input.channelBindingIds, scopes)
     const issued = await this.store.issueApiToken({
       orgId: this.principalOrgId(principal),
       accountId: principal.accountId || principal.userId,
@@ -2316,8 +2323,20 @@ export class CloudSessionService {
         accountId: principal.accountId || principal.userId,
       },
     })
+    for (const channelBindingId of channelBindingIds) {
+      await this.store.grantApiTokenChannelBinding({
+        orgId: this.principalOrgId(principal),
+        tokenId: issued.token.tokenId,
+        channelBindingId,
+        actor: {
+          actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+          actorId: principal.tokenId || principal.userId,
+          accountId: principal.accountId || principal.userId,
+        },
+      })
+    }
     return {
-      token: publicApiToken(issued.token),
+      token: publicApiToken(issued.token, channelBindingIds),
       plaintext: issued.plaintext,
     }
   }
@@ -2334,7 +2353,37 @@ export class CloudSessionService {
         accountId: principal.accountId || principal.userId,
       },
     })
-    return revoked ? publicApiToken(revoked) : null
+    return revoked ? this.publicApiTokenWithChannelBindings(revoked) : null
+  }
+
+  async grantApiTokenChannelBinding(
+    principal: CloudPrincipal,
+    tokenId: string,
+    input: { channelBindingId: string },
+  ): Promise<{ grant: { orgId: string, tokenId: string, channelBindingId: string, createdAt: string }, token: PublicApiTokenRecord }> {
+    await this.ensurePrincipal(principal)
+    this.assertApiTokenAdmin(principal)
+    const orgId = this.principalOrgId(principal)
+    const token = (await this.store.listApiTokens(orgId)).find((candidate) => candidate.tokenId === tokenId)
+    if (!token) throw new CloudServiceError(404, 'API token was not found.')
+    if (!token.scopes.includes('gateway')) {
+      throw new CloudServiceError(400, 'Channel binding grants require a gateway-scoped API token.')
+    }
+    const channelBindingId = await this.normalizeSingleApiTokenChannelBindingId(principal, input.channelBindingId)
+    const grant = await this.store.grantApiTokenChannelBinding({
+      orgId,
+      tokenId,
+      channelBindingId,
+      actor: {
+        actorType: principal.authSource === 'api_token' ? 'api_token' : 'user',
+        actorId: principal.tokenId || principal.userId,
+        accountId: principal.accountId || principal.userId,
+      },
+    })
+    return {
+      grant,
+      token: await this.publicApiTokenWithChannelBindings(token),
+    }
   }
 
   async getBillingSubscription(principal: CloudPrincipal) {
@@ -3406,6 +3455,39 @@ export class CloudSessionService {
       input,
       resolveActorWorkspaceMember: () => this.principalIsActiveWorkspaceMember(principal),
     })
+  }
+
+  private async publicApiTokenWithChannelBindings(token: ApiTokenRecord): Promise<PublicApiTokenRecord> {
+    const grants = await this.store.listApiTokenChannelBindingGrants({
+      orgId: token.orgId,
+      tokenId: token.tokenId,
+    })
+    return publicApiToken(token, grants.map((grant) => grant.channelBindingId))
+  }
+
+  private async normalizeApiTokenChannelBindingIds(
+    principal: CloudPrincipal,
+    input: readonly string[] | null | undefined,
+    scopes: ApiTokenScope[],
+  ): Promise<string[]> {
+    const ids = [...new Set((input || []).map((value) => value.trim()).filter(Boolean))]
+    if (ids.length === 0) return []
+    if (!scopes.includes('gateway')) {
+      throw new CloudServiceError(400, 'Channel binding grants require a gateway-scoped API token.')
+    }
+    const normalized: string[] = []
+    for (const channelBindingId of ids) {
+      normalized.push(await this.normalizeSingleApiTokenChannelBindingId(principal, channelBindingId))
+    }
+    return normalized
+  }
+
+  private async normalizeSingleApiTokenChannelBindingId(principal: CloudPrincipal, input: string): Promise<string> {
+    const channelBindingId = input.trim()
+    if (!channelBindingId) throw new CloudServiceError(400, 'Channel binding id is required.')
+    const binding = await this.store.getChannelBinding(this.principalOrgId(principal), channelBindingId)
+    if (!binding) throw new CloudServiceError(404, 'Channel binding was not found.')
+    return binding.bindingId
   }
 
   private assertBillingAdmin(principal: CloudPrincipal) {

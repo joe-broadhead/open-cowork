@@ -383,7 +383,7 @@ function assertDesktopParity(rawView, desktopView, label) {
   return { raw, desktop }
 }
 
-async function setupGateway({ baseUrl, token, adminClient, runId }) {
+async function setupGateway({ baseUrl, token, tokenId, adminClient, runId }) {
   const createHeadlessAgent = requireMethod(adminClient, 'createHeadlessAgent')
   const createChannelBinding = requireMethod(adminClient, 'createChannelBinding')
   const resolveChannelIdentity = requireMethod(adminClient, 'resolveChannelIdentity')
@@ -405,6 +405,11 @@ async function setupGateway({ baseUrl, token, adminClient, runId }) {
     status: 'active',
     settings: { smoke: true },
   })
+  const grantApiTokenChannelBinding = requireMethod(adminClient, 'grantApiTokenChannelBinding')
+  const grant = await grantApiTokenChannelBinding(tokenId, { channelBindingId: bindingId })
+  if (!grant?.token?.channelBindingIds?.includes(bindingId)) {
+    throw new Error('Continuation smoke gateway token was not granted to the channel binding.')
+  }
   const identity = await resolveChannelIdentity({
     provider: 'cli',
     externalUserId,
@@ -814,6 +819,7 @@ async function runSmoke() {
     gatewaySetup = await setupGateway({
       baseUrl,
       token: tokenState.tokens.gateway,
+      tokenId: tokenState.issued.gateway.tokenId,
       adminClient: tokenState.adminClient,
       runId,
     })

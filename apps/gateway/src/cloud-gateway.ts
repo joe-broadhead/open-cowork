@@ -28,6 +28,7 @@ export type CloudGateway = {
   resolveIdentity(input: {
     provider: CloudChannelProviderId
     externalUserId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     metadata?: Record<string, unknown>
   }): Promise<ChannelIdentityRecord>
@@ -55,6 +56,7 @@ export type CloudGateway = {
   claimProviderEvent(input: {
     provider: CloudChannelProviderId
     providerInstanceId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     providerEventId: string
     eventType: CloudChannelProviderEventType
@@ -63,6 +65,7 @@ export type CloudGateway = {
     metadata?: Record<string, unknown>
   }): Promise<ChannelProviderEventClaimResult>
   completeProviderEvent(eventId: string, input: {
+    channelBindingId?: string | null
     claimedBy: string
     status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
     retryable?: boolean
@@ -101,6 +104,7 @@ export type CloudGateway = {
   subscribeDeliveries(input: {
     claimedBy?: string
     ttlMs?: number
+    channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
   }): CloudTransportSubscription
@@ -117,6 +121,7 @@ export type CloudGateway = {
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord | null>
   listDeliveries?(input?: {
+    deliveryId?: string | null
     status?: ChannelDeliveryRecord['status'] | null
     channelBindingId?: string | null
     limit?: number | null

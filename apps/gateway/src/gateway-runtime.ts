@@ -10,7 +10,12 @@ import { isCloudTransportError, type ChannelDeliveryRecord, type CloudChannelPro
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayConfig, GatewayProviderConfig } from './config.js'
 import { routeGatewayInteraction } from './interaction-router.js'
-import { createGatewayMetrics, type GatewayMetrics } from './metrics.js'
+import {
+  createGatewayMetrics,
+  ensureGatewayProviderMetrics,
+  setGatewayProviderState,
+  type GatewayMetrics,
+} from './metrics.js'
 import { classifyProviderFailure } from './provider-errors.js'
 import { createGatewayProviderRegistry, type GatewayProviderRegistry, type ProviderRegistration } from './provider-registry.js'
 import { createGatewaySessionStreamManager, type GatewaySessionStreamManager } from './session-stream-manager.js'
@@ -25,6 +30,7 @@ export type GatewayRuntime = {
   start(): Promise<void>
   stop(): Promise<void>
   ready(): boolean
+  refreshProviderHealth(): void
 }
 
 export type GatewayRuntimeOptions = {
@@ -38,8 +44,12 @@ export function createGatewayRuntime(
   options: GatewayRuntimeOptions = {},
 ): GatewayRuntime {
   const metrics = createGatewayMetrics()
+  for (const provider of config.providers.filter((entry) => entry.enabled)) {
+    ensureGatewayProviderMetrics(metrics, provider)
+  }
   const streams = createGatewaySessionStreamManager(cloud, metrics)
   const claimedBy = `gateway:${config.instanceId}`
+  const channelBindingIds = [...new Set(config.providers.filter((provider) => provider.enabled).map((provider) => provider.channelBindingId))]
   const deliverySubscriptions: Array<{ close(): void }> = []
   const inFlightDeliveries = new Set<Promise<void>>()
   let started = false
@@ -50,11 +60,18 @@ export function createGatewayRuntime(
     streams,
     async start() {
       if (started) return
+      for (const provider of config.providers.filter((entry) => entry.enabled)) {
+        setGatewayProviderState(metrics, provider, 'starting')
+      }
       await providers.start((providerConfig, message) => handleMessage(providerConfig, message, cloud, providers, streams, metrics, claimedBy))
+      for (const registration of providers.registrations) {
+        setGatewayProviderState(metrics, registration.config, registration.healthy ? 'healthy' : 'unhealthy')
+      }
       started = true
       if (options.subscribeDeliveries !== false) {
         deliverySubscriptions.push(cloud.subscribeDeliveries({
           claimedBy,
+          channelBindingIds,
           onDelivery: (delivery) => {
             const task = handleDelivery(delivery, providers, cloud, metrics)
               .finally(() => {
@@ -76,19 +93,30 @@ export function createGatewayRuntime(
         await settleWithin(Promise.allSettled([...inFlightDeliveries]), config.timeouts.shutdownDrainMs)
       }
       await providers.stop()
+      for (const provider of config.providers.filter((entry) => entry.enabled)) {
+        setGatewayProviderState(metrics, provider, 'stopped')
+      }
       started = false
     },
     ready() {
-      return started && providers.registrations.every((registration) => {
-        const health = registration.provider.health?.()
-        registration.healthy = health?.ok ?? registration.healthy
-        registration.lastError = health?.error || null
-        return registration.started && registration.healthy
-      })
+      refreshProviderHealth(providers, metrics)
+      return started && providers.registrations.every((registration) => registration.started && registration.healthy)
+    },
+    refreshProviderHealth() {
+      refreshProviderHealth(providers, metrics)
     },
   }
 
   return runtime
+}
+
+function refreshProviderHealth(providers: GatewayProviderRegistry, metrics: GatewayMetrics) {
+  for (const registration of providers.registrations) {
+    const health = registration.provider.health?.()
+    registration.healthy = health?.ok ?? registration.healthy
+    registration.lastError = health?.error || null
+    setGatewayProviderState(metrics, registration.config, registration.healthy ? 'healthy' : 'unhealthy')
+  }
 }
 
 async function settleWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
@@ -115,6 +143,8 @@ async function handleMessage(
   claimedBy: string,
 ) {
   metrics.incomingMessages += 1
+  const providerMetrics = ensureGatewayProviderMetrics(metrics, providerConfig)
+  providerMetrics.incomingMessages += 1
   const provider = message.provider as CloudChannelProviderId
   const externalWorkspaceId = providerConfig.externalWorkspaceId ?? null
   const externalUserId = message.sender.providerUserId
@@ -127,6 +157,7 @@ async function handleMessage(
     const eventClaim = await cloud.claimProviderEvent({
       provider,
       providerInstanceId: providerConfig.id,
+      channelBindingId: providerConfig.channelBindingId,
       externalWorkspaceId,
       providerEventId: providerEventIdForMessage(message),
       eventType: providerEventTypeForMessage(message),
@@ -134,12 +165,16 @@ async function handleMessage(
       ttlMs: PROVIDER_EVENT_CLAIM_TTL_MS,
       metadata: providerEventMetadata(message, providerConfig),
     })
-    if (!eventClaim.claimed) return
+    if (!eventClaim.claimed) {
+      providerMetrics.inboundDuplicates += 1
+      return
+    }
     claimedEvent = { eventId: eventClaim.event.eventId }
 
     if (await routeGatewayInteraction({ cloud, provider: registration.provider, providerConfig, message, metrics })) {
       sideEffectCommitted = true
       await cloud.completeProviderEvent(claimedEvent.eventId, {
+        channelBindingId: providerConfig.channelBindingId,
         claimedBy,
         status: 'processed',
       })
@@ -149,6 +184,7 @@ async function handleMessage(
     const text = message.text.trim()
     if (!text) {
       await cloud.completeProviderEvent(claimedEvent.eventId, {
+        channelBindingId: providerConfig.channelBindingId,
         claimedBy,
         status: 'processed',
       })
@@ -157,6 +193,7 @@ async function handleMessage(
 
     const identity = await cloud.resolveIdentity({
       provider,
+      channelBindingId: providerConfig.channelBindingId,
       externalWorkspaceId,
       externalUserId,
       metadata: {
@@ -187,13 +224,16 @@ async function handleMessage(
     })
     sideEffectCommitted = true
     metrics.promptedMessages += 1
+    providerMetrics.promptedMessages += 1
     await cloud.completeProviderEvent(claimedEvent.eventId, {
+      channelBindingId: providerConfig.channelBindingId,
       claimedBy,
       status: 'processed',
     })
   } catch (error) {
     if (claimedEvent && !sideEffectCommitted) {
       await cloud.completeProviderEvent(claimedEvent.eventId, {
+        channelBindingId: providerConfig.channelBindingId,
         claimedBy,
         status: 'failed',
         retryable: providerEventFailureIsRetryable(error),
@@ -201,6 +241,7 @@ async function handleMessage(
       }).catch(() => {})
     }
     metrics.errors += 1
+    providerMetrics.inboundFailures += 1
     throw error
   }
 }
@@ -224,6 +265,8 @@ async function handleDelivery(
     })
     return
   }
+  const providerMetrics = ensureGatewayProviderMetrics(metrics, registration.config)
+  providerMetrics.deliveriesReceived += 1
 
   try {
     await sendDelivery(registration.provider, delivery)
@@ -233,13 +276,19 @@ async function handleDelivery(
       lastError: null,
     })
     metrics.deliveriesSent += 1
+    providerMetrics.deliveriesSent += 1
     metrics.deliveryLatencyMsTotal += Math.max(0, Date.now() - startedAt)
   } catch (error) {
     metrics.errors += 1
     const failure = classifyProviderFailure(error)
     const shouldRetry = failure.transient && delivery.attemptCount < MAX_DELIVERY_ATTEMPTS
-    if (shouldRetry) metrics.deliveryRetries += 1
-    else metrics.deliveryDeadLetters += 1
+    if (shouldRetry) {
+      metrics.deliveryRetries += 1
+      providerMetrics.deliveryRetries += 1
+    } else {
+      metrics.deliveryDeadLetters += 1
+      providerMetrics.deliveryDeadLetters += 1
+    }
     await cloud.ackDelivery(delivery.deliveryId, {
       status: shouldRetry ? 'failed' : 'dead',
       claimedBy: delivery.claimedBy,

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 
 import { createHttpSseCloudTransportAdapter } from '../packages/cloud-client/dist/index.js'
 import { createCloudGateway, createGatewayDaemon, resolveGatewayCloudConnection, resolveGatewayConfig } from '../apps/gateway/dist/index.js'
+import { WebhookCircuitOpenError } from '../packages/gateway-provider-webhook/dist/index.js'
 
 const args = parseArgs(process.argv.slice(2))
 const debugEnabled = process.env.OPEN_COWORK_GATEWAY_SMOKE_DEBUG === 'true'
@@ -406,6 +407,15 @@ async function setupCloudChannelState({ baseUrl, adminToken, adminClient, servic
   }
 }
 
+async function grantGatewayTokenChannelBinding(adminClient, issuedToken, channelBindingId) {
+  const grantApiTokenChannelBinding = requireMethod(adminClient, 'grantApiTokenChannelBinding')
+  const result = await grantApiTokenChannelBinding(issuedToken.tokenId, { channelBindingId })
+  if (!result?.token?.channelBindingIds?.includes(channelBindingId)) {
+    throw new Error('Gateway token channel binding grant was not applied.')
+  }
+  return result
+}
+
 async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, adminClient, setup, timeoutMs, runId }) {
   const gatewayAdminToken = `gateway-admin-${runId}`
   const gatewayEnv = {
@@ -433,6 +443,18 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
   const fakeProvider = gateway.runtime.providers.get('fake')?.provider
   if (!fakeProvider || !Array.isArray(fakeProvider.sent)) {
     throw new Error('Gateway smoke fake provider was not available.')
+  }
+  const originalSendText = fakeProvider.sendText.bind(fakeProvider)
+  const forcedDeliveryFailures = new Map()
+  fakeProvider.sendText = async (...sendArgs) => {
+    const options = sendArgs[2] && typeof sendArgs[2] === 'object' ? sendArgs[2] : {}
+    const deliveryId = typeof options.deliveryId === 'string' ? options.deliveryId : ''
+    const retryAfterMs = forcedDeliveryFailures.get(deliveryId)
+    if (retryAfterMs !== undefined) {
+      forcedDeliveryFailures.delete(deliveryId)
+      throw new WebhookCircuitOpenError(retryAfterMs)
+    }
+    return originalSendText(...sendArgs)
   }
 
   try {
@@ -566,8 +588,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
     )
 
     const failedRetryId = `gw-smoke-retry-${runId}`
-    const retryChannelDelivery = requireMethod(adminClient, 'retryChannelDelivery')
-    const deadLetterChannelDelivery = requireMethod(adminClient, 'deadLetterChannelDelivery')
+    forcedDeliveryFailures.set(failedRetryId, 60_000)
     await createDelivery(baseUrl, adminToken, {
       deliveryId: failedRetryId,
       agentId: setup.ids.agentId,
@@ -576,24 +597,24 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       target: { externalChatId: setup.ids.externalChatId, externalThreadId: setup.ids.externalThreadId },
       eventType: 'workflow.completed',
       payload: { text: 'retry later' },
-      status: 'failed',
-      nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
     })
-    const backlog = await expectOkJson(`${gatewayUrl}/deliveries?status=failed&channelBindingId=${encodeURIComponent(setup.ids.bindingId)}`, {
-      token: gatewayAdminToken,
-    })
-    if (!Array.isArray(backlog.deliveries) || !backlog.deliveries.some((delivery) => delivery.deliveryId === failedRetryId)) {
-      throw new Error('Gateway admin delivery backlog did not include the failed smoke delivery.')
-    }
+    await waitFor(
+      () => expectOkJson(`${gatewayUrl}/deliveries?status=failed&channelBindingId=${encodeURIComponent(setup.ids.bindingId)}`, {
+        token: gatewayAdminToken,
+      }),
+      (backlog) => Array.isArray(backlog.deliveries) && backlog.deliveries.some((delivery) => delivery.deliveryId === failedRetryId),
+      'gateway-owned failed smoke retry delivery',
+      timeoutMs,
+    )
     const gatewayRetry = await requestJson(`${gatewayUrl}/deliveries/${encodeURIComponent(failedRetryId)}/retry`, {
       method: 'POST',
       token: gatewayAdminToken,
     })
-    if (gatewayRetry.status >= 200 && gatewayRetry.status < 300) {
-      throw new Error('Gateway admin delivery retry unexpectedly succeeded with a gateway-scoped cloud token.')
+    if (gatewayRetry.status < 200 || gatewayRetry.status >= 300) {
+      throw new Error(`Gateway admin delivery retry returned ${gatewayRetry.status}: ${String(gatewayRetry.text).slice(0, 240)}`)
     }
-    const retried = await retryChannelDelivery(failedRetryId)
-    if (retried?.status !== 'failed') throw new Error('Cloud admin delivery retry did not move the failed delivery back into retry eligibility.')
+    const retried = gatewayRetry.body?.delivery
+    if (retried?.status !== 'failed') throw new Error('Gateway admin delivery retry did not move the failed delivery back into retry eligibility.')
     await waitFor(
       () => fakeProvider.sent,
       (sent) => sent.some((entry) => entry.text === 'retry later'),
@@ -609,6 +630,7 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
     )
 
     const failedDeadId = `gw-smoke-dead-${runId}`
+    forcedDeliveryFailures.set(failedDeadId, 60_000)
     await createDelivery(baseUrl, adminToken, {
       deliveryId: failedDeadId,
       agentId: setup.ids.agentId,
@@ -617,19 +639,25 @@ async function runSelfHostGatewaySmoke({ baseUrl, serviceToken, adminToken, admi
       target: { externalChatId: setup.ids.externalChatId, externalThreadId: setup.ids.externalThreadId },
       eventType: 'workflow.completed',
       payload: { text: 'dead letter me' },
-      status: 'failed',
-      nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
     })
+    await waitFor(
+      () => expectOkJson(`${gatewayUrl}/deliveries?status=failed&channelBindingId=${encodeURIComponent(setup.ids.bindingId)}`, {
+        token: gatewayAdminToken,
+      }),
+      (backlog) => Array.isArray(backlog.deliveries) && backlog.deliveries.some((delivery) => delivery.deliveryId === failedDeadId),
+      'gateway-owned failed smoke dead-letter delivery',
+      timeoutMs,
+    )
     const gatewayDeadLetter = await requestJson(`${gatewayUrl}/deliveries/${encodeURIComponent(failedDeadId)}/dead-letter`, {
       method: 'POST',
       token: gatewayAdminToken,
       body: { lastError: 'gateway smoke operator dead-letter' },
     })
-    if (gatewayDeadLetter.status >= 200 && gatewayDeadLetter.status < 300) {
-      throw new Error('Gateway admin delivery dead-letter unexpectedly succeeded with a gateway-scoped cloud token.')
+    if (gatewayDeadLetter.status < 200 || gatewayDeadLetter.status >= 300) {
+      throw new Error(`Gateway admin delivery dead-letter returned ${gatewayDeadLetter.status}: ${String(gatewayDeadLetter.text).slice(0, 240)}`)
     }
-    const dead = await deadLetterChannelDelivery(failedDeadId, { lastError: 'gateway smoke operator dead-letter' })
-    if (dead?.status !== 'dead') throw new Error('Cloud admin delivery dead-letter did not return a dead delivery.')
+    const dead = gatewayDeadLetter.body?.delivery
+    if (dead?.status !== 'dead') throw new Error('Gateway admin delivery dead-letter did not return a dead delivery.')
 
     return {
       gatewayUrl,
@@ -681,6 +709,7 @@ async function runSmoke() {
       serviceToken: tokenState.serviceToken,
       runId,
     })
+    await grantGatewayTokenChannelBinding(tokenState.adminClient, tokenState.issuedToken, setup.ids.bindingId)
     const managed = await checkManagedGateway(managedGatewayUrl)
     const selfHost = await runSelfHostGatewaySmoke({
       baseUrl,

@@ -14,8 +14,12 @@ export type CloudIdentityServiceDelegate = {
     name: string
     scopes: ApiTokenScope[]
     expiresAt?: Date | null
+    channelBindingIds?: readonly string[] | null
   }): Promise<IssuedPublicApiTokenRecord>
   revokeApiToken(principal: CloudPrincipal, tokenId: string): Promise<PublicApiTokenRecord | null>
+  grantApiTokenChannelBinding(principal: CloudPrincipal, tokenId: string, input: {
+    channelBindingId: string
+  }): Promise<{ grant: { orgId: string, tokenId: string, channelBindingId: string, createdAt: string }, token: PublicApiTokenRecord }>
 }
 
 export class CloudIdentityService {
@@ -41,11 +45,16 @@ export class CloudIdentityService {
     name: string
     scopes: ApiTokenScope[]
     expiresAt?: Date | null
+    channelBindingIds?: readonly string[] | null
   }) {
     return this.delegate.issueApiToken(principal, input)
   }
 
   revokeApiToken(principal: CloudPrincipal, tokenId: string) {
     return this.delegate.revokeApiToken(principal, tokenId)
+  }
+
+  grantApiTokenChannelBinding(principal: CloudPrincipal, tokenId: string, input: { channelBindingId: string }) {
+    return this.delegate.grantApiTokenChannelBinding(principal, tokenId, input)
   }
 }

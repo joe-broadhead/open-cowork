@@ -713,6 +713,45 @@ test('cloud transport adapter reports typed fetch SSE failures', async () => {
   assert.equal((parseErrors[0] as CloudTransportError).kind, 'parse')
 })
 
+test('cloud transport adapter surfaces channel delivery SSE error payloads', async () => {
+  const deliveries: unknown[] = []
+  const errors: unknown[] = []
+  const transport = createHttpSseCloudTransportAdapter({
+    baseUrl: 'https://cloud.example.test',
+    headers: { authorization: 'Bearer cloud-token' },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      async text() {
+        return ''
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('event: error\ndata: {"error":"Gateway API token is not authorized for one or more requested channel bindings."}\n\n'))
+          controller.close()
+        },
+      }),
+    }),
+  })
+
+  transport.subscribeChannelDeliveries?.({
+    claimedBy: 'gateway:test',
+    channelBindingIds: ['binding-2'],
+    onDelivery(delivery) {
+      deliveries.push(delivery)
+    },
+    onError(error) {
+      errors.push(error)
+    },
+  })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.deepEqual(deliveries, [])
+  assert.equal(errors.length, 1)
+  assert.match(errors[0] instanceof Error ? errors[0].message : String(errors[0]), /not authorized/)
+})
+
 test('cloud transport adapter applies request timeout and caller cancellation signals', async () => {
   const timeoutTransport = createHttpSseCloudTransportAdapter({
     baseUrl: 'https://cloud.example.test',

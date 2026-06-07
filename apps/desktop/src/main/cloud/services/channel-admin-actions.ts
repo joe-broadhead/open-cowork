@@ -11,6 +11,10 @@ import {
 } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 import {
+  resolveGatewayChannelBindingForProviderScope,
+  resolveGatewayChannelBindingScope,
+} from './channel-binding-scope.ts'
+import {
   assertChannelSetupAllowed,
   assertGatewayAccess,
   normalizedCloudListLimit,
@@ -181,6 +185,7 @@ export async function resolveChannelIdentity(
   principal: CloudPrincipal,
   input: {
     provider: ChannelProviderId
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     externalUserId: string
     identityId?: string | null
@@ -193,18 +198,24 @@ export async function resolveChannelIdentity(
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
+  const setupAllowed = principalCanManageChannels(principal)
+  let externalWorkspaceId = input.externalWorkspaceId
+  if (!setupAllowed) {
+    const channelBinding = await resolveGatewayChannelBindingForProviderScope(options, principal, input, 'Channel identity resolution')
+    await resolveGatewayChannelBindingScope(options, principal, [channelBinding.bindingId])
+    externalWorkspaceId = input.externalWorkspaceId === undefined ? channelBinding.externalWorkspaceId : input.externalWorkspaceId
+  }
   const existing = await options.store.findChannelIdentity({
     orgId,
     provider: input.provider,
-    externalWorkspaceId: input.externalWorkspaceId,
+    externalWorkspaceId,
     externalUserId: input.externalUserId,
   })
-  const setupAllowed = principalCanManageChannels(principal)
   return options.store.upsertChannelIdentity({
     identityId: existing?.identityId || input.identityId || options.ids.randomUUID(),
     orgId,
     provider: input.provider,
-    externalWorkspaceId: input.externalWorkspaceId,
+    externalWorkspaceId,
     externalUserId: input.externalUserId,
     accountId: setupAllowed ? input.accountId : existing?.accountId,
     role: setupAllowed ? input.role || existing?.role || 'viewer' : existing?.role || 'viewer',

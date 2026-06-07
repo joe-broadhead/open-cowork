@@ -1,5 +1,6 @@
 import type {
   AccountRecord,
+  ApiTokenChannelBindingGrantRecord,
   ApiTokenRecord,
   AuditEventRecord,
   CloudAuthBackoffRecord,
@@ -77,6 +78,15 @@ export function apiTokenFromRow(row: QueryRow): ApiTokenRecord {
     lastUsedAt: isoOrNull(row.last_used_at),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  }
+}
+
+export function apiTokenChannelBindingGrantFromRow(row: QueryRow): ApiTokenChannelBindingGrantRecord {
+  return {
+    orgId: String(row.org_id),
+    tokenId: String(row.token_id),
+    channelBindingId: String(row.channel_binding_id),
+    createdAt: iso(row.created_at),
   }
 }
 

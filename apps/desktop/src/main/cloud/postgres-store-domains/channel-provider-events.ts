@@ -146,6 +146,7 @@ export class PostgresChannelProviderEventsRepository {
        WHERE org_id = $1
          AND event_id = $2
          AND claimed_by = $7
+         AND ($8::text[] IS NULL OR metadata ->> 'channelBindingId' = ANY($8::text[]) OR NOT (metadata ? 'channelBindingId'))
        RETURNING *`,
       [
         input.orgId,
@@ -157,6 +158,7 @@ export class PostgresChannelProviderEventsRepository {
           : null,
         updatedAt,
         normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant'),
+        input.channelBindingIds === null || input.channelBindingIds === undefined ? null : [...input.channelBindingIds],
       ],
     )
     return result.rows[0] ? channelProviderEventFromRow(result.rows[0]) : null
