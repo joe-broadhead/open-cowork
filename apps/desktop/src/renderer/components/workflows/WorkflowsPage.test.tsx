@@ -126,8 +126,8 @@ describe('WorkflowsPage', () => {
     const onOpenThread = vi.fn()
     render(<WorkflowsPage onOpenThread={onOpenThread} />)
 
-    await screen.findByText('No workflows yet')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Add workflow' })[0]!)
+    await screen.findByText('No playbooks yet')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Add playbook' })[0]!)
 
     expect(api.workflows?.startDraft).toHaveBeenCalledTimes(1)
     expect(api.workflows?.startDraft).toHaveBeenCalledWith()
@@ -139,8 +139,8 @@ describe('WorkflowsPage', () => {
     const onOpenThread = vi.fn()
     render(<WorkflowsPage onOpenThread={onOpenThread} />)
 
-    await screen.findByText('No workflows yet')
-    const buttons = await screen.findAllByRole('button', { name: 'Add workflow' })
+    await screen.findByText('No playbooks yet')
+    const buttons = await screen.findAllByRole('button', { name: 'Add playbook' })
     await waitFor(() => expect(buttons[0]).toBeDisabled())
 
     expect(api.workflows?.startDraft).not.toHaveBeenCalled()
@@ -278,7 +278,7 @@ describe('WorkflowsPage', () => {
 
     render(<WorkflowsPage onOpenThread={vi.fn()} />)
 
-    expect(await screen.findByText('No workflows yet')).toBeInTheDocument()
+    expect(await screen.findByText('No playbooks yet')).toBeInTheDocument()
     expect(screen.getByText('support failed')).toBeInTheDocument()
     expect(api.workflows?.list).not.toHaveBeenCalled()
     expect(api.workflows?.runNow).not.toHaveBeenCalled()

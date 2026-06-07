@@ -389,7 +389,7 @@ export function SettingsPanel({
   if (!settings || !config) {
     return (
       <Dialog title={t('settings.title', 'Settings')} size="lg" onClose={onClose}>
-        <div className="settings-dialog-loading" aria-label={t('settings.loading', 'Loading settings...')}>
+        <div className="settings-dialog-loading" role="status" aria-live="polite" aria-label={t('settings.loading', 'Loading settings...')}>
           <Skeleton variant="text" className="w-40" />
           <Skeleton variant="block" className="h-10 w-full" />
           <Skeleton variant="card" className="h-48 w-full" />

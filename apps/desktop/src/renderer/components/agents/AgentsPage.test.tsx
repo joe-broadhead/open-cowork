@@ -173,7 +173,7 @@ describe('AgentsPage', () => {
     const user = userEvent.setup()
     const api = renderAgentsPage()
 
-    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Coworkers' })).toBeInTheDocument()
     expect(screen.getByText('market-analyst')).toBeInTheDocument()
     expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.getByText('Build')).toBeInTheDocument()
@@ -183,11 +183,11 @@ describe('AgentsPage', () => {
     expect(api.builtinAgents).toHaveBeenCalledTimes(1)
     expect(api.runtimeReady).toHaveBeenCalledTimes(1)
 
-    await user.type(screen.getByPlaceholderText('Search agents, skills, tools, or instructions…'), 'chart')
+    await user.type(screen.getByPlaceholderText('Search coworkers, skills, tools, or instructions...'), 'chart')
     expect(screen.getByText('market-analyst')).toBeInTheDocument()
     expect(screen.queryByText('plugin-helper')).not.toBeInTheDocument()
 
-    await user.clear(screen.getByPlaceholderText('Search agents, skills, tools, or instructions…'))
+    await user.clear(screen.getByPlaceholderText('Search coworkers, skills, tools, or instructions...'))
     await user.click(screen.getByRole('tab', { name: 'Built-in' }))
     expect(screen.getByText('Workflow Designer')).toBeInTheDocument()
     expect(screen.queryByText('Build')).not.toBeInTheDocument()
@@ -208,12 +208,12 @@ describe('AgentsPage', () => {
     const api = renderAgentsPage()
 
     await screen.findByText('market-analyst')
-    await user.click(screen.getByRole('button', { name: 'New agent' }))
+    await user.click(screen.getByRole('button', { name: 'New coworker' }))
     expect(screen.getByRole('heading', { name: 'Start a new agent' })).toBeInTheDocument()
     expect(api.onClearDraft).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: /Start from blank/ }))
-    expect(await screen.findByRole('button', { name: 'Create agent' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Create coworker' })).toBeDisabled()
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
@@ -258,7 +258,7 @@ describe('AgentsPage', () => {
       runtimeAgents: [],
     })
 
-    expect(await screen.findByText('Custom agents')).toBeInTheDocument()
+    expect(await screen.findByText('Custom coworkers')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('agent-1')).toBeInTheDocument()
   })

@@ -240,7 +240,7 @@ export function AgentBuilderPage({
             size="sm"
             leftIcon="chevron-left"
           >
-            Agents
+            {t('agents.builder.backToTeam', 'Team')}
           </Button>
           {!readOnly && (
             <div className="flex items-center gap-2">
@@ -258,14 +258,14 @@ export function AgentBuilderPage({
                 variant="primary"
                 size="md"
               >
-                {target.kind === 'custom' ? 'Save changes' : 'Create agent'}
+                {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.createCoworker', 'Create coworker')}
               </Button>
               <Button
                 onClick={() => void handleSave({ testAfterSave: true })}
                 disabled={saving || issues.length > 0 || draft.enabled === false}
                 variant="secondary"
                 size="md"
-                title={draft.enabled === false ? 'Enable this agent before testing it in chat.' : 'Save and insert an @mention into a new thread.'}
+                title={draft.enabled === false ? t('agents.builder.enableBeforeTest', 'Enable this coworker before testing it in chat.') : t('agents.builder.saveAndMention', 'Save and insert an @mention into a new chat.')}
               >
                 Save & Test
               </Button>
@@ -278,7 +278,7 @@ export function AgentBuilderPage({
                   onClick={() => onTestAgent(draft.name, projectTargetDirectory)}
                   variant="secondary"
                   size="sm"
-                  title="Insert this agent as an @mention in a fresh chat thread."
+                  title={t('agents.builder.testInChatTitle', 'Insert this coworker as an @mention in a fresh chat.')}
                 >
                   Test in chat
                 </Button>

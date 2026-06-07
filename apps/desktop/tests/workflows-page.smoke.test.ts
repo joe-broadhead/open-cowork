@@ -95,10 +95,10 @@ test('workflows page presents the thread-first workflow surface', async () => {
     await waitForAppShell(page)
     await page.getByRole('button', { name: 'Playbooks', exact: true }).click()
 
-    await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor()
-    await page.getByText('Save repeatable work from a Workflow Designer setup thread').waitFor()
-    await page.getByRole('button', { name: 'Add workflow', exact: true }).first().waitFor()
-    await page.getByText('No workflows yet').waitFor()
+    await page.getByRole('heading', { name: 'Playbooks', exact: true }).waitFor()
+    await page.getByText('Save repeatable work from a Workflow Designer setup chat').waitFor()
+    await page.getByRole('button', { name: 'Add playbook', exact: true }).first().waitFor()
+    await page.getByText('No playbooks yet').waitFor()
   } finally {
     await cleanup()
   }
@@ -116,7 +116,7 @@ test('workflow run action crosses renderer, preload, main, and persisted run sta
     await waitForAppShell(page)
     await page.getByRole('button', { name: 'Playbooks', exact: true }).click()
 
-    await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Playbooks', exact: true }).waitFor()
     await page.getByRole('heading', { name: 'Smoke workflow', exact: true }).waitFor()
 
     const runResult = await page.evaluate(async (id) => {

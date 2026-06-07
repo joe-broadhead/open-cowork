@@ -95,7 +95,7 @@ export function AgentCard({
               aria-label={t('agentCard.editAvatar', 'Edit agent avatar')}
               className="relative cursor-pointer transition-transform hover:scale-[1.02] rounded-2xl"
             >
-              <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
+              <AgentAvatar name={draft.name || 'New coworker'} color={draft.color} src={draft.avatar} size="xl" />
               <span
                 className="absolute -bottom-1 -end-1 w-6 h-6 rounded-full border flex items-center justify-center"
                 style={{
@@ -115,7 +115,7 @@ export function AgentCard({
             </span>
           </div>
         ) : (
-          <AgentAvatar name={draft.name || 'New agent'} color={draft.color} src={draft.avatar} size="xl" />
+          <AgentAvatar name={draft.name || 'New coworker'} color={draft.color} src={draft.avatar} size="xl" />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -125,7 +125,7 @@ export function AgentCard({
             )}
           </div>
           {readOnly ? (
-            <div className="text-[16px] font-semibold text-text truncate">{draft.name || 'New agent'}</div>
+            <div className="text-[16px] font-semibold text-text truncate">{draft.name || 'New coworker'}</div>
           ) : (
             <input
               value={draft.name}
@@ -219,7 +219,7 @@ export function AgentCard({
 
       {editorOpen && (
         <AvatarEditor
-          name={draft.name || 'New agent'}
+          name={draft.name || 'New coworker'}
           color={draft.color}
           src={draft.avatar}
           anchorRect={avatarButtonRef.current?.getBoundingClientRect() || null}

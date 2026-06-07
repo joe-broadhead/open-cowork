@@ -307,12 +307,12 @@ export function CapabilitiesPage({
   }
 
   const searchPlaceholder = tab === 'map'
-    ? t('capabilities.searchMap', 'Search tools, skills, linked capabilities, or agents…')
+    ? t('capabilities.searchMap', 'Search tools, skills, linked capabilities, or coworkers...')
     : tab === 'relationships'
-      ? t('capabilities.searchRelationships', 'Search capabilities, consumers, risks, credentials, or policies…')
+      ? t('capabilities.searchRelationships', 'Search capabilities, coworkers, playbooks, risks, credentials, or policies...')
       : tab === 'tools'
-        ? t('capabilities.searchTools', 'Search tools, descriptions, or agents…')
-        : t('capabilities.searchSkills', 'Search skills, descriptions, or agents…')
+        ? t('capabilities.searchTools', 'Search tools, descriptions, or coworkers...')
+        : t('capabilities.searchSkills', 'Search skills, descriptions, or coworkers...')
   const addButtonLabel = tab === 'skills'
     ? t('capabilities.addSkillButton', 'Add skill')
     : t('capabilities.addTool', 'Add tool')
@@ -326,7 +326,7 @@ export function CapabilitiesPage({
               <GlossaryHelp />
             </div>
             <p className="text-[13px] text-text-secondary mt-1">
-              {t('capabilities.subtitle', 'Inspect the tools and skills available in the current workspace, including bundled, machine, project, and custom additions.')}
+              {t('capabilities.subtitle', 'Inspect the OpenCode tools and skills available to coworkers and playbooks in the current workspace.')}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>{t('agentsPage.backToChat', 'Back to chat')}</Button>
@@ -344,7 +344,7 @@ export function CapabilitiesPage({
             />
           </div>
           <SegmentedControl
-            label={t('capabilities.tabLabel', 'Capability view')}
+            label={t('capabilities.tabLabel', 'Tools and skills view')}
             value={tab}
             onChange={(value) => setTab(value as Tab)}
             options={([

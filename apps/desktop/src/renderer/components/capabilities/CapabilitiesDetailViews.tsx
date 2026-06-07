@@ -81,7 +81,7 @@ export function CapabilityToolDetailView({
                 variant="secondary"
                 size="sm"
               >
-                Create agent
+                Create coworker
               </Button>
               {custom ? (
                 <>
@@ -120,7 +120,7 @@ export function CapabilityToolDetailView({
                       : `${getBrandName()} config`}
                 />
                 <StatBox label="Runtime namespace" value={selectedTool.namespace || selectedTool.id} />
-                <StatBox label="Used by agents" value={selectedTool.agentNames.length > 0 ? selectedTool.agentNames.join(', ') : 'No agents yet'} />
+                <StatBox label="Used by coworkers" value={selectedTool.agentNames.length > 0 ? selectedTool.agentNames.join(', ') : 'No coworkers yet'} />
               </div>
             </div>
 
@@ -205,7 +205,7 @@ export function CapabilityToolDetailView({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedAgents', 'Linked agents')}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.linkedCoworkers', 'Linked coworkers')}</div>
               {selectedTool.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedTool.agentNames.map((agentName) => (
@@ -215,7 +215,7 @@ export function CapabilityToolDetailView({
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No built-in or custom agents use this tool yet.</div>
+                <div className="text-[12px] text-text-muted">No built-in or custom coworkers use this tool yet.</div>
               )}
             </div>
           </div>
@@ -270,7 +270,7 @@ export function CapabilitySkillDetailView({
                 variant="secondary"
                 size="sm"
               >
-                Create agent
+                Create coworker
               </Button>
               {custom ? (
                 <>
@@ -344,7 +344,7 @@ export function CapabilitySkillDetailView({
             </div>
 
             <div className="rounded-xl border border-border-subtle bg-surface p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByAgents', 'Used by agents')}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-muted mb-3">{t('capabilities.usedByCoworkers', 'Used by coworkers')}</div>
               {selectedSkill.agentNames.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedSkill.agentNames.map((agentName) => (
@@ -354,7 +354,7 @@ export function CapabilitySkillDetailView({
                   ))}
                 </div>
               ) : (
-                <div className="text-[12px] text-text-muted">No built-in or custom agents use this skill yet.</div>
+                <div className="text-[12px] text-text-muted">No built-in or custom coworkers use this skill yet.</div>
               )}
             </div>
 

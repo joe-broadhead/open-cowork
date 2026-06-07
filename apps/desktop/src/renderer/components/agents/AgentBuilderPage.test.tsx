@@ -113,7 +113,7 @@ describe('AgentBuilderPage', () => {
     const user = userEvent.setup()
     const { create, onSaved } = renderBuilder()
 
-    expect(screen.getByRole('button', { name: 'Create agent' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Create coworker' })).toBeDisabled()
     expect(screen.getByText('Complete these before saving')).toBeInTheDocument()
     expect(screen.getByText('Selected capabilities')).toBeInTheDocument()
     expect(screen.queryByText(/loadout/i)).not.toBeInTheDocument()
@@ -134,7 +134,7 @@ describe('AgentBuilderPage', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Project' }))
-    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    await user.click(screen.getByRole('button', { name: 'Create coworker' }))
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
@@ -159,7 +159,7 @@ describe('AgentBuilderPage', () => {
     })
 
     expect(screen.getByText('Built-in - tune via the builtInAgents config block')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Create agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create coworker' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Instructions' }))
     expect(screen.getByText(/uses OpenCode's native built-in prompt/)).toBeInTheDocument()
