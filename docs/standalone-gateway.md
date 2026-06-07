@@ -51,6 +51,8 @@ Required environment:
 
 ```bash
 OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL=postgres://...
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED=true
 OPEN_COWORK_STANDALONE_GATEWAY_ADMIN_TOKEN=...
 OPEN_COWORK_STANDALONE_GATEWAY_OPENCODE_URL=http://127.0.0.1:4096
 OPEN_COWORK_STANDALONE_GATEWAY_TELEGRAM_BOT_TOKEN=...
@@ -70,6 +72,28 @@ The setup helper writes env files with mode `0600`, refuses public OpenCode
 URLs, and does not echo provided secrets to stdout when `--output` is used. Use
 `--print` only for placeholder examples unless you explicitly pass
 `--allow-secret-print` in a controlled terminal.
+
+### Postgres TLS
+
+Solo/local deployments may run against a local Postgres listener without TLS.
+Team and enterprise deployments must enable verified Postgres TLS:
+
+```bash
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED=true
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CA_PATH=/run/secrets/postgres-ca.pem
+```
+
+Client certificates are optional and are passed directly to the Postgres pool
+when configured:
+
+```bash
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CERT_PATH=/run/secrets/postgres-client.pem
+OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_KEY_PATH=/run/secrets/postgres-client-key.pem
+```
+
+The doctor report exposes only booleans for TLS state and certificate presence.
+It does not print certificate file contents or connection string secrets.
 
 ## Run
 
@@ -174,6 +198,21 @@ Retention windows are explicit:
 - `OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_SESSION_DAYS`
 - `OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_ARTIFACT_DAYS`
 - `OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_AUDIT_DAYS`
+- `OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_JOB_DAYS`
+
+The serving daemon runs retention under the active daemon lease. A standby
+process that cannot hold the lease cannot prune data. Retention deletes:
+
+- idle, failed, or completed sessions older than the session window, including
+  their event rows
+- artifact metadata older than the artifact window
+- audit events older than the audit window
+- completed, failed, or dead jobs older than the job window
+
+Retention preserves running sessions, blocked sessions, and any session with a
+pending, claimed, or running job. Each successful retention pass writes a
+`standalone.retention.pruned` audit event with cutoff times and deletion
+counts.
 
 Run a restore drill before public or enterprise rollout.
 

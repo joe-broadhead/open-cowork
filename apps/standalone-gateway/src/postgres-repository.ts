@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 
+import { standaloneRetentionCutoffs } from "./retention.js";
 import { standaloneGatewayMigrations } from "./schema.js";
 import {
   canIdentityPrompt,
@@ -7,6 +9,8 @@ import {
   normalizeIdentityStatus,
   normalizeWorkspaceId,
   redactRecord,
+  retentionAuditMetadata,
+  retentionResult,
 } from "./repository.js";
 import { redactSecretText } from "./redaction.js";
 import type { StandaloneGatewayRepository } from "./repository.js";
@@ -22,8 +26,10 @@ import type {
   StandaloneGatewayIdentityAuthorizationSummary,
   StandaloneGatewayIdentityRole,
   StandaloneGatewayIdentityStatus,
+  StandaloneGatewayRetentionResult,
   StandaloneGatewaySessionRecord,
   StandalonePromptInput,
+  StandaloneGatewayConfig,
 } from "./types.js";
 
 export interface PgLikeClient {
@@ -36,9 +42,74 @@ export interface PgLikePool extends PgLikeClient {
   end?(): Promise<void>;
 }
 
-export async function createStandaloneGatewayPostgresRepository(databaseUrl: string): Promise<StandaloneGatewayRepository> {
-  const pg = await import("pg") as { Pool: new (options: { connectionString: string }) => PgLikePool };
-  return new PostgresStandaloneGatewayRepository(new pg.Pool({ connectionString: databaseUrl }));
+export interface StandalonePostgresPoolOptions {
+  connectionString: string;
+  ssl?: {
+    rejectUnauthorized: boolean;
+    ca?: string;
+    cert?: string;
+    key?: string;
+  };
+}
+
+export interface CreateStandaloneGatewayPostgresRepositoryOptions {
+  createPool?: (options: StandalonePostgresPoolOptions) => PgLikePool;
+  readFile?: (path: string) => string;
+}
+
+type StandaloneDatabaseConfig = StandaloneGatewayConfig["database"];
+
+export async function createStandaloneGatewayPostgresRepository(
+  database: string | StandaloneDatabaseConfig,
+  options: CreateStandaloneGatewayPostgresRepositoryOptions = {},
+): Promise<StandaloneGatewayRepository> {
+  const poolOptions = standalonePostgresPoolOptions(database, { readFile: options.readFile });
+  if (options.createPool) {
+    return new PostgresStandaloneGatewayRepository(options.createPool(poolOptions));
+  }
+  const pg = await import("pg") as {
+    Pool: new (options: StandalonePostgresPoolOptions) => PgLikePool;
+  };
+  return new PostgresStandaloneGatewayRepository(new pg.Pool(poolOptions));
+}
+
+export function standalonePostgresPoolOptions(
+  database: string | StandaloneDatabaseConfig,
+  options: { readFile?: (path: string) => string } = {},
+): StandalonePostgresPoolOptions {
+  if (typeof database === "string") {
+    return { connectionString: database };
+  }
+  const poolOptions: StandalonePostgresPoolOptions = {
+    connectionString: database.ssl ? stripPostgresSslConnectionOptions(database.url) : database.url,
+  };
+  if (!database.ssl) {
+    return poolOptions;
+  }
+  const readFile = options.readFile || ((path: string) => readFileSync(path, "utf8"));
+  poolOptions.ssl = {
+    rejectUnauthorized: database.sslRejectUnauthorized,
+    ...(database.sslCaPath ? { ca: readFile(database.sslCaPath) } : {}),
+    ...(database.sslCertPath ? { cert: readFile(database.sslCertPath) } : {}),
+    ...(database.sslKeyPath ? { key: readFile(database.sslKeyPath) } : {}),
+  };
+  return poolOptions;
+}
+
+function stripPostgresSslConnectionOptions(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    let stripped = false;
+    for (const key of [...url.searchParams.keys()]) {
+      if (key.toLowerCase().startsWith("ssl")) {
+        url.searchParams.delete(key);
+        stripped = true;
+      }
+    }
+    return stripped ? url.toString() : connectionString;
+  } catch {
+    return connectionString;
+  }
 }
 
 export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRepository {
@@ -126,7 +197,7 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
          )
          VALUES ($1, $2, 'idle', $3, $4, $5, $6, $7, $8, $9, $10, $10)
          ON CONFLICT (provider, provider_workspace_id, external_chat_id, external_thread_id) DO UPDATE
-         SET updated_at = standalone_gateway_sessions.updated_at
+         SET updated_at = EXCLUDED.updated_at
          RETURNING *`,
         [
           randomUUID(),
@@ -360,6 +431,74 @@ export class PostgresStandaloneGatewayRepository implements StandaloneGatewayRep
       [randomUUID(), action, actor, JSON.stringify(redactRecord(metadata)), now.toISOString()],
     );
     return auditFromRow(result.rows[0]!);
+  }
+
+  async pruneRetention(input: {
+    retention: { sessionDays: number; artifactDays: number; auditDays: number; jobDays: number };
+    leaseId: string;
+    ownerId: string;
+    leaseToken: string;
+    now?: Date;
+  }): Promise<StandaloneGatewayRetentionResult | null> {
+    const now = input.now || new Date();
+    const cutoffs = standaloneRetentionCutoffs(input.retention, now);
+    return this.withTransaction(async (client) => {
+      const lease = await client.query(
+        `SELECT lease_id
+         FROM standalone_gateway_daemon_leases
+         WHERE lease_id = $1
+           AND owner_id = $2
+           AND lease_token = $3
+           AND expires_at > $4
+         FOR UPDATE`,
+        [input.leaseId, input.ownerId, input.leaseToken, now.toISOString()],
+      );
+      if (lease.rows.length === 0) {
+        return null;
+      }
+      const artifacts = await client.query(
+        "DELETE FROM standalone_gateway_artifacts WHERE created_at < $1",
+        [cutoffs.artifactCutoff.toISOString()],
+      );
+      const sessions = await client.query(
+        `DELETE FROM standalone_gateway_sessions sessions
+         WHERE sessions.updated_at < $1
+           AND sessions.status IN ('idle', 'failed', 'completed')
+           AND NOT EXISTS (
+             SELECT 1
+             FROM standalone_gateway_jobs jobs
+             WHERE jobs.session_id = sessions.session_id
+               AND jobs.status IN ('pending', 'claimed', 'running')
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM standalone_gateway_artifacts artifacts
+             WHERE artifacts.session_id = sessions.session_id
+               AND artifacts.created_at >= $2
+           )`,
+        [cutoffs.sessionCutoff.toISOString(), cutoffs.artifactCutoff.toISOString()],
+      );
+      const jobs = await client.query(
+        "DELETE FROM standalone_gateway_jobs WHERE updated_at < $1 AND status IN ('completed', 'failed', 'dead')",
+        [cutoffs.jobCutoff.toISOString()],
+      );
+      const auditEvents = await client.query(
+        "DELETE FROM standalone_gateway_audit_events WHERE created_at < $1",
+        [cutoffs.auditCutoff.toISOString()],
+      );
+      const result = retentionResult(now, cutoffs, {
+        sessionsDeleted: sessions.rowCount || 0,
+        artifactsDeleted: artifacts.rowCount || 0,
+        auditEventsDeleted: auditEvents.rowCount || 0,
+        jobsDeleted: jobs.rowCount || 0,
+      });
+      await client.query(
+        `INSERT INTO standalone_gateway_audit_events (audit_id, action, actor, metadata, created_at)
+         VALUES ($1, 'standalone.retention.pruned', $2, $3::jsonb, $4)`,
+        [randomUUID(), input.ownerId, JSON.stringify(retentionAuditMetadata(result)), now.toISOString()],
+      );
+      return result;
+    });
   }
 
   async close(): Promise<void> {
