@@ -59,7 +59,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
   const cloudCreateReason = workspaceSupportError
     || (!activeWorkspaceIsLocal && !workspaceSupportLoaded
       ? t('newThread.policyChecking', 'Checking cloud workspace policy.')
-      : createSupport?.verdict?.reason || t('newThread.createBlocked', 'Thread creation is disabled by this workspace policy.'))
+      : createSupport?.verdict?.reason || t('newThread.createBlocked', 'Chat creation is disabled by this workspace policy.'))
   const localFilesReason = localFilesSupport?.verdict?.reason || t('newThread.localFilesBlocked', 'Cloud workspaces do not implicitly upload local files.')
   const blankDisabled = (!activeWorkspaceIsLocal && (!workspaceSupportLoaded || Boolean(workspaceSupportError))) || !supportAllows(createSupport, { mutation: true })
   const projectDisabled = canExposeLocalPaths
@@ -70,17 +70,17 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
     : canExposeLocalPaths
       ? localFilesReason
       : null
-  const blankDisabledReason = cloudCreateReason || t('newThread.blankUnavailableReason', 'Thread creation is unavailable for this workspace.')
+  const blankDisabledReason = cloudCreateReason || t('newChat.blankUnavailableReason', 'Chat creation is unavailable for this workspace.')
   const blankHint = blankDisabled
-    ? `${t('newThread.unavailable', 'Unavailable')} - ${blankDisabledReason}`
+    ? `${t('newChat.unavailable', 'Unavailable')} - ${blankDisabledReason}`
     : canExposeLocalPaths
-      ? t('newThread.blankHint', 'Local workspace - start with Build and the currently available agents, tools, and skills')
-      : t('newThread.blankCloudHint', 'Cloud-safe action - start a synced cloud thread')
+      ? t('newChat.blankHint', 'Local workspace - start with Build and the currently available coworkers, tools, and skills')
+      : t('newChat.blankCloudHint', 'Cloud-safe action - start a synced cloud chat')
   const projectHint = projectDisabled
-    ? `${canExposeLocalPaths ? t('newThread.localOnlyAction', 'Local-only action') : t('newThread.cloudAction', 'Cloud action')} - ${projectDisabledReason || ''}`
+    ? `${canExposeLocalPaths ? t('newChat.localOnlyAction', 'Local-only action') : t('newChat.cloudAction', 'Cloud action')} - ${projectDisabledReason || ''}`
     : canExposeLocalPaths
-      ? t('newThread.projectHint', 'Local-only action - choose a directory the agent can read and edit')
-      : t('newThread.cloudProjectHint', 'Cloud-safe action - choose Git or upload an explicit snapshot')
+      ? t('newChat.projectHint', 'Local-only action - choose a project directory the coworker can read and edit')
+      : t('newChat.cloudProjectHint', 'Cloud-safe action - choose Git or upload an explicit snapshot')
   const createProjectDisabledReason = projectMode === 'snapshot' && !snapshotInventory && !projectBusy
     ? t('newThread.snapshotRequired', 'Choose a snapshot directory first.')
     : null
@@ -93,7 +93,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
 
   const createThread = async (directory?: string, projectSource?: CloudProjectSourceInput | null) => {
     if ((directory || projectSource) && projectDisabled) {
-      addGlobalError(projectDisabledReason || t('newThread.projectBlocked', 'Project thread creation is disabled.'))
+      addGlobalError(projectDisabledReason || t('newChat.projectBlocked', 'Project chat creation is disabled.'))
       setShowMenu(false)
       return
     }
@@ -115,7 +115,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       onClick?.()
       closeProjectDialog()
     } catch (err) {
-      addGlobalError(t('newThread.createFailed', 'Could not create a new thread. Please try again.'))
+      addGlobalError(t('newChat.createFailed', 'Could not create a new project chat. Please try again.'))
       reportThreadError(err, `Failed to create session${directory ? ` for ${directory}` : ''}`)
     }
     setShowMenu(false)
@@ -149,7 +149,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       await createThread(undefined, projectSource)
     } catch (err) {
       setProjectError(describeThreadError(err))
-      reportThreadError(err, 'Failed to create cloud git thread')
+      reportThreadError(err, 'Failed to create cloud git chat')
     } finally {
       setProjectBusy(false)
     }
@@ -187,7 +187,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
       await createThread(undefined, uploaded.projectSource)
     } catch (err) {
       setProjectError(describeThreadError(err))
-      reportThreadError(err, 'Failed to create cloud snapshot thread')
+      reportThreadError(err, 'Failed to create cloud snapshot chat')
     } finally {
       setProjectBusy(false)
     }
@@ -203,7 +203,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
         leftIcon="plus"
         className="new-thread-trigger"
       >
-        {t('sidebar.newThread', 'New Thread')}
+        {t('sidebar.newChat', 'New Chat')}
       </Button>
 
       {showMenu && (
@@ -221,7 +221,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             >
               <Icon name="plus" size={16} className="text-text-muted" />
               <div>
-                <div className="font-medium">{t('newThread.blank', 'Blank thread')}</div>
+                <div className="font-medium">{t('newChat.blank', 'Blank chat')}</div>
                 <div className="text-[10px] text-text-muted mt-px">{blankHint}</div>
               </div>
             </Card>
@@ -231,7 +231,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
               padding="sm"
               onClick={async () => {
                 if (projectDisabled) {
-                  addGlobalError(projectDisabledReason || t('newThread.projectBlocked', 'Project thread creation is disabled.'))
+                  addGlobalError(projectDisabledReason || t('newChat.projectBlocked', 'Project chat creation is disabled.'))
                   setShowMenu(false)
                   return
                 }
@@ -269,7 +269,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-[13px] font-semibold text-text">{t('newThread.cloudProjectTitle', 'Cloud project source')}</div>
-                <div className="text-[11px] text-text-muted mt-1">{t('newThread.cloudProjectSubtitle', 'Start a cloud thread from Git or an explicit uploaded snapshot.')}</div>
+                <div className="text-[11px] text-text-muted mt-1">{t('newChat.cloudProjectSubtitle', 'Start a cloud project chat from Git or an explicit uploaded snapshot.')}</div>
               </div>
               <IconButton
                 icon="x"
@@ -381,7 +381,7 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
                 variant="primary"
                 loading={projectBusy}
               >
-                {t('newThread.createCloudProject', 'Create thread')}
+                {t('newChat.createCloudProject', 'Create project chat')}
               </Button>
             </div>
           </div>

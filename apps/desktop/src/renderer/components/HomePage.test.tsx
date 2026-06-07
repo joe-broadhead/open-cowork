@@ -114,7 +114,7 @@ describe('HomePage', () => {
     useSessionStore.getState().setAgentMode('build')
   })
 
-  it('keeps upstream Home copy as the default', async () => {
+  it('keeps Studio Home copy as the default', async () => {
     render(
       <HomePage
         brandName="Open Cowork"
@@ -123,13 +123,13 @@ describe('HomePage', () => {
       />,
     )
 
-    expect(screen.getByText('What shall we cowork on today?')).toBeTruthy()
-    expect(screen.getByText('Open Cowork · Ask anything, or @mention an agent')).toBeTruthy()
-    expect(screen.getByPlaceholderText('Ask anything, or @mention an agent')).toBeTruthy()
+    expect(screen.getByText('What should your team tackle today?')).toBeTruthy()
+    expect(screen.getByText('Open Cowork · Choose a lead coworker, @mention specialists, and review the work in one place')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toBeTruthy()
     await waitFor(() => expect(window.coworkApi.app.builtinAgents).toHaveBeenCalledTimes(1))
   })
 
-  it('renders downstream-configured Home copy without changing agent suggestions', async () => {
+  it('renders downstream-configured Home copy without changing coworker suggestions', async () => {
     vi.mocked(window.coworkApi.app.builtinAgents).mockResolvedValue([researchAgent])
 
     render(
@@ -151,7 +151,7 @@ describe('HomePage', () => {
     expect(screen.getByText('Ask a question or delegate to an approved agent.')).toBeTruthy()
     expect(screen.getByPlaceholderText('Ask Acme Cowork anything')).toBeTruthy()
     expect(await screen.findByText('Start with')).toBeTruthy()
-    expect(screen.getByText('@Research')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '@Research' })).toBeTruthy()
     expect(screen.getByText('Online')).toBeTruthy()
   })
 
@@ -173,7 +173,7 @@ describe('HomePage', () => {
     await user.click(screen.getByRole('button', { name: 'Build' }))
     expect(screen.getByRole('button', { name: 'Plan' })).toBeTruthy()
 
-    await user.type(screen.getByPlaceholderText('Ask anything, or @mention an agent'), 'Draft a release note')
+    await user.type(screen.getByPlaceholderText('Ask anything, or @mention a coworker'), 'Draft a release note')
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
@@ -201,7 +201,7 @@ describe('HomePage', () => {
     })
   })
 
-  it('turns Home agent suggestions into native prompt agent routing', async () => {
+  it('turns Home coworker suggestions into native prompt agent routing', async () => {
     const user = userEvent.setup()
     const onStartThread = createStartThreadMock()
     installHomeRuntime()
@@ -215,7 +215,7 @@ describe('HomePage', () => {
     )
 
     await user.click(await screen.findByRole('button', { name: '@Research' }))
-    const composer = screen.getByPlaceholderText('Ask anything, or @mention an agent')
+    const composer = screen.getByPlaceholderText('Ask anything, or @mention a coworker')
     await waitFor(() => expect(composer).toHaveValue('@research '))
     fireEvent.change(composer, { target: { value: '@research Map the market' } })
     fireEvent.keyDown(composer, { key: 'Enter' })
@@ -265,7 +265,7 @@ describe('HomePage', () => {
     await user.click(await screen.findByRole('option', { name: /XHigh/i }))
     expect(screen.getByRole('button', { name: /Think XHigh/i })).toBeTruthy()
 
-    await user.type(screen.getByPlaceholderText('Ask anything, or @mention an agent'), 'Analyze this with more reasoning')
+    await user.type(screen.getByPlaceholderText('Ask anything, or @mention a coworker'), 'Analyze this with more reasoning')
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
@@ -297,7 +297,7 @@ describe('HomePage', () => {
     await user.upload(input as HTMLInputElement, file)
     expect(await screen.findByText('checklist.txt')).toBeTruthy()
 
-    await user.type(screen.getByPlaceholderText('Ask anything, or @mention an agent'), 'Review this')
+    await user.type(screen.getByPlaceholderText('Ask anything, or @mention a coworker'), 'Review this')
     await user.keyboard('{Enter}')
 
     await waitFor(() => {
@@ -327,8 +327,8 @@ describe('HomePage', () => {
 
     await user.click(screen.getByRole('button', { name: /Plan a release/i }))
 
-    expect(screen.getByPlaceholderText('Ask anything, or @mention an agent')).toHaveValue('Draft a release plan for the next milestone.')
-    expect(screen.getByText('@mention an agent')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Ask anything, or @mention a coworker')).toHaveValue('Draft a release plan for the next milestone.')
+    expect(screen.getByText('@mention a coworker')).toBeTruthy()
     expect(screen.getByText(/⌘K for commands/)).toBeTruthy()
   })
 

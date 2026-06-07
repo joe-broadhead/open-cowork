@@ -116,7 +116,7 @@ describe('Sidebar', () => {
     expect(sessionList).not.toHaveBeenCalledWith({ workspaceId: 'cloud:slow' })
   })
 
-  it('keeps the upstream sidebar layout when no branding config is provided', () => {
+  it('keeps the Studio sidebar layout when no branding config is provided', () => {
     render(
       <Sidebar
         currentView="home"
@@ -124,9 +124,14 @@ describe('Sidebar', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'New Thread' })).toBeTruthy()
-    expect(screen.getByText('Workflows')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New Chat' })).toBeTruthy()
+    expect(screen.getByText('Projects')).toBeTruthy()
+    expect(screen.getByText('Approvals')).toBeTruthy()
+    expect(screen.getByText('Team')).toBeTruthy()
+    expect(screen.getByText('Playbooks')).toBeTruthy()
+    expect(screen.getByText('Channels')).toBeTruthy()
     expect(screen.getByText('Tools & Skills')).toBeTruthy()
+    expect(screen.getByText('Artifacts')).toBeTruthy()
     expect(screen.getByText('Diagnostics')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
@@ -638,7 +643,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Acme internal build')).toBeTruthy()
     expect(screen.getByText('Support from Data Platform.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Get help' })).toHaveAttribute('href', 'https://internal.acme.example/help')
-    expect(screen.getByText('Workflows')).toBeTruthy()
+    expect(screen.getByText('Playbooks')).toBeTruthy()
   })
 
   it('supports icon-only, text-only, and logo-backed top branding variants', () => {

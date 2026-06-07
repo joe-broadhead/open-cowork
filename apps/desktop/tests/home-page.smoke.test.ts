@@ -3,8 +3,8 @@ import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
 // Smoke: Home is the welcoming landing surface. After the redesign it's
-// a composer-first page: greeting, textarea, agent suggestion pills,
-// recent threads, and a small runtime status strip.
+// a composer-first page: greeting, textarea, coworker suggestion cards,
+// recent project chats, and a small runtime status strip.
 
 test('home renders the greeting, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
@@ -12,7 +12,7 @@ test('home renders the greeting, composer, status strip, and no removed dashboar
     // Greeting is a single stable line now (we tried rotating and it
     // felt off — product voice is clearer with one tagline). Match the
     // exact copy in the English catalog's inline fallback.
-    await page.waitForSelector('h1:has-text("What shall we cowork on today?")', { timeout: 30_000 })
+    await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
 
     // The composer textarea is the primary action on Home. Its
     // placeholder mentions @-mention; we match a loose regex so i18n
@@ -25,10 +25,10 @@ test('home renders the greeting, composer, status strip, and no removed dashboar
       `expected the composer placeholder to reference @-mention (got "${placeholder}")`,
     )
 
-    // Agent suggestion pills appear once built-in agents load. At
-    // least one pill should be present on a healthy boot.
-    const pill = await page.waitForSelector('button:has-text("@")', { timeout: 10_000 }).catch(() => null)
-    assert.ok(pill, 'expected at least one @-agent suggestion pill on Home')
+    // Coworker cards appear once built-in agents load. At least one
+    // mention action should be present on a healthy boot.
+    const mentionAction = await page.waitForSelector('button:has-text("@")', { timeout: 10_000 }).catch(() => null)
+    assert.ok(mentionAction, 'expected at least one @-coworker action on Home')
 
     // The status strip stays on Home and reports the managed runtime
     // connection state without reintroducing a separate dashboard route.

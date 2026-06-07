@@ -133,17 +133,17 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
   const allComplete = taskRuns.every((task) => task.status === 'complete')
   const anyErrored = taskRuns.some((task) => task.status === 'error')
   const headerLabel = anyRunning
-    ? 'Agents working'
+    ? 'Coworkers working'
     : allComplete
-      ? 'Agents complete'
+      ? 'Coworkers complete'
       : anyErrored
-        ? 'Agents errored'
-        : 'Agents'
+        ? 'Coworkers need review'
+        : 'Coworkers'
 
   // Summary line. Prefers a human description of the task set over raw
-  // counts — for a short agent roster we name the agents explicitly, so
+  // counts — for a short coworker roster we name the agents explicitly, so
   // "1 Research + 1 Explore" reads as "2 tasks · Research, Explore"
-  // instead of a lossy "2 tasks · 2 agents". Falls back to a count-only
+  // instead of a lossy "2 tasks · 2 coworkers". Falls back to a count-only
   // summary when the roster gets long (4+).
   const AGENT_ROSTER_THRESHOLD = 3
   const taskSummary = useMemo(() => {
@@ -159,14 +159,14 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
       return `${total} tasks · ${names}`
     }
     if (uniqueAgents.length > AGENT_ROSTER_THRESHOLD) {
-      return `${total} tasks · ${uniqueAgents.length} agents`
+      return `${total} tasks · ${uniqueAgents.length} coworkers`
     }
     return `${total} tasks`
   }, [taskRuns, uniqueAgents])
 
   // Running-state note only — when everything's settled the header label
   // already carries the semantic, so we drop the count to avoid the
-  // "3 complete" redundancy under an "Agents complete" pill.
+  // "3 complete" redundancy under a "Coworkers complete" pill.
   const runningStatusNote = anyRunning
     ? summarizeStatus(taskRuns)
     : anyErrored && !allComplete
@@ -354,13 +354,13 @@ function AgentRunFilterControls({
             </select>
           </label>
           <label className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-text-muted">
-            Agent
+            Coworker
             <select
               value={state.agentFilter}
               onChange={(event) => update({ agentFilter: event.target.value })}
               className="max-w-[160px] rounded-md border border-border-subtle bg-surface px-2 py-1 text-[11px] normal-case tracking-normal text-text-secondary"
             >
-              <option value="all">All agents</option>
+              <option value="all">All coworkers</option>
               {summary.agents.map((agent) => (
                 <option key={agent.id || 'unassigned'} value={agent.id}>{agent.label} ({agent.count})</option>
               ))}

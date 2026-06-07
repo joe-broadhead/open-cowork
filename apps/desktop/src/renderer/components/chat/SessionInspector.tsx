@@ -4,7 +4,7 @@ import { useSessionStore, type Message } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
-import { listSessionArtifacts } from './session-artifacts'
+import { listSessionArtifacts, listVisibleSessionArtifacts } from './session-artifacts'
 import { SessionArtifactList } from './SessionArtifactList'
 import { TodoListView } from './TodoListView'
 import { countTodos, summarizeTodoCounts } from './todo-utils'
@@ -19,7 +19,7 @@ import {
   serializeToolPayload,
 } from './session-inspector-utils'
 import { getModelContextLimit } from '../../helpers/model-info'
-import { DiffView, type DiffViewFile } from '../ui'
+import { DiffView, ReviewPanel, TaskLane, type DiffViewFile } from '../ui'
 
 type InspectorTab = 'context' | 'messages' | 'todos' | 'artifacts'
 
@@ -31,10 +31,6 @@ type RuntimeModelState = {
   providerId: string | null
   modelId: string | null
   contextLimit: number | null
-}
-
-function artifactsContainCloud(view: SessionView) {
-  return (view.artifacts || []).some((artifact) => artifact.source === 'cloud')
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -196,7 +192,16 @@ export function SessionInspector({ onClose }: InspectorProps) {
   // available in both modes — keep the tab when either kind is
   // present.
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
-  const showArtifactsTab = (!currentSession?.directory && activeWorkspaceIsLocal) || chartArtifacts.length > 0 || artifactsContainCloud(currentView)
+  const canReadPrivateArtifacts = !currentSession?.directory && activeWorkspaceIsLocal
+  const allArtifacts = useMemo(
+    () => listSessionArtifacts(currentView, chartArtifacts),
+    [currentView, chartArtifacts],
+  )
+  const visibleArtifacts = useMemo(
+    () => listVisibleSessionArtifacts(currentView, chartArtifacts, { canReadPrivateArtifacts }),
+    [currentView, chartArtifacts, canReadPrivateArtifacts],
+  )
+  const showArtifactsTab = canReadPrivateArtifacts || visibleArtifacts.length > 0
 
   useEffect(() => {
     let cancelled = false
@@ -260,11 +265,10 @@ export function SessionInspector({ onClose }: InspectorProps) {
   const assistantMessageCount = currentView.messages.filter((message) => message.role === 'assistant').length
   const totalTokens = currentView.sessionTokens.input + currentView.sessionTokens.output + currentView.sessionTokens.reasoning
   const rawMessages = currentView.messages.slice().sort((left, right) => left.order - right.order)
-  const artifacts = useMemo(
-    () => listSessionArtifacts(currentView, chartArtifacts),
-    [currentView, chartArtifacts],
-  )
-  const reviewFiles = useMemo(() => reviewFilesFromArtifacts(artifacts), [artifacts])
+  const reviewFiles = useMemo(() => reviewFilesFromArtifacts(allArtifacts), [allArtifacts])
+  const openDecisionCount = currentView.pendingApprovals.length + currentView.pendingQuestions.length
+  const activeTaskRuns = currentView.taskRuns.filter((task) => task.status === 'running' || task.status === 'queued').length
+  const todoCount = currentView.todos.length + currentView.executionPlan.length + currentView.taskRuns.reduce((count, task) => count + task.todos.length, 0)
   const toolPayloads = [
     ...currentView.toolCalls.map((tool) => `${tool.name} ${serializeToolPayload(tool.input)} ${serializeToolPayload(tool.output)}`),
     ...currentView.taskRuns.flatMap((taskRun) =>
@@ -312,6 +316,65 @@ export function SessionInspector({ onClose }: InspectorProps) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+        <ReviewPanel
+          title={t('sessionInspector.reviewTitle', 'Review')}
+          summary={t('sessionInspector.reviewSummary', 'Session state projected from OpenCode messages, tools, delegated tasks, approvals, questions, and artifacts.')}
+          status={{
+            label: openDecisionCount > 0
+              ? t('sessionInspector.reviewNeedsInput', 'Needs input')
+              : t('sessionInspector.reviewReady', 'Ready'),
+            tone: openDecisionCount > 0 ? 'warning' : 'success',
+          }}
+          className="mb-5"
+        >
+          <div className="grid gap-3">
+            <TaskLane
+              title={t('sessionInspector.decisionLane', 'Decisions')}
+              tone="approval"
+              items={[
+                ...(currentView.pendingApprovals.length > 0 ? [{
+                  id: 'approvals',
+                  title: t('sessionInspector.permissionApprovals', 'Permission approvals'),
+                  meta: t('sessionInspector.pendingCount', '{{count}} pending', { count: currentView.pendingApprovals.length }),
+                  status: { label: t('sessionInspector.open', 'Open'), tone: 'warning' as const },
+                }] : []),
+                ...(currentView.pendingQuestions.length > 0 ? [{
+                  id: 'questions',
+                  title: t('sessionInspector.questions', 'Questions'),
+                  meta: t('sessionInspector.pendingCount', '{{count}} pending', { count: currentView.pendingQuestions.length }),
+                  status: { label: t('sessionInspector.open', 'Open'), tone: 'warning' as const },
+                }] : []),
+              ]}
+              emptyLabel={t('sessionInspector.noDecisions', 'No decisions waiting')}
+            />
+            <TaskLane
+              title={t('sessionInspector.deliverablesLane', 'Deliverables')}
+              tone="artifact"
+              items={[
+                ...(allArtifacts.length > 0 ? [{
+                  id: 'artifacts',
+                  title: t('sessionInspector.artifactsReady', 'Artifacts ready'),
+                  meta: t('sessionInspector.artifactCount', '{{count}} artifacts', { count: allArtifacts.length }),
+                  status: { label: t('sessionInspector.review', 'Review'), tone: 'accent' as const },
+                }] : []),
+                ...(todoCount > 0 ? [{
+                  id: 'todos',
+                  title: t('sessionInspector.todosTracked', 'Todos tracked'),
+                  meta: t('sessionInspector.todoCount', '{{count}} items', { count: todoCount }),
+                  status: { label: t('sessionInspector.live', 'Live'), tone: 'neutral' as const },
+                }] : []),
+                ...(activeTaskRuns > 0 ? [{
+                  id: 'coworkers',
+                  title: t('sessionInspector.activeCoworkers', 'Coworkers active'),
+                  meta: t('sessionInspector.taskCount', '{{count}} task runs', { count: activeTaskRuns }),
+                  status: { label: t('sessionInspector.running', 'Running'), tone: 'accent' as const },
+                }] : []),
+              ]}
+              emptyLabel={t('sessionInspector.noDeliverables', 'No deliverables yet')}
+            />
+          </div>
+        </ReviewPanel>
+
         <DiffView
           title="Review"
           subtitle={reviewFiles.length
@@ -414,7 +477,7 @@ export function SessionInspector({ onClose }: InspectorProps) {
             <div className="mt-3">
               <SessionArtifactList
                 sessionId={currentSessionId}
-                artifacts={artifacts}
+                artifacts={visibleArtifacts}
                 workspaceId={activeWorkspaceIsLocal ? undefined : activeWorkspaceId}
                 canDownloadArtifact={workspaceSupport.flags.canDownloadArtifact}
                 downloadDisabledReason={workspaceSupport.flags.reasons.downloadArtifact}
@@ -446,7 +509,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
   if (nothing) {
     return (
       <div className="text-[12px] text-text-muted py-6 text-center rounded-xl border border-border-subtle border-dashed">
-        No todos yet. Agents populate this list via the <span className="font-mono">todowrite</span> tool.
+        No todos yet. Coworkers populate this list via the <span className="font-mono">todowrite</span> tool.
       </div>
     )
   }
@@ -479,7 +542,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
 
       {taskRunsWithTodos.length > 0 && (
         <section>
-          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">Sub-agent todos</div>
+          <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted mb-3">Specialist todos</div>
           <div className="flex flex-col gap-4">
             {taskRunsWithTodos.map((task) => (
               <TaskTodos key={task.id} task={task} />
@@ -489,7 +552,7 @@ function TodosTab({ currentView }: { currentView: SessionView }) {
       )}
 
       <div className="text-[11px] text-text-muted leading-relaxed rounded-xl border border-border-subtle bg-surface px-3 py-2">
-        Todos are maintained by the agent via the <span className="font-mono">todowrite</span> tool. The app reads them live through the OpenCode SDK — direct edits are not exposed.
+        Todos are maintained by OpenCode via the <span className="font-mono">todowrite</span> tool. The app reads them live through the OpenCode SDK — direct edits are not exposed.
       </div>
     </div>
   )
@@ -502,7 +565,7 @@ function TaskTodos({ task }: { task: TaskRun }) {
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="min-w-0 flex-1">
           <div className="text-[12px] font-medium text-text truncate">
-            {task.title || 'Sub-Agent'}
+            {task.title || 'Specialist'}
           </div>
           {task.agent && (
             <div className="text-[10px] text-text-muted truncate">

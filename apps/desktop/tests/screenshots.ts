@@ -73,11 +73,11 @@ async function shoot(page: Page, outputDir: string, name: string) {
 
 async function gotoHome(page: Page) {
   await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-  await page.waitForSelector('h1:has-text("What shall we cowork on today?")', { timeout: 30_000 })
+  await page.waitForSelector('h1:has-text("What should your team tackle today?")', { timeout: 30_000 })
 }
 
 async function gotoAgents(page: Page) {
-  await page.getByRole('button', { name: 'Agents', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Team', exact: true }).first().click()
   await page.waitForSelector('h1:has-text("Agents")', { timeout: 30_000 })
   await page.getByText('Built-in agents', { exact: true }).waitFor({ timeout: 10_000 })
 }
@@ -88,7 +88,7 @@ async function gotoCapabilities(page: Page) {
 }
 
 async function gotoWorkflows(page: Page) {
-  await page.getByRole('button', { name: 'Workflows', exact: true }).first().click()
+  await page.getByRole('button', { name: 'Playbooks', exact: true }).first().click()
   await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor({ timeout: 30_000 })
 }
 
@@ -225,9 +225,9 @@ async function captureChatViews(page: Page, outputDir: string) {
   // Use the sidebar new-thread path so the Chat surface is real, but
   // avoid firing a provider request. Screenshot runs should not depend
   // on API keys or capture a missing-credential error banner.
-  await page.getByRole('button', { name: 'New Thread', exact: true }).click()
-  await page.getByRole('button', { name: /^Blank thread\b/ }).click()
-  await page.waitForSelector('h1:has-text("What shall we cowork on today?")', {
+  await page.getByRole('button', { name: 'New Chat', exact: true }).click()
+  await page.getByRole('button', { name: /^Blank chat\b/ }).click()
+  await page.waitForSelector('h1:has-text("What should your team tackle today?")', {
     state: 'detached',
     timeout: 15_000,
   })

@@ -93,7 +93,7 @@ test('workflows page presents the thread-first workflow surface', async () => {
 
   try {
     await waitForAppShell(page)
-    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await page.getByRole('button', { name: 'Playbooks', exact: true }).click()
 
     await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor()
     await page.getByText('Save repeatable work from a Workflow Designer setup thread').waitFor()
@@ -114,7 +114,7 @@ test('workflow run action crosses renderer, preload, main, and persisted run sta
 
   try {
     await waitForAppShell(page)
-    await page.getByRole('button', { name: 'Workflows', exact: true }).click()
+    await page.getByRole('button', { name: 'Playbooks', exact: true }).click()
 
     await page.getByRole('heading', { name: 'Workflows', exact: true }).waitFor()
     await page.getByRole('heading', { name: 'Smoke workflow', exact: true }).waitFor()

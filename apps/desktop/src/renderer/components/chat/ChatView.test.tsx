@@ -330,7 +330,7 @@ describe('ChatView', () => {
     expect(document.querySelector('[data-workbench-layout="true"]')).toBeInTheDocument()
     expect(document.querySelector('[data-workbench-pane="conversation"]')).toBeInTheDocument()
     expect(document.querySelector('[data-workbench-pane="review"]')).toHaveTextContent('Session inspector')
-    expect(screen.getByRole('toolbar', { name: 'Thread actions' })).toBeInTheDocument()
+    expect(screen.getByRole('toolbar', { name: 'Chat actions' })).toBeInTheDocument()
     expect(screen.getByText('Launch analysis')).toBeInTheDocument()
     expect(screen.getByText('/tmp/workspace/app')).toBeInTheDocument()
     expect(screen.getByText('+14')).toBeInTheDocument()
@@ -360,9 +360,9 @@ describe('ChatView', () => {
     await user.click(screen.getByRole('button', { name: 'Reverted · click to unrevert' }))
     await waitFor(() => expect(api.session.unrevert).toHaveBeenCalledWith('session-1'))
 
-    await user.click(screen.getByRole('button', { name: 'Hide Context' }))
+    await user.click(screen.getByRole('button', { name: 'Hide Review' }))
     expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Show Context' }))
+    await user.click(screen.getByRole('button', { name: 'Show Review' }))
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
   })
 

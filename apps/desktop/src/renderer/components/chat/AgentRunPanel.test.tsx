@@ -112,14 +112,14 @@ describe('AgentRunPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Agents working')).toBeInTheDocument()
+    expect(screen.getByText('Coworkers working')).toBeInTheDocument()
     expect(screen.getByText('2 tasks · Research Agent, Explore')).toBeInTheDocument()
     expect(screen.getByText('2 running')).toBeInTheDocument()
     expect(screen.getByText(/tok$/)).toHaveTextContent('1.5k tok')
     expect(screen.getByText('$0.42')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Research Agent — running' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Agents working/ }))
+    await user.click(screen.getByRole('button', { name: /Coworkers working/ }))
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
@@ -197,7 +197,7 @@ describe('AgentRunPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Agents complete')).toBeInTheDocument()
+    expect(screen.getByText('Coworkers complete')).toBeInTheDocument()
     expect(screen.queryByText('1 complete')).not.toBeInTheDocument()
 
     rerender(
@@ -223,7 +223,7 @@ describe('AgentRunPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Agents errored')).toBeInTheDocument()
+    expect(screen.getByText('Coworkers need review')).toBeInTheDocument()
     expect(screen.getByText('1 running')).toBeInTheDocument()
   })
 

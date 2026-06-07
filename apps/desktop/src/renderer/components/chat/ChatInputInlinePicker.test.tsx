@@ -54,7 +54,7 @@ describe('ChatInputInlinePicker', () => {
       />,
     )
 
-    expect(screen.getByText('Sub-Agents')).toBeInTheDocument()
+    expect(screen.getByText('Coworkers')).toBeInTheDocument()
     expect(screen.getByText('Explore')).toBeInTheDocument()
     expect(screen.getByText('@analyst')).toBeInTheDocument()
 

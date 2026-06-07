@@ -44,13 +44,13 @@ describe('NewThreadButton', () => {
 
     render(<NewThreadButton />)
 
-    await user.click(screen.getByRole('button', { name: 'New Thread' }))
-    await user.click(screen.getByRole('button', { name: /Blank thread/ }))
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    await user.click(screen.getByRole('button', { name: /Blank chat/ }))
 
     await waitFor(() => {
       expect(create).toHaveBeenCalledWith(undefined)
     })
-    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a new thread. Please try again.')
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a new project chat. Please try again.')
     expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('runtime unavailable'),
       view: 'new-thread',
@@ -80,7 +80,7 @@ describe('NewThreadButton', () => {
 
     render(<NewThreadButton />)
 
-    await user.click(screen.getByRole('button', { name: 'New Thread' }))
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
     await user.click(screen.getByRole('button', { name: /Open Project/ }))
 
     await waitFor(() => {
@@ -112,14 +112,14 @@ describe('NewThreadButton', () => {
 
     render(<NewThreadButton />)
 
-    await user.click(screen.getByRole('button', { name: 'New Thread' }))
-    await user.click(screen.getByRole('button', { name: /Blank thread/ }))
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    await user.click(screen.getByRole('button', { name: /Blank chat/ }))
 
     await waitFor(() => {
       expect(create).toHaveBeenCalledWith(undefined)
     })
-    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a new thread. Please try again.')
-    expect(screen.queryByRole('button', { name: /Blank thread/ })).not.toBeInTheDocument()
+    expect(useSessionStore.getState().globalErrors[0]?.message).toBe('Could not create a new project chat. Please try again.')
+    expect(screen.queryByRole('button', { name: /Blank chat/ })).not.toBeInTheDocument()
   })
 
   it('opens the cloud project-source flow instead of the local directory picker', async () => {
@@ -166,9 +166,9 @@ describe('NewThreadButton', () => {
 
     render(<NewThreadButton />)
 
-    await user.click(screen.getByRole('button', { name: 'New Thread' }))
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
 
-    expect(await screen.findByText('Cloud-safe action - start a synced cloud thread')).toBeTruthy()
+    expect(await screen.findByText('Cloud-safe action - start a synced cloud chat')).toBeTruthy()
     expect(screen.getByText('Cloud-safe action - choose Git or upload an explicit snapshot')).toBeTruthy()
     const projectButton = screen.getByRole('button', { name: /Open Project/ })
     await user.click(projectButton)
@@ -176,7 +176,7 @@ describe('NewThreadButton', () => {
     expect(await screen.findByText('Cloud project source')).toBeTruthy()
 
     await user.type(screen.getByPlaceholderText('https://github.com/org/repo.git'), 'https://github.com/acme/repo.git')
-    await user.click(screen.getByRole('button', { name: 'Create thread' }))
+    await user.click(screen.getByRole('button', { name: 'Create project chat' }))
 
     await waitFor(() => {
       expect(validate).toHaveBeenCalledWith({

@@ -1,7 +1,7 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import type { SessionInfo } from '@open-cowork/shared'
 
-import type { AppView } from '../app-types'
+import { normalizeAppView, type AppView } from '../app-types'
 import { t } from '../helpers/i18n'
 import { loadSessionMessages } from '../helpers/loadSessionMessages'
 import { useSessionStore } from '../stores/session'
@@ -205,11 +205,8 @@ export function useAppGlobalEvents({
       }
     })
     const unsubNav = window.coworkApi.on.menuNavigate((nextView) => {
-      if (nextView === 'workflows') setView('workflows')
-      if (nextView === 'agents') setView('agents')
-      if (nextView === 'capabilities') setView('capabilities')
-      if (nextView === 'health') setView('health')
-      if (nextView === 'home') setView('home')
+      const normalized = normalizeAppView(nextView)
+      if (normalized && normalized !== 'settings') setView(normalized)
       if (nextView === 'settings') openSidebarSettings()
     })
     return () => {

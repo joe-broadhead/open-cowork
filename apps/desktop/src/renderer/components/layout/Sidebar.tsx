@@ -10,14 +10,14 @@ import { ThreadList } from '../sidebar/ThreadList'
 import { McpStatus } from '../sidebar/McpStatus'
 import { NewThreadButton } from '../sidebar/NewThreadButton'
 import { t } from '../../helpers/i18n'
-import type { AppView } from '../../app-types'
+import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { Icon } from '../ui'
 
 interface Props {
   currentView: AppView
-  onViewChange: (view: AppView) => void
+  onViewChange: (view: AppNavigationTarget) => void
   searchRequestNonce?: number
   settingsRequestNonce?: number
   branding?: BrandingSidebarConfig
@@ -578,10 +578,10 @@ export function Sidebar({
             </div>
             <button
               onClick={() => setShowSearch(!showSearch)}
-              aria-label={t('sidebar.searchTitle', 'Search threads (⌘K)')}
+              aria-label={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
               aria-expanded={showSearch}
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
-              title={t('sidebar.searchTitle', 'Search threads (⌘K)')}
+              title={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
             >
               <Icon name="search" size={16} />
             </button>
@@ -595,51 +595,77 @@ export function Sidebar({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') { setShowSearch(false); setSearchQuery('') } }}
-                aria-label={t('sidebar.search', 'Search threads...')}
-                placeholder={t('sidebar.search', 'Search threads...')}
+                aria-label={t('sidebar.search', 'Search projects and chats...')}
+                placeholder={t('sidebar.search', 'Search projects and chats...')}
                 className="w-full px-3 py-1.5 rounded-lg text-[12px] bg-elevated border border-border-subtle text-text placeholder:text-text-muted outline-none focus:border-border"
               />
             </div>
           )}
 
           <div className="px-2 pt-2 pb-1">
+            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div>
             <button onClick={() => onViewChange('home')}
               aria-current={currentView === 'home' ? 'page' : undefined}
               className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="home" size={16} />
               {t('sidebar.home', 'Home')}
             </button>
-            <button onClick={() => onViewChange('agents')}
-              aria-current={currentView === 'agents' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'agents' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="bot" size={16} />
-              {t('sidebar.agents', 'Agents')}
+            <button onClick={() => onViewChange('projects')}
+              aria-current={currentView === 'projects' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <Icon name="folder" size={16} />
+              {t('sidebar.projects', 'Projects')}
             </button>
-            <button onClick={() => onViewChange('workflows')}
-              aria-current={currentView === 'workflows' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'workflows' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+            <button onClick={() => onViewChange('approvals')}
+              aria-current={currentView === 'approvals' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'approvals' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <Icon name="circle-help" size={16} />
+              {t('sidebar.approvals', 'Approvals')}
+            </button>
+            <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.manage', 'Manage')}</div>
+            <button onClick={() => onViewChange('team')}
+              aria-current={currentView === 'team' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'team' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <Icon name="users" size={16} />
+              {t('sidebar.team', 'Team')}
+            </button>
+            <button onClick={() => onViewChange('playbooks')}
+              aria-current={currentView === 'playbooks' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'playbooks' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="workflow" size={16} />
-              {t('sidebar.workflows', 'Workflows')}
+              {t('sidebar.playbooks', 'Playbooks')}
             </button>
-            <button onClick={() => onViewChange('capabilities')}
-              aria-current={currentView === 'capabilities' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'capabilities' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+            <button onClick={() => onViewChange('channels')}
+              aria-current={currentView === 'channels' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'channels' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <Icon name="activity" size={16} />
+              {t('sidebar.channels', 'Channels')}
+            </button>
+            <button onClick={() => onViewChange('tools')}
+              aria-current={currentView === 'tools' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'tools' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="blocks" size={16} />
               {t('sidebar.toolsSkills', 'Tools & Skills')}
             </button>
+            <button onClick={() => onViewChange('artifacts')}
+              aria-current={currentView === 'artifacts' ? 'page' : undefined}
+              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'artifacts' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
+              <Icon name="file" size={16} />
+              {t('sidebar.artifacts', 'Artifacts')}
+            </button>
           </div>
 
-          {/* Threads — ThreadList owns its own scroll container so it
+          {/* Recent project chats — ThreadList owns its own scroll container so it
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
           <div className="flex-1 min-h-0 flex flex-col px-2 py-2">
             <button
               type="button"
-              onClick={() => onViewChange('threads')}
-              aria-current={currentView === 'threads' ? 'page' : undefined}
-              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'threads' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
+              onClick={() => onViewChange('projects')}
+              aria-current={currentView === 'projects' ? 'page' : undefined}
+              className={`sidebar-nav-item mb-1 rounded-md px-2 py-1 text-start text-[10px] font-semibold uppercase tracking-widest transition-colors ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
             >
-              {t('sidebar.threads', 'Threads')}
+              {t('sidebar.recentWork', 'Recent work')}
             </button>
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
           </div>

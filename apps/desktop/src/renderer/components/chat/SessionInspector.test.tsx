@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SessionArtifact, SessionView, TaskRun } from '@open-cowork/shared'
+import type { SessionArtifact, SessionView, TaskRun, ToolCall } from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { unavailableWorkspaceSupport, useWorkspaceSupportStore } from '../../stores/workspace-support'
@@ -41,6 +41,17 @@ function createTaskRun(overrides: Partial<TaskRun> = {}): TaskRun {
     error: null,
     sessionCost: 0,
     sessionTokens: emptyTokens,
+    order: 1,
+    ...overrides,
+  }
+}
+
+function createToolCall(overrides: Partial<ToolCall> = {}): ToolCall {
+  return {
+    id: 'tool-1',
+    name: 'write',
+    input: {},
+    status: 'complete',
     order: 1,
     ...overrides,
   }
@@ -256,11 +267,33 @@ describe('SessionInspector', () => {
     await user.click(screen.getByRole('button', { name: 'Todos' }))
     expect(screen.getByText('Agent plan')).toBeInTheDocument()
     expect(screen.getByText('Session todos')).toBeInTheDocument()
-    expect(screen.getByText('Sub-agent todos')).toBeInTheDocument()
+    expect(screen.getByText('Specialist todos')).toBeInTheDocument()
     expect(screen.getByText('Draft release checklist')).toBeInTheDocument()
     expect(screen.getByText('Update changelog')).toBeInTheDocument()
     expect(screen.getByText('Check IPC boundaries')).toBeInTheDocument()
     expect(screen.queryByText('No todos yet.')).not.toBeInTheDocument()
+  })
+
+  it('keeps project file artifacts in the Review diff while hiding unsafe artifact actions', () => {
+    resetStore({
+      directory: '/Users/alice/project',
+      view: createView({
+        toolCalls: [
+          createToolCall({
+            id: 'write-project-file',
+            input: { filePath: '/Users/alice/project/report.txt', content: 'hello' },
+            order: 8,
+          }),
+        ],
+      }),
+    })
+    installInspectorApi()
+
+    render(<SessionInspector onClose={vi.fn()} />)
+
+    expect(screen.getByText('/Users/alice/project/report.txt')).toBeInTheDocument()
+    expect(screen.getByText('Artifacts ready')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Artifacts' })).not.toBeInTheDocument()
   })
 
   it('surfaces artifacts, previews chart files, and wires send/rerender/reveal/export actions', async () => {
