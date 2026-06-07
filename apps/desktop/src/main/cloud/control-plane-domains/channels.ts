@@ -25,6 +25,7 @@ export type ChannelControlPlaneStore = Pick<ControlPlaneStore,
   | 'listChannelDeliveries'
   | 'claimNextChannelDelivery'
   | 'ackChannelDelivery'
+  | 'listApiTokenChannelBindingGrants'
   | 'claimChannelProviderEvent'
   | 'completeChannelProviderEvent'
   | 'getSession'

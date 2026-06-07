@@ -134,6 +134,8 @@ test('real Postgres cloud store serializes concurrent schema migrations', {
         '008_managed_workers',
         '009_managed_work_claims',
         '011_channel_provider_events',
+        '012_channel_delivery_owner',
+        '013_api_token_channel_binding_grants',
         '010_managed_work_reaper_indexes',
       ])
     } finally {

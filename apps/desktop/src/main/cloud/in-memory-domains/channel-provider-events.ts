@@ -90,6 +90,7 @@ export class InMemoryChannelProviderEventsDomain {
     const event = Array.from(this.events.values())
       .find((candidate) => candidate.orgId === input.orgId && candidate.eventId === input.eventId)
     if (!event) return null
+    if (!providerEventMatchesChannelBindingScope(event, input.channelBindingIds)) return null
     if (event.claimedBy !== normalizeText(input.claimedBy, CHANNEL_TEXT_MAX_LENGTH, 'Provider event claimant')) return null
 
     const updatedAt = nowIso(input.updatedAt)
@@ -104,6 +105,16 @@ export class InMemoryChannelProviderEventsDomain {
     event.updatedAt = updatedAt
     return clone(event)
   }
+}
+
+function providerEventMatchesChannelBindingScope(
+  event: ChannelProviderEventRecord,
+  channelBindingIds: readonly string[] | null | undefined,
+) {
+  if (channelBindingIds === null || channelBindingIds === undefined) return true
+  if (!Object.prototype.hasOwnProperty.call(event.metadata, 'channelBindingId')) return true
+  const bindingId = typeof event.metadata.channelBindingId === 'string' ? event.metadata.channelBindingId : null
+  return bindingId !== null && channelBindingIds.includes(bindingId)
 }
 
 function channelProviderEventKey(input: {

@@ -81,6 +81,7 @@ export type CloudChannelsClient = {
   resolveChannelIdentity(input: {
     provider: ChannelProviderId
     externalUserId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     identityId?: string | null
     accountId?: string | null
@@ -111,6 +112,7 @@ export type CloudChannelsClient = {
   claimChannelProviderEvent(input: {
     provider: ChannelProviderId
     providerInstanceId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     providerEventId: string
     eventType: CloudChannelProviderEventType
@@ -119,6 +121,7 @@ export type CloudChannelsClient = {
     metadata?: Record<string, unknown>
   }): Promise<ChannelProviderEventClaimResult>
   completeChannelProviderEvent(eventId: string, input: {
+    channelBindingId?: string | null
     claimedBy: string
     status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
     retryable?: boolean
@@ -166,23 +169,29 @@ export type CloudChannelsClient = {
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord | null>
   listChannelDeliveries(input?: {
+    deliveryId?: string | null
     status?: CloudChannelDeliveryStatus | null
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<ChannelDeliveryRecord[]>
   retryChannelDelivery(deliveryId: string): Promise<ChannelDeliveryRecord | null>
   deadLetterChannelDelivery(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
-  channelDeliveriesUrl(input?: { claimedBy?: string, ttlMs?: number }): string
+  channelDeliveriesUrl(input?: { claimedBy?: string, ttlMs?: number, channelBindingIds?: readonly string[] }): string
   subscribeChannelDeliveries(input: {
     claimedBy?: string
     ttlMs?: number
+    channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
   }): CloudTransportSubscription
 }
 
-function channelDeliveriesUrl(baseUrl: string, input: { claimedBy?: string, ttlMs?: number } = {}) {
-  return `${baseUrl}/api/channels/deliveries/stream${queryString(input)}`
+function channelDeliveriesUrl(baseUrl: string, input: { claimedBy?: string, ttlMs?: number, channelBindingIds?: readonly string[] } = {}) {
+  return `${baseUrl}/api/channels/deliveries/stream${queryString({
+    claimedBy: input.claimedBy,
+    ttlMs: input.ttlMs,
+    channelBindingId: input.channelBindingIds,
+  })}`
 }
 
 export function createCloudChannelsClient(context: CloudChannelsClientContext): CloudChannelsClient {
@@ -312,9 +321,14 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
       const url = channelDeliveriesUrl(context.baseUrl, {
         claimedBy: input.claimedBy,
         ttlMs: input.ttlMs,
+        channelBindingIds: input.channelBindingIds,
       })
       const onEvent = (event: unknown) => {
         const record = asRecord(event)
+        if ('error' in record) {
+          input.onError?.(new Error(typeof record.error === 'string' ? record.error : 'Channel delivery stream failed.'))
+          return
+        }
         const delivery = record.delivery
         if (delivery && typeof delivery === 'object') input.onDelivery(delivery as ChannelDeliveryRecord)
       }

@@ -97,6 +97,17 @@
       ]
     },
     {
+      "type": "timeseries",
+      "title": "Gateway provider health",
+      "targets": [
+        { "expr": "sum(open_cowork_gateway_provider_state{state=~\"healthy|unhealthy\"}) by (provider_id, provider_kind, state)" },
+        { "expr": "sum(rate(open_cowork_gateway_provider_inbound_failures_total[5m])) by (provider_id, provider_kind)" },
+        { "expr": "sum(rate(open_cowork_gateway_provider_delivery_retries_total[5m])) by (provider_id, provider_kind)" },
+        { "expr": "sum(rate(open_cowork_gateway_provider_delivery_dead_letters_total[5m])) by (provider_id, provider_kind)" },
+        { "expr": "sum(rate(open_cowork_gateway_provider_webhook_requests_total[5m])) by (provider_id, provider_kind)" }
+      ]
+    },
+    {
       "type": "stat",
       "title": "Gateway active providers and streams",
       "targets": [

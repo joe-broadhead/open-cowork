@@ -519,6 +519,13 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'connections'))
     assert.match(harness.document.querySelector('[data-admin-surface-route="connections"]')?.textContent || '', /one-time plaintext reveal/)
 
+    harness.clickText('#gateway-token', 'Gateway token')
+    await waitFor(() => {
+      const request = harness.lastRequest((entry) => entry.method === 'POST' && entry.path === '/api/api-tokens')
+      assert.ok(request)
+      assert.deepEqual((request.body as Record<string, unknown>).channelBindingIds, ['binding-1'])
+    })
+
     ;(harness.document.querySelector('#agent-form input[name="name"]') as HTMLInputElement).value = 'Release helper'
     harness.submit('#agent-form')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/agents')))

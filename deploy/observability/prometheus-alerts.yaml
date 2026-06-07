@@ -129,6 +129,33 @@ groups:
         annotations:
           summary: Gateway deliveries are retrying or dead-lettering.
           runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage
+      - alert: OpenCoworkGatewayProviderUnhealthy
+        expr: sum by (provider_id, provider_kind) (open_cowork_gateway_provider_state{state="unhealthy"}) > 0
+        for: 5m
+        labels:
+          severity: page
+          surface: gateway
+        annotations:
+          summary: A configured Gateway provider is unhealthy.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage
+      - alert: OpenCoworkGatewayProviderDeliveryFailures
+        expr: sum by (provider_id, provider_kind) (rate(open_cowork_gateway_provider_delivery_retries_total[10m])) > 1 or sum by (provider_id, provider_kind) (rate(open_cowork_gateway_provider_delivery_dead_letters_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          surface: gateway
+        annotations:
+          summary: A configured Gateway provider is retrying or dead-lettering deliveries.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage
+      - alert: OpenCoworkGatewayProviderInboundFailures
+        expr: sum by (provider_id, provider_kind) (rate(open_cowork_gateway_provider_inbound_failures_total[10m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          surface: gateway
+        annotations:
+          summary: A configured Gateway provider is failing inbound message handling.
+          runbook: docs/runbooks/cloud-managed-operations.md#gateway-provider-outage
       - alert: OpenCoworkGatewayStreamReconnects
         expr: sum(rate(open_cowork_gateway_stream_reconnects_total[5m])) > 5
         for: 10m

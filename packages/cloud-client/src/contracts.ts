@@ -186,6 +186,7 @@ export type ChannelDeliveryRecord = {
   status: CloudChannelDeliveryStatus
   attemptCount: number
   claimedBy: string | null
+  lastClaimedBy: string | null
   claimExpiresAt: string | null
   nextAttemptAt: string
   lastError: string | null
@@ -352,6 +353,7 @@ export type CloudApiTokenRecord = {
   accountId: string | null
   name: string
   scopes: CloudApiTokenScope[]
+  channelBindingIds: string[]
   last4: string
   expiresAt: string | null
   revokedAt: string | null
@@ -363,6 +365,13 @@ export type CloudApiTokenRecord = {
 export type CloudIssuedApiTokenRecord = {
   token: CloudApiTokenRecord
   plaintext: string
+}
+
+export type CloudApiTokenChannelBindingGrantRecord = {
+  orgId: string
+  tokenId: string
+  channelBindingId: string
+  createdAt: string
 }
 
 export type CloudOrgMemberRecord = {
@@ -660,8 +669,12 @@ export type CloudTransportAdapter = {
     name: string
     scopes: CloudApiTokenScope[]
     expiresAt?: string | null
+    channelBindingIds?: readonly string[] | null
   }): Promise<CloudIssuedApiTokenRecord>
   revokeApiToken?(tokenId: string): Promise<CloudApiTokenRecord | null>
+  grantApiTokenChannelBinding?(tokenId: string, input: {
+    channelBindingId: string
+  }): Promise<{ grant: CloudApiTokenChannelBindingGrantRecord, token: CloudApiTokenRecord }>
   getAdminPolicy?(): Promise<CloudAdminPolicyOverview>
   listOrgMembers?(input?: { query?: string | null, limit?: number | null }): Promise<CloudOrgMemberRecord[]>
   inviteOrgMember?(input: { email: string, role?: 'owner' | 'admin' | 'member' | null }): Promise<CloudOrgMemberRecord>
@@ -706,6 +719,7 @@ export type CloudTransportAdapter = {
   resolveChannelIdentity?(input: {
     provider: CloudChannelProviderId
     externalUserId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     identityId?: string | null
     accountId?: string | null
@@ -736,6 +750,7 @@ export type CloudTransportAdapter = {
   claimChannelProviderEvent?(input: {
     provider: CloudChannelProviderId
     providerInstanceId: string
+    channelBindingId?: string | null
     externalWorkspaceId?: string | null
     providerEventId: string
     eventType: CloudChannelProviderEventType
@@ -744,6 +759,7 @@ export type CloudTransportAdapter = {
     metadata?: Record<string, unknown>
   }): Promise<ChannelProviderEventClaimResult>
   completeChannelProviderEvent?(eventId: string, input: {
+    channelBindingId?: string | null
     claimedBy: string
     status: Extract<CloudChannelProviderEventStatus, 'processed' | 'failed'>
     retryable?: boolean
@@ -791,16 +807,18 @@ export type CloudTransportAdapter = {
     nextAttemptAt?: string | null
   }): Promise<ChannelDeliveryRecord | null>
   listChannelDeliveries?(input?: {
+    deliveryId?: string | null
     status?: CloudChannelDeliveryStatus | null
     channelBindingId?: string | null
     limit?: number | null
   }): Promise<ChannelDeliveryRecord[]>
   retryChannelDelivery?(deliveryId: string): Promise<ChannelDeliveryRecord | null>
   deadLetterChannelDelivery?(deliveryId: string, input?: { lastError?: string | null }): Promise<ChannelDeliveryRecord | null>
-  channelDeliveriesUrl?(input?: { claimedBy?: string, ttlMs?: number }): string
+  channelDeliveriesUrl?(input?: { claimedBy?: string, ttlMs?: number, channelBindingIds?: readonly string[] }): string
   subscribeChannelDeliveries?(input: {
     claimedBy?: string
     ttlMs?: number
+    channelBindingIds?: readonly string[]
     onDelivery: (delivery: ChannelDeliveryRecord) => void
     onError?: (error: unknown) => void
   }): CloudTransportSubscription

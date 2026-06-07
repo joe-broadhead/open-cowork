@@ -82,6 +82,13 @@ function pillKind(value: unknown) {
   return ''
 }
 
+function grantableChannelBindingIds(bindings: Record<string, unknown>[]) {
+  return [...new Set(bindings
+    .filter((binding) => text(binding.status, 'active') !== 'disabled')
+    .map((binding) => text(binding.bindingId || binding.id).trim())
+    .filter(Boolean))]
+}
+
 function formatDate(value: unknown) {
   if (!value) return 'never'
   const date = new Date(String(value))
@@ -316,7 +323,12 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
       } else if (target.closest('#desktop-token')) {
         event.preventDefault(); event.stopImmediatePropagation(); void mutate('Desktop token issued', async () => { const issued = asRecord(await api.admin.apiTokens.create({ name: 'Desktop connection', scopes: ['desktop'] })); setState((current) => ({ ...current, revealToken: text(issued.plaintext) })) })
       } else if (target.closest('#gateway-token')) {
-        event.preventDefault(); event.stopImmediatePropagation(); void mutate('Gateway token issued', async () => { const issued = asRecord(await api.admin.apiTokens.create({ name: 'Gateway service token', scopes: ['gateway'] })); setState((current) => ({ ...current, revealToken: text(issued.plaintext) })) })
+        event.preventDefault(); event.stopImmediatePropagation(); void mutate('Gateway token issued', async () => {
+          const channelBindingIds = grantableChannelBindingIds(state.bindings)
+          if (channelBindingIds.length === 0) throw new Error('Create a channel binding before issuing a Gateway token.')
+          const issued = asRecord(await api.admin.apiTokens.create({ name: 'Gateway service token', scopes: ['gateway'], channelBindingIds }))
+          setState((current) => ({ ...current, revealToken: text(issued.plaintext) }))
+        })
       } else if (target.closest('#billing-portal')) {
         event.preventDefault(); event.stopImmediatePropagation(); if (billingActionDisabled) status(billingDisabledReason, 'warn'); else void mutate('Billing portal opened', async () => { const result = asRecord(await api.admin.billing.portal()); if (result.url) window.location.href = text(result.url) })
       } else if (target.closest('#export-audit')) {
@@ -329,7 +341,7 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
     }
     document.addEventListener('click', click, true)
     return () => { disposers.forEach((dispose) => dispose()); document.removeEventListener('click', click, true) }
-  }, [api, auditFilter, billingActionDisabled, billingDisabledReason, bootstrap.profileName, filteredAudit, inviteDisabled, inviteDisabledReason, locked, lockTitle, mutate, reload, state.usage, state.usageSummary, workspace])
+  }, [api, auditFilter, billingActionDisabled, billingDisabledReason, bootstrap.profileName, filteredAudit, inviteDisabled, inviteDisabledReason, locked, lockTitle, mutate, reload, state.bindings, state.usage, state.usageSummary, workspace])
 
   const portals = []
   if (targets.memberCount) portals.push(createPortal(<>{filteredMembers.length}</>, targets.memberCount))

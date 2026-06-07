@@ -20,7 +20,6 @@ import type { CloudArtifactService } from './artifact-service.ts'
 import { cloudBrowserAppHtml } from './browser-app.ts'
 import {
   principalHasDesktopApiAccess,
-  principalHasGatewayAccess,
   routeAllowsGatewayOnlyToken,
   routeAllowsOperationalToken,
   routeAllowsWorkerCredential,
@@ -146,8 +145,6 @@ type RouteContext = {
   url: URL
   segments: string[]
 }
-
-const CHANNEL_DELIVERY_SSE_EVENT_TYPE = 'channel.delivery' satisfies CloudSessionEventType
 
 const DEFAULT_PRINCIPAL: CloudPrincipal = {
   tenantId: 'default',
@@ -514,14 +511,6 @@ function writeSseEvent(res: ServerResponse, event: {
   res.write(`id: ${event.sequence}\n`)
   res.write(`event: ${event.type}\n`)
   res.write(`data: ${JSON.stringify(event)}\n\n`)
-}
-
-function writeChannelDeliverySseEvent(res: ServerResponse, delivery: unknown) {
-  const record = readRecord(delivery) || {}
-  const deliveryId = readString(record.deliveryId) || 'delivery'
-  res.write(`id: ${deliveryId}\n`)
-  res.write(`event: ${CHANNEL_DELIVERY_SSE_EVENT_TYPE}\n`)
-  res.write(`data: ${JSON.stringify({ delivery })}\n\n`)
 }
 
 function publicChannelInteraction(value: unknown) {
@@ -976,62 +965,6 @@ async function handleWorkspaceSse(
   }, ssePollMs(options))
 }
 
-async function handleChannelDeliveriesSse(
-  req: IncomingMessage,
-  res: ServerResponse,
-  options: CloudHttpServerOptions,
-  context: RouteContext,
-) {
-  if (!principalHasGatewayAccess(context.principal)) {
-    writeError(res, 403, 'Gateway channel access requires a gateway-scoped API token.', options.corsOrigin)
-    return
-  }
-  writeCorsHeaders(res, options.corsOrigin)
-  res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-store',
-    connection: 'keep-alive',
-  })
-  const claimedBy = context.url.searchParams.get('claimedBy') || context.principal.tokenId || context.principal.userId || 'gateway'
-  const ttlMsRaw = Number(context.url.searchParams.get('ttlMs') || 30_000)
-  const ttlMs = Number.isInteger(ttlMsRaw) && ttlMsRaw > 0 ? ttlMsRaw : 30_000
-  let closed = false
-  let pollActive = false
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  const cleanup = () => {
-    if (closed) return
-    closed = true
-    if (pollTimer) clearInterval(pollTimer)
-  }
-  if (!trackSseStream(req, res, options, cleanup)) return
-  const poll = async () => {
-    if (pollActive || closed || res.destroyed) return
-    pollActive = true
-    try {
-      let claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
-      while (claimed && !closed && !res.destroyed) {
-        writeChannelDeliverySseEvent(res, claimed)
-        claimed = await options.service.claimNextChannelDelivery(context.principal, { claimedBy, ttlMs })
-      }
-      if (!closed && !res.destroyed) res.write(': keep-alive\n\n')
-    } catch (error) {
-      if (!closed && !res.destroyed) {
-        const message = error instanceof CloudServiceError
-          ? error.publicMessage
-          : 'Channel delivery stream failed.'
-        res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`)
-      }
-    } finally {
-      pollActive = false
-    }
-  }
-  await poll()
-  if (closed) return
-  pollTimer = setInterval(() => {
-    void poll()
-  }, ssePollMs(options))
-}
-
 async function handleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1245,9 +1178,11 @@ async function handleApiRequest(
         publicChannelInteraction,
         writeJson,
         writeError,
+        writeCorsHeaders,
+        trackSseStream,
+        ssePollMs,
         processSessionCommandIfConfigured,
         writeSessionCommandMutationResponse,
-        handleChannelDeliveriesSse,
       },
     })
     if (!handled) writeError(res, 404, 'Not found.', options.corsOrigin)

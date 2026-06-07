@@ -1262,13 +1262,30 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
     claimedBy: 'gateway-early',
     now: new Date('2026-01-01T00:00:01.000Z'),
   }), null)
+  assert.equal(store.claimNextChannelDelivery({
+    orgId: org.orgId,
+    claimedBy: 'gateway-wrong-binding',
+    channelBindingIds: ['other-binding'],
+    now: new Date('2026-01-01T00:00:10.000Z'),
+  }), null)
   const claimed = store.claimNextChannelDelivery({
     orgId: org.orgId,
-    claimedBy: 'gateway-1',
+    claimedBy: 'gateway-instance-1',
+    lastClaimedBy: 'gateway-token-1',
     now: new Date('2026-01-01T00:00:10.000Z'),
     ttlMs: 30_000,
   })
   assert.equal(claimed?.deliveryId, delivery.deliveryId)
+  assert.equal(claimed?.claimedBy, 'gateway-instance-1')
+  assert.equal(claimed?.lastClaimedBy, 'gateway-token-1')
+  assert.equal(store.listChannelDeliveries({
+    orgId: org.orgId,
+    lastClaimedBy: 'gateway-token-1',
+  })[0]?.deliveryId, delivery.deliveryId)
+  assert.equal(store.listChannelDeliveries({
+    orgId: org.orgId,
+    lastClaimedBy: 'gateway-token-2',
+  }).length, 0)
   assert.equal(store.claimNextChannelDelivery({
     orgId: org.orgId,
     claimedBy: 'gateway-2',
@@ -1284,10 +1301,27 @@ test('cloud control plane stores headless channel bindings, interactions, cursor
   assert.equal(store.ackChannelDelivery({
     orgId: org.orgId,
     deliveryId: delivery.deliveryId,
-    claimedBy: 'gateway-1',
+    lastClaimedBy: 'gateway-token-2',
+    status: 'dead',
+    updatedAt: new Date('2026-01-01T00:00:03.000Z'),
+  }), null)
+  const legacyDeliveryRecord = (store as unknown as {
+    channelDeliveriesDomain: {
+      deliveries: Map<string, { lastClaimedBy: string | null }>
+    }
+  }).channelDeliveriesDomain.deliveries.get(delivery.deliveryId)
+  assert.ok(legacyDeliveryRecord)
+  legacyDeliveryRecord.lastClaimedBy = null
+  const legacyAck = store.ackChannelDelivery({
+    orgId: org.orgId,
+    deliveryId: delivery.deliveryId,
+    claimedBy: 'gateway-instance-1',
+    lastClaimedBy: 'gateway-token-1',
     status: 'sent',
     updatedAt: new Date('2026-01-01T00:00:03.000Z'),
-  })?.status, 'sent')
+  })
+  assert.equal(legacyAck?.status, 'sent')
+  assert.equal(legacyAck?.lastClaimedBy, 'gateway-token-1')
 
   const firstProviderEvent = store.claimChannelProviderEvent({
     orgId: org.orgId,

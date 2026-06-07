@@ -34,6 +34,7 @@ export type ClaimChannelProviderEventInput = {
   orgId: string
   provider: ChannelProviderId
   providerInstanceId: string
+  channelBindingId?: string | null
   externalWorkspaceId?: string | null
   providerEventId: string
   eventType: ChannelProviderEventType
@@ -46,6 +47,7 @@ export type ClaimChannelProviderEventInput = {
 export type CompleteChannelProviderEventInput = {
   orgId: string
   eventId: string
+  channelBindingIds?: readonly string[] | null
   claimedBy: string
   status: Extract<ChannelProviderEventStatus, 'processed' | 'failed'>
   retryable?: boolean

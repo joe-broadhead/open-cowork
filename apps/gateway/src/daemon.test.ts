@@ -8,6 +8,7 @@ import {
 } from '@open-cowork/gateway-provider-webhook'
 import type { CloudGateway } from '../dist/index.js'
 import {
+  createGatewayDaemon,
   createGatewayHttpServer,
   createGatewayProviderRegistry,
   createGatewayRuntime,
@@ -36,6 +37,37 @@ function signedWebhookHeaders(rawBody: string, sharedSecret: string, timestamp =
     'x-open-cowork-gateway-webhook-signature': `v1=${createHmac('sha256', sharedSecret).update(`v1:${timestamp}:${rawBody}`).digest('hex')}`,
   }
 }
+
+test('gateway daemon default cloud client uses the resolved config instead of process env', () => {
+  const previousBaseUrl = process.env.OPEN_COWORK_CLOUD_BASE_URL
+  const previousServiceToken = process.env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN
+  const config = resolveGatewayConfigBase({
+    server: {
+      port: 0,
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://configured-cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'configured-service-token',
+  })
+  try {
+    delete process.env.OPEN_COWORK_CLOUD_BASE_URL
+    delete process.env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN
+    const daemon = createGatewayDaemon(config)
+    assert.equal(daemon.config.cloud.baseUrl, 'https://configured-cloud.example.test')
+    assert.equal(daemon.config.cloud.serviceToken, 'configured-service-token')
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.OPEN_COWORK_CLOUD_BASE_URL
+    else process.env.OPEN_COWORK_CLOUD_BASE_URL = previousBaseUrl
+    if (previousServiceToken === undefined) delete process.env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN
+    else process.env.OPEN_COWORK_GATEWAY_SERVICE_TOKEN = previousServiceToken
+  }
+})
 
 function providerEventRecord(input: {
   provider: string
@@ -221,6 +253,7 @@ test('gateway daemon exposes health, readiness, metrics, diagnostics, and fake w
     assert.equal(webhook.status, 202)
     assert.deepEqual(prompted, ['ship it'])
     assert.equal(runtime.metrics.webhookRequests, 1)
+    assert.equal(runtime.metrics.providerMetrics.fake?.webhookRequests, 1)
   } finally {
     await http.close()
     await runtime.stop()
@@ -773,6 +806,7 @@ test('gateway diagnostics redact provider health errors', async () => {
     assert.equal(text.includes('alice@example.test'), false)
     assert.equal(text.includes('/Users/alice'), false)
     assert.match(text, /Bearer \[redacted\]/)
+    assert.equal(((diagnostics.metrics as { providerMetrics: Record<string, { state: string }> }).providerMetrics.fake)?.state, 'unhealthy')
   } finally {
     await http.close()
     await runtime.stop()
@@ -903,6 +937,15 @@ test('gateway operator endpoints require the admin token when configured', async
       headers: { 'x-open-cowork-gateway-admin-token': 'admin-token' },
     })
     assert.equal(diagnostics.status, 200)
+    const diagnosticsBody = await readJson(diagnostics)
+    assert.deepEqual(diagnosticsBody.deliveryOperator, {
+      scope: 'configured-channel-bindings',
+      channelBindingIds: ['fake-binding'],
+      listAllowed: true,
+      retryAllowed: false,
+      deadLetterAllowed: false,
+      disabledReason: 'Cloud delivery retry is not available. Cloud delivery dead-letter is not available.',
+    })
     const deliveries = await fetch(`${url}/deliveries`, {
       headers: { authorization: 'Bearer admin-token' },
     })
@@ -1539,8 +1582,12 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
   const cloud = {
     subscribeDeliveries() { return { close() {} } },
     async listDeliveries(input) {
-      calls.push(`list:${input.status}`)
-      return [deliveryRecord({ deliveryId: 'delivery-1' })]
+      calls.push(`list:${input.deliveryId || ''}:${input.status || ''}:${input.channelBindingId}`)
+      if (input.deliveryId && input.deliveryId !== `delivery-${input.channelBindingId}`) return []
+      return [deliveryRecord({
+        deliveryId: `delivery-${input.channelBindingId}`,
+        channelBindingId: input.channelBindingId,
+      })]
     },
     async retryDelivery(deliveryId: string) {
       calls.push(`retry:${deliveryId}`)
@@ -1559,6 +1606,10 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
       id: 'fake',
       kind: 'fake',
       channelBindingId: 'fake-binding',
+    }, {
+      id: 'fake-secondary',
+      kind: 'fake',
+      channelBindingId: 'secondary-binding',
     }],
   }, {
     OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
@@ -1575,9 +1626,21 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
   try {
     const listed = await readJson(await fetch(`${url}/deliveries?status=failed`, { headers: auth }))
     assert.equal(Array.isArray(listed.deliveries), true)
-    const retried = await readJson(await fetch(`${url}/deliveries/delivery-1/retry`, { method: 'POST', headers: auth }))
-    assert.equal((retried.delivery as { deliveryId: string }).deliveryId, 'delivery-1')
-    const dead = await readJson(await fetch(`${url}/deliveries/delivery-1/dead-letter`, {
+    assert.deepEqual((listed.deliveries as Array<{ deliveryId: string }>).map((delivery) => delivery.deliveryId), [
+      'delivery-fake-binding',
+      'delivery-secondary-binding',
+    ])
+    const filtered = await readJson(await fetch(`${url}/deliveries?status=failed&channelBindingId=secondary-binding`, { headers: auth }))
+    assert.deepEqual((filtered.deliveries as Array<{ deliveryId: string }>).map((delivery) => delivery.deliveryId), [
+      'delivery-secondary-binding',
+    ])
+    const unrelated = await readJson(await fetch(`${url}/deliveries?status=failed&channelBindingId=unconfigured-binding`, { headers: auth }))
+    assert.deepEqual(unrelated.deliveries, [])
+    const blockedRetry = await fetch(`${url}/deliveries/delivery-unconfigured/retry`, { method: 'POST', headers: auth })
+    assert.equal(blockedRetry.status, 404)
+    const retried = await readJson(await fetch(`${url}/deliveries/delivery-fake-binding/retry`, { method: 'POST', headers: auth }))
+    assert.equal((retried.delivery as { deliveryId: string }).deliveryId, 'delivery-fake-binding')
+    const dead = await readJson(await fetch(`${url}/deliveries/delivery-fake-binding/dead-letter`, {
       method: 'POST',
       headers: {
         ...auth,
@@ -1585,8 +1648,20 @@ test('gateway daemon exposes admin delivery backlog controls', async () => {
       },
       body: JSON.stringify({ lastError: 'operator stop' }),
     }))
-    assert.equal((dead.delivery as { deliveryId: string }).deliveryId, 'delivery-1')
-    assert.deepEqual(calls, ['list:failed', 'retry:delivery-1', 'dead:delivery-1:operator stop'])
+    assert.equal((dead.delivery as { deliveryId: string }).deliveryId, 'delivery-fake-binding')
+    assert.deepEqual(calls, [
+      'list::failed:fake-binding',
+      'list::failed:secondary-binding',
+      'list::failed:secondary-binding',
+      'list:delivery-unconfigured::fake-binding',
+      'list:delivery-unconfigured::secondary-binding',
+      'list:delivery-fake-binding::fake-binding',
+      'list:delivery-fake-binding::secondary-binding',
+      'retry:delivery-fake-binding',
+      'list:delivery-fake-binding::fake-binding',
+      'list:delivery-fake-binding::secondary-binding',
+      'dead:delivery-fake-binding:operator stop',
+    ])
   } finally {
     await http.close()
     await runtime.stop()
@@ -1645,6 +1720,46 @@ test('gateway daemon rejects delivery admin controls without the admin token', a
     assert.deepEqual(calls, [])
   } finally {
     await http.close()
+    await runtime.stop()
+  }
+})
+
+test('gateway runtime subscribes only to enabled configured channel bindings', async () => {
+  let subscribed: { channelBindingIds?: readonly string[] } | null = null
+  const cloud = {
+    subscribeDeliveries(input: { channelBindingIds?: readonly string[] }) {
+      subscribed = input
+      return { close() {} }
+    },
+  } as CloudGateway
+  const config = resolveGatewayConfig({
+    server: {
+      adminToken: 'admin-token',
+    },
+    providers: [{
+      id: 'fake',
+      kind: 'fake',
+      channelBindingId: 'fake-binding',
+    }, {
+      id: 'fake-secondary',
+      kind: 'fake',
+      channelBindingId: 'secondary-binding',
+    }, {
+      id: 'fake-disabled',
+      kind: 'fake',
+      enabled: false,
+      channelBindingId: 'disabled-binding',
+    }],
+  }, {
+    OPEN_COWORK_CLOUD_BASE_URL: 'https://cloud.example.test',
+    OPEN_COWORK_GATEWAY_SERVICE_TOKEN: 'service-token',
+  })
+  const runtime = createGatewayRuntime(config, cloud)
+
+  await runtime.start()
+  try {
+    assert.deepEqual(subscribed?.channelBindingIds, ['fake-binding', 'secondary-binding'])
+  } finally {
     await runtime.stop()
   }
 })
@@ -1881,13 +1996,14 @@ test('gateway runtime drains in-flight deliveries before provider shutdown', asy
 function deliveryRecord(overrides: Partial<{
   deliveryId: string
   attemptCount: number
+  channelBindingId: string
   payload: Record<string, unknown>
 }> = {}) {
   return {
     deliveryId: overrides.deliveryId || 'delivery-1',
     orgId: 'tenant-1',
     agentId: 'agent-1',
-    channelBindingId: 'fake-binding',
+    channelBindingId: overrides.channelBindingId || 'fake-binding',
     sessionBindingId: null,
     provider: 'cli',
     target: {
@@ -1899,6 +2015,7 @@ function deliveryRecord(overrides: Partial<{
     status: 'claimed',
     attemptCount: overrides.attemptCount ?? 1,
     claimedBy: 'gateway:test',
+    lastClaimedBy: 'gateway:test',
     claimExpiresAt: new Date(Date.now() + 30_000).toISOString(),
     nextAttemptAt: new Date(0).toISOString(),
     lastError: null,

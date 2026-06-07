@@ -116,6 +116,7 @@ export class CloudChannelDomainService {
     principal: CloudPrincipal,
     input: {
       provider: ChannelProviderId
+      channelBindingId?: string | null
       externalWorkspaceId?: string | null
       externalUserId: string
       identityId?: string | null
@@ -227,6 +228,7 @@ export class CloudChannelDomainService {
   listChannelDeliveries(
     principal: CloudPrincipal,
     input: {
+      deliveryId?: string | null
       status?: ChannelDeliveryRecord['status'] | null
       channelBindingId?: string | null
       limit?: number | null
@@ -248,7 +250,7 @@ export class CloudChannelDomainService {
 
   claimNextChannelDelivery(
     principal: CloudPrincipal,
-    input: { claimedBy: string, ttlMs?: number, now?: Date },
+    input: { claimedBy: string, ttlMs?: number, now?: Date, channelBindingIds?: readonly string[] | null },
   ): Promise<ChannelDeliveryRecord | null> {
     return deliveryActions.claimNextChannelDelivery(this.options, principal, input)
   }
@@ -271,6 +273,7 @@ export class CloudChannelDomainService {
     input: {
       provider: ChannelProviderId
       providerInstanceId: string
+      channelBindingId?: string | null
       externalWorkspaceId?: string | null
       providerEventId: string
       eventType: ChannelProviderEventType
@@ -286,6 +289,7 @@ export class CloudChannelDomainService {
     principal: CloudPrincipal,
     input: {
       eventId: string
+      channelBindingId?: string | null
       claimedBy: string
       status: Extract<ChannelProviderEventRecord['status'], 'processed' | 'failed'>
       retryable?: boolean

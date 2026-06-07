@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { handleChannelDeliveriesSse, type ChannelDeliverySseTools } from './channel-delivery-sse.ts'
 import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
 import type { CloudHttpServerOptions } from '../http-server.ts'
 import type { CloudPrincipal } from '../session-service.ts'
@@ -8,7 +9,7 @@ type RouteContext = {
   url: URL
 }
 
-export type ChannelRouteTools = {
+export type ChannelRouteTools = ChannelDeliverySseTools & {
   readJsonBody(req: IncomingMessage, maxBodyBytes: number): Promise<Record<string, unknown>>
   readString(value: unknown): string | null
   readRecord(value: unknown): Record<string, unknown> | null
@@ -29,12 +30,6 @@ export type ChannelRouteTools = {
     processed: number,
     beforeProjectionSequence: number,
     extraBody?: Record<string, unknown>,
-  ): Promise<void>
-  handleChannelDeliveriesSse(
-    req: IncomingMessage,
-    res: ServerResponse,
-    options: CloudHttpServerOptions,
-    context: RouteContext,
   ): Promise<void>
 }
 
@@ -161,7 +156,8 @@ export async function handleChannelsApiRoute(input: {
     const identity = await options.service.resolveChannelIdentity(context.principal, {
       identityId: tools.readString(body.identityId),
       provider,
-      externalWorkspaceId: tools.readString(body.externalWorkspaceId),
+      channelBindingId: tools.readString(body.channelBindingId),
+      externalWorkspaceId: body.externalWorkspaceId === undefined ? undefined : tools.readString(body.externalWorkspaceId),
       externalUserId,
       accountId: tools.readString(body.accountId),
       role: tools.readEnum(body.role, ['owner', 'admin', 'member', 'approver', 'viewer'] as const),
@@ -357,7 +353,8 @@ export async function handleChannelsApiRoute(input: {
       const result = await options.service.claimChannelProviderEvent(context.principal, {
         provider,
         providerInstanceId,
-        externalWorkspaceId: tools.readString(body.externalWorkspaceId),
+        channelBindingId: tools.readString(body.channelBindingId),
+        externalWorkspaceId: body.externalWorkspaceId === undefined ? undefined : tools.readString(body.externalWorkspaceId),
         providerEventId,
         eventType,
         claimedBy,
@@ -377,6 +374,7 @@ export async function handleChannelsApiRoute(input: {
       }
       const event = await options.service.completeChannelProviderEvent(context.principal, {
         eventId: itemId,
+        channelBindingId: tools.readString(body.channelBindingId),
         claimedBy,
         status,
         retryable: body.retryable === undefined ? undefined : body.retryable === true,
@@ -393,12 +391,13 @@ export async function handleChannelsApiRoute(input: {
 
   if (collection === 'deliveries') {
     if (itemId === 'stream' && !itemAction && req.method === 'GET') {
-      await tools.handleChannelDeliveriesSse(req, res, options, context)
+      await handleChannelDeliveriesSse(req, res, options, context, tools)
       return true
     }
     if (!itemId && req.method === 'GET') {
       const status = tools.readEnum(context.url.searchParams.get('status'), ['pending', 'claimed', 'sent', 'failed', 'dead'] as const)
       const deliveries = await options.service.listChannelDeliveries(context.principal, {
+        deliveryId: tools.readString(context.url.searchParams.get('deliveryId')),
         status,
         channelBindingId: tools.readString(context.url.searchParams.get('channelBindingId')),
         limit: tools.readNonNegativeInteger(context.url.searchParams.get('limit'), 50),

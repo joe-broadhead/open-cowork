@@ -271,10 +271,13 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     }
     if (request.method === 'GET' && request.pathname === '/api/api-tokens') return jsonResponse({ tokens: state.tokens.slice(0, limitFromRequest(request, 100)) })
     if (request.method === 'POST' && request.pathname === '/api/api-tokens') {
+      const body = request.body as Record<string, unknown>
+      const channelBindingIds = Array.isArray(body?.channelBindingIds) ? body.channelBindingIds : []
       const token = {
         tokenId: `token-${state.tokens.length + 1}`,
-        name: (request.body as Record<string, unknown>)?.name || 'API token',
-        scopes: (request.body as Record<string, unknown>)?.scopes || ['desktop'],
+        name: body?.name || 'API token',
+        scopes: body?.scopes || ['desktop'],
+        channelBindingIds,
         last4: 'wxyz',
         lastUsedAt: null,
         revokedAt: null,

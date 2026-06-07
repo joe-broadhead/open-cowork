@@ -3,7 +3,7 @@ import type { CloudChannelProviderId } from '@open-cowork/cloud-client'
 
 import type { CloudGateway } from './cloud-gateway.js'
 import type { GatewayProviderConfig } from './config.js'
-import type { GatewayMetrics } from './metrics.js'
+import { ensureGatewayProviderMetrics, type GatewayMetrics } from './metrics.js'
 import { parseGatewayInteractionToken } from './render/interaction-tokens.js'
 
 export type RouteGatewayInteractionInput = {
@@ -28,6 +28,7 @@ export async function routeGatewayInteraction(input: RouteGatewayInteractionInpu
     ...interaction.resolution,
   })
   input.metrics.interactionsResolved += 1
+  ensureGatewayProviderMetrics(input.metrics, input.providerConfig).interactionsResolved += 1
 
   if (input.provider.answerInteraction) {
     try {

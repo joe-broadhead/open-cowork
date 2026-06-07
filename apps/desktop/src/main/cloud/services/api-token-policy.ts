@@ -7,7 +7,9 @@ const DEFAULT_API_TOKEN_TTL_MS = 90 * DAY_MS
 const MAX_API_TOKEN_TTL_MS = 365 * DAY_MS
 const DEFAULT_API_TOKEN_ALLOWED_SCOPES = new Set<ApiTokenScope>(['desktop', 'gateway', 'admin', 'operator'])
 
-export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'>
+export type PublicApiTokenRecord = Omit<ApiTokenRecord, 'tokenHash'> & {
+  channelBindingIds: string[]
+}
 
 export type CloudIdentityPolicy = {
   allowSelfServiceSignup: boolean
@@ -18,9 +20,12 @@ export type CloudIdentityPolicy = {
   apiTokenAllowedScopes?: readonly string[] | null
 }
 
-export function publicApiToken(token: ApiTokenRecord): PublicApiTokenRecord {
+export function publicApiToken(token: ApiTokenRecord, channelBindingIds: readonly string[] = []): PublicApiTokenRecord {
   const { tokenHash: _tokenHash, ...publicToken } = token
-  return publicToken
+  return {
+    ...publicToken,
+    channelBindingIds: [...new Set(channelBindingIds)].sort(),
+  }
 }
 
 export function resolvedSignupMode(policy: CloudIdentityPolicy): 'disabled' | 'closed' | 'invite' | 'domain' | 'open' {

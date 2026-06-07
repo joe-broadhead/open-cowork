@@ -20,12 +20,30 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
       tools.writeError(res, 400, 'API token requires a name and at least one valid scope.', options.corsOrigin)
       return true
     }
+    const channelBindingIds = readOptionalStringArray(body.channelBindingIds)
+    if (channelBindingIds === false) {
+      tools.writeError(res, 400, 'Channel binding grants must be an array of strings.', options.corsOrigin)
+      return true
+    }
     const issued = await options.service.issueApiToken(context.principal, {
       name,
       scopes,
       expiresAt: tools.readOptionalDate(body.expiresAt),
+      channelBindingIds,
     })
     tools.writeJson(res, 201, issued, options.corsOrigin)
+    return true
+  }
+
+  if (itemId && action === 'channel-bindings' && req.method === 'POST') {
+    const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+    const channelBindingId = tools.readString(body.channelBindingId)
+    if (!channelBindingId) {
+      tools.writeError(res, 400, 'Channel binding id is required.', options.corsOrigin)
+      return true
+    }
+    const result = await options.service.grantApiTokenChannelBinding(context.principal, itemId, { channelBindingId })
+    tools.writeJson(res, 200, result, options.corsOrigin)
     return true
   }
 
@@ -41,4 +59,10 @@ export async function handleApiTokensApiRoute(input: CloudApiRouteInput): Promis
 
   tools.writeError(res, 404, 'Not found.', options.corsOrigin)
   return true
+}
+
+function readOptionalStringArray(value: unknown): string[] | null | false {
+  if (value === undefined || value === null) return null
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return false
+  return [...new Set(value.map((entry) => entry.trim()).filter(Boolean))]
 }

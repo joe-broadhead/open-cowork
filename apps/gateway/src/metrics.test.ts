@@ -19,6 +19,21 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   metrics.cursorPersistenceFailures = 1
   metrics.cloudSubscriptionErrors = 1
   metrics.droppedSessionEvents = 1
+  metrics.providerMetrics.fake = {
+    id: 'fake',
+    kind: 'fake',
+    state: 'healthy',
+    incomingMessages: 2,
+    inboundDuplicates: 1,
+    inboundFailures: 1,
+    promptedMessages: 1,
+    interactionsResolved: 1,
+    deliveriesReceived: 3,
+    deliveriesSent: 2,
+    deliveryRetries: 1,
+    deliveryDeadLetters: 1,
+    webhookRequests: 4,
+  }
 
   const text = renderPrometheusMetrics(metrics, 2, 7, () => new Date('2026-01-01T00:01:00.000Z').getTime())
 
@@ -35,4 +50,7 @@ test('gateway Prometheus metrics include delivery, stream, and webhook operation
   assert.match(text, /open_cowork_gateway_session_render_dead_letters_total 1/)
   assert.match(text, /open_cowork_gateway_cursor_persistence_failures_total 1/)
   assert.match(text, /open_cowork_gateway_cloud_subscription_errors_total 1/)
+  assert.match(text, /open_cowork_gateway_provider_state\{provider_id="fake",provider_kind="fake",state="healthy"\} 1/)
+  assert.match(text, /open_cowork_gateway_provider_webhook_requests_total\{provider_id="fake",provider_kind="fake"\} 4/)
+  assert.match(text, /open_cowork_gateway_provider_interactions_resolved_total\{provider_id="fake",provider_kind="fake"\} 1/)
 })

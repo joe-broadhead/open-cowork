@@ -277,6 +277,11 @@ provider control plane.
   restarting the gateway, then revoking the old token.
 - The gateway token authenticates the gateway process only; inbound channel
   actor identity and approval authority are resolved separately by cloud.
+- Cloud records the API-token id that last claimed each channel delivery. A
+  gateway-scoped token can list, retry, or dead-letter only deliveries last
+  claimed by that same token; channel admins retain broader Cloud recovery
+  access. Run one gateway token per provider shard or deployment instance so
+  retry/dead-letter ownership is auditable.
 
 ### Provider Webhook Signing
 
@@ -533,6 +538,14 @@ channels or mint tokens, runs a loopback fake-provider Gateway against the
 deployed Cloud URL, verifies inbound prompt routing, session SSE rendering,
 approval interaction routing, async delivery, retry/dead-letter controls, and
 ephemeral token revocation.
+
+The Gateway smoke should also confirm `/diagnostics.deliveryOperator` reports
+the enabled `channelBindingIds`, and that `/deliveries` is scoped to those local
+bindings. Provider-level dashboard and alert assets must include
+`open_cowork_gateway_provider_state`,
+`open_cowork_gateway_provider_delivery_retries_total`, and
+`open_cowork_gateway_provider_delivery_dead_letters_total` before public
+provider traffic is enabled.
 
 For the full Web/Desktop/Gateway continuation parity gate:
 

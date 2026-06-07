@@ -1,11 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
+import type { ChannelDeliveryRecord } from '@open-cowork/cloud-client'
 import { resolveHttpClientSource } from '@open-cowork/shared'
 
 import { createCloudGateway, type CloudGateway } from './cloud-gateway.js'
-import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText, resolveGatewayCloudConnection } from './config.js'
+import { type GatewayConfig, redactGatewayConfig, redactGatewayDiagnosticText } from './config.js'
 import { createGatewayRuntime, type GatewayRuntime } from './gateway-runtime.js'
-import { renderPrometheusMetrics } from './metrics.js'
+import { ensureGatewayProviderMetrics, renderPrometheusMetrics } from './metrics.js'
 
 class GatewayHttpError extends Error {
   constructor(readonly status: number, message: string, readonly retryAfterMs?: number) {
@@ -103,7 +104,13 @@ export type GatewayDaemon = {
   stop(): Promise<void>
 }
 
-export function createGatewayDaemon(config: GatewayConfig, cloud: CloudGateway = createCloudGateway(resolveGatewayCloudConnection())): GatewayDaemon {
+export function createGatewayDaemon(
+  config: GatewayConfig,
+  cloud: CloudGateway = createCloudGateway({
+    ...config.cloud,
+    requestTimeoutMs: config.timeouts.cloudRequestMs,
+  }),
+): GatewayDaemon {
   const runtime = createGatewayRuntime(config, cloud)
   const http = createGatewayHttpServer(config, runtime, cloud)
 
@@ -213,6 +220,7 @@ async function handleRequest(
       writeJson(res, 401, { ok: false, error: 'Gateway admin authorization is required.' })
       return
     }
+    runtime.refreshProviderHealth()
     const body = renderPrometheusMetrics(runtime.metrics, runtime.providers.registrations.length, runtime.streams.activeCount())
     res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' })
     res.end(body)
@@ -234,6 +242,7 @@ async function handleRequest(
       ready: runtime.ready(),
       providers: providerStatus(runtime),
       metrics: runtime.metrics,
+      deliveryOperator: deliveryOperatorStatus(config, cloud),
     })
     return
   }
@@ -247,7 +256,8 @@ async function handleRequest(
       writeJson(res, 503, { ok: false, error: 'Cloud delivery listing is not available.' })
       return
     }
-    const deliveries = await cloud.listDeliveries({
+    const deliveries = await listConfiguredDeliveries(config, cloud, {
+      deliveryId: null,
       status: readDeliveryStatus(url.searchParams.get('status')),
       channelBindingId: url.searchParams.get('channelBindingId'),
       limit: readLimit(url.searchParams.get('limit'), 50),
@@ -264,9 +274,18 @@ async function handleRequest(
     }
     const deliveryId = decodeURIComponent(deliveryActionMatch[1] || '')
     const action = deliveryActionMatch[2]
+    if (!cloud?.listDeliveries) {
+      writeJson(res, 503, { ok: false, error: 'Cloud delivery listing is not available.' })
+      return
+    }
     if (action === 'retry') {
       if (!cloud?.retryDelivery) {
         writeJson(res, 503, { ok: false, error: 'Cloud delivery retry is not available.' })
+        return
+      }
+      const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId)
+      if (!scopedDelivery) {
+        writeJson(res, 404, { ok: false, error: 'Delivery not found.' })
         return
       }
       const delivery = await cloud.retryDelivery(deliveryId)
@@ -282,6 +301,11 @@ async function handleRequest(
     const lastError = payload && typeof payload === 'object' && !Array.isArray(payload)
       ? stringField((payload as Record<string, unknown>).lastError)
       : null
+    const scopedDelivery = await findConfiguredDelivery(config, cloud, deliveryId)
+    if (!scopedDelivery) {
+      writeJson(res, 404, { ok: false, error: 'Delivery not found.' })
+      return
+    }
     const delivery = await cloud.deadLetterDelivery(deliveryId, { lastError })
     writeJson(res, delivery ? 200 : 404, delivery ? { ok: true, delivery } : { ok: false, error: 'Delivery not found.' })
     return
@@ -291,6 +315,8 @@ async function handleRequest(
   if (req.method === 'POST' && webhookMatch) {
     runtime.metrics.webhookRequests += 1
     const providerId = decodeURIComponent(webhookMatch[1])
+    const providerConfig = configuredProvider(config, providerId)
+    if (providerConfig) ensureGatewayProviderMetrics(runtime.metrics, providerConfig).webhookRequests += 1
     const source = webhookSource(req, config.server.trustProxyHeaders, config.server.trustedProxyCidrs)
     enforceGatewayWebhookLimit(webhookLimiter, `request:${source}:${providerId}`)
     enforceGatewayWebhookAuthBackoff(webhookLimiter, `auth:${source}:${providerId}`)
@@ -395,6 +421,78 @@ function providerStatus(runtime: GatewayRuntime) {
     healthy: registration.healthy,
     error: registration.lastError ? redactGatewayDiagnosticText(registration.lastError) : null,
   }))
+}
+
+async function listConfiguredDeliveries(
+  config: GatewayConfig,
+  cloud: CloudGateway,
+  input: {
+    deliveryId: string | null
+    status: 'pending' | 'claimed' | 'sent' | 'failed' | 'dead' | null
+    channelBindingId: string | null
+    limit: number
+  },
+) {
+  if (!cloud.listDeliveries) return []
+  const configuredBindings = configuredChannelBindingIds(config)
+  const requestedBinding = input.channelBindingId?.trim() || null
+  const bindingIds = requestedBinding
+    ? configuredBindings.includes(requestedBinding) ? [requestedBinding] : []
+    : configuredBindings
+  if (bindingIds.length === 0) return []
+  const pages = await Promise.all(bindingIds.map((channelBindingId) => cloud.listDeliveries?.({
+    deliveryId: input.deliveryId,
+    status: input.status,
+    channelBindingId,
+    limit: input.limit,
+  }) || []))
+  const byId = new Map<string, ChannelDeliveryRecord>()
+  for (const delivery of pages.flat()) byId.set(delivery.deliveryId, delivery)
+  return [...byId.values()]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.createdAt.localeCompare(left.createdAt))
+    .slice(0, input.limit)
+}
+
+async function findConfiguredDelivery(config: GatewayConfig, cloud: CloudGateway, deliveryId: string) {
+  const deliveries = await listConfiguredDeliveries(config, cloud, {
+    deliveryId,
+    status: null,
+    channelBindingId: null,
+    limit: 1,
+  })
+  return deliveries.find((delivery) => delivery.deliveryId === deliveryId) || null
+}
+
+function configuredChannelBindingIds(config: GatewayConfig) {
+  return [...new Set(config.providers.filter((provider) => provider.enabled).map((provider) => provider.channelBindingId))]
+}
+
+function configuredProvider(config: GatewayConfig, providerId: string) {
+  return config.providers.find((provider) => provider.enabled && provider.id === providerId) || null
+}
+
+function deliveryOperatorStatus(config: GatewayConfig, cloud?: CloudGateway) {
+  const channelBindingIds = configuredChannelBindingIds(config)
+  const hasBindings = channelBindingIds.length > 0
+  const listAvailable = Boolean(cloud?.listDeliveries)
+  const retryAvailable = Boolean(cloud?.retryDelivery)
+  const deadLetterAvailable = Boolean(cloud?.deadLetterDelivery)
+  const disabledReasons = [
+    cloud ? null : 'Cloud client is not attached to this gateway HTTP server.',
+    hasBindings ? null : 'No enabled provider channel bindings are configured.',
+    listAvailable ? null : 'Cloud delivery listing is not available.',
+    retryAvailable ? null : 'Cloud delivery retry is not available.',
+    deadLetterAvailable ? null : 'Cloud delivery dead-letter is not available.',
+  ].filter(Boolean)
+
+  return {
+    scope: 'configured-channel-bindings',
+    channelBindingIds,
+    listAllowed: hasBindings && listAvailable,
+    retryAllowed: hasBindings && listAvailable && retryAvailable,
+    deadLetterAllowed: hasBindings && listAvailable && deadLetterAvailable,
+    disabledReason: disabledReasons.length > 0 ? disabledReasons.join(' ') : null,
+  }
 }
 
 function isAdminRequest(config: GatewayConfig, req: IncomingMessage) {
