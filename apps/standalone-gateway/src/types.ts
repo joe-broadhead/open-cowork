@@ -48,6 +48,10 @@ export interface StandaloneGatewayConfig {
   database: {
     url: string;
     ssl: boolean;
+    sslRejectUnauthorized: boolean;
+    sslCaPath: string | null;
+    sslCertPath: string | null;
+    sslKeyPath: string | null;
   };
   opencode: {
     baseUrl: string;
@@ -58,6 +62,7 @@ export interface StandaloneGatewayConfig {
     sessionDays: number;
     artifactDays: number;
     auditDays: number;
+    jobDays: number;
   };
   providers: StandaloneGatewayProviderConfig[];
 }
@@ -143,6 +148,18 @@ export interface StandaloneGatewayDashboardSnapshot {
   identities: StandaloneGatewayChannelIdentityRecord[];
   jobs: StandaloneGatewayJobRecord[];
   audits: StandaloneGatewayAuditRecord[];
+}
+
+export interface StandaloneGatewayRetentionResult {
+  ranAt: string;
+  sessionCutoff: string;
+  artifactCutoff: string;
+  auditCutoff: string;
+  jobCutoff: string;
+  sessionsDeleted: number;
+  artifactsDeleted: number;
+  auditEventsDeleted: number;
+  jobsDeleted: number;
 }
 
 export interface StandalonePromptInput {

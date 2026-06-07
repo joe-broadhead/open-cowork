@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadStandaloneGatewayConfig } from "../dist/config.js";
+import {
+  assertStandaloneGatewayProductionDatabaseSecurity,
+  loadStandaloneGatewayConfig,
+  standaloneGatewayProductionDatabaseSecurityIssue,
+} from "../dist/config.js";
 
 const baseEnv = {
   OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL: "postgres://gateway:gateway@127.0.0.1:5432/gateway",
@@ -16,6 +20,9 @@ test("standalone gateway config requires private OpenCode, Postgres, admin token
 
   assert.equal(config.productMode, "standalone");
   assert.equal(config.database.url, baseEnv.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_URL);
+  assert.equal(config.database.ssl, false);
+  assert.equal(config.database.sslRejectUnauthorized, true);
+  assert.equal(config.retention.jobDays, 30);
   assert.equal(config.opencode.baseUrl, "http://127.0.0.1:4096");
   assert.deepEqual(config.providers.map((provider) => ({
     id: provider.id,
@@ -26,6 +33,55 @@ test("standalone gateway config requires private OpenCode, Postgres, admin token
     kind: "webhook",
     channelBindingId: "webhook",
   }]);
+});
+
+test("standalone gateway config resolves Postgres TLS and retention windows", () => {
+  const config = loadStandaloneGatewayConfig({
+    ...baseEnv,
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL: "true",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED: "false",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CA_PATH: "/certs/ca.pem",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CERT_PATH: "/certs/client-cert.pem",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_KEY_PATH: "/certs/client-key.pem",
+    OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_JOB_DAYS: "14",
+  });
+
+  assert.equal(config.database.ssl, true);
+  assert.equal(config.database.sslRejectUnauthorized, false);
+  assert.equal(config.database.sslCaPath, "/certs/ca.pem");
+  assert.equal(config.database.sslCertPath, "/certs/client-cert.pem");
+  assert.equal(config.database.sslKeyPath, "/certs/client-key.pem");
+  assert.equal(config.retention.jobDays, 14);
+});
+
+test("standalone gateway production modes require verified Postgres TLS before serving", () => {
+  const solo = loadStandaloneGatewayConfig(baseEnv);
+  assert.doesNotThrow(() => assertStandaloneGatewayProductionDatabaseSecurity(solo));
+  assert.equal(standaloneGatewayProductionDatabaseSecurityIssue(solo), null);
+
+  const teamPlaintext = loadStandaloneGatewayConfig({
+    ...baseEnv,
+    OPEN_COWORK_STANDALONE_GATEWAY_DEPLOYMENT_MODE: "team",
+  });
+  assert.throws(
+    () => assertStandaloneGatewayProductionDatabaseSecurity(teamPlaintext),
+    /DATABASE_SSL=true/,
+  );
+  assert.match(
+    standaloneGatewayProductionDatabaseSecurityIssue(teamPlaintext) || "",
+    /DATABASE_SSL=true/,
+  );
+
+  const teamUnverified = loadStandaloneGatewayConfig({
+    ...baseEnv,
+    OPEN_COWORK_STANDALONE_GATEWAY_DEPLOYMENT_MODE: "team",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL: "true",
+    OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED: "false",
+  });
+  assert.throws(
+    () => assertStandaloneGatewayProductionDatabaseSecurity(teamUnverified),
+    /verified Postgres TLS/,
+  );
 });
 
 test("standalone gateway config rejects public OpenCode and placeholder admin secrets", () => {

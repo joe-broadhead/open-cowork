@@ -1,4 +1,4 @@
-export const STANDALONE_GATEWAY_SCHEMA_VERSION = 2;
+export const STANDALONE_GATEWAY_SCHEMA_VERSION = 3;
 
 export const standaloneGatewayMigrations = [{
   id: "0001_standalone_gateway_core",
@@ -187,8 +187,29 @@ BEGIN
 EXCEPTION WHEN duplicate_object THEN
   NULL;
 END $$;
-`,
-}];
+  `,
+  }, {
+    id: "0003_standalone_gateway_retention_indexes",
+    sql: `
+CREATE INDEX IF NOT EXISTS standalone_gateway_sessions_retention_idx
+  ON standalone_gateway_sessions (updated_at)
+  WHERE status IN ('idle', 'failed', 'completed');
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_jobs_retention_idx
+  ON standalone_gateway_jobs (updated_at)
+  WHERE status IN ('completed', 'failed', 'dead');
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_jobs_active_session_idx
+  ON standalone_gateway_jobs (session_id, status)
+  WHERE status IN ('pending', 'claimed', 'running');
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_artifacts_retention_idx
+  ON standalone_gateway_artifacts (created_at);
+
+CREATE INDEX IF NOT EXISTS standalone_gateway_artifacts_session_retention_idx
+  ON standalone_gateway_artifacts (session_id, created_at);
+  `,
+  }];
 
 export function standaloneGatewaySchemaContainsProductionTables(sql = standaloneGatewayMigrations.map((migration) => migration.sql).join("\n")): boolean {
   return [

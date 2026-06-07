@@ -30,6 +30,10 @@ export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.
     database: {
       url: databaseUrl,
       ssl: readBoolean(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL, false),
+      sslRejectUnauthorized: readBoolean(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED, true),
+      sslCaPath: readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CA_PATH),
+      sslCertPath: readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_CERT_PATH),
+      sslKeyPath: readNullable(env.OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_KEY_PATH),
     },
     opencode: {
       baseUrl: assertPrivateOpenCodeEndpoint(opencodeBaseUrl, { allowPrivateDns }).toString().replace(/\/$/, ""),
@@ -40,6 +44,7 @@ export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.
       sessionDays: readInteger(env.OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_SESSION_DAYS, 90, 1, 3650),
       artifactDays: readInteger(env.OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_ARTIFACT_DAYS, 30, 1, 3650),
       auditDays: readInteger(env.OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_AUDIT_DAYS, 365, 1, 3650),
+      jobDays: readInteger(env.OPEN_COWORK_STANDALONE_GATEWAY_RETENTION_JOB_DAYS, 30, 1, 3650),
     },
     providers: readProviders(env),
   };
@@ -47,6 +52,22 @@ export function loadStandaloneGatewayConfig(env: StandaloneGatewayEnv = process.
   if (publicBaseUrl && !adminToken) throw new Error("Public Standalone Gateway installs require an admin token.");
   if (isPlaceholderSecret(adminToken)) throw new Error("Standalone Gateway admin token is still a placeholder.");
   return config;
+}
+
+export function assertStandaloneGatewayProductionDatabaseSecurity(config: StandaloneGatewayConfig): void {
+  const issue = standaloneGatewayProductionDatabaseSecurityIssue(config);
+  if (issue) throw new Error(issue);
+}
+
+export function standaloneGatewayProductionDatabaseSecurityIssue(config: StandaloneGatewayConfig): string | null {
+  if (config.deploymentMode === "solo") return null;
+  if (!config.database.ssl) {
+    return `Standalone Gateway ${config.deploymentMode} deployments require OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true.`;
+  }
+  if (!config.database.sslRejectUnauthorized) {
+    return `Standalone Gateway ${config.deploymentMode} deployments require verified Postgres TLS. Keep OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL_REJECT_UNAUTHORIZED=true.`;
+  }
+  return null;
 }
 
 function readProviders(env: StandaloneGatewayEnv): StandaloneGatewayProviderConfig[] {

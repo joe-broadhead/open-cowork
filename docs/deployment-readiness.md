@@ -329,6 +329,9 @@ provider control plane.
 ### Backups/Restore
 
 - Back up Postgres and object storage on the same retention policy.
+- For Standalone Gateway team and enterprise deployments, run Postgres with
+  verified TLS and enable the lease-gated retention daemon for sessions,
+  artifacts, audit events, and completed/dead jobs.
 - Restore Postgres first, then object-store artifacts/checkpoints for the same
   point in time.
 - Start web with workers at zero, verify projections and session lists, start

@@ -92,6 +92,8 @@ export async function runStandaloneGatewayDoctor(input: {
   const opencode = await input.opencode.health();
   const configuredProviderIds = input.config.providers.filter((provider) => provider.enabled).map((provider) => provider.id);
   const identityAuthorization = await identityAuthorizationSummary(input.repository, repository.ok, configuredProviderIds);
+  const databaseTls = databaseTlsSummary(input.config);
+  const retention = retentionSummary(input.config);
   const schemaOk = standaloneGatewaySchemaContainsProductionTables();
   const productModeOk = input.config.productMode === "standalone";
   const providersOk = input.config.providers.length > 0;
@@ -99,10 +101,12 @@ export async function runStandaloneGatewayDoctor(input: {
   const checks: StandaloneDoctorCheck[] = [
     legacyCheck("product-mode", productModeOk, `mode=${input.config.productMode}`),
     legacyCheck("postgres", repository.ok, repository.detail),
+    legacyCheck("postgres-tls", databaseTls.ok, databaseTls.detail),
     legacyCheck("opencode-private", opencode.ok, opencode.detail),
     legacyCheck("schema", schemaOk, "standalone gateway schema covers sessions/events/jobs/leases/channel/artifact/team/audit tables"),
     legacyCheck("providers", providersOk, `${input.config.providers.length} provider(s) configured`),
     legacyCheck("identity-authorization", identitiesOk, identityAuthorization.detail),
+    legacyCheck("retention", retention.ok, retention.detail),
   ];
   const doctorChecks = [
     doctorCheck({
@@ -118,6 +122,13 @@ export async function runStandaloneGatewayDoctor(input: {
       message: repository.detail,
       remediation: "Verify Postgres connectivity, migrations, and Standalone Gateway database credentials.",
       evidence: { repository: "postgres" },
+    }),
+    doctorCheck({
+      code: "standalone_gateway.repository.tls",
+      status: databaseTls.ok ? "pass" : "fail",
+      message: databaseTls.detail,
+      remediation: "Enable OPEN_COWORK_STANDALONE_GATEWAY_DATABASE_SSL=true and keep certificate verification enabled for team or enterprise deployments.",
+      evidence: databaseTls.evidence,
     }),
     doctorCheck({
       code: "standalone_gateway.opencode.health",
@@ -150,6 +161,13 @@ export async function runStandaloneGatewayDoctor(input: {
         promptCapable: identityAuthorization.summary.promptCapable,
       },
     }),
+    doctorCheck({
+      code: "standalone_gateway.retention.policy",
+      status: retention.ok ? "pass" : "fail",
+      message: retention.detail,
+      remediation: "Set positive retention windows for sessions, artifacts, audit rows, and completed jobs.",
+      evidence: retention.evidence,
+    }),
   ];
   const ok = doctorChecks.every((check) => check.status === "pass" || check.status === "skipped");
   return {
@@ -180,6 +198,65 @@ export async function runStandaloneGatewayDoctor(input: {
       audit: "standalone_gateway_repository",
     },
     redacted: true,
+  };
+}
+
+function databaseTlsSummary(config: StandaloneGatewayConfig): {
+  ok: boolean;
+  detail: string;
+  evidence: RuntimeDoctorCheck["evidence"];
+} {
+  const productionMode = config.deploymentMode === "team" || config.deploymentMode === "enterprise";
+  const evidence = {
+    deploymentMode: config.deploymentMode,
+    enabled: config.database.ssl,
+    rejectUnauthorized: config.database.ssl ? config.database.sslRejectUnauthorized : null,
+    caConfigured: Boolean(config.database.sslCaPath),
+    certConfigured: Boolean(config.database.sslCertPath),
+    keyConfigured: Boolean(config.database.sslKeyPath),
+  };
+  if (!config.database.ssl) {
+    return {
+      ok: !productionMode,
+      detail: productionMode
+        ? `Postgres TLS is disabled for ${config.deploymentMode} deployment mode.`
+        : "Postgres TLS is disabled for solo/local deployment mode.",
+      evidence,
+    };
+  }
+  if (productionMode && !config.database.sslRejectUnauthorized) {
+    return {
+      ok: false,
+      detail: `Postgres TLS certificate verification is disabled for ${config.deploymentMode} deployment mode.`,
+      evidence,
+    };
+  }
+  return {
+    ok: true,
+    detail: config.database.sslRejectUnauthorized
+      ? "Postgres TLS is enabled with certificate verification."
+      : "Postgres TLS is enabled without certificate verification for solo/local deployment mode.",
+    evidence,
+  };
+}
+
+function retentionSummary(config: StandaloneGatewayConfig): {
+  ok: boolean;
+  detail: string;
+  evidence: RuntimeDoctorCheck["evidence"];
+} {
+  const windows = config.retention;
+  const ok = windows.sessionDays > 0 && windows.artifactDays > 0 && windows.auditDays > 0 && windows.jobDays > 0;
+  return {
+    ok,
+    detail: `Retention is lease-gated with sessions=${windows.sessionDays}d artifacts=${windows.artifactDays}d audit=${windows.auditDays}d jobs=${windows.jobDays}d.`,
+    evidence: {
+      leaseGated: true,
+      sessionDays: windows.sessionDays,
+      artifactDays: windows.artifactDays,
+      auditDays: windows.auditDays,
+      jobDays: windows.jobDays,
+    },
   };
 }
 

@@ -3,9 +3,13 @@ import assert from "node:assert/strict";
 
 import * as standaloneGateway from "../dist/index.js";
 import { exportStandaloneGatewayBackup } from "../dist/backup.js";
-import { PostgresStandaloneGatewayRepository } from "../dist/postgres-repository.js";
+import {
+  createStandaloneGatewayPostgresRepository,
+  PostgresStandaloneGatewayRepository,
+  standalonePostgresPoolOptions,
+} from "../dist/postgres-repository.js";
 import { InMemoryStandaloneGatewayRepository } from "../dist/repository.js";
-import { describeStandaloneRetention } from "../dist/retention.js";
+import { describeStandaloneRetention, runStandaloneGatewayRetention } from "../dist/retention.js";
 import { standaloneGatewayMigrations } from "../dist/schema.js";
 
 function fakeProviderKey(...parts: string[]) {
@@ -132,11 +136,182 @@ test("standalone package barrel exposes backup, retention, and repository adapte
   assert.deepEqual(backup.sessions, [{ sessionId: "session-1" }]);
   assert.deepEqual(backup.identities, [{ identityId: "identity-1" }]);
   assert.deepEqual(describeStandaloneRetention({
-    retention: { sessionDays: 30, artifactDays: 7, auditDays: 90 },
-  } as never), ["sessions:30d", "artifacts:7d", "audit:90d"]);
+    retention: { sessionDays: 30, artifactDays: 7, auditDays: 90, jobDays: 14 },
+  } as never), ["sessions:30d", "artifacts:7d", "audit:90d", "jobs:14d"]);
   assert.equal(standaloneGateway.exportStandaloneGatewayBackup, exportStandaloneGatewayBackup);
   assert.equal(standaloneGateway.describeStandaloneRetention, describeStandaloneRetention);
   assert.equal(typeof standaloneGateway.createStandaloneGatewayPostgresRepository, "function");
+});
+
+test("postgres repository factory builds explicit TLS pool options without a live database", async () => {
+  let capturedOptions: unknown;
+  let closed = false;
+  const repository = await createStandaloneGatewayPostgresRepository({
+    url: "postgres://gateway:gateway@db.example.test:5432/gateway",
+    ssl: true,
+    sslRejectUnauthorized: true,
+    sslCaPath: "/certs/ca.pem",
+    sslCertPath: "/certs/client-cert.pem",
+    sslKeyPath: "/certs/client-key.pem",
+  }, {
+    readFile: (path) => `file:${path}`,
+    createPool: (options) => {
+      capturedOptions = options;
+      return {
+        async query() {
+          return { rows: [], rowCount: 0 };
+        },
+        async end() {
+          closed = true;
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(capturedOptions, {
+    connectionString: "postgres://gateway:gateway@db.example.test:5432/gateway",
+    ssl: {
+      rejectUnauthorized: true,
+      ca: "file:/certs/ca.pem",
+      cert: "file:/certs/client-cert.pem",
+      key: "file:/certs/client-key.pem",
+    },
+  });
+  assert.deepEqual(standalonePostgresPoolOptions("postgres://local"), {
+    connectionString: "postgres://local",
+  });
+  assert.deepEqual(standalonePostgresPoolOptions({
+    url: "postgres://gateway:gateway@db.example.test:5432/gateway?sslmode=require&application_name=open-cowork",
+    ssl: false,
+    sslRejectUnauthorized: true,
+    sslCaPath: null,
+    sslCertPath: null,
+    sslKeyPath: null,
+  }), {
+    connectionString: "postgres://gateway:gateway@db.example.test:5432/gateway?sslmode=require&application_name=open-cowork",
+  });
+  assert.deepEqual(standalonePostgresPoolOptions({
+    url: "postgres://gateway:gateway@db.example.test:5432/gateway?application_name=open-cowork&sslmode=disable&ssl=0&sslrootcert=/tmp/ca.pem",
+    ssl: true,
+    sslRejectUnauthorized: true,
+    sslCaPath: null,
+    sslCertPath: null,
+    sslKeyPath: null,
+  }), {
+    connectionString: "postgres://gateway:gateway@db.example.test:5432/gateway?application_name=open-cowork",
+    ssl: {
+      rejectUnauthorized: true,
+    },
+  });
+  await repository.close?.();
+  assert.equal(closed, true);
+});
+
+test("standalone retention is lease-gated and preserves active sessions and jobs", async () => {
+  const repository = new InMemoryStandaloneGatewayRepository();
+  const now = new Date("2026-06-05T00:00:00.000Z");
+  const old = new Date("2026-02-01T00:00:00.000Z");
+  const recent = new Date("2026-06-01T00:00:00.000Z");
+  const lease = await repository.acquireDaemonLease({ leaseId: "daemon", ownerId: "node-1", ttlMs: 30_000, now });
+  assert.ok(lease);
+  const expiredSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-expired", threadId: "thread-expired" },
+    externalUserId: "user-1",
+    text: "expired session",
+    now: old,
+  });
+  await repository.updateSessionRuntime({ sessionId: expiredSession.sessionId, opencodeSessionId: "oc-expired", status: "completed", now: old });
+  const expiredJob = await repository.enqueueJob({ kind: "prompt", sessionId: expiredSession.sessionId, payload: { text: "expired" }, now: old });
+  const expiredClaim = await repository.claimNextJob({ claimedBy: "node-1", ttlMs: 30_000, now: old });
+  assert.equal(expiredClaim?.jobId, expiredJob.jobId);
+  await repository.finishJob({ jobId: expiredJob.jobId, claimToken: expiredClaim!.claimToken!, status: "completed", now: old });
+
+  const activeSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-active", threadId: "thread-active" },
+    externalUserId: "user-1",
+    text: "active session",
+    now: old,
+  });
+  await repository.enqueueJob({ kind: "prompt", sessionId: activeSession.sessionId, payload: { text: "still pending" }, now: old });
+  const reopenedSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-reopened", threadId: "thread-reopened" },
+    externalUserId: "user-1",
+    text: "old reopened session",
+    now: old,
+  });
+  const touchedSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-reopened", threadId: "thread-reopened" },
+    externalUserId: "user-1",
+    text: "touch reopened session",
+    now: recent,
+  });
+  assert.equal(touchedSession.sessionId, reopenedSession.sessionId);
+  assert.equal(touchedSession.updatedAt, recent.toISOString());
+  const runningSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-running", threadId: "thread-running" },
+    externalUserId: "user-1",
+    text: "running session",
+    now: old,
+  });
+  await repository.updateSessionRuntime({ sessionId: runningSession.sessionId, opencodeSessionId: "oc-running", status: "running", now: old });
+  const recentSession = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-recent", threadId: "thread-recent" },
+    externalUserId: "user-1",
+    text: "recent session",
+    now: recent,
+  });
+  await repository.recordAudit("old.audit", "user-1", { token: "secret-token" }, old);
+  await repository.recordAudit("recent.audit", "user-1", { note: "keep" }, recent);
+
+  const config = {
+    retention: { sessionDays: 30, artifactDays: 30, auditDays: 30, jobDays: 30 },
+  } as never;
+  assert.equal(await runStandaloneGatewayRetention({
+    repository,
+    config,
+    lease: { leaseId: "daemon", ownerId: "node-1", leaseToken: "wrong-token" },
+    now,
+  }), null);
+
+  const result = await runStandaloneGatewayRetention({
+    repository,
+    config,
+    lease: { leaseId: "daemon", ownerId: "node-1", leaseToken: lease.leaseToken },
+    now,
+  });
+  assert.equal(result?.sessionsDeleted, 1);
+  assert.equal(result?.jobsDeleted, 1);
+  assert.equal(result?.auditEventsDeleted, 1);
+  const snapshot = await repository.dashboardSnapshot(20);
+  assert.equal(snapshot.sessions.some((session) => session.sessionId === expiredSession.sessionId), false);
+  assert.equal(snapshot.sessions.some((session) => session.sessionId === activeSession.sessionId), true);
+  assert.equal(snapshot.sessions.some((session) => session.sessionId === reopenedSession.sessionId), true);
+  assert.equal(snapshot.sessions.some((session) => session.sessionId === runningSession.sessionId), true);
+  assert.equal(snapshot.sessions.some((session) => session.sessionId === recentSession.sessionId), true);
+  assert.equal(snapshot.jobs.some((job) => job.jobId === expiredJob.jobId), false);
+  assert.equal(snapshot.audits.some((audit) => audit.action === "old.audit"), false);
+  assert.equal(snapshot.audits.some((audit) => audit.action === "recent.audit"), true);
+  const retentionAudit = snapshot.audits.find((audit) => audit.action === "standalone.retention.pruned");
+  assert.equal(retentionAudit?.metadata.sessionsDeleted, 1);
+  assert.equal(retentionAudit?.metadata.jobsDeleted, 1);
 });
 
 test("postgres repository adapter maps readiness and daemon lease rows without a live database", async () => {
@@ -316,6 +491,107 @@ test("postgres repository adapter maps readiness and daemon lease rows without a
   assert.ok(queries.some((query) => query.includes("RETURNING *")));
 });
 
+test("postgres repository retention is transactional and protected by the daemon lease", async () => {
+  const now = new Date("2026-06-05T00:00:00.000Z");
+  const queries: Array<{ sql: string; params?: unknown[] }> = [];
+  let released = false;
+  const client = {
+    async query(sql: string, params?: unknown[]) {
+      queries.push({ sql, params });
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT lease_id")) return { rows: [{ lease_id: "daemon" }], rowCount: 1 };
+      if (sql.includes("DELETE FROM standalone_gateway_artifacts")) return { rows: [], rowCount: 2 };
+      if (sql.includes("DELETE FROM standalone_gateway_sessions")) return { rows: [], rowCount: 3 };
+      if (sql.includes("DELETE FROM standalone_gateway_jobs")) return { rows: [], rowCount: 4 };
+      if (sql.includes("DELETE FROM standalone_gateway_audit_events")) return { rows: [], rowCount: 5 };
+      if (sql.includes("INSERT INTO standalone_gateway_audit_events")) return { rows: [], rowCount: 1 };
+      throw new Error(`Unexpected retention query: ${sql}`);
+    },
+    release() {
+      released = true;
+    },
+  };
+  const repository = new PostgresStandaloneGatewayRepository({
+    async connect() {
+      return client;
+    },
+    async query() {
+      throw new Error("retention should use an explicit transaction client");
+    },
+  } as never);
+
+  const result = await repository.pruneRetention({
+    retention: { sessionDays: 30, artifactDays: 7, auditDays: 90, jobDays: 14 },
+    leaseId: "daemon",
+    ownerId: "node-1",
+    leaseToken: "lease-token",
+    now,
+  });
+
+  assert.equal(result?.sessionsDeleted, 3);
+  assert.equal(result?.artifactsDeleted, 2);
+  assert.equal(result?.auditEventsDeleted, 5);
+  assert.equal(result?.jobsDeleted, 4);
+  assert.equal(queries[0]?.sql, "BEGIN");
+  assert.equal(queries.at(-1)?.sql, "COMMIT");
+  assert.equal(released, true);
+  const retentionSql = queries.map((query) => query.sql).join("\n");
+  assert.match(retentionSql, /FOR UPDATE/);
+  assert.match(retentionSql, /NOT EXISTS/);
+  assert.match(retentionSql, /jobs.status IN \('pending', 'claimed', 'running'\)/);
+  assert.match(retentionSql, /FROM standalone_gateway_artifacts artifacts/);
+  assert.match(retentionSql, /artifacts.created_at >= \$2/);
+  assert.match(retentionSql, /status IN \('completed', 'failed', 'dead'\)/);
+});
+
+test("postgres repository touches existing sessions before appending new message events", async () => {
+  const now = new Date("2026-06-01T00:00:00.000Z");
+  const queries: string[] = [];
+  const repository = new PostgresStandaloneGatewayRepository({
+    async query(sql: string, params?: unknown[]) {
+      queries.push(sql);
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO standalone_gateway_sessions")) {
+        return {
+          rows: [{
+            session_id: "session-existing",
+            opencode_session_id: "oc-existing",
+            title: "Existing",
+            status: "idle",
+            provider: "webhook-ci",
+            provider_kind: "webhook",
+            provider_workspace_id: "",
+            channel_binding_id: "webhook",
+            external_user_id: "user-1",
+            external_chat_id: "chat-1",
+            external_thread_id: "thread-1",
+            last_event_sequence: 7,
+            created_at: "2026-01-01T00:00:00.000Z",
+            updated_at: params?.[9],
+          }],
+          rowCount: 1,
+        };
+      }
+      throw new Error(`Unexpected findOrCreate query: ${sql}`);
+    },
+  } as never);
+
+  const session = await repository.findOrCreateSession({
+    provider: "webhook-ci",
+    providerKind: "webhook",
+    channelBindingId: "webhook",
+    target: { provider: "webhook-ci", providerKind: "webhook", chatId: "chat-1", threadId: "thread-1" },
+    externalUserId: "user-1",
+    text: "hello",
+    now,
+  });
+
+  assert.equal(session.sessionId, "session-existing");
+  assert.equal(session.updatedAt, now.toISOString());
+  assert.match(queries.join("\n"), /updated_at = EXCLUDED\.updated_at/);
+  assert.equal(queries.at(-1), "COMMIT");
+});
+
 test("postgres repository migrations skip applied migration ids before replaying old indexes", async () => {
   const queries: Array<{ sql: string; params?: unknown[] }> = [];
   const pool = {
@@ -329,6 +605,7 @@ test("postgres repository migrations skip applied migration ids before replaying
       if (sql.includes("INSERT INTO standalone_gateway_schema_migrations")) return { rows: [], rowCount: 1 };
       if (sql.includes("0001_standalone_gateway_core")) throw new Error("migration id should not be embedded in SQL");
       if (sql.includes("standalone_gateway_sessions_provider_workspace_thread_unique")) return { rows: [], rowCount: 0 };
+      if (sql.includes("standalone_gateway_sessions_retention_idx")) return { rows: [], rowCount: 0 };
       throw new Error(`Unexpected migration query: ${sql}`);
     },
   };
@@ -339,6 +616,18 @@ test("postgres repository migrations skip applied migration ids before replaying
   const migrationSql = queries.map((query) => query.sql).join("\n");
   assert.equal(migrationSql.includes("CREATE UNIQUE INDEX IF NOT EXISTS standalone_gateway_sessions_provider_thread_unique"), false);
   assert.equal(migrationSql.includes("standalone_gateway_sessions_provider_workspace_thread_unique"), true);
+  assert.equal(migrationSql.includes("standalone_gateway_jobs_active_session_idx"), true);
+});
+
+test("standalone retention migration indexes prune and active-job lookups", () => {
+  const migration = standaloneGatewayMigrations.find((entry) => entry.id === "0003_standalone_gateway_retention_indexes");
+  assert.ok(migration);
+  assert.match(migration.sql, /standalone_gateway_sessions_retention_idx/);
+  assert.match(migration.sql, /WHERE status IN \('idle', 'failed', 'completed'\)/);
+  assert.match(migration.sql, /standalone_gateway_jobs_retention_idx/);
+  assert.match(migration.sql, /standalone_gateway_jobs_active_session_idx/);
+  assert.match(migration.sql, /standalone_gateway_artifacts_retention_idx/);
+  assert.match(migration.sql, /standalone_gateway_artifacts_session_retention_idx/);
 });
 
 test("standalone identity migration drops legacy provider-user uniqueness by catalog lookup", () => {

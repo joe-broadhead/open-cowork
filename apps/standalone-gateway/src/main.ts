@@ -1,32 +1,48 @@
 import { hostname } from "node:os";
 
-import { loadStandaloneGatewayConfig } from "./config.js";
+import {
+  assertStandaloneGatewayProductionDatabaseSecurity,
+  loadStandaloneGatewayConfig,
+  standaloneGatewayProductionDatabaseSecurityIssue,
+} from "./config.js";
 import { runStandaloneGatewayDoctor } from "./doctor.js";
 import { createSdkOpenCodeAdapter } from "./opencode.js";
 import { createStandaloneGatewayPostgresRepository } from "./postgres-repository.js";
 import { createStandaloneProviderRegistry } from "./provider-registry.js";
+import { runStandaloneGatewayRetention } from "./retention.js";
 import { normalizeIdentityRole, normalizeIdentityStatus } from "./repository.js";
 import { createStandaloneGatewayRuntime } from "./runtime.js";
 import { createStandaloneGatewayServer } from "./server.js";
 import { runStandaloneGatewaySmoke } from "./smoke.js";
+import type { StandaloneGatewayRepository } from "./repository.js";
 
 const command = process.argv[2] || "serve";
+const daemonLeaseId = "standalone-gateway:daemon";
+const daemonLeaseTtlMs = 30_000;
+const daemonLeaseRenewalMs = 10_000;
+const maintenanceIntervalMs = 5_000;
+const retentionIntervalMs = 60 * 60 * 1000;
 
 if (command === "smoke") {
   const result = await runStandaloneGatewaySmoke();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } else {
   const config = loadStandaloneGatewayConfig();
-  const repository = await createStandaloneGatewayPostgresRepository(config.database.url);
-  await repository.migrate();
   const opencode = createSdkOpenCodeAdapter({ baseUrl: config.opencode.baseUrl });
 
   if (command === "doctor") {
+    const databaseSecurityIssue = standaloneGatewayProductionDatabaseSecurityIssue(config);
+    const repository = databaseSecurityIssue
+      ? skippedDoctorRepository(databaseSecurityIssue)
+      : await createMigratedRepository(config.database);
     const result = await runStandaloneGatewayDoctor({ config, repository, opencode });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     await repository.close?.();
     process.exitCode = result.ok ? 0 : 1;
   } else if (command === "identity") {
+    assertStandaloneGatewayProductionDatabaseSecurity(config);
+    const repository = await createStandaloneGatewayPostgresRepository(config.database);
+    await repository.migrate();
     const action = process.argv[3] || "";
     if (action !== "upsert") {
       throw new Error("Unknown standalone gateway identity command. Use: identity upsert --provider <id> --external-user-id <id> --role <owner|admin|member|approver|viewer> [--status <active|disabled>] [--provider-workspace-id <id>].");
@@ -46,11 +62,14 @@ if (command === "smoke") {
     process.stdout.write(`${JSON.stringify({ ok: true, identity }, null, 2)}\n`);
     await repository.close?.();
   } else if (command === "serve") {
+    assertStandaloneGatewayProductionDatabaseSecurity(config);
+    const repository = await createStandaloneGatewayPostgresRepository(config.database);
+    await repository.migrate();
     const ownerId = `${hostname()}:${process.pid}`;
     const lease = await repository.acquireDaemonLease({
-      leaseId: "standalone-gateway:daemon",
+      leaseId: daemonLeaseId,
       ownerId,
-      ttlMs: 30_000,
+      ttlMs: daemonLeaseTtlMs,
     });
     if (!lease) {
       throw new Error("Another Standalone Gateway daemon owns the active provider/runtime lease.");
@@ -58,10 +77,10 @@ if (command === "smoke") {
     let leaseToken = lease.leaseToken;
     const leaseRenewal = setInterval(() => {
       void repository.renewDaemonLease({
-        leaseId: "standalone-gateway:daemon",
+        leaseId: daemonLeaseId,
         ownerId,
         leaseToken,
-        ttlMs: 30_000,
+        ttlMs: daemonLeaseTtlMs,
       }).then((renewed) => {
         if (!renewed) throw new Error("Lost Standalone Gateway daemon lease.");
         leaseToken = renewed.leaseToken;
@@ -69,28 +88,47 @@ if (command === "smoke") {
         process.stderr.write(`Standalone Gateway lease renewal failed: ${error instanceof Error ? error.message : String(error)}\n`);
         process.exit(1);
       });
-    }, 10_000);
+    }, daemonLeaseRenewalMs);
 
     const runtime = createStandaloneGatewayRuntime({ repository, opencode });
     const providers = createStandaloneProviderRegistry(config);
     await providers.start((providerConfig, message) =>
       runtime.handleMessage(providers.get(providerConfig.id)!.provider, providerConfig, message)
     );
-    const jobRunner = setInterval(() => {
-      void runtime.runDueJobs(ownerId).catch((error: unknown) => {
-        process.stderr.write(`Standalone Gateway job runner failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    let maintenanceRunning = false;
+    let nextRetentionAt = 0;
+    const maintenanceRunner = setInterval(() => {
+      if (maintenanceRunning) return;
+      maintenanceRunning = true;
+      void (async () => {
+        await runtime.runDueJobs(ownerId);
+        const now = Date.now();
+        if (now < nextRetentionAt) return;
+        const result = await runStandaloneGatewayRetention({
+          repository,
+          config,
+          lease: { leaseId: daemonLeaseId, ownerId, leaseToken },
+        });
+        if (!result) {
+          throw new Error("Standalone Gateway retention skipped because the daemon lease is not active.");
+        }
+        nextRetentionAt = Date.now() + retentionIntervalMs;
+      })().catch((error: unknown) => {
+        process.stderr.write(`Standalone Gateway maintenance runner failed: ${error instanceof Error ? error.message : String(error)}\n`);
+      }).finally(() => {
+        maintenanceRunning = false;
       });
-    }, 5_000);
+    }, maintenanceIntervalMs);
     const server = createStandaloneGatewayServer({ config, repository, opencode, providers });
     await server.listen();
     process.stdout.write(`Open Cowork Standalone Gateway listening on ${server.url() || `${config.server.host}:${config.server.port}`}\n`);
     const shutdown = async () => {
       clearInterval(leaseRenewal);
-      clearInterval(jobRunner);
+      clearInterval(maintenanceRunner);
       await server.close().catch(() => undefined);
       await providers.stop().catch(() => undefined);
       await repository.releaseDaemonLease({
-        leaseId: "standalone-gateway:daemon",
+        leaseId: daemonLeaseId,
         ownerId,
         leaseToken,
       }).catch(() => undefined);
@@ -100,9 +138,28 @@ if (command === "smoke") {
     process.once("SIGTERM", () => void shutdown().then(() => process.exit(0)));
   } else {
     process.stderr.write(`Unknown standalone gateway command ${command}. Use serve, doctor, or smoke.\n`);
-    await repository.close?.();
     process.exitCode = 1;
   }
+}
+
+async function createMigratedRepository(
+  database: Parameters<typeof createStandaloneGatewayPostgresRepository>[0],
+): Promise<StandaloneGatewayRepository> {
+  const repository = await createStandaloneGatewayPostgresRepository(database);
+  await repository.migrate();
+  return repository;
+}
+
+function skippedDoctorRepository(
+  reason: string,
+): Pick<StandaloneGatewayRepository, "readiness"> & { close?: StandaloneGatewayRepository["close"] } {
+  return {
+    readiness: async () => ({
+      ok: false,
+      detail: `Postgres readiness skipped because ${reason}`,
+    }),
+    close: undefined,
+  };
 }
 
 function parseArgs(argv: string[]): Record<string, string> {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { standaloneRetentionCutoffs } from "./retention.js";
 import { redactSecretRecord, redactSecretText } from "./redaction.js";
 import type {
   StandaloneGatewayAuditRecord,
@@ -13,6 +14,7 @@ import type {
   StandaloneGatewayIdentityAuthorizationSummary,
   StandaloneGatewayIdentityRole,
   StandaloneGatewayIdentityStatus,
+  StandaloneGatewayRetentionResult,
   StandaloneGatewaySessionRecord,
   StandalonePromptInput,
 } from "./types.js";
@@ -43,6 +45,13 @@ export interface StandaloneGatewayRepository {
   listSessions(limit?: number): Promise<StandaloneGatewaySessionRecord[]>;
   dashboardSnapshot(limit?: number): Promise<StandaloneGatewayDashboardSnapshot>;
   recordAudit(action: string, actor: string, metadata?: Record<string, unknown>, now?: Date): Promise<StandaloneGatewayAuditRecord>;
+  pruneRetention(input: {
+    retention: { sessionDays: number; artifactDays: number; auditDays: number; jobDays: number };
+    leaseId: string;
+    ownerId: string;
+    leaseToken: string;
+    now?: Date;
+  }): Promise<StandaloneGatewayRetentionResult | null>;
   close?(): Promise<void>;
 }
 
@@ -104,8 +113,12 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
       session.externalChatId === input.target.chatId &&
       session.externalThreadId === externalThreadId
     );
-    if (existing) return { ...existing };
     const now = (input.now || new Date()).toISOString();
+    if (existing) {
+      const touched = { ...existing, updatedAt: now };
+      this.sessions.set(touched.sessionId, touched);
+      return { ...touched };
+    }
     const session: StandaloneGatewaySessionRecord = {
       sessionId: randomUUID(),
       opencodeSessionId: null,
@@ -287,10 +300,71 @@ export class InMemoryStandaloneGatewayRepository implements StandaloneGatewayRep
     return { ...audit, metadata: { ...audit.metadata } };
   }
 
+  async pruneRetention(input: {
+    retention: { sessionDays: number; artifactDays: number; auditDays: number; jobDays: number };
+    leaseId: string;
+    ownerId: string;
+    leaseToken: string;
+    now?: Date;
+  }): Promise<StandaloneGatewayRetentionResult | null> {
+    const now = input.now || new Date();
+    const lease = this.leases.get(input.leaseId);
+    if (
+      !lease ||
+      lease.ownerId !== input.ownerId ||
+      lease.leaseToken !== input.leaseToken ||
+      new Date(lease.expiresAt).getTime() <= now.getTime()
+    ) {
+      return null;
+    }
+    const cutoffs = standaloneRetentionCutoffs(input.retention, now);
+    let sessionsDeleted = 0;
+    for (const session of [...this.sessions.values()]) {
+      if (
+        new Date(session.updatedAt).getTime() < cutoffs.sessionCutoff.getTime() &&
+        isRetainableSessionStatus(session.status) &&
+        !this.hasActiveJobForSession(session.sessionId)
+      ) {
+        this.sessions.delete(session.sessionId);
+        this.events.delete(session.sessionId);
+        sessionsDeleted += 1;
+      }
+    }
+    let jobsDeleted = 0;
+    for (const job of [...this.jobs.values()]) {
+      if (
+        new Date(job.updatedAt).getTime() < cutoffs.jobCutoff.getTime() &&
+        isTerminalJobStatus(job.status)
+      ) {
+        this.jobs.delete(job.jobId);
+        jobsDeleted += 1;
+      }
+    }
+    let auditEventsDeleted = 0;
+    for (let index = this.audits.length - 1; index >= 0; index -= 1) {
+      if (new Date(this.audits[index]!.createdAt).getTime() < cutoffs.auditCutoff.getTime()) {
+        this.audits.splice(index, 1);
+        auditEventsDeleted += 1;
+      }
+    }
+    const result = retentionResult(now, cutoffs, {
+      sessionsDeleted,
+      artifactsDeleted: 0,
+      auditEventsDeleted,
+      jobsDeleted,
+    });
+    await this.recordAudit("standalone.retention.pruned", input.ownerId, retentionAuditMetadata(result), now);
+    return result;
+  }
+
   private requireSession(sessionId: string): StandaloneGatewaySessionRecord {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Unknown standalone gateway session ${sessionId}.`);
     return session;
+  }
+
+  private hasActiveJobForSession(sessionId: string): boolean {
+    return [...this.jobs.values()].some((job) => job.sessionId === sessionId && !isTerminalJobStatus(job.status));
   }
 }
 
@@ -331,4 +405,50 @@ function identityKey(provider: string, providerWorkspaceId: string | null, exter
 
 function cloneIdentity(identity: StandaloneGatewayChannelIdentityRecord): StandaloneGatewayChannelIdentityRecord {
   return { ...identity };
+}
+
+export function retentionResult(
+  now: Date,
+  cutoffs: {
+    sessionCutoff: Date;
+    artifactCutoff: Date;
+    auditCutoff: Date;
+    jobCutoff: Date;
+  },
+  counts: {
+    sessionsDeleted: number;
+    artifactsDeleted: number;
+    auditEventsDeleted: number;
+    jobsDeleted: number;
+  },
+): StandaloneGatewayRetentionResult {
+  return {
+    ranAt: now.toISOString(),
+    sessionCutoff: cutoffs.sessionCutoff.toISOString(),
+    artifactCutoff: cutoffs.artifactCutoff.toISOString(),
+    auditCutoff: cutoffs.auditCutoff.toISOString(),
+    jobCutoff: cutoffs.jobCutoff.toISOString(),
+    ...counts,
+  };
+}
+
+export function retentionAuditMetadata(result: StandaloneGatewayRetentionResult): Record<string, unknown> {
+  return {
+    sessionCutoff: result.sessionCutoff,
+    artifactCutoff: result.artifactCutoff,
+    auditCutoff: result.auditCutoff,
+    jobCutoff: result.jobCutoff,
+    sessionsDeleted: result.sessionsDeleted,
+    artifactsDeleted: result.artifactsDeleted,
+    auditEventsDeleted: result.auditEventsDeleted,
+    jobsDeleted: result.jobsDeleted,
+  };
+}
+
+function isRetainableSessionStatus(status: StandaloneGatewaySessionRecord["status"]): boolean {
+  return status === "idle" || status === "failed" || status === "completed";
+}
+
+function isTerminalJobStatus(status: StandaloneGatewayJobRecord["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "dead";
 }
