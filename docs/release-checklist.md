@@ -189,10 +189,24 @@ and linked from the release Go/No-Go report.
       decision, Accepted Launch Tier, Known limits, Cost and scaling notes,
       Final smoke status, and Findings Workflow.
 - [ ] final Cloud Web/Desktop/Gateway smoke gates passed after the soak run.
-- [ ] Cloud Web and Desktop visual parity checklist completed from
-      `docs/cloud-web-workbench.md`: shell/nav/topbar, cards/panels, controls,
-      chat/thread runtime surfaces, admin/settings surfaces, responsive layout,
-      loading/empty/error states, and `/assets/fonts/*.woff2` font loading.
+- [ ] Cloud Web and Desktop visual parity checklist completed from the Studio
+      Production Visual QA Matrix in `docs/cloud-web-workbench.md`: Home/Chat
+      and composer, Projects/thread history, runtime review, approvals,
+      questions, coworker picker/cards, delegated specialist lanes, Team,
+      Playbooks, Tools & Skills, Channels, Artifacts, Settings/Admin,
+      BYOK/token/Gateway/audit/diagnostics, responsive desktop/tablet/mobile
+      layout, loading/empty/error/disabled/permission/offline/retry states,
+      destructive confirmations, one-time reveal flows, and
+      `/assets/fonts/*.woff2` font loading.
+- [ ] Studio production audit checklist completed from
+      `docs/cloud-web-workbench.md`: canonical shared tokens, shared Studio
+      primitives, shared product vocabulary, Cloud API client-only browser
+      boundary, secondary Admin path, safe redaction, honest performance
+      budgets, and docs that describe shipped behavior only.
+- [ ] OpenWiki/Knowledge deferral verified: no Cloud Web route, no visible CTA,
+      no runtime dependency, no data-sync claim, no local OpenWiki checkout
+      coupling, and a separate future roadmap exists before any Knowledge work
+      starts.
 
 ## Tagged release
 

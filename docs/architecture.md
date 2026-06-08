@@ -139,6 +139,13 @@ workspace authorities:
   runtime still executes; remote Gateway/mobile/Cloud callers only reach it
   through explicit, revocable pairing without public Desktop or OpenCode ports.
 
+Cloud Web's browser contract is documented in
+[Cloud Web Studio](cloud-web-workbench.md). Its route/API matrix, admin matrix,
+and production QA contract are product-surface gates only: they require Desktop
+and Cloud Web to share Studio vocabulary, design tokens, primitives, and visible
+state coverage while keeping OpenCode as the execution authority and the Cloud
+API as the browser boundary.
+
 A thread belongs to exactly one workspace. Local threads do not become cloud
 threads unless a user intentionally creates or imports cloud-safe content
 through an explicit product flow. Normal sync is product-state sync, not
