@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { accessSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { UI_THEME_PRESETS } from '@open-cowork/shared'
+import { DEFAULT_UI_ACCENT_PRESET_ID, UI_ACCENT_PRESETS } from '@open-cowork/shared'
 import { CLOUD_WEB_ROUTES } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
 import {
@@ -392,20 +392,27 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
       await page.waitForSelector('body[data-react-admin-surfaces="active"]', { timeout: 10_000 })
       await page.locator('#cloud-theme-preset').selectOption('frappe')
       try {
-        await page.waitForFunction((accent: string) => (
-          document.documentElement.dataset.uiTheme === 'frappe'
-          && document.documentElement.style.getPropertyValue('--color-accent') === accent
-        ), UI_THEME_PRESETS.frappe.dark.accent)
+        await page.waitForFunction(({ accent, accentId }: { accent: string, accentId: string }) => {
+          const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
+          return document.documentElement.dataset.uiTheme === 'frappe'
+            && accentSelect?.value === accentId
+            && document.documentElement.style.getPropertyValue('--color-accent') === accent
+        }, { accent: UI_ACCENT_PRESETS[DEFAULT_UI_ACCENT_PRESET_ID].accent, accentId: DEFAULT_UI_ACCENT_PRESET_ID })
       } catch (error) {
         const debug = await page.evaluate(() => {
           const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement | null
+          const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
           return {
             theme: document.documentElement.dataset.uiTheme || null,
             accent: document.documentElement.style.getPropertyValue('--color-accent') || null,
             selectValue: select?.value || null,
             selectDisabled: select?.disabled || false,
             selectLocked: select?.dataset.tenantBrandingLocked || null,
+            accentSelectValue: accentSelect?.value || null,
+            accentSelectDisabled: accentSelect?.disabled || false,
+            accentSelectLocked: accentSelect?.dataset.tenantBrandingLocked || null,
             storedTheme: localStorage.getItem('open-cowork-cloud-ui-theme'),
+            storedAccent: localStorage.getItem('open-cowork-cloud-ui-accent'),
           }
         })
         throw new Error(`Cloud Web real browser smoke did not apply selected theme: ${JSON.stringify(debug)}`, {
@@ -413,9 +420,10 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
         })
       }
       assert.equal(await page.evaluate(() => document.documentElement.dataset.uiTheme), 'frappe')
+      assert.equal(await page.locator('#cloud-theme-accent').inputValue(), DEFAULT_UI_ACCENT_PRESET_ID)
       assert.equal(
         await page.evaluate(() => document.documentElement.style.getPropertyValue('--color-accent')),
-        UI_THEME_PRESETS.frappe.dark.accent,
+        UI_ACCENT_PRESETS[DEFAULT_UI_ACCENT_PRESET_ID].accent,
       )
     }
     assert.equal(await page.locator('[data-cloud-react-shell]').getAttribute('data-cloud-react-shell'), 'ssr')

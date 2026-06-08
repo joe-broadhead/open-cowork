@@ -17,7 +17,7 @@ import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
-import { DEFAULT_CLOUD_THEME_PRESET, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
+import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
@@ -28,6 +28,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
   const branding = resolvePublicBranding(rawBranding)
   const tenantBrandingLocked = hasPublicBrandingThemeOverride(rawBranding)
   const themePresets = cloudThemePresetOptions()
+  const accentPresets = cloudAccentPresetOptions()
   const copy = branding.dashboard || DEFAULT_WEBSITE_PUBLIC_BRANDING.dashboard || {}
   const labels = branding.managedOrgConnectionLabels || DEFAULT_WEBSITE_PUBLIC_BRANDING.managedOrgConnectionLabels || {}
   const bootstrap: CloudWebClientBootstrap = {
@@ -37,8 +38,11 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     publicBranding: branding,
     theme: {
       defaultPreset: DEFAULT_CLOUD_THEME_PRESET,
+      defaultScheme: DEFAULT_CLOUD_THEME_SCHEME,
+      defaultAccent: DEFAULT_CLOUD_THEME_ACCENT_PRESET,
       tenantBrandingLocked,
       presets: themePresets,
+      accents: accentPresets,
     },
     routes: CLOUD_WEB_ROUTES,
     defaultRoute: DEFAULT_CLOUD_WEB_ROUTE,

@@ -1,11 +1,11 @@
 export function cloudWebsiteComponentStyles() {
   return String.raw`    a {
-      color: var(--accent);
+      color: var(--accent-text);
       text-decoration: none;
       transition: color var(--dur-1) var(--ease-out);
     }
     a:hover {
-      color: var(--accent-strong);
+      color: var(--accent-text);
       text-decoration: underline;
     }
     .sr-only {
@@ -64,9 +64,9 @@ export function cloudWebsiteComponentStyles() {
     button.primary {
       position: relative;
       overflow: hidden;
-      background: var(--accent);
-      border-color: color-mix(in srgb, var(--accent) 82%, var(--text) 18%);
-      color: var(--color-accent-foreground);
+      background: var(--accent-action-fill);
+      border-color: var(--accent-line);
+      color: var(--accent-action-foreground);
       box-shadow: var(--shadow-1), var(--specular);
     }
     button.primary::after {
@@ -85,8 +85,8 @@ export function cloudWebsiteComponentStyles() {
       z-index: 1;
     }
     button.primary:hover:not(:disabled) {
-      background: var(--accent-strong);
-      border-color: var(--accent-strong);
+      background: var(--accent-action-fill);
+      border-color: var(--accent-line);
       box-shadow: var(--glow-accent), var(--shadow-2), var(--specular-strong);
       transform: translateY(calc(-1 * var(--border-width-1)));
     }
@@ -96,7 +96,7 @@ export function cloudWebsiteComponentStyles() {
     }
     button.secondary {
       background: var(--color-elevated);
-      color: var(--accent);
+      color: var(--accent-text);
       box-shadow: var(--shadow-1), var(--specular);
     }
     button.ghost {
@@ -405,7 +405,7 @@ export function cloudWebsiteComponentStyles() {
       font-weight: 650;
     }
     .row-link:hover {
-      color: var(--accent);
+      color: var(--accent-text);
       border-color: transparent;
       background: transparent;
       text-decoration: underline;
@@ -458,7 +458,7 @@ export function cloudWebsiteComponentStyles() {
       inset-inline-start: 0;
       width: 2px;
       border-radius: var(--radius-full);
-      background: var(--accent);
+      background: var(--accent-gradient);
       box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 42%, transparent);
       opacity: 0;
       transform: scaleY(0);

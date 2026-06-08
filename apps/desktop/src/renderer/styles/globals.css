@@ -50,6 +50,7 @@
   --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
   --color-accent: var(--color-accent);
+  --color-accent-2: var(--color-accent-2);
   --color-accent-hover: var(--color-accent-hover);
   --color-green: var(--color-green);
   --color-amber: var(--color-amber);
@@ -516,9 +517,9 @@ body::after {
 .ui-button--primary {
   position: relative;
   overflow: hidden;
-  background: var(--color-accent);
-  color: var(--color-accent-foreground);
-  border-color: color-mix(in srgb, var(--color-accent) 82%, var(--color-text) 18%);
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
+  border-color: var(--accent-line);
   box-shadow: var(--shadow-1), var(--specular);
 }
 
@@ -541,7 +542,7 @@ body::after {
 }
 
 .ui-button--primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: var(--accent-action-fill);
   box-shadow: var(--glow-accent), var(--shadow-2), var(--specular-strong);
   transform: translateY(calc(-1 * var(--border-width-1)));
 }
@@ -986,8 +987,10 @@ body::after {
 .studio-shell__mark {
   width: var(--control-h-lg);
   height: var(--control-h-lg);
-  color: var(--color-accent);
+  background: var(--accent-action-fill);
+  color: var(--accent-action-foreground);
   font-weight: 750;
+  box-shadow: var(--glow-soft), var(--specular);
 }
 
 .studio-shell__brand-name,
@@ -1102,7 +1105,7 @@ body::after {
 }
 
 .studio-nav__badge {
-  color: var(--color-accent);
+  color: var(--accent-text);
   font-size: var(--text-xs);
   line-height: var(--lh-xs);
 }
@@ -1344,7 +1347,7 @@ body::after {
 .ui-badge--accent {
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
   border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);
-  color: var(--color-accent);
+  color: var(--accent-text);
 }
 
 .ui-badge--success {
@@ -2112,6 +2115,15 @@ body::after {
 
 .new-thread-trigger {
   justify-content: flex-start;
+  background: var(--accent-action-fill);
+  border-color: var(--accent-line);
+  color: var(--accent-action-foreground);
+  box-shadow: var(--shadow-1), var(--specular);
+}
+
+.new-thread-trigger:hover:not(:disabled) {
+  background: var(--accent-action-fill);
+  box-shadow: var(--glow-soft), var(--shadow-2), var(--specular-strong);
 }
 
 .ui-card.new-thread-menu-option {
@@ -2617,7 +2629,7 @@ body::after {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+  background: var(--accent-gradient);
   box-shadow: var(--glow-soft);
 }
 
@@ -2928,7 +2940,7 @@ body::after {
 .prose li > ul, .prose li > ol { margin-top: 0.2em; margin-bottom: 0.2em; }
 .prose strong { font-weight: 600; color: var(--color-text); }
 .prose em { font-style: italic; }
-.prose a { color: var(--color-accent); text-decoration: none; }
+.prose a { color: var(--accent-text); text-decoration: none; }
 .prose a:hover { text-decoration: underline; }
 .prose hr { border: none; border-top: 1px solid var(--color-border); margin: 1em 0; }
 

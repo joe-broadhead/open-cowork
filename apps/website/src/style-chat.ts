@@ -294,9 +294,9 @@ export function cloudWebsiteChatStyles() {
       line-height: 1;
     }
     .composer-send:not(:disabled) {
-      background: var(--color-surface-active);
-      border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border) 66%);
-      color: var(--text);
+      background: var(--accent-action-fill);
+      border-color: var(--accent-line);
+      color: var(--accent-action-foreground);
       box-shadow: var(--glow-soft), var(--specular);
     }
     .chat-inspector {

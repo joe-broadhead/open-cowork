@@ -54,7 +54,7 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
   useEffect(() => {
     const root = document.documentElement
     const observer = new MutationObserver(() => setThemeVersion((value) => value + 1))
-    observer.observe(root, { attributes: true, attributeFilter: ['data-ui-theme', 'data-color-scheme'] })
+    observer.observe(root, { attributes: true, attributeFilter: ['data-ui-theme', 'data-color-scheme', 'data-ui-accent'] })
     return () => observer.disconnect()
   }, [])
 
@@ -69,10 +69,10 @@ export function VegaChart({ spec, chartFormat, chartTitle, sessionId, toolCallId
       title: ensureReadableTextColor(text, surface),
       grid: styles.getPropertyValue('--color-border-subtle').trim() || 'rgba(255,255,255,0.08)',
       domain: styles.getPropertyValue('--color-border').trim() || 'rgba(255,255,255,0.12)',
-      accent: styles.getPropertyValue('--color-accent').trim() || '#cfa0e6',
+      accent: styles.getPropertyValue('--color-accent').trim() || '#2f6bf0',
       green: styles.getPropertyValue('--color-green').trim() || '#77c599',
       amber: styles.getPropertyValue('--color-amber').trim() || '#fc9b6f',
-      red: styles.getPropertyValue('--color-red').trim() || '#ff9bb4',
+      red: styles.getPropertyValue('--color-red').trim() || '#d6587e',
       info: styles.getPropertyValue('--color-info').trim() || '#77becf',
       muted: ensureReadableTextColor(textMuted, surface),
       secondary: ensureReadableTextColor(textSecondary, surface),

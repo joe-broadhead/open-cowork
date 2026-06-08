@@ -20,6 +20,9 @@ export interface BrandThemeTokens {
   textSecondary: string
   textMuted: string
   accent: string
+  accent2?: string
+  accentSoft?: string
+  accentLine?: string
   accentHover: string
   green: string
   amber: string
@@ -103,6 +106,9 @@ export interface PublicBrandingThemeTokens {
   text?: string
   mutedText?: string
   accent?: string
+  accent2?: string
+  accentSoft?: string
+  accentLine?: string
   accentStrong?: string
   focus?: string
   warn?: string
@@ -158,33 +164,36 @@ export interface PublicBrandingConfig {
 }
 
 const DEFAULT_PUBLIC_BRANDING_DARK_THEME: PublicBrandingThemeTokens = {
-  background: '#181516',
-  surface: 'rgba(239, 220, 206, 0.06)',
-  mutedSurface: '#242021',
-  border: 'rgba(239, 220, 206, 0.13)',
-  text: '#f0e9e1',
-  mutedText: '#a8988e',
-  accent: '#cfa0e6',
-  accentStrong: '#e0b7f0',
-  focus: 'rgba(207, 160, 230, 0.52)',
-  warn: '#f0b86e',
-  danger: '#ff9bb4',
-  ok: '#82d3a2',
-  surfaceHover: 'rgba(239, 220, 206, 0.11)',
-  surfaceActive: 'rgba(207, 160, 230, 0.18)',
-  borderSubtle: 'rgba(239, 220, 206, 0.06)',
-  borderStrong: 'rgba(239, 220, 206, 0.22)',
-  elevated: '#242021',
-  textSecondary: '#d2c3b6',
-  accentHover: '#e0b7f0',
-  accentForeground: '#1b121d',
-  green: '#82d3a2',
-  amber: '#f0b86e',
-  red: '#ff9bb4',
-  info: '#8bc9d8',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.30), 0 12px 28px rgba(0, 0, 0, 0.20)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.34), 0 24px 60px rgba(0, 0, 0, 0.28)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(207, 160, 230, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(139, 201, 216, 0.045), transparent 62%)',
+  background: '#0c0d0f',
+  surface: '#141619',
+  mutedSurface: '#1f2329',
+  border: '#2d3137',
+  text: '#eceef1',
+  mutedText: '#828a94',
+  accent: '#2f6bf0',
+  accent2: '#5a8cf5',
+  accentSoft: 'color-mix(in srgb,var(--accent) 15%,transparent)',
+  accentLine: 'color-mix(in srgb,var(--accent) 38%,transparent)',
+  accentStrong: '#5a8cf5',
+  focus: 'rgba(47, 107, 240, 0.52)',
+  warn: '#e0913a',
+  danger: '#d6587e',
+  ok: '#3f9a8f',
+  surfaceHover: '#1a1d21',
+  surfaceActive: 'color-mix(in srgb, #2f6bf0 16%, #1a1d21)',
+  borderSubtle: '#23262b',
+  borderStrong: '#3b4047',
+  elevated: '#1f2329',
+  textSecondary: '#9aa1aa',
+  accentHover: '#5a8cf5',
+  accentForeground: '#ffffff',
+  green: '#3f9a8f',
+  amber: '#e0913a',
+  red: '#d6587e',
+  info: '#6f8cc4',
+  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%)',
 }
 
 export const GATEWAY_PRODUCT_MODES = [

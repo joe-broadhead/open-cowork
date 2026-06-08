@@ -73,12 +73,20 @@ export type CloudWebClientBootstrap = {
   publicBranding: PublicBrandingConfig
   theme?: {
     defaultPreset: string
+    defaultScheme?: 'dark' | 'light'
+    defaultAccent?: string
     tenantBrandingLocked: boolean
     presets: Array<{
       id: string
       label: string
       description: string
       swatches: string[]
+    }>
+    accents?: Array<{
+      id: string
+      label: string
+      accent: string
+      accent2: string
     }>
   }
   routes: CloudWebRoute[]

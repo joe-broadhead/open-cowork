@@ -5,8 +5,8 @@ Open Cowork separates color from structure.
 The canonical typed token source is
 `packages/shared/src/design-tokens.ts`. It exports `DESIGN_TOKENS`,
 `DEFAULT_DARK_BRAND_THEME`, `DEFAULT_LIGHT_BRAND_THEME`, and
-`emitRootTokensCss()`. The default dark theme is the Studio graphite/plum
-palette; Mercury remains available as a named preset for existing users.
+`emitRootTokensCss()`. The default dark theme is Mercury graphite with the
+Azure signature accent; Day is the matching warm light scheme.
 Desktop imports the generated CSS partial at
 `apps/desktop/src/renderer/styles/generated/design-tokens.css`, produced by
 `pnpm design-tokens:build`; Cloud Web emits the same structural variables from
@@ -170,17 +170,18 @@ instead of silently drifting.
 ## Public Branding Theme Keys
 
 `cloud.publicBranding.theme` may override color and visual-brand values only.
-The default theme is the Desktop-aligned dark palette from
+The default theme is the Desktop-aligned Mercury graphite palette from
 `DEFAULT_DARK_BRAND_THEME`; `DEFAULT_LIGHT_BRAND_THEME` defines the matching
-warm light palette for presets and downstream full-theme overrides. Legacy
+Day warm light palette for presets and downstream full-theme overrides. Legacy
 light partial overrides remain supported for existing deployments.
 
 Supported keys are:
 
 `background`, `surface`, `mutedSurface`, `border`, `text`, `mutedText`,
-`accent`, `accentStrong`, `focus`, `warn`, `danger`, `ok`, `surfaceHover`,
-`surfaceActive`, `borderSubtle`, `borderStrong`, `elevated`, `textSecondary`,
-`accentHover`, `accentForeground`, `green`, `amber`, `red`, `info`, `shadowCard`,
+`accent`, `accent2`, `accentSoft`, `accentLine`, `accentStrong`, `focus`,
+`warn`, `danger`, `ok`, `surfaceHover`, `surfaceActive`, `borderSubtle`,
+`borderStrong`, `elevated`, `textSecondary`, `accentHover`,
+`accentForeground`, `green`, `amber`, `red`, `info`, `shadowCard`,
 `shadowElevated`, and `bgImage`.
 
 Downstream builders should override only the color/brand keys they own and let
