@@ -54,6 +54,12 @@ export function initialCloudWebClientState(bootstrap: CloudWebClientBootstrap): 
       runs: [],
       error: null,
     },
+    channels: {
+      agents: [],
+      bindings: [],
+      deliveries: [],
+      error: null,
+    },
     usageSummary: null,
     deliveries: [],
     diagnostics: null,

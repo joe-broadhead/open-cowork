@@ -9,6 +9,7 @@ export type CloudWebRouteId =
   | 'agents'
   | 'capabilities'
   | 'workflows'
+  | 'channels'
   | 'artifacts'
   | 'org'
   | 'members'
@@ -78,6 +79,14 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     requiresAuth: true,
     requiresAdmin: false,
     summary: cloudWebWorkbenchRouteSummary('workflows', 'Saved playbooks, runs, and status.'),
+  },
+  {
+    id: 'channels',
+    label: 'Channels',
+    surface: 'workbench',
+    requiresAuth: true,
+    requiresAdmin: false,
+    summary: cloudWebWorkbenchRouteSummary('channels', 'Connected chat channels and delivery status.'),
   },
   {
     id: 'artifacts',

@@ -34,6 +34,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'react-client-asset.ts',
     'react-client.tsx',
     'react-project-source.ts',
+    'react-workbench-channels.tsx',
     'react-shell.ts',
     'react-shell-controller.tsx',
     'react-state.ts',

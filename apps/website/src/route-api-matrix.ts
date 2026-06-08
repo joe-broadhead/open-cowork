@@ -140,6 +140,23 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
   {
+    routeId: 'channels',
+    surface: 'workbench',
+    requiredRole: 'member',
+    endpointIds: ['channelAgents', 'channelBindings', 'channelDeliveries'],
+    states: {
+      loading: 'Channel agent, binding, and delivery lists render empty cards until the Cloud channel endpoints return.',
+      empty: 'No connected channels or deliveries loaded.',
+      error: 'Gateway/channel API denial renders a read-only unavailable state and does not expose admin setup internals.',
+    },
+    disabledBehavior: 'The user-facing Channels route is read-only; setup, credential, retry, and dead-letter actions remain admin-only.',
+    pagination: 'Channel agents and bindings load the first 100 rows; delivery status loads the first 50 rows.',
+    paginationContract: paginationContract('bounded-page', 'deferred', 100),
+    redaction: 'Credential refs, payload secrets, signed URLs, tokens, object keys, and provider internals are stripped before rendering.',
+    redactionContract: redactionContract('safeOperationalMetadata'),
+    tests: ['browser-e2e.test.ts', 'render.test.ts'],
+  },
+  {
     routeId: 'artifacts',
     surface: 'workbench',
     requiredRole: 'member',

@@ -163,6 +163,11 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       validate: (input) => request(endpoint('projectSourceValidate', '/api/project-sources/validate'), { method: 'POST', body: input }),
       uploadSnapshot: (input) => request(endpoint('projectSnapshots', '/api/project-sources/snapshots'), { method: 'POST', body: input }),
     },
+    channels: {
+      agents: () => request(endpoint('channelAgents', '/api/channels/agents?limit=100')),
+      bindings: () => request(endpoint('channelBindings', '/api/channels/bindings?limit=100')),
+      deliveries: () => request(endpoint('channelDeliveries', '/api/channels/deliveries?limit=50')),
+    },
     admin: {
       policy: () => request(endpoint('adminPolicy', '/api/admin/policy')),
       members: {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
+import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
 import { CloudArtifactCards, type CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
@@ -299,7 +300,6 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [workflowFilter, setWorkflowFilter] = useState('')
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
-
   const targets = {
     agents: usePortalTarget('workbench-agent-list'),
     agentPolicy: usePortalTarget('agent-policy-list'),
@@ -443,7 +443,6 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   }, [workflowFilter, workflows])
   const selectedWorkflow = visibleWorkflows.find((workflow) => workflow.id === selectedWorkflowId) || visibleWorkflows[0] || null
   const selectedRuns = selectedWorkflow ? runs.filter((run) => run.workflowId === selectedWorkflow.id) : []
-
   const runWorkflow = useCallback((workflow: Workflow) => {
     void (async () => {
       try {
@@ -497,7 +496,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
         <div className="row compact"><strong>Profile</strong><span>{text(asRecord(workspace).profileName || bootstrap.profileName, 'default')}</span></div>
         <div className="row compact"><strong>Chat</strong><span>{bootstrap.features.chat === false ? 'disabled' : 'enabled'}</span></div>
         <div className="row compact"><strong>Playbooks</strong><span>{workflowDisabled ? 'disabled' : 'enabled'}</span></div>
-        <div className="row compact"><strong>Surfaces</strong><span>chat, coworkers, tools, playbooks, artifacts</span></div>
+        <div className="row compact"><strong>Surfaces</strong><span>chat, coworkers, tools, playbooks, channels, artifacts</span></div>
       </>,
       targets.agentPolicy,
     ))
@@ -544,5 +543,5 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   }
   if (targets.artifactList) portals.push(createPortal(<CloudArtifactCards view={selectedView} {...artifactActions} />, targets.artifactList))
   if (targets.artifactHistory) portals.push(createPortal(<CloudArtifactCards view={selectedView} {...artifactActions} />, targets.artifactHistory))
-  return <>{portals}</>
+  return <>{portals}<CloudChannelSurfacePortals onSelectSession={onSelectSession} /></>
 }

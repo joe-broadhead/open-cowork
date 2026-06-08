@@ -27,6 +27,7 @@ loading/empty/error state contract.
 | `agents` | Studio | Member | `workspace`, `capabilitiesCatalog` | Capability filtering is local and performance-tested. | Coworker metadata is cloud profile metadata only; local stdio MCP commands and secrets are not rendered. |
 | `capabilities` | Studio | Member | `capabilitiesCatalog`, `capabilityTools`, `capabilitySkills` | Local capability filtering is bounded; API cursoring is deferred. | Machine-scoped MCPs are visible only as policy-limited metadata. |
 | `workflows` | Studio | Member | `workflows`, `workflow`, `workflowRun`, `workflowPause`, `workflowResume`, `workflowArchive` | Playbook summary rendering is bounded to 100 playbooks and 50 recent runs in the browser; run-history cursoring is deferred. | Playbook controls disable when profile policy blocks workflows. Rows never expose worker credentials or local paths. |
+| `channels` | Studio | Member | `channelAgents`, `channelBindings`, `channelDeliveries` | Channel coworkers and bindings request `limit=100`; delivery status requests and renders the first 50 rows. Delivery stream cursoring stays with Gateway/admin flows. | User route is read-only. Setup, credential rotation, retry, and dead-letter actions stay under Admin Gateway. Credential refs, payload secrets, signed URLs, tokens, and provider internals are stripped before rendering. |
 | `artifacts` | Studio | Member | `sessionArtifacts`, `sessionArtifact` | Selected-session artifact metadata rendering is bounded to 100 artifacts. Cross-session artifact browsing is deferred. | Artifact bodies fetch only after explicit action. Signed URLs, object keys, buckets, tokens, and object-store internals are stripped from metadata. |
 | `org` | Admin | Public | `authMe`, `config`, `workspace` | Not applicable. | Org is an explicit public org/profile surface, not the signed-out fallback. Bootstrap JSON carries public branding, route metadata, endpoint metadata, and feature metadata only. |
 | `members` | Admin | Admin | `adminMembers`, `adminMemberInvite`, `adminMemberUpdate` | Members endpoint supports `q` and `limit`; the browser requests `limit=100` and renders at most 100 rows. | Member rows expose identity, role, and status only. Invite and role controls disable for non-admins and non-invite signup modes. |
@@ -59,6 +60,7 @@ keeping Cloud Web honest about cloud-only and desktop-only boundaries.
 | Tools & Skills | Shared with Desktop | `capabilities` | Show allowed tools, skills, MCP metadata, linked coworkers, and policy verdicts. | Cloud Web renders cloud-safe capability metadata; runtime execution remains owned by OpenCode workers. |
 | Artifacts | Shared with Desktop | `artifacts`, `chat` | Show artifact cards, loaded-chat history, sanitized metadata, explicit view/download actions, and selected-chat previews. | Cloud Web fetches artifact bodies only after explicit user action and strips object-store internals from metadata. |
 | Playbooks | Shared with Desktop | `workflows`, `chat` | Create, list, run, pause, resume, archive, and inspect Cloud playbook definitions and run chats. | Cloud Web runs saved playbooks through Cloud workflow APIs; local launch-at-login and native notifications remain Desktop settings. |
+| Channels | Shared with Desktop | `channels`, `chat` | Show connected channel agents, channel bindings, delivery status, and linked Cloud run chats without exposing setup credentials. | Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned. |
 | Cloud Project Sources | Cloud-only | `threads` | Start project-backed Cloud chats from allowed git repositories or explicit browser-uploaded snapshots. | Cloud policy validates git and snapshot sources before execution. |
 | Local Filesystem | Unavailable in Cloud | `threads`, `artifacts` | Use git URLs, managed Cloud project sources, uploaded snapshots, and Cloud artifacts instead. | Browser sessions must not implicitly read or upload host paths from the user machine. |
 | Local Stdio MCPs | Unavailable in Cloud | `capabilities`, `agents` | Show only policy-safe MCP metadata that has been converted into the Cloud profile. | Cloud Web cannot spawn local stdio MCP processes or expose command lines, environment variables, or secret refs. |
@@ -98,6 +100,8 @@ Cloud Web must keep parity with Desktop Cloud for cloud workspaces:
 - reconnect SSE from durable projection cursors
 - browse artifact metadata and fetch bodies only on explicit action
 - run playbooks through the Cloud workflow API
+- review connected channel coworkers, bindings, and delivery status without
+  exposing setup credentials or delivery payloads
 - show custom coworker, skill, and MCP metadata with policy verdicts
 
 The browser must not create a second projection model. It consumes Cloud
@@ -134,8 +138,9 @@ branding, role, and feature metadata, and the HTTP server keeps the same CSP
 nonce boundary.
 
 There are no remaining vanilla feature scripts under `apps/website/src/client`.
-Projects, chat, coworkers, capabilities, playbooks, artifacts, admin/settings
-surfaces, and the browser theme switcher are React-owned in the browser bundle.
+Projects, chat, coworkers, capabilities, playbooks, channels, artifacts,
+admin/settings surfaces, and the browser theme switcher are React-owned in the
+browser bundle.
 New feature work must use the shared `AppAPI` contract from
 `packages/shared/src/app-api.ts`, `AppApiProvider` / `useAppApi()` from
 `@open-cowork/ui/app-api`, and the Cloud fetch/SSE adapter in
@@ -202,7 +207,8 @@ parity, not pixel-perfect screenshots.
 - Cards, panels, tables, rows, badges, notices, empty states, focus rings, and
   destructive/primary/secondary controls read like Desktop primitives.
 - Projects, chat, runtime status, approvals, questions, coworkers, tools,
-  skills, playbooks, and artifacts map to the Desktop/Cloud parity matrix.
+  skills, playbooks, channels, and artifacts map to the Desktop/Cloud parity
+  matrix.
 - Org, members, policy, BYOK, connections, gateway, billing, audit, usage, and
   diagnostics map to the admin/settings surface matrix.
 - `/assets/open-cowork-cloud-react.js` mounts the React controller for
