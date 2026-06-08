@@ -71,6 +71,10 @@ function canManage(role: unknown) {
   return role === 'owner' || role === 'admin'
 }
 
+function canInspectDiagnostics(role: unknown) {
+  return canManage(role) || role === 'operator'
+}
+
 function rowKey(record: Record<string, unknown>, fallback: string) {
   return text(record.id || record.accountId || record.tokenId || record.providerId || record.agentId || record.bindingId || record.deliveryId || record.poolId || record.workerId, fallback)
 }
@@ -173,9 +177,12 @@ function providerSettingsFromForm(data: FormData) {
 
 export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
   const api = useAppApi()
-  const role = asRecord(workspace).role || bootstrap.role
+  const workspaceRecord = asRecord(workspace)
+  const role = workspaceRecord.role || (workspaceRecord.email ? bootstrap.role : 'signed-out')
   const locked = !canManage(role)
+  const diagnosticsLocked = !canInspectDiagnostics(role)
   const lockTitle = 'This action requires an org owner or admin role.'
+  const diagnosticsLockTitle = 'Diagnostics require an org owner, admin, or operator role.'
   const [state, setState] = useState<AdminState>(EMPTY_STATE)
   const [memberFilter, setMemberFilter] = useState('')
   const [auditFilter, setAuditFilter] = useState('')
@@ -199,31 +206,37 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
   const billingActionDisabled = state.billing === null || billingDisabled
   const billingDisabledReason = state.billing === null ? 'Billing state is loading.' : 'Billing is not available for this deployment.'
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (options: { preserveRevealToken?: boolean } = {}) => {
+    const preserveRevealToken = options.preserveRevealToken === true
+    if (!preserveRevealToken) {
+      setState((current) => current.revealToken ? ({ ...current, revealToken: null }) : current)
+    }
     try {
+      const loadAdmin = !locked
+      const loadSignedInSummary = text(role, 'signed-out') !== 'signed-out'
       const [
         policy, byok, tokens, billing, usage, usageSummary, agents, bindings, deliveries,
         members, audit, workerPools, workers,
       ] = await Promise.all([
-        api.admin.policy().then((body) => asRecord(body).policy || null).catch(() => null),
-        api.admin.byok.list().then((body) => list<Record<string, unknown>>(asRecord(body).secrets)).catch(() => []),
-        api.admin.apiTokens.list().then((body) => list<Record<string, unknown>>(asRecord(body).tokens)).catch(() => []),
-        api.admin.billing.subscription().then(asRecord).catch(() => ({ enabled: false })),
-        api.admin.usage.events().then((body) => list<Record<string, unknown>>(asRecord(body).events)).catch(() => []),
-        api.admin.usage.summary().then(asRecord).catch(() => null),
-        api.admin.channels.agents().then((body) => list<Record<string, unknown>>(asRecord(body).agents)).catch(() => []),
-        api.admin.channels.bindings().then((body) => list<Record<string, unknown>>(asRecord(body).bindings)).catch(() => []),
-        api.admin.channels.deliveries().then((body) => list<Record<string, unknown>>(asRecord(body).deliveries).map((entry) => safeValue(entry) as Record<string, unknown>)).catch(() => []),
-        locked ? Promise.resolve([]) : api.admin.members.list().then((body) => list<Record<string, unknown>>(asRecord(body).members)).catch(() => []),
-        locked ? Promise.resolve([]) : api.admin.audit().then((body) => list<Record<string, unknown>>(asRecord(body).events).map((entry) => safeValue(entry) as Record<string, unknown>)).catch(() => []),
-        locked ? Promise.resolve([]) : api.admin.workerPools().then((body) => list<Record<string, unknown>>(asRecord(body).pools)).catch(() => []),
-        locked ? Promise.resolve([]) : api.admin.workers().then((body) => list<Record<string, unknown>>(asRecord(body).workers)).catch(() => []),
+        loadSignedInSummary ? api.admin.policy().then((body) => asRecord(body).policy || null).catch(() => null) : Promise.resolve(null),
+        loadAdmin ? api.admin.byok.list().then((body) => list<Record<string, unknown>>(asRecord(body).secrets)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.apiTokens.list().then((body) => list<Record<string, unknown>>(asRecord(body).tokens)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.billing.subscription().then(asRecord).catch(() => ({ enabled: false })) : Promise.resolve(null),
+        loadSignedInSummary ? api.admin.usage.events().then((body) => list<Record<string, unknown>>(asRecord(body).events)).catch(() => []) : Promise.resolve([]),
+        loadSignedInSummary ? api.admin.usage.summary().then(asRecord).catch(() => null) : Promise.resolve(null),
+        loadAdmin ? api.admin.channels.agents().then((body) => list<Record<string, unknown>>(asRecord(body).agents)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.channels.bindings().then((body) => list<Record<string, unknown>>(asRecord(body).bindings)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.channels.deliveries().then((body) => list<Record<string, unknown>>(asRecord(body).deliveries).map((entry) => safeValue(entry) as Record<string, unknown>)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.members.list().then((body) => list<Record<string, unknown>>(asRecord(body).members)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.audit().then((body) => list<Record<string, unknown>>(asRecord(body).events).map((entry) => safeValue(entry) as Record<string, unknown>)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.workerPools().then((body) => list<Record<string, unknown>>(asRecord(body).pools)).catch(() => []) : Promise.resolve([]),
+        loadAdmin ? api.admin.workers().then((body) => list<Record<string, unknown>>(asRecord(body).workers)).catch(() => []) : Promise.resolve([]),
       ])
-      setState((current) => ({ ...current, policy: asRecord(policy), byok, tokens, billing: billing as Record<string, unknown>, usage, usageSummary, agents, bindings, deliveries, members, audit, workerPools, workers, error: null }))
+      setState((current) => ({ ...current, policy: policy ? asRecord(policy) : null, byok, tokens, billing: billing ? asRecord(billing) : null, usage, usageSummary, agents, bindings, deliveries, members, audit, workerPools, workers, revealToken: preserveRevealToken ? current.revealToken : null, error: null }))
     } catch (error) {
       setState((current) => ({ ...current, error: errorMessage(error) }))
     }
-  }, [api, locked])
+  }, [api, locked, role])
 
   const mutate = useCallback(async (message: string, action: () => Promise<unknown>) => {
     try {
@@ -234,6 +247,27 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
       status(errorMessage(error), 'warn')
     }
   }, [reload])
+
+  const revealOneTimeToken = useCallback((value: unknown) => {
+    const token = text(value).trim()
+    if (!token) return false
+    setState((current) => ({ ...current, revealToken: token }))
+    return true
+  }, [])
+
+  const issueApiToken = useCallback(async (message: string, input: Record<string, unknown>) => {
+    try {
+      const issued = asRecord(await api.admin.apiTokens.create(input))
+      const revealed = revealOneTimeToken(issued.plaintext)
+      await reload({ preserveRevealToken: revealed })
+      if (!revealed) throw new Error('Token was created, but the API did not return one-time plaintext.')
+      status(message, 'ok')
+      return true
+    } catch (error) {
+      status(errorMessage(error), 'warn')
+      return false
+    }
+  }, [api, reload, revealOneTimeToken])
 
   useEffect(() => {
     document.body.dataset.reactAdminSurfaces = 'active'
@@ -251,10 +285,11 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
       const routeReason = bootstrap.adminSurfaces.find((surface) => surface.routeId === routeId)?.disabledReason
       const isInviteControl = Boolean(control.closest('#member-invite-form'))
       const isBillingControl = control.dataset.billingControl === 'true'
-      const disabled = locked || (isInviteControl && inviteDisabled) || (isBillingControl && billingActionDisabled)
+      const routeLocked = routeId === 'diagnostics' ? diagnosticsLocked : locked
+      const disabled = routeLocked || (isInviteControl && inviteDisabled) || (isBillingControl && billingActionDisabled)
       control.disabled = disabled
       control.dataset.locked = disabled ? 'true' : 'false'
-      if (disabled) control.title = isBillingControl ? billingDisabledReason : isInviteControl ? inviteDisabledReason : routeReason || lockTitle
+      if (disabled) control.title = routeId === 'diagnostics' ? diagnosticsLockTitle : isBillingControl ? billingDisabledReason : isInviteControl ? inviteDisabledReason : routeReason || lockTitle
       else control.removeAttribute('title')
     }
     const member = document.getElementById('member-filter') as HTMLInputElement | null
@@ -267,7 +302,7 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
       member?.removeEventListener('input', onMember)
       audit?.removeEventListener('input', onAudit)
     }
-  }, [billingActionDisabled, billingDisabledReason, bootstrap.adminSurfaces, inviteDisabled, inviteDisabledReason, locked, lockTitle])
+  }, [billingActionDisabled, billingDisabledReason, bootstrap.adminSurfaces, diagnosticsLocked, diagnosticsLockTitle, inviteDisabled, inviteDisabledReason, locked, lockTitle])
 
   const filteredMembers = useMemo(() => {
     const query = memberFilter.toLowerCase().trim()
@@ -306,42 +341,63 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
         if (apiKey && kmsRef) throw new Error('Use either an API key or a KMS ref, not both.')
         return api.admin.byok.save(providerId, apiKey ? { apiKey } : { kmsRef }).then(() => undefined)
       }),
-      bindForm('token-form', async (data, form) => {
-        const scopes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="scopes"]:checked')).map((input) => input.value)
-        const issued = asRecord(await api.admin.apiTokens.create({ name: text(data.get('name')).trim(), scopes }))
-        setState((current) => ({ ...current, revealToken: text(issued.plaintext) }))
-      }),
       bindForm('agent-form', (data) => api.admin.channels.createAgent({ name: text(data.get('name')).trim(), profileName: text(data.get('profileName') || asRecord(workspace).profileName || bootstrap.profileName, 'default'), status: 'active', managed: true }).then(() => undefined)),
       bindForm('binding-form', (data) => api.admin.channels.createBinding({ agentId: text(data.get('agentId')).trim(), provider: text(data.get('provider')).trim(), displayName: text(data.get('displayName')).trim(), externalWorkspaceId: text(data.get('externalWorkspaceId') || data.get('slackTeamId') || data.get('emailDomain')).trim() || null, credentialRef: text(data.get('credentialRef')).trim() || null, status: 'auth_required', settings: Object.fromEntries(Object.entries(providerSettingsFromForm(data)).filter(([, value]) => Boolean(value))) }).then(() => undefined)),
       bindForm('billing-form', async (data) => { const result = asRecord(await api.admin.billing.checkout({ planKey: text(data.get('planKey')).trim() || null })); if (result.url) window.location.href = text(result.url) }),
     ].filter(Boolean) as Array<() => void>
+    const tokenForm = document.getElementById('token-form') as HTMLFormElement | null
+    const tokenListener = (event: SubmitEvent) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (locked) return status(lockTitle, 'warn')
+      if (!tokenForm) return
+      const data = new FormData(tokenForm)
+      const scopes = Array.from(tokenForm.querySelectorAll<HTMLInputElement>('input[name="scopes"]:checked')).map((input) => input.value)
+      void issueApiToken('Token issued', { name: text(data.get('name')).trim(), scopes }).then((ok) => { if (ok) tokenForm.reset() })
+    }
+    tokenForm?.addEventListener('submit', tokenListener, true)
     const click = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
       if (!target) return
       if (target.closest('#refresh-admin') || target.closest('#refresh-gateway')) {
-        event.preventDefault(); event.stopImmediatePropagation(); void reload()
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (locked) return status(lockTitle, 'warn')
+        void reload()
       } else if (target.closest('#desktop-token')) {
-        event.preventDefault(); event.stopImmediatePropagation(); void mutate('Desktop token issued', async () => { const issued = asRecord(await api.admin.apiTokens.create({ name: 'Desktop connection', scopes: ['desktop'] })); setState((current) => ({ ...current, revealToken: text(issued.plaintext) })) })
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (locked) return status(lockTitle, 'warn')
+        void issueApiToken('Desktop token issued', { name: 'Desktop connection', scopes: ['desktop'] })
       } else if (target.closest('#gateway-token')) {
-        event.preventDefault(); event.stopImmediatePropagation(); void mutate('Gateway token issued', async () => {
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (locked) return status(lockTitle, 'warn')
+        void (async () => {
           const channelBindingIds = grantableChannelBindingIds(state.bindings)
-          if (channelBindingIds.length === 0) throw new Error('Create a channel binding before issuing a Gateway token.')
-          const issued = asRecord(await api.admin.apiTokens.create({ name: 'Gateway service token', scopes: ['gateway'], channelBindingIds }))
-          setState((current) => ({ ...current, revealToken: text(issued.plaintext) }))
-        })
+          if (channelBindingIds.length === 0) return status('Create a channel binding before issuing a Gateway token.', 'warn')
+          await issueApiToken('Gateway token issued', { name: 'Gateway service token', scopes: ['gateway'], channelBindingIds })
+        })()
       } else if (target.closest('#billing-portal')) {
-        event.preventDefault(); event.stopImmediatePropagation(); if (billingActionDisabled) status(billingDisabledReason, 'warn'); else void mutate('Billing portal opened', async () => { const result = asRecord(await api.admin.billing.portal()); if (result.url) window.location.href = text(result.url) })
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (locked) return status(lockTitle, 'warn')
+        if (billingActionDisabled) status(billingDisabledReason, 'warn'); else void mutate('Billing portal opened', async () => { const result = asRecord(await api.admin.billing.portal()); if (result.url) window.location.href = text(result.url) })
       } else if (target.closest('#export-audit')) {
-        event.preventDefault(); event.stopImmediatePropagation(); downloadJson('open-cowork-audit-events.json', { exportedAt: new Date().toISOString(), filter: auditFilter || null, events: filteredAudit })
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (locked) return status(lockTitle, 'warn')
+        downloadJson('open-cowork-audit-events.json', { exportedAt: new Date().toISOString(), filter: auditFilter || null, events: filteredAudit })
       } else if (target.closest('#export-usage')) {
         event.preventDefault(); event.stopImmediatePropagation(); downloadJson('open-cowork-usage.json', { exportedAt: new Date().toISOString(), summary: state.usageSummary, events: state.usage })
       } else if (target.closest('#prepare-diagnostics')) {
-        event.preventDefault(); event.stopImmediatePropagation(); void mutate('Diagnostics prepared', async () => { const diagnostics = safeValue(await api.admin.diagnostics()) as Record<string, unknown>; setState((current) => ({ ...current, diagnostics })) })
+        event.preventDefault(); event.stopImmediatePropagation()
+        if (diagnosticsLocked) return status(diagnosticsLockTitle, 'warn')
+        void mutate('Diagnostics prepared', async () => { const diagnostics = safeValue(await api.admin.diagnostics()) as Record<string, unknown>; setState((current) => ({ ...current, diagnostics })) })
       }
     }
     document.addEventListener('click', click, true)
-    return () => { disposers.forEach((dispose) => dispose()); document.removeEventListener('click', click, true) }
-  }, [api, auditFilter, billingActionDisabled, billingDisabledReason, bootstrap.profileName, filteredAudit, inviteDisabled, inviteDisabledReason, locked, lockTitle, mutate, reload, state.bindings, state.usage, state.usageSummary, workspace])
+    return () => {
+      disposers.forEach((dispose) => dispose())
+      tokenForm?.removeEventListener('submit', tokenListener, true)
+      document.removeEventListener('click', click, true)
+    }
+  }, [api, auditFilter, billingActionDisabled, billingDisabledReason, bootstrap.profileName, diagnosticsLocked, diagnosticsLockTitle, filteredAudit, inviteDisabled, inviteDisabledReason, issueApiToken, locked, lockTitle, mutate, reload, state.bindings, state.usage, state.usageSummary, workspace])
 
   const portals = []
   if (targets.memberCount) portals.push(createPortal(<>{filteredMembers.length}</>, targets.memberCount))
@@ -360,7 +416,7 @@ export function CloudAdminSurfacePortals({ bootstrap, workspace }: Props) {
 
   if (targets.byokNote) portals.push(createPortal(<>{`Allowed providers: ${list(asRecord(state.policy?.byok).allowedProviderIds).join(', ') || 'profile defaults'} - ${asRecord(state.policy?.byok).kmsRefsEnabled ? 'KMS refs enabled' : 'KMS refs disabled'}`}</>, targets.byokNote))
   if (targets.byok) portals.push(createPortal(<>{state.byok.length ? state.byok.map((secret, index) => { const id = rowKey(secret, `secret-${index}`); return <div className="row" key={id}><div><strong>{id}</strong> {secret.credentialKind === 'kms_ref' ? 'KMS ref' : 'key'} ending {text(secret.last4)}<br /><small>Updated {formatDate(secret.updatedAt)} - {secret.lastValidatedAt ? `validated ${formatDate(secret.lastValidatedAt)}` : 'not validated'}</small></div><div className="row-actions"><span className="pill" data-kind={pillKind(secret.status)}>{text(secret.status, 'unknown')}</span><ActionButton disabled={locked} title={lockTitle} onClick={() => void mutate('Provider validated', () => api.admin.byok.validate(id))}>Validate</ActionButton><ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the provider id to confirm BYOK credential disablement: ${id}`) === id) void mutate('Provider disabled', () => api.admin.byok.disable(id)); else status('Confirmation did not match the provider id.', 'warn') }}>Disable</ActionButton></div></div> }) : <p className="empty">No provider keys configured.</p>}</>, targets.byok))
-  if (targets.tokens) portals.push(createPortal(<>{state.revealToken ? <div className="secret-reveal"><label>New token<input readOnly value={state.revealToken} /></label><small>Shown once. It is not stored by this dashboard.</small></div> : null}{state.tokens.length ? state.tokens.slice(0, 100).map((token, index) => { const id = rowKey(token, `token-${index}`); return <div className="row" key={id}><div><strong>{text(token.name, 'API token')}</strong> ending {text(token.last4)}<br /><small>{list(token.scopes).join(', ') || 'scoped'} - last used {formatDate(token.lastUsedAt)}</small></div><div className="row-actions"><span className="pill" data-kind={token.revokedAt ? 'warn' : 'ok'}>{token.revokedAt ? 'revoked' : 'active'}</span>{!token.revokedAt ? <ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the token id to confirm token revocation: ${id}`) === id) void mutate('Token revoked', () => api.admin.apiTokens.revoke(id)); else status('Confirmation did not match the token id.', 'warn') }}>Revoke</ActionButton> : null}</div></div> }) : <p className="empty">No API tokens issued.</p>}</>, targets.tokens))
+  if (targets.tokens) portals.push(createPortal(<>{state.revealToken ? <div className="secret-reveal"><label>New token<input readOnly value={state.revealToken} /></label><small>Shown once. It is not stored by this dashboard.</small><div className="row-actions"><button type="button" onClick={() => setState((current) => ({ ...current, revealToken: null }))}>Clear token</button></div></div> : null}{state.tokens.length ? state.tokens.slice(0, 100).map((token, index) => { const id = rowKey(token, `token-${index}`); return <div className="row" key={id}><div><strong>{text(token.name, 'API token')}</strong> ending {text(token.last4)}<br /><small>{list(token.scopes).join(', ') || 'scoped'} - last used {formatDate(token.lastUsedAt)}</small></div><div className="row-actions"><span className="pill" data-kind={token.revokedAt ? 'warn' : 'ok'}>{token.revokedAt ? 'revoked' : 'active'}</span>{!token.revokedAt ? <ActionButton kind="danger" disabled={locked} title={lockTitle} onClick={() => { if (window.prompt(`Type the token id to confirm token revocation: ${id}`) === id) void mutate('Token revoked', () => api.admin.apiTokens.revoke(id)); else status('Confirmation did not match the token id.', 'warn') }}>Revoke</ActionButton> : null}</div></div> }) : <p className="empty">No API tokens issued.</p>}</>, targets.tokens))
 
   if (targets.setup) portals.push(createPortal(<>{['Create or rotate a gateway-scoped service token in Connections.', 'Deploy the gateway with OPEN_COWORK_CLOUD_BASE_URL and OPEN_COWORK_GATEWAY_SERVICE_TOKEN.', 'Use the delivery backlog below to retry or dead-letter stuck outbound messages.'].map((step, index) => <div className="row compact" key={step}><span className="pill">{index + 1}</span><span>{step}</span></div>)}</>, targets.setup))
   if (targets.bindingSelect) portals.push(createPortal(<>{state.agents.map((agent, index) => <option key={rowKey(agent, `agent-${index}`)} value={text(agent.agentId)}>{text(agent.name)}</option>)}</>, targets.bindingSelect))

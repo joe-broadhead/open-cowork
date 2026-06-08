@@ -228,7 +228,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'byok',
     surface: 'admin',
     requiredRole: 'admin',
-    endpointIds: ['byok'],
+    endpointIds: ['byok', 'byokSave', 'byokValidate', 'byokDisable'],
     states: {
       loading: 'Provider status metadata loads after sign-in.',
       empty: 'No configured providers.',
@@ -245,7 +245,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'connections',
     surface: 'admin',
     requiredRole: 'admin',
-    endpointIds: ['apiTokens'],
+    endpointIds: ['apiTokens', 'apiTokenCreate', 'apiTokenRevoke'],
     states: {
       loading: 'Token list loads after sign-in.',
       empty: 'No issued tokens.',
@@ -262,7 +262,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'billing',
     surface: 'admin',
     requiredRole: 'admin',
-    endpointIds: ['billingSubscription'],
+    endpointIds: ['billingSubscription', 'billingCheckout', 'billingPortal'],
     states: {
       loading: 'Subscription state loads with the dashboard bootstrap.',
       empty: 'Self-host mode renders billing disabled.',
@@ -279,7 +279,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'gateway',
     surface: 'admin',
     requiredRole: 'admin',
-    endpointIds: ['channelAgents', 'channelBindings', 'channelDeliveries', 'channelDeliveryRetry', 'channelDeliveryDeadLetter'],
+    endpointIds: ['channelAgents', 'channelAgentCreate', 'channelBindings', 'channelBindingCreate', 'channelDeliveries', 'channelDeliveryRetry', 'channelDeliveryDeadLetter'],
     states: {
       loading: 'Gateway agents, bindings, and delivery backlog load after sign-in.',
       empty: 'No gateway agents, bindings, or deliveries loaded.',
@@ -329,14 +329,14 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
   {
     routeId: 'diagnostics',
     surface: 'admin',
-    requiredRole: 'operator',
+    requiredRole: 'admin',
     endpointIds: ['diagnostics', 'runtimeStatus', 'workerHeartbeats'],
     states: {
       loading: 'Diagnostics are loaded only after Prepare bundle.',
       empty: 'Prepare a bundle to inspect redacted support data.',
       error: 'Operator/admin boundary errors remain visible in the diagnostics panel.',
     },
-    disabledBehavior: 'Diagnostics controls are hidden from non-admin users and may still require operator-token privileges.',
+    disabledBehavior: 'Diagnostics controls are hidden from non-admin users and may still fail closed when the Cloud API requires operator-token privileges.',
     pagination: 'Diagnostics includes bounded worker heartbeat and gateway delivery samples.',
     paginationContract: paginationContract('bounded-page', 'deferred', 50),
     redaction: 'Diagnostics bundle is recursively redacted for tokens, cookies, API keys, object URLs, and credential refs.',

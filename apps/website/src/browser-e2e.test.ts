@@ -50,6 +50,18 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
     assert.match((harness.document.querySelector('#desktop-token') as HTMLButtonElement).title, /Connection token issuance requires/)
     assert.match((harness.document.querySelector('#prepare-diagnostics') as HTMLButtonElement).title, /Diagnostics require/)
     assert.equal(harness.lastRequest((request) => request.path === '/api/workspace')?.method, 'GET')
+    const requestedPaths = harness.requests.map((request) => request.path)
+    for (const adminOnlyPath of [
+      '/api/byok',
+      '/api/api-tokens?limit=100',
+      '/api/admin/members?limit=100',
+      '/api/admin/audit?limit=100',
+      '/api/admin/worker-pools?limit=100',
+      '/api/admin/workers?limit=100',
+      '/api/billing/subscription',
+    ]) {
+      assert.equal(requestedPaths.includes(adminOnlyPath), false, `${adminOnlyPath} is not fetched for member workspaces`)
+    }
   } finally {
     harness.close()
   }
@@ -62,6 +74,7 @@ test('cloud web browser disables member invite controls outside invite signup mo
     const email = harness.document.querySelector('#member-invite-form input[name="email"]') as HTMLInputElement
     const role = harness.document.querySelector('#member-invite-form select[name="role"]') as HTMLSelectElement
     const submit = harness.document.querySelector('#member-invite-form button[type="submit"]') as HTMLButtonElement
+    await waitFor(() => assert.match(submit.title, /signup mode is invite/))
     assert.equal(email.disabled, true)
     assert.equal(role.disabled, true)
     assert.equal(submit.disabled, true)
@@ -556,11 +569,13 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     ;(harness.document.querySelector('#byok-form input[name="apiKey"]') as HTMLInputElement).value = 'sk-test-secret'
     harness.submit('#byok-form')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/byok/openai')))
+    await waitFor(() => assert.equal(harness.document.getElementById('status')?.textContent, 'Action complete'))
     assert.doesNotMatch(harness.document.querySelector('#byok-list')?.textContent || '', /sk-test-secret/)
 
     harness.clickText('[data-route-link]', 'Connections')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'connections'))
     assert.match(harness.document.querySelector('[data-admin-surface-route="connections"]')?.textContent || '', /one-time plaintext reveal/)
+    await waitFor(() => assert.ok(harness.document.querySelector('#binding-list > .row')))
 
     harness.clickText('#gateway-token', 'Gateway token')
     await waitFor(() => {
@@ -568,6 +583,9 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
       assert.ok(request)
       assert.deepEqual((request.body as Record<string, unknown>).channelBindingIds, ['binding-1'])
     })
+    await waitFor(() => assert.match(harness.document.querySelector('#token-list')?.textContent || '', /Shown once/))
+    assert.match(harness.document.querySelector('#token-list')?.textContent || '', /Clear token/)
+    assert.match((harness.document.querySelector('#token-list input[readonly]') as HTMLInputElement).value, /occ_created_token_value/)
 
     ;(harness.document.querySelector('#agent-form input[name="name"]') as HTMLInputElement).value = 'Release helper'
     harness.submit('#agent-form')
@@ -638,6 +656,7 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     assert.equal((billingDisabled.document.querySelector('#billing-plan-select') as HTMLSelectElement).disabled, true)
     assert.equal((billingDisabled.document.querySelector('#billing-form button[type="submit"]') as HTMLButtonElement).disabled, true)
     assert.equal((billingDisabled.document.querySelector('#billing-portal') as HTMLButtonElement).disabled, true)
+    await waitFor(() => assert.match((billingDisabled.document.querySelector('#billing-portal') as HTMLButtonElement).title, /Billing is not available/))
     const billingRequestCount = billingDisabled.requests.filter((request) => request.method === 'POST' && request.path.startsWith('/api/billing/')).length
     billingDisabled.submit('#billing-form')
     billingDisabled.clickText('#billing-portal', 'Open portal')

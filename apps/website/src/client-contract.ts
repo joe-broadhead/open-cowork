@@ -9,10 +9,19 @@ export type CloudWebEndpointId =
   | 'config'
   | 'workspace'
   | 'byok'
+  | 'byokSave'
+  | 'byokValidate'
+  | 'byokDisable'
   | 'apiTokens'
+  | 'apiTokenCreate'
+  | 'apiTokenRevoke'
   | 'channelAgents'
+  | 'channelAgentCreate'
   | 'channelBindings'
+  | 'channelBindingCreate'
   | 'billingSubscription'
+  | 'billingCheckout'
+  | 'billingPortal'
   | 'usageEvents'
   | 'usageSummary'
   | 'diagnostics'
@@ -179,10 +188,40 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     csrf: false,
   },
   {
+    id: 'byokSave',
+    method: 'POST',
+    path: '/api/byok/:providerId',
+    csrf: true,
+  },
+  {
+    id: 'byokValidate',
+    method: 'POST',
+    path: '/api/byok/:providerId/validate',
+    csrf: true,
+  },
+  {
+    id: 'byokDisable',
+    method: 'DELETE',
+    path: '/api/byok/:providerId',
+    csrf: true,
+  },
+  {
     id: 'apiTokens',
     method: 'GET',
     path: '/api/api-tokens?limit=100',
     csrf: false,
+  },
+  {
+    id: 'apiTokenCreate',
+    method: 'POST',
+    path: '/api/api-tokens',
+    csrf: true,
+  },
+  {
+    id: 'apiTokenRevoke',
+    method: 'DELETE',
+    path: '/api/api-tokens/:tokenId',
+    csrf: true,
   },
   {
     id: 'channelAgents',
@@ -191,10 +230,22 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     csrf: false,
   },
   {
+    id: 'channelAgentCreate',
+    method: 'POST',
+    path: '/api/channels/agents',
+    csrf: true,
+  },
+  {
     id: 'channelBindings',
     method: 'GET',
     path: '/api/channels/bindings?limit=100',
     csrf: false,
+  },
+  {
+    id: 'channelBindingCreate',
+    method: 'POST',
+    path: '/api/channels/bindings',
+    csrf: true,
   },
   {
     id: 'channelDeliveries',
@@ -219,6 +270,18 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     method: 'GET',
     path: '/api/billing/subscription',
     csrf: false,
+  },
+  {
+    id: 'billingCheckout',
+    method: 'POST',
+    path: '/api/billing/checkout',
+    csrf: true,
+  },
+  {
+    id: 'billingPortal',
+    method: 'POST',
+    path: '/api/billing/portal',
+    csrf: true,
   },
   {
     id: 'usageEvents',
