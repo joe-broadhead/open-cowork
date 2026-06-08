@@ -207,3 +207,10 @@ Settings holds lower-frequency configuration:
 
 Settings should configure the core surfaces without introducing separate
 product concepts.
+
+Cloud Web shares this Studio vocabulary and visual language for Cloud
+workspaces. The route/API matrix, Desktop/Cloud parity matrix, admin/settings
+surface matrix, and production visual QA checklist live in
+[Cloud Web Studio](cloud-web-workbench.md). Those contracts keep Cloud Web
+chat-first and Desktop-aligned while preserving the OpenCode boundary:
+Cloud Web remains a Cloud API client, not an execution runtime.

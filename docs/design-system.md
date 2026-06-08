@@ -89,6 +89,13 @@ React-owned; the old vanilla feature-script directory has been retired. New
 React feature code should use `useAppApi()` instead of direct `fetch`,
 `EventSource`, or `window.coworkApi` access.
 
+The production visual QA contract for shared Studio surfaces lives in
+`apps/website/src/studio-production-qa.ts` and is documented in
+[Cloud Web Studio](cloud-web-workbench.md). It is a parity gate, not a new
+runtime contract: OpenCode still owns execution, while Desktop and Cloud Web
+must share the same visual language, product vocabulary, primitive usage, and
+state coverage.
+
 ## Accessibility Gates
 
 CI runs `pnpm lint:a11y --max-warnings=0` and the focused renderer accessibility smoke tests. The smoke helper explicitly enables axe `color-contrast`, so contrast regressions are part of the required test gate.

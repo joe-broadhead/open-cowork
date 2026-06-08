@@ -54,6 +54,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'style-primitives.ts',
     'style-shared-ui.ts',
     'styles.ts',
+    'studio-production-qa.ts',
     'surface-workbench.ts',
     'thread-workbench.ts',
     'workbench-parity.ts',

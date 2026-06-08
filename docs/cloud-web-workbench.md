@@ -203,6 +203,24 @@ For visual or surface-organization changes, compare Cloud Web and Desktop
 side-by-side before merge. The expected match is product language and workflow
 parity, not pixel-perfect screenshots.
 
+The typed source of truth for release visual QA is
+`apps/website/src/studio-production-qa.ts`. The matrix below must cover every
+Cloud Web route at desktop, tablet, and mobile widths. Tests assert every row so
+the checklist cannot drift from the source contract.
+
+## Studio Production Visual QA Matrix
+
+| Surface | Cloud route(s) | Desktop surface | Cloud Web check | Required states | Product boundary |
+|---|---|---|---|---|---|
+| Home, Chat, and composer | `chat` | Home and Chat composer-first runtime surface | Default route opens to chat, shows coworker selection, disables signed-out send controls, and submits prompts through Cloud commands after auth. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry` | Cloud Web consumes Cloud session projections and commands only; OpenCode owns session execution and event semantics. |
+| Projects and thread history | `threads` | Projects with recent chats, project context, filters, and reopen actions | Thread list, filters, selected objective, project-source status, bounded loading, and Load more behavior match the Desktop Studio vocabulary. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry` | Browser project sources stay cloud-safe; local host paths are never inferred, uploaded, or rendered as available Cloud context. |
+| Runtime review, approvals, and questions | `chat`, `artifacts` | Chat transcript, task lanes, approvals, questions, todos, runtime status, cost, tokens, and review panel | Messages, delegated specialist lanes, running/completed/error task states, approval/question cards, deliverables, todos, artifacts, cost, token usage, and follow-up actions are visible from Cloud projections. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry`, `destructive-confirmation` | Approval and question semantics remain OpenCode-owned; Cloud Web only submits tenant-scoped responses through Cloud API endpoints. |
+| Coworkers, tools, and skills | `agents`, `capabilities` | Team and Tools & Skills capability catalog | Coworker cards, picker states, linked skills, linked tools, MCP policy verdicts, and Start chat actions use the shared Studio primitive language. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `retry` | Cloud Web renders policy-safe metadata only and cannot edit local custom agent files or spawn local stdio MCPs. |
+| Playbooks and runs | `workflows` | Playbooks list, saved workflow setup chats, run controls, and run history | Playbook cards, run rows, pause/resume/archive actions, empty states, and blocked policy copy behave like Desktop workflows while staying browser-bounded. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry`, `destructive-confirmation` | Cloud Web runs saved playbooks through Cloud workflow APIs; OpenCode-native agents still execute the work. |
+| Channels and artifacts | `channels`, `artifacts`, `chat` | Channel status, linked run chats, artifact cards, and review-first artifact previews | Connected channel coworkers, bindings, delivery status, sanitized artifact metadata, explicit view/download actions, and selected-chat previews stay reachable without admin controls. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry` | Provider payloads, signed URLs, object-store internals, channel secrets, and delivery targets are stripped before rendering. |
+| Team and member admin boundary | `org`, `members`, `policy`, `usage` | Desktop account, Team context, Settings policy, Health Center, and usage summaries | Org profile, member rows, invite/role controls, policy summaries, usage quotas, and worker health are visually grouped under Admin without dominating the default Studio path. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `retry`, `destructive-confirmation` | Browser disabled controls are ergonomic only; Cloud API authorization remains server-side and tenant-scoped. |
+| Secrets, Gateway, audit, and diagnostics | `byok`, `connections`, `billing`, `gateway`, `audit`, `diagnostics` | Desktop Cloud connection setup, Gateway pairing, provider credentials, billing, audit, and Health Center support bundle surfaces | BYOK write-only rotation, one-time token reveal, gateway delivery controls, billing portal actions, audit export, diagnostics redaction, confirmations, and settled disabled states are visible and keyboard-reachable. | `loading`, `empty`, `error`, `disabled`, `permission-gated`, `offline-disconnected`, `retry`, `destructive-confirmation`, `one-time-reveal` | Raw secrets, provider keys, auth headers, signed URLs, object-store internals, local paths, command lines, and environment variables must not render outside intentional safe reveal flows. |
+
 - App shell, sidebar, topbar, active route, status text, and density use the
   same dark product language.
 - Cards, panels, tables, rows, badges, notices, empty states, focus rings, and
@@ -226,3 +244,31 @@ parity, not pixel-perfect screenshots.
 - `/assets/open-cowork-cloud-react.js` returns the Vite-built React client
   asset, and the real-browser smoke verifies that the nonce'd module route is
   requested and can mount the controller for `#open-cowork-cloud-react-root`.
+
+## Production Audit Checklist
+
+The typed source of truth is `apps/website/src/studio-production-qa.ts`. This
+checklist is the closeout audit for Studio parity work before the roadmap can
+be considered complete.
+
+| Check id | Requirement | Evidence |
+|---|---|---|
+| `canonical-shared-tokens` | Shared design tokens are the only canonical Studio token source for Desktop and Cloud Web. | `packages/shared/src/design-tokens.ts`, `tests/design-tokens-sync.test.ts`, `docs/design-tokens.md` |
+| `shared-primitives-first` | Shared Studio primitives are preferred before app-local component duplication. | `packages/ui/src/`, `docs/design-system.md`, `apps/website/src/modularity.test.ts` |
+| `shared-product-vocabulary` | Desktop and Cloud Web use the same user-facing vocabulary for shared concepts. | `docs/desktop-app.md`, `docs/cloud-web-workbench.md`, `apps/website/src/workbench-parity.ts` |
+| `cloud-api-client-only` | Cloud Web remains a Cloud API client and does not own execution, projection semantics, or OpenCode runtime behavior. | `apps/website/src/app-api.ts`, `apps/website/src/modularity.test.ts`, `docs/architecture.md` |
+| `admin-not-default-path` | Admin/setup controls are explicit secondary surfaces and do not dominate the default user path. | `apps/website/src/app-shell.ts`, `apps/website/src/admin-surface-matrix.ts`, `docs/cloud-web-workbench.md` |
+| `safe-redaction` | No raw secrets, signed URLs, object-store internals, local paths, command lines, environment variables, or provider payloads render outside intentional safe reveal flows. | `apps/website/src/route-api-matrix.ts`, `apps/website/src/render.test.ts`, `tests/cloud-http-server.test.ts` |
+| `honest-performance-budgets` | Performance budgets stay honest for added routes, surfaces, large fixtures, and responsive layouts. | `apps/website/src/performance.test.ts`, `apps/website/src/modularity.test.ts`, `docs/cloud-web-workbench.md` |
+| `docs-match-shipped-behavior` | Docs describe shipped behavior and explicit boundaries, not aspirational runtime behavior. | `docs/cloud-web-workbench.md`, `docs/release-checklist.md`, `apps/website/src/studio-production-qa.test.ts` |
+
+## OpenWiki/Knowledge Deferral
+
+Knowledge/OpenWiki is intentionally deferred and ships with no Cloud Web route,
+no visible CTA, no runtime dependency, and no data-sync claim in this roadmap.
+Do not add a placeholder that implies wiki content is synced, indexed, or
+available to OpenCode. Do not couple Cloud Web, Desktop, Gateway, or the Cloud
+API to a local OpenWiki checkout while this contract is in force.
+
+Create a separate future roadmap before adding a Knowledge route, CTA, sync
+contract, local OpenWiki checkout dependency, or runtime integration.
