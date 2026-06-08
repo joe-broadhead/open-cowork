@@ -4,9 +4,12 @@ import { escapeHtml } from './html-utils.ts'
 export const CLOUD_THEME_STORAGE_KEY = 'open-cowork-cloud-ui-theme'
 export const CLOUD_THEME_SCHEME_STORAGE_KEY = 'open-cowork-cloud-color-scheme'
 export const CLOUD_THEME_ACCENT_STORAGE_KEY = 'open-cowork-cloud-ui-accent'
+export const CLOUD_THEME_DENSITY_STORAGE_KEY = 'open-cowork-cloud-density'
 export const DEFAULT_CLOUD_THEME_PRESET = 'mercury'
 export const DEFAULT_CLOUD_THEME_SCHEME = 'dark'
 export const DEFAULT_CLOUD_THEME_ACCENT_PRESET = DEFAULT_UI_ACCENT_PRESET_ID
+export const DEFAULT_CLOUD_THEME_DENSITY = 'regular'
+export type CloudDensity = 'compact' | 'regular' | 'comfy'
 
 export function cloudThemePresetOptions() {
   return Object.entries(UI_THEME_PRESETS).map(([id, preset]) => ({
@@ -24,6 +27,14 @@ export function cloudAccentPresetOptions() {
     accent: preset.accent,
     accent2: preset.accent2,
   }))
+}
+
+export function cloudDensityOptions(): Array<{ id: CloudDensity; label: string }> {
+  return [
+    { id: 'compact', label: 'Compact' },
+    { id: 'regular', label: 'Regular' },
+    { id: 'comfy', label: 'Comfy' },
+  ]
 }
 
 export function cloudThemePresetSelectMarkup(tenantBrandingLocked: boolean) {
@@ -48,6 +59,12 @@ export function cloudThemePresetSelectMarkup(tenantBrandingLocked: boolean) {
               ${cloudAccentPresetOptions().map((preset) => `<option value="${escapeHtml(preset.id)}"${preset.id === DEFAULT_CLOUD_THEME_ACCENT_PRESET ? ' selected' : ''}>${escapeHtml(preset.label)}</option>`).join('')}
             </select>
           </label>
+          <label class="cloud-theme-switcher">
+            <span>Density</span>
+            <select id="cloud-theme-density" aria-label="Interface density">
+              ${cloudDensityOptions().map((option) => `<option value="${escapeHtml(option.id)}"${option.id === DEFAULT_CLOUD_THEME_DENSITY ? ' selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+            </select>
+          </label>
         </div>`
 }
 
@@ -61,4 +78,8 @@ export function isCloudThemeScheme(value: string | null | undefined): value is '
 
 export function isCloudThemeAccentPreset(value: string | null | undefined) {
   return Boolean(value && Object.prototype.hasOwnProperty.call(UI_ACCENT_PRESETS, value))
+}
+
+export function isCloudDensity(value: string | null | undefined): value is CloudDensity {
+  return value === 'compact' || value === 'regular' || value === 'comfy'
 }

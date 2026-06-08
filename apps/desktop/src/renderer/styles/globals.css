@@ -20,20 +20,20 @@
 }
 
 @font-face {
-  font-family: 'Hubot Sans Variable';
+  font-family: 'Schibsted Grotesk Variable';
   font-style: normal;
   font-display: block;
   font-weight: 200 900;
-  src: url('@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-normal.woff2') format('woff2-variations');
+  src: url('@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2') format('woff2-variations');
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 
 @font-face {
-  font-family: 'Hubot Sans Variable';
+  font-family: 'Schibsted Grotesk Variable';
   font-style: italic;
   font-display: block;
   font-weight: 200 900;
-  src: url('@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-italic.woff2') format('woff2-variations');
+  src: url('@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-italic.woff2') format('woff2-variations');
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 
@@ -186,7 +186,7 @@ body::after {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: var(--tracking-tight);
+  letter-spacing: var(--tracking-display);
 }
 
 .tabular {
@@ -905,9 +905,9 @@ body::after {
   color: var(--color-text);
 }
 
-.ui-card--sm { padding: var(--space-3); }
-.ui-card--md { padding: var(--space-4); }
-.ui-card--lg { padding: var(--space-6); }
+.ui-card--sm { padding: calc(var(--row-pad) + var(--space-1)); }
+.ui-card--md { padding: calc(var(--row-pad) + var(--space-2)); }
+.ui-card--lg { padding: calc(var(--row-pad) + var(--space-4)); }
 
 .ui-card--interactive {
   cursor: pointer;
@@ -932,7 +932,7 @@ body::after {
 .ui-card.chat-tool-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: calc(var(--gap) * 0.5);
 }
 
 .studio-shell {
@@ -2454,6 +2454,7 @@ body::after {
 
 .ui-polish-list-row {
   position: relative;
+  padding-block: var(--row-pad);
   transition:
     background var(--dur-1) var(--ease-out),
     border-color var(--dur-1) var(--ease-out),

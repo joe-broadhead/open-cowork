@@ -56,10 +56,10 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1054.0
         version: 3.1054.0
-      '@fontsource-variable/hubot-sans':
+      '@fontsource-variable/mona-sans':
         specifier: ^5.2.8
         version: 5.2.8
-      '@fontsource-variable/mona-sans':
+      '@fontsource-variable/schibsted-grotesk':
         specifier: ^5.2.8
         version: 5.2.8
       '@modelcontextprotocol/sdk':
@@ -1128,11 +1128,11 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@fontsource-variable/hubot-sans@5.2.8':
-    resolution: {integrity: sha512-snt3rHAg6IrE0DKltYvjsIoeB+GSUpQHY3PAkMGUzxp8gN31kTl8yFuyuK6RcknIjtCVo7v0S6i31Oif3QxtjA==}
-
   '@fontsource-variable/mona-sans@5.2.8':
     resolution: {integrity: sha512-8OWdTcP8KvRxkU1Skkk+tX3D5XHN9buejxSDwrT7teRfGnpKBYxQUApV/+zS8TzeHiSU8H5Tc0HfBr57ahgcvA==}
+
+  '@fontsource-variable/schibsted-grotesk@5.2.8':
+    resolution: {integrity: sha512-nZAorDrFue4dXZbI613WdvAhu5DPH1UJYNn5fWl7Poa+nl/s9o3VUcQImIiVZpQnYG/jkPVzHsTE7WZbSDvvkw==}
 
   '@grammyjs/types@3.27.3':
     resolution: {integrity: sha512-yUKMLliGsGbnxu96YUJ7km7B0zy4PzeH/Jvti5705R/LeKDMqkDV4DckMSt+OrliWQpTwQljHE0QLol5zgxBkg==}
@@ -5909,9 +5909,9 @@ snapshots:
 
   '@exodus/bytes@1.15.0': {}
 
-  '@fontsource-variable/hubot-sans@5.2.8': {}
-
   '@fontsource-variable/mona-sans@5.2.8': {}
+
+  '@fontsource-variable/schibsted-grotesk@5.2.8': {}
 
   '@grammyjs/types@3.27.3': {}
 

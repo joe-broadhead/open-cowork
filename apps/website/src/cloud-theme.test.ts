@@ -4,12 +4,14 @@ import { createRequire } from 'node:module'
 import { UI_THEME_PRESETS, accentActionFillToken } from '@open-cowork/shared'
 import {
   CLOUD_THEME_ACCENT_STORAGE_KEY,
+  CLOUD_THEME_DENSITY_STORAGE_KEY,
   CLOUD_THEME_SCHEME_STORAGE_KEY,
   CLOUD_THEME_STORAGE_KEY,
   cloudAccentPresetOptions,
+  cloudDensityOptions,
   cloudThemePresetOptions,
 } from './cloud-theme.ts'
-import { applyCloudThemePreset, installCloudThemePresetControls } from './cloud-theme-client.ts'
+import { applyCloudDensity, applyCloudThemePreset, installCloudThemePresetControls } from './cloud-theme-client.ts'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 
 const require = createRequire(import.meta.url)
@@ -40,6 +42,7 @@ function bootstrap(tenantBrandingLocked: boolean): CloudWebClientBootstrap {
       defaultPreset: 'mercury',
       defaultScheme: 'dark',
       defaultAccent: 'azure',
+      defaultDensity: 'regular',
       tenantBrandingLocked,
       presets: cloudThemePresetOptions(),
       accents: cloudAccentPresetOptions(),
@@ -63,7 +66,10 @@ function withThemeDom(run: (dom: ThemeDom) => void) {
   const accents = cloudAccentPresetOptions()
     .map((preset) => `<option value="${preset.id}">${preset.label}</option>`)
     .join('')
-  const dom = new JSDOM(`<select id="cloud-theme-preset">${options}</select><select id="cloud-theme-scheme"><option value="dark">Mercury</option><option value="light">Day</option></select><select id="cloud-theme-accent">${accents}</select>`, { url: 'https://cloud.example.test/' })
+  const densities = cloudDensityOptions()
+    .map((density) => `<option value="${density.id}">${density.label}</option>`)
+    .join('')
+  const dom = new JSDOM(`<select id="cloud-theme-preset">${options}</select><select id="cloud-theme-scheme"><option value="dark">Mercury</option><option value="light">Day</option></select><select id="cloud-theme-accent">${accents}</select><select id="cloud-theme-density">${densities}</select>`, { url: 'https://cloud.example.test/' })
   ;(globalThis as { document?: Document }).document = dom.window.document
   ;(globalThis as { localStorage?: Storage }).localStorage = dom.window.localStorage
   try {
@@ -84,17 +90,21 @@ test('cloud theme switcher applies and persists shared preset tokens when unlock
   localStorage.setItem(CLOUD_THEME_STORAGE_KEY, 'tokyostorm')
   localStorage.setItem(CLOUD_THEME_SCHEME_STORAGE_KEY, 'light')
   localStorage.setItem(CLOUD_THEME_ACCENT_STORAGE_KEY, 'teal')
+  localStorage.setItem(CLOUD_THEME_DENSITY_STORAGE_KEY, 'compact')
   installCloudThemePresetControls(bootstrap(false))
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement
   const scheme = document.getElementById('cloud-theme-scheme') as HTMLSelectElement
   const accent = document.getElementById('cloud-theme-accent') as HTMLSelectElement
+  const density = document.getElementById('cloud-theme-density') as HTMLSelectElement
   assert.equal(select.disabled, false)
   assert.equal(select.value, 'tokyostorm')
   assert.equal(scheme.value, 'light')
   assert.equal(accent.value, 'teal')
+  assert.equal(density.value, 'compact')
   assert.equal(document.documentElement.dataset.uiTheme, 'tokyostorm')
   assert.equal(document.documentElement.dataset.colorScheme, 'light')
   assert.equal(document.documentElement.dataset.uiAccent, 'teal')
+  assert.equal(document.documentElement.dataset.density, 'compact')
   assert.equal(document.documentElement.style.getPropertyValue('--color-base'), UI_THEME_PRESETS.tokyostorm.light.base)
   assert.equal(document.documentElement.style.getPropertyValue('--color-accent'), '#3f9a8f')
   assert.equal(document.documentElement.style.getPropertyValue('--accent-2'), '#5bb4a8')
@@ -113,6 +123,11 @@ test('cloud theme switcher applies and persists shared preset tokens when unlock
   assert.equal(document.documentElement.style.getPropertyValue('--accent-2'), '#e87b9c')
   assert.equal(document.documentElement.style.getPropertyValue('--accent-text'), '#e87b9c')
   assert.equal(document.documentElement.style.getPropertyValue('--accent-action-foreground'), '#000000')
+
+  density.value = 'comfy'
+  density.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  assert.equal(localStorage.getItem(CLOUD_THEME_DENSITY_STORAGE_KEY), 'comfy')
+  assert.equal(document.documentElement.dataset.density, 'comfy')
 }))
 
 test('cloud theme switcher survives React hydration replacing the select node', () => withThemeDom((dom) => {
@@ -123,21 +138,29 @@ test('cloud theme switcher survives React hydration replacing the select node', 
   const accents = cloudAccentPresetOptions()
     .map((preset) => `<option value="${preset.id}">${preset.label}</option>`)
     .join('')
-  document.body.innerHTML = `<select id="cloud-theme-preset">${options}</select><select id="cloud-theme-scheme"><option value="dark">Mercury</option><option value="light">Day</option></select><select id="cloud-theme-accent">${accents}</select>`
+  const densities = cloudDensityOptions()
+    .map((density) => `<option value="${density.id}">${density.label}</option>`)
+    .join('')
+  document.body.innerHTML = `<select id="cloud-theme-preset">${options}</select><select id="cloud-theme-scheme"><option value="dark">Mercury</option><option value="light">Day</option></select><select id="cloud-theme-accent">${accents}</select><select id="cloud-theme-density">${densities}</select>`
 
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement
   const scheme = document.getElementById('cloud-theme-scheme') as HTMLSelectElement
   const accent = document.getElementById('cloud-theme-accent') as HTMLSelectElement
+  const density = document.getElementById('cloud-theme-density') as HTMLSelectElement
   select.value = 'frappe'
   scheme.value = 'light'
   accent.value = 'amber'
   select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  density.value = 'compact'
+  density.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
 
   assert.equal(localStorage.getItem(CLOUD_THEME_STORAGE_KEY), 'frappe')
   assert.equal(localStorage.getItem(CLOUD_THEME_SCHEME_STORAGE_KEY), 'light')
   assert.equal(localStorage.getItem(CLOUD_THEME_ACCENT_STORAGE_KEY), 'amber')
+  assert.equal(localStorage.getItem(CLOUD_THEME_DENSITY_STORAGE_KEY), 'compact')
   assert.equal(document.documentElement.dataset.uiTheme, 'frappe')
   assert.equal(document.documentElement.dataset.colorScheme, 'light')
+  assert.equal(document.documentElement.dataset.density, 'compact')
   assert.equal(document.documentElement.style.getPropertyValue('--color-base'), UI_THEME_PRESETS.frappe.light.base)
   assert.equal(document.documentElement.style.getPropertyValue('--color-accent'), '#e0913a')
   assert.equal(document.documentElement.style.getPropertyValue('--accent-text'), '#966127')
@@ -149,11 +172,14 @@ test('cloud theme switcher preserves tenant branding when locked', () => withThe
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement
   const scheme = document.getElementById('cloud-theme-scheme') as HTMLSelectElement
   const accent = document.getElementById('cloud-theme-accent') as HTMLSelectElement
+  const density = document.getElementById('cloud-theme-density') as HTMLSelectElement
   assert.equal(select.disabled, true)
   assert.equal(scheme.disabled, true)
   assert.equal(accent.disabled, true)
+  assert.equal(density.disabled, false)
   assert.equal(select.dataset.tenantBrandingLocked, 'true')
   assert.equal(document.documentElement.style.getPropertyValue('--color-base'), '')
+  assert.equal(document.documentElement.dataset.density, 'regular')
 }))
 
 test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
@@ -166,4 +192,11 @@ test('cloud theme applies preset tokens directly', () => withThemeDom(() => {
   assert.equal(document.documentElement.style.getPropertyValue('--accent-2'), '#a594f5')
   assert.equal(document.documentElement.style.getPropertyValue('--accent-text'), '#6c61bb')
   assert.equal(document.documentElement.style.getPropertyValue('--focus'), focusTokenForAccent('#8b7cf0'))
+}))
+
+test('cloud density applies directly with a regular fallback', () => withThemeDom(() => {
+  applyCloudDensity('compact')
+  assert.equal(document.documentElement.dataset.density, 'compact')
+  applyCloudDensity('wide')
+  assert.equal(document.documentElement.dataset.density, 'regular')
 }))

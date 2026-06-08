@@ -418,7 +418,7 @@ export function cloudWebsiteChatStyles() {
       max-width: 880px;
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-xs);
-      padding: var(--space-3) var(--space-4);
+      padding: var(--row-pad) var(--space-4);
       background: color-mix(in srgb, var(--color-elevated) 72%, transparent);
       color: var(--text);
       box-shadow: var(--shadow-1), var(--specular);
@@ -448,7 +448,7 @@ export function cloudWebsiteChatStyles() {
     .message-bubble[data-role="assistant"][data-streaming="true"] {
       border-radius: var(--radius-xl) var(--radius-xl) var(--radius-xl) var(--radius-xs);
       background: color-mix(in srgb, var(--color-elevated) 58%, transparent);
-      padding: var(--space-3) var(--space-4);
+      padding: var(--row-pad) var(--space-4);
     }
     .message-bubble[data-streaming="true"] p:last-of-type {
       background: linear-gradient(100deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%);

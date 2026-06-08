@@ -89,12 +89,19 @@ test('shared design tokens generate the desktop root token CSS', () => {
   }
 })
 
+test('shared design tokens emit the canonical density selectors', () => {
+  const css = emitRootTokensCss()
+  assert.ok(css.includes(':root[data-density="compact"] {\n  --row-pad: 7px;\n  --gap: 13px;\n}'))
+  assert.ok(css.includes(':root[data-density="regular"] {\n  --row-pad: 10px;\n  --gap: 18px;\n}'))
+  assert.ok(css.includes(':root[data-density="comfy"] {\n  --row-pad: 14px;\n  --gap: 24px;\n}'))
+})
+
 test('desktop font package dependencies are present for cloud font serving', () => {
   const packageJson = JSON.parse(readFileSync('apps/desktop/package.json', 'utf8')) as {
     dependencies?: Record<string, string>
   }
   assert.ok(packageJson.dependencies?.['@fontsource-variable/mona-sans'], 'Mona Sans font package is a desktop dependency')
-  assert.ok(packageJson.dependencies?.['@fontsource-variable/hubot-sans'], 'Hubot Sans font package is a desktop dependency')
+  assert.ok(packageJson.dependencies?.['@fontsource-variable/schibsted-grotesk'], 'Schibsted Grotesk font package is a desktop dependency')
 })
 
 test('design docs describe the shared Cloud Web and Desktop token contract', () => {

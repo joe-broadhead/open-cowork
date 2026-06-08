@@ -161,7 +161,7 @@ metadata for provider setup tooling. Helm deployments can set the equivalent
 `cloud.branding` and `gateway.branding` values.
 
 Cloud Web defaults to the shared Desktop Mercury graphite palette, Mona Sans /
-Hubot Sans font stacks, and the structural token scale from
+Schibsted Grotesk font stacks, and the structural token scale from
 `packages/shared/src/design-tokens.ts`. Public branding may override color and
 brand presentation keys such as `background`, `surface`, `elevated`, `text`,
 `mutedText`, `accent`, `accent2`, `accentHover`, `accentForeground`, semantic

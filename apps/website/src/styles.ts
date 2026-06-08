@@ -33,19 +33,19 @@ function cloudWebsiteFontFaces() {
   unicode-range: ${FONT_UNICODE_RANGE};
 }
 @font-face {
-  font-family: 'Hubot Sans Variable';
+  font-family: 'Schibsted Grotesk Variable';
   font-style: normal;
   font-display: block;
   font-weight: 200 900;
-  src: url('/assets/fonts/hubot-sans-latin-wght-normal.woff2') format('woff2-variations');
+  src: url('/assets/fonts/schibsted-grotesk-latin-wght-normal.woff2') format('woff2-variations');
   unicode-range: ${FONT_UNICODE_RANGE};
 }
 @font-face {
-  font-family: 'Hubot Sans Variable';
+  font-family: 'Schibsted Grotesk Variable';
   font-style: italic;
   font-display: block;
   font-weight: 200 900;
-  src: url('/assets/fonts/hubot-sans-latin-wght-italic.woff2') format('woff2-variations');
+  src: url('/assets/fonts/schibsted-grotesk-latin-wght-italic.woff2') format('woff2-variations');
   unicode-range: ${FONT_UNICODE_RANGE};
 }`
 }

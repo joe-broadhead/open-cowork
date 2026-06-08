@@ -2049,11 +2049,16 @@ test('cloud HTTP server serves only allow-listed Cloud Web font assets', async (
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
   try {
-    const font = await fetch(`${baseUrl}/assets/fonts/mona-sans-latin-wght-normal.woff2`)
-    assert.equal(font.status, 200)
-    assert.equal(font.headers.get('content-type'), 'font/woff2')
-    assert.equal(font.headers.get('cache-control'), 'public, max-age=86400')
-    assert.ok((await font.arrayBuffer()).byteLength > 1024, 'font response has woff2 bytes')
+    for (const fontName of [
+      'mona-sans-latin-wght-normal.woff2',
+      'schibsted-grotesk-latin-wght-normal.woff2',
+    ]) {
+      const font = await fetch(`${baseUrl}/assets/fonts/${fontName}`)
+      assert.equal(font.status, 200)
+      assert.equal(font.headers.get('content-type'), 'font/woff2')
+      assert.equal(font.headers.get('cache-control'), 'public, max-age=86400')
+      assert.ok((await font.arrayBuffer()).byteLength > 1024, `${fontName} response has woff2 bytes`)
+    }
 
     const unknown = await fetch(`${baseUrl}/assets/fonts/not-a-font.woff2`)
     assert.equal(unknown.status, 404)

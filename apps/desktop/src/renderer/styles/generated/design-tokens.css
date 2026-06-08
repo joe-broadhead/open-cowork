@@ -20,7 +20,7 @@
   --color-info: #6f8cc4;
   --color-accent-foreground: #ffffff;
   --font-ui: 'Mona Sans Variable', 'Mona Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Hubot Sans Variable', 'Hubot Sans', var(--font-ui);
+  --font-display: 'Schibsted Grotesk Variable', 'Schibsted Grotesk', var(--font-ui);
   --font-editorial: 'Iowan Old Style', 'New York', Georgia, serif;
   --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
   --text-2xs: 11px;
@@ -108,12 +108,14 @@
   --studio-inspector-w: 360px;
   --studio-composer-min-h: 148px;
   --studio-task-lane-w: 320px;
-  --density-compact-gap: 8px;
-  --density-compact-pad: 12px;
-  --density-regular-gap: 12px;
-  --density-regular-pad: 16px;
-  --density-spacious-gap: 16px;
-  --density-spacious-pad: 24px;
+  --density-compact-gap: 13px;
+  --density-compact-pad: 7px;
+  --density-regular-gap: 18px;
+  --density-regular-pad: 10px;
+  --density-comfy-gap: 24px;
+  --density-comfy-pad: 14px;
+  --row-pad: 10px;
+  --gap: 18px;
   --coworker-lead: var(--color-accent);
   --coworker-strategist: var(--color-info);
   --coworker-builder: var(--color-green);
@@ -140,4 +142,16 @@
   --primitive-dialog-w-lg: calc((var(--space-12) * 15) + var(--space-10));
   --measure: 840px;
   --measure-wide: 1200px;
+}
+:root[data-density="compact"] {
+  --row-pad: 7px;
+  --gap: 13px;
+}
+:root[data-density="regular"] {
+  --row-pad: 10px;
+  --gap: 18px;
+}
+:root[data-density="comfy"] {
+  --row-pad: 14px;
+  --gap: 24px;
 }

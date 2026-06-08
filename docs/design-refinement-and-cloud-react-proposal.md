@@ -10,7 +10,7 @@
 
 ## 1. Why this, and what's really going on
 
-The two apps look different, but **not because they use different design tokens** — they already share the same vocabulary (`--color-*`, `--space-*`, `--radius-*`, Mona Sans / Hubot Sans). The real gaps are:
+The two apps look different, but **not because they use different design tokens** — they already share the same vocabulary (`--color-*`, `--space-*`, `--radius-*`, Mona Sans / Schibsted Grotesk). The real gaps are:
 
 - **Aesthetic ceiling (both apps).** The shared "Mercury" language is *decorated but soft*: ultra-faint borders (`rgba(180,194,250,0.07)`), low-alpha tinted surfaces (`rgba(141,164,245,0.04)`), and a full-bleed radial gradient. Surfaces blend into the background, so the UI reads "pretty but mushy" rather than crisp and intentional. Codex's polish comes from the opposite instinct: **clear hairlines, calm flat surfaces, functional color, tight typographic hierarchy.** We can adopt that *discipline* without abandoning the indigo palette or the presets.
 - **Interaction ceiling (cloud only).** Cloud Web is server-rendered HTML strings + 12 concatenated vanilla-JS client scripts. It can match Desktop *visually* but not *behaviorally* — rich client state, optimistic updates, virtualized timelines, command palette, etc. are all reimplemented by hand against `innerHTML`. React closes this for good.
@@ -66,7 +66,7 @@ Scale is `1,2,3,4,5,6,8,10,12` (×4px) — solid but gappy above 24px. Fill the 
 Scale (`11→38px`) is already near-modular (~1.25 at the top). Refine optics, not sizes:
 
 - Add **letter-spacing tokens** for large display text: `--tracking-tight: -0.01em` (xl/2xl), `-0.02em` (3xl/hero) — tightens headings the way Codex does.
-- Enforce `--font-display` (Hubot Sans) on page/section titles; body stays Mona Sans.
+- Enforce `--font-display` (Schibsted Grotesk) on page/section titles; body stays Mona Sans.
 - Bump weight contrast: titles 600–650, body 400, metadata 450 muted. Variable fonts (200–900) already support this.
 
 ### 3.4 Motion polish

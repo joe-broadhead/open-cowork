@@ -144,7 +144,7 @@ execution behavior.
 | Token family | Role |
 | --- | --- |
 | `--studio-shell-*` | shared shell, topbar, inspector, composer, and task-lane dimensions |
-| `--density-*` | compact, regular, and spacious gap/padding values for operational surfaces |
+| `--density-*` | compact, regular, and comfy row padding/gap values for operational surfaces; emitted as `--row-pad` and `--gap` via `:root[data-density]` |
 | `--coworker-*` | semantic agent/coworker identity colors for lead, strategist, builder, reviewer, operator, and neutral identities |
 | `--lane-*` | planning, delegated, review, approval, and artifact lane colors |
 | `--review-*` | proposed, accepted, and blocked review outcome colors |
@@ -160,7 +160,7 @@ OpenCode and the existing Open Cowork projection layer.
 | Shared package | `packages/shared/src/design-tokens.ts` | Canonical typed token values, default dark brand theme, public branding bridge, and CSS emitter. |
 | Shared React UI | `packages/ui/src/` | Token-backed `WorkbenchLayout`, `ActionCluster`, `DiffView`, Studio shell/coworker/composer/lane/card primitives, and base primitive components consumed by Desktop and Cloud Web. |
 | Desktop | `apps/desktop/src/renderer/styles/generated/design-tokens.css` | Generated `:root` CSS variables imported by `globals.css`; do not hand-edit. |
-| Cloud Web | `apps/website/src/styles.ts` and `apps/website/src/style-shared-ui.ts` | Inline shell CSS imports `emitRootTokensCss()`, serves Mona Sans / Hubot Sans from `/assets/fonts/*.woff2`, overlays public branding variables, and styles the shared workbench/review primitives used by the Vite React client. |
+| Cloud Web | `apps/website/src/styles.ts` and `apps/website/src/style-shared-ui.ts` | Inline shell CSS imports `emitRootTokensCss()`, serves Mona Sans / Schibsted Grotesk from `/assets/fonts/*.woff2`, overlays public branding variables, and styles the shared workbench/review primitives used by the Vite React client. |
 | Drift gate | `tests/design-tokens-sync.test.ts` | Fails when generated Desktop tokens, shared tokens, font package assumptions, or default public branding drift. |
 
 Run `pnpm design-tokens:build` after editing `DESIGN_TOKENS`. CI also runs

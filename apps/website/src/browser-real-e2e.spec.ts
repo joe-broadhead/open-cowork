@@ -25,8 +25,8 @@ const BUILT_REACT_CLIENT_PATH = fileURLToPath(new URL('../dist/client/open-cowor
 const FONT_ASSET_SPECS = {
   'mona-sans-latin-wght-normal.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-normal.woff2',
   'mona-sans-latin-wght-italic.woff2': '@fontsource-variable/mona-sans/files/mona-sans-latin-wght-italic.woff2',
-  'hubot-sans-latin-wght-normal.woff2': '@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-normal.woff2',
-  'hubot-sans-latin-wght-italic.woff2': '@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-italic.woff2',
+  'schibsted-grotesk-latin-wght-normal.woff2': '@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2',
+  'schibsted-grotesk-latin-wght-italic.woff2': '@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-italic.woff2',
 } as const
 
 type ChromiumLauncher = {
@@ -366,7 +366,7 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     await page.goto(pageUrl, { waitUntil: 'load' })
     await page.evaluate(() => document.fonts?.ready)
     assert.ok(fontRequests.some((path) => path.endsWith('/mona-sans-latin-wght-normal.woff2')), 'Mona Sans font route was requested')
-    assert.ok(fontRequests.some((path) => path.endsWith('/hubot-sans-latin-wght-normal.woff2')), 'Hubot Sans font route was requested')
+    assert.ok(fontRequests.some((path) => path.endsWith('/schibsted-grotesk-latin-wght-normal.woff2')), 'Schibsted Grotesk font route was requested')
     assert.deepEqual(reactClientRequests, ['/assets/open-cowork-cloud-react.js'])
     if (builtReactClient) {
       try {
@@ -425,6 +425,10 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
         await page.evaluate(() => document.documentElement.style.getPropertyValue('--color-accent')),
         UI_ACCENT_PRESETS[DEFAULT_UI_ACCENT_PRESET_ID].accent,
       )
+      await page.locator('#cloud-theme-density').selectOption('compact')
+      await page.waitForFunction(() => document.documentElement.dataset.density === 'compact')
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.density), 'compact')
+      assert.equal(await page.locator('#cloud-theme-density').inputValue(), 'compact')
     }
     assert.equal(await page.locator('[data-cloud-react-shell]').getAttribute('data-cloud-react-shell'), 'ssr')
     try {

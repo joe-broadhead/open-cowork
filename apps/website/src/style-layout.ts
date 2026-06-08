@@ -17,10 +17,10 @@ export function cloudWebsiteLayoutStyles() {
       max-height: 100vh;
       background: color-mix(in srgb, var(--color-base) 88%, var(--color-elevated) 12%);
       border-right: var(--border-width-1) solid var(--color-border-subtle);
-      padding: var(--space-3);
+      padding: var(--row-pad);
       display: flex;
       flex-direction: column;
-      gap: var(--space-3);
+      gap: var(--gap);
       box-shadow: inset -1px 0 0 var(--color-border-subtle);
       overflow-x: hidden;
       overflow-y: auto;
@@ -59,7 +59,7 @@ export function cloudWebsiteLayoutStyles() {
       color: var(--text);
       font-family: var(--font-display);
       font-weight: 650;
-      letter-spacing: var(--tracking-tight);
+      letter-spacing: var(--tracking-display);
     }
     .brand-title {
       overflow: hidden;
@@ -92,7 +92,7 @@ export function cloudWebsiteLayoutStyles() {
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       box-shadow: var(--surface-highlight);
-      padding: var(--space-2);
+      padding: var(--row-pad);
       min-width: 0;
     }
     .workspace-card-row {
@@ -172,7 +172,7 @@ export function cloudWebsiteLayoutStyles() {
       justify-content: space-between;
       border-color: transparent;
       background: transparent;
-      padding: var(--space-1) var(--space-2);
+      padding: var(--row-pad) var(--space-2);
       text-align: left;
     }
     .sidebar-thread-row:hover:not(:disabled) {

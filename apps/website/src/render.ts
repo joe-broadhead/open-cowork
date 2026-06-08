@@ -17,7 +17,7 @@ import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
-import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
+import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
 
@@ -40,6 +40,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
       defaultPreset: DEFAULT_CLOUD_THEME_PRESET,
       defaultScheme: DEFAULT_CLOUD_THEME_SCHEME,
       defaultAccent: DEFAULT_CLOUD_THEME_ACCENT_PRESET,
+      defaultDensity: DEFAULT_CLOUD_THEME_DENSITY,
       tenantBrandingLocked,
       presets: themePresets,
       accents: accentPresets,

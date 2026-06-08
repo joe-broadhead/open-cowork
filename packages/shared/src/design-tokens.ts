@@ -704,7 +704,7 @@ export const DESIGN_TOKENS = {
   color: DEFAULT_DARK_BRAND_THEME,
   fontFamily: {
     ui: "'Mona Sans Variable', 'Mona Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    display: "'Hubot Sans Variable', 'Hubot Sans', var(--font-ui)",
+    display: "'Schibsted Grotesk Variable', 'Schibsted Grotesk', var(--font-ui)",
     editorial: "'Iowan Old Style', 'New York', Georgia, serif",
     mono: "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace",
   },
@@ -815,12 +815,12 @@ export const DESIGN_TOKENS = {
     taskLaneW: '320px',
   },
   density: {
-    compactGap: '8px',
-    compactPad: '12px',
-    regularGap: '12px',
-    regularPad: '16px',
-    spaciousGap: '16px',
-    spaciousPad: '24px',
+    compactGap: '13px',
+    compactPad: '7px',
+    regularGap: '18px',
+    regularPad: '10px',
+    comfyGap: '24px',
+    comfyPad: '14px',
   },
   coworker: {
     lead: 'var(--color-accent)',
@@ -863,6 +863,18 @@ export const DESIGN_TOKENS = {
     wide: '1200px',
   },
 } as const
+
+export const DESIGN_DENSITY_IDS = ['compact', 'regular', 'comfy'] as const
+export type DesignDensityId = typeof DESIGN_DENSITY_IDS[number]
+
+const DENSITY_TOKEN_NAMES = {
+  compact: { gap: 'compactGap', pad: 'compactPad' },
+  regular: { gap: 'regularGap', pad: 'regularPad' },
+  comfy: { gap: 'comfyGap', pad: 'comfyPad' },
+} as const satisfies Record<DesignDensityId, {
+  gap: keyof typeof DESIGN_TOKENS.density
+  pad: keyof typeof DESIGN_TOKENS.density
+}>
 
 function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
   return [
@@ -924,6 +936,8 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ...Object.entries(tokens.controlHeight).map(([name, value]) => [`--control-h-${name}`, value] as [string, string]),
     ...Object.entries(tokens.studio).map(([name, value]) => [`--studio-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value] as [string, string]),
     ...Object.entries(tokens.density).map(([name, value]) => [`--density-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value] as [string, string]),
+    ['--row-pad', tokens.density.regularPad],
+    ['--gap', tokens.density.regularGap],
     ...Object.entries(tokens.coworker).map(([name, value]) => [`--coworker-${name}`, value] as [string, string]),
     ...Object.entries(tokens.lane).map(([name, value]) => [`--lane-${name}`, value] as [string, string]),
     ...Object.entries(tokens.review).map(([name, value]) => [`--review-${name}`, value] as [string, string]),
@@ -940,10 +954,23 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
   ]
 }
 
+function densitySelectorEntries(tokens = DESIGN_TOKENS): string[] {
+  return DESIGN_DENSITY_IDS.flatMap((density) => {
+    const names = DENSITY_TOKEN_NAMES[density]
+    return [
+      `:root[data-density="${density}"] {`,
+      `  --row-pad: ${tokens.density[names.pad]};`,
+      `  --gap: ${tokens.density[names.gap]};`,
+      '}',
+    ]
+  })
+}
+
 export function emitRootTokensCss(tokens = DESIGN_TOKENS): string {
   return [
     ':root {',
     ...tokenEntries(tokens).map(([name, value]) => `  ${name}: ${value};`),
     '}',
+    ...densitySelectorEntries(tokens),
   ].join('\n')
 }
