@@ -74,11 +74,13 @@ function adminSurfaceDocRow(entry: (typeof CLOUD_WEB_ADMIN_SURFACE_MATRIX)[numbe
   return `| ${markdownTableCell(entry.label)} | \`${entry.routeId}\` | ${markdownTableCell(entry.desktopSurface)} | ${markdownTableCell(entry.cloudAffordance)} | ${markdownTableCell(entry.sensitiveBoundary)} |`
 }
 
-test('cloud website renders workbench and admin shell surfaces', () => {
+test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Open Cowork Cloud/)
-  assert.match(html, /Workbench/)
-  assert.match(html, /History/)
+  assert.match(html, /Studio/)
+  assert.match(html, /Projects/)
   assert.match(html, /Home/)
+  assert.match(html, /Coworkers/)
+  assert.match(html, /Playbooks/)
   assert.match(html, /Tools &amp; Skills/)
   assert.match(html, /Artifacts/)
   assert.match(html, /Admin controls/)
@@ -93,6 +95,8 @@ test('cloud website renders workbench and admin shell surfaces', () => {
   assert.match(html, /Diagnostics/)
   assert.match(html, /data-route-panel="threads"/)
   assert.match(html, /data-route-panel="byok"/)
+  assert.match(html, /data-route-panel="chat"(?=[^>]*data-requires-auth="false")(?![^>]* hidden)[^>]*>/)
+  assert.match(html, /data-route-panel="org"(?=[^>]*data-requires-auth="false")(?=[^>]* hidden)[^>]*>/)
   assert.match(html, /What shall we cowork on today\?/)
   assert.match(html, /class="cloud-composer chat-composer-shell"/)
   assert.match(html, /class="composer-toolbar"/)
@@ -146,17 +150,19 @@ test('cloud website renders workbench and admin shell surfaces', () => {
 test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(DEFAULT_CLOUD_WEB_ROUTE, 'chat')
   assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.id), ['workbench', 'admin'])
+  assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.label), ['Studio', 'Admin'])
+  assert.equal(findCloudWebRoute('chat')?.requiresAuth, false)
   assert.equal(findCloudWebRoute('threads')?.surface, 'workbench')
   assert.equal(findCloudWebRoute('byok')?.requiresAdmin, true)
   assert.equal(findCloudWebRoute('usage')?.requiresAdmin, false)
 })
 
-test('cloud website desktop parity matrix covers every workbench route and documented boundary', () => {
+test('cloud website desktop parity matrix covers every Studio route and documented boundary', () => {
   const workbenchRoutes = CLOUD_WEB_ROUTES.filter((route) => route.surface === 'workbench')
   const routeApiIds = new Set(CLOUD_WEB_ROUTE_API_MATRIX.map((entry) => entry.routeId))
   const doc = readFileSync(fileURLToPath(new URL('../../../docs/cloud-web-workbench.md', import.meta.url)), 'utf8')
 
-  assert.match(doc, /Desktop\/Cloud Workbench Parity Matrix/)
+  assert.match(doc, /Desktop\/Cloud Studio Parity Matrix/)
   assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'shared'))
   assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'cloud-only'))
   assert.ok(CLOUD_WEB_WORKBENCH_PARITY_MATRIX.some((entry) => entry.availability === 'desktop-only'))
@@ -243,7 +249,7 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
     assert.ok(entry.redaction, `${entry.routeId} defines redaction behavior`)
     assert.ok(entry.redactionContract, `${entry.routeId} defines structured redaction contract`)
     assert.equal(entry.redactionContract.rawSecretsAllowed, false, `${entry.routeId} forbids raw secrets`)
-    assert.ok(entry.redactionContract.browserSanitizer, `${entry.routeId} names the browser/server sanitizer boundary`)
+  assert.ok(entry.redactionContract.browserSanitizer, `${entry.routeId} names the browser/server sanitizer boundary`)
     assert.ok(entry.tests.length > 0, `${entry.routeId} lists test coverage`)
     for (const filename of entry.tests) {
       assert.ok(existsSync(fileURLToPath(routeMatrixTestUrl(filename))), `${entry.routeId} listed test file exists: ${filename}`)
@@ -261,6 +267,9 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
   assert.doesNotMatch(doc, /backend cursoring is deferred until the sessions API exposes cursors/)
   assert.match(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'threads')?.pagination || '', /cursor pages/)
   assert.equal(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'threads')?.paginationContract.cursor, 'implemented')
+  assert.equal(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'chat')?.requiredRole, 'public')
+  assert.match(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'chat')?.states.loading || '', /default public route/)
+  assert.doesNotMatch(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'org')?.states.loading || '', /fallback/)
   for (const routeId of ['members', 'audit', 'usage', 'gateway', 'connections', 'policy', 'workflows', 'artifacts', 'diagnostics']) {
     const entry = CLOUD_WEB_ROUTE_API_MATRIX.find((candidate) => candidate.routeId === routeId)
     assert.ok(entry, `${routeId} has a route matrix entry`)

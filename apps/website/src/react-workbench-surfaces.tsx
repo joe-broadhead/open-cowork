@@ -170,7 +170,7 @@ function AgentCard({ agent, disabled, onStart }: { agent: CloudWebWorkbenchAgent
           className="primary"
           type="button"
           disabled={disabled}
-          title={disabled ? 'Start chat disables when chat or agent browsing is disabled by this cloud profile.' : ''}
+          title={disabled ? 'Start chat disables when chat or coworker browsing is disabled by this cloud profile.' : ''}
           onClick={() => onStart(agent.name)}
         >
           Start chat
@@ -192,7 +192,7 @@ function CapabilityRows({ items, emptyText }: { items: Capability[], emptyText: 
               <span className="pill" data-kind={item.source === 'custom' ? 'warn' : 'ok'}>{item.source === 'custom' ? 'custom' : 'allowed'}</span>
             </div>
             <p className="empty">{item.description || cloudWebCapabilityPolicyNote(item)}</p>
-            <small>{[item.kind || 'skill', item.source || item.origin || 'profile', item.scope, list(item.agentNames).length ? `agents: ${list(item.agentNames).join(', ')}` : null, list(item.toolIds).length ? `tools: ${list(item.toolIds).join(', ')}` : null].filter(Boolean).join(' - ')}</small>
+            <small>{[item.kind || 'skill', item.source || item.origin || 'profile', item.scope, list(item.agentNames).length ? `coworkers: ${list(item.agentNames).join(', ')}` : null, list(item.toolIds).length ? `tools: ${list(item.toolIds).join(', ')}` : null].filter(Boolean).join(' - ')}</small>
             <small>{cloudWebCapabilityPolicyNote(item)}</small>
           </div>
         </div>
@@ -203,7 +203,7 @@ function CapabilityRows({ items, emptyText }: { items: Capability[], emptyText: 
 
 function WorkflowTable({ workflows, selectedWorkflowId, onSelect }: { workflows: Workflow[], selectedWorkflowId: string | null, onSelect: (workflowId: string) => void }) {
   if (!workflows.length) {
-    return <div className="table-row empty-row" role="row"><span role="cell">No workflows loaded.</span><span role="cell">-</span><span role="cell">-</span><span role="cell">-</span></div>
+    return <div className="table-row empty-row" role="row"><span role="cell">No playbooks loaded.</span><span role="cell">-</span><span role="cell">-</span><span role="cell">-</span></div>
   }
   return (
     <>
@@ -242,8 +242,8 @@ function WorkflowDetail({
   onArchive: (workflow: Workflow) => void
   onOpenThread: (sessionId: string) => void
 }) {
-  const reason = 'Workflow controls disable when workflows are disabled by this cloud profile or the workflow is archived.'
-  if (!workflow) return <p className="empty">Select or create a workflow.</p>
+  const reason = 'Playbook controls disable when workflows are disabled by this cloud profile or the playbook is archived.'
+  if (!workflow) return <p className="empty">Select or create a playbook.</p>
   return (
     <>
       <span className="pill" data-kind={workflowPillKind(workflow.status)}>{workflow.status || 'unknown'}</span>
@@ -253,14 +253,14 @@ function WorkflowDetail({
           <div>
             <strong>Latest run</strong>
             <br />
-            <small>{[workflow.latestRunStatus || 'unknown', workflow.latestRunSummary, workflow.latestRunSessionId ? `thread ${workflow.latestRunSessionId}` : null].filter(Boolean).join(' - ')}</small>
+            <small>{[workflow.latestRunStatus || 'unknown', workflow.latestRunSummary, workflow.latestRunSessionId ? `chat ${workflow.latestRunSessionId}` : null].filter(Boolean).join(' - ')}</small>
           </div>
-          {workflow.latestRunSessionId ? <div className="row-actions"><button type="button" onClick={() => onOpenThread(workflow.latestRunSessionId as string)}>Open run thread</button></div> : null}
+          {workflow.latestRunSessionId ? <div className="row-actions"><button type="button" onClick={() => onOpenThread(workflow.latestRunSessionId as string)}>Open run chat</button></div> : null}
         </div>
       ) : null}
       <p className="empty">{workflow.instructions || 'No instructions.'}</p>
       <details className="runtime-detail">
-        <summary>Workflow metadata</summary>
+        <summary>Playbook metadata</summary>
         <pre>{JSON.stringify({ id: workflow.id, agentName: workflow.agentName, skillNames: workflow.skillNames, toolIds: workflow.toolIds, latestRunId: workflow.latestRunId, latestRunStatus: workflow.latestRunStatus, latestRunSummary: workflow.latestRunSummary, nextRunAt: workflow.nextRunAt, lastRunAt: workflow.lastRunAt }, null, 2)}</pre>
       </details>
       <div className="row-actions">
@@ -280,7 +280,7 @@ function WorkflowDetail({
           </div>
           <div className="row-actions">
             <span className="pill" data-kind={workflowPillKind(run.status)}>{run.status || 'unknown'}</span>
-            {run.sessionId ? <button type="button" onClick={() => onOpenThread(run.sessionId as string)}>Open thread</button> : null}
+            {run.sessionId ? <button type="button" onClick={() => onOpenThread(run.sessionId as string)}>Open chat</button> : null}
           </div>
         </div>
       )) : <p className="empty">No runs recorded.</p>}
@@ -313,7 +313,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     artifactHistory: usePortalTarget('artifact-history'),
   }
   const workflowDisabled = bootstrap.features.workflows === false
-  const workflowDisabledReason = 'Workflow controls are disabled by this cloud profile.'
+  const workflowDisabledReason = 'Playbook controls are disabled by this cloud profile.'
   const agentDisabled = bootstrap.features.chat === false || bootstrap.features.agents === false
 
   const loadCapabilities = useCallback(async () => {
@@ -416,7 +416,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
           })
           form.reset()
           await loadWorkflows()
-          setStatus('Workflow created', 'ok')
+          setStatus('Playbook created', 'ok')
         } catch (error) {
           setStatus(errorMessage(error), 'warn')
         }
@@ -454,7 +454,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
         const nextWorkflow = asRecord(body.workflow)
         const sessionId = text(run.sessionId || nextWorkflow.latestRunSessionId)
         if (sessionId) await onSelectSession(sessionId)
-        setStatus('Workflow run started', 'ok')
+        setStatus('Playbook run started', 'ok')
       } catch (error) {
         setStatus(errorMessage(error), 'warn')
       }
@@ -464,9 +464,9 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   const updateWorkflow = useCallback((workflow: Workflow, action: 'pause' | 'resume' | 'archive') => {
     void (async () => {
       if (action === 'archive') {
-        const confirmation = window.prompt(`Type ${workflow.id} to archive this workflow.`)
+        const confirmation = window.prompt(`Type ${workflow.id} to archive this playbook.`)
         if (confirmation !== workflow.id) {
-          setStatus('Confirmation did not match the workflow id.', 'warn')
+          setStatus('Confirmation did not match the playbook id.', 'warn')
           return
         }
       }
@@ -475,7 +475,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
         else if (action === 'resume') await api.workflows.resume(workflow.id)
         else await api.workflows.archive(workflow.id)
         await loadWorkflows()
-        setStatus(`Workflow ${action} complete`, 'ok')
+        setStatus(`Playbook ${action} complete`, 'ok')
       } catch (error) {
         setStatus(errorMessage(error), 'warn')
       }
@@ -487,7 +487,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     portals.push(createPortal(
       agents.length
         ? <>{agents.map((agent) => <AgentCard key={agent.name} agent={agent} disabled={agentDisabled} onStart={onStartAgentChat} />)}</>
-        : <p className="empty">{capabilityError || 'No profile-allowed agents loaded.'}</p>,
+        : <p className="empty">{capabilityError || 'No profile-allowed coworkers loaded.'}</p>,
       targets.agents,
     ))
   }
@@ -496,8 +496,8 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       <>
         <div className="row compact"><strong>Profile</strong><span>{text(asRecord(workspace).profileName || bootstrap.profileName, 'default')}</span></div>
         <div className="row compact"><strong>Chat</strong><span>{bootstrap.features.chat === false ? 'disabled' : 'enabled'}</span></div>
-        <div className="row compact"><strong>Workflows</strong><span>{workflowDisabled ? 'disabled' : 'enabled'}</span></div>
-        <div className="row compact"><strong>Surfaces</strong><span>chat, agents, tools, workflows, artifacts</span></div>
+        <div className="row compact"><strong>Playbooks</strong><span>{workflowDisabled ? 'disabled' : 'enabled'}</span></div>
+        <div className="row compact"><strong>Surfaces</strong><span>chat, coworkers, tools, playbooks, artifacts</span></div>
       </>,
       targets.agentPolicy,
     ))
@@ -508,7 +508,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     portals.push(createPortal(
       <>
         {capabilityError ? <p className="notice">{capabilityError}</p> : null}
-        {bootstrap.features.agents === false ? <p className="empty">Agent capability browsing is disabled by this org profile.</p> : null}
+        {bootstrap.features.agents === false ? <p className="empty">Coworker capability browsing is disabled by this org profile.</p> : null}
         {bootstrap.features.customSkills === false ? <p className="empty">Custom skill metadata may be synced but is disabled by this org profile.</p> : null}
         {bootstrap.features.customMcps === false ? <p className="empty">Custom MCP metadata may be synced but is disabled by this org profile.</p> : null}
         <p className="empty">The browser shows cloud-safe capability metadata and policy verdicts only.</p>

@@ -40,28 +40,28 @@ export const DEFAULT_CLOUD_WEB_ROUTE: CloudWebRouteId = 'chat'
 
 export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
   {
-    id: 'threads',
-    label: 'History',
-    surface: 'workbench',
-    requiresAuth: true,
-    requiresAdmin: false,
-    summary: cloudWebWorkbenchRouteSummary('threads', 'Recent conversations from web, desktop, and gateway.'),
-  },
-  {
     id: 'chat',
     label: 'Home',
     surface: 'workbench',
-    requiresAuth: true,
+    requiresAuth: false,
     requiresAdmin: false,
-    summary: cloudWebWorkbenchRouteSummary('chat', 'Selected cloud session timeline and composer.'),
+    summary: cloudWebWorkbenchRouteSummary('chat', 'Start or continue a Cloud chat.'),
   },
   {
-    id: 'agents',
-    label: 'Agents',
+    id: 'threads',
+    label: 'Projects',
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: cloudWebWorkbenchRouteSummary('agents', 'Profile-allowed agents and runtime capability status.'),
+    summary: cloudWebWorkbenchRouteSummary('threads', 'Recent chats and project-backed Cloud work.'),
+  },
+  {
+    id: 'agents',
+    label: 'Coworkers',
+    surface: 'workbench',
+    requiresAuth: true,
+    requiresAdmin: false,
+    summary: cloudWebWorkbenchRouteSummary('agents', 'Profile-allowed coworkers and runtime capability status.'),
   },
   {
     id: 'capabilities',
@@ -73,11 +73,11 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
   },
   {
     id: 'workflows',
-    label: 'Workflows',
+    label: 'Playbooks',
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
-    summary: cloudWebWorkbenchRouteSummary('workflows', 'Workflow definitions, runs, and status.'),
+    summary: cloudWebWorkbenchRouteSummary('workflows', 'Saved playbooks, runs, and status.'),
   },
   {
     id: 'artifacts',
@@ -172,7 +172,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
 export const CLOUD_WEB_ROUTE_GROUPS: CloudWebRouteGroup[] = [
   {
     id: 'workbench',
-    label: 'Workbench',
+    label: 'Studio',
     routes: CLOUD_WEB_ROUTES.filter((route) => route.surface === 'workbench'),
   },
   {

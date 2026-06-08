@@ -117,7 +117,7 @@ test('cloud web hydrated shell manages route focus state and admin visibility fo
     assert.equal(adminNav?.open, false)
     assert.equal(harness.document.querySelector('[data-route-panel="chat"]')?.getAttribute('aria-hidden'), 'false')
 
-    harness.clickText('[data-route-link]', 'History')
+    harness.clickText('[data-route-link]', 'Projects')
     await waitFor(() => {
       assert.equal(harness.document.body.dataset.route, 'threads')
       assert.equal(harness.document.querySelector('[data-route-link="threads"]')?.getAttribute('aria-current'), 'page')

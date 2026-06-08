@@ -46,6 +46,126 @@ function setText(id: string, value: string) {
   if (element) element.textContent = value
 }
 
+function textNodeElement<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, value: string) {
+  const element = document.createElement(tag)
+  if (className) element.className = className
+  element.textContent = value
+  return element
+}
+
+function fallbackButton(label: string, title: string, attributes: Record<string, string> = {}) {
+  const button = document.createElement('button')
+  button.type = 'button'
+  button.disabled = true
+  button.title = title
+  button.textContent = label
+  for (const [name, value] of Object.entries(attributes)) button.setAttribute(name, value)
+  return button
+}
+
+function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean) {
+  setInspectorOpen(false)
+  document.body.dataset.chatState = 'empty'
+  setText('chat-session-title', 'What shall we cowork on today?')
+  setText('chat-session-meta', 'Ask anything, or @mention a coworker')
+
+  const managedActions = document.getElementById('chat-managed-actions')
+  if (managedActions) {
+    const actionCluster = document.createElement('div')
+    actionCluster.className = 'ui-action-cluster cloud-chat-action-cluster'
+    actionCluster.setAttribute('role', 'toolbar')
+    actionCluster.setAttribute('aria-label', 'Cloud chat actions')
+    actionCluster.dataset.actionCluster = 'true'
+    actionCluster.append(
+      fallbackButton('Cloud model', 'Model selection is managed by this cloud workspace', { class: 'ui-action-cluster__item', 'data-action-id': 'cloud-model', 'data-managed-control': 'true' }),
+      fallbackButton('Think Auto', 'Reasoning is managed by this cloud workspace', { class: 'ui-action-cluster__item', 'data-action-id': 'reasoning', 'data-managed-control': 'true' }),
+      fallbackButton(profileName || 'default', 'Active cloud profile', { class: 'ui-action-cluster__item', 'data-action-id': 'profile', 'data-managed-control': 'true' }),
+    )
+    const reviewButton = document.createElement('button')
+    reviewButton.className = 'ghost chat-inspector-toggle'
+    reviewButton.id = 'chat-inspector-toggle'
+    reviewButton.type = 'button'
+    reviewButton.setAttribute('aria-controls', 'chat-inspector')
+    reviewButton.setAttribute('aria-expanded', 'false')
+    reviewButton.textContent = 'Review'
+    managedActions.replaceChildren(actionCluster, reviewButton)
+  }
+
+  const timeline = document.getElementById('chat-timeline')
+  if (timeline) {
+    timeline.hidden = false
+    timeline.replaceChildren(textNodeElement('p', 'empty', 'Start a conversation from the composer.'))
+  }
+
+  const form = document.getElementById('prompt-form') as HTMLFormElement | null
+  if (form) {
+    form.removeAttribute('data-react-owned')
+    form.setAttribute('aria-label', 'Chat composer')
+    const label = textNodeElement('label', 'sr-only', 'Message')
+    label.setAttribute('for', 'chat-message-input')
+
+    const inputChrome = document.createElement('div')
+    inputChrome.className = 'composer-input-chrome'
+    const textarea = document.createElement('textarea')
+    textarea.id = 'chat-message-input'
+    textarea.className = 'chat-composer-textarea'
+    textarea.name = 'text'
+    textarea.rows = 1
+    textarea.disabled = true
+    textarea.placeholder = 'Ask anything, or @mention a coworker'
+    inputChrome.append(textarea)
+
+    const chips = document.createElement('div')
+    chips.className = 'composer-agent-chips'
+    chips.id = 'composer-agent-chips'
+    chips.setAttribute('aria-label', 'Coworker shortcuts')
+
+    const toolbar = document.createElement('div')
+    toolbar.className = 'composer-toolbar'
+    toolbar.setAttribute('aria-label', 'Chat controls')
+    const leftGroup = document.createElement('div')
+    leftGroup.className = 'composer-toolbar-group'
+    leftGroup.append(
+      fallbackButton('', 'Cloud file attachments use project snapshots from Projects', { class: 'icon-button ghost', 'data-composer-attach': 'true', 'data-managed-control': 'true', 'aria-label': 'Attach file' }),
+    )
+    const selectLabel = document.createElement('label')
+    selectLabel.className = 'composer-select-label'
+    selectLabel.append(textNodeElement('span', 'sr-only', 'Coworker'))
+    const select = document.createElement('select')
+    select.id = 'composer-agent'
+    select.name = 'agent'
+    select.disabled = true
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = 'Default coworker'
+    select.append(option)
+    selectLabel.append(select)
+    leftGroup.append(selectLabel)
+
+    const rightGroup = document.createElement('div')
+    rightGroup.className = 'composer-toolbar-group'
+    const status = document.createElement('span')
+    status.className = 'pill'
+    status.id = 'chat-event-status'
+    status.dataset.kind = 'warn'
+    status.textContent = chatEnabled ? 'sign in' : 'disabled'
+    const send = document.createElement('button')
+    send.className = 'composer-send'
+    send.type = 'submit'
+    send.disabled = true
+    send.setAttribute('aria-label', 'Send message')
+    send.append(textNodeElement('span', 'sr-only', 'Send message'))
+    rightGroup.append(status, send)
+    toolbar.append(leftGroup, rightGroup)
+    form.replaceChildren(label, inputChrome, chips, toolbar)
+  }
+
+  const inspectorDetail = document.getElementById('chat-inspector-detail')
+  if (inspectorDetail) {
+    inspectorDetail.replaceChildren(textNodeElement('p', 'empty', 'Details appear after a conversation starts.'))
+  }
+}
+
 function setInspectorOpen(open: boolean) {
   const panel = document.getElementById('chat-inspector') as HTMLElement | null
   const toggle = document.getElementById('chat-inspector-toggle') as HTMLElement | null
@@ -251,8 +371,8 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
     dispatch({ type: 'auth', authStatus: 'signed-out' })
     setPrincipal(null)
     setCloudStatus(message, 'warn')
-    navigate('org', true)
-  }, [api, dispatch, navigate])
+    navigate(bootstrap.defaultRoute, true)
+  }, [api, bootstrap.defaultRoute, dispatch, navigate])
 
   useEffect(() => {
     const handleAuthRequired = () => signOut()
@@ -305,7 +425,7 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
     setText('org-meta', signedIn && email ? `${email} - ${role} - ${profile}` : signedIn ? `${role} - ${profile}` : 'Sign in to open your cloud workspace')
     setText('profile-name', profile)
     setText('role-name', role)
-    setText('workspace-label', signedIn ? org : 'Cloud workspace')
+    setText('workspace-label', signedIn ? org : 'Studio workspace')
     setText('workspace-meta', signedIn && email ? `${email} - ${profile}` : 'Sign in to sync chats')
     setText('profile-summary', profile)
 
@@ -314,6 +434,7 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
     setAdminControlState(!signedIn || adminLocked, 'Admin permissions are required for this control.', bootstrap.adminSurfaces)
     setChatControlState(!signedIn || bootstrap.features.chat === false, bootstrap.features.chat === false ? 'Chat is disabled by this cloud profile.' : 'Sign in to start or continue chats.')
     if (state.authStatus !== 'loading') {
+      if (!signedIn) restoreSignedOutChatFallback(profile, bootstrap.features.chat !== false)
       const requestedRoute = hashRoute()
       navigate(requestedRoute || bootstrap.defaultRoute, true)
     }

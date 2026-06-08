@@ -1,5 +1,5 @@
 import { cloudWebAdminSurfaceForRoute } from './admin-surface-matrix.ts'
-import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
+import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
 import { escapeHtml } from './html-utils.ts'
 import { cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailability } from './workbench-parity.ts'
 
@@ -30,7 +30,8 @@ export function routePanelAttrs(routeId: string, options: { signedIn?: boolean, 
   if (options.signedIn !== false) classes.push('signed-in-only')
   if (options.admin) classes.push('admin-only-section')
   const route = CLOUD_WEB_ROUTES.find((entry) => entry.id === routeId)
-  return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"`
+  const hidden = routeId === DEFAULT_CLOUD_WEB_ROUTE ? '' : ' hidden'
+  return `class="${classes.join(' ')}" id="${escapeHtml(routeId)}" data-route-panel="${escapeHtml(routeId)}" data-route-surface="${escapeHtml(route?.surface || 'workbench')}" data-requires-auth="${options.signedIn === false ? 'false' : 'true'}" data-requires-admin="${options.admin ? 'true' : 'false'}"${hidden}`
 }
 
 const parityAvailabilityLabels: Record<CloudWebWorkbenchParityAvailability, { label: string, kind: string }> = {
