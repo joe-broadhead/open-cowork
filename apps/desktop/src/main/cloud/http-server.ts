@@ -30,6 +30,7 @@ import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
+import { handleCoordinationApiRoute } from './http-routes/coordination.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
@@ -1145,6 +1146,21 @@ async function handleApiRequest(
 
   if (resource === 'threads') {
     await handleThreadsApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'coordination') {
+    await handleCoordinationApiRoute({
       req,
       res,
       options,

@@ -45,6 +45,17 @@ export type CloudWebEndpointId =
   | 'workflowPause'
   | 'workflowResume'
   | 'workflowArchive'
+  | 'coordinationBoard'
+  | 'coordinationProjects'
+  | 'coordinationProjectCreate'
+  | 'coordinationProject'
+  | 'coordinationTasks'
+  | 'coordinationTaskCreate'
+  | 'coordinationTask'
+  | 'coordinationTaskMove'
+  | 'coordinationTaskAssign'
+  | 'coordinationTaskLinkWork'
+  | 'coordinationTaskWorkTarget'
   | 'projectSourceValidate'
   | 'projectSnapshots'
   | 'adminPolicy'
@@ -429,6 +440,72 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     method: 'POST',
     path: '/api/workflows/:workflowId/archive',
     csrf: true,
+  },
+  {
+    id: 'coordinationBoard',
+    method: 'GET',
+    path: '/api/coordination/board',
+    csrf: false,
+  },
+  {
+    id: 'coordinationProjects',
+    method: 'GET',
+    path: '/api/coordination/projects?limit=100',
+    csrf: false,
+  },
+  {
+    id: 'coordinationProjectCreate',
+    method: 'POST',
+    path: '/api/coordination/projects',
+    csrf: true,
+  },
+  {
+    id: 'coordinationProject',
+    method: 'POST',
+    path: '/api/coordination/projects/:projectId',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTasks',
+    method: 'GET',
+    path: '/api/coordination/tasks?limit=500',
+    csrf: false,
+  },
+  {
+    id: 'coordinationTaskCreate',
+    method: 'POST',
+    path: '/api/coordination/tasks',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTask',
+    method: 'POST',
+    path: '/api/coordination/tasks/:taskId',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTaskMove',
+    method: 'POST',
+    path: '/api/coordination/tasks/:taskId/move',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTaskAssign',
+    method: 'POST',
+    path: '/api/coordination/tasks/:taskId/assign',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTaskLinkWork',
+    method: 'POST',
+    path: '/api/coordination/tasks/:taskId/link-work',
+    csrf: true,
+  },
+  {
+    id: 'coordinationTaskWorkTarget',
+    method: 'GET',
+    path: '/api/coordination/tasks/:taskId/work-target',
+    csrf: false,
   },
   {
     id: 'projectSourceValidate',

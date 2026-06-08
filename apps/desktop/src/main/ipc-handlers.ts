@@ -32,6 +32,7 @@ import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
+import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
 import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
@@ -394,6 +395,7 @@ export function setupIpcHandlers(
   registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerCoordinationHandlers(context)
   registerWorkflowHandlers(context)
 
   registerThreadHandlers(context)

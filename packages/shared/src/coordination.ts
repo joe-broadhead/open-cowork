@@ -56,6 +56,24 @@ export const COORDINATION_TASK_STATUSES = [
 
 export type CoordinationTaskStatus = typeof COORDINATION_TASK_STATUSES[number]
 
+export const COORDINATION_TASK_COLUMNS = [
+  'backlog',
+  'planning',
+  'doing',
+  'review',
+  'done',
+] as const
+
+export type CoordinationTaskColumn = typeof COORDINATION_TASK_COLUMNS[number]
+
+export const COORDINATION_TASK_PRIORITIES = [
+  'high',
+  'med',
+  'low',
+] as const
+
+export type CoordinationTaskPriority = typeof COORDINATION_TASK_PRIORITIES[number]
+
 export const COORDINATION_RUN_KINDS = [
   'interactive',
   'workflow',
@@ -157,8 +175,10 @@ export type CoordinationBase = {
 export type CoordinationProject = CoordinationBase & {
   kind: 'project'
   title: string
+  objective: string
   description?: string | null
   status: CoordinationProjectStatus
+  team: string[]
   sourceSessionId?: string | null
 }
 
@@ -167,12 +187,23 @@ export type CoordinationTask = CoordinationBase & {
   projectId: string
   parentTaskId?: string | null
   title: string
+  spec: string
   description?: string | null
   status: CoordinationTaskStatus
+  column: CoordinationTaskColumn
+  priority: CoordinationTaskPriority
   externalRef?: string | null
   assigneeAgent?: string | null
   assignedRunId?: string | null
   assignedSessionId?: string | null
+  artifactRefs?: CoordinationArtifactLink[]
+}
+
+export type CoordinationArtifactLink = {
+  artifactId: string
+  title?: string | null
+  sessionId?: string | null
+  runId?: string | null
 }
 
 export type CoordinationRun = CoordinationBase & {
@@ -259,6 +290,57 @@ export type CoordinationEntity =
   | CoordinationQuestionRef
   | CoordinationPermissionRef
 
+export type CoordinationBoardPayload = {
+  projects: CoordinationProject[]
+  tasks: CoordinationTask[]
+}
+
+export type CoordinationProjectInput = {
+  title: string
+  objective: string
+  description?: string | null
+  status?: CoordinationProjectStatus
+  team?: string[]
+  sourceSessionId?: string | null
+  workspaceId?: string | null
+}
+
+export type CoordinationProjectUpdateInput = Partial<Omit<CoordinationProjectInput, 'workspaceId'>>
+
+export type CoordinationTaskInput = {
+  projectId: string
+  parentTaskId?: string | null
+  title: string
+  spec: string
+  description?: string | null
+  status?: CoordinationTaskStatus
+  column?: CoordinationTaskColumn
+  priority?: CoordinationTaskPriority
+  externalRef?: string | null
+  assigneeAgent?: string | null
+  assignedRunId?: string | null
+  assignedSessionId?: string | null
+  artifactRefs?: CoordinationArtifactLink[]
+  workspaceId?: string | null
+}
+
+export type CoordinationTaskUpdateInput = Partial<Omit<CoordinationTaskInput, 'projectId' | 'workspaceId'>>
+
+export type CoordinationTaskMoveInput = {
+  column: CoordinationTaskColumn
+}
+
+export type CoordinationTaskAssignInput = {
+  assigneeAgent?: string | null
+}
+
+export type CoordinationTaskWorkLinkInput = {
+  assignedSessionId: string
+  assignedRunId?: string | null
+  assigneeAgent?: string | null
+  status?: CoordinationTaskStatus
+}
+
 export type CoordinationCapabilitySupport = Record<CoordinationCapability, WorkspaceApiSupportStatus>
 
 export const COORDINATION_WORKSPACE_SUPPORT_APIS = {
@@ -274,8 +356,8 @@ export type CoordinationWorkspaceSupportApi = keyof typeof COORDINATION_WORKSPAC
 
 export const COORDINATION_AUTHORITY_SUPPORT = {
   desktop_local: {
-    projects: 'deferred',
-    tasks: 'deferred',
+    projects: 'supported',
+    tasks: 'supported',
     workflows: 'supported',
     runs: 'supported',
     schedules: 'supported',
@@ -352,4 +434,36 @@ export function coordinationCapabilityFromWorkspaceApi(
   api: string,
 ): CoordinationCapability | null {
   return COORDINATION_WORKSPACE_SUPPORT_APIS[api as CoordinationWorkspaceSupportApi] || null
+}
+
+export function isCoordinationProjectStatus(value: unknown): value is CoordinationProjectStatus {
+  return typeof value === 'string' && COORDINATION_PROJECT_STATUSES.includes(value as CoordinationProjectStatus)
+}
+
+export function isCoordinationTaskStatus(value: unknown): value is CoordinationTaskStatus {
+  return typeof value === 'string' && COORDINATION_TASK_STATUSES.includes(value as CoordinationTaskStatus)
+}
+
+export function isCoordinationTaskColumn(value: unknown): value is CoordinationTaskColumn {
+  return typeof value === 'string' && COORDINATION_TASK_COLUMNS.includes(value as CoordinationTaskColumn)
+}
+
+export function isCoordinationTaskPriority(value: unknown): value is CoordinationTaskPriority {
+  return typeof value === 'string' && COORDINATION_TASK_PRIORITIES.includes(value as CoordinationTaskPriority)
+}
+
+export function coordinationTaskColumnForStatus(
+  status: CoordinationTaskStatus,
+  currentColumn: CoordinationTaskColumn = 'backlog',
+): CoordinationTaskColumn {
+  if (status === 'running') return 'doing'
+  if (status === 'completed') return 'review'
+  if (status === 'open') {
+    return currentColumn === 'planning' ? 'planning' : 'backlog'
+  }
+  return currentColumn
+}
+
+export function coordinationTaskStatusMovesColumn(status: CoordinationTaskStatus) {
+  return status === 'open' || status === 'running' || status === 'completed'
 }

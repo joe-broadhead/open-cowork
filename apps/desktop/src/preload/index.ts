@@ -121,6 +121,17 @@ const PRELOAD_INVOKE_CHANNELS = [
   'workflows:resume',
   'workflows:archive',
   'workflows:regenerate-webhook-secret',
+  'coordination:board',
+  'coordination:projects:list',
+  'coordination:projects:create',
+  'coordination:projects:update',
+  'coordination:tasks:list',
+  'coordination:tasks:create',
+  'coordination:tasks:update',
+  'coordination:tasks:move',
+  'coordination:tasks:assign',
+  'coordination:tasks:link-work',
+  'coordination:tasks:work-target',
   'threads:search',
   'threads:facets',
   'threads:tags:list',
@@ -186,6 +197,7 @@ const PRELOAD_LISTEN_CHANNELS = [
   'session:deleted',
   'workspace:sessions-updated',
   'workflow:updated',
+  'coordination:updated',
 ] as const
 
 type PreloadInvokeChannel = typeof PRELOAD_INVOKE_CHANNELS[number]
@@ -382,6 +394,19 @@ const api: CoworkAPI = {
     archive: (workflowId, options) => options ? invoke('workflows:archive', workflowId, options) : invoke('workflows:archive', workflowId),
     regenerateWebhookSecret: (workflowId) => invoke('workflows:regenerate-webhook-secret', workflowId),
   },
+  coordination: {
+    board: (options) => options ? invoke('coordination:board', options) : invoke('coordination:board'),
+    listProjects: (options) => options ? invoke('coordination:projects:list', options) : invoke('coordination:projects:list'),
+    createProject: (input) => invoke('coordination:projects:create', input),
+    updateProject: (projectId, input) => invoke('coordination:projects:update', projectId, input),
+    listTasks: (options) => options ? invoke('coordination:tasks:list', options) : invoke('coordination:tasks:list'),
+    createTask: (input) => invoke('coordination:tasks:create', input),
+    updateTask: (taskId, input) => invoke('coordination:tasks:update', taskId, input),
+    moveTask: (taskId, input) => invoke('coordination:tasks:move', taskId, input),
+    assignTask: (taskId, input) => invoke('coordination:tasks:assign', taskId, input),
+    linkTaskWork: (taskId, input) => invoke('coordination:tasks:link-work', taskId, input),
+    taskWorkTarget: (taskId, options) => options ? invoke('coordination:tasks:work-target', taskId, options) : invoke('coordination:tasks:work-target', taskId),
+  },
   threads: {
     search: (query) => invoke('threads:search', query),
     facets: (query) => invoke('threads:facets', query),
@@ -500,6 +525,10 @@ const api: CoworkAPI = {
     workflowUpdated: (callback: () => void) => {
       const handler = () => callback()
       return listen('workflow:updated', handler)
+    },
+    coordinationUpdated: (callback: () => void) => {
+      const handler = () => callback()
+      return listen('coordination:updated', handler)
     },
   },
 }

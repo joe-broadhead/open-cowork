@@ -16,6 +16,7 @@ import { assertConfigValid, getAppConfig, getBranding } from './config-loader.ts
 import { applySettingsSideEffects, isSetupComplete } from './settings.ts'
 import { publishNotification } from './session-event-dispatcher.ts'
 import { createPromiseChain, createSingleFlight } from './promise-chain.ts'
+import { configureCoordinationService } from './coordination/coordination-service.ts'
 import { configureWorkflowService, startWorkflowService, stopWorkflowService } from './workflow/workflow-service.ts'
 import { setRuntimeError, setRuntimeReady } from './runtime-status.ts'
 import {
@@ -431,6 +432,7 @@ app.whenReady().then(async () => {
   const rendererDevServerUrl = effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, app.isPackaged)
 
   setupIpcHandlers(ipcMain, getMainWindow, { devServerUrl: rendererDevServerUrl })
+  configureCoordinationService({ getMainWindow })
   configureWorkflowService({ getMainWindow })
   startWorkflowService()
   registerBrandingAssetProtocol()
