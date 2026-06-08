@@ -124,35 +124,43 @@ function taskTitle(task: Record<string, unknown>, index: number) {
   return text(task.title || task.summary || task.id, `Specialist lane ${index + 1}`)
 }
 
+function taskSourceSessionId(task: Record<string, unknown>) {
+  return text(task.sourceSessionId || task.sessionId)
+}
+
 function taskMeta(task: Record<string, unknown>, toolCount: number, todoCount: number, artifactCount: number) {
+  const sessionId = taskSourceSessionId(task)
   return [
     task.status ? `status ${text(task.status)}` : null,
     task.elapsedMs ? `${Math.round(Number(task.elapsedMs) / 1000)}s` : null,
     toolCount ? `${toolCount} tool${toolCount === 1 ? '' : 's'}` : null,
     todoCount ? `${todoCount} todo${todoCount === 1 ? '' : 's'}` : null,
     artifactCount ? `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}` : null,
-    task.sessionId ? `chat ${text(task.sessionId)}` : null,
+    sessionId ? `chat ${sessionId}` : null,
   ].filter(Boolean).join(' - ')
 }
 
-function taskRunNode(task: Record<string, unknown>, index: number) {
+function taskRunNode(task: Record<string, unknown>, index: number, props: CloudRuntimeActionProps) {
   const coworker = taskCoworkerName(task)
   const tools = list<Record<string, unknown>>(task.toolCalls)
   const todos = list<Record<string, unknown>>(task.todos)
   const artifacts = list<Record<string, unknown>>(task.artifacts).map((artifact) => cloudWebSafeArtifactMetadata(artifact))
+  const sessionId = taskSourceSessionId(task)
   const tone = cloudWebCoworkerTone(coworker)
   const style = {
     '--studio-tone': tone,
     '--studio-lane-tone': tone,
   } satisfies StudioToneStyle
 
-  return h('section', {
+  return h('details', {
     className: 'studio-task-lane cloud-specialist-lane',
     key: text(task.id, `task-${index}`),
     'data-kind': 'task-run',
+    'data-session-id': sessionId || undefined,
+    open: index < 2 || String(task.status || '').toLowerCase() === 'running',
     style,
   },
-  h('div', { className: 'studio-task-lane__header' },
+  h('summary', { className: 'studio-task-lane__header' },
     h('div', { className: 'cloud-specialist-lane__identity' },
       h('span', { className: 'studio-coworker-avatar studio-coworker-avatar--sm', style, 'aria-hidden': 'true' }, cloudWebCoworkerInitials(coworker)),
       h('div', null,
@@ -165,6 +173,8 @@ function taskRunNode(task: Record<string, unknown>, index: number) {
       task.content ? h('p', null, text(task.content)) : null,
       task.error ? h('p', { className: 'notice', 'data-kind': 'error' }, text(task.error)) : null,
       h('div', { className: 'studio-task-lane__meta' }, taskMeta(task, tools.length, todos.length, artifacts.length) || 'Projected coworker work'),
+      sessionId ? h('div', { className: 'row-actions' },
+        h('button', { className: 'secondary', type: 'button', onClick: () => props.onOpenTaskSession?.(sessionId) }, 'Open coworker chat')) : null,
       tools.length ? h('div', { className: 'cloud-specialist-lane__tools' },
         tools.map((tool, toolIndex) => toolTraceNode(tool, text(tool.id, `task-tool-${index}-${toolIndex}`)))) : null,
       todos.length ? detailsNode('Coworker todos', todos) : null,
@@ -270,9 +280,10 @@ export type CloudRuntimeActionProps = {
   onViewArtifact?: (artifactId: string) => void
   onDownloadArtifact?: (artifactId: string) => void
   onInspectArtifact?: (artifactId: string) => void
+  onOpenTaskSession?: (sessionId: string) => void
 }
 
-export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, onInspectArtifact, pendingAction }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
+export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, onInspectArtifact, onOpenTaskSession, pendingAction }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
   const projection = runtimeProjection(view)
   const messages = list<Record<string, unknown>>(projection.messages)
   const latestUserOrder = messages.reduce((max, message, index) => {
@@ -308,7 +319,7 @@ export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, on
     ...list<Record<string, unknown>>(projection.taskRuns).map((task, index) => ({
       kind: 'task',
       order: cloudWebRuntimeOrder(task, 2_000 + index),
-      node: taskRunNode(task, index),
+      node: taskRunNode(task, index, { onViewArtifact, onDownloadArtifact, onInspectArtifact, onOpenTaskSession, pendingAction }),
     })),
     ...list<Record<string, unknown>>(projection.artifacts).map((artifact, index) => ({
       kind: 'artifact',
@@ -447,9 +458,23 @@ function artifactCardNode(artifact: Record<string, unknown>, index: number, prop
 }
 
 export function CloudArtifactCards({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
-  const artifacts = list<Record<string, unknown>>(runtimeProjection(view).artifacts).slice(0, 100)
+  const allArtifacts = list<Record<string, unknown>>(runtimeProjection(view).artifacts)
+  const artifacts = allArtifacts.slice(0, 100)
   return h('div', { className: 'list react-artifact-cards', 'aria-label': 'Artifacts' },
     artifacts.length
-      ? artifacts.map((artifact, index) => artifactCardNode(artifact, index, props))
+      ? [
+        ...artifacts.map((artifact, index) => artifactCardNode(artifact, index, props)),
+        allArtifacts.length > artifacts.length ? h('p', { className: 'empty', key: 'artifact-limit' }, `Showing first ${artifacts.length} artifacts from this chat.`) : null,
+      ]
       : h('p', { className: 'empty' }, 'No artifacts loaded.'))
+}
+
+export function CloudSelectedArtifactHistory({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
+  const allArtifacts = list<Record<string, unknown>>(runtimeProjection(view).artifacts)
+  const artifacts = allArtifacts.slice(-12).reverse()
+  return h('div', { className: 'list react-artifact-history', 'aria-label': 'Selected chat artifact history' },
+    h('p', { className: 'notice', 'data-kind': 'warn' }, 'Artifact history is scoped to the selected chat. Cross-chat artifact browsing waits for a Cloud artifact index API.'),
+    artifacts.length
+      ? artifacts.map((artifact, index) => artifactCardNode(artifact, index, props))
+      : h('p', { className: 'empty' }, view ? 'No artifacts in the selected chat.' : 'Open a chat to view its artifact history.'))
 }

@@ -39,6 +39,7 @@ export function makeSessionView(session: ReturnType<typeof makeSession>, sequenc
             agent: 'data-analyst',
             status: 'completed',
             content: 'Checked repository context.',
+            sourceSessionId: `${session.sessionId}-child`,
             order: 4,
             artifacts: [
               {
@@ -118,6 +119,7 @@ export function makeDeliveries(count: number) {
     attemptCount: index % 4,
     lastError: index === 0 ? 'failed with token=leaked-secret' : null,
     nextAttemptAt: iso(index + 3),
+    updatedAt: iso(index + 4),
     target: { chatId: `chat-${index + 1}`, token: 'leaked-secret' },
     payload: { text: 'delivery payload', signedUrl: 'https://object.example.test/signed?token=leaked-secret' },
   }))

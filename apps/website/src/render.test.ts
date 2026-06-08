@@ -27,6 +27,7 @@ import {
 import {
   cloudWebCapabilityPolicyNote,
   cloudWebCoworkerInitials,
+  cloudWebCoworkerOptionsFromWorkspace,
   cloudWebPromptAssignment,
   cloudWebWorkflowTriggerSummary,
   deriveCloudWebWorkbenchAgents,
@@ -660,6 +661,8 @@ test('cloud website binds actions through the React module client', () => {
 test('cloud website renders chat-first controls without local host path affordances', () => {
   assert.match(html, /id="thread-list"/)
   assert.match(html, /id="session-form"/)
+  assert.match(html, /id="thread-objective-state"/)
+  assert.match(html, /Objectives are projected from selected Cloud chats/)
   assert.match(html, /Git repository URL/)
   assert.match(html, /Uploaded snapshot/)
   assert.match(html, /id="prompt-form"/)
@@ -674,6 +677,7 @@ test('cloud website renders chat-first controls without local host path affordan
   assert.match(html, /id="workflow-detail"/)
   assert.match(html, /id="artifact-list"/)
   assert.match(html, /id="artifact-history"/)
+  assert.match(html, /Cross-chat artifact browsing waits/)
   assert.match(html, /id="artifact-detail"/)
   assert.match(html, /id="member-list"/)
   assert.match(html, /id="member-invite-form"/)
@@ -712,6 +716,27 @@ test('cloud website surface helper derives agents, filters capabilities, and sum
   assert.match(cloudWebCapabilityPolicyNote({ kind: 'mcp', scope: 'machine' }), /Machine-scoped/)
   assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'manual', enabled: true }, { type: 'schedule', enabled: false }] }), 'manual')
   assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'schedule', enabled: true }, { type: 'webhook', enabled: true }] }), 'schedule, webhook')
+  assert.deepEqual(cloudWebCoworkerOptionsFromWorkspace({
+    policy: {
+      allowedAgents: [
+        {
+          name: 'build',
+          label: 'Build',
+          role: 'Implementation lead',
+          status: 'available',
+          toolIds: ['shell', 'git'],
+          skillNames: ['review'],
+        },
+      ],
+    },
+  }, 'studio'), [{
+    name: 'build',
+    displayName: 'Build',
+    role: 'Implementation lead',
+    availability: 'available',
+    capabilityHint: '2 tools - 1 skill - profile studio',
+    custom: false,
+  }])
   assert.equal(cloudWebCoworkerInitials('data-analyst'), 'DA')
   assert.equal(firstCloudWebMentionedCoworker('Please ask @data-analyst for help', ['build', 'data-analyst']), 'data-analyst')
   assert.equal(firstCloudWebMentionedCoworker('Please ask @data-analyst.', ['build', 'data-analyst']), 'data-analyst')

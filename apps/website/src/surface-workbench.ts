@@ -18,6 +18,15 @@ export type CloudWebWorkbenchAgent = {
   custom: boolean
 }
 
+export type CloudWebCoworkerOption = {
+  name: string
+  displayName: string
+  role: string
+  availability: string
+  capabilityHint: string
+  custom: boolean
+}
+
 const COWORKER_TONES = [
   'var(--color-accent)',
   'var(--color-green)',
@@ -70,6 +79,44 @@ export function cloudWebCoworkerInitials(name: string) {
 export function cloudWebCoworkerTone(name: string) {
   const cleaned = name.trim()
   return COWORKER_TONES[hashText(cleaned || 'default') % COWORKER_TONES.length]
+}
+
+function agentOptionRecord(agent: unknown): Record<string, unknown> {
+  return agent && typeof agent === 'object' && !Array.isArray(agent) ? agent as Record<string, unknown> : {}
+}
+
+function coworkerRoleFromName(name: string) {
+  const cleaned = name.replace(/[-_.]+/g, ' ').trim()
+  if (!cleaned) return 'Studio coworker'
+  return `${cleaned[0]?.toUpperCase() || ''}${cleaned.slice(1)} coworker`
+}
+
+export function cloudWebCoworkerOptionsFromWorkspace(workspace: unknown, profileName = 'default'): CloudWebCoworkerOption[] {
+  const workspaceRecord = agentOptionRecord(workspace)
+  const policy = agentOptionRecord(workspaceRecord.policy)
+  const allowedAgents = asList<unknown>(policy.allowedAgents)
+  return allowedAgents.map((agent) => {
+    const record = agentOptionRecord(agent)
+    const name = String(typeof agent === 'string' ? agent : record.name || '').trim()
+    if (!name) return null
+    const role = String(record.role || record.title || record.description || coworkerRoleFromName(name))
+    const status = String(record.status || record.availability || (record.disabled ? 'unavailable' : 'available'))
+    const tools = asList(record.toolIds)
+    const skills = asList(record.skillNames || record.skills)
+    const capabilityHint = String(record.capabilityHint || record.summary || [
+      tools.length ? `${tools.length} tool${tools.length === 1 ? '' : 's'}` : null,
+      skills.length ? `${skills.length} skill${skills.length === 1 ? '' : 's'}` : null,
+      `profile ${profileName}`,
+    ].filter(Boolean).join(' - '))
+    return {
+      name,
+      displayName: String(record.label || record.displayName || name),
+      role,
+      availability: status,
+      capabilityHint,
+      custom: record.source === 'custom' || record.origin === 'custom' || record.custom === true,
+    }
+  }).filter((agent): agent is CloudWebCoworkerOption => Boolean(agent))
 }
 
 export function firstCloudWebMentionedCoworker(input: string, allowedAgents: string[]) {

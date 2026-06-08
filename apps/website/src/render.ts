@@ -168,6 +168,13 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
               </div>
               <p class="empty">Cloud policy validates git and uploaded snapshot sources before execution. Local desktop paths and local MCP details are not uploaded implicitly.</p>
             </form>
+            <div class="panel">
+              <h3>Objectives</h3>
+              <div class="list" id="thread-objective-state">
+                <p class="empty">Open a chat to see its projected objective.</p>
+                <p class="notice" data-kind="warn">Objectives are projected from selected Cloud chats. A cross-project objective model is not exposed yet.</p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -410,9 +417,10 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
               </div>
             </div>
             <div class="panel">
-              <h3>Artifact history</h3>
+              <h3>Selected chat history</h3>
               <div class="list" id="artifact-history">
-                <p class="empty">No artifact history loaded.</p>
+                <p class="empty">Open a chat to view its artifact history.</p>
+                <p class="notice" data-kind="warn">Cross-chat artifact browsing waits for a Cloud artifact index API.</p>
               </div>
             </div>
             <div class="panel">

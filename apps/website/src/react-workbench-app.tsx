@@ -17,7 +17,7 @@ import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
 import { useCloudWorkbenchForms } from './react-workbench-forms.ts'
 import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
-import { cloudWebPromptAssignment } from './surface-workbench.ts'
+import { cloudWebCoworkerOptionsFromWorkspace, cloudWebPromptAssignment } from './surface-workbench.ts'
 import {
   allowedAgentsFromWorkspace,
   asRecord,
@@ -108,7 +108,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   const artifactDetailTarget = usePortalTarget('artifact-detail')
 
   const selectedView = selectedSessionId ? views[selectedSessionId] || null : null
-  const allowedAgents = useMemo(() => allowedAgentsFromWorkspace(workspace), [workspace])
+  const coworkerOptions = useMemo(() => cloudWebCoworkerOptionsFromWorkspace(workspace, bootstrap.profileName), [bootstrap.profileName, workspace])
+  const allowedAgents = useMemo(() => {
+    const optionAgents = coworkerOptions.map((option) => option.name)
+    return optionAgents.length ? optionAgents : allowedAgentsFromWorkspace(workspace)
+  }, [coworkerOptions, workspace])
   const activeCoworker = useMemo(
     () => cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).agent,
     [allowedAgents, composerAgent, composerText],
@@ -487,6 +491,9 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     onViewArtifact: (artifactId: string) => openArtifact(artifactId, 'view'),
     onDownloadArtifact: (artifactId: string) => openArtifact(artifactId, 'download'),
     onInspectArtifact: inspectArtifact,
+    onOpenTaskSession: (sessionId: string) => {
+      void selectSession(sessionId)
+    },
   }
 
   const portals = []
@@ -543,6 +550,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       <CloudComposerPortal
         bootstrap={bootstrap}
         allowedAgents={allowedAgents}
+        coworkerOptions={coworkerOptions}
         activeCoworker={activeCoworker}
         composerText={composerText}
         composerAgent={composerAgent}

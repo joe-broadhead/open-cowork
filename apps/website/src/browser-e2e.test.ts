@@ -153,7 +153,10 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
   try {
     assert.ok(Array.isArray(harness.bootstrap.workbenchParity))
     assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Cloud Project Sources/)
+    assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Objectives/)
     assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Local Filesystem/)
+    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /Open a chat to see its projected objective/)
+    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /cross-project objective model/)
 
     const chatLink = harness.document.querySelector('[data-route-link="chat"]') as HTMLAnchorElement
     chatLink.focus()
@@ -166,6 +169,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
     assert.equal((harness.document.querySelector('#chat-inspector') as HTMLElement).hidden, true)
     await selectFirstCloudThread(harness)
+    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /No projected objective is exposed for this chat/)
     const workbench = harness.document.querySelector('.cloud-chat-workbench') as HTMLElement
     assert.ok(harness.document.querySelector('[data-workbench-pane="threads"]'))
     assert.ok(harness.document.querySelector('[data-workbench-layout="true"]'))
@@ -242,8 +246,9 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
 
     harness.clickText('[data-route-link]', 'Channels')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
-    assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /Channel setup/)
+    assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /channel reach|delivery status|linked chats/i)
     assert.match(harness.document.querySelector('#channel-summary-list')?.textContent || '', /read-only/)
+    assert.doesNotMatch(harness.document.querySelector('#channel-summary-list')?.textContent || '', /credentials|dead-letter|retries/i)
     assert.ok(harness.document.querySelector('#channel-agent-list .row'))
     assert.ok(harness.document.querySelector('#channel-binding-list .row'))
     assert.ok(harness.document.querySelector('#channel-delivery-list .row'))
@@ -520,6 +525,8 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
       assert.equal(harness.document.body.dataset.route, 'artifacts')
       assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
       assert.ok(harness.document.querySelector('#artifact-detail [data-diff-view="true"], #artifact-detail[data-diff-view="true"]'))
+      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /selected chat/)
+      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /Cross-chat artifact browsing waits/)
     })
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts(?:\?|$)/.test(request.path)))
 
