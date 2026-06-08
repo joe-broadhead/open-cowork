@@ -317,6 +317,13 @@ export function cloudWebsiteChatStyles() {
       max-width: 880px;
       animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
     }
+    .cloud-specialist-lane > summary {
+      cursor: pointer;
+      list-style: none;
+    }
+    .cloud-specialist-lane > summary::-webkit-details-marker {
+      display: none;
+    }
     .cloud-specialist-lane__identity {
       display: flex;
       align-items: center;

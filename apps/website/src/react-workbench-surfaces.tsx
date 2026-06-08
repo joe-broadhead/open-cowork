@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
-import { CloudArtifactCards, type CloudRuntimeActionProps } from './react-workbench.ts'
+import { CloudArtifactCards, CloudSelectedArtifactHistory, type CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
 import {
@@ -144,6 +144,41 @@ function workflowTriggersFromForm(data: FormData): WorkflowTriggerInput[] {
   }
   if (type === 'webhook') return [{ id, type: 'webhook', enabled: true }]
   return [{ id: 'manual-web', type: 'manual', enabled: true }]
+}
+
+function CloudObjectiveState({ selectedView }: { selectedView: CloudWebThreadView | null }) {
+  const projection = asRecord(selectedView?.projection?.view)
+  const projectSource = asRecord(projection.projectSource)
+  const todos = list<Record<string, unknown>>(projection.todos).slice(0, 6)
+  const objective = text(projection.objective)
+  const objectiveLabel = !selectedView
+    ? 'Open a chat to see its projected objective.'
+    : objective || 'No projected objective is exposed for this chat.'
+  const sourceKind = selectedView ? text(projectSource.kind, 'chat-only') : 'Open a chat'
+  return (
+    <div className="list react-objective-state" aria-label="Selected chat objective">
+      <div className="row compact">
+        <strong>Current objective</strong>
+        <span>{objectiveLabel}</span>
+      </div>
+      <div className="row compact">
+        <strong>Project source</strong>
+        <span>{sourceKind}</span>
+      </div>
+      {todos.length ? (
+        <div className="activity-block">
+          <h4>Follow-up work</h4>
+          {todos.map((todo, index) => (
+            <div className="activity-row" key={text(todo.id, `objective-todo-${index}`)}>
+              <span className="pill">{text(todo.status, 'todo')}</span>
+              <span>{text(todo.content || todo.title, 'Todo')}</span>
+            </div>
+          ))}
+        </div>
+      ) : <p className="empty">No projected follow-up todos in this chat.</p>}
+      <p className="notice" data-kind="warn">Objectives are projected from the selected Cloud chat. A cross-project objective model is not exposed to Cloud Web yet.</p>
+    </div>
+  )
 }
 
 function currentInputValue(id: string) {
@@ -321,6 +356,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     workflows: usePortalTarget('workflow-list'),
     workflowRuns: usePortalTarget('workflow-run-list'),
     workflowDetail: usePortalTarget('workflow-detail'),
+    objectives: usePortalTarget('thread-objective-state'),
     artifactList: usePortalTarget('artifact-list'),
     artifactHistory: usePortalTarget('artifact-history'),
   }
@@ -553,7 +589,8 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       targets.workflowDetail,
     ))
   }
+  if (targets.objectives) portals.push(createPortal(<CloudObjectiveState selectedView={selectedView} />, targets.objectives))
   if (targets.artifactList) portals.push(createPortal(<CloudArtifactCards view={selectedView} {...artifactActions} />, targets.artifactList))
-  if (targets.artifactHistory) portals.push(createPortal(<CloudArtifactCards view={selectedView} {...artifactActions} />, targets.artifactHistory))
+  if (targets.artifactHistory) portals.push(createPortal(<CloudSelectedArtifactHistory view={selectedView} {...artifactActions} />, targets.artifactHistory))
   return <>{portals}<CloudChannelSurfacePortals onSelectSession={onSelectSession} /></>
 }

@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction, CSSProperties } from 'react'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
   cloudWebCoworkerInitials,
+  type CloudWebCoworkerOption,
   cloudWebCoworkerTone,
   cloudWebPromptAssignment,
   ensureCloudWebCoworkerMention,
@@ -14,6 +15,7 @@ type StudioToneStyle = CSSProperties & {
 type CloudComposerPortalProps = {
   bootstrap: CloudWebClientBootstrap
   allowedAgents: string[]
+  coworkerOptions: CloudWebCoworkerOption[]
   activeCoworker: string
   composerText: string
   composerAgent: string
@@ -28,6 +30,7 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
   const {
     bootstrap,
     allowedAgents,
+    coworkerOptions,
     activeCoworker,
     composerText,
     composerAgent,
@@ -39,6 +42,7 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
   } = props
   const chatDisabled = bootstrap.features.chat === false
   const canSend = cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).text.trim().length > 0
+  const activeOption = coworkerOptions.find((option) => option.name === activeCoworker)
   const avatarStyle: StudioToneStyle = {
     '--studio-tone': cloudWebCoworkerTone(activeCoworker || 'default'),
   }
@@ -54,7 +58,11 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
         >
           {cloudWebCoworkerInitials(activeCoworker || 'OC')}
         </span>
-        <span>{activeCoworker ? `Lead coworker: ${activeCoworker}` : 'Lead coworker: profile default'}</span>
+        <span>
+          {activeOption
+            ? `Lead coworker: ${activeOption.displayName} - ${activeOption.role} - ${activeOption.availability}`
+            : activeCoworker ? `Lead coworker: ${activeCoworker}` : 'Lead coworker: profile default'}
+        </span>
       </div>
       <div className="composer-input-chrome">
         <textarea
@@ -69,20 +77,21 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
         />
       </div>
       <div className="composer-agent-chips" id="composer-agent-chips" aria-label="Coworker shortcuts">
-        {allowedAgents.slice(0, 5).map((agent) => (
+        {coworkerOptions.slice(0, 5).map((agent) => (
           <button
-            key={agent}
+            key={agent.name}
             type="button"
             className="agent-chip"
-            data-active={activeCoworker === agent ? 'true' : 'false'}
+            data-active={activeCoworker === agent.name ? 'true' : 'false'}
+            title={`${agent.role}. ${agent.capabilityHint}`}
             onClick={() => {
-              setComposerAgent(agent)
-              setComposerText((current) => ensureCloudWebCoworkerMention(current, agent))
+              setComposerAgent(agent.name)
+              setComposerText((current) => ensureCloudWebCoworkerMention(current, agent.name))
               const select = document.getElementById('composer-agent') as HTMLSelectElement | null
-              if (select) select.value = agent
+              if (select) select.value = agent.name
             }}
           >
-            @{agent}
+            @{agent.name}
           </button>
         ))}
       </div>
@@ -93,7 +102,7 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
             <span className="sr-only">Coworker</span>
             <select id="composer-agent" name="agent" value={composerAgent} disabled={isSending} onChange={(event) => setComposerAgent(event.currentTarget.value)}>
               <option value="">Default coworker</option>
-              {allowedAgents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}
+              {coworkerOptions.map((agent) => <option key={agent.name} value={agent.name}>{agent.displayName} - {agent.role}</option>)}
             </select>
           </label>
         </div>

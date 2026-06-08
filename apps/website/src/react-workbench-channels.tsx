@@ -28,6 +28,7 @@ type ChannelDelivery = {
   eventType?: string
   attemptCount?: number
   nextAttemptAt?: string
+  updatedAt?: string
   sessionId?: string
 }
 
@@ -120,9 +121,9 @@ function ChannelSummary({
       <div className="row compact"><strong>Channel coworkers</strong><span>{agents.length}</span></div>
       <div className="row compact"><strong>Connected channels</strong><span>{bindings.length}</span></div>
       <div className="row compact"><strong>Active channels</strong><span>{activeBindings}</span></div>
-      <div className="row compact"><strong>Delivery backlog</strong><span>{deliveries.length}</span></div>
+      <div className="row compact"><strong>Recent updates</strong><span>{deliveries.length}</span></div>
       <div className="row compact"><strong>Needs attention</strong><span>{blockedDeliveries}</span></div>
-      <p className="empty">This user view is read-only. Channel setup, credentials, retries, and dead-letter actions stay in Admin Gateway controls.</p>
+      <p className="empty">This read-only user view focuses on channel reach, delivery status, and linked chats.</p>
     </>
   )
 }
@@ -185,9 +186,9 @@ function ChannelDeliveryRows({
               <small>{[
                 delivery.provider || 'provider',
                 channelBindingLabel(bindings, delivery.channelBindingId),
-                `attempts ${delivery.attemptCount || 0}`,
-                `next ${formatDate(delivery.nextAttemptAt)}`,
-              ].join(' - ')}</small>
+                sessionId ? `chat ${sessionId}` : null,
+                delivery.updatedAt ? `updated ${formatDate(delivery.updatedAt)}` : null,
+              ].filter(Boolean).join(' - ')}</small>
             </div>
             <div className="row-actions">
               <span className="pill" data-kind={channelPillKind(delivery.status)}>{delivery.status || 'unknown'}</span>

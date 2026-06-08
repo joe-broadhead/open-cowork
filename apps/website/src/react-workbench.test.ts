@@ -6,6 +6,7 @@ import {
   CloudApprovalsAndQuestions,
   CloudArtifactCards,
   CloudChatTimeline,
+  CloudSelectedArtifactHistory,
   CloudRuntimeStatus,
   CloudThreadList,
 } from './react-workbench.ts'
@@ -21,6 +22,7 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
     renderToStaticMarkup(createElement(CloudRuntimeStatus, { view })),
     renderToStaticMarkup(createElement(CloudApprovalsAndQuestions, { view })),
     renderToStaticMarkup(createElement(CloudArtifactCards, { view })),
+    renderToStaticMarkup(createElement(CloudSelectedArtifactHistory, { view })),
   ].join('\n')
 
   assert.match(html, /role="table"/)
@@ -29,10 +31,14 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.match(html, /Runtime status/)
   assert.match(html, /Coworker lanes 1/)
   assert.match(html, /class="studio-task-lane cloud-specialist-lane"/)
+  assert.match(html, /data-session-id="session-1-child"/)
+  assert.match(html, /Open coworker chat/)
   assert.match(html, /data-analyst/)
   assert.match(html, /Projected coworker work|Checked repository context/)
   assert.match(html, /Approval/)
   assert.match(html, /summary.txt/)
+  assert.match(html, /Artifact history is scoped to the selected chat/)
+  assert.match(html, /Cross-chat artifact browsing waits/)
   assert.doesNotMatch(html, /signedUrl/)
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)

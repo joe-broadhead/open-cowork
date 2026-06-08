@@ -16,6 +16,7 @@ export type CloudWebWorkbenchConceptId =
   | 'artifacts'
   | 'workflows'
   | 'channels'
+  | 'objectives'
   | 'cloud-project-sources'
   | 'local-filesystem'
   | 'local-stdio-mcps'
@@ -101,12 +102,23 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
   },
   {
+    conceptId: 'objectives',
+    label: 'Objectives',
+    availability: 'shared',
+    desktopSurface: 'Desktop project/chat objective context and follow-up state',
+    cloudRouteIds: ['threads'],
+    cloudAffordance: 'Show the selected Cloud chat objective, project source, and follow-up todos from durable projection state.',
+    boundary: 'Cloud Web projects objective context from Cloud sessions; it does not invent a cross-project objective model in the browser.',
+    disabledReason: 'Cross-project objective browsing is unavailable until Cloud exposes a durable objective index API.',
+    tests: ['render.test.ts', 'browser-e2e.test.ts'],
+  },
+  {
     conceptId: 'artifacts',
     label: 'Artifacts',
     availability: 'shared',
     desktopSurface: 'Desktop session inspector Artifacts tab',
     cloudRouteIds: ['artifacts', 'chat'],
-    cloudAffordance: 'Show artifact cards, loaded-chat history, sanitized metadata, explicit view/download actions, and selected-chat previews.',
+    cloudAffordance: 'Show artifact cards, selected-chat history, sanitized metadata, explicit view/download actions, and selected-chat previews.',
     boundary: 'Cloud Web fetches artifact bodies only after explicit user action and strips object-store internals from metadata.',
     disabledReason: 'Artifact actions disable when no artifact id or Cloud chat is available.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
@@ -128,9 +140,9 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     availability: 'shared',
     desktopSurface: 'Desktop Gateway/channel status and channel-backed chat context',
     cloudRouteIds: ['channels', 'chat'],
-    cloudAffordance: 'Show connected channel agents, channel bindings, delivery status, and linked Cloud run chats without exposing setup credentials.',
+    cloudAffordance: 'Show connected channel agents, channel bindings, delivery status, and linked Cloud run chats without exposing admin controls.',
     boundary: 'Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned.',
-    disabledReason: 'Channel setup, retry, dead-letter, and credential rotation stay in Admin Gateway controls.',
+    disabledReason: 'Member routes are read-only and focused on reach, status, and linked chats.',
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
   {

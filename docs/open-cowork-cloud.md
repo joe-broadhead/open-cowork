@@ -220,7 +220,7 @@ without changing the Cloud API contract.
 
 The information architecture is split into two surfaces:
 
-- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, and Artifacts.
+- Workbench: Threads, Chat, Agents, Tools & Skills, Workflows, Channels, and Artifacts.
 - Admin: Org, Members, Profiles & Policy, BYOK, Connections, Billing, Gateway,
   Audit, Usage, and Diagnostics.
 
@@ -275,9 +275,10 @@ The rest of the Workbench uses the same cloud API contract:
   `POST /api/workflows/:id/run` for manual runs, and the pause/resume/archive
   routes for lifecycle changes. Manual runs can open the generated run thread so
   users can inspect the same projection shown in Chat.
-- Artifacts includes a selected-thread browser plus a cross-thread history from
-  already hydrated durable projections. Artifact bodies are still fetched only
-  on explicit user action.
+- Artifacts includes a selected-thread browser plus selected-chat history from
+  the hydrated durable projection. Cross-thread artifact browsing remains
+  deferred until Cloud exposes a durable artifact index API. Artifact bodies are
+  still fetched only on explicit user action.
 
 Thread list filtering is client-side over the current durable session snapshot:
 search text, status, profile, project kind, and tag/smart-filter metadata are
