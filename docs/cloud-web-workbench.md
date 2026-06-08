@@ -240,7 +240,7 @@ the checklist cannot drift from the source contract.
 - Responsive desktop and mobile views have no horizontal overflow, clipped
   controls, or unreachable keyboard focus targets.
 - `/assets/fonts/*.woff2` requests return `200 font/woff2` and computed fonts
-  resolve to Mona Sans / Hubot Sans in the real-browser smoke.
+  resolve to Mona Sans / Schibsted Grotesk in the real-browser smoke.
 - `/assets/open-cowork-cloud-react.js` returns the Vite-built React client
   asset, and the real-browser smoke verifies that the nonce'd module route is
   requested and can mount the controller for `#open-cowork-cloud-react-root`.

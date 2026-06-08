@@ -169,12 +169,12 @@ export function cloudWebsiteComponentStyles() {
     .panel {
       min-width: 0;
       display: grid;
-      gap: var(--space-3);
+      gap: var(--gap);
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
       color: var(--text);
-      padding: var(--space-4);
+      padding: calc(var(--row-pad) + var(--space-2));
       box-shadow: var(--shadow-2), var(--specular);
     }
     .panel h3 {
@@ -182,7 +182,7 @@ export function cloudWebsiteComponentStyles() {
       font-family: var(--font-display);
       font-size: var(--text-md);
       font-weight: 650;
-      letter-spacing: var(--tracking-tight);
+      letter-spacing: var(--tracking-display);
       line-height: var(--lh-md);
     }
     .parity-grid,
@@ -190,18 +190,18 @@ export function cloudWebsiteComponentStyles() {
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: var(--space-2);
+      gap: var(--gap);
       min-width: 0;
     }
     .parity-card,
     .surface-card {
       min-width: 0;
       display: grid;
-      gap: var(--space-2);
+      gap: calc(var(--gap) * 0.5);
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-sm);
       background: color-mix(in srgb, var(--color-surface) 76%, transparent);
-      padding: var(--space-3);
+      padding: calc(var(--row-pad) + var(--space-1));
     }
     .agent-card,
     .capability-card {
@@ -209,12 +209,12 @@ export function cloudWebsiteComponentStyles() {
       min-width: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: var(--space-3);
+      gap: var(--gap);
       align-items: start;
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
-      padding: var(--space-3);
+      padding: calc(var(--row-pad) + var(--space-1));
       box-shadow: var(--shadow-2), var(--specular);
       transition:
         background var(--dur-1) var(--ease-out),
@@ -327,11 +327,11 @@ export function cloudWebsiteComponentStyles() {
       box-shadow: var(--shadow-2), var(--specular);
       min-width: 0;
     }
-        .table-row {
-          display: grid;
-          grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(120px, 0.7fr);
-          gap: var(--space-3);
-          min-height: calc(var(--control-h-sm) + var(--space-2));
+    .table-row {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 0.6fr) minmax(110px, 0.7fr) minmax(120px, 0.7fr);
+      gap: var(--gap);
+      min-height: calc(var(--control-h-sm) + (var(--row-pad) * 2));
       align-items: center;
       padding: 0 var(--space-3);
       border-top: var(--border-width-1) solid var(--color-border-subtle);
@@ -415,13 +415,13 @@ export function cloudWebsiteComponentStyles() {
     }
     .row {
       position: relative;
-      min-height: calc(var(--control-h-md) + var(--space-3));
+      min-height: calc(var(--control-h-md) + (var(--row-pad) * 2));
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-sm);
-      padding: var(--space-2) var(--space-3);
+      padding: var(--row-pad) var(--space-3);
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: var(--space-3);
+      gap: var(--gap);
       align-items: center;
       background: var(--color-surface);
       min-width: 0;

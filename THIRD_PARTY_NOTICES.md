@@ -3,7 +3,7 @@
 Open Cowork includes third-party open source packages in its production dependency graph. This file is generated from `pnpm list --prod --recursive` and the installed package manifests.
 
 Generation provenance:
-- pnpm lockfile SHA-256: `c673746962bc159333efaf01fc2c192e87349e5da44de9ef44598f52cac298e8`
+- pnpm lockfile SHA-256: `6b47c0520344127a65e2909e7bb108f8a32272a57e2bffc7a862c0cf10a0c8e3`
 - Production package entries: 507
 - Bundled license directories: 463 (44 package entries have no standalone license file or are workspace links)
 
@@ -45,8 +45,8 @@ Each package remains licensed under its own license terms. The table below is pr
 | @aws/lambda-invoke-store | 0.2.4 | Apache-2.0 | THIRD_PARTY_LICENSES/@aws__lambda-invoke-store@0.2.4/ | git+https://github.com/awslabs/aws-lambda-invoke-store.git |
 | @braintree/sanitize-url | 7.1.2 | MIT | THIRD_PARTY_LICENSES/@braintree__sanitize-url@7.1.2/ | git+https://github.com/braintree/sanitize-url.git |
 | @chevrotain/types | 11.1.2 | Apache-2.0 | THIRD_PARTY_LICENSES/@chevrotain__types@11.1.2/ | git://github.com/Chevrotain/chevrotain.git |
-| @fontsource-variable/hubot-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__hubot-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @fontsource-variable/mona-sans | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__mona-sans@5.2.8/ | git+https://github.com/fontsource/font-files.git |
+| @fontsource-variable/schibsted-grotesk | 5.2.8 | OFL-1.1 | THIRD_PARTY_LICENSES/@fontsource-variable__schibsted-grotesk@5.2.8/ | git+https://github.com/fontsource/font-files.git |
 | @grammyjs/types | 3.27.3 | MIT | THIRD_PARTY_LICENSES/@grammyjs__types@3.27.3/ | git+https://github.com/grammyjs/types.git |
 | @hono/node-server | 1.19.13 | MIT | THIRD_PARTY_LICENSES/@hono__node-server@1.19.13/ | https://github.com/honojs/node-server.git |
 | @iconify/types | 2.0.0 | MIT | THIRD_PARTY_LICENSES/@iconify__types@2.0.0/ | https://github.com/iconify/iconify.git |

@@ -1,4 +1,4 @@
-import { getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type MonoFont, type UiFont, type UiTheme, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId } from '../../helpers/theme'
+import { DENSITY_OPTIONS, getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type Density, type MonoFont, type UiFont, type UiTheme, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
 import { Badge, Card, SegmentedControl, Select } from '../ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
@@ -163,6 +163,20 @@ export function AppearancePreview({
             }))}
           />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <span className={sectionLabelCls}>{t('settings.appearance.density', 'Density')}</span>
+        <SegmentedControl
+          label={t('settings.appearance.density', 'Density')}
+          value={appearance.density}
+          onChange={(value) => onUpdate({ density: value as Density })}
+          className="settings-wide-control"
+          options={DENSITY_OPTIONS.map((option) => ({
+            value: option.id,
+            label: option.label,
+          }))}
+        />
       </div>
 
       <div className="rounded-2xl border border-border-subtle p-4 bg-base">

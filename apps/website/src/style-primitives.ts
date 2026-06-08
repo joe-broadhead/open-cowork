@@ -197,9 +197,9 @@ export function cloudWebsitePrimitiveStyles() {
       box-shadow: var(--shadow-2), var(--specular);
       color: var(--color-text);
     }
-    .ui-card--sm { padding: var(--space-3); }
-    .ui-card--md { padding: var(--space-4); }
-    .ui-card--lg { padding: var(--space-6); }
+    .ui-card--sm { padding: calc(var(--row-pad) + var(--space-1)); }
+    .ui-card--md { padding: calc(var(--row-pad) + var(--space-2)); }
+    .ui-card--lg { padding: calc(var(--row-pad) + var(--space-4)); }
     .ui-card--interactive {
       display: block;
       width: 100%;

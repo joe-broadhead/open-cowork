@@ -64,5 +64,5 @@ icon set stays tree-shakeable because no `* as Icons` namespace import is used.
 ## Licensing
 
 `lucide-react` is recorded in `THIRD_PARTY_NOTICES.md` from the package
-manifest. The bundled font packages for Mona Sans and Hubot Sans are also
+manifest. The bundled font packages for Mona Sans and Schibsted Grotesk are also
 recorded there under OFL-1.1.

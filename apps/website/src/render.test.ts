@@ -415,6 +415,7 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   assert.equal(bootstrap.theme.defaultPreset, 'mercury')
   assert.equal(bootstrap.theme.defaultScheme, 'dark')
   assert.equal(bootstrap.theme.defaultAccent, 'azure')
+  assert.equal(bootstrap.theme.defaultDensity, 'regular')
   assert.equal(bootstrap.theme.tenantBrandingLocked, false)
   assert.equal(bootstrap.theme.presets.length, 18)
   assert.equal(bootstrap.theme.accents.length, 6)
@@ -422,9 +423,11 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   assert.match(html, /id="cloud-theme-preset"/)
   assert.match(html, /id="cloud-theme-scheme"/)
   assert.match(html, /id="cloud-theme-accent"/)
+  assert.match(html, /id="cloud-theme-density"/)
   assert.match(html, /<option value="mercury" selected>Mercury<\/option>/)
   assert.match(html, /<option value="dark" selected>Mercury<\/option>/)
   assert.match(html, /<option value="azure" selected>Azure<\/option>/)
+  assert.match(html, /<option value="regular" selected>Regular<\/option>/)
 
   const defaultedBranding = cloudWebsiteHtml({
     role: 'owner',
@@ -436,6 +439,7 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   assert.ok(defaultedBrandingMatch)
   assert.equal(JSON.parse(defaultedBrandingMatch[1]).theme.tenantBrandingLocked, false)
   assert.doesNotMatch(defaultedBranding, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
+  assert.doesNotMatch(defaultedBranding, /<select(?=[^>]*id="cloud-theme-density")(?=[^>]* disabled)[^>]*>/)
 
   const branded = cloudWebsiteHtml({
     role: 'owner',
@@ -449,6 +453,7 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   assert.ok(brandedMatch)
   assert.equal(JSON.parse(brandedMatch[1]).theme.tenantBrandingLocked, true)
   assert.match(branded, /<select(?=[^>]*id="cloud-theme-preset")(?=[^>]*data-tenant-branding-locked="true")(?=[^>]* disabled)[^>]*>/)
+  assert.doesNotMatch(branded, /<select(?=[^>]*id="cloud-theme-density")(?=[^>]* disabled)[^>]*>/)
 })
 
 test('cloud website keeps existing admin dashboard surfaces available', () => {

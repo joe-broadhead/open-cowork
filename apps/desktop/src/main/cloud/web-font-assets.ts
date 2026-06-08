@@ -16,12 +16,12 @@ const CLOUD_WEB_FONT_ASSETS = new Map<string, Buffer>([
     readFileSync(require.resolve('@fontsource-variable/mona-sans/files/mona-sans-latin-wght-italic.woff2')),
   ],
   [
-    'hubot-sans-latin-wght-normal.woff2',
-    readFileSync(require.resolve('@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-normal.woff2')),
+    'schibsted-grotesk-latin-wght-normal.woff2',
+    readFileSync(require.resolve('@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2')),
   ],
   [
-    'hubot-sans-latin-wght-italic.woff2',
-    readFileSync(require.resolve('@fontsource-variable/hubot-sans/files/hubot-sans-latin-wght-italic.woff2')),
+    'schibsted-grotesk-latin-wght-italic.woff2',
+    readFileSync(require.resolve('@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-italic.woff2')),
   ],
 ])
 

@@ -2,14 +2,18 @@ import { DEFAULT_UI_ACCENT_PRESET_ID, UI_THEME_PRESETS, accentActionFillToken, a
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
   CLOUD_THEME_ACCENT_STORAGE_KEY,
+  CLOUD_THEME_DENSITY_STORAGE_KEY,
   CLOUD_THEME_SCHEME_STORAGE_KEY,
   CLOUD_THEME_STORAGE_KEY,
+  DEFAULT_CLOUD_THEME_DENSITY,
   DEFAULT_CLOUD_THEME_ACCENT_PRESET,
   DEFAULT_CLOUD_THEME_PRESET,
   DEFAULT_CLOUD_THEME_SCHEME,
+  isCloudDensity,
   isCloudThemeAccentPreset,
   isCloudThemePreset,
   isCloudThemeScheme,
+  type CloudDensity,
 } from './cloud-theme.ts'
 
 const TOKEN_CSS_VARS: Array<[keyof ThemeTokens, string[]]> = [
@@ -74,6 +78,10 @@ export function applyCloudThemePreset(presetId: string, scheme: 'dark' | 'light'
   root.style.setProperty('--accent-action-fill', accentActionFillToken(tokens.accent, tokens.accent2))
 }
 
+export function applyCloudDensity(density: string | null | undefined) {
+  document.documentElement.dataset.density = isCloudDensity(density) ? density : DEFAULT_CLOUD_THEME_DENSITY
+}
+
 function storedCloudThemePreset(defaultPreset = DEFAULT_CLOUD_THEME_PRESET) {
   try {
     const stored = localStorage.getItem(CLOUD_THEME_STORAGE_KEY)
@@ -125,6 +133,23 @@ function persistCloudThemeAccent(accentId: UiAccentPresetId) {
   }
 }
 
+function storedCloudDensity(defaultDensity: CloudDensity = DEFAULT_CLOUD_THEME_DENSITY) {
+  try {
+    const stored = localStorage.getItem(CLOUD_THEME_DENSITY_STORAGE_KEY)
+    return isCloudDensity(stored) ? stored : defaultDensity
+  } catch {
+    return defaultDensity
+  }
+}
+
+function persistCloudDensity(density: CloudDensity) {
+  try {
+    localStorage.setItem(CLOUD_THEME_DENSITY_STORAGE_KEY, density)
+  } catch {
+    // Local persistence is best-effort only; the selected density still applies for this page.
+  }
+}
+
 const themeControlDocuments = new WeakSet<Document>()
 
 function installThemeControlChangeListener(ownerDocument: Document) {
@@ -132,7 +157,14 @@ function installThemeControlChangeListener(ownerDocument: Document) {
   ownerDocument.addEventListener('change', (event) => {
     const select = event.target as HTMLSelectElement | null
     if (!select || select.tagName !== 'SELECT') return
-    if (!['cloud-theme-preset', 'cloud-theme-scheme', 'cloud-theme-accent'].includes(select.id)) return
+    if (!['cloud-theme-preset', 'cloud-theme-scheme', 'cloud-theme-accent', 'cloud-theme-density'].includes(select.id)) return
+    if (select.id === 'cloud-theme-density') {
+      const density = isCloudDensity(select.value) ? select.value : DEFAULT_CLOUD_THEME_DENSITY
+      select.value = density
+      persistCloudDensity(density)
+      applyCloudDensity(density)
+      return
+    }
     if (select.disabled || select.dataset.tenantBrandingLocked === 'true') return
     const presetSelect = ownerDocument.getElementById('cloud-theme-preset') as HTMLSelectElement | null
     const schemeSelect = ownerDocument.getElementById('cloud-theme-scheme') as HTMLSelectElement | null
@@ -155,6 +187,7 @@ export function installCloudThemePresetControls(bootstrap: CloudWebClientBootstr
   const select = document.getElementById('cloud-theme-preset') as HTMLSelectElement | null
   const schemeSelect = document.getElementById('cloud-theme-scheme') as HTMLSelectElement | null
   const accentSelect = document.getElementById('cloud-theme-accent') as HTMLSelectElement | null
+  const densitySelect = document.getElementById('cloud-theme-density') as HTMLSelectElement | null
   if (!select) return
   const locked = Boolean(bootstrap.theme?.tenantBrandingLocked)
   for (const control of [select, schemeSelect, accentSelect]) {
@@ -162,6 +195,14 @@ export function installCloudThemePresetControls(bootstrap: CloudWebClientBootstr
     control.disabled = locked
     control.dataset.tenantBrandingLocked = locked ? 'true' : 'false'
   }
+  const bootstrapDensity = isCloudDensity(bootstrap.theme?.defaultDensity)
+    ? bootstrap.theme.defaultDensity
+    : DEFAULT_CLOUD_THEME_DENSITY
+  const initialDensity = storedCloudDensity(bootstrapDensity)
+  if (densitySelect) densitySelect.value = initialDensity
+  applyCloudDensity(initialDensity)
+  installThemeControlChangeListener(document)
+
   if (locked) {
     select.title = 'Theme is managed by this cloud workspace'
     if (schemeSelect) schemeSelect.title = select.title
@@ -176,5 +217,4 @@ export function installCloudThemePresetControls(bootstrap: CloudWebClientBootstr
   if (schemeSelect) schemeSelect.value = initialScheme
   if (accentSelect) accentSelect.value = initialAccent
   applyCloudThemePreset(initialPreset, initialScheme, initialAccent)
-  installThemeControlChangeListener(document)
 }

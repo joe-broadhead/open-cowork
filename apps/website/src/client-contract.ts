@@ -75,6 +75,7 @@ export type CloudWebClientBootstrap = {
     defaultPreset: string
     defaultScheme?: 'dark' | 'light'
     defaultAccent?: string
+    defaultDensity?: 'compact' | 'regular' | 'comfy'
     tenantBrandingLocked: boolean
     presets: Array<{
       id: string
