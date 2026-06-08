@@ -159,7 +159,7 @@ test('cloud web browser keeps large admin surfaces bounded across route transiti
     budget('browser bootstrap with large admin fixtures', performance.now() - start, 8000)
 
     const routeStart = performance.now()
-    for (const label of ['Members', 'Connections', 'Gateway', 'Audit', 'Usage', 'Workflows', 'Artifacts']) {
+    for (const label of ['Members', 'Connections', 'Gateway', 'Audit', 'Usage', 'Playbooks', 'Artifacts']) {
       harness.clickText('[data-route-link]', label)
     }
     budget('admin route transitions over large fixtures', performance.now() - routeStart, 1200)

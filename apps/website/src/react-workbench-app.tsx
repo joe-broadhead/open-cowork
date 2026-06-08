@@ -460,7 +460,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       asRecord(selectedView.session).profileName,
       `${sessionMessageCount(selectedView)} message(s)`,
     ].filter(Boolean).join(' - ')
-    : 'Ask anything, or @mention an agent'
+    : 'Ask anything, or @mention a coworker'
   const statusText = error || (selectedSessionId ? sessionEventStatus : bootstrap.features.chat === false ? 'disabled' : 'ready')
   const limitStatus = sessionListError
     ? sessionListError
@@ -543,11 +543,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
             rows={1}
             value={composerText}
             disabled={isSending || bootstrap.features.chat === false}
-            placeholder={selectedSessionId ? 'Continue the conversation...' : 'Ask anything, or @mention an agent'}
+            placeholder={selectedSessionId ? 'Continue the conversation...' : 'Ask anything, or @mention a coworker'}
             onChange={(event) => setComposerText(event.currentTarget.value)}
           />
         </div>
-        <div className="composer-agent-chips" id="composer-agent-chips" aria-label="Agent shortcuts">
+        <div className="composer-agent-chips" id="composer-agent-chips" aria-label="Coworker shortcuts">
           {allowedAgents.slice(0, 5).map((agent) => (
             <button key={agent} type="button" className="agent-chip" data-active={composerAgent === agent ? 'true' : 'false'} onClick={() => { setComposerAgent(agent); const select = document.getElementById('composer-agent') as HTMLSelectElement | null; if (select) select.value = agent }}>
               @{agent}
@@ -556,11 +556,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
         </div>
         <div className="composer-toolbar" aria-label="Chat controls">
           <div className="composer-toolbar-group">
-            <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from History" aria-label="Attach file" />
+            <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file" />
             <label className="composer-select-label">
-              <span className="sr-only">Agent</span>
+              <span className="sr-only">Coworker</span>
               <select id="composer-agent" name="agent" value={composerAgent} disabled={isSending} onChange={(event) => setComposerAgent(event.currentTarget.value)}>
-                <option value="">Default agent</option>
+                <option value="">Default coworker</option>
                 {allowedAgents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}
               </select>
             </label>

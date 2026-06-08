@@ -30,7 +30,7 @@ test('cloud web browser renders signed-out OIDC bootstrap state', async () => {
   try {
     assert.equal(harness.document.body.dataset.auth, 'signed-out')
     assert.equal(harness.document.querySelector('#status')?.textContent, 'Sign in required')
-    assert.equal(harness.document.body.dataset.route, 'org')
+    assert.equal(harness.document.body.dataset.route, 'chat')
     assert.equal((harness.document.querySelector('[data-route-link="byok"]') as HTMLElement).hidden, true)
     assert.equal(harness.lastRequest((request) => request.path === '/auth/me')?.method, 'GET')
   } finally {
@@ -196,7 +196,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
       assert.equal(inspectorToggle.getAttribute('aria-expanded'), 'false')
     })
 
-    harness.clickText('[data-route-link]', 'Agents')
+    harness.clickText('[data-route-link]', 'Coworkers')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'agents'))
     assert.ok(harness.document.querySelector('#workbench-agent-list .agent-card'))
     assert.equal(harness.document.querySelector('#workbench-agent-list > .row'), null)
@@ -209,7 +209,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.equal(harness.document.querySelector('#tool-list > .row'), null)
     assert.match(harness.document.querySelector('#capability-policy-note')?.textContent || '', /Local stdio MCPs are Desktop-only/)
 
-    harness.clickText('[data-route-link]', 'Workflows')
+    harness.clickText('[data-route-link]', 'Playbooks')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'workflows'))
     assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Latest run/)
     const workflowForm = harness.document.querySelector('#workflow-form') as HTMLFormElement
@@ -238,7 +238,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
         runAtMinute: 0,
       },
     }])
-    await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Workflow created/))
+    await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Playbook created/))
   } finally {
     harness.close()
   }
@@ -253,13 +253,13 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.match(startThread.title, /Start chat disables/)
     const runNow = locked.document.querySelector('#workflow-detail button.primary') as HTMLButtonElement
     assert.equal(runNow.disabled, true)
-    assert.match(runNow.title, /Workflow controls disable/)
+    assert.match(runNow.title, /Playbook controls disable/)
     const workflowSubmit = locked.document.querySelector('#workflow-form button[type="submit"]') as HTMLButtonElement
     assert.equal(workflowSubmit.disabled, true)
-    assert.match(workflowSubmit.title, /Workflow controls are disabled/)
+    assert.match(workflowSubmit.title, /Playbook controls are disabled/)
     locked.submit('#workflow-form')
     assert.equal(locked.lastRequest((request) => request.method === 'POST' && request.path === '/api/workflows'), undefined)
-    assert.match(locked.document.querySelector('#status')?.textContent || '', /Workflow controls are disabled/)
+    assert.match(locked.document.querySelector('#status')?.textContent || '', /Playbook controls are disabled/)
   } finally {
     locked.close()
   }
@@ -271,7 +271,11 @@ test('cloud web browser clears signed-in UI when AppAPI reports auth required af
     harness.window.dispatchEvent(new harness.window.CustomEvent(CLOUD_WEB_AUTH_REQUIRED_EVENT))
     await waitFor(() => {
       assert.equal(harness.document.body.dataset.auth, 'signed-out')
-      assert.equal(harness.document.body.dataset.route, 'org')
+      assert.equal(harness.document.body.dataset.route, 'chat')
+      assert.equal(harness.document.querySelector('[data-route-panel="chat"]')?.getAttribute('aria-hidden'), 'false')
+      assert.equal(harness.document.querySelector('[data-route-panel="org"]')?.getAttribute('aria-hidden'), 'true')
+      assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
+      assert.ok(harness.document.querySelector('#prompt-form textarea[name="text"]'))
     })
     assert.match(harness.document.querySelector('#status')?.textContent || '', /Sign in required/)
   } finally {
@@ -490,7 +494,7 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
     harness.clickText('.artifact-card button', 'Download')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts\/session-1-artifact$/.test(request.path))))
 
-    harness.clickText('[data-route-link]', 'Workflows')
+    harness.clickText('[data-route-link]', 'Playbooks')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'workflows'))
     harness.clickText('#workflow-detail button', 'Run now')
     await waitFor(() => {

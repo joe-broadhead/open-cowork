@@ -584,8 +584,8 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (document.body.dataset.auth === 'signed-in') {
       await waitFor(() => {
         assert.doesNotMatch(document.querySelector('#thread-list')?.textContent || '', /No cloud threads loaded/)
-        assert.doesNotMatch(document.querySelector('#workbench-agent-list')?.textContent || '', /No profile-allowed agents loaded|No agents loaded/)
-        assert.doesNotMatch(document.querySelector('#workflow-list')?.textContent || '', /No workflows loaded/)
+        assert.doesNotMatch(document.querySelector('#workbench-agent-list')?.textContent || '', /No profile-allowed (?:agents|coworkers) loaded|No (?:agents|coworkers) loaded/)
+        assert.doesNotMatch(document.querySelector('#workflow-list')?.textContent || '', /No (?:workflows|playbooks) loaded/)
         assert.equal(document.querySelector('#prompt-form')?.getAttribute('data-react-owned'), 'chat')
         assert.equal(document.querySelector('#session-form')?.getAttribute('data-react-owned'), 'project-session')
       }, 8000)
