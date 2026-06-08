@@ -315,8 +315,14 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
     await waitFor(() => assert.match(harness.document.querySelector('#composer-agent-chips')?.textContent || '', /build/))
     harness.clickText('#composer-agent-chips button', '@build')
     assert.equal(agent.value, 'build')
+    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Lead coworker: build/))
     const message = harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement
-    message.value = 'Continue the work.'
+    await waitFor(() => assert.match(message.value, /^@build/))
+    assert.equal((harness.document.querySelector('#prompt-form .composer-send') as HTMLButtonElement).disabled, true)
+    const setTextareaValue = Object.getOwnPropertyDescriptor(harness.window.HTMLTextAreaElement.prototype, 'value')?.set
+    setTextareaValue?.call(message, 'Continue the work.')
+    message.dispatchEvent(new harness.window.Event('input', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal((harness.document.querySelector('#prompt-form .composer-send') as HTMLButtonElement).disabled, false))
     harness.submit('#prompt-form')
     await waitFor(() => assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Created browser thread/))
     assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions'))
@@ -324,6 +330,7 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
     const promptRequest = harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))
     assert.ok(promptRequest)
     assert.equal((promptRequest.body as Record<string, unknown>).agent, 'build')
+    assert.equal((promptRequest.body as Record<string, unknown>).text, 'Continue the work.')
 
     const sessionId = harness.sessions[0].sessionId
     const liveStreamAfterSequence = harness.views[sessionId].projection.sequence
@@ -486,8 +493,17 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
 test('cloud web browser handles approvals, questions, artifacts, and workflow runs', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
+    const firstSessionId = harness.sessions[0].sessionId
+    harness.views[firstSessionId].projection.view.lastError = 'Provider timeout while summarizing the run.'
     await selectFirstCloudThread(harness)
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /Run read-only tests/))
+    const reviewText = harness.document.querySelector('#chat-inspector')?.textContent || ''
+    assert.match(reviewText, /Review queue/)
+    assert.match(reviewText, /Follow-up/)
+    assert.match(reviewText, /Verify browser workbench/)
+    assert.match(reviewText, /approval\/question/)
+    assert.match(reviewText, /1 runtime issue/)
+    assert.doesNotMatch(reviewText, /task-signed|objectKey|leaked-secret/)
 
     harness.clickText('.runtime-card[data-kind="approval"] button', 'Allow')
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /approved/))

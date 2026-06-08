@@ -15,11 +15,20 @@ import {
   cloudWebRuntimeOrder,
   cloudWebSafeArtifactMetadata,
 } from './runtime-workbench.ts'
+import {
+  cloudWebCoworkerInitials,
+  cloudWebCoworkerTone,
+} from './surface-workbench.ts'
 
 const h = createElement
 
 type PolishRowStyle = CSSProperties & {
   '--polish-row-index'?: string
+}
+
+type StudioToneStyle = CSSProperties & {
+  '--studio-tone'?: string
+  '--studio-lane-tone'?: string
 }
 
 function polishRowStyle(index: number): PolishRowStyle | undefined {
@@ -107,16 +116,59 @@ function toolTraceNode(tool: Record<string, unknown>, key: string) {
     list(tool.attachments).length ? detailsNode('Attachments', tool.attachments) : null)
 }
 
+function taskCoworkerName(task: Record<string, unknown>) {
+  return text(task.agent || task.agentName || task.profileName || task.coworker || task.workerName, 'Specialist')
+}
+
+function taskTitle(task: Record<string, unknown>, index: number) {
+  return text(task.title || task.summary || task.id, `Specialist lane ${index + 1}`)
+}
+
+function taskMeta(task: Record<string, unknown>, toolCount: number, todoCount: number, artifactCount: number) {
+  return [
+    task.status ? `status ${text(task.status)}` : null,
+    task.elapsedMs ? `${Math.round(Number(task.elapsedMs) / 1000)}s` : null,
+    toolCount ? `${toolCount} tool${toolCount === 1 ? '' : 's'}` : null,
+    todoCount ? `${todoCount} todo${todoCount === 1 ? '' : 's'}` : null,
+    artifactCount ? `${artifactCount} artifact${artifactCount === 1 ? '' : 's'}` : null,
+    task.sessionId ? `chat ${text(task.sessionId)}` : null,
+  ].filter(Boolean).join(' - ')
+}
+
 function taskRunNode(task: Record<string, unknown>, index: number) {
-  return h('details', { className: 'runtime-detail task-run', key: text(task.id, `task-${index}`) },
-    h('summary', null,
-      h('span', { className: 'pill', 'data-kind': statusPillKind(task.status) }, text(task.status, 'task')),
-      h('span', null, text(task.title || task.agent || task.id, 'Task run'))),
-    task.content ? h('p', null, text(task.content)) : null,
-    task.agent ? h('span', { className: 'pill' }, `agent ${text(task.agent)}`) : null,
-    task.error ? h('p', { className: 'notice' }, text(task.error)) : null,
-    ...list<Record<string, unknown>>(task.toolCalls).map((tool, toolIndex) => toolTraceNode(tool, text(tool.id, `task-tool-${index}-${toolIndex}`))),
-    list(task.todos).length ? detailsNode('Task todos', task.todos) : null)
+  const coworker = taskCoworkerName(task)
+  const tools = list<Record<string, unknown>>(task.toolCalls)
+  const todos = list<Record<string, unknown>>(task.todos)
+  const artifacts = list<Record<string, unknown>>(task.artifacts).map((artifact) => cloudWebSafeArtifactMetadata(artifact))
+  const tone = cloudWebCoworkerTone(coworker)
+  const style = {
+    '--studio-tone': tone,
+    '--studio-lane-tone': tone,
+  } satisfies StudioToneStyle
+
+  return h('section', {
+    className: 'studio-task-lane cloud-specialist-lane',
+    key: text(task.id, `task-${index}`),
+    'data-kind': 'task-run',
+    style,
+  },
+  h('div', { className: 'studio-task-lane__header' },
+    h('div', { className: 'cloud-specialist-lane__identity' },
+      h('span', { className: 'studio-coworker-avatar studio-coworker-avatar--sm', style, 'aria-hidden': 'true' }, cloudWebCoworkerInitials(coworker)),
+      h('div', null,
+        h('h3', null, coworker),
+        h('p', null, taskTitle(task, index)))),
+    h('span', { className: 'studio-task-lane__count', 'data-kind': statusPillKind(task.status) }, text(task.status, 'working'))),
+  h('ul', { className: 'studio-task-lane__items' },
+    h('li', { className: 'studio-task-lane__item' },
+      h('h4', null, taskTitle(task, index)),
+      task.content ? h('p', null, text(task.content)) : null,
+      task.error ? h('p', { className: 'notice', 'data-kind': 'error' }, text(task.error)) : null,
+      h('div', { className: 'studio-task-lane__meta' }, taskMeta(task, tools.length, todos.length, artifacts.length) || 'Projected coworker work'),
+      tools.length ? h('div', { className: 'cloud-specialist-lane__tools' },
+        tools.map((tool, toolIndex) => toolTraceNode(tool, text(tool.id, `task-tool-${index}-${toolIndex}`)))) : null,
+      todos.length ? detailsNode('Coworker todos', todos) : null,
+      artifacts.length ? detailsNode('Coworker artifacts', artifacts) : null)))
 }
 
 export type CloudThreadListProps = {
@@ -203,7 +255,7 @@ export function CloudRuntimeStatus({ view }: { view: CloudWebThreadView | null |
     h('div', { className: 'runtime-grid' },
       h('span', null, `Messages ${counts.message}`),
       h('span', null, `Tools ${counts.toolCall}`),
-      h('span', null, `Tasks ${counts.taskRun}`),
+      h('span', null, `Coworker lanes ${counts.taskRun}`),
       h('span', null, `Artifacts ${counts.artifact}`),
       h('span', null, `Cost $${Number(projection.sessionCost || 0).toFixed(4)}`),
       h('span', null, `Input ${text(tokens.input, '0')}`),
@@ -284,7 +336,7 @@ function approvalCard(approval: Record<string, unknown>, props: CloudRuntimeActi
     h('div', { className: 'runtime-card-header' },
       h('span', { className: 'pill', 'data-kind': 'warn' }, 'Approval'),
       h('strong', null, text(approval.description || approval.tool, 'Permission requested'))),
-    h('small', null, [approval.tool, approval.taskRunId ? `task ${text(approval.taskRunId)}` : null].filter(Boolean).join(' - ')),
+    h('small', null, [approval.tool, approval.taskRunId ? `coworker lane ${text(approval.taskRunId)}` : null].filter(Boolean).join(' - ')),
     detailsNode('Permission input', approval.input || {}),
     h('div', { className: 'row-actions' },
       h('button', { className: 'primary', type: 'button', disabled: pending, onClick: () => props.onRespondPermission?.(id, true) }, 'Allow'),
@@ -384,7 +436,7 @@ function artifactCardNode(artifact: Record<string, unknown>, index: number, prop
     h('small', null, [
       artifact.mime || artifact.contentType || 'unknown type',
       byteLabel(artifact.size),
-      artifact.taskRunId ? `task ${text(artifact.taskRunId)}` : null,
+      artifact.taskRunId ? `coworker lane ${text(artifact.taskRunId)}` : null,
       artifact.toolName || artifact.toolId || null,
     ].filter(Boolean).join(' - ')),
     h('pre', null, JSON.stringify(metadata, null, 2)),

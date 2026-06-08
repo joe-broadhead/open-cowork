@@ -250,6 +250,12 @@ export function cloudWebsiteComponentStyles() {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .agent-card .surface-card-header {
+      justify-content: flex-start;
+    }
+    .agent-card .surface-card-header strong {
+      flex: 1;
+    }
     .surface-card-actions {
       display: flex;
       align-items: center;

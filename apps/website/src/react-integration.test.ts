@@ -249,6 +249,7 @@ test('React workbench form hook creates a chat and prompts the selected agent', 
         sessionFormTarget: null,
         composerText,
         composerAgent: 'build',
+        allowedAgents: ['build', 'data-analyst'],
         isSending,
         selectedSessionId: null,
         setComposerText,
@@ -285,6 +286,168 @@ test('React workbench form hook creates a chat and prompts the selected agent', 
     assert.deepEqual(calls[1], { type: 'prompt', sessionId: 'session-1', body: { text: 'Build the app', agent: 'build' } })
     assert.equal(window.location.hash, '#chat')
     assert.equal(window.document.getElementById('status')?.textContent, 'Ready')
+    await act(async () => {
+      root.unmount()
+      await delay(0)
+    })
+  })
+})
+
+test('React workbench form hook maps a direct coworker mention to the cloud prompt assignment', async () => {
+  await withDom(`
+    <div id="status"></div>
+    <div id="sidebar-status"></div>
+    <form id="prompt-form">
+      <textarea name="text">@data-analyst Review the run.</textarea>
+      <select name="agent"><option value="build" selected>build</option></select>
+    </form>
+    <div id="react-root"></div>
+  `, async (window) => {
+    const calls: Array<{ type: string, body?: unknown, sessionId?: string }> = []
+    const view = { session: { sessionId: 'session-mention', title: 'Started' }, projection: { view: { messages: [] } } }
+    const api = {
+      sessions: {
+        create: async (body: unknown) => {
+          calls.push({ type: 'create', body })
+          return { session: { sessionId: 'session-mention' }, view }
+        },
+        prompt: async (sessionId: string, body: unknown) => {
+          calls.push({ type: 'prompt', sessionId, body })
+          return { view }
+        },
+      },
+    } as unknown as AppAPI
+    const promptForm = window.document.getElementById('prompt-form') as HTMLFormElement
+
+    function Harness() {
+      const [composerText, setComposerText] = useState('@data-analyst Review the run.')
+      const [isSending, setIsSending] = useState(false)
+      const [, setError] = useState<string | null>(null)
+      const [, setViews] = useState<Record<string, unknown>>({})
+      const [, setSelectedSessionId] = useState<string | null>(null)
+      useCloudWorkbenchForms({
+        api,
+        bootstrap: bootstrap(),
+        workspace: { profileName: 'default' },
+        composerTarget: promptForm,
+        sessionFormTarget: null,
+        composerText,
+        composerAgent: 'build',
+        allowedAgents: ['build', 'data-analyst'],
+        isSending,
+        selectedSessionId: null,
+        setComposerText,
+        setIsSending,
+        setError,
+        setViews: setViews as never,
+        setSelectedSessionId,
+        loadSessions: async () => {
+          calls.push({ type: 'loadSessions' })
+        },
+        loadView: async (sessionId: string) => {
+          calls.push({ type: 'loadView', sessionId })
+          return view as never
+        },
+      })
+      return null
+    }
+
+    const root = createRoot(window.document.getElementById('react-root') as HTMLElement)
+    await act(async () => {
+      root.render(createElement(Harness))
+    })
+    await waitFor(() => assert.equal(promptForm.dataset.reactOwned, 'chat'))
+    await act(async () => {
+      promptForm.dispatchEvent(new window.SubmitEvent('submit', { bubbles: true, cancelable: true }))
+      await waitFor(() => assert.deepEqual(calls.map((call) => call.type), ['create', 'prompt', 'loadSessions', 'loadView']))
+    })
+
+    assert.deepEqual(calls[1], {
+      type: 'prompt',
+      sessionId: 'session-mention',
+      body: { text: 'Review the run.', agent: 'data-analyst' },
+    })
+    await act(async () => {
+      root.unmount()
+      await delay(0)
+    })
+  })
+})
+
+test('React workbench form hook preserves a selected capability coworker outside the policy shortlist', async () => {
+  await withDom(`
+    <div id="status"></div>
+    <div id="sidebar-status"></div>
+    <form id="prompt-form">
+      <textarea name="text">Review the capability output.</textarea>
+      <select name="agent"><option value="" selected>Default coworker</option></select>
+    </form>
+    <div id="react-root"></div>
+  `, async (window) => {
+    const calls: Array<{ type: string, body?: unknown, sessionId?: string }> = []
+    const view = { session: { sessionId: 'session-capability', title: 'Started' }, projection: { view: { messages: [] } } }
+    const api = {
+      sessions: {
+        create: async (body: unknown) => {
+          calls.push({ type: 'create', body })
+          return { session: { sessionId: 'session-capability' }, view }
+        },
+        prompt: async (sessionId: string, body: unknown) => {
+          calls.push({ type: 'prompt', sessionId, body })
+          return { view }
+        },
+      },
+    } as unknown as AppAPI
+    const promptForm = window.document.getElementById('prompt-form') as HTMLFormElement
+
+    function Harness() {
+      const [composerText, setComposerText] = useState('Review the capability output.')
+      const [isSending, setIsSending] = useState(false)
+      const [, setError] = useState<string | null>(null)
+      const [, setViews] = useState<Record<string, unknown>>({})
+      const [, setSelectedSessionId] = useState<string | null>(null)
+      useCloudWorkbenchForms({
+        api,
+        bootstrap: bootstrap(),
+        workspace: { profileName: 'default' },
+        composerTarget: promptForm,
+        sessionFormTarget: null,
+        composerText,
+        composerAgent: 'capability-coworker',
+        allowedAgents: ['build'],
+        isSending,
+        selectedSessionId: null,
+        setComposerText,
+        setIsSending,
+        setError,
+        setViews: setViews as never,
+        setSelectedSessionId,
+        loadSessions: async () => {
+          calls.push({ type: 'loadSessions' })
+        },
+        loadView: async (sessionId: string) => {
+          calls.push({ type: 'loadView', sessionId })
+          return view as never
+        },
+      })
+      return null
+    }
+
+    const root = createRoot(window.document.getElementById('react-root') as HTMLElement)
+    await act(async () => {
+      root.render(createElement(Harness))
+    })
+    await waitFor(() => assert.equal(promptForm.dataset.reactOwned, 'chat'))
+    await act(async () => {
+      promptForm.dispatchEvent(new window.SubmitEvent('submit', { bubbles: true, cancelable: true }))
+      await waitFor(() => assert.deepEqual(calls.map((call) => call.type), ['create', 'prompt', 'loadSessions', 'loadView']))
+    })
+
+    assert.deepEqual(calls[1], {
+      type: 'prompt',
+      sessionId: 'session-capability',
+      body: { text: 'Review the capability output.', agent: 'capability-coworker' },
+    })
     await act(async () => {
       root.unmount()
       await delay(0)

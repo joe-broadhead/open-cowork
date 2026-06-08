@@ -26,9 +26,13 @@ import {
 } from './runtime-workbench.ts'
 import {
   cloudWebCapabilityPolicyNote,
+  cloudWebCoworkerInitials,
+  cloudWebPromptAssignment,
   cloudWebWorkflowTriggerSummary,
   deriveCloudWebWorkbenchAgents,
+  ensureCloudWebCoworkerMention,
   filterCloudWebCapabilities,
+  firstCloudWebMentionedCoworker,
 } from './surface-workbench.ts'
 import {
   CLOUD_WEB_WORKBENCH_PARITY_MATRIX,
@@ -111,6 +115,8 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /\.ui-badge\s*\{/)
   assert.match(html, /\.ui-badge--danger\s*\{/)
   assert.match(html, /id="chat-inspector"[\s\S]*hidden/)
+  assert.match(html, /class="composer-lead-row" data-has-lead="false"/)
+  assert.match(html, /Lead coworker: profile default/)
   assert.match(html, /id="composer-agent-chips"/)
   assert.match(html, /color-scheme: dark/)
   assert.match(html, /font-family: 'Mona Sans Variable'/)
@@ -706,6 +712,63 @@ test('cloud website surface helper derives agents, filters capabilities, and sum
   assert.match(cloudWebCapabilityPolicyNote({ kind: 'mcp', scope: 'machine' }), /Machine-scoped/)
   assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'manual', enabled: true }, { type: 'schedule', enabled: false }] }), 'manual')
   assert.equal(cloudWebWorkflowTriggerSummary({ triggers: [{ type: 'schedule', enabled: true }, { type: 'webhook', enabled: true }] }), 'schedule, webhook')
+  assert.equal(cloudWebCoworkerInitials('data-analyst'), 'DA')
+  assert.equal(firstCloudWebMentionedCoworker('Please ask @data-analyst for help', ['build', 'data-analyst']), 'data-analyst')
+  assert.equal(firstCloudWebMentionedCoworker('Please ask @data-analyst.', ['build', 'data-analyst']), 'data-analyst')
+  assert.equal(firstCloudWebMentionedCoworker('Please ask @agent.v1.', ['agent', 'agent.v1']), 'agent.v1')
+  assert.equal(firstCloudWebMentionedCoworker('Please ask @unknown for help', ['build']), '')
+  assert.equal(ensureCloudWebCoworkerMention('Continue the work.', 'build'), '@build Continue the work.')
+  assert.equal(ensureCloudWebCoworkerMention('@data-analyst Continue the work.', 'build'), '@build Continue the work.')
+  assert.equal(ensureCloudWebCoworkerMention('@data-analyst: Continue the work.', 'build'), '@build Continue the work.')
+  assert.equal(ensureCloudWebCoworkerMention('@data-analyst. Continue the work.', 'build'), '@build Continue the work.')
+  assert.deepEqual(
+    cloudWebPromptAssignment('@data-analyst inspect metrics', ['build', 'data-analyst'], 'build'),
+    { agent: 'data-analyst', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@data-analyst: inspect metrics', ['build', 'data-analyst'], 'build'),
+    { agent: 'data-analyst', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@data-analyst, inspect metrics', ['build', 'data-analyst'], 'build'),
+    { agent: 'data-analyst', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@data-analyst. inspect metrics', ['build', 'data-analyst'], 'build'),
+    { agent: 'data-analyst', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@agent.v1. inspect metrics', ['agent', 'agent.v1'], 'agent'),
+    { agent: 'agent.v1', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('inspect metrics with @data-analyst', ['build', 'data-analyst'], 'build'),
+    { agent: 'build', text: 'inspect metrics with @data-analyst', source: 'selected' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('inspect metrics with @data-analyst', ['build', 'data-analyst'], ''),
+    { agent: 'data-analyst', text: 'inspect metrics with @data-analyst', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('Please ask @data-analyst.', ['build', 'data-analyst'], ''),
+    { agent: 'data-analyst', text: 'Please ask @data-analyst.', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('Please ask @agent.v1.', ['agent', 'agent.v1'], ''),
+    { agent: 'agent.v1', text: 'Please ask @agent.v1.', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('inspect metrics', ['build'], 'capability-coworker'),
+    { agent: 'capability-coworker', text: 'inspect metrics', source: 'selected' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@capability-coworker inspect metrics', ['build'], 'capability-coworker'),
+    { agent: 'capability-coworker', text: 'inspect metrics', source: 'mention' },
+  )
+  assert.deepEqual(
+    cloudWebPromptAssignment('@capability-coworker', ['build'], 'capability-coworker'),
+    { agent: 'capability-coworker', text: '', source: 'mention' },
+  )
 })
 
 test('cloud website runtime helper covers all runtime entity classes', () => {
@@ -750,6 +813,7 @@ test('cloud website runtime helper covers all runtime entity classes', () => {
   assert.equal(counts.error, 1)
   assert.equal(counts.usage, 1)
   assert.equal(counts.context, 1)
+  assert.equal(cloudWebRuntimeCounts({ lastError: 'Provider timeout' }).error, 1)
   assert.equal(cloudWebRuntimeCounts({ contextState: 'idle' }).context, 0)
 })
 

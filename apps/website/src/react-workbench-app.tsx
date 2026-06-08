@@ -14,8 +14,10 @@ import {
 } from './react-workbench.ts'
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
+import { CloudComposerPortal } from './react-workbench-composer.tsx'
 import { useCloudWorkbenchForms } from './react-workbench-forms.ts'
 import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
+import { cloudWebPromptAssignment } from './surface-workbench.ts'
 import {
   allowedAgentsFromWorkspace,
   asRecord,
@@ -107,6 +109,10 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
 
   const selectedView = selectedSessionId ? views[selectedSessionId] || null : null
   const allowedAgents = useMemo(() => allowedAgentsFromWorkspace(workspace), [workspace])
+  const activeCoworker = useMemo(
+    () => cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).agent,
+    [allowedAgents, composerAgent, composerText],
+  )
   const visibleThreads = useMemo(() => filterCloudWebThreads(sessions, views, filters, threadLimit), [filters, sessions, threadLimit, views])
   const filteredThreadCount = useMemo(() => filterCloudWebThreads(sessions, views, filters, Number.MAX_SAFE_INTEGER).length, [filters, sessions, views])
 
@@ -396,6 +402,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     sessionFormTarget,
     composerText,
     composerAgent,
+    allowedAgents,
     isSending,
     selectedSessionId,
     setComposerText,
@@ -533,46 +540,18 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   if (eventStatusTarget) portals.push(createPortal(<>{statusText}</>, eventStatusTarget))
   if (composerTarget) {
     portals.push(createPortal(
-      <>
-        <label className="sr-only" htmlFor="chat-message-input">Message</label>
-        <div className="composer-input-chrome">
-          <textarea
-            id="chat-message-input"
-            className="chat-composer-textarea"
-            name="text"
-            rows={1}
-            value={composerText}
-            disabled={isSending || bootstrap.features.chat === false}
-            placeholder={selectedSessionId ? 'Continue the conversation...' : 'Ask anything, or @mention a coworker'}
-            onChange={(event) => setComposerText(event.currentTarget.value)}
-          />
-        </div>
-        <div className="composer-agent-chips" id="composer-agent-chips" aria-label="Coworker shortcuts">
-          {allowedAgents.slice(0, 5).map((agent) => (
-            <button key={agent} type="button" className="agent-chip" data-active={composerAgent === agent ? 'true' : 'false'} onClick={() => { setComposerAgent(agent); const select = document.getElementById('composer-agent') as HTMLSelectElement | null; if (select) select.value = agent }}>
-              @{agent}
-            </button>
-          ))}
-        </div>
-        <div className="composer-toolbar" aria-label="Chat controls">
-          <div className="composer-toolbar-group">
-            <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file" />
-            <label className="composer-select-label">
-              <span className="sr-only">Coworker</span>
-              <select id="composer-agent" name="agent" value={composerAgent} disabled={isSending} onChange={(event) => setComposerAgent(event.currentTarget.value)}>
-                <option value="">Default coworker</option>
-                {allowedAgents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="composer-toolbar-group">
-            <span className="pill" data-kind={error ? 'warn' : 'ok'}>{error || (bootstrap.features.chat === false ? 'disabled' : 'ready')}</span>
-            <button className="composer-send" type="submit" disabled={isSending || !composerText.trim() || bootstrap.features.chat === false} aria-label="Send message">
-              <span className="sr-only">Send message</span>
-            </button>
-          </div>
-        </div>
-      </>,
+      <CloudComposerPortal
+        bootstrap={bootstrap}
+        allowedAgents={allowedAgents}
+        activeCoworker={activeCoworker}
+        composerText={composerText}
+        composerAgent={composerAgent}
+        error={error}
+        isSending={isSending}
+        selectedSessionId={selectedSessionId}
+        setComposerText={setComposerText}
+        setComposerAgent={setComposerAgent}
+      />,
       composerTarget,
     ))
   }

@@ -195,6 +195,10 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
               </div>
               <form class="cloud-composer chat-composer-shell" id="prompt-form" aria-label="Chat composer">
                 <label class="sr-only" for="chat-message-input">Message</label>
+                <div class="composer-lead-row" data-has-lead="false">
+                  <span class="studio-coworker-avatar studio-coworker-avatar--sm" aria-hidden="true">OC</span>
+                  <span>Lead coworker: profile default</span>
+                </div>
                 <div class="composer-input-chrome">
                   <textarea id="chat-message-input" class="chat-composer-textarea" name="text" rows="1" disabled placeholder="Ask anything, or @mention a coworker"></textarea>
                 </div>

@@ -104,6 +104,13 @@ function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean)
     const label = textNodeElement('label', 'sr-only', 'Message')
     label.setAttribute('for', 'chat-message-input')
 
+    const leadRow = document.createElement('div')
+    leadRow.className = 'composer-lead-row'
+    leadRow.dataset.hasLead = 'false'
+    const leadAvatar = textNodeElement('span', 'studio-coworker-avatar studio-coworker-avatar--sm', 'OC')
+    leadAvatar.setAttribute('aria-hidden', 'true')
+    leadRow.append(leadAvatar, textNodeElement('span', '', 'Lead coworker: profile default'))
+
     const inputChrome = document.createElement('div')
     inputChrome.className = 'composer-input-chrome'
     const textarea = document.createElement('textarea')
@@ -157,7 +164,7 @@ function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean)
     send.append(textNodeElement('span', 'sr-only', 'Send message'))
     rightGroup.append(status, send)
     toolbar.append(leftGroup, rightGroup)
-    form.replaceChildren(label, inputChrome, chips, toolbar)
+    form.replaceChildren(label, leadRow, inputChrome, chips, toolbar)
   }
 
   const inspectorDetail = document.getElementById('chat-inspector-detail')

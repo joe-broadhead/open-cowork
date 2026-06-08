@@ -185,6 +185,22 @@ export function cloudWebsiteChatStyles() {
     .composer-input-chrome {
       padding: var(--space-4) var(--space-4) var(--space-3);
     }
+    .composer-lead-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: var(--control-h-md);
+      border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+      background: color-mix(in srgb, var(--color-surface) 46%, transparent);
+      color: var(--color-text-secondary);
+      padding: var(--space-2) var(--space-4);
+      font-size: var(--text-xs);
+      font-weight: 650;
+      line-height: var(--lh-xs);
+    }
+    .composer-lead-row[data-has-lead="true"] {
+      color: var(--text);
+    }
     .cloud-composer textarea {
       min-height: 28px;
       max-height: 220px;
@@ -296,6 +312,78 @@ export function cloudWebsiteChatStyles() {
     }
     .chat-inspector[hidden] {
       display: none;
+    }
+    .cloud-specialist-lane {
+      max-width: 880px;
+      animation: ui-popover-in var(--dur-3) var(--ease-spring) both;
+    }
+    .cloud-specialist-lane__identity {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .cloud-specialist-lane__identity h3,
+    .cloud-specialist-lane__identity p {
+      margin: 0;
+    }
+    .cloud-specialist-lane__identity h3 {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+    }
+    .cloud-specialist-lane__tools {
+      display: grid;
+      gap: var(--space-2);
+    }
+    .cloud-specialist-lane .runtime-detail {
+      max-width: 100%;
+      box-shadow: none;
+    }
+    .cloud-review-summary {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border: var(--border-width-1) solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--color-elevated) 74%, transparent);
+      box-shadow: var(--shadow-card);
+    }
+    .cloud-review-summary__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+    .cloud-review-summary h3,
+    .cloud-review-summary p {
+      margin: 0;
+    }
+    .cloud-review-summary h3 {
+      font-size: var(--text-sm);
+      line-height: var(--lh-sm);
+    }
+    .cloud-review-summary p,
+    .cloud-review-summary__list {
+      color: var(--muted);
+      font-size: var(--text-xs);
+      line-height: var(--lh-xs);
+    }
+    .cloud-review-summary__list {
+      display: grid;
+      gap: var(--space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .cloud-review-summary__list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      min-width: 0;
     }
     .inspector-header {
       display: flex;
