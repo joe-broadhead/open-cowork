@@ -47,6 +47,7 @@ function expectedThemeTokens() {
     ['--color-text-secondary', 'var(--color-text-secondary)'],
     ['--color-text-muted', 'var(--color-text-muted)'],
     ['--color-accent', 'var(--color-accent)'],
+    ['--color-accent-2', 'var(--color-accent-2)'],
     ['--color-accent-hover', 'var(--color-accent-hover)'],
     ['--color-green', 'var(--color-green)'],
     ['--color-amber', 'var(--color-amber)'],
@@ -115,7 +116,7 @@ test('design docs describe the shared Cloud Web and Desktop token contract', () 
   assert.match(designTokens, /Public Branding Theme Keys/)
   assert.match(designTokens, /surfaceHover/)
   assert.match(designTokens, /shadowElevated/)
-  assert.match(configuration, /Cloud Web defaults to the shared Desktop Studio dark palette/)
+  assert.match(configuration, /Cloud Web defaults to the shared Desktop Mercury graphite palette/)
   assert.match(configuration, /Legacy light partial theme overrides/)
   assert.match(downstream, /should not fork Cloud Web\s+layout CSS/)
   assert.match(downstreamContract, /bypass the Desktop\/Cloud Web drift gates/)

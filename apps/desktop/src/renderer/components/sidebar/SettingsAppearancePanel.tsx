@@ -1,4 +1,4 @@
-import { getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type MonoFont, type UiFont, type UiTheme, UI_FONT_OPTIONS } from '../../helpers/theme'
+import { getThemeTokens, getUiThemeOptions, MONO_FONT_OPTIONS, type AppearancePreferences, type ColorScheme, type MonoFont, type UiFont, type UiTheme, UI_ACCENT_PRESETS, UI_FONT_OPTIONS, type UiAccentPresetId } from '../../helpers/theme'
 import { t } from '../../helpers/i18n'
 import { Badge, Card, SegmentedControl, Select } from '../ui'
 import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
@@ -6,11 +6,13 @@ import { fieldLabelCls, sectionLabelCls } from './settings-panel-styles'
 function ThemePreviewCard({
   themeId,
   scheme,
+  accent,
 }: {
   themeId: UiTheme
   scheme: 'dark' | 'light'
+  accent: UiAccentPresetId
 }) {
-  const tokens = getThemeTokens(themeId, scheme)
+  const tokens = getThemeTokens(themeId, scheme, accent)
   return (
     <div
       className="w-full h-[76px] rounded-xl overflow-hidden relative"
@@ -45,6 +47,12 @@ function ThemePreviewCard({
   )
 }
 
+function colorSchemeLabel(scheme: ColorScheme) {
+  if (scheme === 'dark') return t('settings.appearance.modeMercury', 'Mercury')
+  if (scheme === 'light') return t('settings.appearance.modeDay', 'Day')
+  return t('settings.appearance.modeSystem', 'System')
+}
+
 export function AppearancePreview({
   appearance,
   onUpdate,
@@ -63,7 +71,7 @@ export function AppearancePreview({
           className="settings-wide-control"
           options={(['system', 'dark', 'light'] as ColorScheme[]).map((scheme) => ({
             value: scheme,
-            label: scheme.slice(0, 1).toUpperCase() + scheme.slice(1),
+            label: colorSchemeLabel(scheme),
           }))}
         />
       </div>
@@ -83,7 +91,7 @@ export function AppearancePreview({
                 onClick={() => onUpdate({ uiTheme: theme.id })}
                 className="settings-choice-card settings-theme-card"
               >
-                <ThemePreviewCard themeId={theme.id} scheme={previewScheme} />
+                <ThemePreviewCard themeId={theme.id} scheme={previewScheme} accent={appearance.accent} />
                 <div className="mt-2.5 flex items-center justify-between gap-2">
                   <div className="text-[12px] font-semibold text-text truncate">{theme.label}</div>
                   {active ? (
@@ -94,6 +102,36 @@ export function AppearancePreview({
                 </div>
                 <div className="text-[11px] text-text-muted mt-1 leading-snug line-clamp-2">{theme.description}</div>
               </Card>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <span className={sectionLabelCls}>{t('settings.appearance.accent', 'Accent')}</span>
+        <div className="grid grid-cols-3 gap-2">
+          {Object.entries(UI_ACCENT_PRESETS).map(([accentId, accent]) => {
+            const active = appearance.accent === accentId
+            return (
+              <button
+                key={accentId}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onUpdate({ accent: accentId as UiAccentPresetId })}
+                className="settings-choice-card rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-start transition-colors hover:bg-surface-hover"
+                style={{
+                  borderColor: active ? 'var(--color-accent)' : undefined,
+                  boxShadow: active ? 'var(--ring-selected)' : undefined,
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className="h-5 w-5 rounded-full border border-border-subtle"
+                    style={{ background: `linear-gradient(150deg, ${accent.accent2}, ${accent.accent})` }}
+                  />
+                  <span className="min-w-0 text-[12px] font-semibold text-text">{accent.label}</span>
+                </span>
+              </button>
             )
           })}
         </div>

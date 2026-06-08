@@ -1,51 +1,251 @@
 import type { BrandThemeTokens, PublicBrandingThemeTokens } from './app-config.js'
 
+export const DEFAULT_ACCENT_PRESET_ID = 'azure'
+
+export const DESIGN_ACCENT_PRESETS = {
+  azure: {
+    label: 'Azure',
+    accent: '#2f6bf0',
+    accent2: '#5a8cf5',
+  },
+  indigo: {
+    label: 'Indigo',
+    accent: '#6f8cc4',
+    accent2: '#8aa3d6',
+  },
+  plum: {
+    label: 'Plum',
+    accent: '#8b7cf0',
+    accent2: '#a594f5',
+  },
+  teal: {
+    label: 'Teal',
+    accent: '#3f9a8f',
+    accent2: '#5bb4a8',
+  },
+  amber: {
+    label: 'Amber',
+    accent: '#e0913a',
+    accent2: '#f0a955',
+  },
+  rose: {
+    label: 'Rose',
+    accent: '#d6587e',
+    accent2: '#e87b9c',
+  },
+} as const
+
+export type DesignAccentPresetId = keyof typeof DESIGN_ACCENT_PRESETS
+
+export function isDesignAccentPresetId(value: string | null | undefined): value is DesignAccentPresetId {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(DESIGN_ACCENT_PRESETS, value))
+}
+
+function accentSoftToken() {
+  return 'color-mix(in srgb,var(--accent) 15%,transparent)'
+}
+
+function accentLineToken() {
+  return 'color-mix(in srgb,var(--accent) 38%,transparent)'
+}
+
+export function accentForegroundForColor(accent: string) {
+  const whiteContrast = contrastRatio('#ffffff', accent)
+  const blackContrast = contrastRatio('#000000', accent)
+  if (whiteContrast === null || blackContrast === null) return '#ffffff'
+  return whiteContrast >= blackContrast ? '#ffffff' : '#000000'
+}
+
+function hexFromRgb(red: number, green: number, blue: number) {
+  return `#${[red, green, blue]
+    .map((channel) => Math.round(clampColorChannel(channel)).toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const foregroundLum = cssColorLuminance(foreground)
+  const backgroundLum = cssColorLuminance(background)
+  if (foregroundLum === null || backgroundLum === null) return null
+  const lighter = Math.max(foregroundLum, backgroundLum)
+  const darker = Math.min(foregroundLum, backgroundLum)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function mixHexToward(source: string, target: '#000000' | '#ffffff', sourceWeight: number) {
+  const sourceRgb = hexRgb(source)
+  const targetRgb = hexRgb(target)
+  if (!sourceRgb || !targetRgb) return source
+  return hexFromRgb(
+    sourceRgb[0] * sourceWeight + targetRgb[0] * (1 - sourceWeight),
+    sourceRgb[1] * sourceWeight + targetRgb[1] * (1 - sourceWeight),
+    sourceRgb[2] * sourceWeight + targetRgb[2] * (1 - sourceWeight),
+  )
+}
+
+function overlayActionStop(color: string, foreground: '#000000' | '#ffffff', overlayAlpha: number) {
+  const target = foreground === '#000000' ? '#ffffff' : '#000000'
+  return mixHexToward(color, target, 1 - overlayAlpha)
+}
+
+function minActionContrast(foreground: '#000000' | '#ffffff', backgrounds: readonly string[], overlayAlpha: number) {
+  const ratios = backgrounds.map((background) => contrastRatio(
+    foreground,
+    overlayActionStop(background, foreground, overlayAlpha),
+  ))
+  if (ratios.some((ratio) => ratio === null)) return 0
+  return Math.min(...(ratios as number[]))
+}
+
+function formatOverlayAlpha(value: number) {
+  return value === 0 ? '0' : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function accentActionPlanForColors(accent: string, accent2: string | undefined) {
+  const backgrounds = [accent, accent2 || accent]
+  const candidateFor = (foreground: '#000000' | '#ffffff') => {
+    for (let step = 0; step <= 40; step += 1) {
+      const overlayAlpha = step / 100
+      const score = minActionContrast(foreground, backgrounds, overlayAlpha)
+      if (score >= 4.5) return { foreground, overlayAlpha, score }
+    }
+    return { foreground, overlayAlpha: 0.4, score: minActionContrast(foreground, backgrounds, 0.4) }
+  }
+  const white = candidateFor('#ffffff')
+  const black = candidateFor('#000000')
+  if (white.score === 0 || black.score === 0) {
+    return {
+      foreground: accentForegroundForColor(accent) as '#000000' | '#ffffff',
+      overlayAlpha: 0.01,
+    }
+  }
+  if (white.overlayAlpha !== black.overlayAlpha) return white.overlayAlpha < black.overlayAlpha ? white : black
+  return white.score >= black.score ? white : black
+}
+
+export function accentActionForegroundForColors(accent: string, accent2: string | undefined) {
+  return accentActionPlanForColors(accent, accent2).foreground
+}
+
+export function accentActionFillToken(
+  accent: string = DESIGN_ACCENT_PRESETS[DEFAULT_ACCENT_PRESET_ID].accent,
+  accent2: string | undefined = DESIGN_ACCENT_PRESETS[DEFAULT_ACCENT_PRESET_ID].accent2,
+) {
+  const plan = accentActionPlanForColors(accent, accent2)
+  const overlayColor = plan.foreground === '#000000' ? '255,255,255' : '0,0,0'
+  const overlayAlpha = formatOverlayAlpha(plan.overlayAlpha)
+  return `linear-gradient(rgba(${overlayColor},${overlayAlpha}),rgba(${overlayColor},${overlayAlpha})), var(--accent-gradient)`
+}
+
+export function accentActionBackgroundStopsForColors(accent: string, accent2: string | undefined) {
+  const plan = accentActionPlanForColors(accent, accent2)
+  return [accent, accent2 || accent].map((background) => overlayActionStop(background, plan.foreground, plan.overlayAlpha))
+}
+
+export function accentActionContrastForColors(accent: string, accent2: string | undefined) {
+  const plan = accentActionPlanForColors(accent, accent2)
+  const backgrounds = accentActionBackgroundStopsForColors(accent, accent2)
+  const ratios = backgrounds.map((background) => contrastRatio(plan.foreground, background))
+  if (ratios.some((ratio) => ratio === null)) return null
+  return {
+    foreground: plan.foreground,
+    backgrounds,
+    minContrast: Math.min(...(ratios as number[])),
+  }
+}
+
+export function accentTextForBackground(accent: string, accent2: string | undefined, background: string) {
+  const backgroundLum = cssColorLuminance(background)
+  const preferred = backgroundLum !== null && backgroundLum > 0.55
+    ? accent
+    : (accent2 || accent)
+  const preferredContrast = contrastRatio(preferred, background)
+  if (preferredContrast !== null && preferredContrast >= 4.5) return preferred
+
+  const target = backgroundLum !== null && backgroundLum > 0.55 ? '#000000' : '#ffffff'
+  for (let weight = 0.99; weight >= 0.35; weight -= 0.01) {
+    const candidate = mixHexToward(preferred, target, weight)
+    const ratio = contrastRatio(candidate, background)
+    if (ratio !== null && ratio >= 4.5) return candidate
+  }
+
+  return preferred
+}
+
+export function designAccentTokens(presetId: DesignAccentPresetId = DEFAULT_ACCENT_PRESET_ID) {
+  const preset = DESIGN_ACCENT_PRESETS[presetId]
+  return {
+    accent: preset.accent,
+    accent2: preset.accent2,
+    accentHover: preset.accent2,
+    accentForeground: accentForegroundForColor(preset.accent),
+    accentActionForeground: accentActionForegroundForColors(preset.accent, preset.accent2),
+    accentSoft: accentSoftToken(),
+    accentLine: accentLineToken(),
+  }
+}
+
+export function applyDesignAccentTokens<T extends BrandThemeTokens>(
+  theme: T,
+  presetId: DesignAccentPresetId = DEFAULT_ACCENT_PRESET_ID,
+): T & ReturnType<typeof designAccentTokens> {
+  return {
+    ...theme,
+    ...designAccentTokens(presetId),
+  }
+}
+
 export const DEFAULT_DARK_BRAND_THEME: BrandThemeTokens = {
-  base: '#181516',
-  surface: 'rgba(239, 220, 206, 0.06)',
-  surfaceHover: 'rgba(239, 220, 206, 0.11)',
-  surfaceActive: 'rgba(207, 160, 230, 0.18)',
-  elevated: '#242021',
-  border: 'rgba(239, 220, 206, 0.13)',
-  borderSubtle: 'rgba(239, 220, 206, 0.06)',
-  borderStrong: 'rgba(239, 220, 206, 0.22)',
-  text: '#f0e9e1',
-  textSecondary: '#d2c3b6',
-  textMuted: '#a8988e',
-  accent: '#cfa0e6',
-  accentHover: '#e0b7f0',
-  green: '#82d3a2',
-  amber: '#f0b86e',
-  red: '#ff9bb4',
-  info: '#8bc9d8',
-  accentForeground: '#1b121d',
-  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.30), 0 12px 28px rgba(0, 0, 0, 0.20)',
-  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.34), 0 24px 60px rgba(0, 0, 0, 0.28)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(207, 160, 230, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(139, 201, 216, 0.045), transparent 62%)',
+  base: '#0c0d0f',
+  surface: '#141619',
+  surfaceHover: '#1a1d21',
+  surfaceActive: 'color-mix(in srgb, #2f6bf0 16%, #1a1d21)',
+  elevated: '#1f2329',
+  border: '#2d3137',
+  borderSubtle: '#23262b',
+  borderStrong: '#3b4047',
+  text: '#eceef1',
+  textSecondary: '#9aa1aa',
+  textMuted: '#828a94',
+  accent: '#2f6bf0',
+  accent2: '#5a8cf5',
+  accentSoft: accentSoftToken(),
+  accentLine: accentLineToken(),
+  accentHover: '#5a8cf5',
+  green: '#3f9a8f',
+  amber: '#e0913a',
+  red: '#d6587e',
+  info: '#6f8cc4',
+  accentForeground: '#ffffff',
+  shadowCard: '0 1px 1px rgba(0, 0, 0, 0.34), 0 12px 28px rgba(0, 0, 0, 0.26)',
+  shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.38), 0 24px 60px rgba(0, 0, 0, 0.32)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.07), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.045), transparent 62%)',
 }
 
 export const DEFAULT_LIGHT_BRAND_THEME: BrandThemeTokens = {
-  base: '#f7f1ea',
-  surface: 'rgba(129, 82, 154, 0.05)',
-  surfaceHover: 'rgba(129, 82, 154, 0.09)',
-  surfaceActive: 'rgba(129, 82, 154, 0.14)',
-  elevated: '#fffaf4',
-  border: 'rgba(70, 52, 44, 0.14)',
-  borderSubtle: 'rgba(70, 52, 44, 0.08)',
-  borderStrong: 'rgba(70, 52, 44, 0.24)',
-  text: '#241d1f',
-  textSecondary: '#5a4c48',
-  textMuted: '#746760',
-  accent: '#81529a',
-  accentHover: '#6d4085',
-  green: '#186a42',
-  amber: '#8b4e10',
-  red: '#a22f4d',
-  info: '#306f7b',
-  accentForeground: '#fffaf4',
-  shadowCard: '0 1px 1px rgba(54, 41, 33, 0.08), 0 10px 24px rgba(54, 41, 33, 0.08)',
-  shadowElevated: '0 2px 6px rgba(54, 41, 33, 0.10), 0 20px 48px rgba(54, 41, 33, 0.12)',
-  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(129, 82, 154, 0.08), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(48, 111, 123, 0.045), transparent 62%)',
+  base: '#f3efe7',
+  surface: '#fbf8f2',
+  surfaceHover: '#f5f1e8',
+  surfaceActive: 'color-mix(in srgb, #2f6bf0 10%, #f5f1e8)',
+  elevated: '#ffffff',
+  border: '#d3cabb',
+  borderSubtle: '#e3dccf',
+  borderStrong: '#c2b8a6',
+  text: '#2a2520',
+  textSecondary: '#6a6258',
+  textMuted: '#746b61',
+  accent: '#2f6bf0',
+  accent2: '#5a8cf5',
+  accentSoft: accentSoftToken(),
+  accentLine: accentLineToken(),
+  accentHover: '#5a8cf5',
+  green: '#3f9a8f',
+  amber: '#e0913a',
+  red: '#d6587e',
+  info: '#6f8cc4',
+  accentForeground: '#ffffff',
+  shadowCard: '0 1px 1px rgba(42, 37, 32, 0.08), 0 10px 24px rgba(42, 37, 32, 0.08)',
+  shadowElevated: '0 2px 6px rgba(42, 37, 32, 0.10), 0 20px 48px rgba(42, 37, 32, 0.12)',
+  bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(47, 107, 240, 0.06), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(90, 140, 245, 0.04), transparent 62%)',
 }
 
 export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
@@ -56,6 +256,9 @@ export const PUBLIC_BRANDING_THEME_TOKEN_KEYS = [
   'text',
   'mutedText',
   'accent',
+  'accent2',
+  'accentSoft',
+  'accentLine',
   'accentStrong',
   'focus',
   'warn',
@@ -91,7 +294,7 @@ function hexRgb(value: string) {
 
 function focusToken(theme: BrandThemeTokens) {
   const rgb = hexRgb(theme.accent)
-  if (!rgb) return 'rgba(207, 160, 230, 0.52)'
+  if (!rgb) return 'rgba(47, 107, 240, 0.52)'
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.52)`
 }
 
@@ -104,6 +307,9 @@ export function brandThemeToPublicBrandingTheme(theme: BrandThemeTokens): Public
     text: theme.text,
     mutedText: theme.textMuted,
     accent: theme.accent,
+    accent2: theme.accent2,
+    accentSoft: theme.accentSoft,
+    accentLine: theme.accentLine,
     accentStrong: theme.accentHover,
     focus: focusToken(theme),
     warn: theme.amber,
@@ -482,8 +688,11 @@ export function derivePublicBrandingThemeTokens(theme: PublicBrandingThemeTokens
   assign('borderSubtle', derived.border)
   assign('borderStrong', derived.border)
   assign('textSecondary', derived.mutedText)
+  assign('accent2', derived.accentStrong || derived.accentHover || derived.accent)
+  assign('accentSoft', token(derived.accent) ? accentSoftToken() : undefined)
+  assign('accentLine', token(derived.accent) ? accentLineToken() : undefined)
   assign('accentHover', derived.accentStrong || derived.accent)
-  assign('accentForeground', token(derived.accent) ? '#fff' : undefined)
+  assign('accentForeground', token(derived.accent) ? accentForegroundForColor(derived.accent as string) : undefined)
   assign('green', derived.ok)
   assign('amber', derived.warn)
   assign('red', derived.danger)
@@ -669,6 +878,7 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ['--color-text-secondary', tokens.color.textSecondary],
     ['--color-text-muted', tokens.color.textMuted],
     ['--color-accent', tokens.color.accent],
+    ['--color-accent-2', tokens.color.accent2 || tokens.color.accentHover],
     ['--color-accent-hover', tokens.color.accentHover],
     ['--color-green', tokens.color.green],
     ['--color-amber', tokens.color.amber],
@@ -690,6 +900,14 @@ function tokenEntries(tokens = DESIGN_TOKENS): Array<[string, string]> {
     ['--shadow-card', tokens.shadow.card],
     ['--shadow-elevated', tokens.shadow.elevated],
     ['--bg-image', tokens.color.bgImage],
+    ['--accent', tokens.color.accent],
+    ['--accent-2', tokens.color.accent2 || tokens.color.accentHover],
+    ['--accent-text', accentTextForBackground(tokens.color.accent, tokens.color.accent2 || tokens.color.accentHover, tokens.color.base)],
+    ['--accent-action-foreground', accentActionForegroundForColors(tokens.color.accent, tokens.color.accent2 || tokens.color.accentHover)],
+    ['--accent-action-fill', accentActionFillToken(tokens.color.accent, tokens.color.accent2 || tokens.color.accentHover)],
+    ['--accent-soft', tokens.color.accentSoft || accentSoftToken()],
+    ['--accent-line', tokens.color.accentLine || accentLineToken()],
+    ['--accent-gradient', 'linear-gradient(150deg,var(--accent-2),var(--accent))'],
     ['--elevation-popover', tokens.elevation.popover],
     ['--specular', tokens.specular.default],
     ['--specular-strong', tokens.specular.strong],

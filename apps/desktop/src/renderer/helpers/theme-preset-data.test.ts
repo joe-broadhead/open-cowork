@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { UI_ACCENT_PRESETS, accentActionContrastForColors, applyThemeAccent } from '@open-cowork/shared'
 import { UI_THEME_PRESETS } from './theme-preset-data'
 import { getThemeTokens } from './theme-presets'
 
@@ -82,13 +83,12 @@ describe('theme preset contrast', () => {
     expect(failures).toEqual([])
   })
 
-  it('keeps every built-in theme readable against its base color', () => {
+  it('keeps every built-in theme readable across text roles', () => {
     const failures: string[] = []
     const checks = [
       ['text', 4.5],
-      ['textSecondary', 7],
-      ['textMuted', 4.5],
-      ['accent', 4.5],
+      ['textSecondary', 4.5],
+      ['accentText', 4.5],
     ] as const
 
     for (const [themeId, preset] of Object.entries(UI_THEME_PRESETS)) {
@@ -111,6 +111,26 @@ describe('theme preset contrast', () => {
           }
         }
 
+        if (!isHexColor(tokens.elevated)) {
+          failures.push(`${themeId}.${scheme}.elevated is not a hex color: ${tokens.elevated}`)
+          continue
+        }
+
+        if (!isHexColor(tokens.textMuted)) {
+          failures.push(`${themeId}.${scheme}.textMuted is not a hex color: ${tokens.textMuted}`)
+        } else {
+          const mutedRatio = contrastRatio(tokens.textMuted, tokens.elevated)
+          if (mutedRatio < 2.95) {
+            failures.push(`${themeId}.${scheme}.textMuted ${mutedRatio.toFixed(2)} < 2.95 on elevated`)
+          }
+        }
+
+        if (!isHexColor(tokens.accent2)) {
+          failures.push(`${themeId}.${scheme}.accent2 is not a hex color: ${tokens.accent2}`)
+        } else if (tokens.accent2 === tokens.accent) {
+          failures.push(`${themeId}.${scheme}.accent2 must be distinct from accent for gradients`)
+        }
+
         if (!isHexColor(tokens.accent) || !isHexColor(tokens.accentForeground)) {
           failures.push(`${themeId}.${scheme}.accent/accentForeground must be hex colors`)
           continue
@@ -118,6 +138,20 @@ describe('theme preset contrast', () => {
         const accentRatio = contrastRatio(tokens.accentForeground, tokens.accent)
         if (accentRatio < 4.5) {
           failures.push(`${themeId}.${scheme}.accentForeground ${accentRatio.toFixed(2)} < 4.5`)
+        }
+        for (const accentId of Object.keys(UI_ACCENT_PRESETS)) {
+          const accented = applyThemeAccent(tokens, accentId as keyof typeof UI_ACCENT_PRESETS)
+          const actionContrast = accentActionContrastForColors(accented.accent, accented.accent2)
+          if (!actionContrast) {
+            failures.push(`${themeId}.${scheme}.${accentId}.accentActionContrast is unavailable`)
+            continue
+          }
+          if (actionContrast.foreground !== accented.accentActionForeground) {
+            failures.push(`${themeId}.${scheme}.${accentId}.accentActionForeground does not match computed action foreground`)
+          }
+          if (actionContrast.minContrast < 4.5) {
+            failures.push(`${themeId}.${scheme}.${accentId}.accentActionForeground ${actionContrast.minContrast.toFixed(2)} < 4.5 on action gradient`)
+          }
         }
       }
     }

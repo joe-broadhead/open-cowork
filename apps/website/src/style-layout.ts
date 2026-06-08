@@ -43,11 +43,11 @@ export function cloudWebsiteLayoutStyles() {
     .mark {
       display: grid;
       place-items: center;
-      background: var(--accent);
-      color: var(--color-accent-foreground);
+      background: var(--accent-action-fill);
+      color: var(--accent-action-foreground);
       font-family: var(--font-display);
       font-weight: 800;
-      box-shadow: var(--ring-selected);
+      box-shadow: var(--glow-soft), var(--specular);
     }
     .brand-logo {
       object-fit: contain;
@@ -257,7 +257,7 @@ export function cloudWebsiteLayoutStyles() {
     }
     .admin-nav[open] summary::after {
       content: '-';
-      color: var(--accent);
+      color: var(--accent-text);
     }
     .admin-nav .nav-links {
       margin-top: var(--space-2);
@@ -344,6 +344,13 @@ export function cloudWebsiteLayoutStyles() {
       flex-wrap: wrap;
       justify-content: flex-end;
     }
+    .cloud-theme-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
     .cloud-theme-switcher {
       display: inline-flex;
       align-items: center;
@@ -354,7 +361,7 @@ export function cloudWebsiteLayoutStyles() {
     }
     .cloud-theme-switcher select {
       min-height: var(--control-h-sm);
-      max-width: 170px;
+      max-width: 150px;
     }
     .cloud-theme-switcher select:disabled {
       opacity: 0.72;

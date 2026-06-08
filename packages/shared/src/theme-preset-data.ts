@@ -1,9 +1,27 @@
 import type { BrandThemeTokens } from './app-config.js'
-import { DEFAULT_DARK_BRAND_THEME, DEFAULT_LIGHT_BRAND_THEME } from './design-tokens.js'
+import {
+  DEFAULT_ACCENT_PRESET_ID,
+  DEFAULT_DARK_BRAND_THEME,
+  DEFAULT_LIGHT_BRAND_THEME,
+  DESIGN_ACCENT_PRESETS,
+  accentActionForegroundForColors,
+  accentForegroundForColor,
+  accentTextForBackground,
+  applyDesignAccentTokens,
+  isDesignAccentPresetId,
+  type DesignAccentPresetId,
+} from './design-tokens.js'
 
 export type ResolvedColorScheme = 'dark' | 'light'
 
-export type ThemeTokens = BrandThemeTokens & { borderStrong: string }
+export type ThemeTokens = BrandThemeTokens & {
+  accent2: string
+  accentText: string
+  accentActionForeground: string
+  accentSoft: string
+  accentLine: string
+  borderStrong: string
+}
 type ThemeTokenSeed = BrandThemeTokens
 
 type ThemeDefinition = {
@@ -17,6 +35,22 @@ type ThemeDefinition = {
 type ThemeDefinitionSeed = Omit<ThemeDefinition, 'dark' | 'light'> & {
   dark: ThemeTokenSeed
   light: ThemeTokenSeed
+}
+
+export const UI_ACCENT_PRESETS = DESIGN_ACCENT_PRESETS
+export const DEFAULT_UI_ACCENT_PRESET_ID = DEFAULT_ACCENT_PRESET_ID
+export type UiAccentPresetId = DesignAccentPresetId
+
+export function isUiAccentPresetId(value: string | null | undefined): value is UiAccentPresetId {
+  return isDesignAccentPresetId(value)
+}
+
+function accentSoftToken() {
+  return 'color-mix(in srgb,var(--accent) 15%,transparent)'
+}
+
+function accentLineToken() {
+  return 'color-mix(in srgb,var(--accent) 38%,transparent)'
 }
 
 const GRADIENT_NONE = 'none'
@@ -102,6 +136,12 @@ export function refineThemeTokens(tokens: ThemeTokenSeed, scheme: ResolvedColorS
   const dark = scheme === 'dark'
   return {
     ...tokens,
+    accent2: tokens.accent2 || tokens.accentHover,
+    accentText: accentTextForBackground(tokens.accent, tokens.accent2 || tokens.accentHover, tokens.base),
+    accentActionForeground: accentActionForegroundForColors(tokens.accent, tokens.accent2 || tokens.accentHover),
+    accentSoft: tokens.accentSoft || accentSoftToken(),
+    accentLine: tokens.accentLine || accentLineToken(),
+    accentForeground: tokens.accentForeground || accentForegroundForColor(tokens.accent),
     surface: strengthenRgba(tokens.surface, dark ? 0.055 : 0.04),
     surfaceHover: strengthenRgba(tokens.surfaceHover, dark ? 0.10 : 0.08),
     surfaceActive: strengthenRgba(tokens.surfaceActive, dark ? 0.17 : 0.13),
@@ -111,6 +151,16 @@ export function refineThemeTokens(tokens: ThemeTokenSeed, scheme: ResolvedColorS
     shadowCard: tokens.shadowCard,
     shadowElevated: tokens.shadowElevated,
     bgImage: softenGradient(tokens.bgImage),
+  }
+}
+
+export function applyThemeAccent(tokens: ThemeTokens, accentId: UiAccentPresetId = DEFAULT_UI_ACCENT_PRESET_ID): ThemeTokens {
+  const next = applyDesignAccentTokens(tokens, accentId)
+  return {
+    ...next,
+    accentText: accentTextForBackground(next.accent, next.accent2, next.base),
+    accentActionForeground: accentActionForegroundForColors(next.accent, next.accent2),
+    borderStrong: tokens.borderStrong,
   }
 }
 
@@ -128,61 +178,61 @@ const UI_THEME_PRESET_SEEDS = {
     description: 'Warm graphite coworking studio — plum focus, cream typography, and calm operational contrast.',
     swatches: ['#181516', '#cfa0e6', '#f0e9e1', '#8bc9d8'],
     dark: {
-      ...DEFAULT_DARK_BRAND_THEME,
+      base: '#181516',
+      surface: 'rgba(239, 220, 206, 0.06)',
+      surfaceHover: 'rgba(239, 220, 206, 0.11)',
+      surfaceActive: 'rgba(207, 160, 230, 0.18)',
+      elevated: '#242021',
+      border: 'rgba(239, 220, 206, 0.13)',
+      borderSubtle: 'rgba(239, 220, 206, 0.06)',
+      borderStrong: 'rgba(239, 220, 206, 0.22)',
+      text: '#f0e9e1',
+      textSecondary: '#d2c3b6',
+      textMuted: '#a8988e',
+      accent: '#cfa0e6',
+      accentHover: '#e0b7f0',
+      green: '#82d3a2',
+      amber: '#f0b86e',
+      red: '#ff9bb4',
+      info: '#8bc9d8',
+      accentForeground: '#1b121d',
+      shadowCard: '0 1px 1px rgba(0, 0, 0, 0.30), 0 12px 28px rgba(0, 0, 0, 0.20)',
+      shadowElevated: '0 2px 8px rgba(0, 0, 0, 0.34), 0 24px 60px rgba(0, 0, 0, 0.28)',
       bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(207, 160, 230, 0.112), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(139, 201, 216, 0.072), transparent 62%)',
     },
     light: {
-      ...DEFAULT_LIGHT_BRAND_THEME,
+      base: '#f7f1ea',
+      surface: 'rgba(129, 82, 154, 0.05)',
+      surfaceHover: 'rgba(129, 82, 154, 0.09)',
+      surfaceActive: 'rgba(129, 82, 154, 0.14)',
+      elevated: '#fffaf4',
+      border: 'rgba(70, 52, 44, 0.14)',
+      borderSubtle: 'rgba(70, 52, 44, 0.08)',
+      borderStrong: 'rgba(70, 52, 44, 0.24)',
+      text: '#241d1f',
+      textSecondary: '#5a4c48',
+      textMuted: '#746760',
+      accent: '#81529a',
+      accentHover: '#6d4085',
+      green: '#186a42',
+      amber: '#8b4e10',
+      red: '#a22f4d',
+      info: '#306f7b',
+      accentForeground: '#fffaf4',
+      shadowCard: '0 1px 1px rgba(54, 41, 33, 0.08), 0 10px 24px rgba(54, 41, 33, 0.08)',
+      shadowElevated: '0 2px 6px rgba(54, 41, 33, 0.10), 0 20px 48px rgba(54, 41, 33, 0.12)',
       bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(129, 82, 154, 0.128), transparent 55%), radial-gradient(80% 64% at 92% 12%, rgba(48, 111, 123, 0.072), transparent 62%)',
     },
   },
   mercury: {
     label: 'Mercury',
-    description: 'Signature indigo ink — soft night with a quiet violet aurora at the top.',
-    swatches: ['#1b1b26', '#8da4f5', '#b8a3ff', '#82cadc'],
+    description: 'Graphite Studio default — cool black surfaces, crisp lines, and the Azure signature accent.',
+    swatches: ['#0c0d0f', '#141619', '#2f6bf0', '#eceef1'],
     dark: {
-      base: '#1b1b26',
-      surface: 'rgba(141, 164, 245, 0.04)',
-      surfaceHover: 'rgba(141, 164, 245, 0.08)',
-      surfaceActive: 'rgba(141, 164, 245, 0.15)',
-      elevated: '#23232f',
-      border: 'rgba(180, 194, 250, 0.07)',
-      borderSubtle: 'rgba(180, 194, 250, 0.035)',
-      text: '#e8e9f3',
-      textSecondary: '#b0b3c6',
-      textMuted: '#8a8da0',
-      accent: '#8da4f5',
-      accentHover: '#a7b6f8',
-      green: '#7fcfa0',
-      amber: '#fcb07a',
-      red: '#fc92b4',
-      info: '#82cadc',
-      accentForeground: '#0f0f18',
-      shadowCard: DARK_SHADOW_SOFT,
-      shadowElevated: DARK_SHADOW_SOFT_LG,
-      bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(141, 164, 245, 0.08), transparent 55%)',
+      ...DEFAULT_DARK_BRAND_THEME,
     },
     light: {
-      base: '#f7f8ff',
-      surface: 'rgba(82, 102, 235, 0.03)',
-      surfaceHover: 'rgba(82, 102, 235, 0.07)',
-      surfaceActive: 'rgba(82, 102, 235, 0.12)',
-      elevated: '#ffffff',
-      border: 'rgba(82, 102, 235, 0.07)',
-      borderSubtle: 'rgba(82, 102, 235, 0.04)',
-      text: '#2b2c3c',
-      textSecondary: '#535465',
-      textMuted: '#70727f',
-      accent: '#5165ea',
-      accentHover: '#3e52d8',
-      green: '#0a7a48',
-      amber: '#a44200',
-      red: '#b0175f',
-      info: '#4870c6',
-      accentForeground: '#ffffff',
-      shadowCard: LIGHT_SHADOW_SOFT,
-      shadowElevated: LIGHT_SHADOW_SOFT_LG,
-      bgImage: 'radial-gradient(120% 80% at 50% -10%, rgba(82, 102, 235, 0.05), transparent 55%)',
+      ...DEFAULT_LIGHT_BRAND_THEME,
     },
   },
   tokyostorm: {

@@ -126,7 +126,13 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /data-cloud-react-shell="ssr"/)
   assert.match(html, /data-cloud-react-shell-content="ssr"/)
   assert.match(html, /<script type="module" src="\/assets\/open-cowork-cloud-react\.js" data-cloud-react-client="vite"><\/script>/)
-  assert.match(html, /--color-base: #181516;/)
+  assert.match(html, /--color-base: #0c0d0f;/)
+  assert.match(html, /--accent: #2f6bf0;/)
+  assert.match(html, /--accent-2: #5a8cf5;/)
+  assert.match(html, /--accent-text: #5a8cf5;/)
+  assert.match(html, /--accent-action-foreground: #000000;/)
+  assert.match(html, /--accent-gradient: linear-gradient\(150deg,var\(--accent-2\),var\(--accent\)\);/)
+  assert.match(html, /--accent-action-fill: linear-gradient\(rgba\(255,255,255,0\.01\),rgba\(255,255,255,0\.01\)\), var\(--accent-gradient\);/)
   assert.match(html, /--cloud-shell-sidebar-w: 248px;/)
   assert.match(html, /font-variant-numeric: tabular-nums;/)
   assert.match(html, /\.nav-links a\[data-active="true"\]/)
@@ -142,10 +148,10 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /\.message-bubble\[data-role="user"\]/)
   assert.match(html, /\.message-bubble\[data-role="system"\]/)
   assert.match(html, /\.message-bubble\[data-role="error"\]/)
-  assert.match(html, /--focus: rgba\(207, 160, 230, 0\.52\);/)
-  assert.match(html, /--warn: #f0b86e;/)
-  assert.match(html, /--danger: #ff9bb4;/)
-  assert.match(html, /--ok: #82d3a2;/)
+  assert.match(html, /--focus: rgba\(47, 107, 240, 0\.52\);/)
+  assert.match(html, /--warn: #e0913a;/)
+  assert.match(html, /--danger: #d6587e;/)
+  assert.match(html, /--ok: #3f9a8f;/)
   assert.match(html, /"workbenchParity":/)
   assert.match(html, /"adminSurfaces":/)
   assert.match(html, /data-parity-route="threads"/)
@@ -406,12 +412,19 @@ test('cloud website exposes shared theme presets with tenant branding precedence
   const match = html.match(/<script[^>]+id="open-cowork-cloud-bootstrap"[^>]*>(.*?)<\/script>/s)
   assert.ok(match)
   const bootstrap = JSON.parse(match[1])
-  assert.equal(bootstrap.theme.defaultPreset, 'studio')
+  assert.equal(bootstrap.theme.defaultPreset, 'mercury')
+  assert.equal(bootstrap.theme.defaultScheme, 'dark')
+  assert.equal(bootstrap.theme.defaultAccent, 'azure')
   assert.equal(bootstrap.theme.tenantBrandingLocked, false)
   assert.equal(bootstrap.theme.presets.length, 18)
+  assert.equal(bootstrap.theme.accents.length, 6)
   assert.deepEqual(bootstrap.theme.presets.map((preset: { id: string }) => preset.id), cloudThemePresetOptions().map((preset) => preset.id))
   assert.match(html, /id="cloud-theme-preset"/)
-  assert.match(html, /<option value="studio" selected>Studio<\/option>/)
+  assert.match(html, /id="cloud-theme-scheme"/)
+  assert.match(html, /id="cloud-theme-accent"/)
+  assert.match(html, /<option value="mercury" selected>Mercury<\/option>/)
+  assert.match(html, /<option value="dark" selected>Mercury<\/option>/)
+  assert.match(html, /<option value="azure" selected>Azure<\/option>/)
 
   const defaultedBranding = cloudWebsiteHtml({
     role: 'owner',
@@ -526,7 +539,7 @@ test('cloud website preserves legacy partial public branding themes', () => {
   assert.match(branded, /--surface: #ffffff;/)
   assert.match(branded, /--muted-surface: #ecefed;/)
   assert.match(branded, /--color-accent-hover: #13845d;/)
-  assert.match(branded, /--color-accent-foreground: #fff;/)
+  assert.match(branded, /--color-accent-foreground: #ffffff;/)
   assert.match(branded, /--focus: rgba\(45, 107, 86, 0\.28\);/)
   assert.match(branded, /--warn: #8a5a14;/)
   assert.match(branded, /--danger: #9d3630;/)
@@ -558,6 +571,7 @@ test('cloud website classifies shorthand and rgb light branding tokens', () => {
   assert.match(branded, /--color-base: #fff;/)
   assert.match(branded, /--color-elevated: rgb\(255, 255, 255\);/)
   assert.match(branded, /--text: rgb\(24, 33, 28\);/)
+  assert.match(branded, /--accent-text: #2d6b56;/)
   assert.match(branded, /--focus: rgba\(45, 107, 86, 0\.28\);/)
   assert.doesNotMatch(branded, /color-scheme: dark/)
 
@@ -583,7 +597,27 @@ test('cloud website classifies shorthand and rgb light branding tokens', () => {
   assert.match(named, /--color-base: white;/)
   assert.match(named, /--color-elevated: hsl\(0, 0%, 100%\);/)
   assert.match(named, /--text: black;/)
+  assert.match(named, /--accent-text: #2d6b56;/)
   assert.match(named, /--focus: rgba\(45, 107, 86, 0\.28\);/)
+})
+
+test('cloud website emits complex public branding active-surface tokens', () => {
+  const branded = cloudWebsiteHtml({
+    role: 'owner',
+    profileName: 'default',
+    features: {
+      chat: true,
+      workflows: true,
+    },
+  }, {
+    productName: 'Active Cowork',
+    shortName: 'AC',
+    theme: {
+      surfaceActive: 'color-mix(in srgb, #fff 20%, #000)',
+    },
+  })
+
+  assert.match(branded, /--color-surface-active: color-mix\(in srgb, #fff 20%, #000\);/)
 })
 
 test('cloud website preserves dark defaults for partial dark branding overrides', () => {
@@ -604,9 +638,9 @@ test('cloud website preserves dark defaults for partial dark branding overrides'
 
   assert.match(branded, /color-scheme: dark/)
   assert.match(branded, /--color-base: #101010;/)
-  assert.match(branded, /--color-elevated: #242021;/)
-  assert.match(branded, /--text: #f0e9e1;/)
-  assert.match(branded, /--focus: rgba\(207, 160, 230, 0\.52\);/)
+  assert.match(branded, /--color-elevated: #1f2329;/)
+  assert.match(branded, /--text: #eceef1;/)
+  assert.match(branded, /--focus: rgba\(47, 107, 240, 0\.52\);/)
   assert.doesNotMatch(branded, /--color-elevated: #ffffff;/)
   assert.doesNotMatch(branded, /--text: #18211c;/)
 })

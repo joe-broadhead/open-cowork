@@ -102,10 +102,10 @@ test('cloud web CSS keeps focus, reduced motion, responsive layout, and default 
   assert.match(css, /\.workbench-split\s*\{[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(320px, 360px\)/)
   assert.match(css, /@media \(max-width: 920px\)\s*\{[\s\S]*\.ui-workbench-layout,\s*\.ui-workbench-layout--with-review\s*\{[\s\S]*grid-template-columns: 1fr;/)
   assert.match(css, /@media \(max-width: 920px\)\s*\{[\s\S]*\.form-grid\s*\{\s*grid-template-columns: 1fr;/)
-  assert.ok(contrast('#f0e9e1', '#181516') >= 4.5, 'body text contrasts with background')
-  assert.ok(contrast('#a8988e', '#242021') >= 4.5, 'muted text contrasts with elevated surface')
-  assert.ok(contrast('#cfa0e6', '#242021') >= 4.5, 'links and secondary actions contrast with elevated surface')
-  assert.ok(contrast('#ff9bb4', '#242021') >= 4.5, 'danger text contrasts with elevated surface')
+  assert.ok(contrast('#eceef1', '#0c0d0f') >= 4.5, 'body text contrasts with background')
+  assert.ok(contrast('#828a94', '#1f2329') >= 4.5, 'muted text contrasts with elevated surface')
+  assert.ok(contrast('#5a8cf5', '#1f2329') >= 4.5, 'links and secondary actions contrast with elevated surface')
+  assert.ok(contrast('#ffffff', '#2f6bf0') >= 4.5, 'primary button text contrasts with signature accent fill')
 })
 
 test('cloud web hydrated shell manages route focus state and admin visibility for keyboard users', async () => {

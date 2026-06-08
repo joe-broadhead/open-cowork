@@ -1,5 +1,9 @@
 import {
   DEFAULT_DARK_PUBLIC_BRANDING_THEME,
+  accentActionFillToken,
+  accentActionForegroundForColors,
+  accentForegroundForColor,
+  accentTextForBackground,
   derivePublicBrandingThemeTokens,
   isLegacyLightPublicBrandingTheme,
   isPublicBrandingColorToken,
@@ -61,6 +65,9 @@ const PUBLIC_BRANDING_THEME_COMPLEX_CSS_KEYS = new Set<keyof NonNullable<PublicB
   'shadowCard',
   'shadowElevated',
   'bgImage',
+  'surfaceActive',
+  'accentSoft',
+  'accentLine',
 ])
 const PUBLIC_BRANDING_DASHBOARD_KEYS = new Set<keyof NonNullable<PublicBrandingConfig['dashboard']>>([
   'title',
@@ -179,7 +186,6 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
   const colorToken = publicBrandingColorToken
   const defaultTheme = DEFAULT_DARK_PUBLIC_BRANDING_THEME
   const legacySurfaceOverride = colorToken(theme.surface) && theme.surface !== defaultTheme.surface && theme.elevated === defaultTheme.elevated
-  const legacyAccentOverride = colorToken(theme.accent) && theme.accent !== defaultTheme.accent && theme.accentForeground === defaultTheme.accentForeground
   const legacyLightOverride = legacySurfaceOverride && isLegacyLightPublicBrandingTheme(theme)
   const legacyLightFallback: NonNullable<PublicBrandingConfig['theme']> = legacyLightOverride
     ? LEGACY_LIGHT_PUBLIC_BRANDING_THEME
@@ -187,12 +193,17 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
   const elevated = legacySurfaceOverride
     ? colorToken(theme.surface)
     : colorToken(theme.elevated || theme.mutedSurface || theme.surface)
+  const accent = colorToken(theme.accent)
   const accentHover = colorToken(
     theme.accentHover === defaultTheme.accentHover && theme.accentStrong && theme.accentStrong !== defaultTheme.accentStrong
       ? theme.accentStrong
       : theme.accentHover || theme.accentStrong || theme.accent,
   )
-  const accentForeground = legacyAccentOverride ? '#fff' : colorToken(theme.accentForeground)
+  const accent2 = colorToken(theme.accent2 || accentHover)
+  const accentForeground = colorToken(theme.accentForeground) || (accent ? accentForegroundForColor(accent) : undefined)
+  const accentActionForeground = accent
+    ? accentActionForegroundForColors(accent, accent2 || accentHover)
+    : accentForeground
   const warn = colorToken(legacyLightOverride && theme.warn === defaultTheme.warn ? legacyLightFallback.warn : theme.warn)
   const danger = colorToken(legacyLightOverride && theme.danger === defaultTheme.danger ? legacyLightFallback.danger : theme.danger)
   const ok = colorToken(legacyLightOverride && theme.ok === defaultTheme.ok ? legacyLightFallback.ok : theme.ok)
@@ -203,11 +214,16 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
   const shadowCard = cssToken(legacyLightOverride && theme.shadowCard === defaultTheme.shadowCard ? legacyLightFallback.shadowCard : theme.shadowCard)
   const shadowElevated = cssToken(legacyLightOverride && theme.shadowElevated === defaultTheme.shadowElevated ? legacyLightFallback.shadowElevated : theme.shadowElevated)
   const bgImage = cssToken(legacyLightOverride && theme.bgImage === defaultTheme.bgImage ? legacyLightFallback.bgImage : theme.bgImage)
+  const accentText = accent && accent2
+    ? accentTextForBackground(accent, accent2, colorToken(theme.background) || defaultTheme.background || '#0c0d0f')
+    : undefined
+  const accentSoft = cssToken(theme.accentSoft) || 'color-mix(in srgb,var(--accent) 15%,transparent)'
+  const accentLine = cssToken(theme.accentLine) || 'color-mix(in srgb,var(--accent) 38%,transparent)'
   const tokens: Record<string, string | undefined> = {
     '--color-base': colorToken(theme.background),
     '--color-surface': colorToken(theme.surface),
     '--color-surface-hover': colorToken(theme.surfaceHover),
-    '--color-surface-active': colorToken(theme.surfaceActive),
+    '--color-surface-active': cssToken(theme.surfaceActive),
     '--color-elevated': elevated,
     '--color-border': colorToken(theme.border),
     '--color-border-subtle': colorToken(theme.borderSubtle),
@@ -215,7 +231,8 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
     '--color-text': colorToken(theme.text),
     '--color-text-secondary': colorToken(theme.textSecondary),
     '--color-text-muted': colorToken(theme.mutedText),
-    '--color-accent': colorToken(theme.accent),
+    '--color-accent': accent,
+    '--color-accent-2': accent2,
     '--color-accent-hover': accentHover,
     '--color-accent-foreground': accentForeground,
     '--color-green': green,
@@ -231,7 +248,14 @@ export function publicBrandingCss(branding: PublicBrandingConfig) {
     '--line': colorToken(theme.border),
     '--text': colorToken(theme.text),
     '--muted': colorToken(theme.mutedText),
-    '--accent': colorToken(theme.accent),
+    '--accent': accent,
+    '--accent-2': accent2,
+    '--accent-text': accentText || 'var(--accent-2)',
+    '--accent-action-foreground': accentActionForeground,
+    '--accent-action-fill': accentActionFillToken(accent, accent2 || accentHover),
+    '--accent-soft': accentSoft,
+    '--accent-line': accentLine,
+    '--accent-gradient': 'linear-gradient(150deg,var(--accent-2),var(--accent))',
     '--accent-strong': accentHover,
     '--focus': focus,
     '--warn': warn || amber,

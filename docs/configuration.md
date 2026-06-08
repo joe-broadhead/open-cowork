@@ -135,13 +135,14 @@ ship one desktop app that can connect to different cloud orgs.
       "securityUrl": "https://security.acme.example/cowork",
       "legalUrl": "https://legal.acme.example/terms",
       "theme": {
-        "background": "#181516",
-        "elevated": "#242021",
-        "surface": "rgba(239, 220, 206, 0.06)",
-        "text": "#f0e9e1",
-        "accent": "#cfa0e6",
-        "accentHover": "#e0b7f0",
-        "accentForeground": "#1b121d"
+        "background": "#0c0d0f",
+        "elevated": "#1f2329",
+        "surface": "#141619",
+        "text": "#eceef1",
+        "accent": "#2f6bf0",
+        "accent2": "#5a8cf5",
+        "accentHover": "#5a8cf5",
+        "accentForeground": "#ffffff"
       },
       "managedOrgConnectionLabels": {
         "desktopToken": "Acme Desktop token",
@@ -159,12 +160,12 @@ dashboard renders it directly, and the gateway returns it from health/readiness
 metadata for provider setup tooling. Helm deployments can set the equivalent
 `cloud.branding` and `gateway.branding` values.
 
-Cloud Web defaults to the shared Desktop Studio dark palette, Mona Sans /
+Cloud Web defaults to the shared Desktop Mercury graphite palette, Mona Sans /
 Hubot Sans font stacks, and the structural token scale from
 `packages/shared/src/design-tokens.ts`. Public branding may override color and
 brand presentation keys such as `background`, `surface`, `elevated`, `text`,
-`mutedText`, `accent`, `accentHover`, `accentForeground`, semantic tones,
-`shadowCard`, `shadowElevated`, and `bgImage`. Do not use public branding to
+`mutedText`, `accent`, `accent2`, `accentHover`, `accentForeground`, semantic
+tones, `shadowCard`, `shadowElevated`, and `bgImage`. Do not use public branding to
 fork spacing, radius, control heights, typography scale, or runtime behavior.
 Legacy light partial theme overrides are still normalized for existing
 deployments.

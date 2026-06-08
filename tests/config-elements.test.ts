@@ -462,7 +462,7 @@ test('config normalization applies layer precedence without loader state', () =>
   assert.equal(config.cloud.publicBranding.theme?.elevated, '#ffffff')
   assert.equal(config.cloud.publicBranding.theme?.surfaceHover, '#ecefed')
   assert.equal(config.cloud.publicBranding.theme?.accentHover, '#13845d')
-  assert.equal(config.cloud.publicBranding.theme?.accentForeground, '#fff')
+  assert.equal(config.cloud.publicBranding.theme?.accentForeground, '#ffffff')
   assert.equal(config.cloud.publicBranding.theme?.focus, 'rgba(45, 107, 86, 0.28)')
   assert.equal(config.cloud.publicBranding.theme?.amber, '#8a5a14')
   assert.equal(config.cloud.publicBranding.theme?.red, '#9d3630')

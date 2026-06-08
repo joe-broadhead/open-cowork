@@ -32,7 +32,7 @@ export function cloudWebsiteAgentProfileStyles() {
       display: flex;
       align-items: baseline;
       gap: 2px;
-      color: var(--accent);
+      color: var(--accent-text);
       text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 28%, transparent);
     }
     .agent-capability-profile__score span {
@@ -108,7 +108,7 @@ export function cloudWebsiteAgentProfileStyles() {
       display: block;
       height: 100%;
       border-radius: inherit;
-      background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+      background: var(--accent-gradient);
       box-shadow: var(--glow-soft);
     }`
 }

@@ -295,7 +295,7 @@ test('cloud public branding derives desktop theme keys from legacy theme overlay
   assert.equal(branding.theme?.borderSubtle, '#d8ddd7')
   assert.equal(branding.theme?.textSecondary, '#66736b')
   assert.equal(branding.theme?.accentHover, '#13845d')
-  assert.equal(branding.theme?.accentForeground, '#fff')
+  assert.equal(branding.theme?.accentForeground, '#ffffff')
   assert.equal(branding.theme?.green, '#1f6b46')
   assert.equal(branding.theme?.amber, '#8a5a14')
   assert.equal(branding.theme?.red, '#9d3630')

@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { applyAppearancePreferences, getAppearancePreferences, UI_FONT_OPTIONS } from './theme'
 
+describe('appearance theme defaults', () => {
+  it('defaults first-run appearance to Mercury with the Azure accent', () => {
+    expect(getAppearancePreferences().uiTheme).toBe('mercury')
+    expect(getAppearancePreferences().accent).toBe('azure')
+
+    applyAppearancePreferences()
+
+    expect(document.documentElement.dataset.uiTheme).toBe('mercury')
+    expect(document.documentElement.dataset.uiAccent).toBe('azure')
+    expect(document.documentElement.style.getPropertyValue('--color-base')).toBe('#0c0d0f')
+    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe('#2f6bf0')
+    expect(document.documentElement.style.getPropertyValue('--accent-2')).toBe('#5a8cf5')
+    expect(document.documentElement.style.getPropertyValue('--accent-text')).toBe('#5a8cf5')
+    expect(document.documentElement.style.getPropertyValue('--accent-action-foreground')).toBe('#000000')
+    expect(document.documentElement.style.getPropertyValue('--accent-gradient')).toBe('linear-gradient(150deg,var(--accent-2),var(--accent))')
+    expect(document.documentElement.style.getPropertyValue('--accent-action-fill')).toBe('linear-gradient(rgba(255,255,255,0.01),rgba(255,255,255,0.01)), var(--accent-gradient)')
+  })
+})
+
 describe('appearance typography defaults', () => {
   it('defaults the interface font to Mona Sans and exposes the display font token', () => {
     expect(getAppearancePreferences().uiFont).toBe('mona')

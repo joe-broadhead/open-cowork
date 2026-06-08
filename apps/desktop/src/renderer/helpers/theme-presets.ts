@@ -1,13 +1,25 @@
 import {
+  DEFAULT_UI_ACCENT_PRESET_ID,
+  UI_ACCENT_PRESETS,
   refineThemeTokens,
   UI_THEME_PRESETS,
+  accentActionFillToken,
+  applyThemeAccent,
+  isUiAccentPresetId,
   type BrandThemeDefinition,
   type ResolvedColorScheme,
+  type UiAccentPresetId,
   type ThemeTokens,
 } from '@open-cowork/shared'
 
-export { UI_THEME_PRESETS }
-export type { ResolvedColorScheme, ThemeTokens }
+export {
+  DEFAULT_UI_ACCENT_PRESET_ID,
+  UI_ACCENT_PRESETS,
+  UI_THEME_PRESETS,
+  accentActionFillToken,
+  isUiAccentPresetId,
+}
+export type { ResolvedColorScheme, ThemeTokens, UiAccentPresetId }
 
 // UiTheme is a registered theme id. It includes both the built-in presets
 // above and any theme a downstream config appends via `branding.themes`.
@@ -25,7 +37,7 @@ type RegistryEntry = {
 }
 
 const themeRegistry = new Map<string, RegistryEntry>()
-let defaultThemeId = 'studio'
+let defaultThemeId = 'mercury'
 
 // Seed the registry from the hardcoded presets on module load. Downstream
 // config can append or override entries after App boot.
@@ -67,14 +79,14 @@ export function isUiTheme(value: string | null | undefined): value is UiTheme {
   return Boolean(value && themeRegistry.has(value))
 }
 
-export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme): ThemeTokens {
+export function getThemeTokens(theme: UiTheme, scheme: ResolvedColorScheme, accentId?: UiAccentPresetId | null): ThemeTokens {
   const entry = themeRegistry.get(theme) || themeRegistry.get(defaultThemeId)
   if (!entry) {
     // Should be unreachable — the built-in presets always seed the registry.
     throw new Error(`No theme registered: ${theme}`)
   }
-  if (scheme === 'light') return entry.light || entry.dark
-  return entry.dark
+  const tokens = scheme === 'light' ? entry.light || entry.dark : entry.dark
+  return accentId ? applyThemeAccent(tokens, accentId) : tokens
 }
 
 export function getUiThemeOptions() {

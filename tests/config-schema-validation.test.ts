@@ -276,6 +276,8 @@ test('cloud public branding validates and rejects unsafe URLs or unknown keys', 
         background: '#f7f8f5',
         surface: '#ffffff',
         accent: '#0f6b4b',
+        accentSoft: 'color-mix(in srgb,var(--accent) 15%,transparent)',
+        surfaceActive: 'color-mix(in srgb, #0f6b4b 16%, #ffffff)',
       },
       dashboard: {
         title: 'Acme workspace',
@@ -296,6 +298,10 @@ test('cloud public branding validates and rejects unsafe URLs or unknown keys', 
   assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding\.logoUrl/)
 
   config.cloud.publicBranding.logoUrl = 'https://assets.acme.example/cowork/logo.png'
+  config.cloud.publicBranding.theme.accent = 'color-mix(in srgb, #fff 20%, #000)'
+  assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding\.theme\.accent/)
+
+  config.cloud.publicBranding.theme.accent = '#0f6b4b'
   config.cloud.publicBranding.html = '<strong>not allowed</strong>'
   assert.throws(() => validateResolvedConfig(config, 'cloud public branding config'), /cloud\.publicBranding/)
 })

@@ -3,11 +3,16 @@ import {
   getThemeTokens,
   getUiThemeOptions,
   isUiTheme,
+  isUiAccentPresetId,
+  accentActionFillToken,
+  DEFAULT_UI_ACCENT_PRESET_ID,
+  UI_ACCENT_PRESETS,
+  type UiAccentPresetId,
   type UiTheme,
 } from './theme-presets'
 
-export { getThemeTokens, getUiThemeOptions, getDefaultThemeId }
-export type { UiTheme }
+export { getThemeTokens, getUiThemeOptions, getDefaultThemeId, UI_ACCENT_PRESETS }
+export type { UiTheme, UiAccentPresetId }
 
 export type ColorScheme = 'system' | 'dark' | 'light'
 export type UiFont = 'mona' | 'system' | 'rounded' | 'serif'
@@ -16,6 +21,7 @@ export type MonoFont = 'sfmono' | 'jetbrains' | 'fira'
 export type AppearancePreferences = {
   colorScheme: ColorScheme
   uiTheme: UiTheme
+  accent: UiAccentPresetId
   uiFont: UiFont
   monoFont: MonoFont
 }
@@ -23,6 +29,7 @@ export type AppearancePreferences = {
 const STORAGE_KEYS = {
   colorScheme: 'open-cowork-color-scheme',
   uiTheme: 'open-cowork-ui-theme',
+  accent: 'open-cowork-ui-accent',
   uiFont: 'open-cowork-ui-font',
   monoFont: 'open-cowork-mono-font',
 }
@@ -92,6 +99,11 @@ function readUiTheme(): UiTheme {
   return getDefaultThemeId()
 }
 
+function readAccent(): UiAccentPresetId {
+  const stored = localStorage.getItem(STORAGE_KEYS.accent)
+  return isUiAccentPresetId(stored) ? stored : DEFAULT_UI_ACCENT_PRESET_ID
+}
+
 function readUiFont(): UiFont {
   const stored = localStorage.getItem(STORAGE_KEYS.uiFont)
   return stored === 'mona' || stored === 'rounded' || stored === 'serif' || stored === 'system'
@@ -116,9 +128,9 @@ function applyResolvedColorScheme(colorScheme: ColorScheme) {
   document.documentElement.setAttribute('data-color-scheme', resolveColorScheme(colorScheme))
 }
 
-function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme) {
+function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme, accent: UiAccentPresetId) {
   const root = document.documentElement
-  const tokens = getThemeTokens(theme, resolveColorScheme(colorScheme))
+  const tokens = getThemeTokens(theme, resolveColorScheme(colorScheme), accent)
 
   root.style.setProperty('--color-base', tokens.base)
   root.style.setProperty('--color-surface', tokens.surface)
@@ -132,6 +144,7 @@ function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme) {
   root.style.setProperty('--color-text-secondary', tokens.textSecondary)
   root.style.setProperty('--color-text-muted', tokens.textMuted)
   root.style.setProperty('--color-accent', tokens.accent)
+  root.style.setProperty('--color-accent-2', tokens.accent2)
   root.style.setProperty('--color-accent-hover', tokens.accentHover)
   root.style.setProperty('--color-green', tokens.green)
   root.style.setProperty('--color-amber', tokens.amber)
@@ -141,6 +154,14 @@ function applyThemeVariables(theme: UiTheme, colorScheme: ColorScheme) {
   root.style.setProperty('--shadow-card', tokens.shadowCard)
   root.style.setProperty('--shadow-elevated', tokens.shadowElevated)
   root.style.setProperty('--bg-image', tokens.bgImage)
+  root.style.setProperty('--accent', tokens.accent)
+  root.style.setProperty('--accent-2', tokens.accent2)
+  root.style.setProperty('--accent-text', tokens.accentText)
+  root.style.setProperty('--accent-action-foreground', tokens.accentActionForeground)
+  root.style.setProperty('--accent-action-fill', accentActionFillToken(tokens.accent, tokens.accent2))
+  root.style.setProperty('--accent-soft', tokens.accentSoft)
+  root.style.setProperty('--accent-line', tokens.accentLine)
+  root.style.setProperty('--accent-gradient', 'linear-gradient(150deg,var(--accent-2),var(--accent))')
 }
 
 function attachSystemColorSchemeListener(preferences: AppearancePreferences) {
@@ -154,7 +175,7 @@ function attachSystemColorSchemeListener(preferences: AppearancePreferences) {
   const media = window.matchMedia(SYSTEM_QUERY)
   const listener = () => {
     applyResolvedColorScheme('system')
-    applyThemeVariables(preferences.uiTheme, 'system')
+    applyThemeVariables(preferences.uiTheme, 'system', preferences.accent)
   }
   if (typeof media.addEventListener === 'function') {
     media.addEventListener('change', listener)
@@ -170,6 +191,7 @@ export function getAppearancePreferences(): AppearancePreferences {
   return {
     colorScheme: readColorScheme(),
     uiTheme: readUiTheme(),
+    accent: readAccent(),
     uiFont: readUiFont(),
     monoFont: readMonoFont(),
   }
@@ -178,11 +200,12 @@ export function getAppearancePreferences(): AppearancePreferences {
 export function applyAppearancePreferences(preferences = getAppearancePreferences()) {
   const root = document.documentElement
   root.setAttribute('data-ui-theme', preferences.uiTheme)
+  root.setAttribute('data-ui-accent', preferences.accent)
   root.style.setProperty('--font-ui', UI_FONT_STACKS[preferences.uiFont])
   root.style.setProperty('--font-display', DISPLAY_FONT_STACK)
   root.style.setProperty('--font-mono', MONO_FONT_STACKS[preferences.monoFont])
   applyResolvedColorScheme(preferences.colorScheme)
-  applyThemeVariables(preferences.uiTheme, preferences.colorScheme)
+  applyThemeVariables(preferences.uiTheme, preferences.colorScheme, preferences.accent)
   attachSystemColorSchemeListener(preferences)
   return preferences
 }
@@ -192,6 +215,7 @@ export function saveAppearancePreferences(preferences: Partial<AppearancePrefere
   const next = { ...current, ...preferences }
   localStorage.setItem(STORAGE_KEYS.colorScheme, next.colorScheme)
   localStorage.setItem(STORAGE_KEYS.uiTheme, next.uiTheme)
+  localStorage.setItem(STORAGE_KEYS.accent, next.accent)
   localStorage.setItem(STORAGE_KEYS.uiFont, next.uiFont)
   localStorage.setItem(STORAGE_KEYS.monoFont, next.monoFont)
   applyAppearancePreferences(next)

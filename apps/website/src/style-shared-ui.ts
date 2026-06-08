@@ -74,7 +74,7 @@ export function cloudWebsiteSharedUiStyles() {
       color: var(--color-text);
     }
     .ui-action-cluster__item--primary {
-      color: var(--color-accent);
+      color: var(--accent-text);
     }
     .ui-action-cluster__item--danger {
       color: var(--color-red);
@@ -107,7 +107,7 @@ export function cloudWebsiteSharedUiStyles() {
     .ui-badge--accent {
       background: color-mix(in srgb, var(--color-accent) 14%, transparent);
       border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);
-      color: var(--color-accent);
+      color: var(--accent-text);
     }
     .ui-badge--success {
       background: color-mix(in srgb, var(--color-green) 14%, transparent);
