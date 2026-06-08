@@ -13,14 +13,27 @@ import { Skeleton } from './Skeleton.js'
 import {
   ApprovalCard,
   ArtifactCard,
+  ChannelRow,
   ChannelStatusCard,
   ComposerShell,
+  ConversationLaneCard,
   CoworkerCard,
+  DeliverableCard,
+  KanbanBoard,
+  PermissionEditorRow,
+  PersonRow,
   ProjectCard,
   ReviewPanel,
+  RunTimeline,
   StudioPageHeader,
   StudioShell,
   TaskLane,
+  TraitSlider,
+  WikiPage,
+  WikiSpaceRail,
+  WizardStepPane,
+  WizardSteps,
+  WorkingStyleBars,
 } from './StudioPrimitives.js'
 import { Tooltip } from './Tooltip.js'
 import { toast } from './Toaster.js'
@@ -52,8 +65,12 @@ export function PrimitiveGallery() {
   const [selectValue, setSelectValue] = useState('build')
   const [segment, setSegment] = useState('plan')
   const [dialogSize, setDialogSize] = useState<'sm' | 'md' | 'lg' | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [menuAction, setMenuAction] = useState('No action yet')
   const [cardAction, setCardAction] = useState('No card action yet')
+  const [permissionPolicy, setPermissionPolicy] = useState<'allow' | 'ask' | 'deny'>('ask')
+  const [wizardStep, setWizardStep] = useState('profile')
+  const [traitValue, setTraitValue] = useState(68)
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-base">
@@ -117,14 +134,20 @@ export function PrimitiveGallery() {
                 name="Jordan"
                 role="Lead coworker"
                 tone="lead"
+                presence={{ status: 'working', label: 'Running session' }}
                 mode="Planning"
                 summary="Coordinates the session while OpenCode owns execution, tool calls, and approvals."
                 status={{ label: 'Ready', tone: 'success' }}
                 abilities={['OpenCode', 'Review', 'Artifacts']}
+                styleBars={[
+                  { id: 'speed', label: 'Speed', value: 72 },
+                  { id: 'depth', label: 'Depth', value: 58 },
+                ]}
               />
               <ComposerShell
                 label="Message the studio"
                 placeholder="Ask the team to build, review, or research..."
+                assignMenu={<Button variant="secondary" size="sm" leftIcon="users">Assign</Button>}
                 helper="OpenCode remains the runtime source of truth."
                 actions={[{ id: 'send', type: 'submit', variant: 'primary', rightIcon: 'arrow-up', children: 'Send' }]}
                 onSubmit={(event) => event.preventDefault()}
@@ -159,6 +182,8 @@ export function PrimitiveGallery() {
                 description="Desktop and Cloud share the same IA and visual vocabulary."
                 status={{ label: 'Active', tone: 'success' }}
                 meta="3 sessions"
+                progress={72}
+                progressLabel="72% ready"
               />
               <ArtifactCard
                 title="Roadmap brief"
@@ -172,6 +197,130 @@ export function PrimitiveGallery() {
               />
             </div>
           </StudioShell>
+        </GallerySection>
+
+        <GallerySection title="Studio Production Primitives">
+          <div className="studio-preview-grid studio-preview-grid--wide">
+            <ConversationLaneCard
+              title="Security review"
+              coworker={{ name: 'Maya', role: 'Reviewer', tone: 'reviewer' }}
+              task="Inspect auth edge cases"
+              status="live"
+              runtimeLabel="OpenCode"
+              activities={[
+                { id: 'read', verb: 'Reading', object: 'runtime policy', icon: 'book-open', time: 'now' },
+                { id: 'done', verb: 'Checked', object: 'approval handoff', icon: 'shield-check', time: '1m', done: true },
+              ]}
+              handoff="Ready for lead review"
+            />
+            <ConversationLaneCard
+              title="No delegated work"
+              coworker={{ name: 'Kai', role: 'Builder', tone: 'builder' }}
+              status="waiting"
+              activities={[]}
+            />
+            <KanbanBoard
+              columns={[
+                {
+                  id: 'todo',
+                  title: 'Queued',
+                  tasks: [
+                    {
+                      id: 'api',
+                      title: 'Wire channel route',
+                      priority: 'high',
+                      assignee: { name: 'Maya', tone: 'reviewer', presence: 'working' },
+                      run: { label: 'running', live: true },
+                    },
+                  ],
+                },
+                { id: 'review', title: 'Review', over: true, tasks: [] },
+              ]}
+            />
+            <RunTimeline
+              stateLabel="Running"
+              live
+              sessionId="ses_9f2a"
+              currentStepId="running"
+              completedStepIds={['queued']}
+              steps={[
+                { id: 'queued', label: 'Queued' },
+                { id: 'running', label: 'Running' },
+                { id: 'review', label: 'Review' },
+                { id: 'done', label: 'Done' },
+              ]}
+            />
+            <PermissionEditorRow
+              toolName="Bash"
+              description="Per-tool policy with scoped glob rules."
+              policy={permissionPolicy}
+              onPolicyChange={setPermissionPolicy}
+              rules={['scripts/**/*.mjs', 'apps/**/src/**']}
+            />
+            <DeliverableCard
+              title="Test evidence bundle"
+              meta="Markdown + captured trace"
+              icon="file-text"
+              preview={<span>## Release evidence</span>}
+              actions={[{ id: 'open', children: 'Open' }]}
+              captureAction={{ id: 'capture', leftIcon: 'camera', children: 'Capture preview' }}
+              capturedLabel="Captured 2 minutes ago"
+            />
+            <ChannelRow
+              title="Slack"
+              description="Gateway messages are projected into the active OpenCode-backed session."
+              status={{ label: 'Healthy', tone: 'success' }}
+              meta={<span>3 channels</span>}
+            />
+            <PersonRow
+              name="Alex Morgan"
+              detail={<span><Icon name="at-sign" size={16} /> alex@example.com</span>}
+              tone="operator"
+              presence="available"
+              role={{ label: 'Owner', tone: 'accent', description: 'Can approve tool policy' }}
+            />
+            <div className="studio-mini-panel">
+              <WizardSteps
+                activeStepId={wizardStep}
+                onSelect={(step) => setWizardStep(step.id)}
+                steps={[
+                  { id: 'profile', label: 'Profile', icon: 'user-round-check', completed: wizardStep !== 'profile' },
+                  { id: 'tools', label: 'Tools', icon: 'wrench' },
+                  { id: 'review', label: 'Review', icon: 'badge-check' },
+                ]}
+              />
+              <WizardStepPane title="Working style" hint="Tune how the coworker plans before OpenCode execution starts.">
+                <TraitSlider label="Autonomy" icon="sliders" value={traitValue} minLabel="Guided" maxLabel="Independent" onValueChange={setTraitValue} />
+                <WorkingStyleBars
+                  bars={[
+                    { id: 'creative', label: 'Creative', value: 62 },
+                    { id: 'precise', label: 'Precise', value: 84 },
+                  ]}
+                />
+              </WizardStepPane>
+            </div>
+            <div className="studio-wiki-demo">
+              <WikiSpaceRail
+                activePageId="runtime"
+                reviewAction={<Button size="sm" variant="secondary" leftIcon="badge-check">Review queue</Button>}
+                spaces={[
+                  { id: 'studio', name: 'Studio', icon: 'book-open', pages: [{ id: 'runtime', title: 'Runtime boundary' }, { id: 'ui', title: 'UI language' }] },
+                ]}
+              />
+              <WikiPage
+                breadcrumbs={['Studio', 'Runtime boundary']}
+                title="OpenCode owns execution"
+                meta={<Badge tone="accent">Knowledge</Badge>}
+                blocks={[
+                  { id: 'h', type: 'heading', text: 'Composition rule' },
+                  { id: 'p', type: 'paragraph', text: 'Open Cowork presents collaboration state while OpenCode remains the execution source.' },
+                  { id: 'c', type: 'callout', icon: 'shield-check', text: 'Do not duplicate runtime approval behavior in product UI.' },
+                  { id: 'l', type: 'list', items: ['Sessions', 'Permissions', 'Streaming events'] },
+                ]}
+                links={[{ id: 'arch', label: 'Architecture', icon: 'network' }]}
+              />
+            </div>
+          </div>
         </GallerySection>
 
         <GallerySection title="Icon Buttons">
@@ -231,6 +380,9 @@ export function PrimitiveGallery() {
                 Open {size}
               </Button>
             ))}
+            <Button variant="secondary" rightIcon="panel-right-open" onClick={() => setDrawerOpen(true)}>
+              Open drawer
+            </Button>
           </div>
           {dialogSize ? (
             <Dialog
@@ -240,6 +392,27 @@ export function PrimitiveGallery() {
               footer={<Button variant="primary" onClick={() => setDialogSize(null)}>Done</Button>}
             >
               <p className="text-role-body text-text-secondary">Review details</p>
+            </Dialog>
+          ) : null}
+          {drawerOpen ? (
+            <Dialog
+              title="Task drawer"
+              variant="drawer"
+              onClose={() => setDrawerOpen(false)}
+              footer={<Button variant="primary" onClick={() => setDrawerOpen(false)}>Done</Button>}
+            >
+              <RunTimeline
+                stateLabel="Review"
+                currentStepId="review"
+                completedStepIds={['queued', 'running']}
+                sessionId="ses_drawer"
+                steps={[
+                  { id: 'queued', label: 'Queued' },
+                  { id: 'running', label: 'Running' },
+                  { id: 'review', label: 'Review' },
+                  { id: 'done', label: 'Done' },
+                ]}
+              />
             </Dialog>
           ) : null}
         </GallerySection>
@@ -255,6 +428,16 @@ export function PrimitiveGallery() {
             <Card interactive padding="lg" onClick={() => setCardAction('Card opened')}>
               <div className="ui-card-title font-display text-role-card-title font-bold">Interactive card</div>
               <p className="mt-2 text-role-body text-text-secondary">Open workspace details</p>
+            </Card>
+            <Card
+              padding="lg"
+              variant="tile"
+              hover="lift"
+              tile={<Icon name="kanban" size={20} />}
+              tileLabel="Board"
+            >
+              <div className="ui-card-title font-display text-role-card-title font-bold">Tile card</div>
+              <p className="mt-2 text-role-body text-text-secondary">Hover lift and specular treatment</p>
             </Card>
             <EmptyState
               icon="blocks"

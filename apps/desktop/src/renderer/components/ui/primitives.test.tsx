@@ -9,19 +9,26 @@ import {
   Dialog,
   ActionCluster,
   AgentCapabilityProfileView,
+  ConversationLaneCard,
+  CoworkerAvatar,
+  DeliverableCard,
   DiffView,
   EmptyState,
   Icon,
   IconButton,
   Input,
   Kbd,
+  KanbanBoard,
   Menu,
+  PermissionEditorRow,
   SegmentedControl,
   Select,
   Skeleton,
   StudioShell,
+  RunTimeline,
   Textarea,
   Tooltip,
+  TraitSlider,
   WorkbenchLayout,
 } from '.'
 import { PrimitiveGallery } from './PrimitiveGallery'
@@ -239,6 +246,17 @@ describe('Dialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('renders a drawer variant with the same accessible dialog contract', () => {
+    const { container } = render(
+      <Dialog title="Task drawer" variant="drawer" onClose={vi.fn()}>
+        <p>Drawer details</p>
+      </Dialog>,
+    )
+
+    expect(screen.getByRole('dialog', { name: 'Task drawer' })).toHaveClass('ui-dialog--drawer')
+    expect(container.querySelector('.ui-dialog-backdrop--drawer')).toBeInTheDocument()
+  })
+
   it('restores focus and closes with Cmd/Ctrl+W', async () => {
     const user = userEvent.setup()
 
@@ -282,6 +300,14 @@ describe('Card', () => {
     await user.keyboard('{Enter}')
 
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders tile and hover-lift variants', () => {
+    const { container } = render(<Card variant="tile" hover="lift" tile={<Icon name="kanban" />}>Board card</Card>)
+
+    expect(screen.getByText('Board card')).toBeInTheDocument()
+    expect(container.querySelector('.ui-card__tile')).toBeInTheDocument()
+    expect(container.querySelector('.ui-card--hover-lift')).toBeInTheDocument()
   })
 })
 
@@ -452,6 +478,149 @@ describe('Studio primitives', () => {
     await user.click(screen.getByRole('button', { name: 'Coworkers' }))
     expect(onNavigate).toHaveBeenCalledWith(navSections[0].items[1])
   })
+
+  it('renders presence, conversation lanes, kanban cards, and run timeline states', () => {
+    const { container } = render(
+      <div>
+        <CoworkerAvatar name="Jordan Lee" tone="lead" presence={{ status: 'working', label: 'Running' }} />
+        <ConversationLaneCard
+          title="Auth review"
+          coworker={{ name: 'Maya', role: 'Reviewer', tone: 'reviewer' }}
+          status="live"
+          activities={[{ id: 'read', verb: 'Reading', object: 'runtime.ts', icon: 'book-open' }]}
+          handoff="Ready"
+        />
+        <KanbanBoard
+          columns={[
+            {
+              id: 'queued',
+              title: 'Queued',
+              tasks: [{ id: 'task-1', title: 'Add shared primitive', priority: 'urgent', run: { label: 'running', live: true } }],
+            },
+            { id: 'empty', title: 'Done', tasks: [] },
+          ]}
+        />
+        <RunTimeline
+          stateLabel="Running"
+          live
+          currentStepId="running"
+          completedStepIds={['queued']}
+          sessionId="ses_test"
+          steps={[
+            { id: 'queued', label: 'Queued' },
+            { id: 'running', label: 'Running' },
+          ]}
+        />
+      </div>,
+    )
+
+    expect(screen.getByLabelText('Running')).toHaveClass('studio-presence-dot')
+    expect(screen.getByText('Reading')).toBeInTheDocument()
+    expect(screen.getByText('Add shared primitive')).toBeInTheDocument()
+    expect(screen.getByText('ses_test')).toBeInTheDocument()
+    expect(container.querySelector('.studio-run-pill--live')).toBeInTheDocument()
+  })
+
+  it('preserves uncontrolled conversation lane disclosure across parent renders', () => {
+    const { container, rerender } = render(
+      <ConversationLaneCard
+        title="Auth review"
+        coworker={{ name: 'Maya', role: 'Reviewer', tone: 'reviewer' }}
+        status="live"
+        activities={[{ id: 'read', verb: 'Reading', object: 'runtime.ts' }]}
+      />,
+    )
+    const lane = container.querySelector('details') as HTMLDetailsElement
+    expect(lane.open).toBe(true)
+
+    act(() => {
+      lane.open = false
+      fireEvent(lane, new Event('toggle'))
+    })
+
+    rerender(
+      <ConversationLaneCard
+        title="Auth review"
+        coworker={{ name: 'Maya', role: 'Reviewer', tone: 'reviewer' }}
+        status="live"
+        activities={[
+          { id: 'read', verb: 'Reading', object: 'runtime.ts' },
+          { id: 'test', verb: 'Testing', object: 'primitives' },
+        ]}
+      />,
+    )
+
+    expect((container.querySelector('details') as HTMLDetailsElement).open).toBe(false)
+  })
+
+  it('scopes Kanban column heading ids per board instance', () => {
+    const columns = [{ id: 'done', title: 'Done', tasks: [] }]
+    render(
+      <div>
+        <KanbanBoard columns={columns} />
+        <KanbanBoard columns={columns} />
+      </div>,
+    )
+
+    const headingIds = screen.getAllByRole('heading', { name: 'Done' }).map((heading) => heading.id)
+    expect(new Set(headingIds).size).toBe(2)
+  })
+
+  it('supports permission editor controls and deliverable preview states', async () => {
+    const user = userEvent.setup()
+    const onPolicyChange = vi.fn()
+    function PermissionHarness() {
+      const [rules, setRules] = useState(['scripts/**/*.mjs'])
+      return (
+        <PermissionEditorRow
+          toolName="Bash"
+          policy="ask"
+          onPolicyChange={onPolicyChange}
+          rules={rules}
+          onRuleChange={(index, value) => setRules((current) => current.map((rule, ruleIndex) => ruleIndex === index ? value : rule))}
+        />
+      )
+    }
+
+    render(
+      <div>
+        <PermissionHarness />
+        <DeliverableCard
+          title="Evidence bundle"
+          preview={<span>Preview markdown</span>}
+          capturedLabel="Captured"
+          captureAction={{ id: 'capture', children: 'Capture preview' }}
+        />
+      </div>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'deny' }))
+    expect(onPolicyChange).toHaveBeenCalledWith('deny')
+    expect(screen.getByRole('button', { name: 'ask' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'deny' })).toHaveAttribute('aria-pressed', 'false')
+    const ruleInput = screen.getByDisplayValue('scripts/**/*.mjs')
+    await user.type(ruleInput, 'x')
+    expect(ruleInput).toHaveFocus()
+    expect(ruleInput).toHaveValue('scripts/**/*.mjsx')
+    expect(screen.getByText('Preview markdown')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Capture preview' })).not.toHaveAttribute('id', 'capture')
+    expect(screen.getByText('Captured')).toBeInTheDocument()
+  })
+
+  it('respects TraitSlider min and max values while normalizing visual progress', () => {
+    const onValueChange = vi.fn()
+    render(<TraitSlider label="Autonomy" value={125} min={50} max={150} onValueChange={onValueChange} />)
+
+    const slider = screen.getByLabelText(/Autonomy/)
+    expect(slider).toHaveValue('125')
+    expect(slider).toHaveAttribute('min', '50')
+    expect(slider).toHaveAttribute('max', '150')
+    expect(slider.style.getPropertyValue('--studio-progress')).toBe('75%')
+    expect(screen.getByText('125')).toBeInTheDocument()
+
+    fireEvent.change(slider, { target: { value: '150' } })
+    expect(onValueChange).toHaveBeenCalledWith(150)
+  })
 })
 
 describe('SegmentedControl', () => {
@@ -516,6 +685,7 @@ describe('PrimitiveGallery', () => {
 
     expect(screen.getByRole('heading', { name: 'UI primitives' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Buttons' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Studio Production Primitives' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Icon Buttons' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Select And Menu' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Badges, Tooltip, Kbd, Skeleton, Toast' })).toBeInTheDocument()
@@ -523,6 +693,9 @@ describe('PrimitiveGallery', () => {
     expect(screen.getByText('danger lg')).toBeInTheDocument()
     expect(screen.getByText('Card sm')).toBeInTheDocument()
     expect(screen.getByText('Card lg')).toBeInTheDocument()
+    expect(screen.getByText('Inspect auth edge cases')).toBeInTheDocument()
+    expect(screen.getByText('Test evidence bundle')).toBeInTheDocument()
+    expect(screen.getAllByText('Runtime boundary').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Loading settings' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Toast' })).toBeInTheDocument()
     expect(screen.getByText('Mode selection is managed by policy.')).toBeInTheDocument()

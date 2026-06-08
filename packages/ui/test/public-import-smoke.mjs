@@ -16,6 +16,13 @@ const requiredExports = [
   ['CoworkerCard', ui.CoworkerCard],
   ['ComposerShell', ui.ComposerShell],
   ['TaskLane', ui.TaskLane],
+  ['ConversationLaneCard', ui.ConversationLaneCard],
+  ['KanbanBoard', ui.KanbanBoard],
+  ['RunTimeline', ui.RunTimeline],
+  ['PermissionEditorRow', ui.PermissionEditorRow],
+  ['DeliverableCard', ui.DeliverableCard],
+  ['WizardSteps', ui.WizardSteps],
+  ['WikiPage', ui.WikiPage],
   ['WorkbenchLayout', ui.WorkbenchLayout],
 ]
 

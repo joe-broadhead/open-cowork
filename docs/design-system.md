@@ -50,6 +50,14 @@ should happen in the package:
   `ProjectCard`, and `ChannelStatusCard` for the new Studio product language.
   These are presentational primitives only; OpenCode still owns execution,
   sessions, child sessions, approvals, questions, and tool semantics.
+- Phase-2 Studio surfaces should also use the production-specific primitives in
+  the same package before creating app-local markup: `ConversationLaneCard`,
+  `KanbanBoard`, `KanbanTaskCard`, drawer-capable `Dialog`, `RunTimeline`,
+  `PermissionEditorRow`, `DeliverableCard`, progress-enabled `ProjectCard`,
+  `ChannelRow`, `PersonRow`, `WizardSteps`, `WizardStepPane`, `TraitSlider`,
+  `WorkingStyleBars`, `WikiSpaceRail`, and `WikiPage`. Desktop renders all of
+  these in `#/ui-primitives`; Cloud Web styles the same class contract through
+  `apps/website/src/style-studio-primitives.ts`.
 
 Prefer these primitives before adding component-local button, input, badge, skeleton, or modal markup.
 
