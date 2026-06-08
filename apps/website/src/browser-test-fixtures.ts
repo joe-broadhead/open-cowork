@@ -33,7 +33,22 @@ export function makeSessionView(session: ReturnType<typeof makeSession>, sequenc
           { id: `${session.sessionId}-tool`, name: 'repo.search', status: 'completed', input: { query: 'todo' }, output: { matches: 2 }, order: 3 },
         ],
         taskRuns: [
-          { id: `${session.sessionId}-task`, title: 'Analysis task', agent: 'data-analyst', status: 'completed', content: 'Checked repository context.', order: 4 },
+          {
+            id: `${session.sessionId}-task`,
+            title: 'Analysis task',
+            agent: 'data-analyst',
+            status: 'completed',
+            content: 'Checked repository context.',
+            order: 4,
+            artifacts: [
+              {
+                artifactId: `${session.sessionId}-task-artifact`,
+                filename: 'task-summary.txt',
+                signedUrl: 'https://object.example.test/task-signed?token=leaked-secret',
+                objectKey: `tenant/session/${session.sessionId}/task-artifact`,
+              },
+            ],
+          },
         ],
         pendingApprovals: [
           { id: `${session.sessionId}-approval`, tool: 'shell', description: 'Run read-only tests', input: { command: 'pnpm test' }, order: 5 },

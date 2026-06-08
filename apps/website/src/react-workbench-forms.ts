@@ -2,6 +2,7 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import type { AppAPI } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { assertCloudProjectSourceAllowed, cloudProjectSourceFromForm } from './react-project-source.ts'
+import { cloudWebPromptAssignment } from './surface-workbench.ts'
 import {
   asRecord,
   errorMessage,
@@ -20,6 +21,7 @@ type UseCloudWorkbenchFormsInput = {
   sessionFormTarget: HTMLElement | null
   composerText: string
   composerAgent: string
+  allowedAgents: string[]
   isSending: boolean
   selectedSessionId: string | null
   setComposerText: Dispatch<SetStateAction<string>>
@@ -40,6 +42,7 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
     sessionFormTarget,
     composerText,
     composerAgent,
+    allowedAgents,
     isSending,
     selectedSessionId,
     setComposerText,
@@ -62,6 +65,12 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
         const text = String(formData.get('text') || composerText).trim()
         const agent = String(formData.get('agent') || composerAgent).trim()
         if (!text || isSending) return
+        const assignment = cloudWebPromptAssignment(text, allowedAgents, agent)
+        if (!assignment.text) {
+          setError('Add a message after the coworker mention.')
+          setCloudStatus('Add a message after the coworker mention.', 'warn')
+          return
+        }
         setIsSending(true)
         setError(null)
         try {
@@ -73,7 +82,7 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
             setViews((current) => ({ ...current, [sessionId as string]: sessionViewFromCreateResult(created) }))
             setSelectedSessionId(sessionId)
           }
-          const prompted = asRecord(await api.sessions.prompt(sessionId, { text, agent: agent || undefined }))
+          const prompted = asRecord(await api.sessions.prompt(sessionId, { text: assignment.text, agent: assignment.agent || undefined }))
           if (prompted.view) setViews((current) => ({ ...current, [sessionId as string]: prompted.view as CloudWebThreadView }))
           setComposerText('')
           await loadSessions({ keepSelection: true, preserveLoadedPages: true })
@@ -91,7 +100,7 @@ export function useCloudWorkbenchForms(input: UseCloudWorkbenchFormsInput) {
     }
     composerTarget.addEventListener('submit', handler, true)
     return () => composerTarget.removeEventListener('submit', handler, true)
-  }, [api, bootstrap.profileName, composerAgent, composerTarget, composerText, isSending, loadSessions, loadView, selectedSessionId, setComposerText, setError, setIsSending, setSelectedSessionId, setViews])
+  }, [allowedAgents, api, bootstrap.profileName, composerAgent, composerTarget, composerText, isSending, loadSessions, loadView, selectedSessionId, setComposerText, setError, setIsSending, setSelectedSessionId, setViews])
 
   useEffect(() => {
     if (!sessionFormTarget) return undefined

@@ -18,8 +18,110 @@ export type CloudWebWorkbenchAgent = {
   custom: boolean
 }
 
+const COWORKER_TONES = [
+  'var(--color-accent)',
+  'var(--color-green)',
+  'var(--color-amber)',
+  'var(--color-red)',
+] as const
+const LEADING_COWORKER_MENTION_PATTERN = /^(\s*)@([a-zA-Z0-9._/-]+)(?:[\s,;:!?]+|$)/
+const COWORKER_MENTION_SEPARATOR_PATTERN = /^(?:[\s,;:!?)\]}]+|\.(?:\s+|$)|$)/
+
 function asList<T = unknown>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : []
+}
+
+function hashText(value: string) {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash
+}
+
+function knownCoworkerMentionAt(input: string, atIndex: number, normalizedAgents: Map<string, string>) {
+  if (input[atIndex] !== '@' || normalizedAgents.size === 0) return null
+  const mentionBody = input.slice(atIndex + 1)
+  const lowerBody = mentionBody.toLowerCase()
+  const agentEntries = [...normalizedAgents.entries()].sort((a, b) => b[0].length - a[0].length)
+  for (const [normalizedName, agent] of agentEntries) {
+    if (!lowerBody.startsWith(normalizedName)) continue
+    const remainder = mentionBody.slice(normalizedName.length)
+    const separator = remainder.match(COWORKER_MENTION_SEPARATOR_PATTERN)
+    if (!separator) continue
+    return {
+      agent,
+      length: 1 + normalizedName.length + separator[0].length,
+    }
+  }
+  return null
+}
+
+function leadingKnownCoworkerMention(input: string, normalizedAgents: Map<string, string>) {
+  return knownCoworkerMentionAt(input, 0, normalizedAgents)
+}
+
+export function cloudWebCoworkerInitials(name: string) {
+  const parts = name.trim().split(/[\s._/-]+/).filter(Boolean)
+  if (!parts.length) return 'OC'
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'OC'
+}
+
+export function cloudWebCoworkerTone(name: string) {
+  const cleaned = name.trim()
+  return COWORKER_TONES[hashText(cleaned || 'default') % COWORKER_TONES.length]
+}
+
+export function firstCloudWebMentionedCoworker(input: string, allowedAgents: string[]) {
+  if (!input.trim() || !allowedAgents.length) return ''
+  const normalized = new Map(allowedAgents.map((agent) => [agent.toLowerCase(), agent]))
+  const mentionPattern = /(^|[\s([{])@/g
+  let match: RegExpExecArray | null
+  while ((match = mentionPattern.exec(input)) !== null) {
+    const atIndex = match.index + (match[1] || '').length
+    const mention = knownCoworkerMentionAt(input, atIndex, normalized)
+    if (mention) return mention.agent
+  }
+  return ''
+}
+
+export function ensureCloudWebCoworkerMention(input: string, agentName: string) {
+  const agent = agentName.trim()
+  if (!agent) return input
+  const mention = `@${agent}`
+  const leadingMention = input.match(LEADING_COWORKER_MENTION_PATTERN)
+  if (leadingMention) {
+    return leadingMention[2]?.toLowerCase() === agent.toLowerCase()
+      ? input
+      : input.replace(LEADING_COWORKER_MENTION_PATTERN, (match, leading: string, _current: string, offset: number) => {
+        const hasRemainder = input.slice(offset + match.length).length > 0
+        return hasRemainder ? `${leading}${mention} ` : `${leading}${mention}`
+      })
+  }
+  const tokens = input.split(/\s+/).map((token) => token.replace(/^[([{]+|[)\]},.!?;:]+$/g, '').toLowerCase())
+  if (tokens.includes(mention.toLowerCase())) return input
+  return input.trim() ? `${mention} ${input}` : `${mention} `
+}
+
+export function cloudWebPromptAssignment(input: string, allowedAgents: string[], selectedAgent = '') {
+  const text = input.trim()
+  const selected = selectedAgent.trim()
+  const normalized = new Map(allowedAgents.map((agent) => [agent.toLowerCase(), agent]))
+  if (selected) normalized.set(selected.toLowerCase(), selected)
+  const directMention = leadingKnownCoworkerMention(text, normalized)
+  if (directMention) {
+    return {
+      agent: directMention.agent,
+      text: text.slice(directMention.length).trimStart(),
+      source: 'mention' as const,
+    }
+  }
+  const mentioned = firstCloudWebMentionedCoworker(text, allowedAgents)
+  return {
+    agent: selected || mentioned || '',
+    text,
+    source: selected ? 'selected' as const : mentioned ? 'mention' as const : 'default' as const,
+  }
 }
 
 export function deriveCloudWebWorkbenchAgents(input: {

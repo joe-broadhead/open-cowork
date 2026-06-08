@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
@@ -9,11 +9,17 @@ import type { CloudWebThreadView } from './thread-workbench.ts'
 import {
   cloudWebCapabilityLabel,
   cloudWebCapabilityPolicyNote,
+  cloudWebCoworkerInitials,
+  cloudWebCoworkerTone,
   cloudWebWorkflowTriggerSummary,
   deriveCloudWebWorkbenchAgents,
   filterCloudWebCapabilities,
   type CloudWebWorkbenchAgent,
 } from './surface-workbench.ts'
+
+type StudioToneStyle = CSSProperties & {
+  '--studio-tone'?: string
+}
 
 type SurfaceProps = {
   bootstrap: CloudWebClientBootstrap
@@ -157,12 +163,18 @@ function workspaceAllowedAgents(workspace: unknown) {
 }
 
 function AgentCard({ agent, disabled, onStart }: { agent: CloudWebWorkbenchAgent, disabled: boolean, onStart: (agentName: string) => void }) {
+  const avatarStyle: StudioToneStyle = {
+    '--studio-tone': cloudWebCoworkerTone(agent.name),
+  }
   return (
     <div className="agent-card">
       <div className="surface-card-main">
         <div className="surface-card-header">
+          <span className="studio-coworker-avatar studio-coworker-avatar--sm" style={avatarStyle} aria-hidden="true">
+            {cloudWebCoworkerInitials(agent.name)}
+          </span>
           <strong>{agent.name}</strong>
-          <span className="pill" data-kind={agent.custom ? 'warn' : 'ok'}>{agent.custom ? 'custom' : 'profile'}</span>
+          <span className="pill" data-kind={agent.custom ? 'warn' : 'ok'}>{agent.custom ? 'custom coworker' : 'profile coworker'}</span>
         </div>
         <small>{[agent.custom ? 'Custom metadata' : 'Built-in profile', `${agent.toolCount} tool(s)`, `${agent.skillCount} skill(s)`].join(' - ')}</small>
       </div>
