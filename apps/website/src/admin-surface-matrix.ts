@@ -70,7 +70,7 @@ export const CLOUD_WEB_ADMIN_SURFACE_MATRIX: CloudWebAdminSurfaceEntry[] = [
     label: 'Headless Gateway',
     desktopSurface: 'Desktop Gateway connection and workflow delivery status',
     cloudAffordance: 'Configure headless agents, channel bindings, setup guidance, and delivery backlog controls.',
-    sensitiveBoundary: 'Channel credential refs, delivery targets, payloads, and errors are browser-sanitized before rendering.',
+    sensitiveBoundary: 'Channel credential refs, delivery targets, payloads, provider internals, and errors are browser-sanitized before rendering.',
     disabledReason: 'Gateway administration requires an org owner or admin role.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
   },
@@ -98,7 +98,7 @@ export const CLOUD_WEB_ADMIN_SURFACE_MATRIX: CloudWebAdminSurfaceEntry[] = [
     desktopSurface: 'Desktop Health Center and support bundle surfaces',
     cloudAffordance: 'Prepare redacted health summaries and support bundles for Cloud runtime, BYOK, gateway, and object-store state.',
     sensitiveBoundary: 'Diagnostics are recursively redacted and array-capped before rendering or download.',
-    disabledReason: 'Diagnostics require admin or operator privileges and may be denied by the Cloud API.',
+    disabledReason: 'Diagnostics require an org owner or admin role in Cloud Web and may still be denied by operator-token Cloud API policy.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
   },
 ]
