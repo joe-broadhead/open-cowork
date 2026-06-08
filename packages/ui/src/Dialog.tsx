@@ -8,6 +8,8 @@ export type DialogProps = {
   children: ReactNode
   onClose: () => void
   size?: 'sm' | 'md' | 'lg'
+  variant?: 'modal' | 'drawer'
+  side?: 'right' | 'left'
   footer?: ReactNode
 }
 
@@ -16,6 +18,8 @@ export function Dialog({
   children,
   onClose,
   size = 'md',
+  variant = 'modal',
+  side = 'right',
   footer,
 }: DialogProps) {
   const titleId = useId()
@@ -35,13 +39,17 @@ export function Dialog({
 
   return (
     <>
-      <div aria-hidden="true" className="ui-dialog-backdrop" onClick={onClose} />
+      <div
+        aria-hidden="true"
+        className={cn('ui-dialog-backdrop', variant === 'drawer' && 'ui-dialog-backdrop--drawer')}
+        onClick={onClose}
+      />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={cn('ui-dialog', `ui-dialog--${size}`)}
+        className={cn('ui-dialog', `ui-dialog--${size}`, `ui-dialog--${variant}`, variant === 'drawer' && `ui-dialog--drawer-${side}`)}
       >
         <div className="ui-dialog__header">
           <h2 id={titleId} className="ui-dialog__title">{title}</h2>

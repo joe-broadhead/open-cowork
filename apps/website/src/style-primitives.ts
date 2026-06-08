@@ -194,12 +194,36 @@ export function cloudWebsitePrimitiveStyles() {
       border: var(--border-width-1) solid var(--color-border);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--color-elevated) 88%, var(--color-base) 12%);
-      box-shadow: var(--shadow-2), var(--specular);
+      box-shadow: var(--shadow-2);
       color: var(--color-text);
+    }
+    .ui-card--specular {
+      box-shadow: var(--shadow-2), var(--specular);
     }
     .ui-card--sm { padding: calc(var(--row-pad) + var(--space-1)); }
     .ui-card--md { padding: calc(var(--row-pad) + var(--space-2)); }
     .ui-card--lg { padding: calc(var(--row-pad) + var(--space-4)); }
+    .ui-card--variant-flat {
+      background: var(--color-surface);
+      box-shadow: none;
+    }
+    .ui-card--variant-tile {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--space-3);
+      align-items: start;
+    }
+    .ui-card__tile {
+      display: inline-flex;
+      width: var(--control-h-lg);
+      height: var(--control-h-lg);
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-md);
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      box-shadow: inset 0 0 0 var(--border-width-1) var(--accent-line);
+    }
     .ui-card--interactive {
       display: block;
       width: 100%;
@@ -212,10 +236,105 @@ export function cloudWebsitePrimitiveStyles() {
         box-shadow var(--dur-2) var(--ease-out),
         transform var(--dur-2) var(--ease-spring);
     }
-    .ui-card--interactive:hover {
+    .ui-card--interactive.ui-card--variant-tile {
+      display: grid;
+    }
+    .ui-card--interactive:hover,
+    .ui-card--hover-lift:hover {
       border-color: var(--color-border-strong);
       background: var(--color-surface-hover);
       box-shadow: var(--shadow-3), var(--specular-strong);
       transform: translateY(calc(-1 * var(--border-width-1)));
+    }
+    .ui-dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: var(--z-modal);
+      background: color-mix(in srgb, var(--color-base) 66%, transparent);
+      backdrop-filter: blur(8px);
+      animation: ui-fade-in var(--dur-2) var(--ease-out) both;
+    }
+    .ui-dialog-backdrop--drawer {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .ui-dialog {
+      position: fixed;
+      inset-block-start: 12vh;
+      inset-inline-start: 50%;
+      z-index: calc(var(--z-modal) + 1);
+      display: flex;
+      max-height: min(var(--primitive-dialog-max-h), calc(100vh - var(--space-12)));
+      max-width: calc(100vw - var(--space-8));
+      transform: translateX(-50%);
+      flex-direction: column;
+      overflow: hidden;
+      border: var(--border-width-1) solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--shadow-3), var(--specular-strong);
+      color: var(--color-text);
+      animation: ui-dialog-in var(--dur-3) var(--ease-spring) both;
+    }
+    .ui-dialog--sm { width: min(var(--primitive-dialog-w-sm), calc(100vw - var(--space-8))); }
+    .ui-dialog--md { width: min(var(--primitive-dialog-w-md), calc(100vw - var(--space-8))); }
+    .ui-dialog--lg { width: min(var(--primitive-dialog-w-lg), calc(100vw - var(--space-8))); }
+    .ui-dialog--drawer {
+      inset-block: 0;
+      inset-inline: auto 0;
+      width: min(440px, 92vw);
+      height: 100dvh;
+      max-height: 100dvh;
+      transform: none;
+      border-block: 0;
+      border-inline-end: 0;
+      border-radius: 0;
+      animation-name: ui-drawer-in;
+    }
+    .ui-dialog--drawer-left {
+      inset-inline: 0 auto;
+      border-inline-start: 0;
+      border-inline-end: var(--border-width-1) solid var(--glass-border);
+      animation-name: ui-drawer-left-in;
+    }
+    .ui-dialog__header,
+    .ui-dialog__footer {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-4);
+    }
+    .ui-dialog__header {
+      justify-content: space-between;
+      border-bottom: var(--border-width-1) solid var(--color-border-subtle);
+    }
+    .ui-dialog__footer {
+      justify-content: flex-end;
+      border-top: var(--border-width-1) solid var(--color-border-subtle);
+    }
+    .ui-dialog__title {
+      margin: 0;
+      color: var(--color-text);
+      font-family: var(--font-display);
+      font-size: var(--text-xl);
+      font-weight: 650;
+      line-height: var(--lh-xl);
+    }
+    .ui-dialog__body {
+      overflow: auto;
+      padding: var(--space-4);
+    }
+    @keyframes ui-dialog-in {
+      from { opacity: 0; transform: translateX(-50%) translateY(var(--space-3)) scale(0.985); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+    }
+    @keyframes ui-drawer-in {
+      from { opacity: 0.6; transform: translateX(var(--space-6)); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes ui-drawer-left-in {
+      from { opacity: 0.6; transform: translateX(calc(-1 * var(--space-6))); }
+      to { opacity: 1; transform: translateX(0); }
     }`
 }

@@ -3,6 +3,8 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  useId,
+  useState,
 } from 'react'
 import { Badge, type BadgeTone } from './Badge.js'
 import { Button, type ButtonProps } from './Button.js'
@@ -12,6 +14,7 @@ import { cn } from './utils.js'
 
 export type StudioTone = 'lead' | 'strategist' | 'builder' | 'reviewer' | 'operator' | 'neutral'
 export type StudioStatusTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger'
+export type StudioPresence = 'working' | 'available' | 'offline'
 
 const statusToneMap: Record<StudioStatusTone, BadgeTone> = {
   neutral: 'neutral',
@@ -27,6 +30,30 @@ function toneStyle(tone: StudioTone): CSSProperties {
 
 function laneStyle(tone: StudioLaneTone): CSSProperties {
   return { '--studio-lane-tone': `var(--lane-${tone})` } as CSSProperties
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function toFiniteNumber(value: unknown, fallback: number) {
+  if (value === undefined || value === null || value === '') return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function percentStyle(name: string, value: number): CSSProperties {
+  return { [name]: `${clampPercent(value)}%` } as CSSProperties
+}
+
+function priorityStyle(priority: KanbanPriority = 'medium'): CSSProperties {
+  const color = {
+    low: 'var(--color-green)',
+    medium: 'var(--color-info)',
+    high: 'var(--color-amber)',
+    urgent: 'var(--color-red)',
+  }[priority]
+  return { '--studio-priority': color } as CSSProperties
 }
 
 export type StudioAction = Pick<ButtonProps, 'children' | 'onClick' | 'disabled' | 'disabledReason' | 'leftIcon' | 'rightIcon' | 'type'> & {
@@ -71,6 +98,8 @@ export type StudioShellProps = ComponentPropsWithoutRef<'div'> & {
   activeItemId?: string
   header?: ReactNode
   sidebarFooter?: ReactNode
+  presenceFooter?: ReactNode
+  collapsed?: boolean
   onNavigate?: (item: StudioNavItem) => void
 }
 
@@ -125,13 +154,15 @@ export function StudioShell({
   activeItemId,
   header,
   sidebarFooter,
+  presenceFooter,
+  collapsed = false,
   onNavigate,
   children,
   className,
   ...props
 }: StudioShellProps) {
   return (
-    <div {...props} className={cn('studio-shell', className)}>
+    <div {...props} className={cn('studio-shell', collapsed && 'studio-shell--collapsed', className)}>
       <aside className="studio-shell__sidebar">
         <div className="studio-shell__brand">
           <div className="studio-shell__mark" aria-hidden="true">{brand.mark ?? brand.name.slice(0, 2).toUpperCase()}</div>
@@ -152,6 +183,7 @@ export function StudioShell({
             </section>
           ))}
         </nav>
+        {presenceFooter ? <div className="studio-shell__presence-footer">{presenceFooter}</div> : null}
         {sidebarFooter ? <div className="studio-shell__sidebar-footer">{sidebarFooter}</div> : null}
       </aside>
       <div className="studio-shell__workspace">
@@ -199,6 +231,12 @@ export type CoworkerAvatarProps = ComponentPropsWithoutRef<'span'> & {
   initials?: string
   tone?: StudioTone
   size?: 'sm' | 'md' | 'lg'
+  shape?: 'round' | 'squircle'
+  presence?: StudioPresence | {
+    status: StudioPresence
+    label?: string
+    pulse?: boolean
+  }
 }
 
 export function CoworkerAvatar({
@@ -206,18 +244,35 @@ export function CoworkerAvatar({
   initials,
   tone = 'neutral',
   size = 'md',
+  shape = 'round',
+  presence,
   className,
+  children,
   ...props
 }: CoworkerAvatarProps) {
   const label = initials || name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+  const presenceState = typeof presence === 'string' ? { status: presence } : presence
+  const shouldPulse = presenceState ? presenceState.pulse ?? presenceState.status === 'working' : false
   return (
     <span
       {...props}
-      className={cn('studio-coworker-avatar', `studio-coworker-avatar--${size}`, className)}
+      className={cn('studio-coworker-avatar', `studio-coworker-avatar--${size}`, `studio-coworker-avatar--${shape}`, className)}
       style={{ ...toneStyle(tone), ...props.style }}
       aria-label={name}
     >
       {label}
+      {children}
+      {presenceState ? (
+        <span
+          className={cn(
+            'studio-presence-dot',
+            `studio-presence-dot--${presenceState.status}`,
+            shouldPulse && 'studio-presence-dot--pulse',
+          )}
+          aria-label={presenceState.label || presenceState.status}
+          title={presenceState.label || presenceState.status}
+        />
+      ) : null}
     </span>
   )
 }
@@ -228,7 +283,13 @@ export type CoworkerCardProps = ComponentPropsWithoutRef<'article'> & {
   summary?: string
   tone?: StudioTone
   mode?: string
+  presence?: CoworkerAvatarProps['presence']
   abilities?: string[]
+  styleBars?: Array<{
+    id: string
+    label: string
+    value: number
+  }>
   status?: {
     label: string
     tone?: StudioStatusTone
@@ -242,7 +303,9 @@ export function CoworkerCard({
   summary,
   tone = 'neutral',
   mode,
+  presence,
   abilities,
+  styleBars,
   status,
   actions,
   className,
@@ -251,7 +314,7 @@ export function CoworkerCard({
   return (
     <article {...props} className={cn('studio-coworker-card', className)} style={{ ...toneStyle(tone), ...props.style }}>
       <div className="studio-coworker-card__header">
-        <CoworkerAvatar name={name} tone={tone} />
+        <CoworkerAvatar name={name} tone={tone} presence={presence} />
         <div className="studio-coworker-card__identity">
           <h3>{name}</h3>
           <p>{role}</p>
@@ -267,6 +330,7 @@ export function CoworkerCard({
       ) : mode ? (
         <div className="studio-chip-list"><Badge tone="accent">{mode}</Badge></div>
       ) : null}
+      {styleBars?.length ? <WorkingStyleBars bars={styleBars} compact /> : null}
       <StudioActions actions={actions} />
     </article>
   )
@@ -277,6 +341,8 @@ export type ComposerShellProps = ComponentPropsWithoutRef<'form'> & {
   placeholder?: string
   helper?: ReactNode
   toolbar?: ReactNode
+  assignMenu?: ReactNode
+  context?: ReactNode
   actions?: StudioAction[]
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void
 }
@@ -286,6 +352,8 @@ export function ComposerShell({
   placeholder,
   helper,
   toolbar,
+  assignMenu,
+  context,
   actions,
   className,
   children,
@@ -293,13 +361,14 @@ export function ComposerShell({
 }: ComposerShellProps) {
   return (
     <form {...props} className={cn('studio-composer', className)}>
+      {context ? <div className="studio-composer__context">{context}</div> : null}
       <label className="studio-composer__label">
         <span>{label}</span>
         <textarea name="text" rows={3} placeholder={placeholder} />
       </label>
       {children}
       <div className="studio-composer__footer">
-        <div className="studio-composer__toolbar">{toolbar || helper}</div>
+        <div className="studio-composer__toolbar">{assignMenu}{toolbar || helper}</div>
         <StudioActions actions={actions} />
       </div>
     </form>
@@ -362,6 +431,317 @@ export function TaskLane({
         <p className="studio-empty-line">{emptyLabel}</p>
       )}
     </section>
+  )
+}
+
+export type ConversationLaneActivity = {
+  id: string
+  icon?: IconName
+  verb: string
+  object?: string
+  time?: string
+  done?: boolean
+}
+
+export type ConversationLaneCardProps = Omit<ComponentPropsWithoutRef<'details'>, 'title'> & {
+  title: string
+  coworker: {
+    name: string
+    role?: string
+    initials?: string
+    tone?: StudioTone
+    presence?: CoworkerAvatarProps['presence']
+  }
+  task?: string
+  tone?: StudioLaneTone
+  status?: 'live' | 'done' | 'waiting'
+  runtimeLabel?: string
+  activities?: ConversationLaneActivity[]
+  handoff?: ReactNode
+}
+
+export function ConversationLaneCard({
+  title,
+  coworker,
+  task,
+  tone = 'delegated',
+  status = 'waiting',
+  runtimeLabel,
+  activities,
+  handoff,
+  className,
+  open,
+  onToggle,
+  ...props
+}: ConversationLaneCardProps) {
+  const isControlled = open !== undefined
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(status === 'live')
+
+  return (
+    <details
+      {...props}
+      className={cn('studio-conversation-lane-card', `studio-conversation-lane-card--${status}`, className)}
+      style={{ ...laneStyle(tone), ...props.style }}
+      open={isControlled ? open : uncontrolledOpen}
+      onToggle={(event) => {
+        if (!isControlled) setUncontrolledOpen(event.currentTarget.open)
+        onToggle?.(event)
+      }}
+    >
+      <summary className="studio-conversation-lane-card__head">
+        <CoworkerAvatar
+          name={coworker.name}
+          initials={coworker.initials}
+          tone={coworker.tone || 'neutral'}
+          presence={coworker.presence || (status === 'live' ? 'working' : status === 'done' ? 'available' : undefined)}
+          size="sm"
+        />
+        <span className="studio-conversation-lane-card__copy">
+          <span className="studio-conversation-lane-card__name">{coworker.name}</span>
+          {coworker.role ? <span className="studio-conversation-lane-card__role">{coworker.role}</span> : null}
+          <span className="studio-conversation-lane-card__task">{task || title}</span>
+        </span>
+        <span className="studio-conversation-lane-card__meta">
+          {status === 'live' ? <span className="studio-status-live"><span />Live</span> : null}
+          {status === 'done' ? <span className="studio-status-done"><Icon name="check" size={16} />Done</span> : null}
+          {status === 'waiting' ? <span className="studio-status-waiting">Waiting</span> : null}
+          {runtimeLabel ? <span>{runtimeLabel}</span> : null}
+          <Icon name="chevron-right" size={16} />
+        </span>
+      </summary>
+      <div className="studio-conversation-lane-card__body">
+        {activities?.length ? (
+          <ol className="studio-activity-list">
+            {activities.map((activity) => (
+              <li key={activity.id} className={cn('studio-activity-row', activity.done && 'studio-activity-row--done')}>
+                <span className="studio-activity-row__icon" aria-hidden="true">
+                  <Icon name={activity.icon || (activity.done ? 'check' : 'activity')} size={16} />
+                </span>
+                <span className="studio-activity-row__copy">
+                  <strong>{activity.verb}</strong>
+                  {activity.object ? <span>{activity.object}</span> : null}
+                </span>
+                {activity.time ? <time>{activity.time}</time> : null}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="studio-empty-line">No projected activity yet.</p>
+        )}
+        {handoff ? <div className="studio-handoff-chip"><Icon name="git-fork" size={16} />{handoff}</div> : null}
+      </div>
+    </details>
+  )
+}
+
+export type KanbanPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+export type KanbanTask = {
+  id: string
+  title: string
+  description?: string
+  priority?: KanbanPriority
+  assignee?: {
+    name: string
+    initials?: string
+    tone?: StudioTone
+    presence?: CoworkerAvatarProps['presence']
+  }
+  run?: {
+    label: string
+    live?: boolean
+  }
+  meta?: ReactNode
+}
+
+export type KanbanColumn = {
+  id: string
+  title: string
+  tasks: KanbanTask[]
+  over?: boolean
+  emptyLabel?: string
+}
+
+export type KanbanBoardProps = ComponentPropsWithoutRef<'section'> & {
+  columns: KanbanColumn[]
+}
+
+export function KanbanBoard({ columns, className, id, ...props }: KanbanBoardProps) {
+  const generatedBoardId = useId()
+  const headingIdPrefix = id || generatedBoardId
+
+  return (
+    <section {...props} id={id} className={cn('studio-kanban-board', className)}>
+      {columns.map((column) => (
+        <KanbanColumnView key={column.id} column={column} headingIdPrefix={headingIdPrefix} />
+      ))}
+    </section>
+  )
+}
+
+function KanbanColumnView({ column, headingIdPrefix }: { column: KanbanColumn; headingIdPrefix: string }) {
+  const headingId = `${headingIdPrefix}-${column.id}-heading`
+
+  return (
+    <section className={cn('studio-kanban-column', column.over && 'studio-kanban-column--over')} aria-labelledby={headingId}>
+      <header className="studio-kanban-column__head">
+        <h3 id={headingId}>{column.title}</h3>
+        <span>{column.tasks.length}</span>
+      </header>
+      <div className="studio-kanban-column__body">
+        {column.tasks.length ? column.tasks.map((task) => <KanbanTaskCard key={task.id} task={task} />) : (
+          <p className="studio-kanban-column__empty">{column.emptyLabel || 'No tasks'}</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
+export type KanbanTaskCardProps = ComponentPropsWithoutRef<'article'> & {
+  task: KanbanTask
+  dragging?: boolean
+}
+
+export function KanbanTaskCard({ task, dragging = false, className, ...props }: KanbanTaskCardProps) {
+  return (
+    <article
+      {...props}
+      className={cn('studio-kanban-task-card', dragging && 'studio-kanban-task-card--dragging', className)}
+      style={{ ...priorityStyle(task.priority), ...props.style }}
+    >
+      <div className="studio-kanban-task-card__top">
+        <span className="studio-kanban-task-card__priority" aria-label={`${task.priority || 'medium'} priority`} />
+        <div>
+          <h4>{task.title}</h4>
+          {task.description ? <p>{task.description}</p> : null}
+        </div>
+      </div>
+      <footer className="studio-kanban-task-card__foot">
+        {task.assignee ? (
+          <>
+            <CoworkerAvatar
+              name={task.assignee.name}
+              initials={task.assignee.initials}
+              tone={task.assignee.tone || 'neutral'}
+              presence={task.assignee.presence}
+              size="sm"
+            />
+            <span>{task.assignee.name}</span>
+          </>
+        ) : (
+          <span className="studio-unassigned"><Icon name="users" size={16} />Unassigned</span>
+        )}
+        {task.run ? <span className={cn('studio-run-pill', task.run.live && 'studio-run-pill--live')}><span />{task.run.label}</span> : null}
+        {task.meta ? <span className="studio-kanban-task-card__meta">{task.meta}</span> : null}
+      </footer>
+    </article>
+  )
+}
+
+export type RunTimelineStep = {
+  id: string
+  label: string
+}
+
+export type RunTimelineProps = ComponentPropsWithoutRef<'section'> & {
+  stateLabel: string
+  live?: boolean
+  steps: RunTimelineStep[]
+  currentStepId: string
+  completedStepIds?: string[]
+  sessionId?: string
+}
+
+export function RunTimeline({
+  stateLabel,
+  live = false,
+  steps,
+  currentStepId,
+  completedStepIds = [],
+  sessionId,
+  className,
+  ...props
+}: RunTimelineProps) {
+  return (
+    <section {...props} className={cn('studio-run-timeline', className)} aria-label="Run timeline">
+      <div className="studio-run-timeline__state">
+        <span className={cn(live && 'studio-status-live')}>{live ? <span /> : null}{stateLabel}</span>
+      </div>
+      <ol className="studio-run-timeline__steps">
+        {steps.map((step) => {
+          const done = completedStepIds.includes(step.id)
+          const current = step.id === currentStepId
+          return (
+            <li key={step.id} className={cn('studio-run-timeline__step', done && 'studio-run-timeline__step--done', current && 'studio-run-timeline__step--current')}>
+              <span className="studio-run-timeline__dot" />
+              <span>{step.label}</span>
+            </li>
+          )
+        })}
+      </ol>
+      {sessionId ? <div className="studio-run-timeline__meta">Session <code>{sessionId}</code></div> : null}
+    </section>
+  )
+}
+
+export type PermissionPolicy = 'allow' | 'ask' | 'deny'
+
+export type PermissionEditorRowProps = ComponentPropsWithoutRef<'article'> & {
+  toolName: string
+  description?: string
+  icon?: IconName
+  policy: PermissionPolicy
+  rules?: string[]
+  onPolicyChange?: (policy: PermissionPolicy) => void
+  onRuleChange?: (index: number, value: string) => void
+}
+
+export function PermissionEditorRow({
+  toolName,
+  description,
+  icon = 'shield-check',
+  policy,
+  rules,
+  onPolicyChange,
+  onRuleChange,
+  className,
+  ...props
+}: PermissionEditorRowProps) {
+  const options: PermissionPolicy[] = ['allow', 'ask', 'deny']
+  return (
+    <article {...props} className={cn('studio-permission-row', className)}>
+      <div className="studio-permission-row__head">
+        <span className="studio-permission-row__icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
+        <div className="studio-permission-row__copy">
+          <h3>{toolName}</h3>
+          {description ? <p>{description}</p> : null}
+        </div>
+        <div className="studio-policy-toggle" role="group" aria-label={`${toolName} permission`}>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={cn('studio-policy-toggle__option', `studio-policy-toggle__option--${option}`)}
+              data-active={option === policy ? 'true' : undefined}
+              aria-pressed={option === policy}
+              onClick={() => onPolicyChange?.(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      </div>
+      {rules?.length ? (
+        <div className="studio-permission-row__rules">
+          {rules.map((rule, index) => (
+            <label key={`rule-${index}`} className="studio-permission-rule">
+              <span>Rule {index + 1}</span>
+              <input value={rule} readOnly={!onRuleChange} onChange={(event) => onRuleChange?.(index, event.currentTarget.value)} />
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </article>
   )
 }
 
@@ -431,6 +811,61 @@ export function ApprovalCard({
   )
 }
 
+export type DeliverableCardProps = ComponentPropsWithoutRef<'article'> & {
+  title: string
+  meta?: string
+  icon?: IconName
+  tone?: StudioTone
+  preview?: ReactNode
+  previewLabel?: string
+  capturedLabel?: string
+  actions?: StudioAction[]
+  captureAction?: StudioAction
+}
+
+export function DeliverableCard({
+  title,
+  meta,
+  icon = 'file-text',
+  tone = 'neutral',
+  preview,
+  previewLabel = 'Preview pending',
+  capturedLabel,
+  actions,
+  captureAction,
+  className,
+  ...props
+}: DeliverableCardProps) {
+  const captureButton = captureAction
+    ? (() => {
+        const { id: _id, variant, children, ...buttonProps } = captureAction
+        return { buttonProps, children, variant }
+      })()
+    : null
+
+  return (
+    <article {...props} className={cn('studio-deliverable-card', className)} style={{ ...toneStyle(tone), ...props.style }}>
+      <div className="studio-deliverable-card__head">
+        <span className="studio-deliverable-card__icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
+        <div>
+          <h3>{title}</h3>
+          {meta ? <p>{meta}</p> : null}
+        </div>
+      </div>
+      <div className="studio-deliverable-card__preview">
+        {preview || <span>{previewLabel}</span>}
+      </div>
+      <StudioActions actions={actions} />
+      {captureButton ? (
+        <Button className="studio-deliverable-card__capture" size="sm" variant={captureButton.variant || 'secondary'} {...captureButton.buttonProps}>
+          {captureButton.children}
+        </Button>
+      ) : null}
+      {capturedLabel ? <div className="studio-deliverable-card__captured"><Icon name="check" size={16} />{capturedLabel}</div> : null}
+    </article>
+  )
+}
+
 export type StudioObjectCardProps = ComponentPropsWithoutRef<'article'> & {
   title: string
   description?: string
@@ -443,16 +878,322 @@ export type StudioObjectCardProps = ComponentPropsWithoutRef<'article'> & {
   actions?: StudioAction[]
 }
 
+export type ArtifactCardProps = StudioObjectCardProps
+
 export function ArtifactCard(props: StudioObjectCardProps) {
   return <StudioObjectCard {...props} defaultIcon="file" className={cn('studio-object-card--artifact', props.className)} />
 }
 
-export function ProjectCard(props: StudioObjectCardProps) {
-  return <StudioObjectCard {...props} defaultIcon="folder" className={cn('studio-object-card--project', props.className)} />
+export type ProjectCardProps = StudioObjectCardProps & {
+  progress?: number
+  progressLabel?: string
+}
+
+export function ProjectCard({ progress, progressLabel, ...props }: ProjectCardProps) {
+  return (
+    <StudioObjectCard
+      {...props}
+      defaultIcon="folder"
+      className={cn('studio-object-card--project', props.className)}
+      footer={progress !== undefined ? (
+        <div className="studio-project-progress" aria-label={progressLabel || `${clampPercent(progress)}% complete`}>
+          <span><i style={percentStyle('--studio-progress', progress)} /></span>
+          <em>{progressLabel || `${clampPercent(progress)}%`}</em>
+        </div>
+      ) : undefined}
+    />
+  )
 }
 
 export function ChannelStatusCard(props: StudioObjectCardProps) {
   return <StudioObjectCard {...props} defaultIcon="activity" className={cn('studio-object-card--channel', props.className)} />
+}
+
+export type ChannelRowProps = ComponentPropsWithoutRef<'article'> & {
+  title: string
+  description?: string
+  icon?: IconName
+  status?: {
+    label: string
+    tone?: StudioStatusTone
+  }
+  meta?: ReactNode
+}
+
+export function ChannelRow({
+  title,
+  description,
+  icon = 'radio',
+  status,
+  meta,
+  className,
+  ...props
+}: ChannelRowProps) {
+  return (
+    <article {...props} className={cn('studio-channel-row', className)}>
+      <span className="studio-channel-row__icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
+      <div className="studio-channel-row__copy">
+        <h3>{title}</h3>
+        {description ? <p>{description}</p> : null}
+      </div>
+      {meta ? <div className="studio-channel-row__meta">{meta}</div> : null}
+      {status ? <Badge tone={statusToneMap[status.tone || 'neutral']}>{status.label}</Badge> : null}
+    </article>
+  )
+}
+
+export type PersonRowProps = Omit<ComponentPropsWithoutRef<'article'>, 'role'> & {
+  name: string
+  detail?: ReactNode
+  initials?: string
+  tone?: StudioTone
+  presence?: CoworkerAvatarProps['presence']
+  role?: {
+    label: string
+    description?: string
+    tone?: StudioStatusTone
+  }
+}
+
+export function PersonRow({
+  name,
+  detail,
+  initials,
+  tone = 'neutral',
+  presence,
+  role,
+  className,
+  ...props
+}: PersonRowProps) {
+  return (
+    <article {...props} className={cn('studio-person-row', className)}>
+      <CoworkerAvatar name={name} initials={initials} tone={tone} presence={presence} size="sm" />
+      <div className="studio-person-row__copy">
+        <h3>{name}</h3>
+        {detail ? <div>{detail}</div> : null}
+      </div>
+      {role ? (
+        <div className="studio-person-row__role">
+          <Badge tone={statusToneMap[role.tone || 'neutral']}>{role.label}</Badge>
+          {role.description ? <span>{role.description}</span> : null}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+export type WizardStep = {
+  id: string
+  label: string
+  icon?: IconName
+  completed?: boolean
+}
+
+export type WizardStepsProps = Omit<ComponentPropsWithoutRef<'nav'>, 'onSelect'> & {
+  steps: WizardStep[]
+  activeStepId: string
+  onSelect?: (step: WizardStep) => void
+}
+
+export function WizardSteps({ steps, activeStepId, onSelect, className, ...props }: WizardStepsProps) {
+  return (
+    <nav {...props} className={cn('studio-wizard-steps', className)} aria-label="Wizard steps">
+      {steps.map((step, index) => (
+        <button
+          key={step.id}
+          type="button"
+          data-active={step.id === activeStepId ? 'true' : undefined}
+          aria-current={step.id === activeStepId ? 'step' : undefined}
+          onClick={() => onSelect?.(step)}
+        >
+          <span>{step.completed ? <Icon name="check" size={16} /> : index + 1}</span>
+          {step.icon ? <Icon name={step.icon} size={16} /> : null}
+          {step.label}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+export type WizardStepPaneProps = ComponentPropsWithoutRef<'section'> & {
+  title: string
+  hint?: ReactNode
+}
+
+export function WizardStepPane({ title, hint, children, className, ...props }: WizardStepPaneProps) {
+  return (
+    <section {...props} className={cn('studio-wizard-step-pane', className)}>
+      <h3>{title}</h3>
+      {hint ? <p>{hint}</p> : null}
+      {children}
+    </section>
+  )
+}
+
+export type TraitSliderProps = Omit<ComponentPropsWithoutRef<'input'>, 'type' | 'value' | 'onChange'> & {
+  label: string
+  value: number
+  minLabel?: string
+  maxLabel?: string
+  icon?: IconName
+  onValueChange?: (value: number) => void
+}
+
+export function TraitSlider({
+  label,
+  value,
+  minLabel,
+  maxLabel,
+  icon,
+  onValueChange,
+  className,
+  ...props
+}: TraitSliderProps) {
+  const min = toFiniteNumber(props.min, 0)
+  const max = toFiniteNumber(props.max, 100)
+  const lower = Math.min(min, max)
+  const upper = Math.max(min, max)
+  const clampedValue = Math.min(upper, Math.max(lower, value))
+  const range = upper - lower
+  const progress = range > 0 ? ((clampedValue - lower) / range) * 100 : 100
+  const displayValue = Number.isInteger(clampedValue) ? clampedValue : Number(clampedValue.toFixed(2))
+
+  return (
+    <label className={cn('studio-trait-slider', className)}>
+      <span className="studio-trait-slider__label">
+        <span>{icon ? <Icon name={icon} size={16} /> : null}{label}</span>
+        <strong>{displayValue}</strong>
+      </span>
+      <input
+        {...props}
+        type="range"
+        value={clampedValue}
+        min={lower}
+        max={upper}
+        style={{ ...percentStyle('--studio-progress', progress), ...props.style }}
+        onChange={(event) => onValueChange?.(Number(event.currentTarget.value))}
+      />
+      {(minLabel || maxLabel) ? <span className="studio-trait-slider__ends"><span>{minLabel}</span><span>{maxLabel}</span></span> : null}
+    </label>
+  )
+}
+
+export type WorkingStyleBarsProps = ComponentPropsWithoutRef<'div'> & {
+  bars: Array<{
+    id: string
+    label: string
+    value: number
+  }>
+  compact?: boolean
+}
+
+export function WorkingStyleBars({ bars, compact = false, className, ...props }: WorkingStyleBarsProps) {
+  return (
+    <div {...props} className={cn('studio-working-style-bars', compact && 'studio-working-style-bars--compact', className)}>
+      {bars.map((bar) => (
+        <div key={bar.id} className="studio-working-style-bars__row">
+          <span>{bar.label}</span>
+          <span><i style={percentStyle('--studio-progress', bar.value)} /></span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export type WikiSpace = {
+  id: string
+  name: string
+  icon?: IconName
+  pages: Array<{
+    id: string
+    title: string
+  }>
+}
+
+export type WikiSpaceRailProps = ComponentPropsWithoutRef<'aside'> & {
+  spaces: WikiSpace[]
+  activePageId?: string
+  reviewAction?: ReactNode
+  onSelectPage?: (space: WikiSpace, page: WikiSpace['pages'][number]) => void
+}
+
+export function WikiSpaceRail({ spaces, activePageId, reviewAction, onSelectPage, className, ...props }: WikiSpaceRailProps) {
+  return (
+    <aside {...props} className={cn('studio-wiki-rail', className)}>
+      {reviewAction ? <div className="studio-wiki-rail__review">{reviewAction}</div> : null}
+      <div className="studio-wiki-rail__spaces">
+        {spaces.map((space) => (
+          <section key={space.id} className="studio-wiki-space" aria-labelledby={`studio-wiki-space-${space.id}`}>
+            <h3 id={`studio-wiki-space-${space.id}`}>
+              <span aria-hidden="true">{space.icon ? <Icon name={space.icon} size={16} /> : null}</span>
+              {space.name}
+            </h3>
+            <div>
+              {space.pages.map((page) => (
+                <button
+                  key={page.id}
+                  type="button"
+                  data-active={page.id === activePageId ? 'true' : undefined}
+                  onClick={() => onSelectPage?.(space, page)}
+                >
+                  {page.title}
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </aside>
+  )
+}
+
+export type WikiPageBlock =
+  | { id: string; type: 'heading'; text: string }
+  | { id: string; type: 'paragraph'; text: string }
+  | { id: string; type: 'callout'; text: string; icon?: IconName }
+  | { id: string; type: 'list'; items: string[] }
+
+export type WikiPageProps = ComponentPropsWithoutRef<'article'> & {
+  breadcrumbs?: string[]
+  title: string
+  meta?: ReactNode
+  blocks: WikiPageBlock[]
+  links?: Array<{
+    id: string
+    label: string
+    icon?: IconName
+  }>
+}
+
+export function WikiPage({ breadcrumbs, title, meta, blocks, links, className, ...props }: WikiPageProps) {
+  return (
+    <article {...props} className={cn('studio-wiki-page', className)}>
+      {breadcrumbs?.length ? <div className="studio-wiki-page__crumbs">{breadcrumbs.join(' / ')}</div> : null}
+      <header className="studio-wiki-page__head">
+        <h1>{title}</h1>
+        {meta ? <div>{meta}</div> : null}
+      </header>
+      <div className="studio-wiki-page__body">
+        {blocks.map((block) => {
+          if (block.type === 'heading') return <h2 key={block.id}>{block.text}</h2>
+          if (block.type === 'callout') return <div key={block.id} className="studio-wiki-page__callout">{block.icon ? <Icon name={block.icon} size={16} /> : null}{block.text}</div>
+          if (block.type === 'list') {
+            return (
+              <ul key={block.id}>
+                {block.items.map((item, index) => <li key={`${block.id}-${index}`}>{item}</li>)}
+              </ul>
+            )
+          }
+          return <p key={block.id}>{block.text}</p>
+        })}
+      </div>
+      {links?.length ? (
+        <footer className="studio-wiki-page__links">
+          {links.map((link) => <span key={link.id}>{link.icon ? <Icon name={link.icon} size={16} /> : null}{link.label}</span>)}
+        </footer>
+      ) : null}
+    </article>
+  )
 }
 
 function StudioObjectCard({
@@ -463,9 +1204,10 @@ function StudioObjectCard({
   meta,
   status,
   actions,
+  footer,
   className,
   ...props
-}: StudioObjectCardProps & { defaultIcon: IconName }) {
+}: StudioObjectCardProps & { defaultIcon: IconName; footer?: ReactNode }) {
   return (
     <Card {...props} className={cn('studio-object-card', className)}>
       <div className="studio-object-card__icon" aria-hidden="true">
@@ -478,6 +1220,7 @@ function StudioObjectCard({
         </div>
         {description ? <p>{description}</p> : null}
         {meta ? <div className="studio-object-card__meta">{meta}</div> : null}
+        {footer}
         <StudioActions actions={actions} />
       </div>
     </Card>
