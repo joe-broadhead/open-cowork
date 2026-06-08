@@ -1,4 +1,16 @@
 import type {
+  CoordinationBoardPayload,
+  CoordinationProject,
+  CoordinationProjectInput,
+  CoordinationProjectUpdateInput,
+  CoordinationTask,
+  CoordinationTaskAssignInput,
+  CoordinationTaskInput,
+  CoordinationTaskMoveInput,
+  CoordinationTaskUpdateInput,
+  CoordinationTaskWorkLinkInput,
+} from './coordination.js'
+import type {
   WorkflowDetail,
   WorkflowListPayload,
   WorkflowRun,
@@ -227,6 +239,19 @@ export interface CoworkAPI {
     snapshotInventory: (input: { directory: string }) => Promise<CloudProjectSnapshotInventory>
     uploadSnapshot: (input: { workspaceId?: string; directory: string; title?: string | null }) => Promise<CloudProjectSnapshotUploadResult>
   }
+  coordination: {
+    board: (options?: WorkspaceOptions & { projectId?: string | null; limit?: number }) => Promise<CoordinationBoardPayload>
+    listProjects: (options?: WorkspaceOptions) => Promise<CoordinationProject[]>
+    createProject: (input: CoordinationProjectInput) => Promise<CoordinationProject>
+    updateProject: (projectId: string, input: CoordinationProjectUpdateInput) => Promise<CoordinationProject | null>
+    listTasks: (options?: WorkspaceOptions & { projectId?: string | null; limit?: number }) => Promise<CoordinationTask[]>
+    createTask: (input: CoordinationTaskInput) => Promise<CoordinationTask>
+    updateTask: (taskId: string, input: CoordinationTaskUpdateInput) => Promise<CoordinationTask | null>
+    moveTask: (taskId: string, input: CoordinationTaskMoveInput) => Promise<CoordinationTask | null>
+    assignTask: (taskId: string, input: CoordinationTaskAssignInput) => Promise<CoordinationTask | null>
+    linkTaskWork: (taskId: string, input: CoordinationTaskWorkLinkInput) => Promise<CoordinationTask | null>
+    taskWorkTarget: (taskId: string, options?: WorkspaceOptions) => Promise<SessionInfo | null>
+  }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>
   }
@@ -447,6 +472,7 @@ export interface CoworkAPI {
     sessionDeleted: (callback: (data: { id: string; workspaceId?: string | null }) => void) => () => void
     workspaceSessionsUpdated: (callback: (data: WorkspaceSessionsUpdatedEvent) => void) => () => void
     workflowUpdated: (callback: () => void) => () => void
+    coordinationUpdated: (callback: () => void) => () => void
   }
 }
 

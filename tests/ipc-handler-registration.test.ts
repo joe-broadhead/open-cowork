@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'fs'
+import { DatabaseSync } from 'node:sqlite'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
@@ -12,7 +13,15 @@ import { registerExplorerHandlers } from '../apps/desktop/src/main/ipc/explorer-
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
+import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coordination-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
+import {
+  createCoordinationProject,
+  createCoordinationTask,
+  getCoordinationProject,
+  getCoordinationTask,
+  setCoordinationDatabaseForTests,
+} from '../apps/desktop/src/main/coordination/coordination-store.ts'
 
 function createTestContext() {
   const handlers = new Map<string, unknown>()
@@ -99,6 +108,7 @@ test('IPC handler modules register their core channels', () => {
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)
+  registerCoordinationHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -160,6 +170,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerAppHandlers(context)
   registerArtifactHandlers(context)
   registerWorkflowHandlers(context)
+  registerCoordinationHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -190,6 +201,59 @@ test('shared CoworkAPI groups match the preload implementation surface', () => {
   const preloadSource = readFileSync('apps/desktop/src/preload/index.ts', 'utf-8')
 
   assert.deepEqual(readPreloadApiGroups(preloadSource), readCoworkApiGroups(sharedSource))
+})
+
+test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
+  const db = new DatabaseSync(':memory:')
+  setCoordinationDatabaseForTests(db)
+  try {
+    const { context, handlers } = createTestContext()
+    registerCoordinationHandlers(context)
+
+    const cloudProject = createCoordinationProject({
+      workspaceId: 'cloud:tenant-1',
+      title: 'Cloud project',
+      objective: 'Cloud rows share SQLite but are not local IPC state.',
+    }, { id: 'cloud-project' })
+    const cloudTask = createCoordinationTask({
+      projectId: cloudProject.id,
+      title: 'Cloud task',
+      spec: 'Local IPC must not mutate this row.',
+    }, { id: 'cloud-task' })
+
+    const localProject = createCoordinationProject({
+      title: 'Local project',
+      objective: 'Local rows remain editable through desktop IPC.',
+    }, { id: 'local-project' })
+    const localTask = createCoordinationTask({
+      projectId: localProject.id,
+      title: 'Local task',
+      spec: 'Local IPC can mutate this row.',
+    }, { id: 'local-task' })
+
+    const updateProject = handlers.get('coordination:projects:update') as (
+      event: unknown,
+      projectId: unknown,
+      input: unknown,
+    ) => Promise<unknown>
+    const moveTask = handlers.get('coordination:tasks:move') as (
+      event: unknown,
+      taskId: unknown,
+      input: unknown,
+    ) => Promise<unknown>
+
+    assert.equal(await updateProject(null, cloudProject.id, { title: 'Mutated cloud project' }), null)
+    assert.equal(await moveTask(null, cloudTask.id, { column: 'done' }), null)
+    assert.equal(getCoordinationProject(cloudProject.id)?.title, 'Cloud project')
+    assert.equal(getCoordinationTask(cloudTask.id)?.column, 'backlog')
+
+    const movedLocal = await moveTask(null, localTask.id, { column: 'doing' }) as { column?: unknown }
+    assert.equal(movedLocal.column, 'doing')
+    assert.equal(getCoordinationTask(localTask.id)?.column, 'doing')
+  } finally {
+    setCoordinationDatabaseForTests(null)
+    db.close()
+  }
 })
 
 test('provider auth IPC fails closed for malformed renderer input before runtime access', async () => {

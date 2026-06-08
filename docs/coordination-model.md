@@ -17,8 +17,8 @@ Workspace authority and sync boundaries remain governed by the
 
 | Noun | Meaning | Source of truth |
 | --- | --- | --- |
-| Project | Durable grouping of related team work. | Owning workspace authority. |
-| Task | Durable work item inside a project. | Owning workspace authority. |
+| Project | Durable grouping of related team work with a human objective and assigned agent team. | Owning workspace authority. |
+| Task | Durable work item inside a project with a task spec, board column, priority, assignee, and optional OpenCode session/run link. | Owning workspace authority. |
 | Workflow | Saved repeatable automation definition. | Existing workflow store/control plane. |
 | Run | Authority-scoped execution attempt for a workflow, task, background prompt, delegation, schedule, or watch trigger. | Owning workspace authority. |
 | Schedule | Time trigger that starts a run. | Owning workspace authority. |
@@ -35,6 +35,38 @@ These nouns are intentionally separate from lower-level runtime objects:
 - `CoordinationProject` is a product planning container. It is not a local `projectDirectory`, Git checkout, host path, or Cloud project source.
 - `CoordinationRun` points at OpenCode sessions when execution exists, but it
   does not own OpenCode tool semantics.
+
+## Projects And Tasks
+
+The Desktop Local coordination store persists the first concrete
+Projects->Tasks model:
+
+- `CoordinationProject.objective` is the human-readable outcome the project is
+  organized around.
+- `CoordinationProject.team` is a list of assigned agent ids. It is product
+  planning state; it does not change OpenCode's configured agent registry.
+- `CoordinationTask.spec` is the task brief Cleo or the user gives to the
+  assignee.
+- `CoordinationTask.column` is the stored Kanban lane:
+  `backlog`, `planning`, `doing`, `review`, or `done`.
+- `CoordinationTask.priority` is `high`, `med`, or `low`.
+- `CoordinationTask.assignedSessionId` and `assignedRunId` reference real
+  OpenCode-backed work when execution exists. The task remains product state
+  around that execution; it does not become the runtime.
+
+`status` and `column` are deliberately separate axes. The board groups cards by
+stored `column`. `status` describes execution lifecycle and drives card badges
+or timeline state. Convenience status mapping is only used by service/store
+updates when execution reports a lifecycle change:
+
+| Status | Column behavior |
+| --- | --- |
+| `open` | Moves to `backlog`, unless already in `planning`. |
+| `running` | Moves to `doing`. |
+| `completed` | Moves to `review`; `done` is reserved for human acceptance. |
+| `blocked` | Stays in the current column. |
+| `failed` | Stays in the current column and renders an error badge. |
+| `cancelled` | Stays in the current column and renders a cancelled badge. |
 
 ## Gateway Vocabulary Mapping
 
@@ -68,7 +100,7 @@ feature immediately.
 
 | Authority | Projects | Tasks | Workflows | Runs | Schedules | Watches | Delegation |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Desktop Local | deferred | deferred | supported | supported | supported | not supported | supported |
+| Desktop Local | supported | supported | supported | supported | supported | not supported | supported |
 | Cloud Worker | deferred | deferred | supported | supported | supported | deferred | deferred |
 | Cloud Channel Gateway | deferred | deferred | supported | supported | read-only | supported | deferred |
 | Standalone Team Gateway | supported | supported | supported | supported | supported | supported | supported |
@@ -116,6 +148,10 @@ ships. For example, Desktop can keep the current workflow SQLite store, Cloud
 can keep the existing workflow/run control-plane rows, and Standalone Gateway
 can keep Gateway-owned tables. When these states cross a public boundary, they
 should map to the shared coordination contract.
+
+Desktop Local now stores projects and tasks in `coordination.sqlite` through
+`apps/desktop/src/main/coordination/coordination-store.ts` and exposes service,
+IPC, preload, AppAPI, and Cloud HTTP routes for the same shared contract.
 
 ## Validation
 

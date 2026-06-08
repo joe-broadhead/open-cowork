@@ -760,8 +760,6 @@ export class WorkspaceGateway {
 
   private localSupportReason(api: string, status: WorkspaceApiSupportStatus): string | null {
     if (status === 'supported' || status === 'read_only') return null
-    if (api === 'coordination.projects') return 'Desktop project coordination is deferred until the shared coordination surface is implemented.'
-    if (api === 'coordination.tasks') return 'Desktop task coordination is deferred until the shared coordination surface is implemented.'
     if (api === 'coordination.watches') return 'Desktop Local does not support durable watch subscriptions.'
     if (status === 'deferred') return 'This Desktop Local capability is deferred until its product surface is implemented.'
     return 'This Desktop Local capability is not supported.'

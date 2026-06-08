@@ -263,6 +263,23 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       archive: vi.fn(async () => null),
       regenerateWebhookSecret: vi.fn(async () => null),
     },
+    coordination: {
+      board: vi.fn(async () => ({ projects: [], tasks: [] })),
+      listProjects: vi.fn(async () => []),
+      createProject: vi.fn(async () => {
+        throw new Error('coordination.createProject not mocked')
+      }),
+      updateProject: vi.fn(async () => null),
+      listTasks: vi.fn(async () => []),
+      createTask: vi.fn(async () => {
+        throw new Error('coordination.createTask not mocked')
+      }),
+      updateTask: vi.fn(async () => null),
+      moveTask: vi.fn(async () => null),
+      assignTask: vi.fn(async () => null),
+      linkTaskWork: vi.fn(async () => null),
+      taskWorkTarget: vi.fn(async () => null),
+    },
     artifact: {
       list: vi.fn(async () => []),
       cleanup: vi.fn(async (mode) => ({
@@ -605,6 +622,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       sessionDeleted: vi.fn(() => () => undefined),
       workspaceSessionsUpdated: vi.fn(() => () => undefined),
       workflowUpdated: vi.fn(() => () => undefined),
+      coordinationUpdated: vi.fn(() => () => undefined),
     },
   }
 

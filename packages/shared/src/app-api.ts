@@ -75,6 +75,19 @@ export type AppAPI = AppApiEndpointResolver & {
     resume: (workflowId: string) => Promise<unknown>
     archive: (workflowId: string) => Promise<unknown>
   }
+  coordination: {
+    board: () => Promise<unknown>
+    projects: () => Promise<unknown>
+    createProject: (input: unknown) => Promise<unknown>
+    updateProject: (projectId: string, input: unknown) => Promise<unknown>
+    tasks: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>
+    createTask: (input: unknown) => Promise<unknown>
+    updateTask: (taskId: string, input: unknown) => Promise<unknown>
+    moveTask: (taskId: string, input: unknown) => Promise<unknown>
+    assignTask: (taskId: string, input: unknown) => Promise<unknown>
+    linkTaskWork: (taskId: string, input: unknown) => Promise<unknown>
+    taskWorkTarget: (taskId: string) => Promise<unknown>
+  }
   projectSources: {
     validate: (input: unknown) => Promise<unknown>
     uploadSnapshot: (input: unknown) => Promise<unknown>

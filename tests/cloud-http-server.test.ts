@@ -28,6 +28,7 @@ import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/
 import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
+import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
 import type {
   CloudRuntimeAdapter,
   CloudRuntimePromptPart,
@@ -428,6 +429,206 @@ test('cloud HTTP server exposes health, config, session create/list/get, prompt,
     assert.deepEqual(fixture.runtime.aborted, ['oc-session-1'])
   } finally {
     await fixture.server.close()
+  }
+})
+
+test('cloud HTTP coordination routes expose the desktop coordination model', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-coordination-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
+  clearConfigCaches()
+  clearCoordinationStoreCache()
+
+  const tenant1Principal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner1@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const tenant2Principal = {
+    tenantId: 'tenant-2',
+    tenantName: 'Tenant 2',
+    orgId: 'tenant-2',
+    userId: 'owner-2',
+    accountId: 'owner-2',
+    email: 'owner2@example.test',
+    role: 'owner' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-tenant']) === 'tenant-2' ? tenant2Principal : tenant1Principal,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fixture.service.ensurePrincipal(tenant1Principal)
+    await fixture.service.ensurePrincipal(tenant2Principal)
+
+    const projectResponse = await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Studio parity',
+        objective: 'Coordinate the design parity roadmap.',
+        team: ['cleo', 'builder'],
+      }),
+    })
+    assert.equal(projectResponse.status, 201)
+    const project = await readJson(projectResponse)
+    const projectId = String(project.id)
+    assert.equal(project.kind, 'project')
+    assert.equal(project.workspaceId, 'cloud:tenant-1')
+    assert.equal(project.objective, 'Coordinate the design parity roadmap.')
+    assert.deepEqual(project.team, ['cleo', 'builder'])
+
+    const taskResponse = await fetch(`${baseUrl}/api/coordination/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        title: 'Build the board backend',
+        spec: 'Persist project tasks and expose them to Cloud Web.',
+        priority: 'high',
+        assigneeAgent: 'builder',
+      }),
+    })
+    assert.equal(taskResponse.status, 201)
+    const task = await readJson(taskResponse)
+    const taskId = String(task.id)
+    assert.equal(task.kind, 'task')
+    assert.equal(task.workspaceId, 'cloud:tenant-1')
+    assert.equal(task.projectId, projectId)
+    assert.equal(task.column, 'backlog')
+    assert.equal(task.priority, 'high')
+
+    const board = await readJson(await fetch(`${baseUrl}/api/coordination/board`))
+    assert.equal(asArray(board.projects).length, 1)
+    assert.equal(asArray(board.tasks).length, 1)
+
+    const moved = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ column: 'doing' }),
+    }))
+    assert.equal(moved.column, 'doing')
+
+    const assigned = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/assign`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ assigneeAgent: 'reviewer' }),
+    }))
+    assert.equal(assigned.assigneeAgent, 'reviewer')
+
+    const cloudSession = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const cloudSessionRecord = asRecord(cloudSession.session)
+    const cloudSessionId = String(cloudSessionRecord.sessionId)
+    const linked = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/link-work`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        assignedSessionId: cloudSessionId,
+        status: 'running',
+      }),
+    }))
+    assert.equal(linked.assignedSessionId, cloudSessionId)
+    assert.equal(linked.status, 'running')
+    assert.equal(linked.column, 'doing')
+
+    const workTarget = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/work-target`))
+    assert.equal(workTarget.id, cloudSessionId)
+    assert.equal(workTarget.createdAt, cloudSessionRecord.createdAt)
+
+    const tasks = await readJson(await fetch(`${baseUrl}/api/coordination/tasks?projectId=${encodeURIComponent(projectId)}`))
+    const listedTask = asRecord(asArray(tasks)[0])
+    assert.equal(listedTask.id, taskId)
+    assert.equal(listedTask.column, 'doing')
+    assert.equal(listedTask.assigneeAgent, 'reviewer')
+
+    const tenantTwoBoard = await readJson(await fetch(`${baseUrl}/api/coordination/board`, {
+      headers: { 'x-test-tenant': 'tenant-2' },
+    }))
+    assert.deepEqual(asArray(tenantTwoBoard.projects), [])
+    assert.deepEqual(asArray(tenantTwoBoard.tasks), [])
+
+    const tenantTwoProjectUpdate = await fetch(`${baseUrl}/api/coordination/projects/${projectId}`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Should not update' }),
+    })
+    assert.equal(tenantTwoProjectUpdate.status, 404)
+
+    const tenantTwoTaskMove = await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({ column: 'done' }),
+    })
+    assert.equal(tenantTwoTaskMove.status, 404)
+
+    const tenantTwoTaskCreate = await fetch(`${baseUrl}/api/coordination/tasks`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        title: 'Cross tenant task',
+        spec: 'This should not be allowed.',
+      }),
+    })
+    assert.equal(tenantTwoTaskCreate.status, 404)
+
+    const tenantTwoProject = await readJson(await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Tenant two project',
+        objective: 'Prove Cloud work links resolve only tenant-owned sessions.',
+      }),
+    }))
+    const tenantTwoTask = await readJson(await fetch(`${baseUrl}/api/coordination/tasks`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: tenantTwoProject.id,
+        title: 'Tenant two task',
+        spec: 'This task cannot link tenant one work.',
+      }),
+    }))
+    const crossTenantSessionLink = await fetch(`${baseUrl}/api/coordination/tasks/${String(tenantTwoTask.id)}/link-work`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({ assignedSessionId: cloudSessionId }),
+    })
+    assert.equal(crossTenantSessionLink.status, 404)
+    assert.match(String((await readJson(crossTenantSessionLink)).error), /session/i)
+
+    const missingTitle = await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ objective: 'Missing title should be a bad request.' }),
+    })
+    assert.equal(missingTitle.status, 400)
+    assert.match(String((await readJson(missingTitle)).error), /title/i)
+
+    const invalidMove = await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ column: 'blocked' }),
+    })
+    assert.equal(invalidMove.status, 400)
+    assert.match(String((await readJson(invalidMove)).error), /column/i)
+  } finally {
+    await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    await rm(dataDir, { recursive: true, force: true })
   }
 })
 
