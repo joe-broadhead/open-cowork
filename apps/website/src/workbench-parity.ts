@@ -15,6 +15,7 @@ export type CloudWebWorkbenchConceptId =
   | 'tools-skills'
   | 'artifacts'
   | 'workflows'
+  | 'channels'
   | 'cloud-project-sources'
   | 'local-filesystem'
   | 'local-stdio-mcps'
@@ -120,6 +121,17 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     boundary: 'Cloud Web runs saved playbooks through Cloud workflow APIs; local launch-at-login and native notifications remain Desktop settings.',
     disabledReason: 'Playbook controls disable when org profile policy disables workflows or a playbook is archived.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
+  },
+  {
+    conceptId: 'channels',
+    label: 'Channels',
+    availability: 'shared',
+    desktopSurface: 'Desktop Gateway/channel status and channel-backed chat context',
+    cloudRouteIds: ['channels', 'chat'],
+    cloudAffordance: 'Show connected channel agents, channel bindings, delivery status, and linked Cloud run chats without exposing setup credentials.',
+    boundary: 'Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned.',
+    disabledReason: 'Channel setup, retry, dead-letter, and credential rotation stay in Admin Gateway controls.',
+    tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
   {
     conceptId: 'cloud-project-sources',

@@ -65,6 +65,11 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       validate: (input) => coworkApi.projectSource.validate(input as Parameters<CoworkAPI['projectSource']['validate']>[0]),
       uploadSnapshot: (input) => coworkApi.projectSource.uploadSnapshot(input as Parameters<CoworkAPI['projectSource']['uploadSnapshot']>[0]),
     },
+    channels: {
+      agents: unsupported('Cloud channel agents'),
+      bindings: unsupported('Cloud channel bindings'),
+      deliveries: unsupported('Cloud channel deliveries'),
+    },
     admin: {
       policy: unsupported('Cloud admin policy'),
       members: {

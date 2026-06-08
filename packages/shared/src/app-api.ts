@@ -79,6 +79,11 @@ export type AppAPI = AppApiEndpointResolver & {
     validate: (input: unknown) => Promise<unknown>
     uploadSnapshot: (input: unknown) => Promise<unknown>
   }
+  channels: {
+    agents: () => Promise<unknown>
+    bindings: () => Promise<unknown>
+    deliveries: () => Promise<unknown>
+  }
   admin: {
     policy: () => Promise<unknown>
     members: {

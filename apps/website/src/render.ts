@@ -350,6 +350,46 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           </div>
         </section>
 
+        <section ${routePanelAttrs('channels')}>
+          <div class="section-header">
+            <div>
+              <h2>Channels</h2>
+              <div class="meta">Connected chat channels and delivery status</div>
+            </div>
+            <div class="row-actions">
+              <label><span>Filter</span><input id="channel-filter" autocomplete="off" placeholder="provider, channel, status, coworker" data-channel-control="true"></label>
+              <button id="refresh-channels" type="button" data-channel-control="true">Refresh</button>
+            </div>
+          </div>
+          <div class="grid">
+            ${routeParityMarkup('channels')}
+            <div class="panel">
+              <h3>Channel summary</h3>
+              <div class="list" id="channel-summary-list">
+                <p class="empty">Channel status loads after sign-in.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Connected channels</h3>
+              <div class="list" id="channel-binding-list">
+                <p class="empty">No connected channels loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Channel coworkers</h3>
+              <div class="list" id="channel-agent-list">
+                <p class="empty">No channel coworkers loaded.</p>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>Delivery status</h3>
+              <div class="list" id="channel-delivery-list">
+                <p class="empty">No channel deliveries loaded.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section ${routePanelAttrs('artifacts')}>
           <div class="section-header">
             <div>

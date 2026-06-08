@@ -239,6 +239,19 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
       },
     }])
     await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /Playbook created/))
+
+    harness.clickText('[data-route-link]', 'Channels')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
+    assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /Channel setup/)
+    assert.match(harness.document.querySelector('#channel-summary-list')?.textContent || '', /read-only/)
+    assert.ok(harness.document.querySelector('#channel-agent-list .row'))
+    assert.ok(harness.document.querySelector('#channel-binding-list .row'))
+    assert.ok(harness.document.querySelector('#channel-delivery-list .row'))
+    const userDeliveryText = harness.document.querySelector('#channel-delivery-list')?.textContent || ''
+    assert.doesNotMatch(userDeliveryText, /leaked-secret|signed\?token=|secret:\/\//)
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/agents?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/bindings?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/deliveries?limit=50'))
   } finally {
     harness.close()
   }
@@ -408,6 +421,7 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
     assert.equal(harness.document.querySelectorAll('#member-list .member-row').length, 100)
     assert.equal(harness.document.querySelectorAll('#token-list > .row').length, 100)
     assert.equal(harness.document.querySelectorAll('#delivery-list > .row').length, 50)
+    assert.equal(harness.document.querySelectorAll('#channel-delivery-list > .row').length, 50)
     assert.equal(harness.document.querySelectorAll('#workflow-list [role="row"]').length, 100)
     assert.equal(harness.document.querySelectorAll('#audit-list > .row').length, 100)
     assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100)
@@ -427,6 +441,8 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
 
     const deliveryText = harness.document.querySelector('#delivery-list')?.textContent || ''
     assert.doesNotMatch(deliveryText, /leaked-secret|signed\?token=/)
+    const channelDeliveryText = harness.document.querySelector('#channel-delivery-list')?.textContent || ''
+    assert.doesNotMatch(channelDeliveryText, /leaked-secret|signed\?token=|secret:\/\//)
 
     const artifactText = harness.document.querySelector('#artifact-list')?.textContent || ''
     assert.doesNotMatch(artifactText, /signed\?token=|objectKey/)

@@ -81,6 +81,7 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Home/)
   assert.match(html, /Coworkers/)
   assert.match(html, /Playbooks/)
+  assert.match(html, /Channels/)
   assert.match(html, /Tools &amp; Skills/)
   assert.match(html, /Artifacts/)
   assert.match(html, /Admin controls/)
@@ -94,6 +95,7 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Audit/)
   assert.match(html, /Diagnostics/)
   assert.match(html, /data-route-panel="threads"/)
+  assert.match(html, /data-route-panel="channels"/)
   assert.match(html, /data-route-panel="byok"/)
   assert.match(html, /data-route-panel="chat"(?=[^>]*data-requires-auth="false")(?![^>]* hidden)[^>]*>/)
   assert.match(html, /data-route-panel="org"(?=[^>]*data-requires-auth="false")(?=[^>]* hidden)[^>]*>/)
@@ -270,7 +272,7 @@ test('cloud website route/API matrix covers every route and real endpoint id', (
   assert.equal(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'chat')?.requiredRole, 'public')
   assert.match(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'chat')?.states.loading || '', /default public route/)
   assert.doesNotMatch(CLOUD_WEB_ROUTE_API_MATRIX.find((entry) => entry.routeId === 'org')?.states.loading || '', /fallback/)
-  for (const routeId of ['members', 'audit', 'usage', 'gateway', 'connections', 'policy', 'workflows', 'artifacts', 'diagnostics']) {
+  for (const routeId of ['members', 'audit', 'usage', 'gateway', 'connections', 'policy', 'workflows', 'channels', 'artifacts', 'diagnostics']) {
     const entry = CLOUD_WEB_ROUTE_API_MATRIX.find((candidate) => candidate.routeId === routeId)
     assert.ok(entry, `${routeId} has a route matrix entry`)
     assert.ok(entry.paginationContract.limit === null || entry.paginationContract.limit <= 100, `${routeId} is browser-bounded`)
@@ -320,6 +322,12 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
     workflows: {
       workflows: [],
       runs: [],
+      error: null,
+    },
+    channels: {
+      agents: [],
+      bindings: [],
+      deliveries: [],
       error: null,
     },
     usageSummary: null,
