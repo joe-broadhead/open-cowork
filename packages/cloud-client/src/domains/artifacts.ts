@@ -1,68 +1,39 @@
 export type {
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
 } from '../contracts.js'
 
 import type {
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactUploadRequest,
 } from '../contracts.js'
+import {
+  cloudArtifactIdFromFilePath,
+  normalizeCloudArtifact,
+  normalizeCloudArtifactAttachment,
+  normalizeCloudArtifactIndexEntry,
+} from './artifact-normalizers.js'
 import type { CloudDomainClientContext } from './shared.js'
 import {
-  asRecord,
   encodePath,
-  readNullableString,
+  queryString,
   readNumber,
-  readString,
 } from './shared.js'
 
 export type CloudArtifactsClient = {
   listArtifacts(sessionId: string): Promise<SessionArtifact[]>
+  indexArtifacts(query?: ArtifactIndexRequest): Promise<ArtifactIndexPayload>
+  updateArtifactStatus(input: ArtifactStatusUpdateRequest): Promise<SessionArtifact>
   uploadArtifact(sessionId: string, input: Omit<SessionArtifactUploadRequest, 'sessionId' | 'workspaceId'>): Promise<SessionArtifact>
   readArtifactAttachment(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
-}
-
-function cloudArtifactFilePath(artifactId: string, filename: string) {
-  return `cloud-artifact://${encodeURIComponent(artifactId)}/${encodeURIComponent(filename)}`
-}
-
-function cloudArtifactIdFromFilePath(filePath: string) {
-  const match = /^cloud-artifact:\/\/([^/]+)/.exec(filePath)
-  return match ? decodeURIComponent(match[1]) : null
-}
-
-function normalizeCloudArtifact(value: unknown, fallbackOrder = 0): SessionArtifact {
-  const record = asRecord(value)
-  const artifactId = readString(record.artifactId, readString(record.cloudArtifactId, readString(record.id)))
-  const filename = readString(record.filename, 'artifact')
-  return {
-    id: artifactId,
-    toolId: readString(record.toolId, 'cloud-artifact'),
-    toolName: readString(record.toolName, 'cloud.artifact'),
-    filePath: readString(record.filePath, cloudArtifactFilePath(artifactId, filename)),
-    filename,
-    order: readNumber(record.order, fallbackOrder),
-    source: 'cloud',
-    cloudArtifactId: artifactId,
-    taskRunId: readNullableString(record.taskRunId),
-    mime: readNullableString(record.mime) || readNullableString(record.contentType) || undefined,
-    size: readNumber(record.size),
-    createdAt: readNullableString(record.createdAt) || undefined,
-  }
-}
-
-function normalizeCloudArtifactAttachment(value: unknown): SessionArtifactAttachment {
-  const record = asRecord(value)
-  const artifact = asRecord(record.artifact || record)
-  const mime = readNullableString(artifact.contentType) || readNullableString(artifact.mime) || 'application/octet-stream'
-  const dataBase64 = readString(artifact.dataBase64)
-  return {
-    mime,
-    url: `data:${mime};base64,${dataBase64}`,
-    filename: readString(artifact.filename, 'artifact'),
-  }
 }
 
 export function createCloudArtifactsClient({ request }: CloudDomainClientContext): CloudArtifactsClient {
@@ -72,6 +43,39 @@ export function createCloudArtifactsClient({ request }: CloudDomainClientContext
         .artifacts
         .map((artifact, index) => normalizeCloudArtifact(artifact, index))
     },
+    async indexArtifacts(query = {}) {
+      const payload = await request<{ artifacts: unknown[], total?: number, scannedSessions?: number, truncated?: boolean }>(`/api/artifacts${queryString({
+        sessionId: query.sessionId || undefined,
+        projectId: query.projectId || undefined,
+        taskId: query.taskId || undefined,
+        kind: query.kind || undefined,
+        status: query.status || undefined,
+        limit: query.limit || undefined,
+      })}`)
+      const artifacts = (payload.artifacts || []).map((artifact, index) => normalizeCloudArtifactIndexEntry(artifact, index))
+      return {
+        artifacts,
+        total: readNumber(payload.total, artifacts.length),
+        scannedSessions: readNumber(payload.scannedSessions, 0) || undefined,
+        truncated: payload.truncated === true,
+      }
+    },
+    async updateArtifactStatus(input) {
+      return normalizeCloudArtifact((await request<{ artifact: unknown }>(
+        `/api/sessions/${encodePath(input.sessionId)}/artifacts/${encodePath(input.artifactId)}/status`,
+        {
+          method: 'POST',
+          body: {
+            status: input.status,
+            updatedBy: input.updatedBy || null,
+            authorAgentId: input.authorAgentId || null,
+            projectId: input.projectId || null,
+            taskId: input.taskId || null,
+            kind: input.kind || null,
+          },
+        },
+      )).artifact)
+    },
     async uploadArtifact(sessionId, input) {
       return normalizeCloudArtifact((await request<{ artifact: unknown }>(`/api/sessions/${encodePath(sessionId)}/artifacts`, {
         method: 'POST',
@@ -79,6 +83,13 @@ export function createCloudArtifactsClient({ request }: CloudDomainClientContext
           filename: input.filename,
           contentType: input.contentType || null,
           dataBase64: input.dataBase64,
+          kind: input.kind || null,
+          status: input.status || null,
+          authorAgentId: input.authorAgentId || null,
+          projectId: input.projectId || null,
+          taskId: input.taskId || null,
+          statusUpdatedBy: input.statusUpdatedBy || null,
+          statusUpdatedAt: input.statusUpdatedAt || null,
         },
       })).artifact)
     },

@@ -259,6 +259,18 @@ function browserMocksScript(state: ReturnType<typeof makeMockState>) {
     if (request.method === 'GET' && request.pathname === '/api/sessions') return json({ sessions: state.sessions.slice(0, bounded(request.path, state.sessions.length)), nextCursor: null, totalEstimate: state.sessions.length });
     const sessionViewMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/view$/);
     if (request.method === 'GET' && sessionViewMatch) return json(state.views[decodeURIComponent(sessionViewMatch[1])] || { error: 'Not found' }, state.views[decodeURIComponent(sessionViewMatch[1])] ? 200 : 404);
+    if (request.method === 'GET' && request.pathname === '/api/artifacts') {
+      return json({
+        artifacts: Object.entries(state.views).flatMap(([sessionId, view]) =>
+          (view?.projection?.view?.artifacts || []).map((artifact) => ({
+            ...artifact,
+            sessionId,
+            status: artifact.status || 'draft',
+            kind: artifact.kind || 'document',
+          })),
+        ).slice(0, bounded(request.path, 100)),
+      });
+    }
     const artifactListMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/);
     if (request.method === 'GET' && artifactListMatch) {
       const view = state.views[decodeURIComponent(artifactListMatch[1])];

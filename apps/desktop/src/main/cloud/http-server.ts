@@ -25,6 +25,7 @@ import {
   routeAllowsWorkerCredential,
 } from './http-routes/access-policy.ts'
 import { handleAdminApiRoute } from './http-routes/admin.ts'
+import { handleArtifactsApiRoute } from './http-routes/artifacts.ts'
 import { handleApiTokensApiRoute } from './http-routes/api-tokens.ts'
 import { handleBillingApiRoute } from './http-routes/billing.ts'
 import { handleByokApiRoute } from './http-routes/byok.ts'
@@ -33,6 +34,7 @@ import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { handleCoordinationApiRoute } from './http-routes/coordination.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
+import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.ts'
 import { handleThreadsApiRoute } from './http-routes/threads.ts'
 import { handleWorkspaceApiRoute } from './http-routes/workspace.ts'
 import { CloudServiceError, type CloudPrincipal, type CloudSessionService, type CloudSessionView } from './session-service.ts'
@@ -509,9 +511,20 @@ function writeSseEvent(res: ServerResponse, event: {
   payload: Record<string, unknown>
   createdAt?: string
 }) {
+  const publicEvent = {
+    ...event,
+    payload: publicSsePayload(event.type, event.payload),
+  }
   res.write(`id: ${event.sequence}\n`)
   res.write(`event: ${event.type}\n`)
-  res.write(`data: ${JSON.stringify(event)}\n\n`)
+  res.write(`data: ${JSON.stringify(publicEvent)}\n\n`)
+}
+
+function publicSsePayload(type: string, payload: Record<string, unknown>) {
+  if (type !== 'artifact.created' && type !== 'artifact.updated') return payload
+  const record = { ...payload }
+  delete record.key
+  return record
 }
 
 function publicChannelInteraction(value: unknown) {
@@ -1205,6 +1218,21 @@ async function handleApiRequest(
     return
   }
 
+  if (resource === 'artifacts') {
+    await handleArtifactsApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
   if (resource === 'import') {
     if (sessionId === 'sessions' && !action && req.method === 'POST') {
       const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
@@ -1228,6 +1256,13 @@ async function handleApiRequest(
             filename: artifact.filename,
             contentType: artifact.contentType || null,
             dataBase64: artifact.dataBase64,
+            kind: artifact.kind || null,
+            status: artifact.status || null,
+            authorAgentId: artifact.authorAgentId || null,
+            projectId: artifact.projectId || null,
+            taskId: artifact.taskId || null,
+            statusUpdatedBy: artifact.statusUpdatedBy || null,
+            statusUpdatedAt: artifact.statusUpdatedAt || null,
           })
         }
         const itemCounts = emptySessionImportItemCounts({
@@ -1439,37 +1474,7 @@ async function handleApiRequest(
     return
   }
 
-  if (action === 'artifacts') {
-    if (!options.policy.features.artifacts) {
-      writePolicyError(res, 403, 'Artifacts are disabled for this cloud profile.', 'artifacts.disabled', options.corsOrigin)
-      return
-    }
-    if (!options.artifacts) {
-      writeError(res, 503, 'Cloud artifact storage is not configured.', options.corsOrigin)
-      return
-    }
-    if (!artifactId && req.method === 'GET') {
-      writeJson(res, 200, {
-        artifacts: await options.artifacts.listSessionArtifacts(context.principal, sessionId),
-      }, options.corsOrigin)
-      return
-    }
-    if (!artifactId && req.method === 'POST') {
-      const body = await readJsonBody(req, options.maxBodyBytes || 35 * 1024 * 1024)
-      const uploaded = await options.artifacts.uploadSessionArtifact(context.principal, sessionId, {
-        filename: readString(body.filename) || '',
-        contentType: readString(body.contentType),
-        dataBase64: readString(body.dataBase64) || '',
-      })
-      writeJson(res, 201, { artifact: uploaded }, options.corsOrigin)
-      return
-    }
-    if (artifactId && req.method === 'GET') {
-      const artifact = await options.artifacts.readSessionArtifact(context.principal, sessionId, artifactId)
-      writeJson(res, 200, { artifact }, options.corsOrigin)
-      return
-    }
-  }
+  if (await handleSessionArtifactsApiRoute({ req, res, options, context, resource, itemId: sessionId, action, artifactId, tools: routeTools })) return
 
   if (action === 'prompt' && req.method === 'POST') {
     const body = await readJsonBody(req, options.maxBodyBytes || 1024 * 1024)

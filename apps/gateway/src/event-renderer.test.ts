@@ -89,6 +89,7 @@ test('event renderer handles only canonical shared cloud session events', () => 
     .sort()
   assert.deepEqual([...GATEWAY_RENDERED_SESSION_EVENT_TYPES].sort(), [
     'artifact.created',
+    'artifact.updated',
     'assistant.message',
     'permission.requested',
     'question.asked',
@@ -460,6 +461,89 @@ test('event renderer sends authenticated artifact links for link-only or oversiz
   assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
   assert.doesNotMatch(provider.sent[0]?.text || '', /private-object-key/)
   assert.doesNotMatch(provider.sent[0]?.text || '', /secret/)
+})
+
+test('event renderer notifies channels when artifact lifecycle metadata changes', async () => {
+  const provider = createButtonlessFakeProvider({ capabilities: { fileDownloads: false } })
+  const result = await renderGatewaySessionEvent({
+    cloud: cloudStub({
+      artifactUrl(sessionId: string, artifactId: string) {
+        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      },
+    }),
+    provider,
+    binding: bindingRecord(),
+    state: createGatewaySessionRenderState(),
+    event: {
+      eventId: 'event-1',
+      sequence: 2,
+      type: 'artifact.updated',
+      payload: {
+        artifactId: 'artifact-1',
+        filename: 'report.txt',
+        status: 'in-review',
+        statusUpdatedBy: 'lead',
+        size: 13,
+      },
+    },
+  })
+
+  assert.equal(result.handled, true)
+  assert.equal(provider.sent[0]?.kind, 'text')
+  assert.match(provider.sent[0]?.text || '', /report\.txt/)
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
+})
+
+test('event renderer does not resend artifact files for lifecycle metadata updates', async () => {
+  const provider = createFileCapableFakeProvider()
+  const state = createGatewaySessionRenderState()
+  const result = await renderGatewaySessionEvent({
+    cloud: cloudStub({
+      async readArtifactAttachment() {
+        throw new Error('artifact.updated must not fetch artifact bytes')
+      },
+      artifactUrl(sessionId: string, artifactId: string) {
+        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      },
+    }),
+    provider,
+    binding: bindingRecord(),
+    state,
+    event: {
+      eventId: 'event-1',
+      sequence: 2,
+      type: 'artifact.updated',
+      payload: {
+        artifactId: 'artifact-1',
+        filename: 'report.txt',
+        status: 'final',
+        size: 13,
+      },
+    },
+  })
+  const duplicate = await renderGatewaySessionEvent({
+    cloud: cloudStub({
+      artifactUrl(sessionId: string, artifactId: string) {
+        return `https://cloud.example.test/api/sessions/${sessionId}/artifacts/${artifactId}`
+      },
+    }),
+    provider,
+    binding: bindingRecord(),
+    state,
+    event: {
+      eventId: 'event-1-again',
+      sequence: 2,
+      type: 'artifact.updated',
+      payload: { artifactId: 'artifact-1', filename: 'report.txt', status: 'final', size: 13 },
+    },
+  })
+
+  assert.equal(result.handled, true)
+  assert.equal(duplicate.handled, false)
+  assert.equal(provider.sent.length, 1)
+  assert.equal(provider.sent[0]?.kind, 'text')
+  assert.match(provider.sent[0]?.text || '', /Artifact updated: report\.txt \(final\)/)
+  assert.match(provider.sent[0]?.text || '', /https:\/\/cloud\.example\.test\/api\/sessions\/session-1\/artifacts\/artifact-1/)
 })
 
 function bindingRecord() {

@@ -11,6 +11,7 @@ import {
   CloudChatTimeline,
   CloudSidebarThreadList,
   CloudThreadList,
+  type ArtifactActionContext,
 } from './react-workbench.ts'
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
@@ -280,15 +281,16 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     })
   }, [api, selectedSessionId, withRuntimeAction])
 
-  const readArtifact = useCallback(async (artifactId: string) => {
-    if (!selectedSessionId) throw new Error('Select a chat first.')
-    const body = asRecord(await api.sessions.artifact(selectedSessionId, artifactId))
+  const readArtifact = useCallback(async (artifactId: string, sessionId?: string | null) => {
+    const targetSessionId = sessionId || selectedSessionId
+    if (!targetSessionId) throw new Error('Select a chat first.')
+    const body = asRecord(await api.sessions.artifact(targetSessionId, artifactId))
     return asRecord(body.artifact || body)
   }, [api, selectedSessionId])
 
-  const openArtifact = useCallback((artifactId: string, mode: 'view' | 'download') => {
+  const openArtifact = useCallback((artifactId: string, mode: 'view' | 'download', context?: ArtifactActionContext) => {
     void withRuntimeAction(`artifact:${artifactId}`, async () => {
-      const artifact = await readArtifact(artifactId)
+      const artifact = await readArtifact(artifactId, context?.sessionId)
       const blob = decodeBase64(artifact.dataBase64, artifact.contentType || artifact.mime)
       if (mode === 'download') {
         downloadBlob(blob, String(artifact.filename || artifact.name || 'artifact'))
@@ -303,13 +305,14 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     })
   }, [readArtifact, withRuntimeAction])
 
-  const inspectArtifact = useCallback((artifactId: string) => {
-    if (!selectedSessionId) return
+  const inspectArtifact = useCallback((artifactId: string, context?: ArtifactActionContext) => {
+    const targetSessionId = context?.sessionId || selectedSessionId
+    if (!targetSessionId) return
     setArtifactPanel({ artifactId, metadata: null, status: 'loading', error: null })
     setPendingAction(`artifact:${artifactId}`)
     void (async () => {
       try {
-        const body = asRecord(await api.sessions.artifacts(selectedSessionId))
+        const body = asRecord(await api.sessions.artifacts(targetSessionId))
         const artifacts = Array.isArray(body.artifacts) ? body.artifacts.map(asRecord) : []
         const metadata = artifacts.find((artifact) => String(artifact.artifactId || artifact.id || artifact.filePath || '') === artifactId) || { artifactId }
         setArtifactPanel({ artifactId, metadata, status: 'idle', error: null })
@@ -488,8 +491,8 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     onRespondPermission: respondPermission,
     onReplyQuestion: replyQuestion,
     onRejectQuestion: rejectQuestion,
-    onViewArtifact: (artifactId: string) => openArtifact(artifactId, 'view'),
-    onDownloadArtifact: (artifactId: string) => openArtifact(artifactId, 'download'),
+    onViewArtifact: (artifactId: string, context?: ArtifactActionContext) => openArtifact(artifactId, 'view', context),
+    onDownloadArtifact: (artifactId: string, context?: ArtifactActionContext) => openArtifact(artifactId, 'download', context),
     onInspectArtifact: inspectArtifact,
     onOpenTaskSession: (sessionId: string) => {
       void selectSession(sessionId)

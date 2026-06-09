@@ -87,6 +87,37 @@ test('isReadableSessionArtifact rejects arbitrary files that were not surfaced a
   assert.equal(isReadableSessionArtifact(view, '/tmp/secrets.txt'), false)
 })
 
+test('isReadableSessionArtifact authorizes surfaced Windows absolute artifact paths', () => {
+  const drivePath = 'C:\\Users\\joe\\Documents\\report.txt'
+  const uncPath = '\\\\server\\share\\charts\\summary.csv'
+  const view = createView()
+  view.toolCalls = [
+    createTool({ id: 'write-tool', name: 'write', input: { filePath: drivePath } }),
+  ]
+  view.taskRuns = [{
+    id: 'task-1',
+    title: 'Task',
+    agent: null,
+    status: 'complete',
+    sourceSessionId: null,
+    content: '',
+    transcript: [],
+    toolCalls: [
+      createTool({ id: 'edit-tool', name: 'edit', input: { path: uncPath } }),
+    ],
+    compactions: [],
+    todos: [],
+    error: null,
+    sessionCost: 0,
+    sessionTokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    order: 1,
+  }]
+
+  assert.equal(isReadableSessionArtifact(view, drivePath), true)
+  assert.equal(isReadableSessionArtifact(view, uncPath), true)
+  assert.equal(isReadableSessionArtifact(view, 'C:\\Users\\joe\\Documents\\secret.txt'), false)
+})
+
 test('isReadableSessionArtifact matches safe symlink aliases by real path', { skip: process.platform === 'win32' }, () => {
   const root = mkdtempSync(join(tmpdir(), 'open-cowork-surfaced-artifact-'))
   try {

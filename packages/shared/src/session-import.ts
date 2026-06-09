@@ -1,3 +1,4 @@
+import type { ArtifactKind, ArtifactStatus } from './artifacts.js'
 import type { MessageAttachment, SessionTokens, TodoItem } from './session.js'
 
 export type SessionImportWarningSeverity = 'info' | 'warning' | 'error'
@@ -63,6 +64,13 @@ export type SessionImportPortableArtifact = {
   order: number
   toolId?: string | null
   toolName?: string | null
+  kind?: ArtifactKind | null
+  status?: ArtifactStatus | null
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  statusUpdatedBy?: string | null
+  statusUpdatedAt?: string | null
 }
 
 export type SessionImportRequest = {

@@ -7,6 +7,7 @@ import type {
   SessionView,
   WorkflowListPayload,
 } from '@open-cowork/shared'
+import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
 import type { CloudTransportSettingMetadata } from './cloud/transport-adapter.ts'
 import { getAppDataDir } from './config-loader.ts'
 import { writeFileAtomic } from './fs-atomic.ts'
@@ -170,6 +171,14 @@ function normalizeArtifact(value: unknown): SessionArtifact | null {
     cloudArtifactId: typeof record.cloudArtifactId === 'string' ? record.cloudArtifactId : undefined,
     size: typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : undefined,
     createdAt: typeof record.createdAt === 'string' ? record.createdAt : undefined,
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : undefined,
+    kind: isArtifactKind(record.kind) ? record.kind : undefined,
+    status: isArtifactStatus(record.status) ? record.status : undefined,
+    authorAgentId: typeof record.authorAgentId === 'string' ? record.authorAgentId : record.authorAgentId === null ? null : undefined,
+    projectId: typeof record.projectId === 'string' ? record.projectId : record.projectId === null ? null : undefined,
+    taskId: typeof record.taskId === 'string' ? record.taskId : record.taskId === null ? null : undefined,
+    statusUpdatedBy: typeof record.statusUpdatedBy === 'string' ? record.statusUpdatedBy : record.statusUpdatedBy === null ? null : undefined,
+    statusUpdatedAt: typeof record.statusUpdatedAt === 'string' ? record.statusUpdatedAt : record.statusUpdatedAt === null ? null : undefined,
     chart: record.chart ?? undefined,
   }
 }

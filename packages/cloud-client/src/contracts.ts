@@ -1,4 +1,8 @@
 import type {
+  ArtifactIndexPayload,
+  ArtifactIndexEntry,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
@@ -29,6 +33,10 @@ import type {
 } from '@open-cowork/shared'
 
 export type {
+  ArtifactIndexPayload,
+  ArtifactIndexEntry,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
@@ -645,6 +653,8 @@ export type CloudTransportAdapter = {
   updateThreadSmartFilter?(filterId: string, input: ThreadSmartFilterInput): Promise<ThreadSmartFilter | null>
   deleteThreadSmartFilter?(filterId: string): Promise<boolean>
   listArtifacts?(sessionId: string): Promise<SessionArtifact[]>
+  indexArtifacts?(query?: ArtifactIndexRequest): Promise<ArtifactIndexPayload>
+  updateArtifactStatus?(input: ArtifactStatusUpdateRequest): Promise<SessionArtifact>
   uploadArtifact?(sessionId: string, input: Omit<SessionArtifactUploadRequest, 'sessionId' | 'workspaceId'>): Promise<SessionArtifact>
   readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
   listCapabilityTools?(): Promise<CapabilityTool[]>

@@ -143,6 +143,7 @@ export function saveChartArtifact(request: ChartSaveArtifactRequest): SessionArt
   }
   log('chart', `Saved chart artifact ${filename} (${bytes.length} bytes) for session ${request.sessionId}`)
 
+  const now = new Date().toISOString()
   return {
     id: `${request.taskRunId || 'session'}:${request.toolCallId}:${filename}`,
     toolId: request.toolCallId,
@@ -152,6 +153,10 @@ export function saveChartArtifact(request: ChartSaveArtifactRequest): SessionArt
     order: Date.now(),
     taskRunId: request.taskRunId || null,
     mime: 'image/png',
+    kind: 'chart',
+    status: 'final',
+    createdAt: now,
+    updatedAt: now,
     chart,
   }
 }

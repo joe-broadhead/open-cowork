@@ -1,4 +1,4 @@
-import { resolve } from 'path'
+import { isAbsolute, resolve, win32 } from 'path'
 import { existsSync, realpathSync } from 'fs'
 import type { SessionView, ToolCall } from '@open-cowork/shared'
 
@@ -20,7 +20,7 @@ function artifactPathFromTool(tool: ToolCall): string | null {
       ? input.path
       : null
 
-  if (!candidate || !candidate.startsWith('/')) return null
+  if (!candidate || (!isAbsolute(candidate) && !win32.isAbsolute(candidate))) return null
   if (!['write', 'edit', 'multi_edit', 'str_replace', 'apply_patch'].includes(tool.name)) return null
   return canonicalArtifactPath(candidate)
 }

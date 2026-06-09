@@ -2,6 +2,60 @@ import type { WorkspaceOptions } from './workspace.js'
 
 export const CLOUD_ARTIFACT_FILE_PATH_PREFIX = 'cloud-artifact://'
 
+export const ARTIFACT_STATUSES = ['draft', 'in-review', 'final'] as const
+export type ArtifactStatus = typeof ARTIFACT_STATUSES[number]
+
+export const ARTIFACT_KINDS = ['document', 'chart', 'deck', 'spreadsheet', 'draft'] as const
+export type ArtifactKind = typeof ARTIFACT_KINDS[number]
+
+const ARTIFACT_STATUS_RANK: Record<ArtifactStatus, number> = {
+  draft: 0,
+  'in-review': 1,
+  final: 2,
+}
+
+export function isArtifactStatus(value: unknown): value is ArtifactStatus {
+  return typeof value === 'string' && (ARTIFACT_STATUSES as readonly string[]).includes(value)
+}
+
+export function isArtifactKind(value: unknown): value is ArtifactKind {
+  return typeof value === 'string' && (ARTIFACT_KINDS as readonly string[]).includes(value)
+}
+
+export function canAdvanceArtifactStatus(current: ArtifactStatus, next: ArtifactStatus) {
+  return ARTIFACT_STATUS_RANK[next] >= ARTIFACT_STATUS_RANK[current]
+}
+
+export function defaultArtifactStatusForKind(kind: ArtifactKind): ArtifactStatus {
+  return kind === 'chart' ? 'final' : 'draft'
+}
+
+export function inferArtifactKind(input: {
+  kind?: unknown
+  filename?: string | null
+  mime?: string | null
+  chart?: unknown
+}): ArtifactKind {
+  if (isArtifactKind(input.kind)) return input.kind
+  if (input.chart) return 'chart'
+  const mime = input.mime?.toLowerCase() || ''
+  const filename = input.filename?.toLowerCase() || ''
+  if (mime.startsWith('image/') && /chart|vega/.test(filename)) return 'chart'
+  if (mime.includes('presentation') || /\.(pptx?|key)$/.test(filename)) return 'deck'
+  if (
+    mime.includes('spreadsheet')
+    || mime.includes('csv')
+    || /\.(csv|tsv|xlsx?|ods)$/.test(filename)
+  ) return 'spreadsheet'
+  if (
+    mime.includes('pdf')
+    || mime.includes('markdown')
+    || mime.startsWith('text/')
+    || /\.(md|markdown|txt|pdf|docx?|html?)$/.test(filename)
+  ) return 'document'
+  return 'draft'
+}
+
 export function cloudArtifactFilePath(artifactId: string, filename = 'artifact') {
   const safeFilename = filename.trim() || 'artifact'
   return `${CLOUD_ARTIFACT_FILE_PATH_PREFIX}${encodeURIComponent(artifactId)}/${encodeURIComponent(safeFilename)}`
@@ -33,11 +87,38 @@ export interface SessionArtifactListRequest extends WorkspaceOptions {
   sessionId: string
 }
 
+export interface ArtifactIndexRequest extends WorkspaceOptions {
+  sessionId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  status?: ArtifactStatus | null
+  kind?: ArtifactKind | null
+  limit?: number | null
+}
+
 export interface SessionArtifactUploadRequest extends WorkspaceOptions {
   sessionId: string
   filename: string
   contentType?: string | null
   dataBase64: string
+  kind?: ArtifactKind | null
+  status?: ArtifactStatus | null
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  statusUpdatedBy?: string | null
+  statusUpdatedAt?: string | null
+}
+
+export interface ArtifactStatusUpdateRequest extends WorkspaceOptions {
+  sessionId: string
+  artifactId: string
+  status: ArtifactStatus
+  updatedBy?: string | null
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  kind?: ArtifactKind | null
 }
 
 export interface ChartArtifactSource {
@@ -59,7 +140,28 @@ export interface SessionArtifact {
   mime?: string
   size?: number
   createdAt?: string
+  updatedAt?: string
+  kind?: ArtifactKind
+  status?: ArtifactStatus
+  authorAgentId?: string | null
+  projectId?: string | null
+  taskId?: string | null
+  statusUpdatedBy?: string | null
+  statusUpdatedAt?: string | null
   chart?: ChartArtifactSource | null
+}
+
+export interface ArtifactIndexEntry extends SessionArtifact {
+  sessionId: string
+  sessionTitle?: string | null
+  workspaceId?: string | null
+}
+
+export interface ArtifactIndexPayload {
+  artifacts: ArtifactIndexEntry[]
+  total: number
+  scannedSessions?: number
+  truncated?: boolean
 }
 
 export interface SessionArtifactAttachment {

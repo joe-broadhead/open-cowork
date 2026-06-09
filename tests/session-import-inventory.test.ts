@@ -73,6 +73,13 @@ function sessionView(overrides: Partial<SessionView> = {}): SessionView {
       filename: 'artifact.txt',
       order: 4,
       mime: 'text/plain',
+      kind: 'document',
+      status: 'in-review',
+      authorAgentId: 'agent-writer',
+      projectId: 'project-1',
+      taskId: 'task-1',
+      statusUpdatedBy: 'reviewer-1',
+      statusUpdatedAt: '2026-05-28T10:00:02.000Z',
     }],
     errors: [],
     todos: [{
@@ -131,5 +138,12 @@ test('local session import inventory redacts local paths and secret-like text', 
   assert.equal(request.messages?.[0]?.attachments?.[0]?.filename, 'private.txt')
   assert.equal(request.artifacts?.[0]?.filename, 'artifact.txt')
   assert.equal(request.artifacts?.[0]?.dataBase64, Buffer.from('artifact body').toString('base64'))
+  assert.equal(request.artifacts?.[0]?.kind, 'document')
+  assert.equal(request.artifacts?.[0]?.status, 'in-review')
+  assert.equal(request.artifacts?.[0]?.authorAgentId, 'agent-writer')
+  assert.equal(request.artifacts?.[0]?.projectId, 'project-1')
+  assert.equal(request.artifacts?.[0]?.taskId, 'task-1')
+  assert.equal(request.artifacts?.[0]?.statusUpdatedBy, 'reviewer-1')
+  assert.equal(request.artifacts?.[0]?.statusUpdatedAt, '2026-05-28T10:00:02.000Z')
   assert.equal(request.itemCounts.projectSource, 0)
 })

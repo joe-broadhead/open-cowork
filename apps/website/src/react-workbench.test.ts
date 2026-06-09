@@ -22,7 +22,17 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
     renderToStaticMarkup(createElement(CloudRuntimeStatus, { view })),
     renderToStaticMarkup(createElement(CloudApprovalsAndQuestions, { view })),
     renderToStaticMarkup(createElement(CloudArtifactCards, { view })),
-    renderToStaticMarkup(createElement(CloudSelectedArtifactHistory, { view })),
+    renderToStaticMarkup(createElement(CloudSelectedArtifactHistory, {
+      view,
+      indexedArtifacts: [{
+        artifactId: 'artifact-index-1',
+        filename: 'library-report.md',
+        sessionId: 'session-library',
+        kind: 'document',
+        status: 'in-review',
+        projectId: 'project-1',
+      }],
+    })),
   ].join('\n')
 
   assert.match(html, /role="table"/)
@@ -37,8 +47,10 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.match(html, /Projected coworker work|Checked repository context/)
   assert.match(html, /Approval/)
   assert.match(html, /summary.txt/)
-  assert.match(html, /Artifact history is scoped to the selected chat/)
-  assert.match(html, /Cross-chat artifact browsing waits/)
+  assert.match(html, /library-report\.md/)
+  assert.match(html, /data-session-id="session-library"/)
+  assert.match(html, /in-review/)
+  assert.doesNotMatch(html, /Cross-chat artifact browsing waits/)
   assert.doesNotMatch(html, /signedUrl/)
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)

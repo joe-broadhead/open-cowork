@@ -93,6 +93,8 @@ export const WORKSPACE_SUPPORT_APIS = [
   'coordination.watches',
   'coordination.delegation',
   'artifacts.list',
+  'artifacts.index',
+  'artifacts.status',
   'artifacts.upload',
   'artifacts.download',
   'artifacts.reveal',

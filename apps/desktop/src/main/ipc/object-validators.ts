@@ -1,4 +1,6 @@
 import type {
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   ChartSaveArtifactRequest,
   CustomAgentConfig,
   CustomMcpConfig,
@@ -14,6 +16,7 @@ import type {
   ToolListOptions,
   WorkspaceOptions,
 } from '@open-cowork/shared'
+import { isArtifactKind, isArtifactStatus } from '@open-cowork/shared'
 import type { CoworkSettings } from '../settings.ts'
 import { assertCustomMcpContentLimits, assertCustomSkillContent, assertCustomSkillFiles } from '../custom-content-limits.ts'
 import { validateCustomAgentContentLimits } from '../custom-content-limits.ts'
@@ -24,6 +27,7 @@ const MAX_IPC_ID_BYTES = 512
 const MAX_SETTINGS_UPDATE_BYTES = 512 * 1024
 const MAX_CHART_DATA_URL_BYTES = 8 * 1024 * 1024 + 128
 const MAX_ARTIFACT_UPLOAD_BASE64_BYTES = 35 * 1024 * 1024
+const MAX_ARTIFACT_INDEX_LIMIT = 500
 const SCOPES = new Set(['machine', 'project'])
 const MCP_TYPES = new Set(['stdio', 'http'])
 const MCP_PERMISSION_MODES = new Set(['ask', 'allow'])
@@ -248,12 +252,70 @@ export function validateSessionArtifactListRequest(record: Record<string, unknow
   }
 }
 
+function optionalArtifactKind(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  if (value === undefined || value === null || value === '') return null
+  if (!isArtifactKind(value)) throw new Error('Artifact kind is invalid.')
+  return value
+}
+
+function optionalArtifactStatus(record: Record<string, unknown>, key: string) {
+  const value = record[key]
+  if (value === undefined || value === null || value === '') return null
+  if (!isArtifactStatus(value)) throw new Error('Artifact status is invalid.')
+  return value
+}
+
+function optionalArtifactIndexLimit(record: Record<string, unknown>) {
+  const value = record.limit
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0 || value > MAX_ARTIFACT_INDEX_LIMIT) {
+    throw new Error(`Artifact index limit must be an integer between 1 and ${MAX_ARTIFACT_INDEX_LIMIT}.`)
+  }
+  return value
+}
+
+export function validateArtifactIndexRequest(record: Record<string, unknown>): ArtifactIndexRequest {
+  return {
+    sessionId: optionalNullableString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
+    projectId: optionalNullableString(record, 'projectId', 'Project id', MAX_IPC_ID_BYTES),
+    taskId: optionalNullableString(record, 'taskId', 'Task id', MAX_IPC_ID_BYTES),
+    kind: optionalArtifactKind(record, 'kind'),
+    status: optionalArtifactStatus(record, 'status'),
+    limit: optionalArtifactIndexLimit(record),
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
+  }
+}
+
 export function validateSessionArtifactUploadRequest(record: Record<string, unknown>): SessionArtifactUploadRequest {
   return {
     sessionId: requiredString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
     filename: requiredString(record, 'filename', 'Artifact filename', MAX_IPC_ID_BYTES),
     contentType: optionalNullableString(record, 'contentType', 'Artifact content type', MAX_IPC_ID_BYTES),
     dataBase64: requiredString(record, 'dataBase64', 'Artifact data', MAX_ARTIFACT_UPLOAD_BASE64_BYTES),
+    kind: optionalArtifactKind(record, 'kind'),
+    status: optionalArtifactStatus(record, 'status'),
+    authorAgentId: optionalNullableString(record, 'authorAgentId', 'Author agent id', MAX_IPC_ID_BYTES),
+    projectId: optionalNullableString(record, 'projectId', 'Project id', MAX_IPC_ID_BYTES),
+    taskId: optionalNullableString(record, 'taskId', 'Task id', MAX_IPC_ID_BYTES),
+    statusUpdatedBy: optionalNullableString(record, 'statusUpdatedBy', 'Status updated by', MAX_IPC_ID_BYTES),
+    statusUpdatedAt: optionalNullableString(record, 'statusUpdatedAt', 'Status updated at', MAX_IPC_ID_BYTES),
+    workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
+  }
+}
+
+export function validateArtifactStatusUpdateRequest(record: Record<string, unknown>): ArtifactStatusUpdateRequest {
+  const status = record.status
+  if (!isArtifactStatus(status)) throw new Error('Artifact status is invalid.')
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
+    artifactId: requiredString(record, 'artifactId', 'Artifact id', MAX_IPC_ID_BYTES),
+    status,
+    updatedBy: optionalNullableString(record, 'updatedBy', 'Updated by', MAX_IPC_ID_BYTES),
+    authorAgentId: optionalNullableString(record, 'authorAgentId', 'Author agent id', MAX_IPC_ID_BYTES),
+    projectId: optionalNullableString(record, 'projectId', 'Project id', MAX_IPC_ID_BYTES),
+    taskId: optionalNullableString(record, 'taskId', 'Task id', MAX_IPC_ID_BYTES),
+    kind: optionalArtifactKind(record, 'kind'),
     workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
   }
 }

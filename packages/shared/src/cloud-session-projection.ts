@@ -1,4 +1,4 @@
-import { cloudArtifactFilePath, type SessionArtifact } from './artifacts.js'
+import { cloudArtifactFilePath, isArtifactKind, isArtifactStatus, type SessionArtifact } from './artifacts.js'
 import type {
   Message,
   MessageAttachment,
@@ -433,6 +433,14 @@ function normalizeSessionArtifact(value: unknown, fallbackOrder = 0): SessionArt
     mime: readNullableString(record.mime) || readNullableString(record.contentType) || undefined,
     ...(Number.isFinite(size) ? { size } : {}),
     createdAt: readNullableString(record.createdAt) || undefined,
+    updatedAt: readNullableString(record.updatedAt) || undefined,
+    kind: isArtifactKind(record.kind) ? record.kind : undefined,
+    status: isArtifactStatus(record.status) ? record.status : undefined,
+    authorAgentId: readNullableString(record.authorAgentId),
+    projectId: readNullableString(record.projectId),
+    taskId: readNullableString(record.taskId),
+    statusUpdatedBy: readNullableString(record.statusUpdatedBy),
+    statusUpdatedAt: readNullableString(record.statusUpdatedAt),
   }
 }
 
@@ -855,6 +863,14 @@ export function reduceCloudSessionProjectionEvent(
       }
     }
     case 'artifact.created': {
+      const artifact = normalizeSessionArtifact(payload, event.sequence)
+      return {
+        ...current,
+        artifacts: artifact ? upsertById(current.artifacts, artifact) : current.artifacts,
+        updatedAt: eventTime,
+      }
+    }
+    case 'artifact.updated': {
       const artifact = normalizeSessionArtifact(payload, event.sequence)
       return {
         ...current,

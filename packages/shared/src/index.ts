@@ -55,6 +55,9 @@ import type {
   PublicAppConfig,
 } from './app-config.js'
 import type {
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   ChartSaveArtifactRequest,
   SessionArtifact,
   SessionArtifactAttachment,
@@ -296,6 +299,8 @@ export interface CoworkAPI {
   }
   artifact: {
     list: (request: SessionArtifactListRequest) => Promise<SessionArtifact[]>
+    index: (request?: ArtifactIndexRequest) => Promise<ArtifactIndexPayload>
+    updateStatus: (request: ArtifactStatusUpdateRequest) => Promise<SessionArtifact>
     upload: (request: SessionArtifactUploadRequest) => Promise<SessionArtifact>
     export: (request: SessionArtifactExportRequest) => Promise<string | null>
     reveal: (request: SessionArtifactRequest) => Promise<boolean>

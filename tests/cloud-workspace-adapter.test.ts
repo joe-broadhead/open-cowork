@@ -370,6 +370,26 @@ function transport(): CloudTransportAdapter {
       cloudArtifactId: 'artifact-1',
       mime: 'text/plain',
     }],
+    indexArtifacts: async () => ({
+      artifacts: [{
+        id: 'artifact-index-1',
+        toolId: 'cloud-artifact',
+        toolName: 'cloud.artifact',
+        filePath: 'cloud-artifact://artifact-index-1/report.md',
+        filename: 'report.md',
+        order: 0,
+        source: 'cloud',
+        cloudArtifactId: 'artifact-index-1',
+        sessionId: 'session-1',
+        sessionTitle: 'Cloud session',
+        workspaceId: 'cloud:tenant-1',
+        kind: 'document',
+        status: 'draft',
+      }],
+      total: 1,
+      scannedSessions: 1,
+      truncated: false,
+    }),
     uploadArtifact: async (_sessionId, input) => ({
       id: 'artifact-2',
       toolId: 'cloud-artifact',
@@ -595,6 +615,9 @@ test('cloud workspace adapter maps cloud records to desktop session contracts', 
   assert.equal((await adapter.updateThreadSmartFilter('filter-1', { name: 'Updated filter', query: {} }))?.name, 'Updated filter')
   assert.equal(await adapter.deleteThreadSmartFilter('filter-1'), true)
   assert.equal((await adapter.listArtifacts('session-1'))[0]?.cloudArtifactId, 'artifact-1')
+  const indexedArtifacts = await adapter.indexArtifacts()
+  assert.equal(indexedArtifacts.artifacts[0]?.workspaceId, 'cloud:test')
+  assert.equal(indexedArtifacts.total, 1)
   assert.equal((await adapter.uploadArtifact({
     sessionId: 'session-1',
     filename: 'upload.txt',

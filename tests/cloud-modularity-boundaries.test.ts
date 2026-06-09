@@ -61,6 +61,7 @@ test('cloud core has enforceable domain module boundaries', () => {
   const expectedRoutes = [
     'access-policy.ts',
     'admin.ts',
+    'artifacts.ts',
     'api-tokens.ts',
     'billing.ts',
     'byok.ts',

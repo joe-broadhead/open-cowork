@@ -422,10 +422,9 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
               </div>
             </div>
             <div class="panel">
-              <h3>Selected chat history</h3>
+              <h3>Artifact library</h3>
               <div class="list" id="artifact-history">
-                <p class="empty">Open a chat to view its artifact history.</p>
-                <p class="notice" data-kind="warn">Cross-chat artifact browsing waits for a Cloud artifact index API.</p>
+                <p class="empty">No indexed artifacts loaded.</p>
               </div>
             </div>
             <div class="panel">

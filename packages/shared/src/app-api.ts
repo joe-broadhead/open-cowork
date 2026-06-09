@@ -61,6 +61,9 @@ export type AppAPI = AppApiEndpointResolver & {
     artifacts: (sessionId: string) => Promise<unknown>
     artifact: (sessionId: string, artifactId: string) => Promise<unknown>
   }
+  artifacts: {
+    index: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>
+  }
   capabilities: {
     catalog: () => Promise<unknown>
     tools: () => Promise<unknown>

@@ -9,7 +9,7 @@ import type {
 import type { CloudSessionEventType } from '@open-cowork/shared'
 
 import type { CloudGateway } from './cloud-gateway.js'
-import { renderArtifactCreated } from './render/artifact-renderer.js'
+import { renderArtifactCreated, renderArtifactUpdated } from './render/artifact-renderer.js'
 import { renderApprovalRequest } from './render/approval-renderer.js'
 import { renderQuestionRequest } from './render/question-renderer.js'
 import type { GatewaySessionRenderState } from './render/state.js'
@@ -35,6 +35,7 @@ export const GATEWAY_RENDERED_SESSION_EVENT_TYPES = [
   'permission.requested',
   'question.asked',
   'artifact.created',
+  'artifact.updated',
 ] as const satisfies readonly CloudSessionEventType[]
 
 export async function renderGatewaySessionEvent(
@@ -70,6 +71,10 @@ export async function renderGatewaySessionEvent(
 
   if (input.event.type === 'artifact.created') {
     return renderArtifactCreated({ ...input, target })
+  }
+
+  if (input.event.type === 'artifact.updated') {
+    return renderArtifactUpdated({ ...input, target })
   }
 
   return { handled: false }
