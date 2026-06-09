@@ -47,6 +47,9 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       artifacts: (sessionId) => coworkApi.artifact.list({ sessionId }),
       artifact: (sessionId, artifactId) => coworkApi.artifact.readAttachment({ sessionId, filePath: cloudArtifactFilePath(artifactId) }),
     },
+    artifacts: {
+      index: (query) => coworkApi.artifact.index(query as Parameters<CoworkAPI['artifact']['index']>[0]),
+    },
     capabilities: {
       catalog: () => Promise.all([coworkApi.capabilities.tools(), coworkApi.capabilities.skills()]),
       tools: () => coworkApi.capabilities.tools(),

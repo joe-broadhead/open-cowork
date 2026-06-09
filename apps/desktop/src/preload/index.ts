@@ -66,6 +66,8 @@ const PRELOAD_INVOKE_CHANNELS = [
   'chart:render-svg',
   'chart:save-artifact',
   'artifact:list',
+  'artifact:index',
+  'artifact:update-status',
   'artifact:upload',
   'artifact:export',
   'artifact:reveal',
@@ -301,6 +303,8 @@ const api: CoworkAPI = {
   },
   artifact: {
     list: (request) => invoke('artifact:list', request),
+    index: (request = {}) => invoke('artifact:index', request),
+    updateStatus: (request) => invoke('artifact:update-status', request),
     upload: (request) => invoke('artifact:upload', request),
     export: (request) => invoke('artifact:export', request),
     reveal: (request) => invoke('artifact:reveal', request),

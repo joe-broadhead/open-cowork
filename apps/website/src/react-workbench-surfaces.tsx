@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
+import { CloudArtifactSurfacePortals } from './react-workbench-artifacts.tsx'
 import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
-import { CloudArtifactCards, CloudSelectedArtifactHistory, type CloudRuntimeActionProps } from './react-workbench.ts'
+import type { CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
 import {
@@ -357,8 +358,6 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     workflowRuns: usePortalTarget('workflow-run-list'),
     workflowDetail: usePortalTarget('workflow-detail'),
     objectives: usePortalTarget('thread-objective-state'),
-    artifactList: usePortalTarget('artifact-list'),
-    artifactHistory: usePortalTarget('artifact-history'),
   }
   const workflowDisabled = bootstrap.features.workflows === false
   const workflowDisabledReason = 'Playbook controls are disabled by this cloud profile.'
@@ -590,7 +589,11 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     ))
   }
   if (targets.objectives) portals.push(createPortal(<CloudObjectiveState selectedView={selectedView} />, targets.objectives))
-  if (targets.artifactList) portals.push(createPortal(<CloudArtifactCards view={selectedView} {...artifactActions} />, targets.artifactList))
-  if (targets.artifactHistory) portals.push(createPortal(<CloudSelectedArtifactHistory view={selectedView} {...artifactActions} />, targets.artifactHistory))
-  return <>{portals}<CloudChannelSurfacePortals onSelectSession={onSelectSession} /></>
+  return (
+    <>
+      {portals}
+      <CloudArtifactSurfacePortals selectedView={selectedView} artifactActions={artifactActions} />
+      <CloudChannelSurfacePortals onSelectSession={onSelectSession} />
+    </>
+  )
 }

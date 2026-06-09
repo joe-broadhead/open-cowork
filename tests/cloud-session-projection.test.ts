@@ -107,6 +107,30 @@ test('cloud session projection persists approvals questions tools todos costs an
       size: 5,
       key: 'tenant/session/artifact-1/result.txt',
       createdAt: '2026-05-27T10:02:00.000Z',
+      updatedAt: '2026-05-27T10:02:00.000Z',
+      kind: 'document',
+      status: 'draft',
+      projectId: 'project-1',
+      taskId: 'task-1',
+    },
+  })
+  await service.appendProductEvent(principal, sessionId, {
+    type: 'artifact.updated',
+    payload: {
+      artifactId: 'artifact-1',
+      sessionId,
+      filename: 'result.txt',
+      contentType: 'text/plain',
+      size: 5,
+      key: 'tenant/session/artifact-1/result.txt',
+      createdAt: '2026-05-27T10:02:00.000Z',
+      updatedAt: '2026-05-27T10:03:00.000Z',
+      kind: 'document',
+      status: 'in-review',
+      projectId: 'project-1',
+      taskId: 'task-1',
+      statusUpdatedBy: 'reviewer-1',
+      statusUpdatedAt: '2026-05-27T10:03:00.000Z',
     },
   })
 
@@ -125,6 +149,9 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(asRecord(asArray(pending.todos)[0]).content, 'Ship sync')
   assert.equal(asRecord(asArray(pending.artifacts)[0]).cloudArtifactId, 'artifact-1')
   assert.equal(asRecord(asArray(pending.artifacts)[0]).filePath, 'cloud-artifact://artifact-1/result.txt')
+  assert.equal(asRecord(asArray(pending.artifacts)[0]).status, 'in-review')
+  assert.equal(asRecord(asArray(pending.artifacts)[0]).projectId, 'project-1')
+  assert.equal(asRecord(asArray(pending.artifacts)[0]).statusUpdatedBy, 'reviewer-1')
   assert.equal(pending.sessionCost, 0.42)
   assert.equal(asRecord(pending.sessionTokens).cacheRead, 2)
   assert.equal(pending.lastInputTokens, 11)
@@ -134,6 +161,7 @@ test('cloud session projection persists approvals questions tools todos costs an
   assert.equal(sessionView.pendingApprovals.length, 1)
   assert.equal(sessionView.pendingQuestions.length, 1)
   assert.equal(sessionView.artifacts[0]?.cloudArtifactId, 'artifact-1')
+  assert.equal(sessionView.artifacts[0]?.status, 'in-review')
   assert.equal(sessionView.sessionTokens.cacheRead, 2)
 
   await service.appendProductEvent(principal, sessionId, {

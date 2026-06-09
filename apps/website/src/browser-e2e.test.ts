@@ -522,6 +522,7 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
     assert.match(reviewText, /approval\/question/)
     assert.match(reviewText, /1 runtime issue/)
     assert.doesNotMatch(reviewText, /task-signed|objectKey|leaked-secret/)
+    assert.equal(harness.lastRequest((request) => request.method === 'GET' && /\/api\/artifacts(?:\?|$)/.test(request.path)), undefined)
 
     harness.clickText('.runtime-card[data-kind="approval"] button', 'Allow')
     await waitFor(() => assert.match(harness.document.querySelector('#chat-timeline')?.textContent || '', /approved/))
@@ -538,8 +539,8 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
       assert.equal(harness.document.body.dataset.route, 'artifacts')
       assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
       assert.ok(harness.document.querySelector('#artifact-detail [data-diff-view="true"], #artifact-detail[data-diff-view="true"]'))
-      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /selected chat/)
-      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /Cross-chat artifact browsing waits/)
+      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /summary\.txt/)
+      assert.doesNotMatch(harness.document.querySelector('#artifact-history')?.textContent || '', /Cross-chat artifact browsing waits/)
     })
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts(?:\?|$)/.test(request.path)))
 

@@ -146,8 +146,12 @@ test('cloud transport adapter maps session and channel commands to HTTP routes w
             filename: 'upload.txt',
             contentType: 'text/plain',
             size: 5,
-            key: 'tenant/session/artifact-2/upload.txt',
             createdAt: '2026-05-27T10:02:00.000Z',
+            updatedAt: '2026-05-27T10:02:00.000Z',
+            kind: 'document',
+            status: 'draft',
+            projectId: 'project-1',
+            taskId: 'task-1',
           },
         }, 201)
       }
@@ -158,9 +162,51 @@ test('cloud transport adapter maps session and channel commands to HTTP routes w
           filename: 'result.txt',
           contentType: 'text/plain',
           size: 5,
-          key: 'tenant/session/artifact-1/result.txt',
           createdAt: '2026-05-27T10:01:00.000Z',
+          updatedAt: '2026-05-27T10:01:00.000Z',
+          kind: 'document',
+          status: 'draft',
+          projectId: 'project-1',
+          taskId: 'task-1',
         }],
+      })
+    }
+    if (url.includes('/api/artifacts?')) {
+      return jsonResponse({
+        artifacts: [{
+          artifactId: 'artifact-1',
+          sessionId: 'session-1',
+          sessionTitle: 'Cloud thread',
+          filename: 'result.txt',
+          contentType: 'text/plain',
+          size: 5,
+          createdAt: '2026-05-27T10:01:00.000Z',
+          updatedAt: '2026-05-27T10:01:00.000Z',
+          kind: 'document',
+          status: 'draft',
+          projectId: 'project-1',
+          taskId: 'task-1',
+        }],
+        total: 1,
+      })
+    }
+    if (url.endsWith('/api/sessions/session-1/artifacts/artifact-1/status')) {
+      return jsonResponse({
+        artifact: {
+          artifactId: 'artifact-1',
+          sessionId: 'session-1',
+          filename: 'result.txt',
+          contentType: 'text/plain',
+          size: 5,
+          createdAt: '2026-05-27T10:01:00.000Z',
+          updatedAt: '2026-05-27T10:03:00.000Z',
+          kind: 'document',
+          status: 'in-review',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          statusUpdatedBy: 'reviewer-1',
+          statusUpdatedAt: '2026-05-27T10:03:00.000Z',
+        },
       })
     }
     if (url.endsWith('/api/sessions/session-1/artifacts/artifact-1')) {
@@ -384,10 +430,26 @@ test('cloud transport adapter maps session and channel commands to HTTP routes w
   const artifact = (await transport.listArtifacts?.('session-1'))?.[0]
   assert.equal(artifact?.cloudArtifactId, 'artifact-1')
   assert.equal(artifact?.filePath, 'cloud-artifact://artifact-1/result.txt')
+  assert.equal(artifact?.status, 'draft')
+  assert.equal(artifact?.projectId, 'project-1')
+  const artifactIndex = await transport.indexArtifacts?.({ projectId: 'project-1', status: 'draft', kind: 'document', limit: 25 })
+  assert.equal(artifactIndex?.artifacts[0]?.sessionId, 'session-1')
+  assert.equal(artifactIndex?.artifacts[0]?.sessionTitle, 'Cloud thread')
+  assert.equal(artifactIndex?.artifacts[0]?.status, 'draft')
+  const reviewedArtifact = await transport.updateArtifactStatus?.({
+    sessionId: 'session-1',
+    artifactId: 'artifact-1',
+    status: 'in-review',
+    updatedBy: 'reviewer-1',
+  })
+  assert.equal(reviewedArtifact?.status, 'in-review')
+  assert.equal(reviewedArtifact?.statusUpdatedBy, 'reviewer-1')
   assert.equal((await transport.uploadArtifact?.('session-1', {
     filename: 'upload.txt',
     contentType: 'text/plain',
     dataBase64: Buffer.from('hello').toString('base64'),
+    projectId: 'project-1',
+    taskId: 'task-1',
   }))?.cloudArtifactId, 'artifact-2')
   const attachment = await transport.readArtifactAttachment?.('session-1', artifact?.filePath || 'artifact-1')
   assert.equal(attachment?.mime, 'text/plain')
@@ -424,6 +486,7 @@ test('cloud transport adapter maps session and channel commands to HTTP routes w
       '/api/threads/tags/tag-1/apply',
       '/api/threads/tags/tag-1/remove',
       '/api/threads/smart-filters',
+      '/api/sessions/session-1/artifacts/artifact-1/status',
       '/api/sessions/session-1/artifacts',
     ],
   )

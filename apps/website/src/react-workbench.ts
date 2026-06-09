@@ -272,14 +272,18 @@ export function CloudRuntimeStatus({ view }: { view: CloudWebThreadView | null |
       h('span', null, `Output ${text(tokens.output, '0')}`)))
 }
 
+export type ArtifactActionContext = {
+  sessionId?: string | null
+}
+
 export type CloudRuntimeActionProps = {
   pendingAction?: string | null
   onRespondPermission?: (permissionId: string, allowed: boolean) => void
   onReplyQuestion?: (requestId: string, answers: string[]) => void
   onRejectQuestion?: (requestId: string) => void
-  onViewArtifact?: (artifactId: string) => void
-  onDownloadArtifact?: (artifactId: string) => void
-  onInspectArtifact?: (artifactId: string) => void
+  onViewArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
+  onDownloadArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
+  onInspectArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onOpenTaskSession?: (sessionId: string) => void
 }
 
@@ -438,9 +442,11 @@ export function CloudApprovalsAndQuestions({ view, ...props }: { view: CloudWebT
 
 function artifactCardNode(artifact: Record<string, unknown>, index: number, props: CloudRuntimeActionProps) {
   const id = artifactId(artifact)
+  const sessionId = text(artifact.sessionId)
+  const context = sessionId ? { sessionId } : undefined
   const pending = Boolean(id && props.pendingAction === `artifact:${id}`)
   const metadata = cloudWebSafeArtifactMetadata(artifact)
-  return h('article', { className: 'artifact-card runtime-card', key: id || `artifact-${index}` },
+  return h('article', { className: 'artifact-card runtime-card', key: id || `artifact-${index}`, 'data-session-id': sessionId || undefined },
     h('div', { className: 'runtime-card-header' },
       h('span', { className: 'pill', 'data-kind': 'ok' }, 'Artifact'),
       h('strong', null, text(artifact.filename || artifact.name, 'artifact'))),
@@ -452,9 +458,9 @@ function artifactCardNode(artifact: Record<string, unknown>, index: number, prop
     ].filter(Boolean).join(' - ')),
     h('pre', null, JSON.stringify(metadata, null, 2)),
     h('div', { className: 'row-actions' },
-      h('button', { className: 'secondary', type: 'button', disabled: !id || pending, onClick: () => props.onViewArtifact?.(id) }, 'View'),
-      h('button', { className: 'primary', type: 'button', disabled: !id || pending, onClick: () => props.onDownloadArtifact?.(id) }, 'Download'),
-      h('button', { className: 'secondary', type: 'button', disabled: !id, onClick: () => props.onInspectArtifact?.(id) }, 'Inspect')))
+      h('button', { className: 'secondary', type: 'button', disabled: !id || pending, onClick: () => props.onViewArtifact?.(id, context) }, 'View'),
+      h('button', { className: 'primary', type: 'button', disabled: !id || pending, onClick: () => props.onDownloadArtifact?.(id, context) }, 'Download'),
+      h('button', { className: 'secondary', type: 'button', disabled: !id, onClick: () => props.onInspectArtifact?.(id, context) }, 'Inspect')))
 }
 
 export function CloudArtifactCards({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
@@ -469,12 +475,27 @@ export function CloudArtifactCards({ view, ...props }: { view: CloudWebThreadVie
       : h('p', { className: 'empty' }, 'No artifacts loaded.'))
 }
 
-export function CloudSelectedArtifactHistory({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
+export function CloudSelectedArtifactHistory({
+  view,
+  indexedArtifacts = [],
+  indexError = null,
+  ...props
+}: {
+  view: CloudWebThreadView | null | undefined
+  indexedArtifacts?: Record<string, unknown>[]
+  indexError?: string | null
+} & CloudRuntimeActionProps) {
   const allArtifacts = list<Record<string, unknown>>(runtimeProjection(view).artifacts)
   const artifacts = allArtifacts.slice(-12).reverse()
-  return h('div', { className: 'list react-artifact-history', 'aria-label': 'Selected chat artifact history' },
-    h('p', { className: 'notice', 'data-kind': 'warn' }, 'Artifact history is scoped to the selected chat. Cross-chat artifact browsing waits for a Cloud artifact index API.'),
-    artifacts.length
-      ? artifacts.map((artifact, index) => artifactCardNode(artifact, index, props))
-      : h('p', { className: 'empty' }, view ? 'No artifacts in the selected chat.' : 'Open a chat to view its artifact history.'))
+  const library = indexedArtifacts.slice(0, 100)
+  return h('div', { className: 'list react-artifact-history', 'aria-label': 'Artifact library' },
+    indexError ? h('p', { className: 'notice', 'data-kind': 'danger' }, indexError) : null,
+    library.length
+      ? [
+        ...library.map((artifact, index) => artifactCardNode(artifact, index, props)),
+        indexedArtifacts.length > library.length ? h('p', { className: 'empty', key: 'artifact-index-limit' }, `Showing first ${library.length} indexed artifacts.`) : null,
+      ]
+      : artifacts.length
+        ? artifacts.map((artifact, index) => artifactCardNode(artifact, index, props))
+        : h('p', { className: 'empty' }, view ? 'No artifacts in the selected chat.' : 'No indexed artifacts loaded.'))
 }

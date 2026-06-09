@@ -108,6 +108,9 @@ test('launch readiness harness produces strict load report against cloud and gat
       await readBody(req)
       return writeJson(res, 201, { artifact: { id: `artifact-${artifactCollectionMatch[1]}` } })
     }
+    if (url.pathname === '/api/artifacts' && req.method === 'GET') {
+      return writeJson(res, 200, { artifacts: [], total: 0 })
+    }
     const artifactReadMatch = /^\/api\/sessions\/([^/]+)\/artifacts\/([^/]+)$/.exec(url.pathname)
     if (artifactReadMatch && req.method === 'GET') {
       return writeJson(res, 200, { artifact: { id: artifactReadMatch[2], dataBase64: 'b2s=' } })

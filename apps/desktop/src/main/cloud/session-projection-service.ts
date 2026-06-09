@@ -66,11 +66,11 @@ function workspaceOperationFromEventType(type: string) {
 
 function workspaceEntityForProjectedEvent(input: AppendProjectedEventInput, event: SessionEventRecord) {
   const payload = input.payload || {}
-  if (input.type === 'artifact.created') {
+  if (input.type === 'artifact.created' || input.type === 'artifact.updated') {
     return {
       entityType: 'artifact',
       entityId: eventPayloadId(payload, ['artifactId', 'cloudArtifactId', 'id'], input.sessionId),
-      operation: 'create',
+      operation: input.type === 'artifact.created' ? 'create' : 'update',
       projectionVersion: event.sequence,
     }
   }

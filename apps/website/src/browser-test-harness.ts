@@ -506,6 +506,17 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       view.projection.sequence += 1
       return jsonResponse({ ok: true })
     }
+    if (request.method === 'GET' && request.pathname === '/api/artifacts') {
+      const artifacts = Object.entries(views).flatMap(([sessionId, view]) =>
+        view.projection.view.artifacts.map((artifact: Record<string, unknown>) => ({
+          ...artifact,
+          sessionId,
+          status: artifact.status || 'draft',
+          kind: artifact.kind || 'document',
+        })),
+      )
+      return jsonResponse({ artifacts: artifacts.slice(0, limitFromRequest(request, 100)), total: artifacts.length })
+    }
     const artifactListMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/)
     if (request.method === 'GET' && artifactListMatch) {
       const view = views[decodeURIComponent(artifactListMatch[1])]

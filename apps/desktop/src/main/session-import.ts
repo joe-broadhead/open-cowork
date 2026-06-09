@@ -225,6 +225,13 @@ export async function buildSessionImportRequest(
         order: artifact.order,
         toolId: artifact.toolId || null,
         toolName: artifact.toolName || null,
+        kind: artifact.kind || null,
+        status: artifact.status || null,
+        authorAgentId: artifact.authorAgentId || null,
+        projectId: artifact.projectId || null,
+        taskId: artifact.taskId || null,
+        statusUpdatedBy: artifact.statusUpdatedBy || null,
+        statusUpdatedAt: artifact.statusUpdatedAt || null,
       })
     }
   }

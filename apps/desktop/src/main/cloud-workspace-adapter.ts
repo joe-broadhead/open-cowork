@@ -1,4 +1,7 @@
 import type {
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   MessageAttachment,
   CapabilitySkill,
   CapabilitySkillBundle,
@@ -84,6 +87,8 @@ export type CloudWorkspaceSessionAdapter = {
   updateThreadSmartFilter?(filterId: string, input: ThreadSmartFilterInput): Promise<ThreadSmartFilter | null>
   deleteThreadSmartFilter?(filterId: string): Promise<boolean>
   listArtifacts?(sessionId: string): Promise<SessionArtifact[]>
+  indexArtifacts?(request?: ArtifactIndexRequest): Promise<ArtifactIndexPayload>
+  updateArtifactStatus?(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact>
   uploadArtifact?(input: SessionArtifactUploadRequest): Promise<SessionArtifact>
   readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
   listCapabilityTools?(): Promise<CapabilityTool[]>
@@ -528,12 +533,45 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
     }
   }
 
+  async indexArtifacts(request: ArtifactIndexRequest = {}): Promise<ArtifactIndexPayload> {
+    if (!this.transport.indexArtifacts) throw new Error('Cloud artifact index is not supported by this workspace.')
+    const payload = await this.transport.indexArtifacts(request)
+    return {
+      ...payload,
+      artifacts: payload.artifacts.map((artifact) => ({
+        ...artifact,
+        workspaceId: this.connection.id,
+      })),
+    }
+  }
+
+  async updateArtifactStatus(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact> {
+    if (!this.transport.updateArtifactStatus) throw new Error('Cloud artifact status updates are not supported by this workspace.')
+    const artifact = await this.transport.updateArtifactStatus(request)
+    const cacheKey = cloudWorkspaceCacheKey(this.connection)
+    const existing = this.cache?.listArtifacts(cacheKey, request.sessionId) || []
+    if (existing.length > 0) {
+      this.cache?.upsertArtifactList(cacheKey, request.sessionId, [
+        ...existing.filter((entry) => entry.id !== artifact.id),
+        artifact,
+      ])
+    }
+    return artifact
+  }
+
   async uploadArtifact(input: SessionArtifactUploadRequest): Promise<SessionArtifact> {
     if (!this.transport.uploadArtifact) throw new Error('Cloud artifact uploads are not supported by this workspace.')
     const artifact = await this.transport.uploadArtifact(input.sessionId, {
       filename: input.filename,
       contentType: input.contentType || null,
       dataBase64: input.dataBase64,
+      kind: input.kind || null,
+      status: input.status || null,
+      authorAgentId: input.authorAgentId || null,
+      projectId: input.projectId || null,
+      taskId: input.taskId || null,
+      statusUpdatedBy: input.statusUpdatedBy || null,
+      statusUpdatedAt: input.statusUpdatedAt || null,
     })
     const cacheKey = cloudWorkspaceCacheKey(this.connection)
     const existing = this.cache?.listArtifacts(cacheKey, input.sessionId) || []

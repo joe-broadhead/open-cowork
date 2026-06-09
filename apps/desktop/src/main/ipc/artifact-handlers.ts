@@ -3,6 +3,9 @@ import { resolve } from 'path'
 import { basename, join } from 'path'
 import { chmodSync, copyFileSync, existsSync, realpathSync, writeFileSync } from 'fs'
 import type {
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   SessionArtifact,
   SessionArtifactAttachment,
   SessionArtifactExportRequest,
@@ -13,12 +16,15 @@ import type {
 import type { IpcHandlerContext } from './context.ts'
 import { noIpcArgs, objectArg, registerIpcInvoke, stringArg } from './schema.ts'
 import {
+  validateArtifactIndexRequest,
+  validateArtifactStatusUpdateRequest,
   validateSessionArtifactExportRequest,
   validateSessionArtifactListRequest,
   validateSessionArtifactRequest,
   validateSessionArtifactUploadRequest,
 } from './object-validators.ts'
 import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
+import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '../artifact-index.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
 import { shortSessionId } from '../log-sanitizer.ts'
@@ -82,9 +88,25 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
   registerIpcInvoke(context, 'artifact:list', objectArg<SessionArtifactListRequest>('artifact list request', validateSessionArtifactListRequest), async (event, request): Promise<SessionArtifact[]> => {
     const workspaceId = readWorkspaceIdOption(request)
     if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
-      return sessionEngine.getSessionView(request.sessionId)?.artifacts || []
+      return listLocalSessionArtifacts(request.sessionId, workspaceId)
     }
     return context.workspaceGateway.listCloudArtifacts(event, request.sessionId, workspaceId)
+  })
+
+  registerIpcInvoke(context, 'artifact:index', objectArg<ArtifactIndexRequest>('artifact index request', validateArtifactIndexRequest), async (event, request): Promise<ArtifactIndexPayload> => {
+    const workspaceId = readWorkspaceIdOption(request)
+    if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return listLocalArtifactIndex(request)
+    }
+    return context.workspaceGateway.indexCloudArtifacts(event, request, workspaceId)
+  })
+
+  registerIpcInvoke(context, 'artifact:update-status', objectArg<ArtifactStatusUpdateRequest>('artifact status update request', validateArtifactStatusUpdateRequest), async (event, request): Promise<SessionArtifact> => {
+    const workspaceId = readWorkspaceIdOption(request)
+    if (context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      return updateLocalArtifactStatus(request)
+    }
+    return context.workspaceGateway.updateCloudArtifactStatus(event, request, workspaceId)
   })
 
   registerIpcInvoke(context, 'artifact:upload', objectArg<SessionArtifactUploadRequest>('artifact upload request', validateSessionArtifactUploadRequest), async (event, request): Promise<SessionArtifact> => {

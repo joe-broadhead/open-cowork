@@ -36,6 +36,7 @@ export type CloudWebEndpointId =
   | 'sessionQuestionReject'
   | 'sessionArtifacts'
   | 'sessionArtifact'
+  | 'artifactsIndex'
   | 'capabilitiesCatalog'
   | 'capabilityTools'
   | 'capabilitySkills'
@@ -385,6 +386,12 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'sessionArtifact',
     method: 'GET',
     path: '/api/sessions/:sessionId/artifacts/:artifactId',
+    csrf: false,
+  },
+  {
+    id: 'artifactsIndex',
+    method: 'GET',
+    path: '/api/artifacts',
     csrf: false,
   },
   {

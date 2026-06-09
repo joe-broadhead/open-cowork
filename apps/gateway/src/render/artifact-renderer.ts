@@ -76,6 +76,33 @@ export async function renderArtifactCreated(input: RenderArtifactInput): Promise
   return { handled: true, lastChatMessageId: providerMessageId }
 }
 
+export async function renderArtifactUpdated(input: RenderArtifactInput): Promise<RenderArtifactResult> {
+  const artifact = readArtifact(input.event)
+  if (!artifact.artifactId) return { handled: false }
+
+  const existing = input.state.artifacts.get(artifact.artifactId)
+  if (existing && existing.renderedSequence >= input.event.sequence) {
+    return { handled: false, lastChatMessageId: existing.providerMessageId }
+  }
+
+  const result = await executeRenderOperation(input.provider, {
+    type: 'send_artifact_link',
+    target: input.target,
+    artifact: {
+      filename: artifact.filename,
+      label: artifactUpdateLabel(artifact),
+      url: input.cloud.artifactUrl(input.binding.sessionId, artifact.artifactId),
+    },
+  })
+  const providerMessageId = result.sentMessage?.messageId ?? existing?.providerMessageId ?? null
+  input.state.artifacts.set(artifact.artifactId, {
+    artifactId: artifact.artifactId,
+    providerMessageId,
+    renderedSequence: input.event.sequence,
+  })
+  return { handled: true, lastChatMessageId: providerMessageId }
+}
+
 function readArtifact(event: CloudTransportSessionEvent) {
   const artifactId = stringField(event.payload, 'artifactId')
     || stringField(event.payload, 'cloudArtifactId')
@@ -90,7 +117,13 @@ function readArtifact(event: CloudTransportSessionEvent) {
     label: sanitizeChannelText(filename, 160),
     mime: stringField(event.payload, 'contentType') || stringField(event.payload, 'mime') || 'application/octet-stream',
     size: numberField(event.payload, 'size'),
+    status: stringField(event.payload, 'status'),
   }
+}
+
+function artifactUpdateLabel(artifact: { filename: string, status: string | null }) {
+  const status = artifact.status ? ` (${artifact.status})` : ''
+  return sanitizeChannelText(`Artifact updated: ${artifact.filename}${status}`, 180)
 }
 
 function dataUrlToFile(url: string, filename: string, mime?: string) {

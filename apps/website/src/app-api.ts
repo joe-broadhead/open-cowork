@@ -145,6 +145,9 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       artifacts: (sessionId) => request(withQuery(endpointPath('sessionArtifacts', '/api/sessions/:sessionId/artifacts', { sessionId }), { limit: 100 })),
       artifact: (sessionId, artifactId) => request(endpointPath('sessionArtifact', '/api/sessions/:sessionId/artifacts/:artifactId', { sessionId, artifactId })),
     },
+    artifacts: {
+      index: (query) => request(`${endpoint('artifactsIndex', '/api/artifacts')}${queryString(query)}`),
+    },
     capabilities: {
       catalog: () => request(endpoint('capabilitiesCatalog', '/api/capabilities')),
       tools: () => request(endpoint('capabilityTools', '/api/capabilities/tools')),

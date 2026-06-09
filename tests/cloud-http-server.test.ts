@@ -25,7 +25,7 @@ import { createInMemoryObjectStore } from '../apps/desktop/src/main/cloud/object
 import { createPrometheusCloudObservability, type CloudObservabilityAdapter } from '../apps/desktop/src/main/cloud/observability.ts'
 import { createEnvelopeSecretAdapter } from '../apps/desktop/src/main/cloud/secret-adapter.ts'
 import { createCloudSessionCookieManager } from '../apps/desktop/src/main/cloud/session-cookie-auth.ts'
-import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy } from '../apps/desktop/src/main/cloud/session-service.ts'
+import { CloudSessionService, type ByokManagementPolicy, type CloudIdentityPolicy, type CloudPrincipal } from '../apps/desktop/src/main/cloud/session-service.ts'
 import { createStubBillingAdapter } from '../apps/desktop/src/main/cloud/stub-billing-adapter.ts'
 import { CloudWorker } from '../apps/desktop/src/main/cloud/worker.ts'
 import { clearCoordinationStoreCache } from '../apps/desktop/src/main/coordination/coordination-store.ts'
@@ -1022,6 +1022,13 @@ test('cloud HTTP server imports a redacted local session snapshot and audits the
           contentType: 'text/plain',
           dataBase64: Buffer.from('artifact body').toString('base64'),
           order: 3,
+          kind: 'document',
+          status: 'in-review',
+          authorAgentId: 'agent-writer',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          statusUpdatedBy: 'reviewer-1',
+          statusUpdatedAt: '2026-05-28T10:00:02.000Z',
         }],
         warnings: [{
           code: 'redacted-local-data',
@@ -1045,9 +1052,23 @@ test('cloud HTTP server imports a redacted local session snapshot and audits the
     assert.equal(asArray(projection.messages).length, 2)
     assert.equal(asRecord(asArray(projection.messages)[0]).content, 'Summarize the redacted project.')
     assert.equal(asArray(projection.artifacts).length, 1)
+    const projectedArtifact = asRecord(asArray(projection.artifacts)[0])
+    assert.equal(projectedArtifact.kind, 'document')
+    assert.equal(projectedArtifact.status, 'in-review')
+    assert.equal(projectedArtifact.authorAgentId, 'agent-writer')
+    assert.equal(projectedArtifact.projectId, 'project-1')
+    assert.equal(projectedArtifact.taskId, 'task-1')
+    assert.equal(projectedArtifact.statusUpdatedBy, 'reviewer-1')
+    assert.equal(projectedArtifact.statusUpdatedAt, '2026-05-28T10:00:02.000Z')
 
     const artifacts = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
     assert.equal(asArray(artifacts.artifacts).length, 1)
+    const listedArtifact = asRecord(asArray(artifacts.artifacts)[0])
+    assert.equal(listedArtifact.status, 'in-review')
+    assert.equal(listedArtifact.projectId, 'project-1')
+    assert.equal(listedArtifact.taskId, 'task-1')
+    assert.equal(listedArtifact.statusUpdatedAt, '2026-05-28T10:00:02.000Z')
+    assert.equal('key' in listedArtifact, false)
 
     const promptResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
       method: 'POST',
@@ -1668,6 +1689,42 @@ test('cloud HTTP server blocks artifact uploads that exceed daily byte quota', a
     assert.equal(upload.status, 429)
     const body = await readJson(upload)
     assert.equal(asRecord(body.verdict).policyCode, 'quota.artifact_bytes_per_day_exceeded')
+    const artifacts = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
+    assert.equal(asArray(artifacts.artifacts).length, 0)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP validates artifact metadata before consuming upload quota', async () => {
+  const fixture = createFixture({
+    abuse: testAbuseConfig({
+      maxArtifactBytesPerDay: 100,
+      httpRateLimit: { enabled: false, windowMs: 60_000, maxRequests: 100 },
+    }),
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    const created = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(created.session).sessionId)
+    const upload = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'invalid-kind.txt',
+        contentType: 'text/plain',
+        dataBase64: Buffer.from('valid body').toString('base64'),
+        kind: 'unknown-kind',
+      }),
+    })
+    assert.equal(upload.status, 400)
+    const counters = await fixture.store.listUsageQuotaCounters('tenant-1')
+    const artifactBytes = counters.find((counter) => counter.quotaKey === 'artifact_bytes:day')
+    assert.equal(artifactBytes?.quantity || 0, 0)
     const artifacts = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
     assert.equal(asArray(artifacts.artifacts).length, 0)
   } finally {
@@ -5896,6 +5953,9 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
         filename: 'report.txt',
         contentType: 'text/plain',
         dataBase64: Buffer.from('cloud artifact').toString('base64'),
+        authorAgentId: 'agent-writer',
+        projectId: 'project-1',
+        taskId: 'task-1',
       }),
     })
     assert.equal(uploadedResponse.status, 201)
@@ -5903,15 +5963,104 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
     const uploaded = asRecord(uploadedBody.artifact)
     assert.equal(uploaded.filename, 'report.txt')
     assert.equal(uploaded.size, 'cloud artifact'.length)
+    assert.equal(uploaded.kind, 'document')
+    assert.equal(uploaded.status, 'draft')
+    assert.equal(uploaded.authorAgentId, 'agent-writer')
+    assert.equal(uploaded.projectId, 'project-1')
+    assert.equal(uploaded.taskId, 'task-1')
+    assert.equal('key' in uploaded, false)
 
     const listed = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
     const artifacts = asArray(listed.artifacts)
     assert.equal(artifacts.length, 1)
-    assert.equal(asRecord(artifacts[0]).artifactId, uploaded.artifactId)
+    const listedArtifact = asRecord(artifacts[0])
+    assert.equal(listedArtifact.artifactId, uploaded.artifactId)
+    assert.equal(listedArtifact.status, 'draft')
+    assert.equal('key' in listedArtifact, false)
+
+    const invalidTimestampResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'bad-timestamp.txt',
+        contentType: 'text/plain',
+        dataBase64: Buffer.from('bad timestamp').toString('base64'),
+        statusUpdatedAt: 'next week',
+      }),
+    })
+    assert.equal(invalidTimestampResponse.status, 400)
+    const afterInvalidTimestamp = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts`))
+    assert.equal(asArray(afterInvalidTimestamp.artifacts).length, 1)
+
+    const indexed = await readJson(await fetch(`${baseUrl}/api/artifacts?projectId=project-1&status=draft&kind=document`))
+    const indexedArtifacts = asArray(indexed.artifacts).map(asRecord)
+    assert.equal(indexedArtifacts.length, 1)
+    assert.equal(indexedArtifacts[0]?.artifactId, uploaded.artifactId)
+    assert.equal(indexedArtifacts[0]?.sessionId, sessionId)
+    assert.equal(indexedArtifacts[0]?.projectId, 'project-1')
+    assert.equal('key' in indexedArtifacts[0]!, false)
+
+    const statusResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        status: 'in-review',
+        updatedBy: 'reviewer-1',
+      }),
+    })
+    assert.equal(statusResponse.status, 200)
+    const statusBody = await readJson(statusResponse)
+    const reviewedArtifact = asRecord(statusBody.artifact)
+    assert.equal(reviewedArtifact.status, 'in-review')
+    assert.equal(reviewedArtifact.statusUpdatedBy, 'reviewer-1')
+    assert.equal('key' in reviewedArtifact, false)
+
+    const principal = {
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant 1',
+      orgId: 'tenant-1',
+      userId: 'user-1',
+      accountId: 'user-1',
+      email: 'user@example.test',
+      role: 'owner' as const,
+      authSource: 'local' as const,
+    }
+    const eventsAfterReview = await fixture.service.listEvents(principal, sessionId)
+    const firstUpdatePayload = asRecord(eventsAfterReview.find((event) => event.type === 'artifact.updated')?.payload)
+    assert.equal(firstUpdatePayload.statusUpdatedBy, 'reviewer-1')
+    assert.equal('key' in firstUpdatePayload, false)
+
+    const regressionResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'draft', updatedBy: 'reviewer-1' }),
+    })
+    assert.equal(regressionResponse.status, 409)
+
+    const finalResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'final' }),
+    })
+    assert.equal(finalResponse.status, 200)
+    const finalArtifact = asRecord(asRecord(await readJson(finalResponse)).artifact)
+    assert.equal(finalArtifact.status, 'final')
+    assert.equal(finalArtifact.statusUpdatedBy, null)
+    assert.equal('key' in finalArtifact, false)
+
+    const updateEvents = (await fixture.service.listEvents(principal, sessionId)).filter((event) => event.type === 'artifact.updated')
+    assert.equal(updateEvents.length, 2)
+    const finalUpdatePayload = asRecord(updateEvents.at(-1)?.payload)
+    assert.equal(finalUpdatePayload.status, 'final')
+    assert.equal(finalUpdatePayload.statusUpdatedBy, null)
+    assert.equal('key' in finalUpdatePayload, false)
 
     const read = await readJson(await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}`))
     const artifact = asRecord(read.artifact)
     assert.equal(Buffer.from(String(artifact.dataBase64), 'base64').toString('utf8'), 'cloud artifact')
+    assert.equal(artifact.status, 'final')
+    assert.equal(artifact.statusUpdatedBy, null)
+    assert.equal('key' in artifact, false)
     const usage = await readJson(await fetch(`${baseUrl}/api/usage/events`))
     const usageEvents = asArray(usage.events).map(asRecord)
     const downloaded = usageEvents.find((event) => event.eventType === 'artifact.downloaded')
@@ -5930,6 +6079,96 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
   } finally {
     await fixture.server.close()
   }
+})
+
+test('cloud artifact index scans paged sessions until matching artifacts are found', async () => {
+  const principal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'user-1',
+    accountId: 'user-1',
+    email: 'user1@example.test',
+    role: 'owner',
+    authSource: 'user',
+  }
+  const sessions = [
+    ...Array.from({ length: 100 }, (_value, index) => ({
+      sessionId: `session-empty-${index + 1}`,
+      title: `Empty session ${index + 1}`,
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    })),
+    { sessionId: 'session-artifact', title: 'Artifact session', updatedAt: '2026-01-01T00:00:00.000Z' },
+  ]
+  const eventCalls: string[] = []
+  const requestedLimits: Array<number | undefined> = []
+  const sessionService = {
+    async listSessions() {
+      assert.fail('Artifact index must use paged session listing.')
+    },
+    async listSessionsPage(_principal: CloudPrincipal, input: { limit?: number, cursor?: string | null } = {}) {
+      requestedLimits.push(input.limit)
+      const offset = input.cursor ? Number(input.cursor) : 0
+      const limit = input.limit ?? sessions.length
+      const nextOffset = offset + limit
+      return {
+        items: sessions.slice(offset, nextOffset),
+        nextCursor: nextOffset < sessions.length ? String(nextOffset) : null,
+        totalEstimate: sessions.length,
+      }
+    },
+    async getSessionView(_principal: CloudPrincipal, sessionId: string) {
+      const session = sessions.find((entry) => entry.sessionId === sessionId)
+      if (!session) throw new Error(`Unknown session ${sessionId}`)
+      return { session, projection: null }
+    },
+    async listEvents(_principal: CloudPrincipal, sessionId: string) {
+      eventCalls.push(sessionId)
+      if (sessionId !== 'session-artifact') return []
+      return [{
+        type: 'artifact.created',
+        payload: {
+          artifactId: 'artifact-1',
+          sessionId,
+          filename: 'report.txt',
+          contentType: 'text/plain',
+          size: 6,
+          key: 'tenants/tenant-1/private-object-key',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          kind: 'document',
+          status: 'draft',
+          authorAgentId: 'agent-writer',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          statusUpdatedBy: null,
+          statusUpdatedAt: null,
+        },
+      }]
+    },
+  } as unknown as CloudSessionService
+  const artifacts = new CloudArtifactService(sessionService, createInMemoryObjectStore())
+
+  const indexed = await artifacts.listArtifactIndex(principal, { limit: 1 })
+  assert.equal(indexed.artifacts.length, 1)
+  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-1')
+  assert.equal('key' in indexed.artifacts[0]!, false)
+  assert.equal(indexed.scannedSessions, 101)
+  assert.equal(indexed.truncated, true)
+  assert.deepEqual(requestedLimits, [100, 100])
+  assert.equal(eventCalls.length, 101)
+  assert.equal(eventCalls[0], 'session-empty-1')
+  assert.equal(eventCalls.at(-1), 'session-artifact')
+
+  requestedLimits.length = 0
+  eventCalls.length = 0
+  const complete = await artifacts.listArtifactIndex(principal, { limit: 2 })
+  assert.equal(complete.artifacts.length, 1)
+  assert.equal(complete.artifacts[0]?.artifactId, 'artifact-1')
+  assert.equal(complete.scannedSessions, 101)
+  assert.equal(complete.truncated, false)
+  assert.deepEqual(requestedLimits, [100, 100])
+  assert.equal(eventCalls.length, 101)
 })
 
 test('cloud HTTP returns policy verdicts when artifacts are disabled', async () => {
@@ -5954,6 +6193,8 @@ test('cloud HTTP returns policy verdicts when artifacts are disabled', async () 
       reason: 'Artifacts are disabled for this cloud profile.',
       policyCode: 'artifacts.disabled',
     })
+    const indexResponse = await fetch(`${baseUrl}/api/artifacts`)
+    assert.equal(indexResponse.status, 403)
   } finally {
     await fixture.server.close()
   }

@@ -29,6 +29,7 @@ const projectionReducingEventTypes = [
   'todos.updated',
   'cost.updated',
   'artifact.created',
+  'artifact.updated',
   'session.status',
   'session.idle',
   'session.aborted',

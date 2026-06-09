@@ -167,6 +167,15 @@ export const CLOUD_SESSION_EVENT_CONTRACT = [
     description: 'A cloud artifact became available through object storage.',
   },
   {
+    type: 'artifact.updated',
+    projected: true,
+    facets: ['artifacts'],
+    producers: ['cloud-service'],
+    consumers: ['desktop', 'cloud-web', 'gateway'],
+    channelRenderable: true,
+    description: 'Cloud artifact deliverable status or provenance changed.',
+  },
+  {
     type: 'session.status',
     projected: true,
     facets: ['status'],

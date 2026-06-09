@@ -8,6 +8,9 @@ import {
 import type {
   AddCloudWorkspaceInput,
   AddGatewayWorkspaceInput,
+  ArtifactIndexPayload,
+  ArtifactIndexRequest,
+  ArtifactStatusUpdateRequest,
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
@@ -716,6 +719,8 @@ export class WorkspaceGateway {
       cloudSupport('coordination.watches', 'deferred', 'Cloud watches are deferred until the shared coordination delivery model is available.'),
       cloudSupport('coordination.delegation', 'deferred', 'Cloud delegation coordination is deferred until the shared coordination control plane is available.'),
       supportedIf('artifacts.list', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
+      supportedIf('artifacts.index', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
+      supportedIf('artifacts.status', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.upload', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.download', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       cloudSupport('artifacts.reveal', 'not_supported', 'Cloud artifacts cannot be revealed in the local filesystem. Export the artifact instead.'),
@@ -840,6 +845,8 @@ export class WorkspaceGateway {
         artifactBody: input.authority === 'gateway_standalone' ? 'gateway_artifact_store' : 'redacted_metadata_only',
         artifactReveal: 'none',
       }),
+      remoteSupport('artifacts.index', 'deferred', input.artifactReason, { artifactBody: 'redacted_metadata_only', artifactReveal: 'none' }),
+      remoteSupport('artifacts.status', 'deferred', input.artifactReason, { artifactBody: 'redacted_metadata_only', artifactReveal: 'none' }),
       remoteSupport('artifacts.upload', 'deferred', input.artifactReason, { artifactReveal: 'none' }),
       remoteSupport('artifacts.download', 'deferred', input.artifactReason, {
         artifactBody: input.authority === 'gateway_standalone' ? 'gateway_artifact_store' : 'redacted_metadata_only',
@@ -1205,6 +1212,26 @@ export class WorkspaceGateway {
     const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
     if (!adapter.listArtifacts) throw new Error('Cloud artifacts are not supported by this workspace.')
     return adapter.listArtifacts(sessionId)
+  }
+
+  async indexCloudArtifacts(
+    event: WorkspaceEventLike,
+    request: ArtifactIndexRequest,
+    workspaceIdInput?: string | null,
+  ): Promise<ArtifactIndexPayload> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.indexArtifacts) throw new Error('Cloud artifact index is not supported by this workspace.')
+    return adapter.indexArtifacts(request)
+  }
+
+  async updateCloudArtifactStatus(
+    event: WorkspaceEventLike,
+    request: ArtifactStatusUpdateRequest,
+    workspaceIdInput?: string | null,
+  ): Promise<SessionArtifact> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.updateArtifactStatus) throw new Error('Cloud artifact status updates are not supported by this workspace.')
+    return adapter.updateArtifactStatus(request)
   }
 
   async uploadCloudArtifact(
