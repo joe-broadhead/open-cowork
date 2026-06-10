@@ -48,6 +48,7 @@ export function createCloudArtifactsClient({ request }: CloudDomainClientContext
         sessionId: query.sessionId || undefined,
         projectId: query.projectId || undefined,
         taskId: query.taskId || undefined,
+        taskIds: query.taskIds || undefined,
         kind: query.kind || undefined,
         status: query.status || undefined,
         limit: query.limit || undefined,

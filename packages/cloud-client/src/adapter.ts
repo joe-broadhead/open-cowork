@@ -5,6 +5,7 @@ import { createCloudCapabilitiesClient } from './domains/capabilities.js'
 import { createCloudChannelsClient } from './domains/channels.js'
 import { createCloudConfigClient } from './domains/config.js'
 import { createCloudIdentityClient } from './domains/identity.js'
+import { createCloudLaunchpadClient } from './domains/launchpad.js'
 import { createCloudSessionsClient } from './domains/sessions.js'
 import { createCloudSettingsClient } from './domains/settings.js'
 import { createCloudThreadsClient } from './domains/threads.js'
@@ -261,6 +262,7 @@ export function createHttpSseCloudTransportAdapter(
     ...createCloudWorkflowsClient(domainContext),
     ...createCloudThreadsClient(domainContext),
     ...createCloudArtifactsClient(domainContext),
+    ...createCloudLaunchpadClient(domainContext),
     ...createCloudCapabilitiesClient(domainContext),
     ...createCloudSettingsClient(domainContext),
     ...createCloudByokClient(domainContext),

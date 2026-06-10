@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import { registerArtifactHandlers } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
+import { registerLaunchpadHandlers } from '../apps/desktop/src/main/ipc/launchpad-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-handlers.ts'
@@ -107,6 +108,7 @@ test('IPC handler modules register their core channels', () => {
   registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerLaunchpadHandlers(context)
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
   registerSessionHandlers(context)
@@ -146,6 +148,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('artifact:index'), true)
   assert.equal(handlers.has('artifact:read-attachment'), true)
   assert.equal(handlers.has('artifact:update-status'), true)
+  assert.equal(handlers.has('launchpad:feed'), true)
   assert.equal(handlers.has('session:prompt'), true)
   assert.equal(handlers.has('session:delete'), true)
   assert.equal(handlers.has('mcp:auth'), true)
@@ -171,6 +174,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerLaunchpadHandlers(context)
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
   registerSessionHandlers(context)

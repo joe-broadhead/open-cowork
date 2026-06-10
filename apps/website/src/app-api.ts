@@ -1,4 +1,4 @@
-import type { AppAPI, AppApiEventHandlers, AppApiRequestOptions } from '@open-cowork/shared'
+import type { AppAPI, AppApiEventHandlers, AppApiQueryValue, AppApiRequestOptions } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 
 export type CloudWebAppApiOptions = {
@@ -8,17 +8,23 @@ export type CloudWebAppApiOptions = {
 
 export const CLOUD_WEB_AUTH_REQUIRED_EVENT = 'open-cowork-cloud-auth-required'
 
-function queryString(query: Record<string, string | number | boolean | null | undefined> | undefined) {
+function queryString(query: Record<string, AppApiQueryValue> | undefined) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query || {})) {
     if (value === null || value === undefined || value === '') continue
-    params.set(key, String(value))
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry) params.append(key, entry)
+      }
+    } else {
+      params.set(key, String(value))
+    }
   }
   const text = params.toString()
   return text ? `?${text}` : ''
 }
 
-function withQuery(path: string, query: Record<string, string | number | boolean | null | undefined>) {
+function withQuery(path: string, query: Record<string, AppApiQueryValue>) {
   const suffix = queryString(query)
   if (!suffix) return path
   return `${path}${path.includes('?') ? '&' + suffix.slice(1) : suffix}`
@@ -147,6 +153,9 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
     },
     artifacts: {
       index: (query) => request(`${endpoint('artifactsIndex', '/api/artifacts')}${queryString(query)}`),
+    },
+    launchpad: {
+      feed: (query) => request(`${endpoint('launchpadFeed', '/api/launchpad/feed')}${queryString(query)}`),
     },
     capabilities: {
       catalog: () => request(endpoint('capabilitiesCatalog', '/api/capabilities')),

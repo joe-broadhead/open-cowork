@@ -6,6 +6,8 @@ import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  LaunchpadFeedPayload,
+  LaunchpadFeedRequest,
   CloudProjectSnapshotUploadInput,
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
@@ -40,6 +42,8 @@ export type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  LaunchpadFeedPayload,
+  LaunchpadFeedRequest,
   CloudProjectSnapshotUploadInput,
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
@@ -654,6 +658,7 @@ export type CloudTransportAdapter = {
   deleteThreadSmartFilter?(filterId: string): Promise<boolean>
   listArtifacts?(sessionId: string): Promise<SessionArtifact[]>
   indexArtifacts?(query?: ArtifactIndexRequest): Promise<ArtifactIndexPayload>
+  launchpadFeed?(query?: LaunchpadFeedRequest): Promise<LaunchpadFeedPayload>
   updateArtifactStatus?(input: ArtifactStatusUpdateRequest): Promise<SessionArtifact>
   uploadArtifact?(sessionId: string, input: Omit<SessionArtifactUploadRequest, 'sessionId' | 'workspaceId'>): Promise<SessionArtifact>
   readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>

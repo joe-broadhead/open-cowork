@@ -28,6 +28,8 @@ export type AppApiSessionEventsOptions = {
   afterSequence?: number | null
 }
 
+export type AppApiQueryValue = string | number | boolean | readonly string[] | null | undefined
+
 export type AppApiEndpointResolver = {
   endpoint: (id: string, fallback: string) => string
   endpointPath: (id: string, fallback: string, params?: Record<string, string | number>) => string
@@ -50,7 +52,7 @@ export type AppAPI = AppApiEndpointResolver & {
     events: (handlers?: AppApiEventHandlers) => AppApiEventStream
   }
   sessions: {
-    list: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>
+    list: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
     create: (input: unknown) => Promise<unknown>
     view: (sessionId: string) => Promise<unknown>
     events: (sessionId: string, handlers?: AppApiEventHandlers, options?: AppApiSessionEventsOptions) => AppApiEventStream
@@ -62,7 +64,10 @@ export type AppAPI = AppApiEndpointResolver & {
     artifact: (sessionId: string, artifactId: string) => Promise<unknown>
   }
   artifacts: {
-    index: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>
+    index: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+  }
+  launchpad: {
+    feed: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
   }
   capabilities: {
     catalog: () => Promise<unknown>
@@ -83,7 +88,7 @@ export type AppAPI = AppApiEndpointResolver & {
     projects: () => Promise<unknown>
     createProject: (input: unknown) => Promise<unknown>
     updateProject: (projectId: string, input: unknown) => Promise<unknown>
-    tasks: (query?: Record<string, string | number | boolean | null | undefined>) => Promise<unknown>
+    tasks: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
     createTask: (input: unknown) => Promise<unknown>
     updateTask: (taskId: string, input: unknown) => Promise<unknown>
     moveTask: (taskId: string, input: unknown) => Promise<unknown>

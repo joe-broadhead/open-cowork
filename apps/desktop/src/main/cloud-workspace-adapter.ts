@@ -2,6 +2,8 @@ import type {
   ArtifactIndexPayload,
   ArtifactIndexRequest,
   ArtifactStatusUpdateRequest,
+  LaunchpadFeedPayload,
+  LaunchpadFeedRequest,
   MessageAttachment,
   CapabilitySkill,
   CapabilitySkillBundle,
@@ -88,6 +90,7 @@ export type CloudWorkspaceSessionAdapter = {
   deleteThreadSmartFilter?(filterId: string): Promise<boolean>
   listArtifacts?(sessionId: string): Promise<SessionArtifact[]>
   indexArtifacts?(request?: ArtifactIndexRequest): Promise<ArtifactIndexPayload>
+  launchpadFeed?(request?: LaunchpadFeedRequest): Promise<LaunchpadFeedPayload>
   updateArtifactStatus?(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact>
   uploadArtifact?(input: SessionArtifactUploadRequest): Promise<SessionArtifact>
   readArtifactAttachment?(sessionId: string, filePathOrArtifactId: string): Promise<SessionArtifactAttachment>
@@ -543,6 +546,11 @@ export class CloudWorkspaceAdapter implements CloudWorkspaceSessionAdapter {
         workspaceId: this.connection.id,
       })),
     }
+  }
+
+  async launchpadFeed(request: LaunchpadFeedRequest = {}): Promise<LaunchpadFeedPayload> {
+    if (!this.transport.launchpadFeed) throw new Error('Cloud launchpad feed is not supported by this workspace.')
+    return this.transport.launchpadFeed(request)
   }
 
   async updateArtifactStatus(request: ArtifactStatusUpdateRequest): Promise<SessionArtifact> {

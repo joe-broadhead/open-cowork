@@ -50,6 +50,10 @@
       "types": "./dist/domains/identity.d.ts",
       "import": "./dist/domains/identity.js"
     },
+    "./domains/launchpad": {
+      "types": "./dist/domains/launchpad.d.ts",
+      "import": "./dist/domains/launchpad.js"
+    },
     "./domains/sessions": {
       "types": "./dist/domains/sessions.d.ts",
       "import": "./dist/domains/sessions.js"

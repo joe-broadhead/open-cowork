@@ -91,7 +91,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     routeId: 'chat',
     surface: 'workbench',
     requiredRole: 'public',
-    endpointIds: ['sessionView', 'sessionEvents', 'sessionPrompt', 'sessionPermissionRespond', 'sessionQuestionReply', 'sessionQuestionReject'],
+    endpointIds: ['launchpadFeed', 'sessionView', 'sessionEvents', 'sessionPrompt', 'sessionPermissionRespond', 'sessionQuestionReply', 'sessionQuestionReject'],
     states: {
       loading: 'Chat Home is the default public route while auth resolves; selected signed-in sessions hydrate from /api/sessions/:sessionId/view before SSE.',
       empty: 'Signed-out Home shows a disabled composer; a signed-in ready composer creates a chat-only Cloud session on first send.',

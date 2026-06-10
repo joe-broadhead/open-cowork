@@ -74,6 +74,7 @@ const PRELOAD_INVOKE_CHANNELS = [
   'artifact:read-attachment',
   'artifact:storage-stats',
   'artifact:cleanup',
+  'launchpad:feed',
   'confirm:request-destructive',
   'clipboard:write-text',
   'tool:list',
@@ -311,6 +312,9 @@ const api: CoworkAPI = {
     readAttachment: (request) => invoke('artifact:read-attachment', request),
     storageStats: () => invoke('artifact:storage-stats'),
     cleanup: (mode) => invoke('artifact:cleanup', mode),
+  },
+  launchpad: {
+    feed: (request = {}) => invoke('launchpad:feed', request),
   },
   confirm: {
     requestDestructive: (request) => invoke('confirm:request-destructive', request),
