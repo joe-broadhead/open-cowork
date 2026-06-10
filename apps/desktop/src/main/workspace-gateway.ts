@@ -14,6 +14,8 @@ import type {
   CapabilitySkill,
   CapabilitySkillBundle,
   CapabilityTool,
+  LaunchpadFeedPayload,
+  LaunchpadFeedRequest,
   CloudProjectSnapshotUploadInput,
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
@@ -1222,6 +1224,16 @@ export class WorkspaceGateway {
     const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
     if (!adapter.indexArtifacts) throw new Error('Cloud artifact index is not supported by this workspace.')
     return adapter.indexArtifacts(request)
+  }
+
+  async launchpadFeed(
+    event: WorkspaceEventLike,
+    request: LaunchpadFeedRequest,
+    workspaceIdInput?: string | null,
+  ): Promise<LaunchpadFeedPayload> {
+    const adapter = await this.requireCloudAdapter(this.resolveWorkspace(event, workspaceIdInput))
+    if (!adapter.launchpadFeed) throw new Error('Cloud launchpad feed is not supported by this workspace.')
+    return adapter.launchpadFeed(request)
   }
 
   async updateCloudArtifactStatus(

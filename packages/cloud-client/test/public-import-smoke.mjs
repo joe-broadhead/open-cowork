@@ -10,6 +10,7 @@ const domains = [
   'channels',
   'config',
   'identity',
+  'launchpad',
   'sessions',
   'settings',
   'threads',

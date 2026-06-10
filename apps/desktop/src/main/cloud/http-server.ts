@@ -32,6 +32,7 @@ import { handleByokApiRoute } from './http-routes/byok.ts'
 import { handleCapabilitiesApiRoute } from './http-routes/capabilities.ts'
 import { handleChannelsApiRoute } from './http-routes/channels.ts'
 import { handleCoordinationApiRoute } from './http-routes/coordination.ts'
+import { handleLaunchpadApiRoute } from './http-routes/launchpad.ts'
 import { handleProjectSourcesApiRoute } from './http-routes/project-sources.ts'
 import { handleSettingsApiRoute } from './http-routes/settings.ts'
 import { handleSessionArtifactsApiRoute } from './http-routes/session-artifacts.ts'
@@ -1174,6 +1175,21 @@ async function handleApiRequest(
 
   if (resource === 'coordination') {
     await handleCoordinationApiRoute({
+      req,
+      res,
+      options,
+      context,
+      resource,
+      itemId: sessionId,
+      action,
+      artifactId,
+      tools: routeTools,
+    })
+    return
+  }
+
+  if (resource === 'launchpad') {
+    await handleLaunchpadApiRoute({
       req,
       res,
       options,

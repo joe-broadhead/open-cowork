@@ -30,6 +30,7 @@ import { listWorkflows as listWorkflowState } from './workflow/workflow-store.ts
 import { observePerf } from './perf-metrics.ts'
 import { registerAppHandlers } from './ipc/app-handlers.ts'
 import { registerArtifactHandlers } from './ipc/artifact-handlers.ts'
+import { registerLaunchpadHandlers } from './ipc/launchpad-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
@@ -395,6 +396,7 @@ export function setupIpcHandlers(
   registerDesktopPairingHandlers(context)
   registerAppHandlers(context)
   registerArtifactHandlers(context)
+  registerLaunchpadHandlers(context)
   registerCoordinationHandlers(context)
   registerWorkflowHandlers(context)
 

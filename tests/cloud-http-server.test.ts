@@ -632,6 +632,135 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
   }
 })
 
+test('cloud HTTP launchpad feed uses bounded session scans and honors disabled artifacts', async () => {
+  const basePolicy = resolveCloudRuntimePolicy(DEFAULT_CONFIG)
+  const fixture = createFixture({
+    policy: {
+      ...basePolicy,
+      features: {
+        ...basePolicy.features,
+        artifacts: false,
+      },
+    },
+  })
+  const originalListSessionsPage = fixture.service.listSessionsPage.bind(fixture.service)
+  const pageLimits: Array<number | null | undefined> = []
+  let listSessionsCalled = false
+  let artifactIndexCalled = false
+  fixture.service.listSessions = async () => {
+    listSessionsCalled = true
+    throw new Error('launchpad feed must use bounded session pagination')
+  }
+  fixture.service.listSessionsPage = async (principal, input = {}) => {
+    pageLimits.push(input.limit)
+    await originalListSessionsPage(principal, input)
+    return {
+      items: [],
+      nextCursor: 'more-sessions',
+      totalEstimate: 101,
+    }
+  }
+  fixture.artifacts.listArtifactIndex = async () => {
+    artifactIndexCalled = true
+    throw new Error('launchpad feed must not read artifacts when artifacts are disabled')
+  }
+  const baseUrl = await fixture.server.listen()
+  try {
+    const response = await fetch(`${baseUrl}/api/launchpad/feed?limit=4`)
+    assert.equal(response.status, 200)
+    const feed = await readJson(response)
+    assert.equal(listSessionsCalled, false)
+    assert.deepEqual(pageLimits, [100])
+    assert.equal(artifactIndexCalled, false)
+    assert.deepEqual(asArray(feed.freshArtifacts), [])
+    assert.equal(asRecord(feed.totals).freshArtifacts, 0)
+    assert.equal(asRecord(feed.truncated).freshArtifacts, false)
+    assert.deepEqual(asArray(feed.waitingOnYou), [])
+    assert.equal(asRecord(feed.totals).waitingOnYou, 1)
+    assert.equal(asRecord(feed.truncated).waitingOnYou, true)
+  } finally {
+    await fixture.server.close()
+  }
+})
+
+test('cloud HTTP launchpad filters task-linked artifacts after project enrichment', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-launchpad-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
+  clearConfigCaches()
+  clearCoordinationStoreCache()
+
+  const fixture = createFixture()
+  let artifactRequestProjectId: unknown = 'not-called'
+  let artifactRequestTaskIds: unknown = 'not-called'
+  let artifactRequestLimit: unknown = 'not-called'
+  const baseUrl = await fixture.server.listen()
+  try {
+    const project = await readJson(await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Launchpad project',
+        objective: 'Surface task-linked artifacts.',
+      }),
+    }))
+    const projectId = String(project.id)
+    const task = await readJson(await fetch(`${baseUrl}/api/coordination/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        title: 'Collect artifacts',
+        spec: 'Return fresh artifacts linked only by task id.',
+      }),
+    }))
+    const taskId = String(task.id)
+    fixture.artifacts.listArtifactIndex = async (_principal, request = {}) => {
+      artifactRequestProjectId = request.projectId
+      artifactRequestTaskIds = request.taskIds
+      artifactRequestLimit = request.limit
+      return {
+        artifacts: [{
+          id: 'cloud-artifact-task-only',
+          cloudArtifactId: 'cloud-artifact-task-only',
+          source: 'cloud',
+          toolId: 'cloud-artifact',
+          toolName: 'cloud.artifact',
+          filePath: 'cloud-artifact://cloud-artifact-task-only/report.md',
+          filename: 'report.md',
+          order: 1,
+          sessionId: 'session-artifacts',
+          workspaceId: 'cloud:tenant-1',
+          kind: 'document',
+          status: 'draft',
+          projectId: null,
+          taskId,
+          authorAgentId: 'builder',
+          createdAt: '2026-06-09T11:00:00.000Z',
+          updatedAt: '2026-06-09T11:00:00.000Z',
+        }],
+        total: 1,
+      }
+    }
+
+    const feed = await readJson(await fetch(`${baseUrl}/api/launchpad/feed?projectId=${encodeURIComponent(projectId)}`))
+    assert.equal(artifactRequestProjectId, projectId)
+    assert.deepEqual(artifactRequestTaskIds, [taskId])
+    assert.equal(artifactRequestLimit, 9)
+    const freshArtifacts = asArray(feed.freshArtifacts)
+    assert.equal(freshArtifacts.length, 1)
+    assert.equal(asRecord(freshArtifacts[0]).artifactId, 'cloud-artifact-task-only')
+    assert.equal(asRecord(freshArtifacts[0]).projectId, projectId)
+  } finally {
+    await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
 test('cloud HTTP command projection fences require the submitted command event', async () => {
   const fixture = createFixture()
   const baseUrl = await fixture.server.listen()
@@ -6000,6 +6129,18 @@ test('cloud HTTP artifacts use object storage and durable artifact events', asyn
     assert.equal(indexedArtifacts[0]?.projectId, 'project-1')
     assert.equal('key' in indexedArtifacts[0]!, false)
 
+    const indexedByTaskIds = await readJson(await fetch(`${baseUrl}/api/artifacts?projectId=project-other&taskIds=task-1&taskIds=missing`))
+    const taskLinkedArtifacts = asArray(indexedByTaskIds.artifacts).map(asRecord)
+    assert.equal(taskLinkedArtifacts.length, 1)
+    assert.equal(taskLinkedArtifacts[0]?.artifactId, uploaded.artifactId)
+    assert.equal(taskLinkedArtifacts[0]?.taskId, 'task-1')
+    assert.equal('key' in taskLinkedArtifacts[0]!, false)
+
+    const emptyTaskIdsResponse = await fetch(`${baseUrl}/api/artifacts?taskIds=,,`)
+    assert.equal(emptyTaskIdsResponse.status, 200)
+    const emptyTaskIds = await readJson(emptyTaskIdsResponse)
+    assert.equal(asArray(emptyTaskIds.artifacts).length, 1)
+
     const statusResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/artifacts/${uploaded.artifactId}/status`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -6128,14 +6269,33 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
       return [{
         type: 'artifact.created',
         payload: {
-          artifactId: 'artifact-1',
+          artifactId: 'artifact-older',
           sessionId,
-          filename: 'report.txt',
+          filename: 'older.txt',
           contentType: 'text/plain',
           size: 6,
-          key: 'tenants/tenant-1/private-object-key',
+          key: 'tenants/tenant-1/private-object-key-older',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
+          kind: 'document',
+          status: 'draft',
+          authorAgentId: 'agent-writer',
+          projectId: 'project-1',
+          taskId: 'task-1',
+          statusUpdatedBy: null,
+          statusUpdatedAt: null,
+        },
+      }, {
+        type: 'artifact.created',
+        payload: {
+          artifactId: 'artifact-newer',
+          sessionId,
+          filename: 'newer.txt',
+          contentType: 'text/plain',
+          size: 7,
+          key: 'tenants/tenant-1/private-object-key-newer',
+          createdAt: '2026-01-01T00:01:00.000Z',
+          updatedAt: '2026-01-01T00:01:00.000Z',
           kind: 'document',
           status: 'draft',
           authorAgentId: 'agent-writer',
@@ -6151,7 +6311,7 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
 
   const indexed = await artifacts.listArtifactIndex(principal, { limit: 1 })
   assert.equal(indexed.artifacts.length, 1)
-  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-1')
+  assert.equal(indexed.artifacts[0]?.artifactId, 'artifact-newer')
   assert.equal('key' in indexed.artifacts[0]!, false)
   assert.equal(indexed.scannedSessions, 101)
   assert.equal(indexed.truncated, true)
@@ -6163,12 +6323,24 @@ test('cloud artifact index scans paged sessions until matching artifacts are fou
   requestedLimits.length = 0
   eventCalls.length = 0
   const complete = await artifacts.listArtifactIndex(principal, { limit: 2 })
-  assert.equal(complete.artifacts.length, 1)
-  assert.equal(complete.artifacts[0]?.artifactId, 'artifact-1')
+  assert.equal(complete.artifacts.length, 2)
+  assert.deepEqual(complete.artifacts.map((artifact) => artifact.artifactId), ['artifact-newer', 'artifact-older'])
   assert.equal(complete.scannedSessions, 101)
-  assert.equal(complete.truncated, false)
+  assert.equal(complete.truncated, true)
   assert.deepEqual(requestedLimits, [100, 100])
   assert.equal(eventCalls.length, 101)
+
+  requestedLimits.length = 0
+  eventCalls.length = 0
+  const linkedByTask = await artifacts.listArtifactIndex(principal, {
+    projectId: 'project-with-task-only-artifacts',
+    taskIds: ['task-1'],
+    limit: 1,
+  })
+  assert.equal(linkedByTask.artifacts.length, 1)
+  assert.equal(linkedByTask.artifacts[0]?.artifactId, 'artifact-newer')
+  assert.equal(linkedByTask.truncated, true)
+  assert.deepEqual(requestedLimits, [100, 100])
 })
 
 test('cloud HTTP returns policy verdicts when artifacts are disabled', async () => {

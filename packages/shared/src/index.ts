@@ -145,6 +145,10 @@ import type {
   UpdateInstallEvent,
   UpdateInstallStatus,
 } from './updates.js'
+import type {
+  LaunchpadFeedPayload,
+  LaunchpadFeedRequest,
+} from './launchpad.js'
 
 export * from './app-config.js'
 export * from './app-api.js'
@@ -163,6 +167,7 @@ export * from './events.js'
 export * from './explorer.js'
 export * from './http-client-source.js'
 export * from './jsonc.js'
+export * from './launchpad.js'
 export * from './providers.js'
 export * from './project-source.js'
 export * from './remote-approval-policy.js'
@@ -254,6 +259,9 @@ export interface CoworkAPI {
     assignTask: (taskId: string, input: CoordinationTaskAssignInput) => Promise<CoordinationTask | null>
     linkTaskWork: (taskId: string, input: CoordinationTaskWorkLinkInput) => Promise<CoordinationTask | null>
     taskWorkTarget: (taskId: string, options?: WorkspaceOptions) => Promise<SessionInfo | null>
+  }
+  launchpad: {
+    feed: (request?: LaunchpadFeedRequest) => Promise<LaunchpadFeedPayload>
   }
   permission: {
     respond: (id: string, allowed: boolean, sessionId?: string | null, options?: WorkspaceOptions) => Promise<void>

@@ -50,6 +50,9 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
     artifacts: {
       index: (query) => coworkApi.artifact.index(query as Parameters<CoworkAPI['artifact']['index']>[0]),
     },
+    launchpad: {
+      feed: (query) => coworkApi.launchpad.feed(query as Parameters<CoworkAPI['launchpad']['feed']>[0]),
+    },
     capabilities: {
       catalog: () => Promise.all([coworkApi.capabilities.tools(), coworkApi.capabilities.skills()]),
       tools: () => coworkApi.capabilities.tools(),

@@ -6,6 +6,7 @@ import type {
   CustomMcpConfig,
   CustomSkillConfig,
   DestructiveConfirmationRequest,
+  LaunchpadFeedRequest,
   RuntimeContextOptions,
   ScopedArtifactRef,
   SessionArtifactExportRequest,
@@ -28,6 +29,7 @@ const MAX_SETTINGS_UPDATE_BYTES = 512 * 1024
 const MAX_CHART_DATA_URL_BYTES = 8 * 1024 * 1024 + 128
 const MAX_ARTIFACT_UPLOAD_BASE64_BYTES = 35 * 1024 * 1024
 const MAX_ARTIFACT_INDEX_LIMIT = 500
+const MAX_LAUNCHPAD_SECTION_LIMIT = 50
 const SCOPES = new Set(['machine', 'project'])
 const MCP_TYPES = new Set(['stdio', 'http'])
 const MCP_PERMISSION_MODES = new Set(['ask', 'allow'])
@@ -212,6 +214,31 @@ export function validateWorkspaceOptions(record: Record<string, unknown>): Works
   }
 }
 
+function optionalBoundedInteger(
+  record: Record<string, unknown>,
+  key: string,
+  label: string,
+  max: number,
+) {
+  const value = optionalNumber(record, key, label)
+  if (value === undefined || value === null) return value
+  if (!Number.isInteger(value) || value < 1 || value > max) {
+    throw new Error(`${label} must be an integer between 1 and ${max}.`)
+  }
+  return value
+}
+
+export function validateLaunchpadFeedRequest(record: Record<string, unknown>): LaunchpadFeedRequest {
+  return {
+    ...validateWorkspaceOptions(record),
+    projectId: optionalNullableString(record, 'projectId', 'Project id', MAX_IPC_ID_BYTES),
+    limit: optionalBoundedInteger(record, 'limit', 'Launchpad limit', MAX_LAUNCHPAD_SECTION_LIMIT),
+    inProgressLimit: optionalBoundedInteger(record, 'inProgressLimit', 'Launchpad in-progress limit', MAX_LAUNCHPAD_SECTION_LIMIT),
+    waitingLimit: optionalBoundedInteger(record, 'waitingLimit', 'Launchpad waiting limit', MAX_LAUNCHPAD_SECTION_LIMIT),
+    artifactsLimit: optionalBoundedInteger(record, 'artifactsLimit', 'Launchpad artifacts limit', MAX_LAUNCHPAD_SECTION_LIMIT),
+  }
+}
+
 export function validateToolListOptions(record: Record<string, unknown>): ToolListOptions {
   return {
     ...validateRuntimeContextOptions(record),
@@ -280,6 +307,7 @@ export function validateArtifactIndexRequest(record: Record<string, unknown>): A
     sessionId: optionalNullableString(record, 'sessionId', 'Session id', MAX_IPC_ID_BYTES),
     projectId: optionalNullableString(record, 'projectId', 'Project id', MAX_IPC_ID_BYTES),
     taskId: optionalNullableString(record, 'taskId', 'Task id', MAX_IPC_ID_BYTES),
+    taskIds: optionalStringArray(record, 'taskIds', 'Task ids'),
     kind: optionalArtifactKind(record, 'kind'),
     status: optionalArtifactStatus(record, 'status'),
     limit: optionalArtifactIndexLimit(record),

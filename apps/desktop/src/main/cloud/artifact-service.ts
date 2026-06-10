@@ -245,6 +245,22 @@ function publicArtifactRecord(record: CloudArtifactRecord, options: {
   }
 }
 
+function artifactUpdatedMs(artifact: Pick<ArtifactIndexEntry, 'updatedAt' | 'createdAt'>) {
+  const value = artifact.updatedAt || artifact.createdAt
+  const ms = value ? Date.parse(value) : NaN
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function artifactMatchesIndexRequest(entry: ArtifactIndexEntry, request: ArtifactIndexRequest) {
+  const taskIds = new Set((request.taskIds || []).filter(Boolean))
+  if (request.projectId && entry.projectId !== request.projectId && (!entry.taskId || !taskIds.has(entry.taskId))) return false
+  if (request.taskId && entry.taskId !== request.taskId) return false
+  if (!request.projectId && taskIds.size > 0 && (!entry.taskId || !taskIds.has(entry.taskId))) return false
+  if (request.status && entry.status !== request.status) return false
+  if (request.kind && entry.kind !== request.kind) return false
+  return true
+}
+
 export class CloudArtifactService {
   private readonly sessionService: CloudSessionService
   private readonly objectStore: ObjectStoreAdapter
@@ -396,20 +412,22 @@ export class CloudArtifactService {
     limit: number,
   ): Promise<boolean> {
     const records = await this.listSessionArtifacts(principal, sessionView.session.sessionId)
+    const sessionArtifacts: ArtifactIndexEntry[] = []
     for (const [index, record] of records.entries()) {
       const entry = publicArtifactRecord(record, {
         order: index,
         sessionTitle: sessionView.session.title,
         workspaceId: `cloud:${principal.tenantId}`,
       })
-      if (request.projectId && entry.projectId !== request.projectId) continue
-      if (request.taskId && entry.taskId !== request.taskId) continue
-      if (request.status && entry.status !== request.status) continue
-      if (request.kind && entry.kind !== request.kind) continue
-      artifacts.push(entry)
-      if (artifacts.length >= limit) return true
+      if (!artifactMatchesIndexRequest(entry, request)) continue
+      sessionArtifacts.push(entry)
     }
-    return false
+    sessionArtifacts.sort((left, right) => artifactUpdatedMs(right) - artifactUpdatedMs(left))
+    for (const entry of sessionArtifacts) {
+      if (artifacts.length >= limit) return true
+      artifacts.push(entry)
+    }
+    return artifacts.length >= limit && sessionArtifacts.length > 0
   }
 
   async updateSessionArtifactStatus(

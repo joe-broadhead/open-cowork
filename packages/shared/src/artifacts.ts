@@ -91,6 +91,7 @@ export interface ArtifactIndexRequest extends WorkspaceOptions {
   sessionId?: string | null
   projectId?: string | null
   taskId?: string | null
+  taskIds?: string[] | null
   status?: ArtifactStatus | null
   kind?: ArtifactKind | null
   limit?: number | null

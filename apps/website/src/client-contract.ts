@@ -37,6 +37,7 @@ export type CloudWebEndpointId =
   | 'sessionArtifacts'
   | 'sessionArtifact'
   | 'artifactsIndex'
+  | 'launchpadFeed'
   | 'capabilitiesCatalog'
   | 'capabilityTools'
   | 'capabilitySkills'
@@ -392,6 +393,12 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     id: 'artifactsIndex',
     method: 'GET',
     path: '/api/artifacts',
+    csrf: false,
+  },
+  {
+    id: 'launchpadFeed',
+    method: 'GET',
+    path: '/api/launchpad/feed',
     csrf: false,
   },
   {
