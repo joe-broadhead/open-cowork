@@ -108,6 +108,7 @@ export type CoordinationScheduleStatus = typeof COORDINATION_SCHEDULE_STATUSES[n
 
 export const COORDINATION_WATCH_TARGETS = [
   'conversation',
+  'playbook',
   'project',
   'task',
   'workflow',
@@ -116,6 +117,16 @@ export const COORDINATION_WATCH_TARGETS = [
 ] as const
 
 export type CoordinationWatchTarget = typeof COORDINATION_WATCH_TARGETS[number]
+
+export const COORDINATION_WATCH_EVENTS = [
+  'task.moved',
+  'task.review_ready',
+  'run.finished',
+  'needs_input',
+  'daily_summary',
+] as const
+
+export type CoordinationWatchEventType = typeof COORDINATION_WATCH_EVENTS[number]
 
 export const COORDINATION_WATCH_STATUSES = [
   'active',
@@ -133,6 +144,16 @@ export const COORDINATION_WATCH_VERBOSITIES = [
 ] as const
 
 export type CoordinationWatchVerbosity = typeof COORDINATION_WATCH_VERBOSITIES[number]
+
+export const COORDINATION_WATCH_RECIPIENT_ROLES = [
+  'owner',
+  'admin',
+  'member',
+  'approver',
+  'viewer',
+] as const
+
+export type CoordinationWatchRecipientRole = typeof COORDINATION_WATCH_RECIPIENT_ROLES[number]
 
 export const COORDINATION_DELEGATION_MODES = [
   'opencode_native',
@@ -159,6 +180,32 @@ export type CoordinationDelegationStatus = typeof COORDINATION_DELEGATION_STATUS
 export type CoordinationTarget = {
   kind: CoordinationWatchTarget
   id: string
+}
+
+export type CoordinationWatchChannel = {
+  provider: string
+  agentId: string
+  channelBindingId: string
+  sessionBindingId?: string | null
+  target: Record<string, unknown>
+}
+
+export type CoordinationWatchRecipient = {
+  identityId?: string | null
+  role?: CoordinationWatchRecipientRole | null
+  label?: string | null
+}
+
+export type CoordinationWatchEvent = {
+  eventType: CoordinationWatchEventType
+  workspaceId?: string | null
+  target: CoordinationTarget
+  relatedTargets?: CoordinationTarget[]
+  title?: string | null
+  message?: string | null
+  severity?: 'info' | 'success' | 'warning' | 'error' | null
+  occurredAt?: string | null
+  metadata?: Record<string, unknown> | null
 }
 
 export type CoordinationBase = {
@@ -234,6 +281,9 @@ export type CoordinationWatch = CoordinationBase & {
   kind: 'watch'
   status: CoordinationWatchStatus
   target: CoordinationTarget
+  events: CoordinationWatchEventType[]
+  channel: CoordinationWatchChannel
+  recipient?: CoordinationWatchRecipient | null
   deliverySurface: WorkspaceProductSurface | 'gateway_channel'
   verbosity: CoordinationWatchVerbosity
   cursor?: string | number | null
@@ -341,6 +391,20 @@ export type CoordinationTaskWorkLinkInput = {
   status?: CoordinationTaskStatus
 }
 
+export type CoordinationWatchInput = {
+  target: CoordinationTarget
+  events: CoordinationWatchEventType[]
+  channel: CoordinationWatchChannel
+  recipient?: CoordinationWatchRecipient | null
+  status?: CoordinationWatchStatus
+  deliverySurface?: WorkspaceProductSurface | 'gateway_channel'
+  verbosity?: CoordinationWatchVerbosity
+  cursor?: string | number | null
+  workspaceId?: string | null
+}
+
+export type CoordinationWatchUpdateInput = Partial<Omit<CoordinationWatchInput, 'workspaceId'>>
+
 export type CoordinationCapabilitySupport = Record<CoordinationCapability, WorkspaceApiSupportStatus>
 
 export const COORDINATION_WORKSPACE_SUPPORT_APIS = {
@@ -361,7 +425,7 @@ export const COORDINATION_AUTHORITY_SUPPORT = {
     workflows: 'supported',
     runs: 'supported',
     schedules: 'supported',
-    watches: 'not_supported',
+    watches: 'supported',
     delegation: 'supported',
     artifacts: 'supported',
     questions: 'supported',
@@ -450,6 +514,35 @@ export function isCoordinationTaskColumn(value: unknown): value is CoordinationT
 
 export function isCoordinationTaskPriority(value: unknown): value is CoordinationTaskPriority {
   return typeof value === 'string' && COORDINATION_TASK_PRIORITIES.includes(value as CoordinationTaskPriority)
+}
+
+export function isCoordinationWatchTarget(value: unknown): value is CoordinationWatchTarget {
+  return typeof value === 'string' && COORDINATION_WATCH_TARGETS.includes(value as CoordinationWatchTarget)
+}
+
+export function isCoordinationWatchEvent(value: unknown): value is CoordinationWatchEventType {
+  return typeof value === 'string' && COORDINATION_WATCH_EVENTS.includes(value as CoordinationWatchEventType)
+}
+
+export function isCoordinationWatchStatus(value: unknown): value is CoordinationWatchStatus {
+  return typeof value === 'string' && COORDINATION_WATCH_STATUSES.includes(value as CoordinationWatchStatus)
+}
+
+export function isCoordinationWatchVerbosity(value: unknown): value is CoordinationWatchVerbosity {
+  return typeof value === 'string' && COORDINATION_WATCH_VERBOSITIES.includes(value as CoordinationWatchVerbosity)
+}
+
+export function isCoordinationWatchRecipientRole(value: unknown): value is CoordinationWatchRecipientRole {
+  return typeof value === 'string' && COORDINATION_WATCH_RECIPIENT_ROLES.includes(value as CoordinationWatchRecipientRole)
+}
+
+export function coordinationWatchRecipientCanReceive(
+  role: CoordinationWatchRecipientRole | null | undefined,
+  eventType: CoordinationWatchEventType,
+) {
+  if (!role || role === 'owner' || role === 'admin' || role === 'member') return true
+  if (role === 'approver') return eventType !== 'daily_summary'
+  return eventType === 'task.moved' || eventType === 'task.review_ready' || eventType === 'run.finished'
 }
 
 export function coordinationTaskColumnForStatus(

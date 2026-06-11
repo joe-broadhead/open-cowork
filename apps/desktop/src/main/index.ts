@@ -432,7 +432,26 @@ app.whenReady().then(async () => {
   const rendererDevServerUrl = effectiveRendererDevServerUrl(process.env.VITE_DEV_SERVER_URL, app.isPackaged)
 
   setupIpcHandlers(ipcMain, getMainWindow, { devServerUrl: rendererDevServerUrl })
-  configureCoordinationService({ getMainWindow })
+  configureCoordinationService({
+    getMainWindow,
+    watchDeliveryAdapter: {
+      createChannelDelivery(delivery) {
+        const payload = delivery.payload || {}
+        const message = typeof payload.message === 'string' && payload.message.trim()
+          ? payload.message.trim()
+          : typeof payload.title === 'string' && payload.title.trim()
+            ? payload.title.trim()
+            : `Watch event: ${delivery.eventType}`
+        publishNotification(getMainWindow(), {
+          type: delivery.eventType === 'needs_input' ? 'error' : 'done',
+          workspaceId: delivery.workspaceId,
+          synthetic: false,
+          message,
+        })
+        return { deliveryId: delivery.deliveryId, status: 'sent' }
+      },
+    },
+  })
   configureWorkflowService({ getMainWindow })
   startWorkflowService()
   registerBrandingAssetProtocol()

@@ -58,6 +58,12 @@ export type CloudWebEndpointId =
   | 'coordinationTaskAssign'
   | 'coordinationTaskLinkWork'
   | 'coordinationTaskWorkTarget'
+  | 'coordinationWatches'
+  | 'coordinationWatchCreate'
+  | 'coordinationWatch'
+  | 'coordinationWatchPause'
+  | 'coordinationWatchResume'
+  | 'coordinationWatchDelete'
   | 'projectSourceValidate'
   | 'projectSnapshots'
   | 'adminPolicy'
@@ -521,6 +527,12 @@ export const CLOUD_WEB_CLIENT_ENDPOINTS: CloudWebEndpoint[] = [
     path: '/api/coordination/tasks/:taskId/work-target',
     csrf: false,
   },
+  { id: 'coordinationWatches', method: 'GET', path: '/api/coordination/watches?limit=500', csrf: false },
+  { id: 'coordinationWatchCreate', method: 'POST', path: '/api/coordination/watches', csrf: true },
+  { id: 'coordinationWatch', method: 'POST', path: '/api/coordination/watches/:watchId', csrf: true },
+  { id: 'coordinationWatchPause', method: 'POST', path: '/api/coordination/watches/:watchId/pause', csrf: true },
+  { id: 'coordinationWatchResume', method: 'POST', path: '/api/coordination/watches/:watchId/resume', csrf: true },
+  { id: 'coordinationWatchDelete', method: 'DELETE', path: '/api/coordination/watches/:watchId', csrf: true },
   {
     id: 'projectSourceValidate',
     method: 'POST',

@@ -191,7 +191,7 @@ test('workspace gateway marks local desktop-only capabilities as local supported
   assert.equal(supportStatus(support, 'coordination.tasks').status, 'supported')
   assert.equal(supportStatus(support, 'coordination.runs').status, 'supported')
   assert.equal(supportStatus(support, 'coordination.schedules').status, 'supported')
-  assert.equal(supportStatus(support, 'coordination.watches').status, 'not_supported')
+  assert.equal(supportStatus(support, 'coordination.watches').status, 'supported')
   assert.equal(supportStatus(support, 'coordination.delegation').status, 'supported')
 })
 
@@ -208,6 +208,7 @@ test('workspace gateway registers cloud connections without enabling unauthentic
   const support = await gateway.supportMatrix(event(1), workspace.id)
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.status, 'blocked_by_policy')
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.context?.authority, 'cloud_worker')
+  assert.equal(supportStatus(support, 'coordination.watches').status, 'deferred')
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.context?.runtimeAuthority, 'cloud_worker')
   assert.equal(support.find((entry) => entry.api === 'sessions.prompt')?.context?.ownership.sessions, 'cloud_control_plane')
   assert.equal(support.find((entry) => entry.api === 'localFiles')?.status, 'not_supported')

@@ -79,6 +79,12 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       assignTask: (taskId, input) => coworkApi.coordination.assignTask(taskId, input as Parameters<CoworkAPI['coordination']['assignTask']>[1]),
       linkTaskWork: (taskId, input) => coworkApi.coordination.linkTaskWork(taskId, input as Parameters<CoworkAPI['coordination']['linkTaskWork']>[1]),
       taskWorkTarget: (taskId) => coworkApi.coordination.taskWorkTarget(taskId),
+      watches: (query) => coworkApi.coordination.listWatches(query as Parameters<CoworkAPI['coordination']['listWatches']>[0]),
+      createWatch: (input) => coworkApi.coordination.createWatch(input as Parameters<CoworkAPI['coordination']['createWatch']>[0]),
+      updateWatch: (watchId, input) => coworkApi.coordination.updateWatch(watchId, input as Parameters<CoworkAPI['coordination']['updateWatch']>[1]),
+      pauseWatch: (watchId) => coworkApi.coordination.pauseWatch(watchId),
+      resumeWatch: (watchId) => coworkApi.coordination.resumeWatch(watchId),
+      deleteWatch: (watchId) => coworkApi.coordination.deleteWatch(watchId),
     },
     projectSources: {
       validate: (input) => coworkApi.projectSource.validate(input as Parameters<CoworkAPI['projectSource']['validate']>[0]),

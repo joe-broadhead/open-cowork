@@ -6,8 +6,24 @@ import type {
   CoordinationTaskMoveInput,
   CoordinationTaskUpdateInput,
   CoordinationTaskWorkLinkInput,
+  CoordinationTarget,
   SessionInfo,
 } from '@open-cowork/shared'
+import {
+  assertImplementedWatchTarget,
+  emitCloudTaskWatchEvents,
+  filterAuthorizedWatches,
+  hasOwnField,
+  normalizeCloudWatchRecipient,
+  requireCloudWatchInWorkspace,
+  validateExistingWatchMutation,
+  validateWatchChannel,
+  watchCreateInputFromBody,
+  watchStatusFromQuery,
+  watchTargetFromBody,
+  watchTargetFromQuery,
+  watchUpdateInputFromBody,
+} from './coordination-watch-route-utils.ts'
 import type { CloudApiRouteInput } from './types.ts'
 import {
   assignCoordinationTask,
@@ -33,7 +49,7 @@ function coordinationErrorStatus(error: unknown) {
   if (Number.isInteger(status) && status >= 400 && status < 600) return status
   if (!(error instanceof Error)) return 500
   if (/\bnot found\b/i.test(error.message)) return 404
-  if (/(required|invalid|must|too large|cannot|workspace|parent|artifact|assignee|title|objective|status|column|priority)/i.test(error.message)) {
+  if (/(required|invalid|must|too large|cannot|workspace|parent|artifact|assignee|title|objective|status|column|priority|watch|target|event|channel|provider|recipient|cursor|delivery|verbosity)/i.test(error.message)) {
     return 400
   }
   return 500
@@ -83,6 +99,21 @@ function requireTaskInWorkspace(input: CloudApiRouteInput, taskId: string, works
     return null
   }
   return task
+}
+
+async function requireWatchTargetInWorkspace(input: CloudApiRouteInput, target: CoordinationTarget, workspaceId: string) {
+  if (target.kind === 'project') return Boolean(requireProjectInWorkspace(input, target.id, workspaceId))
+  if (target.kind === 'task') return Boolean(requireTaskInWorkspace(input, target.id, workspaceId))
+  if (target.kind === 'conversation' || target.kind === 'session') {
+    try {
+      await input.options.service.getSessionView(input.context.principal, target.id)
+      return true
+    } catch (error) {
+      writeCoordinationError(input, error)
+      return false
+    }
+  }
+  return true
 }
 
 export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Promise<boolean> {
@@ -182,6 +213,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
           tools.writeError(res, 404, 'Coordination task was not found.', options.corsOrigin)
           return true
         }
+        await emitCloudTaskWatchEvents(input, existing, task)
         tools.writeJson(res, 200, task, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
@@ -189,7 +221,8 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       return true
     }
     if (itemId && itemAction === 'move' && req.method === 'POST') {
-      if (!requireTaskInWorkspace(input, itemId, workspaceId)) return true
+      const existing = requireTaskInWorkspace(input, itemId, workspaceId)
+      if (!existing) return true
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       try {
         const task = moveCoordinationTask(itemId, body as CoordinationTaskMoveInput)
@@ -197,6 +230,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
           tools.writeError(res, 404, 'Coordination task was not found.', options.corsOrigin)
           return true
         }
+        await emitCloudTaskWatchEvents(input, existing, task)
         tools.writeJson(res, 200, task, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
@@ -219,7 +253,8 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       return true
     }
     if (itemId && itemAction === 'link-work' && req.method === 'POST') {
-      if (!requireTaskInWorkspace(input, itemId, workspaceId)) return true
+      const existing = requireTaskInWorkspace(input, itemId, workspaceId)
+      if (!existing) return true
       const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
       const assignedSessionId = workLinkSessionId(body)
       if (!assignedSessionId) {
@@ -236,6 +271,7 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
           tools.writeError(res, 404, 'Coordination task was not found.', options.corsOrigin)
           return true
         }
+        await emitCloudTaskWatchEvents(input, existing, task)
         tools.writeJson(res, 200, task, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
@@ -252,6 +288,110 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
       try {
         const sessionView = await options.service.getSessionView(context.principal, task.assignedSessionId)
         tools.writeJson(res, 200, cloudSessionInfo(sessionView), options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+  }
+
+  if (collection === 'watches') {
+    if (!itemId && req.method === 'GET') {
+      try {
+        const watches = await options.service.listCloudCoordinationWatches(context.principal, {
+          workspaceId,
+          target: watchTargetFromQuery(context.url),
+          status: watchStatusFromQuery(context.url),
+          limit,
+        })
+        tools.writeJson(res, 200, await filterAuthorizedWatches(input, watches), options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (!itemId && req.method === 'POST') {
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const target = watchTargetFromBody(body)
+      if (!target) {
+        tools.writeError(res, 400, 'Watch target is required.', options.corsOrigin)
+        return true
+      }
+      try {
+        assertImplementedWatchTarget(target)
+        if (!await requireWatchTargetInWorkspace(input, target, workspaceId)) return true
+        const watchInputBody = await validateWatchChannel(input, body)
+        tools.writeJson(res, 201, await options.service.createCloudCoordinationWatch(context.principal, {
+          ...watchCreateInputFromBody(watchInputBody, target),
+          workspaceId,
+        }), options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (itemId && !itemAction && req.method === 'POST') {
+      const existingWatch = await requireCloudWatchInWorkspace(input, itemId, workspaceId)
+      if (!existingWatch) return true
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      const target = hasOwnField(body, 'target') ? watchTargetFromBody(body) : null
+      if (hasOwnField(body, 'target') && !target) {
+        tools.writeError(res, 400, 'Watch target is invalid.', options.corsOrigin)
+        return true
+      }
+      try {
+        if (target) {
+          assertImplementedWatchTarget(target)
+          if (!await requireWatchTargetInWorkspace(input, target, workspaceId)) return true
+        }
+        await validateExistingWatchMutation(input, existingWatch)
+        let watchInputBody = body
+        if (hasOwnField(body, 'channel')) {
+          watchInputBody = await validateWatchChannel(input, body)
+        } else if (hasOwnField(body, 'recipient')) {
+          watchInputBody = normalizeCloudWatchRecipient(input, body)
+        }
+        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, watchUpdateInputFromBody(watchInputBody, target))
+        if (!watch) {
+          tools.writeError(res, 404, 'Coordination watch was not found.', options.corsOrigin)
+          return true
+        }
+        tools.writeJson(res, 200, watch, options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (itemId && itemAction === 'pause' && req.method === 'POST') {
+      const existingWatch = await requireCloudWatchInWorkspace(input, itemId, workspaceId)
+      if (!existingWatch) return true
+      try {
+        await validateExistingWatchMutation(input, existingWatch)
+        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'paused' })
+        tools.writeJson(res, watch ? 200 : 404, watch || { error: 'Coordination watch was not found.' }, options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (itemId && itemAction === 'resume' && req.method === 'POST') {
+      const existingWatch = await requireCloudWatchInWorkspace(input, itemId, workspaceId)
+      if (!existingWatch) return true
+      try {
+        await validateExistingWatchMutation(input, existingWatch)
+        const watch = await options.service.updateCloudCoordinationWatch(context.principal, workspaceId, itemId, { status: 'active' })
+        tools.writeJson(res, watch ? 200 : 404, watch || { error: 'Coordination watch was not found.' }, options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (itemId && !itemAction && req.method === 'DELETE') {
+      const existingWatch = await requireCloudWatchInWorkspace(input, itemId, workspaceId)
+      if (!existingWatch) return true
+      try {
+        await validateExistingWatchMutation(input, existingWatch)
+        tools.writeJson(res, 200, { deleted: await options.service.deleteCloudCoordinationWatch(context.principal, workspaceId, itemId) }, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
       }

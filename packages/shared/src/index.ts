@@ -9,6 +9,9 @@ import type {
   CoordinationTaskMoveInput,
   CoordinationTaskUpdateInput,
   CoordinationTaskWorkLinkInput,
+  CoordinationWatch,
+  CoordinationWatchInput,
+  CoordinationWatchUpdateInput,
 } from './coordination.js'
 import type {
   WorkflowDetail,
@@ -259,6 +262,12 @@ export interface CoworkAPI {
     assignTask: (taskId: string, input: CoordinationTaskAssignInput) => Promise<CoordinationTask | null>
     linkTaskWork: (taskId: string, input: CoordinationTaskWorkLinkInput) => Promise<CoordinationTask | null>
     taskWorkTarget: (taskId: string, options?: WorkspaceOptions) => Promise<SessionInfo | null>
+    listWatches: (options?: WorkspaceOptions & { targetKind?: string | null; targetId?: string | null; status?: string | null; limit?: number }) => Promise<CoordinationWatch[]>
+    createWatch: (input: CoordinationWatchInput) => Promise<CoordinationWatch>
+    updateWatch: (watchId: string, input: CoordinationWatchUpdateInput) => Promise<CoordinationWatch | null>
+    pauseWatch: (watchId: string, options?: WorkspaceOptions) => Promise<CoordinationWatch | null>
+    resumeWatch: (watchId: string, options?: WorkspaceOptions) => Promise<CoordinationWatch | null>
+    deleteWatch: (watchId: string, options?: WorkspaceOptions) => Promise<boolean>
   }
   launchpad: {
     feed: (request?: LaunchpadFeedRequest) => Promise<LaunchpadFeedPayload>

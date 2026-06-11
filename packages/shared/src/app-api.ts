@@ -95,6 +95,12 @@ export type AppAPI = AppApiEndpointResolver & {
     assignTask: (taskId: string, input: unknown) => Promise<unknown>
     linkTaskWork: (taskId: string, input: unknown) => Promise<unknown>
     taskWorkTarget: (taskId: string) => Promise<unknown>
+    watches: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    createWatch: (input: unknown) => Promise<unknown>
+    updateWatch: (watchId: string, input: unknown) => Promise<unknown>
+    pauseWatch: (watchId: string) => Promise<unknown>
+    resumeWatch: (watchId: string) => Promise<unknown>
+    deleteWatch: (watchId: string) => Promise<unknown>
   }
   projectSources: {
     validate: (input: unknown) => Promise<unknown>
