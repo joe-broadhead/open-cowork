@@ -14,6 +14,7 @@ import { redactAuditMetadata } from './audit-redaction.ts'
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
+  CoordinationWatch,
 } from '@open-cowork/shared'
 import type {
   AttachWorkflowRunSessionInput,
@@ -40,6 +41,7 @@ import type {
   CreateChannelBindingInput,
   CreateChannelDeliveryInput,
   CreateChannelInteractionInput,
+  CreateCloudCoordinationWatchInput,
   CreateAccountInput,
   CreateByokSecretInput,
   CreateHeadlessAgentInput,
@@ -57,6 +59,8 @@ import type {
   IssuedManagedWorkerCredentialRecord,
   IssueApiTokenInput,
   ListApiTokenChannelBindingGrantsInput,
+  ListCloudCoordinationWatchesInput,
+  ListMatchingCloudCoordinationWatchesInput,
   ListSessionsPageInput,
   ManagedWorkerCredentialRecord,
   ManagedWorkerHeartbeatRecord,
@@ -89,6 +93,7 @@ import type {
   UsageQuotaCounterRecord,
   UpdateChannelBindingInput,
   UpdateChannelCursorInput,
+  UpdateCloudCoordinationWatchInput,
   UpdateHeadlessAgentInput,
   UpdateManagedWorkerPoolInput,
   UpdateManagedWorkerStatusInput,
@@ -147,6 +152,7 @@ import { assertPostgresCommandEnqueueQuotas, assertPostgresCommandQueueQuota, as
 import { PostgresManagedWorkersRepository } from './postgres-store-domains/workers.ts'
 import { PostgresChannelProviderEventsRepository } from './postgres-store-domains/channel-provider-events.ts'
 import { PostgresChannelDeliveriesRepository } from './postgres-store-domains/channel-deliveries.ts'
+import { PostgresCoordinationWatchesRepository } from './postgres-store-domains/coordination-watches.ts'
 
 type PgExecutor = {
   query<Row extends QueryRow = QueryRow>(text: string, values?: unknown[]): Promise<QueryResult<Row>>
@@ -303,6 +309,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   private readonly managedWorkers: PostgresManagedWorkersRepository
   private readonly channelProviderEvents: PostgresChannelProviderEventsRepository
   private readonly channelDeliveries: PostgresChannelDeliveriesRepository
+  private readonly coordinationWatches: PostgresCoordinationWatchesRepository
   private readonly quotaDeps = {
     lockQuota: (executor: PgExecutor, orgId: string, quotaKey: string, now?: Date) => this.lockQuota(executor, orgId, quotaKey, now),
     consumeUsageQuota: (executor: PgExecutor, input: ConsumeUsageQuotaInput) => this.consumeUsageQuotaWithExecutor(executor, input),
@@ -325,6 +332,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
       withTransaction: (fn) => this.withTransaction(fn),
       consumeUsageQuota: (executor, input) => this.consumeUsageQuotaWithExecutor(executor, input),
     })
+    this.coordinationWatches = new PostgresCoordinationWatchesRepository(this.pool)
   }
 
   static async connect(options: PostgresControlPlaneStoreOptions) {
@@ -342,14 +350,14 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     await runPostgresControlPlaneMigrations(this.pool, (fn) => this.withTransaction(fn))
   }
 
-  async createTenant(input: { tenantId: string, name: string, createdAt?: Date }) {
+  async createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }) {
     await this.pool.query(
       `INSERT INTO cloud_tenants (tenant_id, name, created_at)
        VALUES ($1, $2, $3)
        ON CONFLICT (tenant_id) DO NOTHING`,
       [input.tenantId, input.name, nowIso(input.createdAt)],
     )
-    await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, createdAt: input.createdAt })
+    await this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, orgId: input.orgId, createdAt: input.createdAt })
     return this.requireTenant(input.tenantId)
   }
 
@@ -1943,6 +1951,30 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
 
   async ackChannelDelivery(input: AckChannelDeliveryInput) {
     return this.channelDeliveries.ack(input)
+  }
+
+  async createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): Promise<CoordinationWatch> {
+    return this.coordinationWatches.create(input)
+  }
+
+  async updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): Promise<CoordinationWatch | null> {
+    return this.coordinationWatches.update(input)
+  }
+
+  async getCloudCoordinationWatch(workspaceId: string, watchId: string): Promise<CoordinationWatch | null> {
+    return this.coordinationWatches.get(workspaceId, watchId)
+  }
+
+  async listCloudCoordinationWatches(input: ListCloudCoordinationWatchesInput): Promise<CoordinationWatch[]> {
+    return this.coordinationWatches.list(input)
+  }
+
+  async listMatchingCloudCoordinationWatches(input: ListMatchingCloudCoordinationWatchesInput): Promise<CoordinationWatch[]> {
+    return this.coordinationWatches.listMatching(input)
+  }
+
+  async deleteCloudCoordinationWatch(workspaceId: string, watchId: string): Promise<boolean> {
+    return this.coordinationWatches.delete(workspaceId, watchId)
   }
 
   async claimChannelProviderEvent(input: ClaimChannelProviderEventInput) {

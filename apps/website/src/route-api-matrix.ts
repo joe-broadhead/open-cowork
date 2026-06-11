@@ -74,6 +74,12 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
       'coordinationTaskAssign',
       'coordinationTaskLinkWork',
       'coordinationTaskWorkTarget',
+      'coordinationWatches',
+      'coordinationWatchCreate',
+      'coordinationWatch',
+      'coordinationWatchPause',
+      'coordinationWatchResume',
+      'coordinationWatchDelete',
     ],
     states: {
       loading: 'Projects list renders an empty table until /api/sessions returns.',

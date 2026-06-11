@@ -15,22 +15,18 @@ import {
   type CloudChannelDomainServiceOptions,
 } from './channel-domain-context.ts'
 
-export async function createChannelDelivery(
+type ChannelDeliveryTargetInput = {
+  agentId: string
+  channelBindingId: string
+  sessionBindingId?: string | null
+  provider: ChannelProviderId
+}
+
+async function validateChannelDeliveryTarget(
   options: CloudChannelDomainServiceOptions,
   principal: CloudPrincipal,
-  input: {
-    agentId: string
-    channelBindingId: string
-    sessionBindingId?: string | null
-    provider: ChannelProviderId
-    target: Record<string, unknown>
-    eventType: string
-    payload: Record<string, unknown>
-    status?: ChannelDeliveryRecord['status']
-    nextAttemptAt?: Date | null
-    deliveryId?: string | null
-  },
-): Promise<PublicChannelDeliveryRecord> {
+  input: ChannelDeliveryTargetInput,
+) {
   await options.ensurePrincipal(principal)
   assertGatewayAccess(principal)
   const orgId = options.principalOrgId(principal)
@@ -56,6 +52,34 @@ export async function createChannelDelivery(
       throw new CloudServiceError(403, 'Channel delivery session binding does not belong to the selected channel binding.')
     }
   }
+  return { orgId, agent, channelBinding }
+}
+
+export async function assertChannelDeliveryTarget(
+  options: CloudChannelDomainServiceOptions,
+  principal: CloudPrincipal,
+  input: ChannelDeliveryTargetInput,
+) {
+  await validateChannelDeliveryTarget(options, principal, input)
+}
+
+export async function createChannelDelivery(
+  options: CloudChannelDomainServiceOptions,
+  principal: CloudPrincipal,
+  input: {
+    agentId: string
+    channelBindingId: string
+    sessionBindingId?: string | null
+    provider: ChannelProviderId
+    target: Record<string, unknown>
+    eventType: string
+    payload: Record<string, unknown>
+    status?: ChannelDeliveryRecord['status']
+    nextAttemptAt?: Date | null
+    deliveryId?: string | null
+  },
+): Promise<PublicChannelDeliveryRecord> {
+  const { orgId, agent, channelBinding } = await validateChannelDeliveryTarget(options, principal, input)
   const delivery = await options.store.createChannelDelivery({
     deliveryId: input.deliveryId || options.ids.randomUUID(),
     orgId,

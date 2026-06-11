@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
@@ -14,23 +14,41 @@ import type {
   CoordinationTaskPriority,
   CoordinationTaskStatus,
   CoordinationTaskUpdateInput,
+  CoordinationTarget,
+  CoordinationWatch,
+  CoordinationWatchChannel,
+  CoordinationWatchEventType,
+  CoordinationWatchInput,
+  CoordinationWatchRecipient,
+  CoordinationWatchRecipientRole,
+  CoordinationWatchStatus,
+  CoordinationWatchUpdateInput,
+  CoordinationWatchVerbosity,
 } from '@open-cowork/shared'
 import {
+  WORKSPACE_PRODUCT_SURFACES,
   coordinationTaskColumnForStatus,
   isCoordinationProjectStatus,
   isCoordinationTaskColumn,
   isCoordinationTaskPriority,
   isCoordinationTaskStatus,
+  isCoordinationWatchEvent,
+  isCoordinationWatchRecipientRole,
+  isCoordinationWatchStatus,
+  isCoordinationWatchTarget,
+  isCoordinationWatchVerbosity,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
 
-const COORDINATION_DB_SCHEMA_VERSION = 1
+const COORDINATION_DB_SCHEMA_VERSION = 2
 const COORDINATION_SCHEMA_VERSION_KEY = 'schema_version'
 const LOCAL_WORKSPACE_ID = 'local'
 const MAX_TITLE_BYTES = 240
 const MAX_TEXT_BYTES = 32 * 1024
 const MAX_AGENT_ID_BYTES = 256
 const MAX_ARTIFACT_REFS = 100
+const MAX_WATCH_EVENTS = 16
+const MAX_CHANNEL_TARGET_BYTES = 16 * 1024
 
 let coordinationDb: DatabaseSync | null = null
 let coordinationDbForTests: DatabaseSync | null = null
@@ -101,9 +119,29 @@ function initDb(db: DatabaseSync) {
       foreign key(project_id) references coordination_projects(id) on delete cascade,
       foreign key(parent_task_id) references coordination_tasks(id) on delete set null
     );
+    create table if not exists coordination_watches (
+      id text primary key,
+      workspace_id text not null,
+      owner_authority text not null,
+      execution_authority text not null,
+      state_owner text not null,
+      target_kind text not null,
+      target_id text not null,
+      events_json text not null,
+      delivery_surface text not null,
+      channel_json text not null,
+      recipient_json text,
+      status text not null,
+      verbosity text not null,
+      cursor_json text,
+      created_at text not null,
+      updated_at text not null
+    );
     create index if not exists idx_coordination_projects_workspace on coordination_projects(workspace_id, updated_at);
     create index if not exists idx_coordination_tasks_project on coordination_tasks(project_id, column_name, updated_at);
     create index if not exists idx_coordination_tasks_session on coordination_tasks(assigned_session_id);
+    create index if not exists idx_coordination_watches_workspace on coordination_watches(workspace_id, status, updated_at);
+    create index if not exists idx_coordination_watches_target on coordination_watches(workspace_id, target_kind, target_id, status);
   `)
   db.prepare(`
     insert into coordination_meta (key, value)
@@ -231,6 +269,104 @@ function normalizeArtifactRefs(value: unknown): CoordinationArtifactLink[] {
   })
 }
 
+function jsonString(value: unknown, label: string, maxBytes = MAX_TEXT_BYTES) {
+  const json = JSON.stringify(value)
+  if (byteLength(json) > maxBytes) throw new Error(`${label} is too large.`)
+  return json
+}
+
+function normalizeWatchTarget(value: unknown): CoordinationTarget {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Watch target is required.')
+  const record = value as Record<string, unknown>
+  if (!isCoordinationWatchTarget(record.kind)) throw new Error('Watch target kind is invalid.')
+  return {
+    kind: record.kind,
+    id: requiredString(record.id, 'Watch target id', 512),
+  }
+}
+
+function assertImplementedWatchTarget(target: CoordinationTarget) {
+  if (
+    target.kind !== 'project'
+    && target.kind !== 'task'
+    && target.kind !== 'session'
+    && target.kind !== 'conversation'
+  ) {
+    throw new Error(`Watch target kind "${target.kind}" is not supported until ${target.kind} watch events are implemented.`)
+  }
+}
+
+function normalizeWatchEvents(value: unknown): CoordinationWatchEventType[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('Watch events must be a non-empty array.')
+  const unique = new Set<CoordinationWatchEventType>()
+  for (const entry of value) {
+    if (!isCoordinationWatchEvent(entry)) throw new Error('Watch event is invalid.')
+    unique.add(entry)
+  }
+  return Array.from(unique).slice(0, MAX_WATCH_EVENTS)
+}
+
+function normalizeWatchStatus(value: unknown, fallback: CoordinationWatchStatus): CoordinationWatchStatus {
+  if (value === undefined || value === null) return fallback
+  if (!isCoordinationWatchStatus(value)) throw new Error('Watch status is invalid.')
+  return value
+}
+
+function normalizeWatchVerbosity(value: unknown, fallback: CoordinationWatchVerbosity): CoordinationWatchVerbosity {
+  if (value === undefined || value === null) return fallback
+  if (!isCoordinationWatchVerbosity(value)) throw new Error('Watch verbosity is invalid.')
+  return value
+}
+
+function normalizeWatchDeliverySurface(value: unknown, fallback: CoordinationWatch['deliverySurface']): CoordinationWatch['deliverySurface'] {
+  if (value === undefined || value === null) return fallback
+  if (value === 'gateway_channel' || WORKSPACE_PRODUCT_SURFACES.includes(value as (typeof WORKSPACE_PRODUCT_SURFACES)[number])) {
+    return value as CoordinationWatch['deliverySurface']
+  }
+  throw new Error('Watch delivery surface is invalid.')
+}
+
+function normalizeWatchRecipientRole(value: unknown): CoordinationWatchRecipientRole | null {
+  if (value === undefined || value === null) return null
+  if (!isCoordinationWatchRecipientRole(value)) throw new Error('Watch recipient role is invalid.')
+  return value
+}
+
+function normalizeWatchChannel(value: unknown): CoordinationWatchChannel {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Watch channel is required.')
+  const record = value as Record<string, unknown>
+  const target = record.target
+  if (!target || typeof target !== 'object' || Array.isArray(target)) throw new Error('Watch channel target is required.')
+  const normalized: CoordinationWatchChannel = {
+    provider: requiredString(record.provider, 'Watch channel provider', 128),
+    agentId: requiredString(record.agentId, 'Watch channel agent id', MAX_AGENT_ID_BYTES),
+    channelBindingId: requiredString(record.channelBindingId, 'Watch channel binding id', 512),
+    sessionBindingId: optionalString(record.sessionBindingId, 'Watch channel session binding id', 512),
+    target: target as Record<string, unknown>,
+  }
+  jsonString(normalized.target, 'Watch channel target', MAX_CHANNEL_TARGET_BYTES)
+  return normalized
+}
+
+function normalizeWatchRecipient(value: unknown): CoordinationWatchRecipient | null {
+  if (value === undefined || value === null) return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Watch recipient must be an object.')
+  const record = value as Record<string, unknown>
+  const recipient: CoordinationWatchRecipient = {
+    identityId: optionalString(record.identityId, 'Watch recipient identity id', 512),
+    role: normalizeWatchRecipientRole(record.role),
+    label: optionalString(record.label, 'Watch recipient label', MAX_TITLE_BYTES),
+  }
+  return recipient.identityId || recipient.role || recipient.label ? recipient : null
+}
+
+function normalizeWatchCursor(value: unknown): string | number | null {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'string') return optionalString(value, 'Watch cursor', 512)
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  throw new Error('Watch cursor must be a string, number, or null.')
+}
+
 function parseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== 'string') return fallback
   try {
@@ -310,6 +446,55 @@ function rowToTask(row: DbRow): CoordinationTask {
   }
 }
 
+function watchAuthoritiesForWorkspace(workspaceId: string) {
+  return workspaceId.startsWith('cloud:')
+    ? {
+        ownerAuthority: 'cloud_channel_gateway' as const,
+        executionAuthority: 'cloud_channel_gateway' as const,
+        stateOwner: 'cloud_control_plane' as const,
+      }
+    : {
+        ownerAuthority: 'desktop_local' as const,
+        executionAuthority: 'desktop_local' as const,
+        stateOwner: 'desktop_local_store' as const,
+      }
+}
+
+function rowToWatch(row: DbRow): CoordinationWatch {
+  const targetKind = isCoordinationWatchTarget(row.target_kind) ? row.target_kind : 'conversation'
+  const status = isCoordinationWatchStatus(row.status) ? row.status : 'paused'
+  const verbosity = isCoordinationWatchVerbosity(row.verbosity) ? row.verbosity : 'normal'
+  const workspaceId = String(row.workspace_id || LOCAL_WORKSPACE_ID)
+  const fallbackAuthorities = watchAuthoritiesForWorkspace(workspaceId)
+  return {
+    id: String(row.id || ''),
+    kind: 'watch',
+    workspaceId,
+    ownerAuthority: String(row.owner_authority || fallbackAuthorities.ownerAuthority) as CoordinationWatch['ownerAuthority'],
+    executionAuthority: String(row.execution_authority || fallbackAuthorities.executionAuthority) as CoordinationWatch['executionAuthority'],
+    stateOwner: String(row.state_owner || fallbackAuthorities.stateOwner) as CoordinationWatch['stateOwner'],
+    status,
+    target: {
+      kind: targetKind,
+      id: String(row.target_id || ''),
+    },
+    events: parseJson<CoordinationWatchEventType[]>(row.events_json, []).filter(isCoordinationWatchEvent),
+    channel: parseJson<CoordinationWatchChannel>(row.channel_json, {
+      provider: '',
+      agentId: '',
+      channelBindingId: '',
+      sessionBindingId: null,
+      target: {},
+    }),
+    recipient: parseJson<CoordinationWatchRecipient | null>(row.recipient_json, null),
+    deliverySurface: normalizeWatchDeliverySurface(row.delivery_surface, 'gateway_channel'),
+    verbosity,
+    cursor: parseJson<string | number | null>(row.cursor_json, null),
+    createdAt: String(row.created_at || ''),
+    updatedAt: String(row.updated_at || ''),
+  }
+}
+
 export function listCoordinationProjects(options: { workspaceId?: string | null; limit?: number } = {}) {
   const workspaceId = readWorkspaceId(options.workspaceId)
   const limit = Number.isInteger(options.limit) && Number(options.limit) > 0 ? Math.min(Number(options.limit), 500) : 100
@@ -342,6 +527,65 @@ export function listCoordinationTasks(options: { workspaceId?: string | null; pr
   return rows.map(rowToTask)
 }
 
+export function listCoordinationWatches(options: {
+  workspaceId?: string | null
+  target?: CoordinationTarget | null
+  status?: CoordinationWatchStatus | null
+  limit?: number
+} = {}) {
+  const workspaceId = readWorkspaceId(options.workspaceId)
+  const limit = Number.isInteger(options.limit) && Number(options.limit) > 0 ? Math.min(Number(options.limit), 1000) : 500
+  const status = options.status === undefined || options.status === null ? null : normalizeWatchStatus(options.status, 'active')
+  const target = options.target ? normalizeWatchTarget(options.target) : null
+  const rows = target && status
+    ? getCoordinationDb().prepare(`
+      select * from coordination_watches
+      where workspace_id = ? and target_kind = ? and target_id = ? and status = ?
+      order by updated_at desc
+      limit ?
+    `).all(workspaceId, target.kind, target.id, status, limit) as DbRow[]
+    : target
+      ? getCoordinationDb().prepare(`
+        select * from coordination_watches
+        where workspace_id = ? and target_kind = ? and target_id = ?
+        order by updated_at desc
+        limit ?
+      `).all(workspaceId, target.kind, target.id, limit) as DbRow[]
+      : status
+        ? getCoordinationDb().prepare(`
+          select * from coordination_watches
+          where workspace_id = ? and status = ?
+          order by updated_at desc
+          limit ?
+        `).all(workspaceId, status, limit) as DbRow[]
+        : getCoordinationDb().prepare(`
+          select * from coordination_watches
+          where workspace_id = ?
+          order by updated_at desc
+          limit ?
+        `).all(workspaceId, limit) as DbRow[]
+  return rows.map(rowToWatch)
+}
+
+export function listMatchingCoordinationWatches(options: {
+  workspaceId?: string | null
+  eventType: CoordinationWatchEventType
+  targets: readonly CoordinationTarget[]
+}) {
+  const workspaceId = readWorkspaceId(options.workspaceId)
+  if (!isCoordinationWatchEvent(options.eventType) || options.targets.length === 0) return []
+  const targets = options.targets.map(normalizeWatchTarget)
+  const predicates = targets.map(() => '(target_kind = ? and target_id = ?)').join(' or ')
+  const values: SQLInputValue[] = [workspaceId, 'active']
+  for (const target of targets) values.push(target.kind, target.id)
+  const rows = getCoordinationDb().prepare(`
+    select * from coordination_watches
+    where workspace_id = ? and status = ? and (${predicates})
+    order by updated_at desc
+  `).all(...values) as DbRow[]
+  return rows.map(rowToWatch).filter((watch) => watch.events.includes(options.eventType))
+}
+
 export function listCoordinationBoard(options: { workspaceId?: string | null; limit?: number } = {}): CoordinationBoardPayload {
   return {
     projects: listCoordinationProjects(options),
@@ -357,6 +601,22 @@ export function getCoordinationProject(projectId: string) {
 export function getCoordinationTask(taskId: string) {
   const row = getCoordinationDb().prepare('select * from coordination_tasks where id = ?').get(taskId) as DbRow | undefined
   return row ? rowToTask(row) : null
+}
+
+export function getCoordinationWatch(watchId: string) {
+  const row = getCoordinationDb().prepare('select * from coordination_watches where id = ?').get(watchId) as DbRow | undefined
+  return row ? rowToWatch(row) : null
+}
+
+function assertWatchTargetInWorkspace(target: CoordinationTarget, workspaceId: string) {
+  if (target.kind === 'project') {
+    const project = getCoordinationProject(target.id)
+    if (!project || project.workspaceId !== workspaceId) throw new Error('Watch project target was not found.')
+  }
+  if (target.kind === 'task') {
+    const task = getCoordinationTask(target.id)
+    if (!task || task.workspaceId !== workspaceId) throw new Error('Watch task target was not found.')
+  }
 }
 
 export function createCoordinationProject(input: CoordinationProjectInput, options?: CoordinationWriteOptions): CoordinationProject {
@@ -410,6 +670,93 @@ export function updateCoordinationProject(projectId: string, input: Coordination
     `).run(title, objective, description, status, JSON.stringify(team), sourceSessionId, now, projectId)
   })
   return getCoordinationProject(projectId)
+}
+
+export function createCoordinationWatch(input: CoordinationWatchInput, options?: CoordinationWriteOptions): CoordinationWatch {
+  const now = nowIso(options)
+  const id = options?.id || crypto.randomUUID()
+  const workspaceId = readWorkspaceId(input.workspaceId)
+  const target = normalizeWatchTarget(input.target)
+  assertImplementedWatchTarget(target)
+  assertWatchTargetInWorkspace(target, workspaceId)
+  const events = normalizeWatchEvents(input.events)
+  const channel = normalizeWatchChannel(input.channel)
+  const recipient = normalizeWatchRecipient(input.recipient)
+  const status = normalizeWatchStatus(input.status, 'active')
+  const deliverySurface = normalizeWatchDeliverySurface(input.deliverySurface, 'gateway_channel')
+  const verbosity = normalizeWatchVerbosity(input.verbosity, 'normal')
+  const cursor = normalizeWatchCursor(input.cursor)
+  const authorities = watchAuthoritiesForWorkspace(workspaceId)
+  withTransaction((db) => {
+    db.prepare(`
+      insert into coordination_watches (
+        id, workspace_id, owner_authority, execution_authority, state_owner, target_kind,
+        target_id, events_json, delivery_surface, channel_json, recipient_json, status,
+        verbosity, cursor_json, created_at, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      workspaceId,
+      authorities.ownerAuthority,
+      authorities.executionAuthority,
+      authorities.stateOwner,
+      target.kind,
+      target.id,
+      jsonString(events, 'Watch events'),
+      deliverySurface,
+      jsonString(channel, 'Watch channel'),
+      recipient ? jsonString(recipient, 'Watch recipient') : null,
+      status,
+      verbosity,
+      cursor === null ? null : jsonString(cursor, 'Watch cursor'),
+      now,
+      now,
+    )
+  })
+  return getCoordinationWatch(id)!
+}
+
+export function updateCoordinationWatch(watchId: string, input: CoordinationWatchUpdateInput, options?: CoordinationWriteOptions) {
+  const existing = getCoordinationWatch(watchId)
+  if (!existing) return null
+  const now = nowIso(options)
+  const target = input.target === undefined ? existing.target : normalizeWatchTarget(input.target)
+  assertImplementedWatchTarget(target)
+  assertWatchTargetInWorkspace(target, existing.workspaceId)
+  const events = input.events === undefined ? existing.events : normalizeWatchEvents(input.events)
+  const channel = input.channel === undefined ? existing.channel : normalizeWatchChannel(input.channel)
+  const recipient = input.recipient === undefined ? existing.recipient ?? null : normalizeWatchRecipient(input.recipient)
+  const status = input.status === undefined ? existing.status : normalizeWatchStatus(input.status, existing.status)
+  const deliverySurface = normalizeWatchDeliverySurface(input.deliverySurface, existing.deliverySurface)
+  const verbosity = input.verbosity === undefined ? existing.verbosity : normalizeWatchVerbosity(input.verbosity, existing.verbosity)
+  const cursor = input.cursor === undefined ? existing.cursor ?? null : normalizeWatchCursor(input.cursor)
+  withTransaction((db) => {
+    db.prepare(`
+      update coordination_watches
+      set target_kind = ?, target_id = ?, events_json = ?, delivery_surface = ?,
+        channel_json = ?, recipient_json = ?, status = ?, verbosity = ?, cursor_json = ?,
+        updated_at = ?
+      where id = ?
+    `).run(
+      target.kind,
+      target.id,
+      jsonString(events, 'Watch events'),
+      deliverySurface,
+      jsonString(channel, 'Watch channel'),
+      recipient ? jsonString(recipient, 'Watch recipient') : null,
+      status,
+      verbosity,
+      cursor === null ? null : jsonString(cursor, 'Watch cursor'),
+      now,
+      watchId,
+    )
+  })
+  return getCoordinationWatch(watchId)
+}
+
+export function deleteCoordinationWatch(watchId: string) {
+  const result = withTransaction((db) => db.prepare('delete from coordination_watches where id = ?').run(watchId))
+  return result.changes > 0
 }
 
 export function createCoordinationTask(input: CoordinationTaskInput, options?: CoordinationWriteOptions): CoordinationTask {

@@ -1,12 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import type {
-  WorkflowDraft,
-  WorkflowRun,
-  WorkflowRunStatus,
-  WorkflowStatus,
-  WorkflowSummary,
-  WorkflowTriggerType,
-} from '@open-cowork/shared'
+import type { CoordinationWatch, WorkflowDraft, WorkflowRun, WorkflowRunStatus, WorkflowStatus, WorkflowSummary, WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
 import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
@@ -30,6 +23,7 @@ import { InMemoryManagedWorkersDomain } from './in-memory-domains/workers.ts'
 import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
 import { InMemoryChannelProviderEventsDomain } from './in-memory-domains/channel-provider-events.ts'
 import { InMemoryChannelDeliveriesDomain } from './in-memory-domains/channel-deliveries.ts'
+import { InMemoryCoordinationWatchesDomain } from './in-memory-domains/coordination-watches.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import {
   generateChannelInteractionToken,
@@ -43,6 +37,7 @@ import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page
 import { workspaceEventCursor, type WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
 import { channelScopeKey, channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
+import type { CreateCloudCoordinationWatchInput, ListCloudCoordinationWatchesInput, ListMatchingCloudCoordinationWatchesInput, UpdateCloudCoordinationWatchInput } from './coordination-watch-records.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
 export type { QuotaPolicyCode } from './control-plane-errors.ts'
 export type {
@@ -65,6 +60,7 @@ export type {
   UpdateManagedWorkerStatusInput,
 } from './managed-worker-types.ts'
 export { generateManagedWorkerCredential, hashManagedWorkerCredential } from './in-memory-domains/workers.ts'
+export type { CreateCloudCoordinationWatchInput, ListCloudCoordinationWatchesInput, ListMatchingCloudCoordinationWatchesInput, UpdateCloudCoordinationWatchInput } from './coordination-watch-records.ts'
 export {
   generateChannelInteractionToken,
   generateCloudApiToken,
@@ -1139,7 +1135,7 @@ export type UpdateThreadSmartFilterInput = {
 export type MaybePromise<T> = T | Promise<T>
 
 export type ControlPlaneStore = {
-  createTenant(input: { tenantId: string, name: string, createdAt?: Date }): MaybePromise<TenantRecord>
+  createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): MaybePromise<TenantRecord>
   ensureUser(input: {
     tenantId: string
     userId: string
@@ -1239,6 +1235,12 @@ export type ControlPlaneStore = {
   listChannelDeliveries(input: ListChannelDeliveriesInput): MaybePromise<ChannelDeliveryRecord[]>
   claimNextChannelDelivery(input: ClaimChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
   ackChannelDelivery(input: AckChannelDeliveryInput): MaybePromise<ChannelDeliveryRecord | null>
+  createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch>
+  updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): MaybePromise<CoordinationWatch | null>
+  getCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<CoordinationWatch | null>
+  listCloudCoordinationWatches(input: ListCloudCoordinationWatchesInput): MaybePromise<CoordinationWatch[]>
+  listMatchingCloudCoordinationWatches(input: ListMatchingCloudCoordinationWatchesInput): MaybePromise<CoordinationWatch[]>
+  deleteCloudCoordinationWatch(workspaceId: string, watchId: string): MaybePromise<boolean>
   claimChannelProviderEvent(input: ClaimChannelProviderEventInput): MaybePromise<ChannelProviderEventClaimResult>
   completeChannelProviderEvent(input: CompleteChannelProviderEventInput): MaybePromise<ChannelProviderEventRecord | null>
   createSession(input: CreateSessionInput): MaybePromise<SessionRecord>
@@ -1593,15 +1595,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     },
     consumeUsageQuota: (input) => this.consumeUsageQuota(input),
   })
+  private readonly coordinationWatchesDomain = new InMemoryCoordinationWatchesDomain()
 
   private orgIdForTenant(tenantId: string) {
     return this.orgsByTenant.get(tenantId) || tenantId
   }
 
-  createTenant(input: { tenantId: string, name: string, createdAt?: Date }): TenantRecord {
+  createTenant(input: { tenantId: string, name: string, orgId?: string, createdAt?: Date }): TenantRecord {
     const existing = this.tenants.get(input.tenantId)
     if (existing) {
-      this.ensureOrgForTenant({ tenantId: input.tenantId, name: existing.name, createdAt: input.createdAt })
+      this.ensureOrgForTenant({ tenantId: input.tenantId, name: existing.name, orgId: input.orgId, createdAt: input.createdAt })
       return clone(existing)
     }
     const record: TenantRecord = {
@@ -1610,7 +1613,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       createdAt: nowIso(input.createdAt),
     }
     this.tenants.set(input.tenantId, record)
-    this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, createdAt: input.createdAt })
+    this.ensureOrgForTenant({ tenantId: input.tenantId, name: input.name, orgId: input.orgId, createdAt: input.createdAt })
     return clone(record)
   }
 
@@ -2857,6 +2860,13 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   ackChannelDelivery(input: AckChannelDeliveryInput): ChannelDeliveryRecord | null {
     return this.channelDeliveriesDomain.ack(input)
   }
+
+  createCloudCoordinationWatch(input: CreateCloudCoordinationWatchInput): CoordinationWatch { return this.coordinationWatchesDomain.create(input) }
+  updateCloudCoordinationWatch(input: UpdateCloudCoordinationWatchInput): CoordinationWatch | null { return this.coordinationWatchesDomain.update(input) }
+  getCloudCoordinationWatch(workspaceId: string, watchId: string): CoordinationWatch | null { return this.coordinationWatchesDomain.get(workspaceId, watchId) }
+  listCloudCoordinationWatches(input: ListCloudCoordinationWatchesInput): CoordinationWatch[] { return this.coordinationWatchesDomain.list(input) }
+  listMatchingCloudCoordinationWatches(input: ListMatchingCloudCoordinationWatchesInput): CoordinationWatch[] { return this.coordinationWatchesDomain.listMatching(input) }
+  deleteCloudCoordinationWatch(workspaceId: string, watchId: string): boolean { return this.coordinationWatchesDomain.delete(workspaceId, watchId) }
 
   claimChannelProviderEvent(input: ClaimChannelProviderEventInput): ChannelProviderEventClaimResult {
     return this.channelProviderEventsDomain.claim(input)

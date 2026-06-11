@@ -777,6 +777,33 @@ export const CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS = [
     ON cloud_api_token_channel_binding_grants (org_id, channel_binding_id, token_id)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_MIGRATION_ID = '014_cloud_coordination_watches'
+
+export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS cloud_coordination_watches (
+    workspace_id text NOT NULL,
+    watch_id text NOT NULL,
+    target_kind text NOT NULL,
+    target_id text NOT NULL,
+    events jsonb NOT NULL,
+    channel jsonb NOT NULL,
+    recipient jsonb,
+    status text NOT NULL,
+    delivery_surface text NOT NULL,
+    verbosity text NOT NULL,
+    cursor jsonb,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    PRIMARY KEY (workspace_id, watch_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS cloud_coordination_watches_workspace_idx
+    ON cloud_coordination_watches (workspace_id, status, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_coordination_watches_target_idx
+    ON cloud_coordination_watches (workspace_id, target_kind, target_id, status, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS cloud_coordination_watches_events_idx
+    ON cloud_coordination_watches USING GIN (events jsonb_path_ops)`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -831,5 +858,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_API_TOKEN_CHANNEL_BINDINGS_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS,
   },
 ] as const

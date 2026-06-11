@@ -46,6 +46,7 @@ test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests',
     await api.sessions.prompt('s/1', { text: 'Hello', agent: 'build' })
     await api.artifacts.index({ projectId: 'project-1', taskIds: ['task-1', 'task-2'], status: 'draft', limit: 25 })
     await api.launchpad.feed({ projectId: 'project-1', limit: 4 })
+    await api.coordination.watches({ targetKind: 'project', targetId: 'project-1', status: 'active', limit: 10 })
     api.setCsrfToken?.('csrf-2')
     await api.workflows.run('workflow-1')
 
@@ -54,6 +55,7 @@ test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests',
       '/api/sessions/s%2F1/prompt',
       '/api/artifacts?projectId=project-1&taskIds=task-1&taskIds=task-2&status=draft&limit=25',
       '/api/launchpad/feed?projectId=project-1&limit=4',
+      '/api/coordination/watches?limit=10&targetKind=project&targetId=project-1&status=active',
       '/api/workflows/workflow-1/run',
     ])
     assert.equal(calls[0].method, 'GET')
@@ -62,7 +64,7 @@ test('cloud AppAPI maps endpoint metadata, CSRF headers, and API-only requests',
     assert.equal(calls[3].method, 'GET')
     assert.equal(calls[1].headers['x-csrf-token'], 'csrf-1')
     assert.deepEqual(calls[1].body, { text: 'Hello', agent: 'build' })
-    assert.equal(calls[4].headers['x-csrf-token'], 'csrf-2')
+    assert.equal(calls[5].headers['x-csrf-token'], 'csrf-2')
     await assert.rejects(() => api.request('https://example.test/leak'), /blocked non-API request/)
   } finally {
     globalThis.fetch = originalFetch

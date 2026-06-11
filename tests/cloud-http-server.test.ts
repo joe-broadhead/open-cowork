@@ -129,7 +129,7 @@ function createFixture(options: {
   })
   const service = new CloudSessionService(store, runtime, policy, undefined, {
     randomUUID: () => `cmd-${nextId += 1}`,
-  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy)
+  }, undefined, byokSecrets, options.byokPolicy, options.abuse, options.billing || null, options.billingAdapter || null, options.identityPolicy, null)
   const artifacts = new CloudArtifactService(service, objectStore, {
     randomUUID: () => `artifact-${nextId += 1}`,
   })
@@ -318,6 +318,22 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+async function eventually<T>(
+  read: () => T | Promise<T>,
+  accepts: (value: T) => boolean,
+  label: string,
+  timeoutMs = 1000,
+): Promise<T> {
+  const startedAt = Date.now()
+  let lastValue: T | undefined
+  while (Date.now() - startedAt < timeoutMs) {
+    lastValue = await read()
+    if (accepts(lastValue)) return lastValue
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`Timed out waiting for ${label}. Last value: ${JSON.stringify(lastValue)}`)
 }
 
 async function readInitialStreamChunk(response: Response) {
@@ -551,6 +567,147 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
     assert.equal(listedTask.column, 'doing')
     assert.equal(listedTask.assigneeAgent, 'reviewer')
 
+    const channelAgent = await readJson(await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'agent-1', name: 'Watch delivery agent' }),
+    }))
+    assert.equal(asRecord(channelAgent.agent).agentId, 'agent-1')
+    const channelBinding = await readJson(await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'binding-1',
+        agentId: 'agent-1',
+        provider: 'telegram',
+        displayName: 'Project telegram',
+      }),
+    }))
+    assert.equal(asRecord(channelBinding.binding).bindingId, 'binding-1')
+
+    const unsupportedWorkflowWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'workflow', id: 'workflow-1' },
+        events: ['run.finished'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'workflow-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(unsupportedWorkflowWatch.status, 400)
+    assert.match(String((await readJson(unsupportedWorkflowWatch)).error), /not supported/i)
+    const unsupportedWorkflowFilter = await fetch(`${baseUrl}/api/coordination/watches?targetKind=workflow&targetId=workflow-1`)
+    assert.equal(unsupportedWorkflowFilter.status, 400)
+    assert.match(String((await readJson(unsupportedWorkflowFilter)).error), /not supported/i)
+
+    const watchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'project', id: projectId },
+        events: ['task.moved', 'task.review_ready'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'project-chat' },
+        },
+        recipient: { role: 'member', identityId: 'identity-1' },
+      }),
+    })
+    assert.equal(watchResponse.status, 201)
+    const watch = await readJson(watchResponse)
+    const watchId = String(watch.id)
+    assert.equal(watch.kind, 'watch')
+    assert.equal(watch.workspaceId, 'cloud:tenant-1')
+    assert.equal(watch.ownerAuthority, 'cloud_channel_gateway')
+    assert.deepEqual(watch.events, ['task.moved', 'task.review_ready'])
+
+    const movedToReview = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ column: 'review' }),
+    }))
+    assert.equal(movedToReview.column, 'review')
+    const projectWatchDeliveries = await eventually(
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-1', limit: 10 }),
+      (deliveries) => {
+        const watchEventTypes = deliveries
+          .filter((delivery) => asRecord(delivery.payload).watchId === watchId)
+          .map((delivery) => delivery.eventType)
+        return watchEventTypes.includes('task.moved') && watchEventTypes.includes('task.review_ready')
+      },
+      'project task watch delivery',
+    )
+    const taskMovedDelivery = projectWatchDeliveries.find((delivery) => delivery.eventType === 'task.moved' && asRecord(delivery.payload).watchId === watchId)
+    assert.ok(taskMovedDelivery)
+    assert.equal(asRecord(asRecord(taskMovedDelivery.payload).target).id, taskId)
+    assert.equal(asRecord(asArray(asRecord(taskMovedDelivery.payload).relatedTargets)[0]).id, projectId)
+
+    const linkWatchTask = await readJson(await fetch(`${baseUrl}/api/coordination/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        title: 'Link-work watch task',
+        spec: 'Linking work should emit the same moved watch event as direct task mutations.',
+      }),
+    }))
+    const linkWatchTaskId = String(linkWatchTask.id)
+    const linkWatchSession = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const linkedWatchTask = await readJson(await fetch(`${baseUrl}/api/coordination/tasks/${linkWatchTaskId}/link-work`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        assignedSessionId: String(asRecord(linkWatchSession.session).sessionId),
+        status: 'running',
+      }),
+    }))
+    assert.equal(linkedWatchTask.column, 'doing')
+    const linkWorkDelivery = await eventually(
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-1', limit: 20 }),
+      (deliveries) => deliveries.some((delivery) => (
+        delivery.eventType === 'task.moved'
+        && asRecord(delivery.payload).watchId === watchId
+        && asRecord(asRecord(delivery.payload).target).id === linkWatchTaskId
+      )),
+      'link-work task moved watch delivery',
+    )
+    assert.ok(linkWorkDelivery.some((delivery) => (
+      delivery.eventType === 'task.moved'
+      && asRecord(delivery.payload).watchId === watchId
+      && asRecord(asRecord(delivery.payload).target).id === linkWatchTaskId
+    )))
+
+    const watches = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(projectId)}&status=active`))
+    assert.deepEqual(asArray(watches).map((entry) => asRecord(entry).id), [watchId])
+
+    const updatedWatch = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        events: ['task.review_ready'],
+        recipient: { role: 'approver' },
+      }),
+    }))
+    assert.deepEqual(updatedWatch.events, ['task.review_ready'])
+    assert.equal(asRecord(updatedWatch.recipient).role, 'approver')
+
+    const pausedWatch = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${watchId}/pause`, { method: 'POST' }))
+    assert.equal(pausedWatch.status, 'paused')
+    const resumedWatch = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${watchId}/resume`, { method: 'POST' }))
+    assert.equal(resumedWatch.status, 'active')
+
     const tenantTwoBoard = await readJson(await fetch(`${baseUrl}/api/coordination/board`, {
       headers: { 'x-test-tenant': 'tenant-2' },
     }))
@@ -570,6 +727,19 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
       body: JSON.stringify({ column: 'done' }),
     })
     assert.equal(tenantTwoTaskMove.status, 404)
+
+    const tenantTwoWatchUpdate = await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, {
+      method: 'POST',
+      headers: { 'x-test-tenant': 'tenant-2', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'paused' }),
+    })
+    assert.equal(tenantTwoWatchUpdate.status, 404)
+
+    const tenantTwoWatchDelete = await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, {
+      method: 'DELETE',
+      headers: { 'x-test-tenant': 'tenant-2' },
+    })
+    assert.equal(tenantTwoWatchDelete.status, 404)
 
     const tenantTwoTaskCreate = await fetch(`${baseUrl}/api/coordination/tasks`, {
       method: 'POST',
@@ -622,8 +792,573 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
     })
     assert.equal(invalidMove.status, 400)
     assert.match(String((await readJson(invalidMove)).error), /column/i)
+
+    const watchDelete = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, { method: 'DELETE' }))
+    assert.equal(watchDelete.deleted, true)
+    const watchesAfterDelete = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(projectId)}`))
+    assert.deepEqual(asArray(watchesAfterDelete), [])
   } finally {
     await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('cloud watch delivery resolves channel org from tenant workspace id', async () => {
+  const fixture = createFixture()
+  const principal = {
+    tenantId: 'tenant-slug',
+    tenantName: 'Tenant Slug',
+    orgId: 'org-real',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner' as const,
+    authSource: 'local' as const,
+  }
+  await fixture.service.ensurePrincipal(principal)
+  assert.equal(await fixture.service.resolveOrgIdForTenant('tenant-slug'), 'org-real')
+})
+
+test('cloud coordination stale watches remain visible and removable after channel targets disappear', async () => {
+  clearCoordinationStoreCache()
+  clearConfigCaches()
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  const ownerPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'user-1',
+    accountId: 'user-1',
+    email: 'user@example.test',
+    role: 'owner',
+    authSource: 'local',
+  }
+  try {
+    const project = await readJson(await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Stale watch cleanup',
+        objective: 'Prove watches can be cleaned up after channel targets are removed.',
+      }),
+    }))
+    const projectId = String(asRecord(project).id)
+    const staleWatch = await fixture.service.createCloudCoordinationWatch(ownerPrincipal, {
+      workspaceId: 'cloud:tenant-1',
+      target: { kind: 'project', id: projectId },
+      events: ['task.moved'],
+      channel: {
+        provider: 'telegram',
+        agentId: 'deleted-agent',
+        channelBindingId: 'deleted-binding',
+        target: { chatId: 'stale-watch-chat' },
+      },
+      recipient: { role: 'member' },
+    })
+
+    const listed = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(projectId)}`))
+    assert.deepEqual(asArray(listed).map((entry) => asRecord(entry).id), [staleWatch.id])
+
+    const paused = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${staleWatch.id}/pause`, { method: 'POST' }))
+    assert.equal(paused.status, 'paused')
+    const resumed = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${staleWatch.id}/resume`, { method: 'POST' }))
+    assert.equal(resumed.status, 'active')
+    const deleted = await readJson(await fetch(`${baseUrl}/api/coordination/watches/${staleWatch.id}`, { method: 'DELETE' }))
+    assert.equal(deleted.deleted, true)
+    const listedAfterDelete = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(projectId)}`))
+    assert.deepEqual(asArray(listedAfterDelete), [])
+
+    const invalidNewWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'project', id: projectId },
+        events: ['task.moved'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'deleted-agent',
+          channelBindingId: 'deleted-binding',
+          target: { chatId: 'stale-watch-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(invalidNewWatch.status, 404)
+  } finally {
+    await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+  }
+})
+
+test('cloud runtime events deliver coordination watches through channel delivery', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-runtime-watch-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
+  clearConfigCaches()
+  clearCoordinationStoreCache()
+
+  const fixture = createFixture()
+  const baseUrl = await fixture.server.listen()
+  try {
+    const channelAgent = await readJson(await fetch(`${baseUrl}/api/channels/agents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'agent-runtime-watch', name: 'Runtime watch agent' }),
+    }))
+    assert.equal(asRecord(channelAgent.agent).agentId, 'agent-runtime-watch')
+    const channelBinding = await readJson(await fetch(`${baseUrl}/api/channels/bindings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        bindingId: 'binding-runtime-watch',
+        agentId: 'agent-runtime-watch',
+        provider: 'telegram',
+        displayName: 'Runtime watch telegram',
+      }),
+    }))
+    assert.equal(asRecord(channelBinding.binding).bindingId, 'binding-runtime-watch')
+
+    const createdSession = await readJson(await fetch(`${baseUrl}/api/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    }))
+    const sessionId = String(asRecord(createdSession.session).sessionId)
+
+    const watchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'session', id: sessionId },
+        events: ['run.finished', 'needs_input'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-runtime-watch',
+          channelBindingId: 'binding-runtime-watch',
+          target: { chatId: 'runtime-watch-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(watchResponse.status, 201)
+
+    const promptResponse = await fetch(`${baseUrl}/api/sessions/${sessionId}/prompt`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'finish this run' }),
+    })
+    assert.equal(promptResponse.status, 202)
+
+    const deliveriesAfterRun = await eventually(
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-runtime-watch', limit: 10 }),
+      (deliveries) => deliveries.some((delivery) => delivery.eventType === 'run.finished'),
+      'run.finished watch delivery',
+    )
+    const runFinished = deliveriesAfterRun.find((delivery) => delivery.eventType === 'run.finished')
+    assert.ok(runFinished)
+    assert.equal(runFinished.provider, 'telegram')
+    assert.equal(asRecord(runFinished.payload).eventType, 'run.finished')
+    assert.equal(asRecord(asRecord(runFinished.payload).target).id, sessionId)
+
+    const appended = await fixture.worker.appendRuntimeEvent('tenant-1', sessionId, {
+      type: 'permission.requested',
+      payload: {
+        sessionId: fixture.runtime.createdSessions[0],
+        permissionId: 'permission-runtime-watch',
+        description: 'Approve the cloud command.',
+        tool: 'bash',
+      },
+    })
+    assert.equal(appended, true)
+
+    const deliveriesAfterInput = await eventually(
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-runtime-watch', limit: 10 }),
+      (deliveries) => deliveries.some((delivery) => delivery.eventType === 'needs_input'),
+      'needs_input watch delivery',
+    )
+    const needsInput = deliveriesAfterInput.find((delivery) => delivery.eventType === 'needs_input')
+    assert.ok(needsInput)
+    assert.equal(asRecord(needsInput.payload).eventType, 'needs_input')
+    assert.equal(asRecord(asRecord(needsInput.payload).target).id, sessionId)
+    assert.equal(asRecord(asRecord(needsInput.payload).metadata).requestId, 'permission-runtime-watch')
+    assert.equal(fixture.store.resolvePrincipalMembership({
+      tenantId: 'tenant-1',
+      userId: 'coordination-watch',
+      accountId: 'coordination-watch',
+      email: 'coordination-watch@local.open-cowork',
+    }), null)
+  } finally {
+    await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('cloud HTTP watch creation validates channel authority before persisting subscriptions', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-watch-auth-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
+  clearConfigCaches()
+  clearCoordinationStoreCache()
+
+  const ownerPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner' as const,
+    authSource: 'local' as const,
+  }
+  const memberPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'member-1',
+    accountId: 'member-1',
+    email: 'member@example.test',
+    role: 'member' as const,
+    authSource: 'user' as const,
+  }
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-user']) === 'owner' ? ownerPrincipal : memberPrincipal,
+  })
+  const baseUrl = await fixture.server.listen()
+  try {
+    await fixture.service.createHeadlessAgent(ownerPrincipal, {
+      agentId: 'agent-1',
+      name: 'Watch delivery agent',
+    })
+    await fixture.service.createChannelBinding(ownerPrincipal, {
+      bindingId: 'binding-1',
+      agentId: 'agent-1',
+      provider: 'telegram',
+      displayName: 'Project telegram',
+    })
+    const project = await readJson(await fetch(`${baseUrl}/api/coordination/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Member project',
+        objective: 'Prove watch creation does not launder channel delivery authority.',
+      }),
+    }))
+
+    const unauthorizedWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'project', id: project.id },
+        events: ['task.moved'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'project-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(unauthorizedWatch.status, 403)
+    assert.match(String((await readJson(unauthorizedWatch)).error), /gateway|administration|access/i)
+    const watches = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(String(project.id))}`))
+    assert.deepEqual(asArray(watches), [])
+
+    const ownerWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'x-test-user': 'owner', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'project', id: project.id },
+        events: ['task.moved'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'project-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(ownerWatch.status, 201)
+    const watchId = String((await readJson(ownerWatch)).id)
+
+    const ownerViewerWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'x-test-user': 'owner', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'project', id: project.id },
+        events: ['task.review_ready'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'viewer-watch-chat' },
+        },
+        recipient: { role: 'viewer' },
+      }),
+    })
+    assert.equal(ownerViewerWatch.status, 201)
+    const viewerWatchId = String((await readJson(ownerViewerWatch)).id)
+
+    const forgedWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'x-test-user': 'owner', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        watchId,
+        createdAt: 'not-a-date',
+        target: { kind: 'project', id: project.id },
+        events: ['task.moved'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'forged-watch-chat' },
+        },
+        recipient: { role: 'viewer' },
+      }),
+    })
+    assert.equal(forgedWatch.status, 201)
+    const forgedWatchBody = await readJson(forgedWatch)
+    assert.notEqual(String(forgedWatchBody.id), watchId)
+    assert.notEqual(String(forgedWatchBody.createdAt), 'not-a-date')
+
+    const unauthorizedUpdate = await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        events: ['task.review_ready'],
+        status: 'paused',
+      }),
+    })
+    assert.equal(unauthorizedUpdate.status, 403)
+
+    const unauthorizedPause = await fetch(`${baseUrl}/api/coordination/watches/${watchId}/pause`, { method: 'POST' })
+    assert.equal(unauthorizedPause.status, 403)
+
+    const unauthorizedDelete = await fetch(`${baseUrl}/api/coordination/watches/${watchId}`, { method: 'DELETE' })
+    assert.equal(unauthorizedDelete.status, 403)
+
+    const unauthorizedViewerUpdate = await fetch(`${baseUrl}/api/coordination/watches/${viewerWatchId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'paused' }),
+    })
+    assert.equal(unauthorizedViewerUpdate.status, 403)
+
+    const unauthorizedViewerDelete = await fetch(`${baseUrl}/api/coordination/watches/${viewerWatchId}`, { method: 'DELETE' })
+    assert.equal(unauthorizedViewerDelete.status, 403)
+
+    const watchesAfterDeniedMutation = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(String(project.id))}`))
+    assert.deepEqual(asArray(watchesAfterDeniedMutation), [])
+    const ownerVisibleWatches = await readJson(await fetch(`${baseUrl}/api/coordination/watches?targetKind=project&targetId=${encodeURIComponent(String(project.id))}`, {
+      headers: { 'x-test-user': 'owner' },
+    }))
+    const persistedWatch = asArray(ownerVisibleWatches).map(asRecord).find((watch) => watch.id === watchId)
+    assert.ok(persistedWatch)
+    assert.equal(persistedWatch.id, watchId)
+    assert.equal(persistedWatch.status, 'active')
+    assert.deepEqual(persistedWatch.events, ['task.moved'])
+    assert.ok(asArray(ownerVisibleWatches).map(asRecord).some((watch) => watch.id === viewerWatchId))
+
+    const memberSession = await readJson(await fetch(`${baseUrl}/api/sessions`, { method: 'POST' }))
+    const memberSessionId = String(asRecord(memberSession.session).sessionId)
+    const unauthorizedSessionWatch = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: { 'x-test-user': 'owner', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        target: { kind: 'session', id: memberSessionId },
+        events: ['run.finished'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-1',
+          channelBindingId: 'binding-1',
+          target: { chatId: 'project-chat' },
+        },
+        recipient: { role: 'member' },
+      }),
+    })
+    assert.equal(unauthorizedSessionWatch.status, 404)
+  } finally {
+    await fixture.server.close()
+    clearCoordinationStoreCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    await rm(dataDir, { recursive: true, force: true })
+  }
+})
+
+test('cloud gateway watch creation defaults omitted non-admin-scoped recipients to viewer', async () => {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const dataDir = await mkdtemp(join(tmpdir(), 'open-cowork-cloud-watch-recipient-'))
+  process.env.OPEN_COWORK_USER_DATA_DIR = dataDir
+  clearConfigCaches()
+  clearCoordinationStoreCache()
+
+  const ownerPrincipal: CloudPrincipal = {
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'owner-1',
+    accountId: 'owner-1',
+    email: 'owner@example.test',
+    role: 'owner',
+    authSource: 'local',
+  }
+  let gatewayTokenId = 'gateway-token-pending'
+  const gatewayPrincipal = (): CloudPrincipal => ({
+    tenantId: 'tenant-1',
+    tenantName: 'Tenant 1',
+    orgId: 'tenant-1',
+    userId: 'gateway-token-user',
+    accountId: 'gateway-token-user',
+    email: 'gateway-token@example.test',
+    role: 'admin',
+    authSource: 'api_token',
+    tokenId: gatewayTokenId,
+    tokenScopes: ['gateway'],
+  })
+  const fixture = createFixture({
+    auth: (req) => headerValue(req.headers['x-test-auth']) === 'gateway' ? gatewayPrincipal() : ownerPrincipal,
+  })
+  let listening = false
+  try {
+    await fixture.service.ensurePrincipal(ownerPrincipal)
+    const issued = fixture.store.issueApiToken({
+      orgId: 'tenant-1',
+      accountId: 'owner-1',
+      name: 'Gateway-only watch token',
+      scopes: ['gateway'],
+    })
+    gatewayTokenId = issued.token.tokenId
+    await fixture.service.createHeadlessAgent(ownerPrincipal, {
+      agentId: 'agent-watch-recipient',
+      name: 'Watch recipient agent',
+    })
+    await fixture.service.createChannelBinding(ownerPrincipal, {
+      bindingId: 'binding-watch-recipient',
+      agentId: 'agent-watch-recipient',
+      provider: 'telegram',
+      displayName: 'Watch recipient telegram',
+    })
+    fixture.store.grantApiTokenChannelBinding({
+      orgId: 'tenant-1',
+      tokenId: gatewayTokenId,
+      channelBindingId: 'binding-watch-recipient',
+      actor: {
+        actorType: 'user',
+        actorId: 'owner-1',
+        accountId: 'owner-1',
+      },
+    })
+
+    const baseUrl = await fixture.server.listen()
+    listening = true
+
+    const gatewayHeaders = {
+      'x-test-auth': 'gateway',
+      'content-type': 'application/json',
+    }
+    const gatewaySession = await fixture.service.createSession(gatewayPrincipal())
+    const gatewaySessionId = gatewaySession.session.sessionId
+
+    const gatewayWatchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: gatewayHeaders,
+      body: JSON.stringify({
+        target: { kind: 'session', id: gatewaySessionId },
+        events: ['needs_input'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-watch-recipient',
+          channelBindingId: 'binding-watch-recipient',
+          target: { chatId: 'watch-recipient-chat' },
+        },
+      }),
+    })
+    const gatewayWatch = await readJson(gatewayWatchResponse)
+    assert.equal(gatewayWatchResponse.status, 201, JSON.stringify(gatewayWatch))
+    assert.equal(asRecord(gatewayWatch.recipient).role, 'viewer')
+
+    const gatewayNoRoleRecipientWatchResponse = await fetch(`${baseUrl}/api/coordination/watches`, {
+      method: 'POST',
+      headers: gatewayHeaders,
+      body: JSON.stringify({
+        target: { kind: 'session', id: gatewaySessionId },
+        events: ['needs_input'],
+        channel: {
+          provider: 'telegram',
+          agentId: 'agent-watch-recipient',
+          channelBindingId: 'binding-watch-recipient',
+          target: { chatId: 'watch-recipient-chat' },
+        },
+        recipient: { identityId: 'identity-watch-recipient' },
+      }),
+    })
+    const gatewayNoRoleRecipientWatch = await readJson(gatewayNoRoleRecipientWatchResponse)
+    assert.equal(gatewayNoRoleRecipientWatchResponse.status, 201, JSON.stringify(gatewayNoRoleRecipientWatch))
+    assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).role, 'viewer')
+    assert.equal(asRecord(gatewayNoRoleRecipientWatch.recipient).identityId, 'identity-watch-recipient')
+
+    const ownerLegacyWatch = await fixture.service.createCloudCoordinationWatch(ownerPrincipal, {
+      workspaceId: 'cloud:tenant-1',
+      target: { kind: 'session', id: gatewaySessionId },
+      events: ['needs_input'],
+      channel: {
+        provider: 'telegram',
+        agentId: 'agent-watch-recipient',
+        channelBindingId: 'binding-watch-recipient',
+        target: { chatId: 'watch-recipient-chat' },
+      },
+    })
+    assert.equal(ownerLegacyWatch.recipient ?? null, null)
+
+    const appended = await fixture.worker.appendRuntimeEvent('tenant-1', gatewaySessionId, {
+      type: 'permission.requested',
+      payload: {
+        sessionId: fixture.runtime.createdSessions[0],
+        permissionId: 'permission-watch-recipient',
+        description: 'Approve the cloud command.',
+        tool: 'bash',
+      },
+    })
+    assert.equal(appended, true)
+
+    const deliveries = await eventually(
+      () => fixture.store.listChannelDeliveries({ orgId: 'tenant-1', channelBindingId: 'binding-watch-recipient', limit: 10 }),
+      (records) => records.some((delivery) => asRecord(delivery.payload).watchId === ownerLegacyWatch.id),
+      'owner watch needs_input delivery',
+    )
+    assert.equal(
+      deliveries.some((delivery) => asRecord(delivery.payload).watchId === gatewayWatch.id),
+      false,
+      'viewer watch must not receive needs_input deliveries',
+    )
+    assert.equal(
+      deliveries.some((delivery) => asRecord(delivery.payload).watchId === gatewayNoRoleRecipientWatch.id),
+      false,
+      'viewer watch with no-role recipient must not receive needs_input deliveries',
+    )
+
+    const deniedUpdate = await fetch(`${baseUrl}/api/coordination/watches/${String(ownerLegacyWatch.id)}`, {
+      method: 'POST',
+      headers: gatewayHeaders,
+      body: JSON.stringify({ status: 'paused' }),
+    })
+    assert.equal(deniedUpdate.status, 403)
+    assert.match(String((await readJson(deniedUpdate)).error), /recipient roles/i)
+  } finally {
+    if (listening) await fixture.server.close()
     clearCoordinationStoreCache()
     clearConfigCaches()
     if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR

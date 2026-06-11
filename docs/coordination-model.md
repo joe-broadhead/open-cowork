@@ -68,6 +68,33 @@ updates when execution reports a lifecycle change:
 | `failed` | Stays in the current column and renders an error badge. |
 | `cancelled` | Stays in the current column and renders a cancelled badge. |
 
+## Watches
+
+`CoordinationWatch` is the durable subscription record for channel delivery.
+It does not execute OpenCode. It selects progress events from owned
+coordination/runtime state and asks the existing channel delivery primitive to
+enqueue a message.
+
+Watch records include:
+
+- `target`: the subscribed object. Supported targets are `conversation`,
+  `playbook`, `project`, `task`, `workflow`, `run`, and `session`.
+- `events`: one or more event names from the shared taxonomy:
+  `task.moved`, `task.review_ready`, `run.finished`, `needs_input`, and
+  `daily_summary`.
+- `channel`: the delivery target, including provider, headless agent id,
+  channel binding id, optional session binding id, and provider target
+  metadata.
+- `recipient`: optional identity/role metadata used to apply channel role
+  rules before delivery. Owners, admins, and members can receive all watch
+  events; approvers can receive interactive/progress events except daily
+  summaries; viewers receive non-interactive progress only.
+- `status`: `active`, `paused`, or `expired`.
+
+The bridge from event to delivery is intentionally guarded: if the runtime
+surface does not provide `createChannelDelivery`, the event is skipped rather
+than inventing a parallel delivery path.
+
 ## Gateway Vocabulary Mapping
 
 Standalone Gateway's prototype vocabulary maps into the shared model:
@@ -100,7 +127,7 @@ feature immediately.
 
 | Authority | Projects | Tasks | Workflows | Runs | Schedules | Watches | Delegation |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Desktop Local | supported | supported | supported | supported | supported | not supported | supported |
+| Desktop Local | supported | supported | supported | supported | supported | supported | supported |
 | Cloud Worker | deferred | deferred | supported | supported | supported | deferred | deferred |
 | Cloud Channel Gateway | deferred | deferred | supported | supported | read-only | supported | deferred |
 | Standalone Team Gateway | supported | supported | supported | supported | supported | supported | supported |
@@ -149,7 +176,7 @@ can keep the existing workflow/run control-plane rows, and Standalone Gateway
 can keep Gateway-owned tables. When these states cross a public boundary, they
 should map to the shared coordination contract.
 
-Desktop Local now stores projects and tasks in `coordination.sqlite` through
+Desktop Local now stores projects, tasks, and watches in `coordination.sqlite` through
 `apps/desktop/src/main/coordination/coordination-store.ts` and exposes service,
 IPC, preload, AppAPI, and Cloud HTTP routes for the same shared contract.
 

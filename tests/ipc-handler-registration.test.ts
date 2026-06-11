@@ -19,8 +19,10 @@ import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gatew
 import {
   createCoordinationProject,
   createCoordinationTask,
+  createCoordinationWatch,
   getCoordinationProject,
   getCoordinationTask,
+  getCoordinationWatch,
   setCoordinationDatabaseForTests,
 } from '../apps/desktop/src/main/coordination/coordination-store.ts'
 
@@ -226,6 +228,17 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
       title: 'Cloud task',
       spec: 'Local IPC must not mutate this row.',
     }, { id: 'cloud-task' })
+    const cloudWatch = createCoordinationWatch({
+      workspaceId: 'cloud:tenant-1',
+      target: { kind: 'conversation', id: 'cloud-session' },
+      events: ['run.finished'],
+      channel: {
+        provider: 'telegram',
+        agentId: 'cloud-agent',
+        channelBindingId: 'cloud-binding',
+        target: { chatId: 'cloud-chat' },
+      },
+    }, { id: 'cloud-watch' })
 
     const localProject = createCoordinationProject({
       title: 'Local project',
@@ -236,6 +249,16 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
       title: 'Local task',
       spec: 'Local IPC can mutate this row.',
     }, { id: 'local-task' })
+    const localWatch = createCoordinationWatch({
+      target: { kind: 'project', id: localProject.id },
+      events: ['task.moved'],
+      channel: {
+        provider: 'telegram',
+        agentId: 'local-agent',
+        channelBindingId: 'local-binding',
+        target: { chatId: 'local-chat' },
+      },
+    }, { id: 'local-watch' })
 
     const updateProject = handlers.get('coordination:projects:update') as (
       event: unknown,
@@ -247,15 +270,37 @@ test('coordination IPC mutations cannot affect cloud-scoped rows', async () => {
       taskId: unknown,
       input: unknown,
     ) => Promise<unknown>
+    const updateWatch = handlers.get('coordination:watches:update') as (
+      event: unknown,
+      watchId: unknown,
+      input: unknown,
+    ) => Promise<unknown>
+    const pauseWatch = handlers.get('coordination:watches:pause') as (
+      event: unknown,
+      watchId: unknown,
+      options?: unknown,
+    ) => Promise<unknown>
+    const deleteWatch = handlers.get('coordination:watches:delete') as (
+      event: unknown,
+      watchId: unknown,
+      options?: unknown,
+    ) => Promise<unknown>
 
     assert.equal(await updateProject(null, cloudProject.id, { title: 'Mutated cloud project' }), null)
     assert.equal(await moveTask(null, cloudTask.id, { column: 'done' }), null)
+    assert.equal(await updateWatch(null, cloudWatch.id, { status: 'paused' }), null)
+    assert.equal(await deleteWatch(null, cloudWatch.id), false)
     assert.equal(getCoordinationProject(cloudProject.id)?.title, 'Cloud project')
     assert.equal(getCoordinationTask(cloudTask.id)?.column, 'backlog')
+    assert.equal(getCoordinationWatch(cloudWatch.id)?.status, 'active')
 
     const movedLocal = await moveTask(null, localTask.id, { column: 'doing' }) as { column?: unknown }
     assert.equal(movedLocal.column, 'doing')
     assert.equal(getCoordinationTask(localTask.id)?.column, 'doing')
+    const pausedLocal = await pauseWatch(null, localWatch.id) as { status?: unknown }
+    assert.equal(pausedLocal.status, 'paused')
+    assert.equal(await deleteWatch(null, localWatch.id), true)
+    assert.equal(getCoordinationWatch(localWatch.id), null)
   } finally {
     setCoordinationDatabaseForTests(null)
     db.close()

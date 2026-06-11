@@ -10,6 +10,7 @@ import {
   COORDINATION_RUN_KINDS,
   COORDINATION_TASK_COLUMNS,
   COORDINATION_TASK_PRIORITIES,
+  COORDINATION_WATCH_EVENTS,
   COORDINATION_WORKSPACE_SUPPORT_APIS,
   COORDINATION_WATCH_TARGETS,
   coordinationCapabilityFromWorkspaceApi,
@@ -51,7 +52,9 @@ test('coordination contract defines one shared noun set', () => {
   assert.deepEqual([...COORDINATION_TASK_COLUMNS], ['backlog', 'planning', 'doing', 'review', 'done'])
   assert.deepEqual([...COORDINATION_TASK_PRIORITIES], ['high', 'med', 'low'])
   assert.ok(COORDINATION_WATCH_TARGETS.includes('project'))
+  assert.ok(COORDINATION_WATCH_TARGETS.includes('playbook'))
   assert.ok(COORDINATION_WATCH_TARGETS.includes('session'))
+  assert.deepEqual([...COORDINATION_WATCH_EVENTS], ['task.moved', 'task.review_ready', 'run.finished', 'needs_input', 'daily_summary'])
 })
 
 test('coordination support is explicit for every authority and capability', () => {
@@ -69,6 +72,7 @@ test('coordination support is explicit for every authority and capability', () =
   assert.equal(coordinationCapabilityStatus('desktop_local', 'workflows'), 'supported')
   assert.equal(coordinationCapabilityStatus('desktop_local', 'projects'), 'supported')
   assert.equal(coordinationCapabilityStatus('desktop_local', 'tasks'), 'supported')
+  assert.equal(coordinationCapabilityStatus('desktop_local', 'watches'), 'supported')
   assert.equal(coordinationCapabilityStatus('desktop_paired', 'tasks'), 'read_only')
 })
 

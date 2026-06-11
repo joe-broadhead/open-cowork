@@ -25,9 +25,25 @@ function queryString(query: Record<string, AppApiQueryValue> | undefined) {
 }
 
 function withQuery(path: string, query: Record<string, AppApiQueryValue>) {
-  const suffix = queryString(query)
-  if (!suffix) return path
-  return `${path}${path.includes('?') ? '&' + suffix.slice(1) : suffix}`
+  const queryStart = path.indexOf('?')
+  const basePath = queryStart === -1 ? path : path.slice(0, queryStart)
+  const params = new URLSearchParams(queryStart === -1 ? '' : path.slice(queryStart + 1))
+  let changed = false
+  for (const [key, value] of Object.entries(query || {})) {
+    if (value === null || value === undefined || value === '') continue
+    changed = true
+    if (Array.isArray(value)) {
+      params.delete(key)
+      for (const entry of value) {
+        if (entry) params.append(key, entry)
+      }
+    } else {
+      params.set(key, String(value))
+    }
+  }
+  if (!changed && queryStart !== -1) return path
+  const text = params.toString()
+  return text ? `${basePath}?${text}` : basePath
 }
 
 function afterSequenceQuery(afterSequence: number | null | undefined) {
@@ -183,6 +199,12 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       assignTask: (taskId, input) => request(endpointPath('coordinationTaskAssign', '/api/coordination/tasks/:taskId/assign', { taskId }), { method: 'POST', body: input }),
       linkTaskWork: (taskId, input) => request(endpointPath('coordinationTaskLinkWork', '/api/coordination/tasks/:taskId/link-work', { taskId }), { method: 'POST', body: input }),
       taskWorkTarget: (taskId) => request(endpointPath('coordinationTaskWorkTarget', '/api/coordination/tasks/:taskId/work-target', { taskId })),
+      watches: (query) => request(withQuery(endpoint('coordinationWatches', '/api/coordination/watches?limit=500'), query || {})),
+      createWatch: (input) => request(endpoint('coordinationWatchCreate', '/api/coordination/watches'), { method: 'POST', body: input }),
+      updateWatch: (watchId, input) => request(endpointPath('coordinationWatch', '/api/coordination/watches/:watchId', { watchId }), { method: 'POST', body: input }),
+      pauseWatch: (watchId) => request(endpointPath('coordinationWatchPause', '/api/coordination/watches/:watchId/pause', { watchId }), { method: 'POST' }),
+      resumeWatch: (watchId) => request(endpointPath('coordinationWatchResume', '/api/coordination/watches/:watchId/resume', { watchId }), { method: 'POST' }),
+      deleteWatch: (watchId) => request(endpointPath('coordinationWatchDelete', '/api/coordination/watches/:watchId', { watchId }), { method: 'DELETE' }),
     },
     projectSources: {
       validate: (input) => request(endpoint('projectSourceValidate', '/api/project-sources/validate'), { method: 'POST', body: input }),

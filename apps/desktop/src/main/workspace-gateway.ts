@@ -718,7 +718,7 @@ export class WorkspaceGateway {
       cloudSupport('coordination.tasks', 'deferred', 'Cloud task coordination is deferred until the shared coordination control plane is available.'),
       supportedIf('coordination.runs', feature('workflows'), 'Cloud coordination runs are disabled by this workspace policy.'),
       supportedIf('coordination.schedules', feature('workflows'), 'Cloud schedules are disabled by this workspace policy.'),
-      cloudSupport('coordination.watches', 'deferred', 'Cloud watches are deferred until the shared coordination delivery model is available.'),
+      cloudSupport('coordination.watches', 'deferred', 'Cloud watch management is deferred in the desktop Cloud surface until the WorkspaceGateway adapter is wired.'),
       cloudSupport('coordination.delegation', 'deferred', 'Cloud delegation coordination is deferred until the shared coordination control plane is available.'),
       supportedIf('artifacts.list', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
       supportedIf('artifacts.index', feature('artifacts'), 'Cloud artifacts are disabled by this workspace policy.'),
@@ -767,7 +767,7 @@ export class WorkspaceGateway {
 
   private localSupportReason(api: string, status: WorkspaceApiSupportStatus): string | null {
     if (status === 'supported' || status === 'read_only') return null
-    if (api === 'coordination.watches') return 'Desktop Local does not support durable watch subscriptions.'
+    if (api === 'coordination.watches') return 'Desktop Local watch subscriptions require a channel delivery target.'
     if (status === 'deferred') return 'This Desktop Local capability is deferred until its product surface is implemented.'
     return 'This Desktop Local capability is not supported.'
   }

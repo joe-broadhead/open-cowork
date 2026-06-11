@@ -225,6 +225,18 @@ export class CloudChannelDomainService {
     return deliveryActions.createChannelDelivery(this.options, principal, input)
   }
 
+  validateChannelDeliveryTarget(
+    principal: CloudPrincipal,
+    input: {
+      agentId: string
+      channelBindingId: string
+      sessionBindingId?: string | null
+      provider: ChannelProviderId
+    },
+  ): Promise<void> {
+    return deliveryActions.assertChannelDeliveryTarget(this.options, principal, input)
+  }
+
   listChannelDeliveries(
     principal: CloudPrincipal,
     input: {

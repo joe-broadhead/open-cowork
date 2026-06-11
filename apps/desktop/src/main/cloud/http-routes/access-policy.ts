@@ -35,6 +35,7 @@ export function routeAllowsWorkerCredential(input: GatewayRouteAccessInput) {
 
 export function routeAllowsGatewayOnlyToken(input: GatewayRouteAccessInput) {
   if (input.resource === 'channels') return true
+  if (input.resource === 'coordination' && input.sessionId === 'watches') return true
   if (input.resource !== 'sessions' || !input.sessionId || input.method !== 'GET') return false
   if (!input.action || input.action === 'view' || input.action === 'events') return true
   return input.action === 'artifacts' && Boolean(input.artifactId)
