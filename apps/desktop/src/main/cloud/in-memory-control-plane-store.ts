@@ -24,6 +24,7 @@ import { InMemoryQuotaDomain } from './in-memory-domains/quotas.ts'
 import { InMemoryChannelProviderEventsDomain } from './in-memory-domains/channel-provider-events.ts'
 import { InMemoryChannelDeliveriesDomain } from './in-memory-domains/channel-deliveries.ts'
 import { InMemoryCoordinationWatchesDomain } from './in-memory-domains/coordination-watches.ts'
+import { InMemoryChannelIdentitiesDomain } from './in-memory-domains/channel-identities.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
 import {
   generateChannelInteractionToken,
@@ -35,7 +36,7 @@ import {
 } from './control-plane-tokens.ts'
 import { decodeSessionPageCursor, encodeSessionPageCursor } from './session-page-cursor.ts'
 import { workspaceEventCursor, type WorkspaceEventCursorRecord } from './workspace-event-cursor.ts'
-import { channelScopeKey, channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
+import { channelThreadKey, normalizeChannelProviderId as normalizeProvider } from './channel-provider-utils.ts'
 import type { ChannelProviderEventClaimResult, ChannelProviderEventRecord, ChannelProviderId, ClaimChannelProviderEventInput, CompleteChannelProviderEventInput } from './channel-provider-types.ts'
 import type { CreateCloudCoordinationWatchInput, ListCloudCoordinationWatchesInput, ListMatchingCloudCoordinationWatchesInput, UpdateCloudCoordinationWatchInput } from './coordination-watch-records.ts'
 export { ControlPlaneQuotaExceededError, publicQuotaMessage } from './control-plane-errors.ts'
@@ -854,6 +855,14 @@ export type UpsertChannelIdentityInput = {
   updatedAt?: Date
 }
 
+export type ListChannelIdentitiesInput = {
+  provider?: ChannelProviderId | null
+  externalWorkspaceId?: string | null
+  role?: ChannelIdentityRole | null
+  status?: ChannelIdentityStatus | null
+  limit?: number | null
+}
+
 export type BindChannelSessionInput = {
   bindingId: string
   orgId: string
@@ -1207,6 +1216,7 @@ export type ControlPlaneStore = {
   listChannelBindings(orgId: string, agentId?: string | null): MaybePromise<ChannelBindingRecord[]>
   upsertChannelIdentity(input: UpsertChannelIdentityInput): MaybePromise<ChannelIdentityRecord>
   getChannelIdentity(orgId: string, identityId: string): MaybePromise<ChannelIdentityRecord | null>
+  listChannelIdentities(orgId: string, input?: ListChannelIdentitiesInput): MaybePromise<ChannelIdentityRecord[]>
   findChannelIdentity(input: {
     orgId: string
     provider: ChannelProviderId
@@ -1518,14 +1528,6 @@ function normalizeByokProviderId(value: unknown) {
   return providerId
 }
 
-function normalizeChannelIdentityRole(value: unknown): ChannelIdentityRole {
-  const role = normalizeText(value || 'viewer', 32, 'Channel identity role') as ChannelIdentityRole
-  if (!['owner', 'admin', 'member', 'approver', 'viewer'].includes(role)) {
-    throw new Error(`Unsupported channel identity role ${role}.`)
-  }
-  return role
-}
-
 export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly tenants = new Map<string, TenantRecord>()
   private readonly users = new Map<string, UserRecord>()
@@ -1549,8 +1551,6 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   private readonly byokSecrets = new Map<string, ByokSecretRecord>()
   private readonly headlessAgents = new Map<string, HeadlessAgentRecord>()
   private readonly channelBindings = new Map<string, ChannelBindingRecord>()
-  private readonly channelIdentities = new Map<string, ChannelIdentityRecord>()
-  private readonly channelIdentitiesByExternal = new Map<string, string>()
   private readonly channelSessionBindings = new Map<string, ChannelSessionBindingRecord>()
   private readonly channelSessionBindingsByThread = new Map<string, string>()
   private readonly channelInteractions = new Map<string, ChannelInteractionRecord>()
@@ -1578,6 +1578,10 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   })
   private readonly channelProviderEventsDomain = new InMemoryChannelProviderEventsDomain({
     orgExists: (orgId) => this.orgs.has(orgId),
+  })
+  private readonly channelIdentitiesDomain = new InMemoryChannelIdentitiesDomain({
+    orgExists: (orgId) => this.orgs.has(orgId),
+    accountExists: (accountId) => this.accounts.has(accountId),
   })
   private readonly channelDeliveriesDomain = new InMemoryChannelDeliveriesDomain({
     orgExists: (orgId) => this.orgs.has(orgId),
@@ -2611,44 +2615,19 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
   }
 
   upsertChannelIdentity(input: UpsertChannelIdentityInput): ChannelIdentityRecord {
-    if (!this.orgs.has(input.orgId)) throw new Error(`Unknown org ${input.orgId}.`)
-    if (input.accountId && !this.accounts.has(input.accountId)) throw new Error(`Unknown account ${input.accountId}.`)
-    const provider = normalizeProvider(input.provider)
-    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
-    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
-    const externalKey = key(input.orgId, channelScopeKey(provider, externalWorkspaceId, externalUserId))
-    const existingId = this.channelIdentitiesByExternal.get(externalKey)
-    const existing = existingId ? this.channelIdentities.get(existingId) : null
-    const now = nowIso(input.updatedAt)
-    const record: ChannelIdentityRecord = {
-      identityId: existing?.identityId || input.identityId || stableId('chid', input.orgId, provider, externalWorkspaceId || '', externalUserId),
-      orgId: input.orgId,
-      provider,
-      externalWorkspaceId,
-      externalUserId,
-      accountId: input.accountId === undefined ? existing?.accountId || null : input.accountId || null,
-      role: input.role === undefined ? existing?.role || 'viewer' : normalizeChannelIdentityRole(input.role),
-      status: input.status || existing?.status || 'pending',
-      metadata: input.metadata === undefined ? existing?.metadata || {} : normalizeRecord(input.metadata, 'Channel identity metadata'),
-      createdAt: existing?.createdAt || now,
-      updatedAt: now,
-    }
-    this.channelIdentities.set(record.identityId, record)
-    this.channelIdentitiesByExternal.set(externalKey, record.identityId)
-    return clone(record)
+    return this.channelIdentitiesDomain.upsert(input)
   }
 
   getChannelIdentity(orgId: string, identityId: string): ChannelIdentityRecord | null {
-    const identity = this.channelIdentities.get(identityId)
-    return identity && identity.orgId === orgId ? clone(identity) : null
+    return this.channelIdentitiesDomain.get(orgId, identityId)
+  }
+
+  listChannelIdentities(orgId: string, input: ListChannelIdentitiesInput = {}): ChannelIdentityRecord[] {
+    return this.channelIdentitiesDomain.list(orgId, input)
   }
 
   findChannelIdentity(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalUserId: string }): ChannelIdentityRecord | null {
-    const provider = normalizeProvider(input.provider)
-    const externalWorkspaceId = normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
-    const externalUserId = normalizeText(input.externalUserId, CHANNEL_TEXT_MAX_LENGTH, 'External user id')
-    const identityId = this.channelIdentitiesByExternal.get(key(input.orgId, channelScopeKey(provider, externalWorkspaceId, externalUserId)))
-    return identityId ? clone(this.channelIdentities.get(identityId) || null) : null
+    return this.channelIdentitiesDomain.find(input)
   }
 
   bindChannelSession(input: BindChannelSessionInput): ChannelSessionBindingRecord {
@@ -2743,7 +2722,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const session = this.getSessionForTenant(org?.tenantId || input.orgId, input.sessionId)
     if (!session) throw new Error(`Unknown session ${input.sessionId}.`)
     if (input.createdByIdentityId) {
-      const identity = this.channelIdentities.get(input.createdByIdentityId)
+      const identity = this.channelIdentitiesDomain.get(input.orgId, input.createdByIdentityId)
       if (!identity || identity.orgId !== input.orgId) throw new Error(`Unknown channel identity ${input.createdByIdentityId}.`)
     }
     const plaintextToken = generateChannelInteractionToken({ interactionId: input.interactionId, secret: input.tokenSecret })

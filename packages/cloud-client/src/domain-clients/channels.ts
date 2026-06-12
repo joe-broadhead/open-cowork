@@ -19,6 +19,7 @@ export type {
   IssuedChannelInteractionRecord,
 } from '../contracts.js'
 
+import type { ChannelProviderStatus } from '@open-cowork/shared'
 import { isCloudTransportError } from '../errors.js'
 import type {
   ChannelActorInput,
@@ -53,6 +54,7 @@ import {
 export type CloudChannelsClientContext = CloudDomainClientContext & CloudTransportSseContext
 
 export type CloudChannelsClient = {
+  listChannelProviders(): Promise<ChannelProviderStatus[]>
   listHeadlessAgents(): Promise<HeadlessAgentRecord[]>
   createHeadlessAgent(input: {
     name: string
@@ -78,6 +80,20 @@ export type CloudChannelsClient = {
     settings?: Record<string, unknown>
     bindingId?: string | null
   }): Promise<ChannelBindingRecord>
+  updateChannelBinding(bindingId: string, input: {
+    displayName?: string
+    status?: 'active' | 'disabled' | 'auth_required' | 'error'
+    credentialRef?: string | null
+    settings?: Record<string, unknown>
+  }): Promise<ChannelBindingRecord | null>
+  disconnectChannelBinding(bindingId: string): Promise<ChannelBindingRecord | null>
+  listChannelIdentities(input?: {
+    provider?: ChannelProviderId | null
+    externalWorkspaceId?: string | null
+    role?: ChannelIdentityRole
+    status?: ChannelIdentityStatus
+    limit?: number | null
+  }): Promise<ChannelIdentityRecord[]>
   resolveChannelIdentity(input: {
     provider: ChannelProviderId
     externalUserId: string
@@ -197,6 +213,9 @@ function channelDeliveriesUrl(baseUrl: string, input: { claimedBy?: string, ttlM
 export function createCloudChannelsClient(context: CloudChannelsClientContext): CloudChannelsClient {
   const { request } = context
   return {
+    async listChannelProviders() {
+      return (await request<{ providers: ChannelProviderStatus[] }>('/api/channels/providers')).providers
+    },
     async listHeadlessAgents() {
       return (await request<{ agents: HeadlessAgentRecord[] }>('/api/channels/agents')).agents
     },
@@ -220,6 +239,21 @@ export function createCloudChannelsClient(context: CloudChannelsClientContext): 
         method: 'POST',
         body: input,
       })).binding
+    },
+    async updateChannelBinding(bindingId, input) {
+      return (await request<{ binding: ChannelBindingRecord | null }>(`/api/channels/bindings/${encodePath(bindingId)}`, {
+        method: 'PATCH',
+        body: input,
+      })).binding
+    },
+    async disconnectChannelBinding(bindingId) {
+      return (await request<{ binding: ChannelBindingRecord | null }>(`/api/channels/bindings/${encodePath(bindingId)}`, {
+        method: 'PATCH',
+        body: { status: 'disabled' },
+      })).binding
+    },
+    async listChannelIdentities(input) {
+      return (await request<{ identities: ChannelIdentityRecord[] }>(`/api/channels/identities${queryString(input || {})}`)).identities
     },
     async resolveChannelIdentity(input) {
       return (await request<{ identity: ChannelIdentityRecord }>('/api/channels/identities/resolve', {

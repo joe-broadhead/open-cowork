@@ -24,6 +24,9 @@ import type {
   CapabilityTool,
 } from './capabilities.js'
 import type {
+  ChannelApiSurface,
+} from './channels.js'
+import type {
   RuntimeNotification,
   SessionChangeSummary,
   SessionChildInfo,
@@ -159,6 +162,7 @@ export * from './agent-capability-profile.js'
 export * from './agent-validation.js'
 export * from './artifacts.js'
 export * from './capabilities.js'
+export * from './channels.js'
 export * from './cloud-gateway-registration.js'
 export * from './cloud-session-projection.js'
 export * from './coordination.js'
@@ -269,6 +273,7 @@ export interface CoworkAPI {
     resumeWatch: (watchId: string, options?: WorkspaceOptions) => Promise<CoordinationWatch | null>
     deleteWatch: (watchId: string, options?: WorkspaceOptions) => Promise<boolean>
   }
+  channels: ChannelApiSurface
   launchpad: {
     feed: (request?: LaunchpadFeedRequest) => Promise<LaunchpadFeedPayload>
   }

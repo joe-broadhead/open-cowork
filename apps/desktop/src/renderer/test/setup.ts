@@ -280,6 +280,35 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       linkTaskWork: vi.fn(async () => null),
       taskWorkTarget: vi.fn(async () => null),
     },
+    channels: {
+      providers: vi.fn(async () => []),
+      agents: vi.fn(async () => []),
+      createAgent: vi.fn(async () => {
+        throw new Error('channels.createAgent not mocked')
+      }),
+      updateAgent: vi.fn(async () => null),
+      bindings: vi.fn(async () => []),
+      connectBinding: vi.fn(async () => {
+        throw new Error('channels.connectBinding not mocked')
+      }),
+      updateBinding: vi.fn(async () => null),
+      disconnectBinding: vi.fn(async () => null),
+      people: vi.fn(async () => []),
+      resolvePerson: vi.fn(async () => {
+        throw new Error('channels.resolvePerson not mocked')
+      }),
+      deliveries: vi.fn(async () => []),
+      retryDelivery: vi.fn(async () => null),
+      deadLetterDelivery: vi.fn(async () => null),
+      watches: vi.fn(async () => []),
+      createWatch: vi.fn(async () => {
+        throw new Error('channels.createWatch not mocked')
+      }),
+      updateWatch: vi.fn(async () => null),
+      pauseWatch: vi.fn(async () => null),
+      resumeWatch: vi.fn(async () => null),
+      deleteWatch: vi.fn(async () => false),
+    },
     artifact: {
       list: vi.fn(async () => []),
       cleanup: vi.fn(async (mode) => ({

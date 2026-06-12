@@ -7,7 +7,9 @@ import type {
 } from '../control-plane-store.ts'
 import {
   publicChannelBinding,
+  publicChannelIdentity,
   type PublicChannelBindingRecord,
+  type PublicChannelIdentityRecord,
 } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 import {
@@ -222,4 +224,26 @@ export async function resolveChannelIdentity(
     status: setupAllowed ? input.status || existing?.status || 'pending' : existing?.status || 'pending',
     metadata: input.metadata || existing?.metadata || {},
   })
+}
+
+export async function listChannelIdentities(
+  options: CloudChannelDomainServiceOptions,
+  principal: CloudPrincipal,
+  input: {
+    provider?: ChannelProviderId | null
+    externalWorkspaceId?: string | null
+    role?: ChannelIdentityRecord['role'] | null
+    status?: ChannelIdentityRecord['status'] | null
+    limit?: number | null
+  } = {},
+): Promise<PublicChannelIdentityRecord[]> {
+  await options.ensurePrincipal(principal)
+  assertChannelSetupAllowed(principal)
+  return (await options.store.listChannelIdentities(options.principalOrgId(principal), {
+    provider: input.provider,
+    externalWorkspaceId: input.externalWorkspaceId,
+    role: input.role,
+    status: input.status,
+    limit: normalizedCloudListLimit(input.limit),
+  })).map(publicChannelIdentity)
 }
