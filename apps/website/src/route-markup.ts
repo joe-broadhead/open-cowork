@@ -76,3 +76,23 @@ export function routeAdminSurfaceMarkup(routeId: CloudWebRouteId) {
             </article>
           </div>`
 }
+
+export function cloudLaunchpadStaticMarkup() {
+  return `<div class="cloud-launchpad-home signed-in-only" id="cloud-launchpad-home" aria-label="Home launchpad">
+                <div class="cloud-launchpad-suggestions" aria-label="Task suggestions">
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" aria-hidden="true">-&gt;</span><span class="cloud-launchpad-suggestion__text"><strong>Plan a release</strong><span>Draft a release plan for the next milestone.</span><small>@plan can take this</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" aria-hidden="true">~</span><span class="cloud-launchpad-suggestion__text"><strong>Review a change</strong><span>Review the recent changes and call out production risks.</span><small>@build can take this</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" aria-hidden="true">*</span><span class="cloud-launchpad-suggestion__text"><strong>Create a workflow</strong><span>Help me turn a repeated task into a saved workflow.</span><small>@chief-of-staff can take this</small></span></button>
+                  <button class="cloud-launchpad-suggestion" type="button" disabled><span class="cloud-launchpad-suggestion__icon" aria-hidden="true">?</span><span class="cloud-launchpad-suggestion__text"><strong>Investigate an issue</strong><span>Trace this bug from symptoms to a concrete fix.</span><small>@build can take this</small></span></button>
+                </div>
+                <section class="cloud-launchpad-motion" aria-busy="true">
+                  <div class="cloud-launchpad-motion__head"><span>In motion</span><span aria-hidden="true"></span><span class="pill">Loading</span></div>
+                  <div class="cloud-launchpad-motion-grid">
+                    <div class="cloud-launchpad-motion-col"><div class="cloud-launchpad-motion-col__head"><span><span aria-hidden="true">P</span> In progress</span><span class="pill">0</span></div><div class="cloud-launchpad-motion-list"><div class="cloud-launchpad-motion-empty">No active tasks yet.</div></div></div>
+                    <div class="cloud-launchpad-motion-col"><div class="cloud-launchpad-motion-col__head"><span><span aria-hidden="true">!</span> Waiting on you</span><span class="pill">0</span></div><div class="cloud-launchpad-motion-list"><div class="cloud-launchpad-motion-empty">No approvals or questions waiting.</div></div></div>
+                    <div class="cloud-launchpad-motion-col"><div class="cloud-launchpad-motion-col__head"><span><span aria-hidden="true">A</span> Fresh artifacts</span><span class="pill">0</span></div><div class="cloud-launchpad-motion-list"><div class="cloud-launchpad-motion-empty">No new artifacts yet.</div></div></div>
+                  </div>
+                </section>
+                <button class="cloud-launchpad-team-strip" type="button" disabled><span>Your team</span><span class="cloud-launchpad-team-strip__avatars" aria-hidden="true"><span>B</span><span>P</span><span>CS</span></span><span>3 coworkers · manage</span></button>
+              </div>`
+}

@@ -11,6 +11,7 @@ import {
   iso,
   makeAuditEvents,
   makeDeliveries,
+  makeLaunchpadFeed,
   makeMembers,
   makeSession,
   makeSessionView,
@@ -61,13 +62,7 @@ function bundledReactClientScript() {
 }
 
 type MockRole = 'owner' | 'admin' | 'member'
-
-type MockRequest = {
-  method: string
-  path: string
-  body: unknown
-  headers: Record<string, string>
-}
+type MockRequest = { method: string, path: string, body: unknown, headers: Record<string, string> }
 
 type MockEventSource = {
   url: string
@@ -94,8 +89,8 @@ type BrowserHarnessOptions = {
   projectSourceDenied?: boolean
   signupMode?: string
   billingEnabled?: boolean
+  allowedAgents?: string[] | null
 }
-
 function parseJsonBody(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) return null
   try {
@@ -129,6 +124,7 @@ export async function waitFor(assertion: () => void, timeoutMs = 2500) {
 
 export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}) {
   const role = options.role || 'admin'
+  const allowedAgents = options.allowedAgents === undefined ? ['build', 'plan', 'chief-of-staff', 'data-analyst'] : options.allowedAgents
   const features = {
     chat: true,
     workflows: true,
@@ -252,7 +248,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         role,
         profileName: 'default',
         policy: {
-          allowedAgents: ['build', 'data-analyst'],
+          allowedAgents,
           allowedTools: ['shell', 'repo.search'],
           allowedMcps: null,
         },
@@ -324,7 +320,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
           signup: { mode: options.signupMode || 'invite', allowedEmailDomains: ['example.test'] },
           profile: { name: 'default', label: 'Default' },
           features,
-          allowedAgents: ['build', 'data-analyst'],
+          allowedAgents,
           allowedTools: ['shell'],
           allowedMcps: null,
           projectSources: { git: { allowedHosts: ['github.com'] }, uploadedSnapshots: { enabled: true, maxFiles: 100, maxBytes: 1024 * 1024 }, managedWorkspaces: { enabled: false } },
@@ -443,6 +439,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'POST' && request.pathname === '/api/project-sources/snapshots') {
       return jsonResponse({ projectSource: { kind: 'snapshot', snapshotId: 'snapshot-1', title: 'Browser upload' } })
     }
+    if (request.method === 'GET' && request.pathname === '/api/launchpad/feed') return jsonResponse(makeLaunchpadFeed(sessions, views))
     if (request.method === 'GET' && request.pathname === '/api/sessions') {
       const params = new URL(request.path, 'https://cloud.example.test').searchParams, limit = Math.min(Math.max(Math.floor(Number(params.get('limit') || sessions.length)) || sessions.length, 1), 500)
       const offset = params.get('cursor')?.startsWith('offset:') ? Number(params.get('cursor')?.slice('offset:'.length)) : 0

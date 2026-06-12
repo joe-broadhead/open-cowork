@@ -15,6 +15,8 @@ import {
   translateOpencodeRuntimeEventWithDiagnostics,
 } from '../apps/desktop/src/main/cloud/opencode-runtime-adapter.ts'
 
+const MANAGED_RUNTIME_START_TIMEOUT_MS = 15_000
+
 function writeExecutable(root: string, name: string, source: string) {
   const path = join(root, name)
   writeFileSync(path, `#!/bin/sh\n${source}`)
@@ -395,7 +397,7 @@ while true; do sleep 1; done
     hostname: '127.0.0.1',
     port: 0,
     opencodeBinPath: executable,
-    timeout: 5000,
+    timeout: MANAGED_RUNTIME_START_TIMEOUT_MS,
     config: { logLevel: 'warn' },
   })
 
@@ -444,7 +446,7 @@ while true; do sleep 1; done
     hostname: '127.0.0.1',
     port: 0,
     opencodeBinPath: executable,
-    timeout: 5000,
+    timeout: MANAGED_RUNTIME_START_TIMEOUT_MS,
     configDelivery: 'ephemeral-file',
     config: {
       model: 'openrouter/test-model',

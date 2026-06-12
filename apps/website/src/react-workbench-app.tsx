@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
+import type { LaunchpadFreshArtifactItem } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import {
   CLOUD_WEB_THREAD_PAGE_SIZE, filterCloudWebThreads,
@@ -16,6 +17,7 @@ import {
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
+import { CloudLaunchpadPortal, useCloudLaunchpad } from './react-workbench-launchpad.tsx'
 import { useCloudWorkbenchForms } from './react-workbench-forms.ts'
 import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
 import { cloudWebCoworkerOptionsFromWorkspace, cloudWebPromptAssignment } from './surface-workbench.ts'
@@ -107,17 +109,20 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   const inspectorTarget = usePortalTarget('chat-inspector-detail')
   const eventStatusTarget = usePortalTarget('chat-event-status')
   const artifactDetailTarget = usePortalTarget('artifact-detail')
+  const launchpadTarget = usePortalTarget('cloud-launchpad-home')
 
   const selectedView = selectedSessionId ? views[selectedSessionId] || null : null
   const coworkerOptions = useMemo(() => cloudWebCoworkerOptionsFromWorkspace(workspace, bootstrap.profileName), [bootstrap.profileName, workspace])
+  const hasExplicitAllowedAgents = useMemo(() => Array.isArray(asRecord(asRecord(workspace).policy).allowedAgents), [workspace])
   const allowedAgents = useMemo(() => {
     const optionAgents = coworkerOptions.map((option) => option.name)
     return optionAgents.length ? optionAgents : allowedAgentsFromWorkspace(workspace)
   }, [coworkerOptions, workspace])
-  const activeCoworker = useMemo(
-    () => cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).agent,
-    [allowedAgents, composerAgent, composerText],
-  )
+  const activeCoworker = useMemo(() => cloudWebPromptAssignment(composerText, allowedAgents, composerAgent).agent, [allowedAgents, composerAgent, composerText])
+  useEffect(() => {
+    if (hasExplicitAllowedAgents) setComposerAgent((current) => (!current || allowedAgents.includes(current)) ? current : allowedAgents[0] || '')
+  }, [allowedAgents, hasExplicitAllowedAgents])
+
   const visibleThreads = useMemo(() => filterCloudWebThreads(sessions, views, filters, threadLimit), [filters, sessions, threadLimit, views])
   const filteredThreadCount = useMemo(() => filterCloudWebThreads(sessions, views, filters, Number.MAX_SAFE_INTEGER).length, [filters, sessions, views])
 
@@ -225,9 +230,9 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     setRouteHash('chat')
   }, [loadView])
 
-  const startNewChatDraft = useCallback((agentName = '') => {
+  const startNewChatDraft = useCallback((agentName = '', prompt = '') => {
     setSelectedSessionId(null)
-    setComposerText('')
+    setComposerText(prompt)
     setComposerAgent(agentName)
     setArtifactPanel({ artifactId: null, metadata: null, status: 'idle', error: null })
     setSessionEventStatus('idle')
@@ -235,6 +240,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     setRouteHash('chat')
     window.requestAnimationFrame(() => document.getElementById('chat-message-input')?.focus())
   }, [])
+
+  const { feed: launchpadFeed, loading: isLoadingLaunchpad, error: launchpadError, loadFeed: loadLaunchpadFeed, startSuggestion: startLaunchpadSuggestion } = useCloudLaunchpad({
+    api,
+    onDraft: (prompt, agentName) => startNewChatDraft(agentName, prompt),
+  })
 
   const refreshSelectedSession = useCallback(async () => {
     if (!selectedSessionId) return
@@ -248,12 +258,13 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       await action()
       await refreshSelectedSession()
       await loadSessions({ keepSelection: true, preserveLoadedPages: true })
+      await loadLaunchpadFeed()
     } catch (nextError) {
       setError(errorMessage(nextError))
     } finally {
       setPendingAction(null)
     }
-  }, [loadSessions, refreshSelectedSession])
+  }, [loadLaunchpadFeed, loadSessions, refreshSelectedSession])
 
   const respondPermission = useCallback((permissionId: string, allowed: boolean) => {
     if (!selectedSessionId) return
@@ -327,6 +338,14 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     })()
   }, [api, selectedSessionId])
 
+  const openLaunchpadArtifact = useCallback((item: LaunchpadFreshArtifactItem) => {
+    if (item.artifactId && item.sessionId) {
+      inspectArtifact(item.artifactId, { sessionId: item.sessionId })
+      return
+    }
+    setRouteHash('artifacts')
+  }, [inspectArtifact])
+
   useEffect(() => {
     const bridge = {
       ownsChat: true,
@@ -346,10 +365,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     document.body.dataset.reactWorkbench = 'active'
     void api.workspace.current().then(setWorkspace).catch((nextError) => setError(errorMessage(nextError)))
     void loadSessions({ keepSelection: true }).catch((nextError) => setError(errorMessage(nextError)))
+    void loadLaunchpadFeed().catch((nextError) => setError(errorMessage(nextError)))
     return () => {
       delete document.body.dataset.reactWorkbench
     }
-  }, [api, loadSessions])
+  }, [api, loadLaunchpadFeed, loadSessions])
 
   useEffect(() => {
     document.body.dataset.chatState = selectedSessionId && views[selectedSessionId] ? 'thread' : 'empty'
@@ -452,13 +472,14 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       const stream = api.workspace.events({
         message: () => {
           void loadSessions({ keepSelection: true, preserveLoadedPages: true })
+          void loadLaunchpadFeed()
         },
       })
       return () => stream.close()
     } catch {
       return undefined
     }
-  }, [api, loadSessions])
+  }, [api, loadLaunchpadFeed, loadSessions])
 
   useEffect(() => {
     eventStatusTarget?.setAttribute('data-kind', error ? 'warn' : sessionEventStatus === 'open' || sessionEventStatus === 'idle' ? 'ok' : sessionEventStatus === 'retrying' ? 'warn' : '')
@@ -499,73 +520,65 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     },
   }
 
-  const portals = []
-  if (threadListTarget) {
-    portals.push(createPortal(
-      <CloudThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} limit={threadLimit} embedded onSelect={selectSession} />,
-      threadListTarget,
-    ))
+  const portals: ReactNode[] = []
+  const pushPortal = (target: HTMLElement | null, node: ReactNode) => {
+    if (target) portals.push(createPortal(node, target))
   }
-  if (sidebarListTarget) {
-    portals.push(createPortal(
-      <CloudSidebarThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} onSelect={selectSession} />,
-      sidebarListTarget,
-    ))
-  }
-  if (threadCountTarget) portals.push(createPortal(<>{filteredThreadCount}</>, threadCountTarget))
-  if (sidebarCountTarget) portals.push(createPortal(<>{filteredThreadCount}</>, sidebarCountTarget))
-  if (limitStatusTarget) portals.push(createPortal(<>{limitStatus}</>, limitStatusTarget))
-  if (titleTarget) portals.push(createPortal(<>{selectedView ? sessionTitle(selectedView, selectedSessionId || 'Cloud chat') : 'What shall we cowork on today?'}</>, titleTarget))
-  if (metaTarget) portals.push(createPortal(<>{chatMeta}</>, metaTarget))
-  if (managedActionsTarget) {
-    portals.push(createPortal(
-      <>
-        <CloudComposerActionCluster profileName={bootstrap.profileName} />
-        <button className="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
-      </>,
-      managedActionsTarget,
-    ))
-  }
-  if (timelineTarget) {
-    portals.push(createPortal(
-      <>
-        <CloudApprovalsAndQuestions view={selectedView} {...actionProps} />
-        <CloudChatTimeline view={selectedView} {...actionProps} />
-      </>,
-      timelineTarget,
-    ))
-  }
-  if (inspectorTarget) {
-    portals.push(createPortal(
-      <CloudReviewPane view={selectedView} {...actionProps} />,
-      inspectorTarget,
-    ))
-  }
-  if (artifactDetailTarget) {
-    portals.push(createPortal(
-      <CloudArtifactReviewDetail artifactPanel={artifactPanel} />,
-      artifactDetailTarget,
-    ))
-  }
-  if (eventStatusTarget) portals.push(createPortal(<>{statusText}</>, eventStatusTarget))
-  if (composerTarget) {
-    portals.push(createPortal(
-      <CloudComposerPortal
-        bootstrap={bootstrap}
-        allowedAgents={allowedAgents}
-        coworkerOptions={coworkerOptions}
-        activeCoworker={activeCoworker}
-        composerText={composerText}
-        composerAgent={composerAgent}
-        error={error}
-        isSending={isSending}
-        selectedSessionId={selectedSessionId}
-        setComposerText={setComposerText}
-        setComposerAgent={setComposerAgent}
-      />,
-      composerTarget,
-    ))
-  }
+  pushPortal(threadListTarget, <CloudThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} limit={threadLimit} embedded onSelect={selectSession} />)
+  pushPortal(sidebarListTarget, <CloudSidebarThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} onSelect={selectSession} />)
+  pushPortal(threadCountTarget, <>{filteredThreadCount}</>)
+  pushPortal(sidebarCountTarget, <>{filteredThreadCount}</>)
+  pushPortal(limitStatusTarget, <>{limitStatus}</>)
+  pushPortal(titleTarget, <>{selectedView ? sessionTitle(selectedView, selectedSessionId || 'Cloud chat') : 'What shall we cowork on today?'}</>)
+  pushPortal(metaTarget, <>{chatMeta}</>)
+  pushPortal(managedActionsTarget, (
+    <>
+      <CloudComposerActionCluster profileName={bootstrap.profileName} />
+      <button className="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
+    </>
+  ),
+  )
+  pushPortal(timelineTarget, (
+    <>
+      <CloudApprovalsAndQuestions view={selectedView} {...actionProps} />
+      <CloudChatTimeline view={selectedView} {...actionProps} />
+    </>
+  ),
+  )
+  pushPortal(inspectorTarget, <CloudReviewPane view={selectedView} {...actionProps} />)
+  pushPortal(artifactDetailTarget, <CloudArtifactReviewDetail artifactPanel={artifactPanel} />)
+  pushPortal(eventStatusTarget, <>{statusText}</>)
+  pushPortal(composerTarget, (
+    <CloudComposerPortal
+      bootstrap={bootstrap}
+      allowedAgents={allowedAgents}
+      coworkerOptions={coworkerOptions}
+      activeCoworker={activeCoworker}
+      composerText={composerText}
+      composerAgent={composerAgent}
+      error={error}
+      isSending={isSending}
+      selectedSessionId={selectedSessionId}
+      setComposerText={setComposerText}
+      setComposerAgent={setComposerAgent}
+    />
+  ),
+  )
+  pushPortal(launchpadTarget, (
+    <CloudLaunchpadPortal
+      feed={launchpadFeed}
+      loading={isLoadingLaunchpad}
+      error={launchpadError}
+      coworkerOptions={coworkerOptions}
+      policyKnown={Boolean(workspace)}
+      hasExplicitAllowedAgents={hasExplicitAllowedAgents}
+      onSuggestion={startLaunchpadSuggestion}
+      onOpenRoute={setRouteHash}
+      onOpenSession={(sessionId) => { void selectSession(sessionId) }}
+      onOpenArtifact={openLaunchpadArtifact}
+    />
+  ),
+  )
   portals.push(
     <CloudWorkbenchSurfacePortals
       key="workbench-surfaces"

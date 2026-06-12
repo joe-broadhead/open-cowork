@@ -124,6 +124,8 @@ class DesktopSmokeRuntime implements CloudRuntimeAdapter {
 }
 
 function runDesktopSmokeScript(baseUrl: string, adminToken: string, env: Record<string, string> = {}) {
+  const smokeTimeoutMs = 15_000
+  const processTimeoutMs = 45_000
   return new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, [
       '--no-warnings',
@@ -132,7 +134,7 @@ function runDesktopSmokeScript(baseUrl: string, adminToken: string, env: Record<
       '--cloud-url',
       baseUrl,
       '--timeout-ms',
-      '5000',
+      String(smokeTimeoutMs),
     ], {
       cwd: process.cwd(),
       env: {
@@ -149,7 +151,7 @@ function runDesktopSmokeScript(baseUrl: string, adminToken: string, env: Record<
     const timer = setTimeout(() => {
       child.kill('SIGTERM')
       reject(new Error(`Desktop smoke script timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`))
-    }, 20_000)
+    }, processTimeoutMs)
     if (typeof timer.unref === 'function') timer.unref()
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')

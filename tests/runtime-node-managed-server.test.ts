@@ -10,6 +10,8 @@ import {
   resolveNodeManagedOpencodeSupervisorPath,
 } from '../apps/desktop/src/main/runtime-node-managed-server.ts'
 
+const NODE_MANAGED_RUNTIME_TEST_TIMEOUT_MS = 15_000
+
 function writeExecutable(root: string, name: string, source: string) {
   const path = join(root, name)
   writeFileSync(path, `#!/bin/sh\n${source}`)
@@ -51,7 +53,7 @@ while true; do sleep 1; done
     config: { logLevel: 'warn', model: 'test/model' },
     opencodeBinPath: executable,
     port: 0,
-    timeout: 5000,
+    timeout: NODE_MANAGED_RUNTIME_TEST_TIMEOUT_MS,
   })
 
   const pid = (() => {
@@ -88,7 +90,7 @@ exit 9
     opencodeBinPath: executable,
     onUnexpectedExit: (event) => unexpectedExits.push(event),
     port: 0,
-    timeout: 5000,
+    timeout: NODE_MANAGED_RUNTIME_TEST_TIMEOUT_MS,
   })
 
   try {

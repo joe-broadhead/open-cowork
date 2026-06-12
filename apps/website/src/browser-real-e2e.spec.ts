@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { accessSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_UI_ACCENT_PRESET_ID, UI_ACCENT_PRESETS } from '@open-cowork/shared'
 import { CLOUD_WEB_ROUTES } from './app-shell.ts'
@@ -20,6 +21,8 @@ import {
 } from './browser-test-fixtures.ts'
 
 const CI = Boolean(process.env.CI)
+const REAL_BROWSER_STEP_TIMEOUT_MS = 10_000
+const REAL_BROWSER_TEST_TIMEOUT_MS = 120_000
 const desktopRequire = createRequire(new URL('../../desktop/package.json', import.meta.url))
 const BUILT_REACT_CLIENT_PATH = fileURLToPath(new URL('../dist/client/open-cowork-cloud-react.js', import.meta.url))
 const FONT_ASSET_SPECS = {
@@ -87,6 +90,36 @@ async function launchChromium(chromium: ChromiumLauncher) {
     }
     return null
   }
+}
+
+async function waitForFontsReady(page: any) {
+  try {
+    await page.waitForFunction(() => !document.fonts || document.fonts.status === 'loaded', undefined, {
+      timeout: REAL_BROWSER_STEP_TIMEOUT_MS,
+    })
+  } catch (error) {
+    const debug = await page.evaluate(() => ({
+      fontStatus: document.fonts?.status || null,
+      fontCount: document.fonts ? Array.from(document.fonts).length : 0,
+      bodyFont: getComputedStyle(document.body).fontFamily,
+    }))
+    throw new Error(`Cloud Web fonts did not settle: ${JSON.stringify(debug)}`, {
+      cause: error,
+    })
+  }
+}
+
+async function closeBrowserBestEffort(browser: any) {
+  let closed = false
+  await Promise.race([
+    browser.close().then(() => {
+      closed = true
+    }),
+    delay(REAL_BROWSER_STEP_TIMEOUT_MS),
+  ])
+  if (closed) return
+  const process = typeof browser.process === 'function' ? browser.process() : null
+  process?.kill?.()
 }
 
 function scriptJson(value: unknown) {
@@ -325,7 +358,7 @@ function browserMocksScript(state: ReturnType<typeof makeMockState>) {
 })();`
 }
 
-test('cloud web workbench passes a real Chromium desktop and mobile smoke', async () => {
+test('cloud web workbench passes a real Chromium desktop and mobile smoke', { timeout: REAL_BROWSER_TEST_TIMEOUT_MS }, async () => {
   const chromium = await loadChromium()
   if (!chromium) return
 
@@ -376,7 +409,7 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     })
 
     await page.goto(pageUrl, { waitUntil: 'load' })
-    await page.evaluate(() => document.fonts?.ready)
+    await waitForFontsReady(page)
     assert.ok(fontRequests.some((path) => path.endsWith('/mona-sans-latin-wght-normal.woff2')), 'Mona Sans font route was requested')
     assert.ok(fontRequests.some((path) => path.endsWith('/schibsted-grotesk-latin-wght-normal.woff2')), 'Schibsted Grotesk font route was requested')
     assert.deepEqual(reactClientRequests, ['/assets/open-cowork-cloud-react.js'])
@@ -522,6 +555,6 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', asyn
     assert.ok(mobile.contentTop >= mobile.topbarBottom - 1, 'content starts below the mobile topbar')
     assert.deepEqual(pageErrors, [])
   } finally {
-    await browser.close()
+    await closeBrowserBestEffort(browser)
   }
 })

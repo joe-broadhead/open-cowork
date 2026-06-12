@@ -100,9 +100,11 @@ export function cloudWebsiteChatStyles() {
       max-width: 900px;
       width: 100%;
       margin: 0 auto;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto auto auto;
       justify-content: stretch;
-      align-content: center;
+      align-content: start;
+      overflow: auto;
+      padding-top: var(--space-7);
       padding-bottom: var(--space-8);
     }
     .chat-session-header {
@@ -254,7 +256,12 @@ export function cloudWebsiteChatStyles() {
     }
     .composer-select-label {
       width: auto;
-      display: block;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      color: var(--muted);
+      font-size: var(--text-xs);
+      line-height: var(--lh-xs);
     }
     .composer-select-label select {
       width: auto;

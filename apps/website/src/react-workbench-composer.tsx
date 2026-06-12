@@ -60,8 +60,8 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
         </span>
         <span>
           {activeOption
-            ? `Lead coworker: ${activeOption.displayName} - ${activeOption.role} - ${activeOption.availability}`
-            : activeCoworker ? `Lead coworker: ${activeCoworker}` : 'Lead coworker: profile default'}
+            ? `Assign to: ${activeOption.displayName} - ${activeOption.role} - ${activeOption.availability}`
+            : activeCoworker ? `Assign to: ${activeCoworker}` : 'Assign to: profile default'}
         </span>
       </div>
       <div className="composer-input-chrome">
@@ -99,7 +99,7 @@ export function CloudComposerPortal(props: CloudComposerPortalProps) {
         <div className="composer-toolbar-group">
           <button className="icon-button ghost" type="button" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file" />
           <label className="composer-select-label">
-            <span className="sr-only">Coworker</span>
+            <span>Assign to</span>
             <select id="composer-agent" name="agent" value={composerAgent} disabled={isSending} onChange={(event) => setComposerAgent(event.currentTarget.value)}>
               <option value="">Default coworker</option>
               {coworkerOptions.map((agent) => <option key={agent.name} value={agent.name}>{agent.displayName} - {agent.role}</option>)}

@@ -109,7 +109,7 @@ function restoreSignedOutChatFallback(profileName: string, chatEnabled: boolean)
     leadRow.dataset.hasLead = 'false'
     const leadAvatar = textNodeElement('span', 'studio-coworker-avatar studio-coworker-avatar--sm', 'OC')
     leadAvatar.setAttribute('aria-hidden', 'true')
-    leadRow.append(leadAvatar, textNodeElement('span', '', 'Lead coworker: profile default'))
+    leadRow.append(leadAvatar, textNodeElement('span', '', 'Assign to: profile default'))
 
     const inputChrome = document.createElement('div')
     inputChrome.className = 'composer-input-chrome'

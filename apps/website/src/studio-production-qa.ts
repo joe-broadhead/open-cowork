@@ -46,10 +46,10 @@ const allViewports: StudioQaViewport[] = ['desktop', 'tablet', 'mobile']
 export const STUDIO_VISUAL_QA_MATRIX: StudioVisualQaEntry[] = [
   {
     id: 'home-chat-composer',
-    label: 'Home, Chat, and composer',
+    label: 'Home launchpad, Chat, and composer',
     routeIds: ['chat'],
-    desktopSurface: 'Home and Chat composer-first runtime surface',
-    cloudCheck: 'Default route opens to chat, shows coworker selection, disables signed-out send controls, and submits prompts through Cloud commands after auth.',
+    desktopSurface: 'Home launchpad and Chat composer-first runtime surface',
+    cloudCheck: 'Default route opens to the launchpad with assign-to coworker selection, starter cards, in-motion feed, team strip, disabled signed-out send controls, and Cloud command submission after auth.',
     states: ['loading', 'empty', 'error', 'disabled', 'permission-gated', 'offline-disconnected', 'retry'],
     boundary: 'Cloud Web consumes Cloud session projections and commands only; OpenCode owns session execution and event semantics.',
     evidence: ['apps/website/src/render.test.ts', 'apps/website/src/browser-e2e.test.ts', 'apps/website/src/browser-real-e2e.spec.ts'],
