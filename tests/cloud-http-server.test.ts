@@ -567,6 +567,29 @@ test('cloud HTTP coordination routes expose the desktop coordination model', asy
     assert.equal(listedTask.column, 'doing')
     assert.equal(listedTask.assigneeAgent, 'reviewer')
 
+    const cleoPlanResponse = await fetch(`${baseUrl}/api/coordination/projects/${projectId}/plan-with-cleo`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tasks: [{
+          spec: 'Review the board handoff.\n\nAcceptance: project tasks are ready for the human review lane.',
+          priority: 'med',
+          assigneeAgent: 'cleo',
+        }],
+      }),
+    })
+    assert.equal(cleoPlanResponse.status, 201)
+    const cleoPlan = await readJson(cleoPlanResponse)
+    const cleoTasks = asArray(cleoPlan.tasks).map(asRecord)
+    assert.equal(cleoPlan.plannerAgent, 'chief-of-staff')
+    assert.equal(cleoPlan.displayName, 'Cleo')
+    assert.equal(cleoTasks.length, 1)
+    assert.equal(cleoTasks[0]?.projectId, projectId)
+    assert.equal(cleoTasks[0]?.workspaceId, 'cloud:tenant-1')
+    assert.equal(cleoTasks[0]?.column, 'planning')
+    assert.equal(cleoTasks[0]?.priority, 'med')
+    assert.equal(cleoTasks[0]?.assigneeAgent, 'builder')
+
     const channelAgent = await readJson(await fetch(`${baseUrl}/api/channels/agents`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

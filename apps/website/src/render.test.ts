@@ -384,6 +384,7 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationBoard')?.path, '/api/coordination/board')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationProjects')?.path, '/api/coordination/projects?limit=100')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationProjectCreate')?.method, 'POST')
+  assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationPlanWithCleo')?.path, '/api/coordination/projects/:projectId/plan-with-cleo')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationTasks')?.path, '/api/coordination/tasks?limit=500')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationTaskMove')?.path, '/api/coordination/tasks/:taskId/move')
   assert.equal(CLOUD_WEB_CLIENT_ENDPOINTS.find((endpoint) => endpoint.id === 'coordinationTaskWorkTarget')?.path, '/api/coordination/tasks/:taskId/work-target')

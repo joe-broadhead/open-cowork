@@ -11,6 +11,8 @@ import type {
 import type { AppNavigationTarget } from '../app-types.ts'
 import { formatAgentLabel } from '../helpers/agent-label.ts'
 import { compactDescription } from '../helpers/format.ts'
+import { isPrimaryAgentMode } from '../helpers/primary-agent-mode.ts'
+import type { PrimaryAgentMode } from '../stores/session.ts'
 
 export type View = AppNavigationTarget
 export type PaletteSection = 'Go To' | 'Create' | 'Modes' | 'Commands' | 'Coworkers'
@@ -64,7 +66,7 @@ type BuildPaletteItemsInput = {
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
   onInsertComposer: (text: string) => void
-  onSetAgentMode: (mode: 'build' | 'plan') => void
+  onSetAgentMode: (mode: PrimaryAgentMode) => void
   onSelectDirectory: () => Promise<string | null>
   onOpenSettings: () => void
   onToggleSearch: () => void
@@ -105,7 +107,7 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     }))
 
   const topLevelModes = builtinAgents
-    .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'primary' && (agent.name === 'build' || agent.name === 'plan'))
+    .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'primary' && isPrimaryAgentMode(agent.name))
     .map((agent) => ({
       id: `mode:${agent.name}`,
       title: `Use ${agent.label}`,
@@ -114,7 +116,8 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       badge: 'Mode',
       keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
       run: () => {
-        onSetAgentMode(agent.name as 'build' | 'plan')
+        if (!isPrimaryAgentMode(agent.name)) return
+        onSetAgentMode(agent.name)
         onNavigate('chat')
       },
     }))

@@ -1,4 +1,5 @@
 import type {
+  CoordinationChiefOfStaffPlanInput,
   CoordinationProjectInput,
   CoordinationProjectUpdateInput,
   CoordinationTaskAssignInput,
@@ -36,6 +37,7 @@ import {
   listCoordinationProjects,
   listCoordinationTasks,
   moveCoordinationTask,
+  planCoordinationProjectWithCleo,
   updateCoordinationProject,
   updateCoordinationTask,
 } from '../../coordination/coordination-service.ts'
@@ -153,6 +155,25 @@ export async function handleCoordinationApiRoute(input: CloudApiRouteInput): Pro
           return true
         }
         tools.writeJson(res, 200, project, options.corsOrigin)
+      } catch (error) {
+        writeCoordinationError(input, error)
+      }
+      return true
+    }
+    if (itemId && itemAction === 'plan-with-cleo' && req.method === 'POST') {
+      if (!requireProjectInWorkspace(input, itemId, workspaceId)) return true
+      const body = await tools.readJsonBody(req, options.maxBodyBytes || 1024 * 1024)
+      try {
+        const result = planCoordinationProjectWithCleo({
+          ...(body as Omit<CoordinationChiefOfStaffPlanInput, 'projectId'>),
+          projectId: itemId,
+          workspaceId,
+        })
+        if (!result) {
+          tools.writeError(res, 404, 'Coordination project was not found.', options.corsOrigin)
+          return true
+        }
+        tools.writeJson(res, 201, result, options.corsOrigin)
       } catch (error) {
         writeCoordinationError(input, error)
       }

@@ -17,6 +17,7 @@ import {
   createCoordinationWatch,
   deleteCoordinationWatch,
   listCoordinationBoard,
+  listCoordinationTasks,
   listCoordinationWatches,
   moveCoordinationTask,
   setCoordinationDatabaseForTests,
@@ -29,6 +30,7 @@ import {
   getCoordinationTaskWorkTarget,
   linkCoordinationTaskToSession,
   moveCoordinationTask as moveCoordinationTaskService,
+  planCoordinationProjectWithCleo,
   updateCoordinationTask as updateCoordinationTaskService,
 } from '../apps/desktop/src/main/coordination/coordination-service.ts'
 import {
@@ -159,6 +161,153 @@ test('coordination tasks move, reassign, and auto-advance only for lifecycle sta
   const cancelled = updateCoordinationTask(task.id, { status: 'cancelled' })
   assert.equal(cancelled?.status, 'cancelled')
   assert.equal(cancelled?.column, 'done')
+}))
+
+test('chief-of-staff planner creates specced planning tasks and assigns coworkers', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Studio board',
+    objective: 'Ship the Studio projects board with Cleo planning.',
+    team: ['cleo', 'explore', 'builder'],
+  }, { id: 'project-cleo' })
+
+  const result = planCoordinationProjectWithCleo({ projectId: project.id })
+
+  assert.ok(result)
+  assert.equal(result.plannerAgent, 'chief-of-staff')
+  assert.equal(result.displayName, 'Cleo')
+  assert.equal(result.project.id, project.id)
+  assert.equal(result.tasks.length, 4)
+  assert.deepEqual(result.tasks.map((task) => task.column), ['planning', 'planning', 'planning', 'planning'])
+  assert.equal(result.tasks[0]?.priority, 'high')
+  assert.equal(result.tasks[0]?.assigneeAgent, 'explore')
+  assert.equal(result.tasks[2]?.assigneeAgent, 'builder')
+  assert.equal(result.tasks.some((task) => task.assigneeAgent === 'cleo' || task.assigneeAgent === 'chief-of-staff'), false)
+  for (const task of result.tasks) {
+    assert.equal(task.projectId, project.id)
+    assert.match(task.spec, /Ship the Studio projects board/)
+    assert.match(task.externalRef || '', /^chief-of-staff:/)
+  }
+
+  const board = listCoordinationBoard()
+  assert.equal(board.tasks.length, 4)
+}))
+
+test('chief-of-staff planner persists explicit task drafts using the coordination task shape', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Explicit Cleo plan',
+    objective: 'Use supplied plan drafts.',
+    team: ['builder'],
+  }, { id: 'project-cleo-explicit' })
+
+  const result = planCoordinationProjectWithCleo({
+    projectId: project.id,
+    tasks: [
+      {
+        spec: 'Build the first board slice.\n\nAcceptance: the board renders persisted tasks.',
+        priority: 'low',
+        assigneeAgent: 'cleo',
+      },
+    ],
+  })
+
+  assert.ok(result)
+  assert.equal(result.tasks.length, 1)
+  assert.equal(result.tasks[0]?.title, 'Build the first board slice.')
+  assert.equal(result.tasks[0]?.spec, 'Build the first board slice.\n\nAcceptance: the board renders persisted tasks.')
+  assert.equal(result.tasks[0]?.priority, 'low')
+  assert.equal(result.tasks[0]?.column, 'planning')
+  assert.equal(result.tasks[0]?.assigneeAgent, 'builder')
+}))
+
+test('chief-of-staff planner preserves meaningful leading digits in generated task titles', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Identifier title Cleo plan',
+    objective: 'Keep generated task titles faithful.',
+    team: ['builder'],
+  }, { id: 'project-cleo-identifier-title' })
+
+  const result = planCoordinationProjectWithCleo({
+    projectId: project.id,
+    tasks: [
+      {
+        spec: '2FA migration path.\n\nAcceptance: the title keeps the product identifier.',
+        assigneeAgent: 'builder',
+      },
+      {
+        spec: '1. Build ordered-list task.\n\nAcceptance: list markers are still removed.',
+        assigneeAgent: 'builder',
+      },
+    ],
+  })
+
+  assert.ok(result)
+  assert.equal(result.tasks[0]?.title, '2FA migration path.')
+  assert.equal(result.tasks[1]?.title, 'Build ordered-list task.')
+}))
+
+test('chief-of-staff planner never falls back explicit self-assignees to read-only agents', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Self-assignee Cleo plan',
+    objective: 'Use supplied plan drafts without writable coworkers.',
+    team: ['cleo', 'explore'],
+  }, { id: 'project-cleo-self-assignee' })
+
+  const result = planCoordinationProjectWithCleo({
+    projectId: project.id,
+    tasks: [
+      {
+        spec: 'Build the implementation slice.\n\nAcceptance: a writable coworker can execute this task.',
+        priority: 'high',
+        assigneeAgent: 'cleo',
+      },
+    ],
+  })
+
+  assert.ok(result)
+  assert.equal(result.tasks[0]?.assigneeAgent, 'general')
+}))
+
+test('chief-of-staff planner validates generated multibyte titles before task inserts', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Multibyte Cleo plan',
+    objective: 'Avoid partial task creation from generated titles.',
+    team: ['builder'],
+  }, { id: 'project-cleo-multibyte' })
+
+  const result = planCoordinationProjectWithCleo({
+    projectId: project.id,
+    tasks: [
+      {
+        spec: 'Prepare the implementation path.\n\nAcceptance: the first task persists.',
+        assigneeAgent: 'builder',
+      },
+      {
+        spec: `${'🚀'.repeat(100)}\n\nAcceptance: the generated title stays inside the store byte limit.`,
+        assigneeAgent: 'builder',
+      },
+    ],
+  })
+
+  assert.ok(result)
+  assert.equal(result.tasks.length, 2)
+  assert.equal(Buffer.byteLength(result.tasks[1]?.title || '', 'utf8') <= 240, true)
+  assert.equal(listCoordinationTasks({ projectId: project.id }).length, 2)
+}))
+
+test('chief-of-staff planner does not assign generated implementation work to read-only agents', () => withMemoryCoordinationStore(() => {
+  const project = createCoordinationProject({
+    title: 'Read-only team',
+    objective: 'Ship a slice with only discovery agents listed.',
+    team: ['cleo', 'explore'],
+  }, { id: 'project-cleo-readonly' })
+
+  const result = planCoordinationProjectWithCleo({ projectId: project.id })
+
+  assert.ok(result)
+  assert.equal(result.tasks[0]?.assigneeAgent, 'explore')
+  assert.equal(result.tasks[2]?.title, 'Build the first implementation slice')
+  assert.equal(result.tasks[2]?.assigneeAgent, 'general')
+  assert.equal(result.tasks[3]?.assigneeAgent, 'general')
 }))
 
 test('coordination tasks cannot use parents from another project or workspace', () => withMemoryCoordinationStore(() => {

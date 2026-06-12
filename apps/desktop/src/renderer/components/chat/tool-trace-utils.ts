@@ -18,6 +18,7 @@ export const AGENT_LABELS: Record<string, string> = {
   build: 'Build',
   general: 'General',
   plan: 'Plan',
+  'chief-of-staff': 'Cleo',
   explore: 'Explore',
 }
 

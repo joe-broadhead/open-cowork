@@ -14,6 +14,7 @@ import {
   type WorkspaceInfo,
 } from '@open-cowork/shared'
 import { useSessionStore } from './stores/session'
+import type { PrimaryAgentMode } from './stores/session'
 import { useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
@@ -212,7 +213,7 @@ vi.mock('./components/CommandPalette', () => ({
     onCreateThread: () => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
-    onSetAgentMode: (mode: 'build' | 'plan') => void
+    onSetAgentMode: (mode: PrimaryAgentMode) => void
     onOpenSettings: () => void
     onToggleSearch: () => void
   }) => (

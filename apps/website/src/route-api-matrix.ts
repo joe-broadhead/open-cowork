@@ -67,6 +67,7 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
       'coordinationProjects',
       'coordinationProjectCreate',
       'coordinationProject',
+      'coordinationPlanWithCleo',
       'coordinationTasks',
       'coordinationTaskCreate',
       'coordinationTask',

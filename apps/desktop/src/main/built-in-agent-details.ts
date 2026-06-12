@@ -62,6 +62,7 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
   const planNativeToolIds = getNativeToolIdsForBuiltInAgent('plan')
   const generalNativeToolIds = getNativeToolIdsForBuiltInAgent('general')
   const exploreNativeToolIds = getNativeToolIdsForBuiltInAgent('explore')
+  const chiefOfStaffNativeToolIds = getNativeToolIdsForBuiltInAgent('chief-of-staff')
   const autoresearchNativeToolIds = getNativeToolIdsForBuiltInAgent('autoresearch')
   const autoresearchToolIds = configuredToolIds.filter((id) => id === 'charts' || id === 'skills' || id === 'agents')
 
@@ -128,6 +129,22 @@ export function listBuiltInAgentDetails(): BuiltInAgentDetail[] {
       skills: [],
       toolAccess: nativeToolLabels(exploreNativeToolIds),
       nativeToolIds: exploreNativeToolIds,
+      configuredToolIds: [],
+    },
+    {
+      name: 'chief-of-staff',
+      label: 'Cleo',
+      source: 'open-cowork',
+      mode: 'primary',
+      surface: 'chat',
+      hidden: false,
+      disabled: false,
+      color: 'info',
+      description: 'Chief-of-Staff planner for turning objectives into specced task drafts and coworker assignments.',
+      instructions: 'Code-owned Chief-of-Staff planner. The board Plan with Cleo action persists durable tasks through the product coordination service.',
+      skills: [],
+      toolAccess: nativeToolLabels(chiefOfStaffNativeToolIds),
+      nativeToolIds: chiefOfStaffNativeToolIds,
       configuredToolIds: [],
     },
     {

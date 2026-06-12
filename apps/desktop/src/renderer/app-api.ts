@@ -97,6 +97,7 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       projects: () => coworkApi.coordination.listProjects(),
       createProject: (input) => coworkApi.coordination.createProject(input as Parameters<CoworkAPI['coordination']['createProject']>[0]),
       updateProject: (projectId, input) => coworkApi.coordination.updateProject(projectId, input as Parameters<CoworkAPI['coordination']['updateProject']>[1]),
+      planWithCleo: (projectId, input) => coworkApi.coordination.planWithCleo(projectId, input as Parameters<CoworkAPI['coordination']['planWithCleo']>[1]),
       tasks: (query) => coworkApi.coordination.listTasks(query as Parameters<CoworkAPI['coordination']['listTasks']>[0]),
       createTask: (input) => coworkApi.coordination.createTask(input as Parameters<CoworkAPI['coordination']['createTask']>[0]),
       updateTask: (taskId, input) => coworkApi.coordination.updateTask(taskId, input as Parameters<CoworkAPI['coordination']['updateTask']>[1]),

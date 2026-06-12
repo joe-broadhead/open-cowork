@@ -1,5 +1,7 @@
 import type {
   CoordinationBoardPayload,
+  CoordinationChiefOfStaffPlanInput,
+  CoordinationChiefOfStaffPlanResult,
   CoordinationProject,
   CoordinationProjectInput,
   CoordinationProjectUpdateInput,
@@ -259,6 +261,7 @@ export interface CoworkAPI {
     listProjects: (options?: WorkspaceOptions) => Promise<CoordinationProject[]>
     createProject: (input: CoordinationProjectInput) => Promise<CoordinationProject>
     updateProject: (projectId: string, input: CoordinationProjectUpdateInput) => Promise<CoordinationProject | null>
+    planWithCleo: (projectId: string, input?: Omit<CoordinationChiefOfStaffPlanInput, 'projectId'>) => Promise<CoordinationChiefOfStaffPlanResult | null>
     listTasks: (options?: WorkspaceOptions & { projectId?: string | null; limit?: number }) => Promise<CoordinationTask[]>
     createTask: (input: CoordinationTaskInput) => Promise<CoordinationTask>
     updateTask: (taskId: string, input: CoordinationTaskUpdateInput) => Promise<CoordinationTask | null>

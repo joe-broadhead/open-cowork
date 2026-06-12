@@ -3,6 +3,7 @@ import { useSessionStore, type Session } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
+import { nextPrimaryAgentMode } from '../../helpers/primary-agent-mode'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
 import { ChatInputModelMenu } from './ChatInputModelMenu'
@@ -296,7 +297,7 @@ export function ChatInput() {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
-        setAgentMode(useSessionStore.getState().agentMode === 'build' ? 'plan' : 'build')
+        setAgentMode(nextPrimaryAgentMode(useSessionStore.getState().agentMode))
       }
     }
     document.addEventListener('keydown', handler, true)
@@ -488,7 +489,7 @@ export function ChatInput() {
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1"><Kbd>Enter</Kbd>{t('chat.hint.send', 'Send')}</span>
               <span className="inline-flex items-center gap-1"><Kbd>Shift</Kbd><Kbd>Enter</Kbd>{t('chat.hint.newLine', 'New line')}</span>
-              <span className="inline-flex items-center gap-1"><Kbd>Shift</Kbd><Kbd>Tab</Kbd>{t('chat.hint.mode', 'Plan/Build')}</span>
+              <span className="inline-flex items-center gap-1"><Kbd>Shift</Kbd><Kbd>Tab</Kbd>{t('chat.hint.mode', 'Build/Plan/Cleo')}</span>
               <span className="inline-flex items-center gap-1"><Kbd>Esc</Kbd>{t('chat.hint.stop', 'Stop')}</span>
               <span className="inline-flex items-center gap-1"><Kbd>Up</Kbd>{t('chat.hint.history', 'History')}</span>
             </div>
@@ -541,7 +542,11 @@ export function ChatInput() {
               placeholder={isAwaitingQuestion
                 ? t('chat.placeholder.answerPending', 'Answer the pending question above to continue...')
                 : currentSessionId
-                  ? (agentMode === 'plan' ? t('chat.placeholder.askPlan', 'Ask Plan to analyze or structure the work...') : t('chat.placeholder.askBuild', 'Ask Build to work on this...'))
+                  ? (agentMode === 'chief-of-staff'
+                    ? t('chat.placeholder.askCleo', 'Ask Cleo to turn an objective into tasks...')
+                    : agentMode === 'plan'
+                      ? t('chat.placeholder.askPlan', 'Ask Plan to analyze or structure the work...')
+                      : t('chat.placeholder.askBuild', 'Ask Build to work on this...'))
                   : t('chat.placeholder.noThread', 'Start a new thread first')}
               disabled={!currentSessionId || isAwaitingQuestion}
               rows={1}
@@ -583,7 +588,7 @@ export function ChatInput() {
               setShowModelMenu(false)
               setShowReasoningMenu(!showReasoningMenu)
             }}
-            onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+            onToggleAgentMode={() => setAgentMode(nextPrimaryAgentMode(agentMode))}
             onFork={async () => {
               if (!currentSessionId) return
               const forked = await window.coworkApi.session.fork(currentSessionId)

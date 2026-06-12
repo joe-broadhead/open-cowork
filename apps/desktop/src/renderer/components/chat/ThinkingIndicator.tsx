@@ -6,6 +6,7 @@ function agentLabels(): Record<string, string> {
   return {
     build: t('thinking.buildCoordinating', 'Build is coordinating'),
     plan: t('thinking.planning', 'Planning'),
+    'chief-of-staff': t('thinking.cleoPlanning', 'Cleo is planning tasks'),
     general: t('thinking.generalWorking', 'General is working'),
     explore: t('thinking.exploreWorking', 'Explore is working'),
   }

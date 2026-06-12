@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { BuiltInAgentDetail, CustomAgentSummary, SessionInfo } from '@open-cowork/shared'
 import { buildCommandPaletteItems, getShortcutPlatform } from '../apps/desktop/src/renderer/components/command-palette-items.ts'
+import type { PrimaryAgentMode } from '../apps/desktop/src/renderer/stores/session.ts'
 
 function createCallbacks() {
   const calls: Array<{ type: string; value?: string }> = []
@@ -28,7 +29,7 @@ function createCallbacks() {
       onInsertComposer: (text: string) => {
         calls.push({ type: 'insert', value: text })
       },
-      onSetAgentMode: (mode: 'build' | 'plan') => {
+      onSetAgentMode: (mode: PrimaryAgentMode) => {
         calls.push({ type: 'mode', value: mode })
       },
       onSelectDirectory: async () => '/tmp/project',
@@ -77,7 +78,7 @@ test('getShortcutPlatform prefers userAgentData and falls back to legacy platfor
 })
 
 test('buildCommandPaletteItems filters runtime commands and exposes valid agents only', async () => {
-  const { callbacks } = createCallbacks()
+  const { callbacks, calls } = createCallbacks()
   const builtinAgents: BuiltInAgentDetail[] = [
     {
       name: 'build',
@@ -102,6 +103,20 @@ test('buildCommandPaletteItems filters runtime commands and exposes valid agents
       hidden: false,
       source: 'open-cowork',
       instructions: 'Research things',
+      skills: [],
+      toolAccess: [],
+      nativeToolIds: [],
+      configuredToolIds: [],
+    },
+    {
+      name: 'chief-of-staff',
+      label: 'Cleo',
+      color: 'accent',
+      description: 'Chief-of-Staff planner',
+      mode: 'primary',
+      hidden: false,
+      source: 'open-cowork',
+      instructions: 'Plan objectives',
       skills: [],
       toolAccess: [],
       nativeToolIds: [],
@@ -162,6 +177,11 @@ test('buildCommandPaletteItems filters runtime commands and exposes valid agents
   const modeItem = items.find((item) => item.id === 'mode:build')
   assert.ok(modeItem)
   modeItem.run()
+  const cleoModeItem = items.find((item) => item.id === 'mode:chief-of-staff')
+  assert.ok(cleoModeItem)
+  cleoModeItem.run()
+
+  assert.equal(calls.some((call) => call.type === 'mode' && call.value === 'chief-of-staff'), true)
 })
 
 test('command and search actions invoke the expected callbacks', async () => {

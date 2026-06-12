@@ -23,7 +23,7 @@ import { log } from '../logger.ts'
 let publishWorkflowUpdated: (() => void) | null = null
 const PREVIEW_TOKEN_TTL_MS = 30 * 60 * 1000
 const PREVIEW_TOKEN_MAX_ENTRIES = 256
-const BUILT_IN_AGENT_NAMES = ['build', 'plan', 'general', 'explore', 'executive-assistant', 'autoresearch'] as const
+const BUILT_IN_AGENT_NAMES = ['build', 'plan', 'general', 'explore', 'chief-of-staff', 'executive-assistant', 'autoresearch'] as const
 const previewTokens = new Map<string, { normalizedDraft: WorkflowDraft; expiresAt: number }>()
 
 export class WorkflowToolActionError extends Error {}

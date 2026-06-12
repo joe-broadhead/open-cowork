@@ -49,6 +49,7 @@ export type {
 export type { HistoryItem, SessionViewState } from '../../lib/session-view-model.ts'
 
 export type Session = SessionInfo
+export type PrimaryAgentMode = 'build' | 'plan' | 'chief-of-staff'
 
 type SessionMetadataPatch = {
   id: string
@@ -110,8 +111,8 @@ export interface SessionStore {
   mcpConnections: McpConnection[]
   setMcpConnections: (connections: McpStatus[]) => void
 
-  agentMode: 'build' | 'plan'
-  setAgentMode: (mode: 'build' | 'plan') => void
+  agentMode: PrimaryAgentMode
+  setAgentMode: (mode: PrimaryAgentMode) => void
 
   reasoningVariant: string | null
   setReasoningVariant: (variant: string | null) => void
