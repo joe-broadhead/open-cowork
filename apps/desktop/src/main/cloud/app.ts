@@ -59,6 +59,7 @@ import { createStripeBillingAdapter } from './stripe-billing-adapter.ts'
 import { createStubBillingAdapter } from './stub-billing-adapter.ts'
 import { CloudWorker } from './worker.ts'
 import { createWorkerScopedRuntimeAdapter } from './worker-scoped-runtime-adapter.ts'
+import { createUnavailableRuntimeAdapter } from './unavailable-runtime-adapter.ts'
 import {
   createObjectWorkspaceCheckpointStore,
   defaultCloudSessionCheckpointRoots,
@@ -671,20 +672,6 @@ export function resolveCloudPublicBranding(config: OpenCoworkConfig, env: Env = 
       legalUrl: envValue(env, 'OPEN_COWORK_CLOUD_LEGAL_URL') || undefined,
     },
   )
-}
-
-function createUnavailableRuntimeAdapter(): CloudRuntimeAdapter {
-  const fail = () => {
-    throw new Error('Cloud runtime is not available in this process role.')
-  }
-  return {
-    createSession: fail,
-    promptSession: fail,
-    abortSession: fail,
-    replyToQuestion: fail,
-    rejectQuestion: fail,
-    respondToPermission: fail,
-  }
 }
 
 function defaultCloudRuntimeFactory(input: CloudRoleRuntimeFactoryInput) {

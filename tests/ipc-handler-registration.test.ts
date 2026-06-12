@@ -15,6 +15,7 @@ import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-hand
 import { registerWorkspaceHandlers } from '../apps/desktop/src/main/ipc/workspace-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
 import { registerCoordinationHandlers } from '../apps/desktop/src/main/ipc/coordination-handlers.ts'
+import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import {
   createCoordinationProject,
@@ -94,7 +95,7 @@ function readPreloadChannelArray(source: string, constantName: string) {
 function readCoworkApiGroups(source: string) {
   const match = source.match(/export interface CoworkAPI \{([\s\S]*?)\n\}/)
   assert.ok(match, 'missing CoworkAPI interface')
-  return Array.from(match[1].matchAll(/^ {2}([a-zA-Z][\w]*): \{/gm), (entry) => entry[1]).sort()
+  return Array.from(match[1].matchAll(/^ {2}([a-zA-Z][\w]*): /gm), (entry) => entry[1]).sort()
 }
 
 function readPreloadApiGroups(source: string) {
@@ -113,6 +114,7 @@ test('IPC handler modules register their core channels', () => {
   registerLaunchpadHandlers(context)
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
+  registerChannelHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)
@@ -164,6 +166,10 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('workflows:run-now'), true)
   assert.equal(handlers.has('workflows:archive'), true)
   assert.equal(handlers.has('workflows:regenerate-webhook-secret'), true)
+  assert.equal(handlers.has('channels:providers'), true)
+  assert.equal(handlers.has('channels:bindings:connect'), true)
+  assert.equal(handlers.has('channels:people:list'), true)
+  assert.equal(handlers.has('channels:watches:create'), true)
   assert.equal(handlers.has('threads:tags:apply'), true)
   assert.equal(handlers.has('threads:smart-filters:create'), true)
   assert.equal(handlers.has('threads:suggestions:accept'), true)
@@ -179,6 +185,7 @@ test('preload invoke/send channels match registered main-process IPC channels', 
   registerLaunchpadHandlers(context)
   registerWorkflowHandlers(context)
   registerCoordinationHandlers(context)
+  registerChannelHandlers(context)
   registerSessionHandlers(context)
   registerCatalogHandlers(context)
   registerCustomContentHandlers(context)

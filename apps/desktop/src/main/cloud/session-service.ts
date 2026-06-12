@@ -109,6 +109,7 @@ import { CloudSessionEventBus, CloudWorkspaceEventBus } from './session-event-bu
 import type {
   PublicChannelBindingRecord,
   PublicChannelDeliveryRecord,
+  PublicChannelIdentityRecord,
 } from './public-channel-records.ts'
 import {
   CloudSessionProjectionService,
@@ -340,7 +341,11 @@ export type CloudDiagnosticsBundle = {
 }
 
 export type { CloudIdentityPolicy, PublicApiTokenRecord } from './services/api-token-policy.ts'
-export type { PublicChannelBindingRecord, PublicChannelDeliveryRecord } from './public-channel-records.ts'
+export type {
+  PublicChannelBindingRecord,
+  PublicChannelDeliveryRecord,
+  PublicChannelIdentityRecord,
+} from './public-channel-records.ts'
 
 export type IssuedPublicApiTokenRecord = {
   token: PublicApiTokenRecord
@@ -1517,6 +1522,19 @@ export class CloudSessionService {
     },
   ): Promise<ChannelIdentityRecord> {
     return this.channelDomain.resolveChannelIdentity(principal, input)
+  }
+
+  async listChannelIdentities(
+    principal: CloudPrincipal,
+    input: {
+      provider?: ChannelProviderId | null
+      externalWorkspaceId?: string | null
+      role?: ChannelIdentityRecord['role'] | null
+      status?: ChannelIdentityRecord['status'] | null
+      limit?: number | null
+    } = {},
+  ): Promise<PublicChannelIdentityRecord[]> {
+    return this.channelDomain.listChannelIdentities(principal, input)
   }
 
   async bindChannelSession(

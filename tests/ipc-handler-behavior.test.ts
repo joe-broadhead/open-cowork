@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import type { CustomMcpConfig, DesktopPairingPublicRecord } from '@open-cowork/shared'
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
@@ -18,6 +19,7 @@ import { registerWorkflowHandlers } from '../apps/desktop/src/main/ipc/workflow-
 import { registerCatalogHandlers } from '../apps/desktop/src/main/ipc/catalog-handlers.ts'
 import { registerThreadHandlers } from '../apps/desktop/src/main/ipc/thread-handlers.ts'
 import { registerDesktopPairingHandlers } from '../apps/desktop/src/main/ipc/desktop-pairing-handlers.ts'
+import { registerChannelHandlers } from '../apps/desktop/src/main/ipc/channel-handlers.ts'
 import { sniffImageMime } from '../apps/desktop/src/main/ipc/app-handler-support.ts'
 import { validateCustomSkillConfig } from '../apps/desktop/src/main/ipc/object-validators.ts'
 import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
@@ -28,6 +30,11 @@ import { clearSessionRegistryCache, toSessionRecord, upsertSessionRecord } from 
 import { LOCAL_WORKSPACE_ID, createWorkspaceGateway } from '../apps/desktop/src/main/workspace-gateway.ts'
 import { runtimeState } from '../apps/desktop/src/main/runtime-state.ts'
 import type { CloudWorkspaceSessionAdapter } from '../apps/desktop/src/main/cloud-workspace-adapter.ts'
+import {
+  createCoordinationProject,
+  getCoordinationWatch,
+  setCoordinationDatabaseForTests,
+} from '../apps/desktop/src/main/coordination/coordination-store.ts'
 
 function createBaseContext() {
   const handlers = new Map<string, (...args: any[]) => any>()
@@ -86,6 +93,161 @@ function createBaseContext() {
 
   return { context, handlers, errors }
 }
+
+test('channel IPC bridge round-trips bindings, people, provider status, watches, and redacts secrets', async () => {
+  const db = new DatabaseSync(':memory:')
+  setCoordinationDatabaseForTests(db)
+  try {
+    const { context, handlers } = createBaseContext()
+    registerChannelHandlers(context)
+    const event = { sender: { id: 799 } }
+    const suffix = `test-${Date.now()}`
+    const provider = `telegram-${suffix}`
+
+    const providers = handlers.get('channels:providers') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const createAgent = handlers.get('channels:agents:create') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const updateAgent = handlers.get('channels:agents:update') as (event: unknown, agentId: unknown, input: unknown) => Promise<Record<string, unknown> | null>
+    const listAgents = handlers.get('channels:agents:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const connectBinding = handlers.get('channels:bindings:connect') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const updateBinding = handlers.get('channels:bindings:update') as (event: unknown, bindingId: unknown, input: unknown) => Promise<Record<string, unknown> | null>
+    const listBindings = handlers.get('channels:bindings:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const disconnectBinding = handlers.get('channels:bindings:disconnect') as (event: unknown, bindingId: unknown, options?: unknown) => Promise<Record<string, unknown> | null>
+    const resolvePerson = handlers.get('channels:people:resolve') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const listPeople = handlers.get('channels:people:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const createWatch = handlers.get('channels:watches:create') as (event: unknown, input: unknown) => Promise<Record<string, unknown>>
+    const updateWatch = handlers.get('channels:watches:update') as (event: unknown, watchId: unknown, input: unknown) => Promise<Record<string, unknown> | null>
+    const listWatches = handlers.get('channels:watches:list') as (event: unknown, options?: unknown) => Promise<Array<Record<string, unknown>>>
+    const pauseWatch = handlers.get('channels:watches:pause') as (event: unknown, watchId: unknown, options?: unknown) => Promise<Record<string, unknown> | null>
+    const resumeWatch = handlers.get('channels:watches:resume') as (event: unknown, watchId: unknown, options?: unknown) => Promise<Record<string, unknown> | null>
+    const deleteWatch = handlers.get('channels:watches:delete') as (event: unknown, watchId: unknown, options?: unknown) => Promise<boolean>
+
+    const initialTelegramProvider = (await providers(event)).find((entry) => entry.id === 'telegram')
+    assert.equal(initialTelegramProvider?.status, 'available')
+    assert.equal(initialTelegramProvider?.connected, false)
+
+    const agent = await createAgent(event, {
+      agentId: `agent-${suffix}`,
+      name: 'Telegram reviewer',
+      profileName: 'reviewer',
+    })
+    assert.equal(agent.agentId, `agent-${suffix}`)
+
+    const updatedAgent = await updateAgent(event, agent.agentId, { name: 'Telegram reviewer updated' })
+    assert.equal(updatedAgent?.name, 'Telegram reviewer updated')
+    assert.equal((await listAgents(event, { limit: 20 })).some((entry) => entry.agentId === agent.agentId), true)
+
+    const binding = await connectBinding(event, {
+      bindingId: `binding-${suffix}`,
+      agentId: agent.agentId,
+      provider,
+      displayName: 'Telegram production channel',
+      externalWorkspaceId: `workspace-${suffix}`,
+      credentialRef: 'env:TELEGRAM_BOT_TOKEN',
+      settings: {
+        room: 'engineering',
+        token: 'fixture-token-value',
+        nested: {
+          authorization: 'fixture-authorization-value',
+          apiKey: 'fixture-api-key-value',
+        },
+      },
+    })
+    assert.equal(binding.bindingId, `binding-${suffix}`)
+    assert.equal(binding.credentialRefConfigured, true)
+    assert.equal(binding.credentialRefKind, 'env')
+    assert.equal('credentialRef' in binding, false)
+    assert.equal((binding.settings as Record<string, unknown>).room, 'engineering')
+    assert.equal((binding.settings as Record<string, unknown>).token, '[redacted]')
+    assert.equal(((binding.settings as Record<string, unknown>).nested as Record<string, unknown>).authorization, '[redacted]')
+    assert.equal(((binding.settings as Record<string, unknown>).nested as Record<string, unknown>).apiKey, '[redacted]')
+    assert.equal(JSON.stringify(binding).includes('TELEGRAM_BOT_TOKEN'), false)
+    assert.equal(JSON.stringify(binding).includes('fixture-api-key-value'), false)
+
+    const connectedTelegramProvider = (await providers(event)).find((entry) => entry.id === 'telegram')
+    assert.equal(connectedTelegramProvider?.status, 'connected')
+    assert.equal(connectedTelegramProvider?.connected, true)
+    assert.equal(Number(connectedTelegramProvider?.activeBindingCount) >= 1, true)
+
+    const updatedBinding = await updateBinding(event, binding.bindingId, {
+      displayName: 'Telegram engineering channel',
+      settings: {
+        room: 'engineering',
+        secret: 'still-hidden',
+      },
+    })
+    assert.equal(updatedBinding?.displayName, 'Telegram engineering channel')
+    assert.equal(((updatedBinding?.settings || {}) as Record<string, unknown>).secret, '[redacted]')
+
+    const listedBindings = await listBindings(event, { agentId: agent.agentId, limit: 20 })
+    assert.equal(listedBindings.some((entry) => entry.bindingId === binding.bindingId), true)
+    assert.equal(JSON.stringify(listedBindings).includes('still-hidden'), false)
+
+    const person = await resolvePerson(event, {
+      provider,
+      channelBindingId: binding.bindingId,
+      externalWorkspaceId: `workspace-${suffix}`,
+      externalUserId: `user-${suffix}`,
+      role: 'approver',
+      status: 'active',
+      metadata: {
+      displayName: 'Ada',
+        token: 'fixture-token-value',
+        note: 'token: fixture-redaction-value',
+      },
+    })
+    assert.equal(person.role, 'approver')
+    assert.equal((person.metadata as Record<string, unknown>).displayName, 'Ada')
+    assert.equal((person.metadata as Record<string, unknown>).token, '[redacted]')
+    assert.equal((person.metadata as Record<string, unknown>).note, 'token:[redacted]')
+    assert.equal(JSON.stringify(person).includes('fixture-redaction-value'), false)
+
+    const people = await listPeople(event, { provider, limit: 20 })
+    assert.equal(people.some((entry) => entry.identityId === person.identityId && entry.role === 'approver'), true)
+
+    const project = createCoordinationProject({
+      title: `Channel IPC ${suffix}`,
+      objective: 'Prove channel watch CRUD through desktop IPC.',
+    }, { id: `project-${suffix}` })
+
+    const watch = await createWatch(event, {
+      target: { kind: 'project', id: project.id },
+      events: ['task.moved'],
+      channel: {
+        provider,
+        agentId: String(agent.agentId),
+        channelBindingId: String(binding.bindingId),
+        target: { chatId: `chat-${suffix}` },
+      },
+      recipient: { role: 'approver', identityId: String(person.identityId) },
+    })
+    assert.equal(watch.kind, 'watch')
+    assert.equal(watch.status, 'active')
+    assert.equal((watch.channel as Record<string, unknown>).channelBindingId, binding.bindingId)
+
+    const listedWatches = await listWatches(event, { targetKind: 'project', targetId: project.id })
+    assert.equal(listedWatches.some((entry) => entry.id === watch.id), true)
+
+    const updatedWatch = await updateWatch(event, watch.id, { events: ['task.review_ready'], cursor: 'cursor-1' })
+    assert.deepEqual(updatedWatch?.events, ['task.review_ready'])
+    assert.equal(updatedWatch?.cursor, 'cursor-1')
+
+    const pausedWatch = await pauseWatch(event, watch.id)
+    assert.equal(pausedWatch?.status, 'paused')
+    const resumedWatch = await resumeWatch(event, watch.id)
+    assert.equal(resumedWatch?.status, 'active')
+    assert.equal(await deleteWatch(event, watch.id), true)
+    assert.equal(getCoordinationWatch(String(watch.id)), null)
+
+    const disconnected = await disconnectBinding(event, binding.bindingId)
+    assert.equal(disconnected?.status, 'disabled')
+    assert.equal(JSON.stringify(disconnected).includes('TELEGRAM_BOT_TOKEN'), false)
+    const availableTelegramProvider = (await providers(event)).find((entry) => entry.id === 'telegram')
+    assert.equal(availableTelegramProvider?.connected, false)
+  } finally {
+    setCoordinationDatabaseForTests(null)
+    db.close()
+  }
+})
 
 function writeCredentialDescriptorConfig(configDir: string) {
   mkdirSync(configDir, { recursive: true })

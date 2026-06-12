@@ -11,6 +11,7 @@ export type ChannelControlPlaneStore = Pick<ControlPlaneStore,
   | 'listChannelBindings'
   | 'upsertChannelIdentity'
   | 'getChannelIdentity'
+  | 'listChannelIdentities'
   | 'findChannelIdentity'
   | 'bindChannelSession'
   | 'getChannelSessionBinding'

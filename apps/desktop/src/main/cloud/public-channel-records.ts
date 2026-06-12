@@ -1,6 +1,7 @@
 import type {
   ChannelBindingRecord,
   ChannelDeliveryRecord,
+  ChannelIdentityRecord,
 } from './control-plane-store.ts'
 
 export type PublicChannelBindingRecord = Omit<ChannelBindingRecord, 'credentialRef' | 'settings'> & {
@@ -13,6 +14,10 @@ export type PublicChannelDeliveryRecord = Omit<ChannelDeliveryRecord, 'target' |
   target: Record<string, unknown>
   payload: Record<string, unknown>
   lastError: string | null
+}
+
+export type PublicChannelIdentityRecord = Omit<ChannelIdentityRecord, 'metadata'> & {
+  metadata: Record<string, unknown>
 }
 
 function publicCredentialRefKind(ref: string | null | undefined): PublicChannelBindingRecord['credentialRefKind'] {
@@ -85,5 +90,12 @@ export function publicChannelDelivery(delivery: ChannelDeliveryRecord): PublicCh
     target: sanitizePublicJson(delivery.target) as Record<string, unknown>,
     payload: sanitizePublicJson(delivery.payload) as Record<string, unknown>,
     lastError: delivery.lastError ? sanitizePublicString(delivery.lastError) : null,
+  }
+}
+
+export function publicChannelIdentity(identity: ChannelIdentityRecord): PublicChannelIdentityRecord {
+  return {
+    ...identity,
+    metadata: sanitizePublicJson(identity.metadata) as Record<string, unknown>,
   }
 }

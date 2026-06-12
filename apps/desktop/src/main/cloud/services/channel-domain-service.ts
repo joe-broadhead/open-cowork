@@ -16,6 +16,7 @@ import type {
 import type {
   PublicChannelBindingRecord,
   PublicChannelDeliveryRecord,
+  PublicChannelIdentityRecord,
 } from '../public-channel-records.ts'
 import type {
   CloudPrincipal,
@@ -127,6 +128,19 @@ export class CloudChannelDomainService {
     },
   ): Promise<ChannelIdentityRecord> {
     return adminActions.resolveChannelIdentity(this.options, principal, input)
+  }
+
+  listChannelIdentities(
+    principal: CloudPrincipal,
+    input: {
+      provider?: ChannelProviderId | null
+      externalWorkspaceId?: string | null
+      role?: ChannelIdentityRecord['role'] | null
+      status?: ChannelIdentityRecord['status'] | null
+      limit?: number | null
+    } = {},
+  ): Promise<PublicChannelIdentityRecord[]> {
+    return adminActions.listChannelIdentities(this.options, principal, input)
   }
 
   bindChannelSession(

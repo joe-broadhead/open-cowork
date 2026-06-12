@@ -34,6 +34,7 @@ import { registerLaunchpadHandlers } from './ipc/launchpad-handlers.ts'
 import { registerSessionHandlers } from './ipc/session-handlers.ts'
 import { registerCatalogHandlers } from './ipc/catalog-handlers.ts'
 import { registerCoordinationHandlers } from './ipc/coordination-handlers.ts'
+import { registerChannelHandlers } from './ipc/channel-handlers.ts'
 import { registerWorkflowHandlers } from './ipc/workflow-handlers.ts'
 import { registerCustomContentHandlers } from './ipc/custom-content-handlers.ts'
 import { registerExplorerHandlers } from './ipc/explorer-handlers.ts'
@@ -398,6 +399,7 @@ export function setupIpcHandlers(
   registerArtifactHandlers(context)
   registerLaunchpadHandlers(context)
   registerCoordinationHandlers(context)
+  registerChannelHandlers(context)
   registerWorkflowHandlers(context)
 
   registerThreadHandlers(context)

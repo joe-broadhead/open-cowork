@@ -23,6 +23,7 @@ import type {
   CloudSessionView,
   PublicChannelBindingRecord,
   PublicChannelDeliveryRecord,
+  PublicChannelIdentityRecord,
 } from '../session-service.ts'
 
 export type CloudChannelServiceDelegate = {
@@ -68,6 +69,13 @@ export type CloudChannelServiceDelegate = {
     status?: ChannelIdentityStatus
     metadata?: Record<string, unknown>
   }): Promise<ChannelIdentityRecord>
+  listChannelIdentities(principal: CloudPrincipal, input?: {
+    provider?: ChannelProviderId | null
+    externalWorkspaceId?: string | null
+    role?: ChannelIdentityRole | null
+    status?: ChannelIdentityStatus | null
+    limit?: number | null
+  }): Promise<PublicChannelIdentityRecord[]>
   bindChannelSession(principal: CloudPrincipal, input: ChannelActorInput & {
     channelBindingId: string
     provider: ChannelProviderId
@@ -198,6 +206,9 @@ export class CloudChannelService {
   }
   resolveIdentity(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['resolveChannelIdentity']>[1]) {
     return this.delegate.resolveChannelIdentity(principal, input)
+  }
+  listIdentities(principal: CloudPrincipal, input?: Parameters<CloudChannelServiceDelegate['listChannelIdentities']>[1]) {
+    return this.delegate.listChannelIdentities(principal, input)
   }
   bindSession(principal: CloudPrincipal, input: Parameters<CloudChannelServiceDelegate['bindChannelSession']>[1]) {
     return this.delegate.bindChannelSession(principal, input)

@@ -111,6 +111,7 @@ import type {
   RegisterManagedWorkerInput,
   IssueManagedWorkerCredentialInput,
   ApiTokenChannelBindingGrantRecord,
+  ListChannelIdentitiesInput,
 } from './control-plane-store.ts'
 import type {
   WorkflowWebhookReplayClaim,
@@ -1588,6 +1589,35 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async getChannelIdentity(orgId: string, identityId: string) {
     const row = await this.maybeOne(`SELECT * FROM cloud_channel_identities WHERE org_id = $1 AND identity_id = $2`, [orgId, identityId])
     return row ? channelIdentityFromRow(row) : null
+  }
+
+  async listChannelIdentities(orgId: string, input: ListChannelIdentitiesInput = {}) {
+    const provider = input.provider ? normalizeProvider(input.provider) : null
+    const externalWorkspaceIdSpecified = input.externalWorkspaceId !== undefined
+    const externalWorkspaceId = externalWorkspaceIdSpecified
+      ? normalizeNullableText(input.externalWorkspaceId, CHANNEL_TEXT_MAX_LENGTH, 'External workspace id')
+      : null
+    const role = input.role && ['owner', 'admin', 'member', 'approver', 'viewer'].includes(input.role)
+      ? input.role
+      : null
+    const status = input.status && ['active', 'disabled', 'pending'].includes(input.status)
+      ? input.status
+      : null
+    const limit = Number.isInteger(input.limit) && Number(input.limit) > 0
+      ? Math.min(Number(input.limit), 500)
+      : 100
+    const result = await this.pool.query(
+      `SELECT * FROM cloud_channel_identities
+       WHERE org_id = $1
+         AND ($2::text IS NULL OR provider = $2)
+         AND ($3::boolean = false OR COALESCE(external_workspace_id, '') = COALESCE($4, ''))
+         AND ($5::text IS NULL OR role = $5)
+         AND ($6::text IS NULL OR status = $6)
+       ORDER BY updated_at DESC, identity_id
+       LIMIT $7`,
+      [orgId, provider, externalWorkspaceIdSpecified, externalWorkspaceId, role, status, limit],
+    )
+    return result.rows.map(channelIdentityFromRow)
   }
 
   async findChannelIdentity(input: { orgId: string, provider: ChannelProviderId, externalWorkspaceId?: string | null, externalUserId: string }) {

@@ -1,6 +1,6 @@
 export type AppApiPlatform = 'desktop' | 'cloud'
 
-export type AppApiHttpMethod = 'GET' | 'POST' | 'DELETE'
+export type AppApiHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
 export type AppApiRequestOptions = {
   method?: AppApiHttpMethod
@@ -107,9 +107,25 @@ export type AppAPI = AppApiEndpointResolver & {
     uploadSnapshot: (input: unknown) => Promise<unknown>
   }
   channels: {
-    agents: () => Promise<unknown>
-    bindings: () => Promise<unknown>
-    deliveries: () => Promise<unknown>
+    providers: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    agents: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    createAgent: (input: unknown) => Promise<unknown>
+    updateAgent: (agentId: string, input: unknown) => Promise<unknown>
+    bindings: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    connectBinding: (input: unknown) => Promise<unknown>
+    updateBinding: (bindingId: string, input: unknown) => Promise<unknown>
+    disconnectBinding: (bindingId: string, input?: unknown) => Promise<unknown>
+    people: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    resolvePerson: (input: unknown) => Promise<unknown>
+    deliveries: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    retryDelivery: (deliveryId: string) => Promise<unknown>
+    deadLetterDelivery: (deliveryId: string, input?: unknown) => Promise<unknown>
+    watches: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+    createWatch: (input: unknown) => Promise<unknown>
+    updateWatch: (watchId: string, input: unknown) => Promise<unknown>
+    pauseWatch: (watchId: string) => Promise<unknown>
+    resumeWatch: (watchId: string) => Promise<unknown>
+    deleteWatch: (watchId: string) => Promise<unknown>
   }
   admin: {
     policy: () => Promise<unknown>
@@ -130,13 +146,25 @@ export type AppAPI = AppApiEndpointResolver & {
       revoke: (tokenId: string) => Promise<unknown>
     }
     channels: {
-      agents: () => Promise<unknown>
+      providers: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+      agents: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
       createAgent: (input: unknown) => Promise<unknown>
-      bindings: () => Promise<unknown>
+      updateAgent: (agentId: string, input: unknown) => Promise<unknown>
+      bindings: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
       createBinding: (input: unknown) => Promise<unknown>
-      deliveries: () => Promise<unknown>
+      updateBinding: (bindingId: string, input: unknown) => Promise<unknown>
+      disconnectBinding: (bindingId: string, input?: unknown) => Promise<unknown>
+      people: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+      resolvePerson: (input: unknown) => Promise<unknown>
+      deliveries: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
       retryDelivery: (deliveryId: string) => Promise<unknown>
       deadLetterDelivery: (deliveryId: string, input?: unknown) => Promise<unknown>
+      watches: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
+      createWatch: (input: unknown) => Promise<unknown>
+      updateWatch: (watchId: string, input: unknown) => Promise<unknown>
+      pauseWatch: (watchId: string) => Promise<unknown>
+      resumeWatch: (watchId: string) => Promise<unknown>
+      deleteWatch: (watchId: string) => Promise<unknown>
     }
     billing: {
       subscription: () => Promise<unknown>

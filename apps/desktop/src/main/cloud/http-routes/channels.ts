@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { handleChannelDirectoryRoute } from './channel-directory.ts'
 import { handleChannelDeliveriesSse, type ChannelDeliverySseTools } from './channel-delivery-sse.ts'
 import type { ChannelProviderId, SessionCommandRecord } from '../control-plane-store.ts'
 import type { CloudHttpServerOptions } from '../http-server.ts'
+import { publicChannelIdentity } from '../public-channel-records.ts'
 import type { CloudPrincipal } from '../session-service.ts'
 
 type RouteContext = {
@@ -53,6 +55,8 @@ export async function handleChannelsApiRoute(input: {
     itemAction,
     tools,
   } = input
+
+  if (await handleChannelDirectoryRoute({ req, res, options, context, collection, itemId, tools })) return true
 
   if (collection === 'agents') {
     if (!itemId && req.method === 'GET') {
@@ -164,7 +168,7 @@ export async function handleChannelsApiRoute(input: {
       status: tools.readEnum(body.status, ['active', 'disabled', 'pending'] as const),
       metadata: tools.readRecord(body.metadata) || {},
     })
-    tools.writeJson(res, 200, { identity }, options.corsOrigin)
+    tools.writeJson(res, 200, { identity: publicChannelIdentity(identity) }, options.corsOrigin)
     return true
   }
 

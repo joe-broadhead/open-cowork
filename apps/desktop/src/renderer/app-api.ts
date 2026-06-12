@@ -4,7 +4,32 @@ function unsupported(name: string) {
   return () => Promise.reject(new Error(`${name} is not available through the desktop AppAPI adapter yet`))
 }
 
+function createChannelAppApi(coworkApi: CoworkAPI): AppAPI['channels'] {
+  return {
+    providers: async (query) => ({ providers: await coworkApi.channels.providers(query as Parameters<CoworkAPI['channels']['providers']>[0]) }),
+    agents: async (query) => ({ agents: await coworkApi.channels.agents(query as Parameters<CoworkAPI['channels']['agents']>[0]) }),
+    createAgent: async (input) => ({ agent: await coworkApi.channels.createAgent(input as Parameters<CoworkAPI['channels']['createAgent']>[0]) }),
+    updateAgent: async (agentId, input) => ({ agent: await coworkApi.channels.updateAgent(agentId, input as Parameters<CoworkAPI['channels']['updateAgent']>[1]) }),
+    bindings: async (query) => ({ bindings: await coworkApi.channels.bindings(query as Parameters<CoworkAPI['channels']['bindings']>[0]) }),
+    connectBinding: async (input) => ({ binding: await coworkApi.channels.connectBinding(input as Parameters<CoworkAPI['channels']['connectBinding']>[0]) }),
+    updateBinding: async (bindingId, input) => ({ binding: await coworkApi.channels.updateBinding(bindingId, input as Parameters<CoworkAPI['channels']['updateBinding']>[1]) }),
+    disconnectBinding: async (bindingId, input) => ({ binding: await coworkApi.channels.disconnectBinding(bindingId, input as Parameters<CoworkAPI['channels']['disconnectBinding']>[1]) }),
+    people: async (query) => ({ identities: await coworkApi.channels.people(query as Parameters<CoworkAPI['channels']['people']>[0]) }),
+    resolvePerson: async (input) => ({ identity: await coworkApi.channels.resolvePerson(input as Parameters<CoworkAPI['channels']['resolvePerson']>[0]) }),
+    deliveries: async (query) => ({ deliveries: await coworkApi.channels.deliveries(query as Parameters<CoworkAPI['channels']['deliveries']>[0]) }),
+    retryDelivery: async (deliveryId) => ({ delivery: await coworkApi.channels.retryDelivery(deliveryId) }),
+    deadLetterDelivery: async (deliveryId, input) => ({ delivery: await coworkApi.channels.deadLetterDelivery(deliveryId, input as Parameters<CoworkAPI['channels']['deadLetterDelivery']>[1]) }),
+    watches: (query) => coworkApi.channels.watches(query as Parameters<CoworkAPI['channels']['watches']>[0]),
+    createWatch: (input) => coworkApi.channels.createWatch(input as Parameters<CoworkAPI['channels']['createWatch']>[0]),
+    updateWatch: (watchId, input) => coworkApi.channels.updateWatch(watchId, input as Parameters<CoworkAPI['channels']['updateWatch']>[1]),
+    pauseWatch: coworkApi.channels.pauseWatch,
+    resumeWatch: coworkApi.channels.resumeWatch,
+    deleteWatch: coworkApi.channels.deleteWatch,
+  }
+}
+
 export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): AppAPI {
+  const channels = createChannelAppApi(coworkApi)
   return {
     platform: 'desktop',
     endpoint: (_id, fallback) => fallback,
@@ -90,11 +115,7 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
       validate: (input) => coworkApi.projectSource.validate(input as Parameters<CoworkAPI['projectSource']['validate']>[0]),
       uploadSnapshot: (input) => coworkApi.projectSource.uploadSnapshot(input as Parameters<CoworkAPI['projectSource']['uploadSnapshot']>[0]),
     },
-    channels: {
-      agents: unsupported('Cloud channel agents'),
-      bindings: unsupported('Cloud channel bindings'),
-      deliveries: unsupported('Cloud channel deliveries'),
-    },
+    channels,
     admin: {
       policy: unsupported('Cloud admin policy'),
       members: {
@@ -114,13 +135,8 @@ export function createDesktopAppApi(coworkApi: CoworkAPI = window.coworkApi): Ap
         revoke: unsupported('Cloud API token revoke'),
       },
       channels: {
-        agents: unsupported('Cloud channel agents'),
-        createAgent: unsupported('Cloud channel agent create'),
-        bindings: unsupported('Cloud channel bindings'),
-        createBinding: unsupported('Cloud channel binding create'),
-        deliveries: unsupported('Cloud channel deliveries'),
-        retryDelivery: unsupported('Cloud channel delivery retry'),
-        deadLetterDelivery: unsupported('Cloud channel delivery dead-letter'),
+        ...channels,
+        createBinding: channels.connectBinding,
       },
       billing: {
         subscription: unsupported('Cloud billing subscription'),
