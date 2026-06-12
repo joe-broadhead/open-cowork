@@ -101,7 +101,7 @@ test('workspace switcher lists standalone Gateway authorities without Cloud', as
   }
 })
 
-test('home recent-thread CTA routes through the real session activation path', async () => {
+test('home launchpad in-motion row routes through the real session activation path', async () => {
   const { page, cleanup } = await launchSmokeApp()
 
   try {
@@ -160,23 +160,53 @@ test('home recent-thread CTA routes through the real session activation path', a
       marker: RECENT_THREAD_MARKER,
     }, { timeout: 15_000 })
 
-    await page.evaluate(async (targetTitle) => {
+    await page.evaluate(async ({ sourceTitle, targetTitle, sourceSessionId }) => {
+      const project = await window.coworkApi.coordination.createProject({
+        title: 'Navigation launchpad project',
+        objective: 'Exercise Home launchpad routing through real coordination feed rows.',
+        team: ['build'],
+      })
+      await window.coworkApi.coordination.createTask({
+        projectId: project.id,
+        title: sourceTitle,
+        spec: 'Open the source thread from the Home launchpad.',
+        status: 'running',
+        column: 'doing',
+        priority: 'high',
+        assigneeAgent: 'build',
+        assignedSessionId: sourceSessionId,
+      })
       const target = await window.coworkApi.session.create()
       await window.coworkApi.session.rename(target.id, targetTitle)
-    }, RECENT_TARGET_TITLE)
+      await window.coworkApi.coordination.createTask({
+        projectId: project.id,
+        title: targetTitle,
+        spec: 'Open the target thread from the Home launchpad.',
+        status: 'running',
+        column: 'doing',
+        priority: 'med',
+        assigneeAgent: 'build',
+        assignedSessionId: target.id,
+      })
+    }, {
+      sourceTitle: RECENT_SOURCE_TITLE,
+      targetTitle: RECENT_TARGET_TITLE,
+      sourceSessionId: sourceId,
+    })
 
     await page.reload()
     await waitForAppShell(page, 30_000)
 
-    await page.locator('.studio-object-card').filter({ hasText: RECENT_SOURCE_TITLE }).getByRole('button', { name: 'Open chat' }).click()
+    await page.getByText('In motion', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: new RegExp(RECENT_SOURCE_TITLE) }).click()
     await page.getByText(RECENT_THREAD_MARKER, { exact: false }).waitFor({ timeout: 15_000 })
 
     await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-    await page.locator('.studio-object-card').filter({ hasText: RECENT_TARGET_TITLE }).getByRole('button', { name: 'Open chat' }).click()
+    await page.getByRole('button', { name: new RegExp(RECENT_TARGET_TITLE) }).click()
     await page.locator('main').getByText(RECENT_TARGET_TITLE, { exact: true }).waitFor({ timeout: 10_000 })
 
     const markerCount = await page.getByText(RECENT_THREAD_MARKER, { exact: false }).count()
-    assert.equal(markerCount, 0, 'switching via Home recent threads should hydrate the selected thread, not keep the prior transcript visible')
+    assert.equal(markerCount, 0, 'switching via Home launchpad rows should hydrate the selected thread, not keep the prior transcript visible')
   } finally {
     await cleanup()
   }

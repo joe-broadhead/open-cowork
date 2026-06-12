@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { launchSmokeApp } from './smoke-helpers.ts'
 
-// Smoke: Home is the welcoming landing surface. After the redesign it's
-// a composer-first page: greeting, textarea, coworker suggestion cards,
-// recent project chats, and a small runtime status strip.
+// Smoke: Home is the welcoming landing surface. It should stay aligned
+// with the Studio launchpad: greeting, composer, assign-to picker,
+// starter cards, in-motion feed, team strip, and runtime status.
 
-test('home renders the greeting, composer, status strip, and no removed dashboard content', async () => {
+test('home renders the Studio launchpad, composer, status strip, and no removed dashboard content', async () => {
   const { page, cleanup } = await launchSmokeApp()
   try {
     // Greeting is a single stable line now (we tried rotating and it
@@ -25,10 +25,15 @@ test('home renders the greeting, composer, status strip, and no removed dashboar
       `expected the composer placeholder to reference @-mention (got "${placeholder}")`,
     )
 
-    // Coworker cards appear once built-in agents load. At least one
-    // mention action should be present on a healthy boot.
-    const mentionAction = await page.waitForSelector('button:has-text("@")', { timeout: 10_000 }).catch(() => null)
-    assert.ok(mentionAction, 'expected at least one @-coworker action on Home')
+    await page.getByText('Assign to', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByRole('button', { name: /Build.*default/i }).waitFor({ timeout: 10_000 })
+
+    await page.getByText('Start with a handoff', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('In motion', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('In progress', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('Waiting on you', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('Fresh artifacts', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('Your team', { exact: true }).waitFor({ timeout: 10_000 })
 
     // The status strip stays on Home and reports the managed runtime
     // connection state without reintroducing a separate dashboard route.
