@@ -53,6 +53,7 @@ const CLOUD_WEB_ENDPOINT_DEFINITIONS = [
   { id: 'coordinationProjects', method: 'GET', path: '/api/coordination/projects?limit=100', csrf: false },
   { id: 'coordinationProjectCreate', method: 'POST', path: '/api/coordination/projects', csrf: true },
   { id: 'coordinationProject', method: 'POST', path: '/api/coordination/projects/:projectId', csrf: true },
+  { id: 'coordinationPlanWithCleo', method: 'POST', path: '/api/coordination/projects/:projectId/plan-with-cleo', csrf: true },
   { id: 'coordinationTasks', method: 'GET', path: '/api/coordination/tasks?limit=500', csrf: false },
   { id: 'coordinationTaskCreate', method: 'POST', path: '/api/coordination/tasks', csrf: true },
   { id: 'coordinationTask', method: 'POST', path: '/api/coordination/tasks/:taskId', csrf: true },

@@ -134,6 +134,8 @@ export const RESERVED_AGENT_NAMES = [
   'title',
   'summary',
   'compaction',
+  'cleo',
+  'chief-of-staff',
   'executive-assistant',
   'autoresearch',
 ]

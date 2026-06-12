@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
-import { useSessionStore } from '../stores/session'
+import { useSessionStore, type PrimaryAgentMode } from '../stores/session'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
 import { formatAgentLabel } from '../helpers/agent-label'
 import { formatDate, t } from '../helpers/i18n'
 import { summarizeMcpConnections } from '../helpers/mcp-status-summary'
+import { nextPrimaryAgentMode, primaryAgentLeadLabel } from '../helpers/primary-agent-mode'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
 import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
 import { ChatInputModelMenu } from './chat/ChatInputModelMenu'
@@ -531,7 +532,7 @@ function HomeComposer({
             setShowModelMenu(false)
             setShowReasoningMenu(!showReasoningMenu)
           }}
-          onToggleAgentMode={() => setAgentMode(agentMode === 'build' ? 'plan' : 'build')}
+          onToggleAgentMode={() => setAgentMode(nextPrimaryAgentMode(agentMode))}
           onFork={() => undefined}
           onStop={() => undefined}
           onSubmit={handleSubmit}
@@ -599,8 +600,8 @@ function LeadCoworkers({
 }: {
   agents: Array<{ id: string; label: string; description: string }>
   onPick: (agentId: string) => void
-  agentMode: 'build' | 'plan'
-  onSetAgentMode: (mode: 'build' | 'plan') => void
+  agentMode: PrimaryAgentMode
+  onSetAgentMode: (mode: PrimaryAgentMode) => void
   label: string
 }) {
   return (
@@ -612,7 +613,7 @@ function LeadCoworkers({
             {t('home.coworkers.subtitle', 'Choose a lead mode or mention a specialist coworker from the OpenCode agent catalog.')}
           </div>
         </div>
-        <Badge tone="accent">{agentMode === 'build' ? t('home.coworkers.building', 'Build lead') : t('home.coworkers.planning', 'Plan lead')}</Badge>
+        <Badge tone="accent">{primaryAgentLeadLabel(agentMode)}</Badge>
       </div>
       <div className="home-coworker-grid">
         <CoworkerCard
@@ -641,6 +642,20 @@ function LeadCoworkers({
             children: t('home.coworkers.usePlan', 'Use Plan'),
             variant: agentMode === 'plan' ? 'primary' : 'secondary',
             onClick: () => onSetAgentMode('plan'),
+          }]}
+        />
+        <CoworkerCard
+          name={t('home.coworkers.cleo.name', 'Cleo')}
+          role={t('home.coworkers.cleo.role', 'Chief-of-Staff planner')}
+          summary={t('home.coworkers.cleo.summary', 'Best for turning an objective into specced tasks and assigning the right coworkers.')}
+          tone="operator"
+          mode={agentMode === 'chief-of-staff' ? t('home.coworkers.active', 'Active') : undefined}
+          status={{ label: agentMode === 'chief-of-staff' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'chief-of-staff' ? 'success' : 'neutral' }}
+          actions={[{
+            id: 'chief-of-staff',
+            children: t('home.coworkers.useCleo', 'Use Cleo'),
+            variant: agentMode === 'chief-of-staff' ? 'primary' : 'secondary',
+            onClick: () => onSetAgentMode('chief-of-staff'),
           }]}
         />
         {agents.slice(0, MAX_SUGGESTIONS).map((agent, index) => (

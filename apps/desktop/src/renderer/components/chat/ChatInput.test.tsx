@@ -409,7 +409,7 @@ describe('ChatInput', () => {
 
     expect(screen.getByText('Send')).toBeInTheDocument()
     expect(screen.getByText('New line')).toBeInTheDocument()
-    expect(screen.getByText('Plan/Build')).toBeInTheDocument()
+    expect(screen.getByText('Build/Plan/Cleo')).toBeInTheDocument()
     expect(screen.getByText('Stop')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Dismiss keyboard hints' }))
 

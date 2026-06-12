@@ -1,7 +1,7 @@
 import { getAppConfig, type BuiltInAgentOverrideConfig } from './config-loader.ts'
 
-export type BuiltInAgentName = 'build' | 'plan' | 'general' | 'explore' | 'executive-assistant' | 'autoresearch'
-type OverridableBuiltInAgentName = Exclude<BuiltInAgentName, 'executive-assistant' | 'autoresearch'>
+export type BuiltInAgentName = 'build' | 'plan' | 'general' | 'explore' | 'chief-of-staff' | 'executive-assistant' | 'autoresearch'
+type OverridableBuiltInAgentName = Exclude<BuiltInAgentName, 'chief-of-staff' | 'executive-assistant' | 'autoresearch'>
 
 function isOverridableBuiltInAgentName(name: string): name is OverridableBuiltInAgentName {
   return name === 'build' || name === 'plan' || name === 'general' || name === 'explore'

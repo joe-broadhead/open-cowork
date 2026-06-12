@@ -1,4 +1,5 @@
 import type {
+  CoordinationChiefOfStaffPlanInput,
   CoordinationProjectInput,
   CoordinationProjectUpdateInput,
   CoordinationTaskAssignInput,
@@ -42,6 +43,7 @@ import {
   listCoordinationWatches,
   moveCoordinationTask,
   pauseCoordinationWatch,
+  planCoordinationProjectWithCleo,
   resumeCoordinationWatch,
   updateCoordinationProject,
   updateCoordinationTask,
@@ -61,6 +63,8 @@ type CoordinationWatchListOptions = WorkspaceOptions & {
   status?: CoordinationWatchStatus | null
   limit?: number
 }
+
+type CoordinationCleoPlanOptions = Omit<CoordinationChiefOfStaffPlanInput, 'projectId'>
 
 function assertCoordinationId(value: unknown, label = 'coordination id') {
   if (typeof value !== 'string' || !value.trim() || value.length > 512) {
@@ -124,6 +128,10 @@ function normalizeCoordinationWatchListOptions(value: Record<string, unknown>): 
   }
 }
 
+function normalizeCleoPlanOptions(value: Record<string, unknown>): CoordinationCleoPlanOptions {
+  return { ...value } as CoordinationCleoPlanOptions
+}
+
 function assertLocalWorkspace(context: IpcHandlerContext, event: IpcMainInvokeEvent, options?: unknown) {
   context.workspaceGateway.assertLocalWorkspace(event, readWorkspaceIdOption(options))
 }
@@ -161,6 +169,13 @@ export function registerCoordinationHandlers(context: IpcHandlerContext) {
     const id = assertCoordinationId(projectId, 'Project id')
     if (!isLocalProject(id)) return null
     return updateCoordinationProject(id, input)
+  })
+
+  registerIpcInvoke(context, 'coordination:projects:plan-with-cleo', stringAndOptionalObjectArgs<CoordinationCleoPlanOptions>('project id', 'Cleo plan request', {}, normalizeCleoPlanOptions), async (event, projectId, input) => {
+    assertLocalWorkspace(context, event, input)
+    const id = assertCoordinationId(projectId, 'Project id')
+    if (!isLocalProject(id)) return null
+    return planCoordinationProjectWithCleo({ ...(input || {}), projectId: id })
   })
 
   registerIpcInvoke(context, 'coordination:tasks:list', optionalObjectArg<CoordinationListOptions>('coordination task options', normalizeCoordinationListOptions), async (event, options) => {

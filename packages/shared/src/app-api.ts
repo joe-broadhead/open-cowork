@@ -88,6 +88,7 @@ export type AppAPI = AppApiEndpointResolver & {
     projects: () => Promise<unknown>
     createProject: (input: unknown) => Promise<unknown>
     updateProject: (projectId: string, input: unknown) => Promise<unknown>
+    planWithCleo: (projectId: string, input?: unknown) => Promise<unknown>
     tasks: (query?: Record<string, AppApiQueryValue>) => Promise<unknown>
     createTask: (input: unknown) => Promise<unknown>
     updateTask: (taskId: string, input: unknown) => Promise<unknown>

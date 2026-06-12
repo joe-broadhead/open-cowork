@@ -1,12 +1,18 @@
 import { createHash } from 'node:crypto'
 import type { BrowserWindow } from 'electron'
 import type {
+  CoordinationChiefOfStaffPlanInput,
+  CoordinationChiefOfStaffPlanResult,
+  CoordinationChiefOfStaffTaskDraft,
+  CoordinationProject,
   CoordinationProjectInput,
   CoordinationProjectUpdateInput,
   CoordinationTask,
   CoordinationTaskAssignInput,
+  CoordinationTaskColumn,
   CoordinationTaskInput,
   CoordinationTaskMoveInput,
+  CoordinationTaskPriority,
   CoordinationTaskUpdateInput,
   CoordinationTaskWorkLinkInput,
   CoordinationTarget,
@@ -40,6 +46,8 @@ import {
 } from './coordination-store.ts'
 import {
   coordinationWatchRecipientCanReceive,
+  isCoordinationTaskColumn,
+  isCoordinationTaskPriority,
 } from '@open-cowork/shared'
 import { getSessionRecord, toRendererSession } from '../session-registry.ts'
 import { addRuntimeSessionEventObserver, type RuntimeSessionEvent } from '../session-event-dispatcher.ts'
@@ -47,6 +55,16 @@ import { log } from '../logger.ts'
 
 let getMainWindow: (() => BrowserWindow | null) | null = null
 let removeRuntimeEventObserver: (() => boolean) | null = null
+
+const CHIEF_OF_STAFF_AGENT_ID = 'chief-of-staff'
+const CHIEF_OF_STAFF_DISPLAY_NAME = 'Cleo'
+const MAX_CLEO_PLAN_TASKS = 20
+const MAX_CLEO_TITLE_BYTES = 240
+const MAX_CLEO_SPEC_BYTES = 32 * 1024
+const MAX_CLEO_AGENT_ID_BYTES = 256
+const MAX_CLEO_EXTERNAL_REF_BYTES = 512
+const CLEO_SELF_AGENT_IDS = new Set(['cleo', CHIEF_OF_STAFF_AGENT_ID, 'executive-assistant'])
+const READ_ONLY_AGENT_IDS = new Set(['explore', 'plan'])
 
 export type CoordinationWatchDeliveryInput = {
   workspaceId: string
@@ -121,6 +139,233 @@ export function createCoordinationProject(input: CoordinationProjectInput) {
   const project = createProjectState(input)
   publishCoordinationUpdated()
   return project
+}
+
+function byteLength(value: string) {
+  return new TextEncoder().encode(value).length
+}
+
+function normalizedText(value: unknown, label: string, options: { required?: boolean; maxBytes?: number } = {}) {
+  if (value === undefined || value === null) {
+    if (options.required) throw new Error(`${label} is required.`)
+    return null
+  }
+  if (typeof value !== 'string') throw new Error(`${label} must be a string.`)
+  const trimmed = value.trim()
+  if (!trimmed) {
+    if (options.required) throw new Error(`${label} is required.`)
+    return null
+  }
+  const maxBytes = options.maxBytes || MAX_CLEO_SPEC_BYTES
+  if (byteLength(trimmed) > maxBytes) throw new Error(`${label} is too large.`)
+  return trimmed
+}
+
+function uniqueAgents(values: unknown[]) {
+  const seen = new Set<string>()
+  const agents: string[] = []
+  for (const value of values) {
+    const agent = normalizedText(value, 'Cleo assignee agent', { maxBytes: MAX_CLEO_AGENT_ID_BYTES })
+    if (!agent) continue
+    const normalized = agent.toLowerCase()
+    if (CLEO_SELF_AGENT_IDS.has(normalized) || seen.has(normalized)) continue
+    seen.add(normalized)
+    agents.push(agent)
+  }
+  return agents
+}
+
+function candidateAgentsForPlan(project: CoordinationProject, input: CoordinationChiefOfStaffPlanInput) {
+  const explicit = Array.isArray(input.assigneeAgents) ? input.assigneeAgents : []
+  const candidates = uniqueAgents([...explicit, ...project.team])
+  return candidates.length > 0 ? candidates : ['explore', 'general']
+}
+
+function writableAgentFromCandidates(candidates: string[], fallbackIndex = 0) {
+  const rotated = candidates.slice(fallbackIndex).concat(candidates.slice(0, fallbackIndex))
+  return rotated.find((agent) => !READ_ONLY_AGENT_IDS.has(agent.toLowerCase())) || 'general'
+}
+
+function agentMatching(candidates: string[], patterns: RegExp[], fallbackIndex = 0) {
+  return candidates.find((agent) => patterns.some((pattern) => pattern.test(agent)))
+    || candidates[Math.min(fallbackIndex, candidates.length - 1)]
+    || 'general'
+}
+
+function executionAgentMatching(candidates: string[], patterns: RegExp[]) {
+  return candidates.find((agent) => {
+    if (READ_ONLY_AGENT_IDS.has(agent.toLowerCase())) return false
+    return patterns.some((pattern) => pattern.test(agent))
+  }) || 'general'
+}
+
+function objectiveForPlan(project: CoordinationProject, input: CoordinationChiefOfStaffPlanInput) {
+  return normalizedText(input.objective, 'Cleo objective', { maxBytes: MAX_CLEO_SPEC_BYTES }) || project.objective
+}
+
+function titleFromSpec(spec: string, index: number) {
+  const firstLine = spec.split('\n').map((line) => line.trim()).find(Boolean) || `Task ${index + 1}`
+  const cleaned = firstLine
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^[-*+]\s+/, '')
+    .replace(/^\d+[.)]\s+/, '')
+    .trim() || `Task ${index + 1}`
+  const shortened = cleaned.length > 80 ? `${cleaned.slice(0, 77).trimEnd()}...` : cleaned
+  if (byteLength(shortened) <= MAX_CLEO_TITLE_BYTES) return shortened
+
+  let result = ''
+  for (const char of shortened) {
+    if (byteLength(`${result}${char}...`) > MAX_CLEO_TITLE_BYTES) break
+    result += char
+  }
+  const trimmed = result.trimEnd()
+  return trimmed ? `${trimmed}...` : `Task ${index + 1}`
+}
+
+function normalizePlanPriority(value: unknown): CoordinationTaskPriority {
+  if (value === undefined || value === null) return 'med'
+  if (!isCoordinationTaskPriority(value)) throw new Error('Cleo task priority is invalid.')
+  return value
+}
+
+function normalizePlanColumn(value: unknown): CoordinationTaskColumn {
+  if (value === undefined || value === null) return 'planning'
+  if (!isCoordinationTaskColumn(value)) throw new Error('Cleo task column is invalid.')
+  return value
+}
+
+function defaultCleoTaskDrafts(objective: string, candidates: string[]): CoordinationChiefOfStaffTaskDraft[] {
+  const discoveryAgent = agentMatching(candidates, [/explore/i, /research/i, /analyst/i])
+  const executionAgent = executionAgentMatching(candidates, [/build/i, /builder/i, /engineer/i, /general/i])
+  const reviewAgent = executionAgentMatching(candidates, [/review/i, /qa/i, /test/i, /general/i])
+  return [
+    {
+      title: 'Clarify scope and success criteria',
+      spec: [
+        `Objective: ${objective}`,
+        '',
+        'Produce the project brief the team will execute against: success criteria, constraints, assumptions, known risks, and the first questions that must be answered before implementation starts.',
+        '',
+        'Acceptance: the brief is specific enough for a coworker to begin work without rereading the original objective.',
+      ].join('\n'),
+      assigneeAgent: discoveryAgent,
+      priority: 'high',
+      column: 'planning',
+    },
+    {
+      title: 'Map the execution path',
+      spec: [
+        `Objective: ${objective}`,
+        '',
+        'Break the work into concrete implementation slices, identify dependencies between slices, and call out the narrowest first slice that proves the direction.',
+        '',
+        'Acceptance: the plan names the order of work, handoff points, validation needs, and any blocked decisions.',
+      ].join('\n'),
+      assigneeAgent: discoveryAgent,
+      priority: 'med',
+      column: 'planning',
+    },
+    {
+      title: 'Build the first implementation slice',
+      spec: [
+        `Objective: ${objective}`,
+        '',
+        'Implement the first useful slice from the execution plan using the existing OpenCode runtime, repository patterns, and product boundaries. Keep unrelated refactors out of scope.',
+        '',
+        'Acceptance: the slice is usable, covered by focused validation, and ready for human review.',
+      ].join('\n'),
+      assigneeAgent: executionAgent,
+      priority: 'high',
+      column: 'planning',
+    },
+    {
+      title: 'Verify and prepare the handoff',
+      spec: [
+        `Objective: ${objective}`,
+        '',
+        'Review the completed slice against the project objective, collect evidence from tests or manual checks, and summarize remaining follow-up tasks.',
+        '',
+        'Acceptance: the reviewer can decide whether to move the task to done, request changes, or create the next set of implementation tasks.',
+      ].join('\n'),
+      assigneeAgent: reviewAgent,
+      priority: 'med',
+      column: 'planning',
+    },
+  ]
+}
+
+function taskExternalRef(projectId: string, objective: string, index: number, title: string) {
+  const digest = createHash('sha256')
+    .update(JSON.stringify({ projectId, objective, index, title }))
+    .digest('hex')
+    .slice(0, 16)
+  return `${CHIEF_OF_STAFF_AGENT_ID}:${digest}:${index + 1}`
+}
+
+function normalizeCleoTaskInputs(
+  project: CoordinationProject,
+  input: CoordinationChiefOfStaffPlanInput,
+  objective: string,
+): CoordinationTaskInput[] {
+  const candidates = candidateAgentsForPlan(project, input)
+  const rawTasks = input.tasks === undefined || input.tasks === null
+    ? defaultCleoTaskDrafts(objective, candidates)
+    : input.tasks
+  if (!Array.isArray(rawTasks) || rawTasks.length === 0) throw new Error('Cleo plan tasks must be a non-empty array.')
+  if (rawTasks.length > MAX_CLEO_PLAN_TASKS) throw new Error('Cleo plan contains too many tasks.')
+  return rawTasks.map((draft, index) => {
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw new Error('Cleo task draft must be an object.')
+    const record = draft as CoordinationChiefOfStaffTaskDraft
+    const spec = normalizedText(record.spec, 'Cleo task spec', { required: true, maxBytes: MAX_CLEO_SPEC_BYTES })!
+    const title = normalizedText(record.title, 'Cleo task title', { maxBytes: MAX_CLEO_TITLE_BYTES }) || titleFromSpec(spec, index)
+    const requestedAssignee = normalizedText(record.assigneeAgent, 'Cleo task assignee agent', { maxBytes: MAX_CLEO_AGENT_ID_BYTES })
+    const assigneeAgent = requestedAssignee && !CLEO_SELF_AGENT_IDS.has(requestedAssignee.toLowerCase())
+      ? requestedAssignee
+      : writableAgentFromCandidates(candidates, index)
+    const externalRef = taskExternalRef(project.id, objective, index, title)
+    assertCleoTaskInputReady({ title, spec, assigneeAgent, externalRef })
+    return {
+      projectId: project.id,
+      workspaceId: project.workspaceId,
+      title,
+      spec,
+      priority: normalizePlanPriority(record.priority),
+      column: normalizePlanColumn(record.column),
+      assigneeAgent,
+      externalRef,
+    }
+  })
+}
+
+function assertCleoTaskInputReady(input: {
+  title: string
+  spec: string
+  assigneeAgent: string
+  externalRef: string
+}) {
+  if (byteLength(input.title) > MAX_CLEO_TITLE_BYTES) throw new Error('Cleo task title is too large.')
+  if (byteLength(input.spec) > MAX_CLEO_SPEC_BYTES) throw new Error('Cleo task spec is too large.')
+  if (byteLength(input.assigneeAgent) > MAX_CLEO_AGENT_ID_BYTES) throw new Error('Cleo task assignee agent is too large.')
+  if (byteLength(input.externalRef) > MAX_CLEO_EXTERNAL_REF_BYTES) throw new Error('Cleo task external ref is too large.')
+}
+
+export function planCoordinationProjectWithCleo(input: CoordinationChiefOfStaffPlanInput): CoordinationChiefOfStaffPlanResult | null {
+  const projectId = normalizedText(input.projectId, 'Project id', { required: true, maxBytes: 512 })!
+  const project = getCoordinationProject(projectId)
+  if (!project) return null
+  const workspaceId = normalizedText(input.workspaceId, 'Workspace id', { maxBytes: 512 }) || project.workspaceId
+  if (workspaceId !== project.workspaceId) throw new Error('Cleo plan workspace must match its project workspace.')
+  const objective = objectiveForPlan(project, input)
+  const taskInputs = normalizeCleoTaskInputs(project, input, objective)
+  const tasks = taskInputs.map((taskInput) => createTaskState(taskInput))
+  publishCoordinationUpdated()
+  return {
+    plannerAgent: CHIEF_OF_STAFF_AGENT_ID,
+    displayName: CHIEF_OF_STAFF_DISPLAY_NAME,
+    objective,
+    project,
+    tasks,
+  }
 }
 
 export function updateCoordinationProject(projectId: string, input: CoordinationProjectUpdateInput) {

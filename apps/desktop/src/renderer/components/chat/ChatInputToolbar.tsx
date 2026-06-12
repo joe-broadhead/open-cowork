@@ -1,5 +1,7 @@
 import type { RefObject } from 'react'
 import { t } from '../../helpers/i18n'
+import { primaryAgentModeLabel } from '../../helpers/primary-agent-mode'
+import type { PrimaryAgentMode } from '../../stores/session'
 import { Badge, Button, Icon, IconButton } from '../ui'
 
 type ChatInputToolbarProps = {
@@ -10,7 +12,7 @@ type ChatInputToolbarProps = {
   reasoningLabel?: string
   showReasoningControl?: boolean
   currentDirectory: string | null
-  agentMode: 'build' | 'plan'
+  agentMode: PrimaryAgentMode
   currentSessionId: string | null
   isGenerating: boolean
   isAwaitingPermission: boolean
@@ -127,11 +129,11 @@ export function ChatInputToolbar({
 
         <Button
           onClick={onToggleAgentMode}
-          variant={agentMode === 'plan' ? 'secondary' : 'ghost'}
+          variant={agentMode === 'build' ? 'ghost' : 'secondary'}
           size="sm"
           rightIcon="chevron-down"
         >
-          {agentMode === 'plan' ? t('chat.planMode', 'Plan') : t('chat.buildMode', 'Build')}
+          {primaryAgentModeLabel(agentMode)}
         </Button>
       </div>
 

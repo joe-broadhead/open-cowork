@@ -198,6 +198,28 @@ export function buildOpenCoworkAgentConfig(options: {
         source: 'custom' as const,
       })),
   ]
+  const chiefOfStaffDelegatedAgents: DelegationPromptAgent[] = [
+    {
+      name: 'explore',
+      description: 'Read-only codebase and file-system investigation agent.',
+      source: 'builtin',
+    },
+    ...configuredAgents
+      .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'configured' as const,
+      })),
+    ...customDelegationAgents
+      .filter((agent) => !agent.disabled)
+      .filter((agent) => !agent.writeAccess)
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'custom' as const,
+      })),
+  ]
 
   const allowPatterns = Array.from(new Set([...(options.allowToolPatterns || []), ...globalAccess.allow]))
   const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
@@ -270,6 +292,47 @@ export function buildOpenCoworkAgentConfig(options: {
           web,
           webSearch,
           bash: readonlyBash,
+          task,
+          taskRules: {
+            explore: 'allow',
+            ...readonlyConfiguredTaskRules,
+            ...readonlyCustomTaskRules,
+          },
+        }),
+      },
+    },
+    {
+      name: 'chief-of-staff',
+      config: {
+        mode: 'primary',
+        description: 'Chief-of-Staff planner for turning objectives into specced task drafts and coworker assignments.',
+        color: 'info',
+        prompt: [
+          `You are Cleo, the ${getBrandName()} Chief-of-Staff planner.`,
+          'Your job is to turn a human objective into concrete, reviewable task drafts for coworkers.',
+          'OpenCode owns execution. Do not implement specialist work inside this planner role when a coworker task should own it.',
+          'Use task delegation only for read-only discovery when it materially improves the plan; keep implementation work as assigned coordination tasks.',
+          createPrimaryAgentPrompt({
+            role: 'plan',
+            delegatedAgents: chiefOfStaffDelegatedAgents,
+          }),
+          'When preparing board task drafts, use the existing CoordinationTask contract: title, spec, assigneeAgent, priority, and column.',
+          'Default every new board task to column "planning" unless the user explicitly asks otherwise.',
+          'Write specs as complete task briefs with objective context, deliverables, acceptance criteria, constraints, and handoff notes.',
+          'Assign tasks to real coworkers or configured agents. Do not assign implementation tasks to Cleo or chief-of-staff.',
+          'In normal chat, return structured task drafts and say the board Plan with Cleo action will persist them; do not claim durable CoordinationTask rows were created unless the app reports the coordination service result.',
+          'If the objective is ambiguous, ask one concise clarifying question before producing tasks.',
+        ].join('\n'),
+        permission: buildAgentPermission({
+          allToolPatterns,
+          allowPatterns,
+          deniedPatterns: deniedToolPatterns,
+          externalDirectoryRules: managedExternalDirectoryRules,
+          allowAllSkills: true,
+          web,
+          webSearch,
+          allowQuestion: true,
+          allowTodoWrite: true,
           task,
           taskRules: {
             explore: 'allow',

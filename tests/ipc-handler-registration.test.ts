@@ -166,6 +166,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('workflows:run-now'), true)
   assert.equal(handlers.has('workflows:archive'), true)
   assert.equal(handlers.has('workflows:regenerate-webhook-secret'), true)
+  assert.equal(handlers.has('coordination:projects:plan-with-cleo'), true)
   assert.equal(handlers.has('channels:providers'), true)
   assert.equal(handlers.has('channels:bindings:connect'), true)
   assert.equal(handlers.has('channels:people:list'), true)

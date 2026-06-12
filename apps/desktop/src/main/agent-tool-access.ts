@@ -318,7 +318,7 @@ export function nativeToolLabels(ids: string[]) {
   })
 }
 
-export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore' | 'autoresearch') {
+export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'general' | 'explore' | 'chief-of-staff' | 'autoresearch') {
   const settings = getEffectiveSettings()
   const canUseBash = settings.enableBash
   const canWriteFiles = settings.enableFileWrite
@@ -343,6 +343,15 @@ export function getNativeToolIdsForBuiltInAgent(name: 'build' | 'plan' | 'genera
       ...readOnlyCore,
       ...webTools,
       'bash',
+    ])
+  }
+
+  if (name === 'chief-of-staff') {
+    return unique([
+      ...readOnlyCore,
+      ...webTools,
+      'todowrite',
+      'question',
     ])
   }
 

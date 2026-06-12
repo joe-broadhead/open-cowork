@@ -21,13 +21,17 @@ test('generated built-in agent config keeps read-only delegated agents within pa
 
   const matrix = buildAgentPermissionMatrix(agents)
   const plan = matrix.find((entry) => entry.agentName === 'plan')
+  const chiefOfStaff = matrix.find((entry) => entry.agentName === 'chief-of-staff')
   const explore = matrix.find((entry) => entry.agentName === 'explore')
 
   assert.ok(plan)
+  assert.ok(chiefOfStaff)
   assert.ok(explore)
   assert.equal(plan.taskTargets.general, undefined)
   assert.equal(plan.taskTargets.autoresearch, undefined)
   assert.equal(plan.taskTargets.explore, 'allow')
+  assert.equal(chiefOfStaff.taskTargets.general, undefined)
+  assert.equal(chiefOfStaff.taskTargets.explore, 'allow')
   assert.equal(explore.sensitive.bash, 'deny')
   assert.equal(explore.sensitive.write, 'deny')
   assert.deepEqual(findPermissionInheritanceIssues(agents), [])

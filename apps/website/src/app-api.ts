@@ -192,6 +192,7 @@ export function createCloudWebAppApi(bootstrap: CloudWebClientBootstrap, options
       projects: () => request(endpoint('coordinationProjects', '/api/coordination/projects?limit=100')),
       createProject: (input) => request(endpoint('coordinationProjectCreate', '/api/coordination/projects'), { method: 'POST', body: input }),
       updateProject: (projectId, input) => request(endpointPath('coordinationProject', '/api/coordination/projects/:projectId', { projectId }), { method: 'POST', body: input }),
+      planWithCleo: (projectId, input) => request(endpointPath('coordinationPlanWithCleo', '/api/coordination/projects/:projectId/plan-with-cleo', { projectId }), { method: 'POST', body: input || {} }),
       tasks: (query) => request(withQuery(endpoint('coordinationTasks', '/api/coordination/tasks?limit=500'), query || {})),
       createTask: (input) => request(endpoint('coordinationTaskCreate', '/api/coordination/tasks'), { method: 'POST', body: input }),
       updateTask: (taskId, input) => request(endpointPath('coordinationTask', '/api/coordination/tasks/:taskId', { taskId }), { method: 'POST', body: input }),

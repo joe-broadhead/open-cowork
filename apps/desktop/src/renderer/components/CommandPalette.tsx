@@ -6,6 +6,7 @@ import type {
 } from '@open-cowork/shared'
 import { useSessionStore } from '../stores/session'
 import { t } from '../helpers/i18n'
+import type { PrimaryAgentMode } from '../stores/session'
 import { ModalBackdrop } from './layout/ModalBackdrop'
 import {
   buildCommandPaletteItems,
@@ -22,7 +23,7 @@ interface CommandPaletteProps {
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
   onInsertComposer: (text: string) => void
-  onSetAgentMode: (mode: 'build' | 'plan') => void
+  onSetAgentMode: (mode: PrimaryAgentMode) => void
   onOpenSettings: () => void
   onToggleSearch: () => void
 }

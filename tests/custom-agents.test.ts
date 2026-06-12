@@ -54,6 +54,8 @@ test('custom agent catalog exposes configured built-in tools and skills', () => 
   assert.equal(catalog.tools.find((tool) => tool.id === 'task')?.supportsWrite, true)
   assert.equal(catalog.skills.some((skill) => skill.name === 'github:github'), true)
   assert.equal(catalog.reservedNames.includes('build'), true)
+  assert.equal(catalog.reservedNames.includes('chief-of-staff'), true)
+  assert.equal(catalog.reservedNames.includes('cleo'), true)
 })
 
 test('custom agent catalog includes custom skills alongside bundled skills', () => {
@@ -141,6 +143,15 @@ test('custom agents become invalid when they collide with reserved names or lose
         enabled: true,
         color: 'accent' as const,
       },
+      {
+        name: 'cleo',
+        description: 'Should fail because Cleo is a built-in display name',
+        instructions: '',
+        skillNames: ['sales-review'],
+        toolIds: ['github'],
+        enabled: true,
+        color: 'accent' as const,
+      },
     ],
   }
 
@@ -154,6 +165,8 @@ test('custom agents become invalid when they collide with reserved names or lose
   assert.equal(summaries[0]?.issues.some((issue) => issue.code === 'reserved_name'), true)
   assert.equal(summaries[1]?.valid, false)
   assert.equal(summaries[1]?.issues.some((issue) => issue.code === 'missing_skill'), true)
+  assert.equal(summaries[2]?.valid, false)
+  assert.equal(summaries[2]?.issues.some((issue) => issue.code === 'reserved_name'), true)
 })
 
 test('custom agent validation rejects oversized payloads and unbounded selections', () => {

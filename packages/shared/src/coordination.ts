@@ -374,6 +374,30 @@ export type CoordinationTaskInput = {
   workspaceId?: string | null
 }
 
+export type CoordinationChiefOfStaffTaskDraft = {
+  title?: string | null
+  spec: string
+  assigneeAgent?: string | null
+  priority?: CoordinationTaskPriority
+  column?: CoordinationTaskColumn
+}
+
+export type CoordinationChiefOfStaffPlanInput = {
+  projectId: string
+  objective?: string | null
+  assigneeAgents?: string[]
+  tasks?: CoordinationChiefOfStaffTaskDraft[]
+  workspaceId?: string | null
+}
+
+export type CoordinationChiefOfStaffPlanResult = {
+  plannerAgent: 'chief-of-staff'
+  displayName: 'Cleo'
+  objective: string
+  project: CoordinationProject
+  tasks: CoordinationTask[]
+}
+
 export type CoordinationTaskUpdateInput = Partial<Omit<CoordinationTaskInput, 'projectId' | 'workspaceId'>>
 
 export type CoordinationTaskMoveInput = {
