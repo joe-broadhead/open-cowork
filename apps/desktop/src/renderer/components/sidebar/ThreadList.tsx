@@ -399,7 +399,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+    <div ref={scrollRef} className="min-h-[96px] flex-1 overflow-y-auto">
       {virtualize ? (
         <div
           style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}

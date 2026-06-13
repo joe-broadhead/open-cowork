@@ -602,7 +602,7 @@ export function Sidebar({
             </div>
           )}
 
-          <div className="shrink-0 px-2 pt-2 pb-1">
+          <div className="min-h-0 max-h-[40vh] overflow-y-auto px-2 pt-2 pb-1">
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div>
             <button onClick={() => onViewChange('home')}
               aria-current={currentView === 'home' ? 'page' : undefined}
@@ -658,7 +658,7 @@ export function Sidebar({
           {/* Recent project chats — ThreadList owns its own scroll container so it
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 py-2">
+          <div className="flex min-h-[120px] flex-1 flex-col overflow-hidden px-2 py-2">
             <button
               type="button"
               onClick={() => onViewChange('projects')}
@@ -671,7 +671,7 @@ export function Sidebar({
           </div>
 
           {/* Tool status */}
-          <div className="shrink-0 border-t border-border-subtle px-2 py-2">
+          <div className="max-h-[28vh] shrink-0 overflow-y-auto border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
