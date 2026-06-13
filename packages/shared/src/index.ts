@@ -167,6 +167,7 @@ export * from './capabilities.js'
 export * from './channels.js'
 export * from './cloud-gateway-registration.js'
 export * from './cloud-session-projection.js'
+export * from './conversation-context.js'
 export * from './coordination.js'
 export * from './custom-content.js'
 export * from './design-tokens.js'
@@ -327,6 +328,7 @@ export interface CoworkAPI {
     index: (request?: ArtifactIndexRequest) => Promise<ArtifactIndexPayload>
     updateStatus: (request: ArtifactStatusUpdateRequest) => Promise<SessionArtifact>
     upload: (request: SessionArtifactUploadRequest) => Promise<SessionArtifact>
+    open: (request: SessionArtifactExportRequest) => Promise<string | null>
     export: (request: SessionArtifactExportRequest) => Promise<string | null>
     reveal: (request: SessionArtifactRequest) => Promise<boolean>
     readAttachment: (request: SessionArtifactRequest) => Promise<SessionArtifactAttachment>

@@ -148,6 +148,7 @@ test('IPC handler modules register their core channels', () => {
   assert.equal(handlers.has('provider:oauth-authorize'), true)
   assert.equal(handlers.has('provider:oauth-callback'), true)
   assert.equal(handlers.has('provider:auth-remove'), true)
+  assert.equal(handlers.has('artifact:open'), true)
   assert.equal(handlers.has('artifact:export'), true)
   assert.equal(handlers.has('artifact:index'), true)
   assert.equal(handlers.has('artifact:read-attachment'), true)

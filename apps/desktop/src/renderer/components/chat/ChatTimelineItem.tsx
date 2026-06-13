@@ -18,6 +18,7 @@ type ChatTimelineItemProps = {
   focusedTaskRunId: string | null
   pendingApprovals: PendingApproval[]
   pendingQuestions: PendingQuestion[]
+  handoffAgentBySessionId: Record<string, string>
   agentRunFiltersEnabled: boolean
   onFocusTask: (taskRun: TaskRun, visibleTaskRuns?: TaskRun[]) => void
   isTaskGroupExpanded: (groupedTaskRuns: TaskRun[]) => boolean
@@ -36,6 +37,7 @@ export function ChatTimelineItem({
   focusedTaskRunId,
   pendingApprovals,
   pendingQuestions,
+  handoffAgentBySessionId,
   agentRunFiltersEnabled,
   onFocusTask,
   isTaskGroupExpanded,
@@ -66,6 +68,7 @@ export function ChatTimelineItem({
           onFocusTask={onFocusTask}
           pendingApprovals={pendingApprovals}
           pendingQuestions={pendingQuestions}
+          handoffAgentBySessionId={handoffAgentBySessionId}
           scaleEnabled={agentRunFiltersEnabled}
           scaleStorageKey={agentRunFilterStorageKey(currentSessionId, taskGroupKey([item.data]))}
         />
@@ -81,6 +84,7 @@ export function ChatTimelineItem({
           onFocusTask={onFocusTask}
           pendingApprovals={pendingApprovals}
           pendingQuestions={pendingQuestions}
+          handoffAgentBySessionId={handoffAgentBySessionId}
           scaleEnabled={agentRunFiltersEnabled}
           scaleStorageKey={agentRunFilterStorageKey(currentSessionId, taskGroupKey(item.data))}
         />

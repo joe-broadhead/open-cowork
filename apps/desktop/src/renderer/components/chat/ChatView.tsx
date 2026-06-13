@@ -1,6 +1,12 @@
 import { useRef, useEffect, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { PendingQuestion } from '@open-cowork/shared'
+import {
+  buildTaskRunAgentBySourceSession,
+  resolveConversationTaskContext,
+  type CoordinationBoardPayload,
+  type PendingQuestion,
+} from '@open-cowork/shared'
+import type { AppNavigationTarget } from '../../app-types'
 import { useSessionStore, type PendingApproval, type TaskRun } from '../../stores/session'
 import { loadSessionMessages } from '../../helpers/loadSessionMessages'
 import { t } from '../../helpers/i18n'
@@ -32,7 +38,11 @@ const CHAT_ROW_ESTIMATE_PX = 140
 const THREAD_MAX_WIDTH_WITH_INSPECTOR = 820
 const THREAD_MAX_WIDTH = 'var(--measure)'
 
-export function ChatView() {
+type ChatViewProps = {
+  onNavigate?: (target: AppNavigationTarget) => void
+}
+
+export function ChatView({ onNavigate }: ChatViewProps = {}) {
   const currentView = useSessionStore((s) => s.currentView)
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
@@ -52,6 +62,7 @@ export function ChatView() {
   const [expandedTaskGroups, setExpandedTaskGroups] = useState<Record<string, boolean>>({})
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [autoFollowPaused, setAutoFollowPaused] = useState(false)
+  const [coordinationBoard, setCoordinationBoard] = useState<CoordinationBoardPayload | null>(null)
   const agentRunFiltersEnabled = useMemo(() => isAgentRunFiltersEnabled(), [])
   const visibleApprovals = pendingApprovals
   const transcriptMaxWidth = inspectorOpen ? THREAD_MAX_WIDTH_WITH_INSPECTOR : THREAD_MAX_WIDTH
@@ -74,6 +85,34 @@ export function ChatView() {
     [messages],
   )
   const agentVisuals = useChatAgentVisuals(currentSession?.directory)
+  const taskContext = useMemo(
+    () => resolveConversationTaskContext(coordinationBoard, currentSessionId),
+    [coordinationBoard, currentSessionId],
+  )
+  const handoffAgentBySessionId = useMemo(
+    () => buildTaskRunAgentBySourceSession(taskRuns),
+    [taskRuns],
+  )
+
+  useEffect(() => {
+    let disposed = false
+    const loadBoard = async () => {
+      try {
+        const board = await window.coworkApi.coordination.board()
+        if (!disposed) setCoordinationBoard(board)
+      } catch {
+        if (!disposed) setCoordinationBoard(null)
+      }
+    }
+    void loadBoard()
+    const unsubscribe = window.coworkApi.on.coordinationUpdated(() => {
+      void loadBoard()
+    })
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
+  }, [])
 
   const timeline = useMemo(() => {
     return buildChatTimeline({
@@ -332,6 +371,7 @@ export function ChatView() {
         focusedTaskRunId={focusedTaskRunId}
         pendingApprovals={pendingApprovals}
         pendingQuestions={pendingQuestions}
+        handoffAgentBySessionId={handoffAgentBySessionId}
         agentRunFiltersEnabled={agentRunFiltersEnabled}
         onFocusTask={onFocusTask}
         isTaskGroupExpanded={isTaskGroupExpanded}
@@ -365,11 +405,13 @@ export function ChatView() {
           parentSession={parentSession}
           inspectorOpen={inspectorOpen}
           unreverting={unrevertingSessionId === currentSessionId}
+          taskContext={taskContext}
           onOpenParent={() => {
             if (currentSession?.parentSessionId) {
               void loadSessionMessages(currentSession.parentSessionId)
             }
           }}
+          onOpenBoard={taskContext ? () => onNavigate?.('projects') : undefined}
           onToggleInspector={() => setInspectorOpen((open) => !open)}
           onUnrevert={() => {
             setUnrevertingSessionId(currentSessionId)

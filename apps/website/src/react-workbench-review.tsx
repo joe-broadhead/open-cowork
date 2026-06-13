@@ -3,6 +3,7 @@ import { ActionCluster, DiffView, type DiffViewFile } from '@open-cowork/ui'
 import { cloudWebRuntimeCounts, cloudWebSafeArtifactMetadata } from './runtime-workbench.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
 import type { ArtifactPanelState } from './react-workbench-controller.ts'
+import { CLOUD_DELIVERABLE_APPROVAL_COPY } from './react-workbench-context.ts'
 import {
   CloudApprovalsAndQuestions,
   CloudArtifactCards,
@@ -144,6 +145,7 @@ export function CloudReviewPane({ view, ...props }: { view: CloudWebThreadView |
       empty="No artifacts to review yet."
       className="cloud-review-pane"
     >
+      <p className="cloud-deliverables-approval">{CLOUD_DELIVERABLE_APPROVAL_COPY}</p>
       <CloudReviewSummary projection={projection} counts={counts} />
       <CloudApprovalsAndQuestions view={view} {...props} />
       <CloudReviewTodos projection={projection} />

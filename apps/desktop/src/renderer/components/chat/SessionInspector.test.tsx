@@ -153,6 +153,7 @@ function installInspectorApi() {
         },
       })),
       reveal: vi.fn(async () => true),
+      open: vi.fn(async () => '/tmp/chart.png'),
       export: vi.fn(async () => '/tmp/chart.png'),
     },
     model: {
@@ -322,21 +323,28 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Artifacts' }))
+    await user.click(screen.getByText('Artifacts'))
     expect(screen.getByText('Sandbox Artifacts')).toBeInTheDocument()
     expect(screen.getByText('chart.png')).toBeInTheDocument()
     expect(await screen.findByRole('img', { name: 'chart.png' })).toHaveAttribute('src', 'data:image/png;base64,abc')
 
-    await user.click(screen.getByRole('button', { name: 'Send to thread' }))
+    await user.click(screen.getByText('Open'))
+    expect(api.artifact.open).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      filePath: '/tmp/chart.png',
+      suggestedName: 'chart.png',
+    })
+
+    await user.click(screen.getByText('Send to thread'))
     await waitFor(() => expect(composerEvents[0]?.detail.attachments[0].filename).toBe('chart.png'))
 
-    await user.click(screen.getByRole('button', { name: 'Rerender' }))
+    await user.click(screen.getByText('Rerender'))
     await waitFor(() => expect(composerEvents[1]?.detail.text).toContain('Please recreate or refine the attached chart'))
 
-    await user.click(screen.getByRole('button', { name: 'Reveal' }))
+    await user.click(screen.getByText('Reveal'))
     expect(api.artifact.reveal).toHaveBeenCalledWith({ sessionId: 'session-1', filePath: '/tmp/chart.png' })
 
-    await user.click(screen.getByRole('button', { name: 'Save As…' }))
+    await user.click(screen.getByText('Export'))
     expect(api.artifact.export).toHaveBeenCalledWith({
       sessionId: 'session-1',
       filePath: '/tmp/chart.png',
@@ -377,14 +385,16 @@ describe('SessionInspector', () => {
 
     render(<SessionInspector onClose={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: 'Artifacts' }))
+    await user.click(screen.getByText('Artifacts'))
     expect(await screen.findByText('chart.png')).toBeInTheDocument()
     expect(screen.getByText('Preview disabled')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Send to thread' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Rerender' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save As…' })).toBeDisabled()
+    expect(screen.getByText('Open').closest('button')).toBeDisabled()
+    expect(screen.getByText('Send to thread').closest('button')).toBeDisabled()
+    expect(screen.getByText('Rerender').closest('button')).toBeDisabled()
+    expect(screen.getByText('Export').closest('button')).toBeDisabled()
     expect(screen.getByText('Reveal disabled')).toHaveAttribute('title', 'support failed')
     expect(api.artifact.readAttachment).not.toHaveBeenCalled()
+    expect(api.artifact.open).not.toHaveBeenCalled()
     expect(api.artifact.export).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isSafeArtifactOpenTarget } from '@open-cowork/shared'
 import { attachmentFromArtifact, buildChartRerenderPrompt, dispatchComposerCompose } from './composer-events'
 import { listSessionArtifacts } from './session-artifacts'
 
@@ -42,7 +43,7 @@ export function SessionArtifactList({
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [composerAction, setComposerAction] = useState<{
     artifactId: string
-    mode: 'send' | 'rerender'
+    mode: 'open' | 'send' | 'rerender'
   } | null>(null)
   const [previewStates, setPreviewStates] = useState<Record<string, ArtifactPreviewState>>({})
   const previewStatesRef = useRef(previewStates)
@@ -129,6 +130,7 @@ export function SessionArtifactList({
       {artifacts.map((artifact) => {
         const previewState = previewStates[artifact.id]
         const showPreview = isPreviewableArtifact(artifact)
+        const canOpenArtifact = isSafeArtifactOpenTarget({ filename: artifact.filename, mime: artifact.mime })
         const bodyActionsBlocked = !canDownloadArtifact
         const bodyActionTitle = bodyActionsBlocked ? downloadDisabledReason : undefined
         const actionClassName = 'px-2.5 py-1.5 rounded-lg border border-border-subtle text-[11px] text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary'
@@ -168,6 +170,30 @@ export function SessionArtifactList({
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
+              {canOpenArtifact ? (
+                <button
+                  onClick={async () => {
+                    if (bodyActionsBlocked) return
+                    try {
+                      setComposerAction({ artifactId: artifact.id, mode: 'open' })
+                      await window.coworkApi.artifact.open({
+                        sessionId,
+                        filePath: artifact.filePath,
+                        suggestedName: artifact.filename,
+                        ...artifactWorkspaceScope(workspaceId),
+                      })
+                    } finally {
+                      setComposerAction(null)
+                    }
+                  }}
+                  disabled={bodyActionsBlocked || composerAction !== null}
+                  title={bodyActionTitle}
+                  className={actionClassName}
+                >
+                  {composerAction?.artifactId === artifact.id && composerAction.mode === 'open' ? 'Opening…' : 'Open'}
+                </button>
+              ) : null}
+
               <button
                 onClick={async () => {
                   if (bodyActionsBlocked) return
@@ -257,7 +283,7 @@ export function SessionArtifactList({
                 title={bodyActionTitle}
                 className={actionClassName}
               >
-                {exportingId === artifact.id ? 'Saving...' : 'Save As…'}
+                {exportingId === artifact.id ? 'Exporting…' : 'Export'}
               </button>
             </div>
           </div>

@@ -680,7 +680,7 @@ export function App() {
             )}
             {view === 'chat' && (
               <Suspense fallback={null}>
-                <ChatView />
+                <ChatView onNavigate={navigateView} />
               </Suspense>
             )}
             {view === 'projects' && (

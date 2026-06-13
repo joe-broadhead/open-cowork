@@ -3,17 +3,16 @@ import { createPortal } from 'react-dom'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { LaunchpadFreshArtifactItem } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
-import {
-  CLOUD_WEB_THREAD_PAGE_SIZE, filterCloudWebThreads,
-  type CloudWebThreadFilters, type CloudWebThreadSession, type CloudWebThreadView,
-} from './thread-workbench.ts'
+import { CLOUD_WEB_THREAD_PAGE_SIZE, filterCloudWebThreads, type CloudWebThreadFilters, type CloudWebThreadSession, type CloudWebThreadView } from './thread-workbench.ts'
 import {
   CloudApprovalsAndQuestions,
   CloudChatTimeline,
   CloudSidebarThreadList,
   CloudThreadList,
+  buildCloudHandoffAgentBySessionId,
   type ArtifactActionContext,
 } from './react-workbench.ts'
+import { CloudConversationMeta, useCloudConversationTaskContext } from './react-workbench-context.ts'
 import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
 import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
 import { CloudComposerPortal } from './react-workbench-composer.tsx'
@@ -40,7 +39,6 @@ import {
   type ArtifactPanelState,
   type SessionListPage,
 } from './react-workbench-controller.ts'
-
 declare global {
   interface Window {
     __openCoworkReactWorkbench?: {
@@ -86,7 +84,6 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   const [sessionEventStatus, setSessionEventStatus] = useState<'idle' | 'connecting' | 'open' | 'retrying' | 'closed' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [artifactPanel, setArtifactPanel] = useState<ArtifactPanelState>({ artifactId: null, metadata: null, status: 'idle', error: null })
-
   const sessionsRef = useRef(sessions)
   const threadLimitRef = useRef(threadLimit)
   const nextCursorRef = useRef(nextCursor)
@@ -125,6 +122,8 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
 
   const visibleThreads = useMemo(() => filterCloudWebThreads(sessions, views, filters, threadLimit), [filters, sessions, threadLimit, views])
   const filteredThreadCount = useMemo(() => filterCloudWebThreads(sessions, views, filters, Number.MAX_SAFE_INTEGER).length, [filters, sessions, views])
+  const handoffAgentBySessionId = useMemo(() => buildCloudHandoffAgentBySessionId(views), [views])
+  const taskContext = useCloudConversationTaskContext(api, selectedSessionId)
 
   useEffect(() => {
     sessionsRef.current = sessions
@@ -518,6 +517,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     onOpenTaskSession: (sessionId: string) => {
       void selectSession(sessionId)
     },
+    handoffAgentBySessionId,
   }
 
   const portals: ReactNode[] = []
@@ -530,7 +530,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   pushPortal(sidebarCountTarget, <>{filteredThreadCount}</>)
   pushPortal(limitStatusTarget, <>{limitStatus}</>)
   pushPortal(titleTarget, <>{selectedView ? sessionTitle(selectedView, selectedSessionId || 'Cloud chat') : 'What shall we cowork on today?'}</>)
-  pushPortal(metaTarget, <>{chatMeta}</>)
+  pushPortal(metaTarget, <CloudConversationMeta summary={chatMeta} taskContext={taskContext} onOpenBoard={taskContext ? () => setRouteHash('threads') : undefined} />)
   pushPortal(managedActionsTarget, (
     <>
       <CloudComposerActionCluster profileName={bootstrap.profileName} />

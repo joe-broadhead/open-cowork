@@ -1,5 +1,10 @@
 import { createElement, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import {
+  buildTaskRunAgentBySourceSession,
+  resolveTaskRunHandoffAgent,
+  type TaskRunHandoffSource,
+} from '@open-cowork/shared'
+import {
   CLOUD_WEB_THREAD_PAGE_SIZE,
   cloudWebThreadProjectLabel,
   cloudWebThreadProjection,
@@ -128,6 +133,28 @@ function taskSourceSessionId(task: Record<string, unknown>) {
   return text(task.sourceSessionId || task.sessionId)
 }
 
+function taskParentSessionId(task: Record<string, unknown>) {
+  return text(task.parentSessionId)
+}
+
+function taskRunHandoffSource(task: Record<string, unknown>): TaskRunHandoffSource {
+  return {
+    agent: taskCoworkerName(task),
+    sourceSessionId: taskSourceSessionId(task) || null,
+    parentSessionId: taskParentSessionId(task) || null,
+  }
+}
+
+export function buildCloudHandoffAgentBySessionId(views: Record<string, CloudWebThreadView | undefined>) {
+  const taskRuns: TaskRunHandoffSource[] = []
+  for (const view of Object.values(views)) {
+    for (const task of list<Record<string, unknown>>(runtimeProjection(view).taskRuns)) {
+      taskRuns.push(taskRunHandoffSource(task))
+    }
+  }
+  return buildTaskRunAgentBySourceSession(taskRuns)
+}
+
 function taskMeta(task: Record<string, unknown>, toolCount: number, todoCount: number, artifactCount: number) {
   const sessionId = taskSourceSessionId(task)
   return [
@@ -146,6 +173,7 @@ function taskRunNode(task: Record<string, unknown>, index: number, props: CloudR
   const todos = list<Record<string, unknown>>(task.todos)
   const artifacts = list<Record<string, unknown>>(task.artifacts).map((artifact) => cloudWebSafeArtifactMetadata(artifact))
   const sessionId = taskSourceSessionId(task)
+  const handoffAgent = resolveTaskRunHandoffAgent(taskRunHandoffSource(task), props.handoffAgentBySessionId)
   const tone = cloudWebCoworkerTone(coworker)
   const style = {
     '--studio-tone': tone,
@@ -165,7 +193,9 @@ function taskRunNode(task: Record<string, unknown>, index: number, props: CloudR
       h('span', { className: 'studio-coworker-avatar studio-coworker-avatar--sm', style, 'aria-hidden': 'true' }, cloudWebCoworkerInitials(coworker)),
       h('div', null,
         h('h3', null, coworker),
-        h('p', null, taskTitle(task, index)))),
+        h('div', { className: 'cloud-specialist-lane__subline' },
+          h('p', null, taskTitle(task, index)),
+          handoffAgent ? h('span', { className: 'studio-handoff-chip' }, 'from ', h('span', null, handoffAgent)) : null))),
     h('span', { className: 'studio-task-lane__count', 'data-kind': statusPillKind(task.status) }, text(task.status, 'working'))),
   h('ul', { className: 'studio-task-lane__items' },
     h('li', { className: 'studio-task-lane__item' },
@@ -285,9 +315,10 @@ export type CloudRuntimeActionProps = {
   onDownloadArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onInspectArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onOpenTaskSession?: (sessionId: string) => void
+  handoffAgentBySessionId?: Record<string, string>
 }
 
-export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, onInspectArtifact, onOpenTaskSession, pendingAction }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
+export function CloudChatTimeline({ view, ...props }: { view: CloudWebThreadView | null | undefined } & CloudRuntimeActionProps) {
   const projection = runtimeProjection(view)
   const messages = list<Record<string, unknown>>(projection.messages)
   const latestUserOrder = messages.reduce((max, message, index) => {
@@ -323,12 +354,12 @@ export function CloudChatTimeline({ view, onViewArtifact, onDownloadArtifact, on
     ...list<Record<string, unknown>>(projection.taskRuns).map((task, index) => ({
       kind: 'task',
       order: cloudWebRuntimeOrder(task, 2_000 + index),
-      node: taskRunNode(task, index, { onViewArtifact, onDownloadArtifact, onInspectArtifact, onOpenTaskSession, pendingAction }),
+      node: taskRunNode(task, index, props),
     })),
     ...list<Record<string, unknown>>(projection.artifacts).map((artifact, index) => ({
       kind: 'artifact',
       order: cloudWebRuntimeOrder(artifact, 3_000 + index),
-      node: artifactCardNode(artifact, index, { onViewArtifact, onDownloadArtifact, onInspectArtifact, pendingAction }),
+      node: artifactCardNode(artifact, index, props),
     })),
     ...list<Record<string, unknown>>(projection.errors).map((error, index) => ({
       kind: 'error',

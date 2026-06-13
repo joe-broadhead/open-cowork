@@ -10,6 +10,7 @@ import {
   CloudRuntimeStatus,
   CloudThreadList,
 } from './react-workbench.ts'
+import { CLOUD_DELIVERABLE_APPROVAL_COPY, CloudConversationMeta } from './react-workbench-context.ts'
 import { makeSession, makeSessionView } from './browser-test-fixtures.ts'
 
 test('React workbench components render cloud-safe thread, timeline, runtime, and artifact markup', () => {
@@ -54,6 +55,67 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.doesNotMatch(html, /signedUrl/)
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)
+})
+
+test('React workbench renders delegated handoff badges, task context, and approval-gated deliverables', () => {
+  const session = makeSession(3)
+  const view = makeSessionView(session, 10, 1)
+  view.projection.view.taskRuns = [
+    {
+      id: 'task-root',
+      title: 'Plan launch',
+      agent: 'lead-agent',
+      status: 'running',
+      content: 'Planning the launch.',
+      sourceSessionId: 'root-session',
+      order: 3,
+      toolCalls: [],
+      todos: [],
+      artifacts: [],
+    },
+    {
+      id: 'task-child',
+      title: 'Write launch notes',
+      agent: 'writer-agent',
+      status: 'completed',
+      content: 'Drafted launch notes.',
+      sourceSessionId: 'child-session',
+      parentSessionId: 'root-session',
+      order: 4,
+      toolCalls: [],
+      todos: [],
+      artifacts: [],
+    },
+  ]
+
+  const html = [
+    renderToStaticMarkup(createElement(CloudChatTimeline, {
+      view,
+      handoffAgentBySessionId: { 'root-session': 'Lead Agent' },
+    })),
+    renderToStaticMarkup(createElement(CloudConversationMeta, {
+      summary: 'default - 2 messages',
+      taskContext: {
+        projectId: 'project-1',
+        projectTitle: 'Studio redesign',
+        taskId: 'task-1',
+        taskTitle: 'Conversation polish',
+        taskStatus: 'running',
+        taskColumn: 'doing',
+        taskPriority: 'high',
+        assignedSessionId: session.sessionId,
+      },
+    })),
+    CLOUD_DELIVERABLE_APPROVAL_COPY,
+  ].join('\n')
+
+  assert.match(html, /from/)
+  assert.match(html, /Lead Agent/)
+  assert.match(html, /Project/)
+  assert.match(html, /Studio redesign/)
+  assert.match(html, /Conversation polish/)
+  assert.match(html, /Nothing ships until you approve/)
+  assert.doesNotMatch(html, /Capture to knowledge/)
 })
 
 test('React workbench marks only post-prompt assistant messages as streaming', () => {

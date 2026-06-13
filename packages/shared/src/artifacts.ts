@@ -56,6 +56,45 @@ export function inferArtifactKind(input: {
   return 'draft'
 }
 
+const SAFE_ARTIFACT_OPEN_EXTENSIONS = new Set([
+  'gif',
+  'jpeg',
+  'jpg',
+  'json',
+  'md',
+  'markdown',
+  'pdf',
+  'png',
+  'txt',
+  'webp',
+  'yaml',
+  'yml',
+])
+
+const SAFE_ARTIFACT_OPEN_MIMES = new Set([
+  'application/json',
+  'application/pdf',
+  'application/yaml',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'text/markdown',
+  'text/plain',
+  'text/yaml',
+])
+
+export function isSafeArtifactOpenTarget(input: {
+  filename?: string | null
+  mime?: string | null
+}) {
+  const filename = input.filename?.toLowerCase().trim() || ''
+  const extension = filename.includes('.') ? filename.split('.').pop() || '' : ''
+  if (!extension || !SAFE_ARTIFACT_OPEN_EXTENSIONS.has(extension)) return false
+  const mime = input.mime?.toLowerCase().split(';', 1)[0]?.trim()
+  return !mime || mime === 'application/octet-stream' || SAFE_ARTIFACT_OPEN_MIMES.has(mime)
+}
+
 export function cloudArtifactFilePath(artifactId: string, filename = 'artifact') {
   const safeFilename = filename.trim() || 'artifact'
   return `${CLOUD_ARTIFACT_FILE_PATH_PREFIX}${encodeURIComponent(artifactId)}/${encodeURIComponent(safeFilename)}`

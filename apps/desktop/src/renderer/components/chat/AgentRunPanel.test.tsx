@@ -162,16 +162,19 @@ describe('AgentRunPanel', () => {
         onToggle={vi.fn()}
         focusedTaskId="child"
         onFocusTask={onFocusTask}
+        handoffAgentBySessionId={{ 'root-session': 'research-agent' }}
       />,
     )
 
     expect(screen.getByRole('button', { name: 'Research Agent — running' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('button', { name: 'Explore — done' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Explore — done from Research Agent' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('from')).toBeInTheDocument()
+    expect(screen.getAllByText('Research Agent').length).toBeGreaterThan(0)
     expect(screen.getByText('1 deeper')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /General.*done/ })).not.toBeInTheDocument()
     expect(screen.getByText('Reviewing launch notes')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Explore — done' }))
+    await user.click(screen.getByRole('button', { name: 'Explore — done from Research Agent' }))
     expect(onFocusTask).toHaveBeenLastCalledWith(child)
 
     await user.click(screen.getByRole('button', { name: 'Research Agent — running' }))
