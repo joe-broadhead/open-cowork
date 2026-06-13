@@ -197,12 +197,13 @@ test('home launchpad in-motion row routes through the real session activation pa
     await page.reload()
     await waitForAppShell(page, 30_000)
 
-    await page.getByText('In motion', { exact: true }).waitFor({ timeout: 10_000 })
-    await page.getByRole('button', { name: new RegExp(RECENT_SOURCE_TITLE) }).click()
+    const launchpadMotion = page.locator('main .home-motion')
+    await launchpadMotion.getByText('In motion', { exact: true }).waitFor({ timeout: 10_000 })
+    await launchpadMotion.getByRole('button', { name: new RegExp(RECENT_SOURCE_TITLE) }).click()
     await page.getByText(RECENT_THREAD_MARKER, { exact: false }).waitFor({ timeout: 15_000 })
 
     await page.getByRole('button', { name: 'Home', exact: true }).first().click()
-    await page.getByRole('button', { name: new RegExp(RECENT_TARGET_TITLE) }).click()
+    await launchpadMotion.getByRole('button', { name: new RegExp(RECENT_TARGET_TITLE) }).click()
     await page.locator('main').getByText(RECENT_TARGET_TITLE, { exact: true }).waitFor({ timeout: 10_000 })
 
     const markerCount = await page.getByText(RECENT_THREAD_MARKER, { exact: false }).count()

@@ -73,6 +73,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     overscan: 8,
   })
 
+  useEffect(() => {
+    if (!virtualize) return
+    const frame = window.requestAnimationFrame(() => virtualizer.measure())
+    return () => window.cancelAnimationFrame(frame)
+  }, [filtered.length, virtualize, virtualizer])
+
   // When the active thread changes, keep it visible. Plays nice with
   // both virtualized and non-virtualized modes — in non-virtualized
   // mode the row is a real DOM node and `scrollIntoView` works; in
