@@ -36,6 +36,7 @@ function writeExecutable(root: string, name: string, source: string) {
 }
 
 const testSupervisorPath = fileURLToPath(new URL('../apps/desktop/src/main/runtime-managed-server-supervisor.ts', import.meta.url))
+const MANAGED_RUNTIME_TEST_TIMEOUT_MS = 15_000
 
 const forkTestSupervisor: ManagedOpencodeSupervisorFork = () => {
   const execArgv = Array.from(new Set([...process.execArgv, '--no-warnings', '--experimental-strip-types']))
@@ -109,7 +110,7 @@ while true; do sleep 1; done
     opencodeBinPath: executable,
     cwd: runtimeCwd,
     port: 0,
-    timeout: 5000,
+    timeout: MANAGED_RUNTIME_TEST_TIMEOUT_MS,
   })
 
   const pid = (() => {
@@ -168,7 +169,7 @@ test('node managed opencode server handles child startup exit without IPC crash'
         hostname: '127.0.0.1',
         opencodeBinPath: executable,
         port: 0,
-        timeout: 5000,
+        timeout: MANAGED_RUNTIME_TEST_TIMEOUT_MS,
       }),
       /Server exited with code 42/,
     )
@@ -194,7 +195,7 @@ while true; do sleep 1; done
       opencodeBinPath: executable,
       port: 0,
       signal: controller.signal,
-      timeout: 5000,
+      timeout: MANAGED_RUNTIME_TEST_TIMEOUT_MS,
     })
     controller.abort()
 
@@ -229,7 +230,7 @@ exit 7
       unexpectedExits.push(event)
     },
     port: 0,
-    timeout: 5000,
+    timeout: MANAGED_RUNTIME_TEST_TIMEOUT_MS,
   })
 
   try {

@@ -88,6 +88,71 @@ export function makeSessionView(session: ReturnType<typeof makeSession>, sequenc
   }
 }
 
+export function makeLaunchpadFeed(sessions: Array<ReturnType<typeof makeSession>>, views: Record<string, any>) {
+  const firstSession = sessions[0]
+  const firstView = firstSession ? views[firstSession.sessionId] : null
+  const firstArtifact = firstView?.projection?.view?.artifacts?.[0]
+  const firstApproval = firstView?.projection?.view?.pendingApprovals?.[0]
+  return {
+    generatedAt: iso(15),
+    inProgress: firstSession ? [{
+      id: 'task:launchpad',
+      kind: 'task',
+      title: 'Implement cloud launchpad',
+      projectId: 'project-cloud',
+      projectTitle: 'Studio redesign',
+      taskId: 'task-launchpad',
+      taskTitle: 'Cloud launchpad parity',
+      sessionId: firstSession.sessionId,
+      runId: 'run-launchpad',
+      assigneeAgent: firstSession.profileName || 'build',
+      status: 'running',
+      priority: 'high',
+      when: iso(16),
+      updatedAt: iso(16),
+    }] : [],
+    waitingOnYou: firstSession && firstApproval ? [{
+      id: `permission:${firstSession.sessionId}:${firstApproval.id}`,
+      kind: 'permission',
+      status: 'pending',
+      title: String(firstApproval.description || 'Approve pending work'),
+      projectId: 'project-cloud',
+      projectTitle: 'Studio redesign',
+      taskId: 'task-approval',
+      taskTitle: 'Review launchpad',
+      sessionId: firstSession.sessionId,
+      runId: 'run-approval',
+      assigneeAgent: firstSession.profileName || 'build',
+      when: iso(17),
+      updatedAt: iso(17),
+    }] : [],
+    freshArtifacts: firstSession && firstArtifact ? [{
+      id: `artifact:${firstSession.sessionId}:${firstArtifact.artifactId}`,
+      artifactId: firstArtifact.artifactId,
+      kind: 'document',
+      status: 'draft',
+      title: firstArtifact.filename || 'summary.txt',
+      projectId: 'project-cloud',
+      projectTitle: 'Studio redesign',
+      taskId: 'task-artifact',
+      taskTitle: 'Document launchpad',
+      sessionId: firstSession.sessionId,
+      runId: 'run-artifact',
+      assigneeAgent: firstSession.profileName || 'build',
+      authorAgentId: firstSession.profileName || 'build',
+      when: iso(18),
+      createdAt: iso(18),
+      updatedAt: iso(18),
+    }] : [],
+    totals: {
+      inProgress: firstSession ? 1 : 0,
+      waitingOnYou: firstSession && firstApproval ? 1 : 0,
+      freshArtifacts: firstSession && firstArtifact ? 1 : 0,
+    },
+    truncated: { inProgress: false, waitingOnYou: false, freshArtifacts: false },
+  }
+}
+
 export function makeMembers(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     accountId: `acct-${index + 1}`,

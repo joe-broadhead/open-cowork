@@ -73,6 +73,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     overscan: 8,
   })
 
+  useEffect(() => {
+    if (!virtualize) return
+    const frame = window.requestAnimationFrame(() => virtualizer.measure())
+    return () => window.cancelAnimationFrame(frame)
+  }, [filtered.length, virtualize, virtualizer])
+
   // When the active thread changes, keep it visible. Plays nice with
   // both virtualized and non-virtualized modes — in non-virtualized
   // mode the row is a real DOM node and `scrollIntoView` works; in
@@ -393,7 +399,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   }
 
   return (
-    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+    <div ref={scrollRef} className="min-h-[96px] flex-1 overflow-y-auto">
       {virtualize ? (
         <div
           style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}

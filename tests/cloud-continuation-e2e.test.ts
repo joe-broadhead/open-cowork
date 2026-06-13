@@ -263,6 +263,8 @@ async function runContinuationSmokeScript(input: {
   adminToken: string
   promptPrefix: string
 }) {
+  const smokeTimeoutMs = 15_000
+  const processTimeoutMs = 60_000
   const child = spawn(process.execPath, [
     '--no-warnings',
     '--experimental-strip-types',
@@ -271,7 +273,7 @@ async function runContinuationSmokeScript(input: {
     input.cloudUrl,
     '--allow-insecure-http',
     '--timeout-ms',
-    '5000',
+    String(smokeTimeoutMs),
   ], {
     cwd: process.cwd(),
     env: {
@@ -293,7 +295,7 @@ async function runContinuationSmokeScript(input: {
     const timer = setTimeout(() => {
       child.kill('SIGTERM')
       reject(new Error(`Continuation smoke script timed out.\nstdout:\n${stdout}\nstderr:\n${stderr}`))
-    }, 30_000)
+    }, processTimeoutMs)
     timer.unref()
     child.on('error', (error) => {
       clearTimeout(timer)

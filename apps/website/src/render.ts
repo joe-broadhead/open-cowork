@@ -15,7 +15,7 @@ import { escapeHtml, jsonScript } from './html-utils.ts'
 import { cloudWebsiteStyles } from './styles.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
-import { routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
+import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
 import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
@@ -209,7 +209,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                 <label class="sr-only" for="chat-message-input">Message</label>
                 <div class="composer-lead-row" data-has-lead="false">
                   <span class="studio-coworker-avatar studio-coworker-avatar--sm" aria-hidden="true">OC</span>
-                  <span>Lead coworker: profile default</span>
+                  <span>Assign to: profile default</span>
                 </div>
                 <div class="composer-input-chrome">
                   <textarea id="chat-message-input" class="chat-composer-textarea" name="text" rows="1" disabled placeholder="Ask anything, or @mention a coworker"></textarea>
@@ -218,7 +218,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                 <div class="composer-toolbar" aria-label="Chat controls">
                   <div class="composer-toolbar-group">
                     <button class="icon-button ghost" type="button" data-composer-attach="true" data-managed-control="true" disabled title="Cloud file attachments use project snapshots from Projects" aria-label="Attach file"></button>
-                    <label class="composer-select-label"><span class="sr-only">Coworker</span><select id="composer-agent" name="agent" disabled><option value="">Default coworker</option></select></label>
+                    <label class="composer-select-label"><span>Assign to</span><select id="composer-agent" name="agent" disabled><option value="">Default coworker</option></select></label>
                   </div>
                   <div class="composer-toolbar-group">
                     <span class="pill" id="chat-event-status" data-kind="${policy.features.chat ? 'ok' : 'warn'}">${policy.features.chat ? 'ready' : 'disabled'}</span>
@@ -226,6 +226,7 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
                   </div>
                 </div>
               </form>
+              ${cloudLaunchpadStaticMarkup()}
             </div>
             <aside class="chat-inspector ui-workbench-layout__review" id="chat-inspector" aria-label="Selected chat details" data-workbench-pane="review" hidden>
               <div class="inspector-header">

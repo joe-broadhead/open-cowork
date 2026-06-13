@@ -280,6 +280,24 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
       linkTaskWork: vi.fn(async () => null),
       taskWorkTarget: vi.fn(async () => null),
     },
+    launchpad: {
+      feed: vi.fn(async () => ({
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        inProgress: [],
+        waitingOnYou: [],
+        freshArtifacts: [],
+        totals: {
+          inProgress: 0,
+          waitingOnYou: 0,
+          freshArtifacts: 0,
+        },
+        truncated: {
+          inProgress: false,
+          waitingOnYou: false,
+          freshArtifacts: false,
+        },
+      })),
+    },
     channels: {
       providers: vi.fn(async () => []),
       agents: vi.fn(async () => []),

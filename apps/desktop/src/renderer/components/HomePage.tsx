@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrandingHomeConfig, SessionInfo, SessionPromptOptions } from '@open-cowork/shared'
+import type {
+  BrandingHomeConfig,
+  LaunchpadFeedPayload,
+  LaunchpadFreshArtifactItem,
+  LaunchpadInProgressItem,
+  LaunchpadWaitingItem,
+  SessionPromptOptions,
+} from '@open-cowork/shared'
 import { useSessionStore, type PrimaryAgentMode } from '../stores/session'
 import { useActiveWorkspaceSupport } from '../stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from '../stores/session-workspace-keys'
+import type { AppNavigationTarget } from '../app-types'
 import { formatAgentLabel } from '../helpers/agent-label'
 import { formatDate, t } from '../helpers/i18n'
 import { summarizeMcpConnections } from '../helpers/mcp-status-summary'
-import { nextPrimaryAgentMode, primaryAgentLeadLabel } from '../helpers/primary-agent-mode'
+import { PRIMARY_AGENT_MODES, primaryAgentLeadLabel } from '../helpers/primary-agent-mode'
 import { ChatInputAttachments } from './chat/ChatInputAttachments'
 import { ChatInputInlinePicker } from './chat/ChatInputInlinePicker'
 import { ChatInputModelMenu } from './chat/ChatInputModelMenu'
@@ -22,11 +30,10 @@ import type { Attachment, InlinePickerState, MentionableAgent } from './chat/cha
 import {
   Badge,
   Card,
-  CoworkerCard,
   EmptyState,
   Icon,
   IconButton,
-  ProjectCard,
+  type IconName,
   ReviewPanel,
   TaskLane,
   type StudioTone,
@@ -40,6 +47,7 @@ interface Props {
   homeBranding?: BrandingHomeConfig
   onStartThread: (text: string, attachments?: Attachment[], agent?: string, options?: SessionPromptOptions) => Promise<void>
   onOpenThread: (sessionId: string) => void | Promise<void>
+  onNavigate: (target: AppNavigationTarget) => void
 }
 
 // Single, stable greeting. We experimented with a rotation but the
@@ -53,7 +61,7 @@ const GREETING_FALLBACK = 'What should your team tackle today?'
 // show. Kept small deliberately — the page is "get started", not
 // "everything at once".
 const MAX_SUGGESTIONS = 4
-const MAX_RECENT_THREADS = 3
+const MAX_MOTION_ITEMS = 3
 const HOME_COACHMARK_DISMISSED_KEY = 'open-cowork-home-coachmark-dismissed'
 
 // Upper bound on the composer's auto-grow. Past ~220px the textarea
@@ -66,20 +74,63 @@ const EXAMPLE_PROMPTS = [
   {
     title: 'Plan a release',
     prompt: 'Draft a release plan for the next milestone.',
+    agentMode: 'plan',
+    icon: 'kanban',
   },
   {
     title: 'Review a change',
     prompt: 'Review the recent changes and call out production risks.',
+    agentMode: 'build',
+    icon: 'file-diff',
   },
   {
     title: 'Create a workflow',
     prompt: 'Help me turn a repeated task into a saved workflow.',
+    agentMode: 'chief-of-staff',
+    icon: 'workflow',
   },
   {
     title: 'Investigate an issue',
     prompt: 'Trace this bug from symptoms to a concrete fix.',
+    agentMode: 'build',
+    icon: 'search',
   },
-]
+] satisfies Array<{ title: string; prompt: string; agentMode: PrimaryAgentMode; icon: IconName }>
+
+const DEFAULT_PRIMARY_AGENT_MODE: PrimaryAgentMode = 'build'
+
+function allowedPrimaryAgentModes(allowedAgents: string[] | null | undefined): PrimaryAgentMode[] {
+  if (!allowedAgents) return [...PRIMARY_AGENT_MODES]
+  const allowed = new Set(allowedAgents)
+  return PRIMARY_AGENT_MODES.filter((mode) => allowed.has(mode))
+}
+
+function constrainedPrimaryAgentMode(mode: PrimaryAgentMode, allowedModes: PrimaryAgentMode[]) {
+  return allowedModes.includes(mode) ? mode : (allowedModes[0] || DEFAULT_PRIMARY_AGENT_MODE)
+}
+
+function nextAllowedPrimaryAgentMode(mode: PrimaryAgentMode, allowedModes: PrimaryAgentMode[]) {
+  const modes = allowedModes.length ? allowedModes : [DEFAULT_PRIMARY_AGENT_MODE]
+  const currentIndex = modes.indexOf(mode)
+  return modes[(currentIndex + 1) % modes.length] || modes[0] || DEFAULT_PRIMARY_AGENT_MODE
+}
+
+const EMPTY_LAUNCHPAD_FEED: LaunchpadFeedPayload = {
+  generatedAt: '',
+  inProgress: [],
+  waitingOnYou: [],
+  freshArtifacts: [],
+  totals: {
+    inProgress: 0,
+    waitingOnYou: 0,
+    freshArtifacts: 0,
+  },
+  truncated: {
+    inProgress: false,
+    waitingOnYou: false,
+    freshArtifacts: false,
+  },
+}
 
 function interpolateCopy(value: string, vars?: Record<string, string | number>) {
   if (!vars) return value
@@ -156,6 +207,9 @@ function HomeComposer({
   disabled,
   placeholder,
   specialistAgents,
+  allowedPrimaryModes,
+  allowedAgentNames,
+  fallbackAgent,
   prefillAgent,
   prefillPrompt,
   workspaceOptions,
@@ -170,6 +224,9 @@ function HomeComposer({
   disabled: boolean
   placeholder: string
   specialistAgents: MentionableAgent[]
+  allowedPrimaryModes: PrimaryAgentMode[]
+  allowedAgentNames?: string[] | null
+  fallbackAgent?: string | null
   prefillAgent: { id: string; nonce: number } | null
   prefillPrompt: { text: string; nonce: number } | null
   workspaceOptions?: { workspaceId: string }
@@ -185,6 +242,7 @@ function HomeComposer({
   const [dragOver, setDragOver] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [showReasoningMenu, setShowReasoningMenu] = useState(false)
+  const [showAssignMenu, setShowAssignMenu] = useState(false)
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputChromeRef = useRef<HTMLDivElement>(null)
@@ -192,6 +250,8 @@ function HomeComposer({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const modelBtnRef = useRef<HTMLButtonElement>(null)
   const reasoningBtnRef = useRef<HTMLButtonElement>(null)
+  const assignBtnRef = useRef<HTMLButtonElement>(null)
+  const assignMenuRef = useRef<HTMLDivElement>(null)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -199,6 +259,30 @@ function HomeComposer({
   const promptPolicyReason = sendDisabledReason || t('chat.sendDisabled', 'Prompting is disabled by this workspace policy.')
   const { currentModel, setCurrentModel, provider, availableModels } = useChatRuntimeSelection(null, workspaceOptions)
   const reasoningSelection = useReasoningVariantSelection(provider, currentModel, availableModels)
+  const assignOptions = [
+    {
+      id: 'build' as const,
+      label: t('home.assign.build', 'Build'),
+      role: t('home.assign.buildRole', 'Implementation lead'),
+      summary: t('home.assign.buildSummary', 'Best for edits, tests, packaging, and follow-through.'),
+    },
+    {
+      id: 'plan' as const,
+      label: t('home.assign.plan', 'Plan'),
+      role: t('home.assign.planRole', 'Strategy lead'),
+      summary: t('home.assign.planSummary', 'Best for scoping, decomposition, and risk calls.'),
+    },
+    {
+      id: 'chief-of-staff' as const,
+      label: t('home.assign.cleo', 'Cleo'),
+      role: t('home.assign.cleoRole', 'Chief-of-Staff'),
+      summary: t('home.assign.cleoSummary', 'Best for turning objectives into assigned tasks.'),
+    },
+  ]
+  const visibleAssignOptions = assignOptions.filter((option) => allowedPrimaryModes.includes(option.id))
+  const primaryLeadAvailable = visibleAssignOptions.length > 0
+  const activeAgentMode = constrainedPrimaryAgentMode(agentMode, allowedPrimaryModes)
+  const activeAssignOption = visibleAssignOptions.find((option) => option.id === activeAgentMode) || visibleAssignOptions[0] || assignOptions[0]!
 
   useEffect(() => {
     // Autofocus on mount — the composer is the primary action on Home,
@@ -269,7 +353,15 @@ function HomeComposer({
     const promptText = directInvocation.text || (attachments.length > 0 ? t('home.imageOnlyPrompt', 'Describe this image.') : '')
     if (!promptText && attachments.length === 0) return
     const currentAttachments = [...attachments]
-    const promptAgent = directInvocation.agent || agentMode
+    if (directInvocation.agent && allowedAgentNames && !allowedAgentNames.includes(directInvocation.agent)) {
+      addGlobalError(t('home.assign.agentNotAllowed', 'That coworker is not allowed by this cloud profile.'))
+      return
+    }
+    const promptAgent = directInvocation.agent || (primaryLeadAvailable ? activeAgentMode : fallbackAgent || undefined)
+    if (!promptAgent && !primaryLeadAvailable) {
+      addGlobalError(t('home.assign.noAllowedAgent', 'This cloud profile does not expose an allowed coworker for Home prompts.'))
+      return
+    }
     const promptOptions = modelControlsManaged ? undefined : reasoningSelection.promptOptions
     if (promptOptions) {
       await onSubmit(promptText, currentAttachments, promptAgent, promptOptions)
@@ -280,7 +372,7 @@ function HomeComposer({
     setAttachments([])
     setInlinePicker(null)
     autosize()
-  }, [text, attachments, disabled, canPrompt, attachmentsAllowed, specialistAgents, agentMode, modelControlsManaged, reasoningSelection.promptOptions, onSubmit, addGlobalError, promptPolicyReason, attachmentPolicyReason])
+  }, [text, attachments, disabled, canPrompt, attachmentsAllowed, specialistAgents, allowedAgentNames, activeAgentMode, primaryLeadAvailable, fallbackAgent, modelControlsManaged, reasoningSelection.promptOptions, onSubmit, addGlobalError, promptPolicyReason, attachmentPolicyReason])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -326,6 +418,21 @@ function HomeComposer({
     document.addEventListener('mousedown', handlePointerDown, true)
     return () => document.removeEventListener('mousedown', handlePointerDown, true)
   }, [inlinePicker])
+
+  useEffect(() => {
+    if (!showAssignMenu) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+      if (assignMenuRef.current?.contains(target)) return
+      if (assignBtnRef.current?.contains(target)) return
+      setShowAssignMenu(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown, true)
+    return () => document.removeEventListener('mousedown', handlePointerDown, true)
+  }, [showAssignMenu])
 
   // Composer chrome is deliberately quiet at rest — the borders use a
   // static `rgba` so the theme's purple accent never bleeds in through
@@ -396,7 +503,7 @@ function HomeComposer({
       />
       <div
         ref={inputChromeRef}
-        className="w-full rounded-t-[18px] px-4 py-3 flex items-end gap-3 transition-colors"
+        className="w-full rounded-t-[18px] px-4 py-3 grid gap-3 transition-colors"
         style={{
           background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-elevated) 86%, var(--color-base) 14%), color-mix(in srgb, var(--color-elevated) 70%, var(--color-base) 30%))',
           border: dragOver ? dropBorder : restBorder,
@@ -405,6 +512,61 @@ function HomeComposer({
             : '0 22px 80px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.035)',
         }}
       >
+        <div className="home-composer-assign-row">
+          <span className="home-composer-assign-label">{t('home.assign.label', 'Assign to')}</span>
+          <div className="relative min-w-0">
+            <button
+              ref={assignBtnRef}
+              type="button"
+              className="home-assign-pill"
+              aria-haspopup="menu"
+              aria-expanded={showAssignMenu}
+              disabled={!primaryLeadAvailable}
+              title={!primaryLeadAvailable ? t('home.assign.noPrimaryLead', 'This cloud profile does not expose a primary lead coworker.') : undefined}
+              onClick={() => {
+                if (!primaryLeadAvailable) return
+                setInlinePicker(null)
+                setShowModelMenu(false)
+                setShowReasoningMenu(false)
+                setShowAssignMenu((current) => !current)
+              }}
+            >
+              <span className="home-assign-avatar" aria-hidden="true">{primaryLeadAvailable ? activeAssignOption.label.slice(0, 1) : 'P'}</span>
+              <span className="min-w-0 truncate">{primaryLeadAvailable ? activeAssignOption.label : t('home.assign.profileDefault', 'Profile default')}</span>
+              {primaryLeadAvailable && activeAssignOption.id === 'build' && <span className="home-assign-default">{t('home.assign.default', 'default')}</span>}
+              {primaryLeadAvailable && <Icon name="chevron-down" size={16} className="shrink-0 text-text-muted" />}
+            </button>
+            {showAssignMenu && primaryLeadAvailable && (
+              <div ref={assignMenuRef} className="home-assign-menu" role="menu" aria-label={t('home.assign.menuLabel', 'Assign lead coworker')}>
+                {visibleAssignOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={activeAgentMode === option.id}
+                    className="home-assign-option"
+                    onClick={() => {
+                      setAgentMode(option.id)
+                      setShowAssignMenu(false)
+                      textareaRef.current?.focus()
+                    }}
+                  >
+                    <span className="home-assign-avatar" aria-hidden="true">{option.label.slice(0, 1)}</span>
+                    <span className="min-w-0">
+                      <span className="home-assign-option-title">{option.label}</span>
+                      <span className="home-assign-option-meta">{option.role}</span>
+                      <span className="home-assign-option-summary">{option.summary}</span>
+                    </span>
+                    {option.id === activeAgentMode && <Icon name="check" size={16} className="shrink-0 text-accent" />}
+                  </button>
+                ))}
+                <p className="home-assign-note">
+                  {t('home.assign.specialistNote', 'Specialists can still be mentioned with @ and delegated by the lead.')}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
         <textarea
           ref={textareaRef}
           data-no-focus-ring
@@ -507,7 +669,7 @@ function HomeComposer({
           reasoningLabel={formatReasoningVariantLabel(reasoningSelection.reasoningVariant)}
           showReasoningControl={reasoningSelection.supportsReasoning}
           currentDirectory={null}
-          agentMode={agentMode}
+          agentMode={activeAgentMode}
           currentSessionId={null}
           isGenerating={false}
           isAwaitingPermission={false}
@@ -532,7 +694,9 @@ function HomeComposer({
             setShowModelMenu(false)
             setShowReasoningMenu(!showReasoningMenu)
           }}
-          onToggleAgentMode={() => setAgentMode(nextPrimaryAgentMode(agentMode))}
+          onToggleAgentMode={() => {
+            if (primaryLeadAvailable) setAgentMode(nextAllowedPrimaryAgentMode(activeAgentMode, allowedPrimaryModes))
+          }}
           onFork={() => undefined}
           onStop={() => undefined}
           onSubmit={handleSubmit}
@@ -586,130 +750,253 @@ function HomeComposer({
   )
 }
 
-function coworkerTone(index: number): StudioTone {
-  const tones: StudioTone[] = ['strategist', 'builder', 'reviewer', 'operator']
-  return tones[index % tones.length] || 'neutral'
-}
-
-function LeadCoworkers({
-  agents,
+function LaunchpadSuggestions({
+  allowedPrimaryModes,
   onPick,
-  label,
-  agentMode,
-  onSetAgentMode,
 }: {
-  agents: Array<{ id: string; label: string; description: string }>
-  onPick: (agentId: string) => void
-  agentMode: PrimaryAgentMode
-  onSetAgentMode: (mode: PrimaryAgentMode) => void
-  label: string
+  allowedPrimaryModes: PrimaryAgentMode[]
+  onPick: (prompt: string, agentMode: PrimaryAgentMode) => void
 }) {
   return (
-    <div className="home-studio-section w-full mt-9">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[11px] uppercase text-text-muted">{label}</div>
-          <div className="mt-1 text-[13px] text-text-secondary">
-            {t('home.coworkers.subtitle', 'Choose a lead mode or mention a specialist coworker from the OpenCode agent catalog.')}
-          </div>
-        </div>
-        <Badge tone="accent">{primaryAgentLeadLabel(agentMode)}</Badge>
-      </div>
-      <div className="home-coworker-grid">
-        <CoworkerCard
-          name={t('home.coworkers.build.name', 'Build')}
-          role={t('home.coworkers.build.role', 'Lead implementation coworker')}
-          summary={t('home.coworkers.build.summary', 'Best for concrete edits, tests, packaging, and production follow-through.')}
-          tone="builder"
-          mode={agentMode === 'build' ? t('home.coworkers.active', 'Active') : undefined}
-          status={{ label: agentMode === 'build' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'build' ? 'success' : 'neutral' }}
-          actions={[{
-            id: 'build',
-            children: t('home.coworkers.useBuild', 'Use Build'),
-            variant: agentMode === 'build' ? 'primary' : 'secondary',
-            onClick: () => onSetAgentMode('build'),
-          }]}
-        />
-        <CoworkerCard
-          name={t('home.coworkers.plan.name', 'Plan')}
-          role={t('home.coworkers.plan.role', 'Lead strategy coworker')}
-          summary={t('home.coworkers.plan.summary', 'Best for scoping, decomposing risky work, and deciding what should happen before code changes.')}
-          tone="strategist"
-          mode={agentMode === 'plan' ? t('home.coworkers.active', 'Active') : undefined}
-          status={{ label: agentMode === 'plan' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'plan' ? 'success' : 'neutral' }}
-          actions={[{
-            id: 'plan',
-            children: t('home.coworkers.usePlan', 'Use Plan'),
-            variant: agentMode === 'plan' ? 'primary' : 'secondary',
-            onClick: () => onSetAgentMode('plan'),
-          }]}
-        />
-        <CoworkerCard
-          name={t('home.coworkers.cleo.name', 'Cleo')}
-          role={t('home.coworkers.cleo.role', 'Chief-of-Staff planner')}
-          summary={t('home.coworkers.cleo.summary', 'Best for turning an objective into specced tasks and assigning the right coworkers.')}
-          tone="operator"
-          mode={agentMode === 'chief-of-staff' ? t('home.coworkers.active', 'Active') : undefined}
-          status={{ label: agentMode === 'chief-of-staff' ? t('home.coworkers.selected', 'Selected') : t('home.coworkers.available', 'Available'), tone: agentMode === 'chief-of-staff' ? 'success' : 'neutral' }}
-          actions={[{
-            id: 'chief-of-staff',
-            children: t('home.coworkers.useCleo', 'Use Cleo'),
-            variant: agentMode === 'chief-of-staff' ? 'primary' : 'secondary',
-            onClick: () => onSetAgentMode('chief-of-staff'),
-          }]}
-        />
-        {agents.slice(0, MAX_SUGGESTIONS).map((agent, index) => (
-          <CoworkerCard
-            key={agent.id}
-            name={agent.label}
-            role={t('home.coworkers.specialistRole', 'Specialist coworker')}
-            summary={agent.description || t('home.coworkers.specialistSummary', 'Focused delegated work through an OpenCode agent.')}
-            tone={coworkerTone(index)}
-            mode={`@${agent.id}`}
-            status={{ label: t('home.coworkers.mentionable', 'Mentionable'), tone: 'accent' }}
-            actions={[{
-              id: agent.id,
-              children: `@${agent.label}`,
-              variant: 'ghost',
-              onClick: () => onPick(agent.id),
-            }]}
-          />
-        ))}
+    <div className="w-full mt-7">
+      <EmptyState
+        icon="sparkles"
+        title={t('home.suggestions.launchpadTitle', 'Start with a handoff')}
+        body={t('home.suggestions.launchpadBody', 'Pick a starter task, choose the lead coworker, then adjust the prompt for your work.')}
+      />
+      <div className="home-example-grid">
+        {EXAMPLE_PROMPTS.map((example) => {
+          const primaryLeadAvailable = allowedPrimaryModes.length > 0
+          const agentMode = constrainedPrimaryAgentMode(example.agentMode, allowedPrimaryModes)
+          const content = (
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 text-accent">
+                  <Icon name={example.icon} size={16} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium text-text">{example.title}</span>
+                  <span className="mt-1 block text-[11px] leading-snug text-text-muted">{example.prompt}</span>
+                  <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-text-secondary">
+                    <Icon name="at-sign" size={16} />
+                    {primaryLeadAvailable
+                      ? primaryAgentLeadLabel(agentMode)
+                      : t('home.suggestions.noPrimaryLead', 'No primary lead in this profile')}
+                  </span>
+                </span>
+              </div>
+          )
+          return primaryLeadAvailable ? (
+            <Card
+              key={example.title}
+              interactive
+              padding="md"
+              onClick={() => onPick(example.prompt, agentMode)}
+              aria-label={`${example.title}: ${example.prompt}`}
+            >
+              {content}
+            </Card>
+          ) : (
+            <Card
+              key={example.title}
+              padding="md"
+              aria-disabled="true"
+              aria-label={`${example.title}: ${example.prompt}`}
+            >
+              {content}
+            </Card>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-function FirstRunExamples({ onPick }: { onPick: (prompt: string) => void }) {
+type MotionColumnConfig<TItem> = {
+  key: string
+  title: string
+  icon: IconName
+  tone: StudioTone
+  total: number
+  truncated: boolean
+  items: TItem[]
+  empty: string
+  onOpen: (item: TItem) => void
+  meta: (item: TItem) => string
+  badge: (item: TItem) => string
+}
+
+function motionWhenLabel(value: string | null | undefined) {
+  if (!value) return null
+  return formatDate(value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function motionMeta(item: LaunchpadInProgressItem | LaunchpadWaitingItem | LaunchpadFreshArtifactItem) {
+  return [
+    item.projectTitle || item.taskTitle || null,
+    item.assigneeAgent ? `@${item.assigneeAgent}` : null,
+    motionWhenLabel(item.when),
+  ].filter(Boolean).join(' · ')
+}
+
+function MotionColumn<TItem extends LaunchpadInProgressItem | LaunchpadWaitingItem | LaunchpadFreshArtifactItem>({
+  config,
+}: {
+  config: MotionColumnConfig<TItem>
+}) {
   return (
-    <div className="w-full mt-7">
-      <EmptyState
-        icon="sparkles"
-        title={t('home.firstRunTitle', 'Start with an example')}
-        body={t('home.firstRunBody', 'Pick a prompt to prefill the composer, then adjust it for your work.')}
-      />
-      <div className="home-example-grid">
-        {EXAMPLE_PROMPTS.map((example) => (
-          <Card
-            key={example.title}
-            interactive
-            padding="md"
-            onClick={() => onPick(example.prompt)}
-            aria-label={`${example.title}: ${example.prompt}`}
+    <div className="home-motion-column" data-tone={config.tone}>
+      <div className="home-motion-column-head">
+        <span className="inline-flex min-w-0 items-center gap-2">
+          <Icon name={config.icon} size={16} />
+          <span className="truncate">{config.title}</span>
+        </span>
+        <Badge tone={config.total > 0 ? 'accent' : 'neutral'}>
+          {config.truncated ? `${config.total}+` : config.total}
+        </Badge>
+      </div>
+      <div className="home-motion-list">
+        {config.items.length > 0 ? config.items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="home-motion-row"
+            onClick={() => config.onOpen(item)}
           >
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-accent">
-                <Icon name="sparkles" size={16} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13px] font-medium text-text">{example.title}</span>
-                <span className="mt-1 block text-[11px] leading-snug text-text-muted">{example.prompt}</span>
-              </span>
-            </div>
-          </Card>
-        ))}
+            <span className="home-motion-icon" aria-hidden="true">
+              <Icon name={config.icon} size={16} />
+            </span>
+            <span className="home-motion-text">
+              <span className="home-motion-title">{item.title}</span>
+              <span className="home-motion-meta">{config.meta(item)}</span>
+            </span>
+            <span className="home-motion-badge">{config.badge(item)}</span>
+          </button>
+        )) : (
+          <div className="home-motion-empty">{config.empty}</div>
+        )}
       </div>
     </div>
+  )
+}
+
+function LaunchpadMotionGrid({
+  feed,
+  loading,
+  error,
+  onNavigate,
+  onOpenThread,
+  onOpenArtifact,
+}: {
+  feed: LaunchpadFeedPayload
+  loading: boolean
+  error: string | null
+  onNavigate: (target: AppNavigationTarget) => void
+  onOpenThread: (sessionId: string) => void
+  onOpenArtifact: (item: LaunchpadFreshArtifactItem) => void
+}) {
+  const inProgressColumn: MotionColumnConfig<LaunchpadInProgressItem> = {
+    key: 'in-progress',
+    title: t('home.motion.inProgress', 'In progress'),
+    icon: 'kanban',
+    tone: 'builder',
+    total: feed.totals.inProgress,
+    truncated: feed.truncated.inProgress,
+    items: feed.inProgress.slice(0, MAX_MOTION_ITEMS),
+    empty: t('home.motion.noInProgress', 'No active tasks yet.'),
+    onOpen: (item) => item.sessionId ? onOpenThread(item.sessionId) : onNavigate('projects'),
+    meta: motionMeta,
+    badge: (item) => item.priority.toUpperCase(),
+  }
+  const waitingColumn: MotionColumnConfig<LaunchpadWaitingItem> = {
+    key: 'waiting',
+    title: t('home.motion.waiting', 'Waiting on you'),
+    icon: 'bell',
+    tone: 'operator',
+    total: feed.totals.waitingOnYou,
+    truncated: feed.truncated.waitingOnYou,
+    items: feed.waitingOnYou.slice(0, MAX_MOTION_ITEMS),
+    empty: t('home.motion.noWaiting', 'No approvals or questions waiting.'),
+    onOpen: (item) => item.sessionId ? onOpenThread(item.sessionId) : onNavigate('approvals'),
+    meta: motionMeta,
+    badge: (item) => item.kind === 'permission' ? t('home.motion.permission', 'Approval') : t('home.motion.question', 'Question'),
+  }
+  const artifactsColumn: MotionColumnConfig<LaunchpadFreshArtifactItem> = {
+    key: 'artifacts',
+    title: t('home.motion.artifacts', 'Fresh artifacts'),
+    icon: 'file',
+    tone: 'strategist',
+    total: feed.totals.freshArtifacts,
+    truncated: feed.truncated.freshArtifacts,
+    items: feed.freshArtifacts.slice(0, MAX_MOTION_ITEMS),
+    empty: t('home.motion.noArtifacts', 'No new artifacts yet.'),
+    onOpen: onOpenArtifact,
+    meta: motionMeta,
+    badge: (item) => item.status,
+  }
+
+  return (
+    <div className="home-motion w-full mt-10" aria-busy={loading}>
+      <div className="home-motion-head">
+        <span>{t('home.motion.title', 'In motion')}</span>
+        <span className="home-motion-line" aria-hidden="true" />
+        {loading && <Badge tone="neutral">{t('home.motion.loading', 'Loading')}</Badge>}
+        {error && <Badge tone="warning">{t('home.motion.error', 'Feed unavailable')}</Badge>}
+      </div>
+      <div className="home-motion-grid">
+        <MotionColumn config={inProgressColumn} />
+        <MotionColumn config={waitingColumn} />
+        <MotionColumn config={artifactsColumn} />
+      </div>
+      {error && (
+        <p className="mt-3 text-center text-[12px] text-text-muted">
+          {t('home.motion.errorDetail', 'Showing the launchpad shell while live feed data reconnects.')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function TeamStrip({
+  agents,
+  allowedPrimaryModes,
+  allowedAgentNames,
+  onNavigate,
+}: {
+  agents: Array<{ id: string; label: string }>
+  allowedPrimaryModes: PrimaryAgentMode[]
+  allowedAgentNames?: string[] | null
+  onNavigate: (target: AppNavigationTarget) => void
+}) {
+  const primaryAgentOptions = [
+    { id: 'build', label: t('home.coworkers.build.name', 'Build') },
+    { id: 'plan', label: t('home.coworkers.plan.name', 'Plan') },
+    { id: 'chief-of-staff', label: t('home.coworkers.cleo.name', 'Cleo') },
+  ] satisfies Array<{ id: PrimaryAgentMode; label: string }>
+  const primaryAgents = primaryAgentOptions.filter((agent) => allowedPrimaryModes.includes(agent.id))
+  const knownAgentIds = new Set([...primaryAgents.map((agent) => agent.id), ...agents.map((agent) => agent.id)])
+  const specialistAgents = allowedAgentNames
+    ? agents.filter((agent) => allowedAgentNames.includes(agent.id))
+    : agents
+  const allowedUnknownAgents = allowedAgentNames
+    ? allowedAgentNames
+      .filter((agentId) => !knownAgentIds.has(agentId))
+      .map((agentId) => ({ id: agentId, label: formatAgentLabel(agentId) }))
+    : []
+  const team = [...primaryAgents, ...specialistAgents, ...allowedUnknownAgents].slice(0, 8)
+  const teamCount = allowedAgentNames ? allowedAgentNames.length : primaryAgents.length + agents.length
+
+  return (
+    <button type="button" className="home-team-strip mt-9" onClick={() => onNavigate('team')}>
+      <span className="home-team-label">{t('home.team.title', 'Your team')}</span>
+      <span className="home-team-avatars" aria-hidden="true">
+        {team.map((agent) => (
+          <span key={agent.id} className="home-team-avatar">{agent.label.slice(0, 2).toUpperCase()}</span>
+        ))}
+      </span>
+      <span className="home-team-label">
+        {t('home.team.manage', '{{count}} coworkers · manage', { count: teamCount })}
+      </span>
+    </button>
   )
 }
 
@@ -726,45 +1013,6 @@ function HomeCoachmark({ onDismiss }: { onDismiss: () => void }) {
         size="sm"
         onClick={onDismiss}
       />
-    </div>
-  )
-}
-
-function RecentProjects({ threads, onOpen }: {
-  threads: SessionInfo[]
-  onOpen: (sessionId: string) => void
-}) {
-  if (threads.length === 0) return null
-  return (
-    <div className="w-full mt-10">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[11px] uppercase text-text-muted">
-            {t('home.recent.title', 'Pick up where you left off')}
-          </div>
-          <div className="mt-1 text-[13px] text-text-secondary">
-            {t('home.recent.subtitle', 'Recent project chats stay backed by real OpenCode sessions.')}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {threads.slice(0, MAX_RECENT_THREADS).map((thread) => (
-          <ProjectCard
-            key={thread.id}
-            title={thread.title || t('home.recent.untitled', 'Untitled project chat')}
-            description={thread.directory || t('home.recent.chatOnly', 'Chat-only project')}
-            status={{ label: t('home.recent.open', 'Open'), tone: 'accent' }}
-            meta={thread.updatedAt ? formatDate(thread.updatedAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null}
-            actions={[{
-              id: 'open',
-              children: t('home.recent.openChat', 'Open chat'),
-              onClick: () => onOpen(thread.id),
-              variant: 'secondary',
-              rightIcon: 'chevron-right',
-            }]}
-          />
-        ))}
-      </div>
     </div>
   )
 }
@@ -843,21 +1091,27 @@ function StatusStrip({ readyLabel }: { readyLabel: string }) {
   )
 }
 
-export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread }: Props) {
+export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread, onNavigate }: Props) {
   const sessions = useSessionStore((s) => s.sessions)
   const currentView = useSessionStore((s) => s.currentView)
-  const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
   const [submitting, setSubmitting] = useState(false)
-  const [agentPrefill, setAgentPrefill] = useState<{ id: string; nonce: number } | null>(null)
   const [promptPrefill, setPromptPrefill] = useState<{ text: string; nonce: number } | null>(null)
   const [coachmarkDismissed, setCoachmarkDismissed] = useState(readHomeCoachmarkDismissed)
+  const [launchpadFeed, setLaunchpadFeed] = useState<LaunchpadFeedPayload>(EMPTY_LAUNCHPAD_FEED)
+  const [launchpadLoading, setLaunchpadLoading] = useState(true)
+  const [launchpadError, setLaunchpadError] = useState<string | null>(null)
+  const launchpadRequestIdRef = useRef(0)
   const workspaceSupport = useActiveWorkspaceSupport()
   const activeWorkspaceIsLocal = workspaceSupport.workspaceId === LOCAL_WORKSPACE_ID
   const workspaceOptions = useMemo(
     () => activeWorkspaceIsLocal ? undefined : { workspaceId: workspaceSupport.workspaceId },
     [activeWorkspaceIsLocal, workspaceSupport.workspaceId],
   )
+  const [allowedPrimaryModes, setAllowedPrimaryModes] = useState<PrimaryAgentMode[]>(() => [...PRIMARY_AGENT_MODES])
+  const [allowedAgentNames, setAllowedAgentNames] = useState<string[] | null>(null)
+  const [fallbackPromptAgent, setFallbackPromptAgent] = useState<string | null>(null)
+  const [agentPolicyStatus, setAgentPolicyStatus] = useState<'ready' | 'loading' | 'error'>('ready')
   const specialistAgents = useMentionableAgents(null, workspaceOptions)
 
   const suggestedAgents = useMemo(() => {
@@ -870,11 +1124,94 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
       .slice(0, MAX_SUGGESTIONS)
   }, [specialistAgents])
 
-  const recentThreads = useMemo(
-    () => sessions.filter((session) => (session.kind || 'interactive') === 'interactive').slice(0, MAX_RECENT_THREADS),
+  const firstRun = sessions.filter((session) => (session.kind || 'interactive') === 'interactive').length === 0
+  const sessionFeedKey = useMemo(
+    () => sessions
+      .map((session) => `${session.id}:${session.updatedAt}:${session.title || ''}:${session.kind || 'interactive'}`)
+      .join('|'),
     [sessions],
   )
-  const firstRun = recentThreads.length === 0
+
+  useEffect(() => {
+    let cancelled = false
+    if (activeWorkspaceIsLocal) {
+      setAllowedPrimaryModes([...PRIMARY_AGENT_MODES])
+      setAllowedAgentNames(null)
+      setFallbackPromptAgent(null)
+      setAgentPolicyStatus('ready')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setAgentPolicyStatus('loading')
+    setAllowedPrimaryModes([])
+    setAllowedAgentNames([])
+    setFallbackPromptAgent(null)
+    void window.coworkApi.workspace.policy(workspaceSupport.workspaceId).then((policy) => {
+      if (cancelled) return
+      setAllowedPrimaryModes(allowedPrimaryAgentModes(policy.allowedAgents))
+      setAllowedAgentNames(Array.isArray(policy.allowedAgents) ? policy.allowedAgents : null)
+      setFallbackPromptAgent(Array.isArray(policy.allowedAgents) ? policy.allowedAgents[0] || null : null)
+      setAgentPolicyStatus('ready')
+    }).catch(() => {
+      if (!cancelled) {
+        setAllowedPrimaryModes([])
+        setAllowedAgentNames([])
+        setFallbackPromptAgent(null)
+        setAgentPolicyStatus('error')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeWorkspaceIsLocal, workspaceSupport.workspaceId])
+
+  const agentPolicyReady = activeWorkspaceIsLocal || agentPolicyStatus === 'ready'
+  const effectiveAllowedPrimaryModes = agentPolicyReady ? allowedPrimaryModes : []
+  const effectiveAllowedAgentNames = agentPolicyReady ? allowedAgentNames : []
+  const effectiveFallbackPromptAgent = agentPolicyReady ? fallbackPromptAgent : null
+  const canPromptFromHome = workspaceSupport.flags.canPrompt && agentPolicyReady
+  const promptDisabledReason = agentPolicyReady ? workspaceSupport.flags.reasons.prompt : t('home.assign.policyLoading', 'Checking cloud profile policy.')
+
+  useEffect(() => {
+    const nextMode = constrainedPrimaryAgentMode(useSessionStore.getState().agentMode, effectiveAllowedPrimaryModes)
+    if (nextMode !== useSessionStore.getState().agentMode) setAgentMode(nextMode)
+  }, [effectiveAllowedPrimaryModes, setAgentMode])
+
+  useEffect(() => {
+    let cancelled = false
+    const timeout = window.setTimeout(() => {
+      const requestId = launchpadRequestIdRef.current + 1
+      launchpadRequestIdRef.current = requestId
+      setLaunchpadLoading(true)
+      setLaunchpadError(null)
+      void window.coworkApi.launchpad.feed({
+        ...(workspaceOptions || {}),
+        limit: MAX_MOTION_ITEMS,
+      }).then((feed) => {
+        if (cancelled || requestId !== launchpadRequestIdRef.current) return
+        setLaunchpadFeed(feed)
+      }).catch((error) => {
+        if (cancelled || requestId !== launchpadRequestIdRef.current) return
+        setLaunchpadFeed(EMPTY_LAUNCHPAD_FEED)
+        setLaunchpadError(error instanceof Error ? error.message : String(error))
+      }).finally(() => {
+        if (!cancelled && requestId === launchpadRequestIdRef.current) setLaunchpadLoading(false)
+      })
+    }, 150)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [
+    workspaceOptions,
+    sessionFeedKey,
+    currentView.lastEventAt,
+    currentView.revision,
+  ])
 
   const handleSubmit = useCallback(async (text: string, attachments: Attachment[], agent?: string, options?: SessionPromptOptions) => {
     if (submitting) return
@@ -897,13 +1234,10 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
     }
   }, [activeWorkspaceIsLocal, onStartThread, submitting, workspaceSupport.flags, workspaceSupport.workspaceId])
 
-  const handlePickAgent = useCallback((agentId: string) => {
-    setAgentPrefill({ id: agentId, nonce: Date.now() })
-  }, [])
-
-  const handlePickExample = useCallback((prompt: string) => {
+  const handlePickExample = useCallback((prompt: string, nextAgentMode: PrimaryAgentMode) => {
+    setAgentMode(constrainedPrimaryAgentMode(nextAgentMode, effectiveAllowedPrimaryModes))
     setPromptPrefill({ text: prompt, nonce: Date.now() })
-  }, [])
+  }, [effectiveAllowedPrimaryModes, setAgentMode])
 
   const handleDismissCoachmark = useCallback(() => {
     setCoachmarkDismissed(true)
@@ -917,6 +1251,31 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
   const handleOpenThread = useCallback((sessionId: string) => {
     void onOpenThread(sessionId)
   }, [onOpenThread])
+
+  const handleOpenArtifact = useCallback((item: LaunchpadFreshArtifactItem) => {
+    if (activeWorkspaceIsLocal && item.sessionId && item.artifactId.startsWith('local-artifact-')) {
+      // Local feed artifact ids are privacy-preserving aliases; open the source thread instead of dispatching an unresolvable resource identity.
+      void onOpenThread(item.sessionId)
+      return
+    }
+
+    if (item.sessionId && item.artifactId) {
+      window.dispatchEvent(new CustomEvent('open-cowork:open-resource', {
+        detail: {
+          identity: {
+            format: 'open-cowork-resource-identity-v1',
+            authority: activeWorkspaceIsLocal ? 'desktop-local' : 'desktop-cloud',
+            kind: 'artifact',
+            workspaceId: workspaceSupport.workspaceId,
+            sessionId: item.sessionId,
+            artifactId: item.artifactId,
+          },
+        },
+      }))
+      return
+    }
+    onNavigate('artifacts')
+  }, [activeWorkspaceIsLocal, onNavigate, onOpenThread, workspaceSupport.workspaceId])
 
   const homeCopyVars = { brand: brandName }
   const greeting = configuredCopy(homeBranding?.greeting, GREETING_KEY, GREETING_FALLBACK, homeCopyVars)
@@ -932,10 +1291,6 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
     'Ask anything, or @mention a coworker',
     homeCopyVars,
   )
-  const suggestionLabel = configuredCopy(homeBranding?.suggestionLabel, 'home.suggestions.title', 'Try', homeCopyVars)
-  const agentNudgeLabel = firstRun && !homeBranding?.suggestionLabel
-    ? t('studioHome.agentNudge', '@mention a coworker')
-    : suggestionLabel
   const readyLabel = configuredCopy(homeBranding?.statusReadyLabel, 'home.statusStrip.ready', 'Ready', homeCopyVars)
 
   return (
@@ -956,11 +1311,14 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
             disabled={submitting}
             placeholder={composerPlaceholder}
             specialistAgents={specialistAgents}
-            prefillAgent={agentPrefill}
+            allowedPrimaryModes={effectiveAllowedPrimaryModes}
+            allowedAgentNames={effectiveAllowedAgentNames}
+            fallbackAgent={effectiveFallbackPromptAgent}
+            prefillAgent={null}
             prefillPrompt={promptPrefill}
             workspaceOptions={workspaceOptions}
-            canPrompt={workspaceSupport.flags.canPrompt}
-            sendDisabledReason={workspaceSupport.flags.reasons.prompt}
+            canPrompt={canPromptFromHome}
+            sendDisabledReason={promptDisabledReason}
             attachmentsAllowed={workspaceSupport.flags.canAttachFiles}
             attachmentsDisabledReason={workspaceSupport.flags.reasons.attachFiles}
             modelControlsManaged={!workspaceSupport.flags.canUseMachineRuntimeConfig}
@@ -970,14 +1328,22 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
 
         {firstRun && !coachmarkDismissed && <HomeCoachmark onDismiss={handleDismissCoachmark} />}
 
-        {firstRun && <FirstRunExamples onPick={handlePickExample} />}
+        <LaunchpadSuggestions allowedPrimaryModes={effectiveAllowedPrimaryModes} onPick={handlePickExample} />
 
-        <LeadCoworkers
+        <LaunchpadMotionGrid
+          feed={launchpadFeed}
+          loading={launchpadLoading}
+          error={launchpadError}
+          onNavigate={onNavigate}
+          onOpenThread={handleOpenThread}
+          onOpenArtifact={handleOpenArtifact}
+        />
+
+        <TeamStrip
           agents={suggestedAgents}
-          onPick={handlePickAgent}
-          label={agentNudgeLabel}
-          agentMode={agentMode}
-          onSetAgentMode={setAgentMode}
+          allowedPrimaryModes={effectiveAllowedPrimaryModes}
+          allowedAgentNames={effectiveAllowedAgentNames}
+          onNavigate={onNavigate}
         />
 
         <HomeReviewSnapshot
@@ -985,8 +1351,6 @@ export function HomePage({ brandName, homeBranding, onStartThread, onOpenThread 
           pendingQuestions={currentView.pendingQuestions.length}
           taskCount={currentView.taskRuns.length}
         />
-
-        <RecentProjects threads={recentThreads} onOpen={handleOpenThread} />
 
         <StatusStrip readyLabel={readyLabel} />
       </div>

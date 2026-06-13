@@ -3,6 +3,7 @@ import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteAgentProfileStyles } from './style-agent-profile.ts'
 import { cloudWebsiteChatStyles } from './style-chat.ts'
 import { cloudWebsiteComponentStyles } from './style-components.ts'
+import { cloudWebsiteLaunchpadStyles } from './style-launchpad.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
 import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
@@ -209,6 +210,7 @@ ${cloudWebsiteComponentStyles()}
 ${cloudWebsitePrimitiveStyles()}
 ${cloudWebsiteAgentProfileStyles()}
 ${cloudWebsiteChatStyles()}
+${cloudWebsiteLaunchpadStyles()}
 ${cloudWebsiteSharedUiStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}
 `

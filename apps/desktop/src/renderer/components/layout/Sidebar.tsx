@@ -566,13 +566,13 @@ export function Sidebar({
   return (
     <>
       <aside
-        className="flex w-[252px] flex-col shrink-0 border-e border-border-subtle transition-[width] duration-200"
+        className="flex min-h-0 w-[252px] shrink-0 flex-col overflow-hidden border-e border-border-subtle transition-[width] duration-200"
         style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
         data-workbench-pane="threads"
       >
           <SidebarBrandTop top={branding?.top} />
           <WorkspaceSwitcher />
-          <div className="p-3 pb-1 flex gap-2">
+          <div className="shrink-0 p-3 pb-1 flex gap-2">
             <div className="flex-1">
               <NewThreadButton onClick={() => onViewChange('chat')} />
             </div>
@@ -588,7 +588,7 @@ export function Sidebar({
           </div>
 
           {showSearch && (
-            <div className="px-3 pb-1">
+            <div className="shrink-0 px-3 pb-1">
               <input
                 autoFocus
                 type="text"
@@ -602,7 +602,7 @@ export function Sidebar({
             </div>
           )}
 
-          <div className="px-2 pt-2 pb-1">
+          <div className="min-h-0 max-h-[40vh] overflow-y-auto px-2 pt-2 pb-1">
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div>
             <button onClick={() => onViewChange('home')}
               aria-current={currentView === 'home' ? 'page' : undefined}
@@ -658,7 +658,7 @@ export function Sidebar({
           {/* Recent project chats — ThreadList owns its own scroll container so it
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
-          <div className="flex-1 min-h-0 flex flex-col px-2 py-2">
+          <div className="flex min-h-[120px] flex-1 flex-col overflow-hidden px-2 py-2">
             <button
               type="button"
               onClick={() => onViewChange('projects')}
@@ -671,7 +671,7 @@ export function Sidebar({
           </div>
 
           {/* Tool status */}
-          <div className="border-t border-border-subtle px-2 py-2">
+          <div className="max-h-[28vh] shrink-0 overflow-y-auto border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
@@ -687,7 +687,7 @@ export function Sidebar({
           {/* Settings */}
           <button onClick={() => setShowSettings(true)}
             aria-expanded={showSettings}
-            className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle">
+            className="flex shrink-0 items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle">
             <Icon name="settings-2" size={16} />
             {t('sidebar.settings', 'Settings')}
           </button>

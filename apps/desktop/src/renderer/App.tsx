@@ -675,6 +675,7 @@ export function App() {
                 homeBranding={config.branding.home}
                 onStartThread={startThreadFromHome}
                 onOpenThread={(sessionId) => void openExistingThread(sessionId)}
+                onNavigate={navigateView}
               />
             )}
             {view === 'chat' && (

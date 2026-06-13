@@ -314,6 +314,107 @@ test('cloud web browser clears signed-in UI when AppAPI reports auth required af
   }
 })
 
+test('cloud web browser renders launchpad feed and routes launchpad actions', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  const clickContaining = (selector: string, text: string) => {
+    const target = [...harness.document.querySelectorAll(selector)]
+      .find((element) => element.textContent?.includes(text)) as HTMLElement | undefined
+    assert.ok(target, `${selector} containing ${text} exists`)
+    target.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+  }
+
+  try {
+    await waitFor(() => assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /Implement cloud launchpad/))
+    assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /Run read-only tests/)
+    assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /summary.txt/)
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path === '/api/launchpad/feed?limit=3'))
+    const openChatRoute = () => {
+      const chatLink = harness.document.querySelector('[data-route-link="chat"]') as HTMLElement | null
+      assert.ok(chatLink, 'chat route link exists')
+      chatLink.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    }
+
+    clickContaining('.cloud-launchpad-suggestion', 'Create a workflow')
+    await waitFor(() => {
+      assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value, 'Help me turn a repeated task into a saved workflow.')
+      assert.equal((harness.document.querySelector('#composer-agent') as HTMLSelectElement).value, 'chief-of-staff')
+    })
+
+    clickContaining('.cloud-launchpad-team-strip', 'Your team')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'agents'))
+
+    openChatRoute()
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'chat'))
+    clickContaining('.cloud-launchpad-motion-row', 'summary.txt')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'artifacts'))
+    assert.ok(harness.lastRequest((request) => request.method === 'GET' && request.path.startsWith('/api/sessions/session-1/artifacts')))
+
+    openChatRoute()
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'chat'))
+    clickContaining('.cloud-launchpad-motion-row', 'Implement cloud launchpad')
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.chatState, 'thread')
+      assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /Cloud thread 1/)
+    })
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud launchpad suggestions stay inside the allowed coworker policy', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', allowedAgents: ['build'] }).start()
+  const clickContaining = (selector: string, text: string) => {
+    const target = [...harness.document.querySelectorAll(selector)]
+      .find((element) => element.textContent?.includes(text)) as HTMLElement | undefined
+    assert.ok(target, `${selector} containing ${text} exists`)
+    target.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+  }
+
+  try {
+    await waitFor(() => assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /Plan a release/))
+
+    clickContaining('.cloud-launchpad-suggestion', 'Plan a release')
+    await waitFor(() => {
+      assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value, 'Draft a release plan for the next milestone.')
+      assert.equal((harness.document.querySelector('#composer-agent') as HTMLSelectElement).value, 'build')
+    })
+
+    clickContaining('.cloud-launchpad-suggestion', 'Create a workflow')
+    await waitFor(() => {
+      assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value, 'Help me turn a repeated task into a saved workflow.')
+      assert.equal((harness.document.querySelector('#composer-agent') as HTMLSelectElement).value, 'build')
+    })
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud launchpad suggestions preserve requested agents for default cloud policies', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', allowedAgents: null }).start()
+  const clickContaining = (selector: string, text: string) => {
+    const target = [...harness.document.querySelectorAll(selector)]
+      .find((element) => element.textContent?.includes(text)) as HTMLElement | undefined
+    assert.ok(target, `${selector} containing ${text} exists`)
+    target.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+  }
+
+  try {
+    await waitFor(() => assert.match(harness.document.querySelector('#cloud-launchpad-home')?.textContent || '', /Create a workflow/))
+    clickContaining('.cloud-launchpad-suggestion', 'Create a workflow')
+    await waitFor(() => {
+      assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).value, 'Help me turn a repeated task into a saved workflow.')
+      assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /chief-of-staff/)
+    })
+
+    harness.submit('#prompt-form')
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))))
+    const promptRequest = harness.lastRequest((request) => request.method === 'POST' && /\/prompt$/.test(request.path))
+    assert.equal((promptRequest?.body as Record<string, unknown>).agent, 'chief-of-staff')
+  } finally {
+    harness.close()
+  }
+})
+
 test('cloud web browser creates, prompts, streams, reloads, and continues a cloud thread', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
   try {
@@ -333,7 +434,7 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
     await waitFor(() => assert.match(harness.document.querySelector('#composer-agent-chips')?.textContent || '', /build/))
     harness.clickText('#composer-agent-chips button', '@build')
     assert.equal(agent.value, 'build')
-    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Lead coworker: build/))
+    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Assign to: build/))
     const message = harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement
     await waitFor(() => assert.match(message.value, /^@build/))
     assert.equal((harness.document.querySelector('#prompt-form .composer-send') as HTMLButtonElement).disabled, true)
