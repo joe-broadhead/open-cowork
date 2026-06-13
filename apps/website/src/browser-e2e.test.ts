@@ -62,6 +62,26 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
     ]) {
       assert.equal(requestedPaths.includes(adminOnlyPath), false, `${adminOnlyPath} is not fetched for member workspaces`)
     }
+
+    const beforeChannels = harness.requests.length
+    harness.clickText('[data-route-link]', 'Channels')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
+    await waitFor(() => assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Start work/))
+    const channelRequestPaths = harness.requests.slice(beforeChannels).map((request) => request.path)
+    const allRequestPaths = harness.requests.map((request) => request.path)
+    for (const adminOnlyChannelPath of [
+      '/api/channels/providers',
+      '/api/channels/agents?limit=100',
+      '/api/channels/bindings?limit=100',
+      '/api/channels/identities?limit=100',
+    ]) {
+      assert.equal(allRequestPaths.includes(adminOnlyChannelPath), false, `${adminOnlyChannelPath} is not fetched for member channel views`)
+      assert.equal(channelRequestPaths.includes(adminOnlyChannelPath), false, `${adminOnlyChannelPath} is not fetched for member channel views`)
+    }
+    assert.equal(allRequestPaths.includes('/api/channels/deliveries?limit=50'), true)
+    assert.equal(allRequestPaths.includes('/api/coordination/watches?limit=500'), true)
+    const firstConnectButton = harness.document.querySelector('#channel-add-grid button[data-admin-control="true"]') as HTMLButtonElement | null
+    assert.equal(firstConnectButton?.disabled, true)
   } finally {
     harness.close()
   }
@@ -88,6 +108,40 @@ test('cloud web browser disables member invite controls outside invite signup mo
     harness.submit('#member-invite-form')
     assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/admin/members'), undefined)
     assert.match(harness.document.querySelector('#status')?.textContent || '', /signup mode is invite/)
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser creates a fresh active channel agent before provider setup', async () => {
+  const harness = createCloudWebBrowserHarness({ role: 'admin' })
+  harness.state.agents = [{
+    agentId: 'agent-disabled',
+    name: 'Disabled gateway coworker',
+    profileName: 'default',
+    status: 'disabled',
+  }]
+  harness.state.bindings = []
+  await harness.start()
+  try {
+    harness.clickText('[data-route-link]', 'Channels')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
+    await waitFor(() => assert.match(harness.document.querySelector('#channel-add-grid')?.textContent || '', /WhatsApp/))
+    const whatsappCard = [...harness.document.querySelectorAll('#channel-add-grid article')]
+      .find((card) => card.textContent?.includes('WhatsApp'))
+    assert.ok(whatsappCard)
+    const connectButton = [...whatsappCard.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Connect') as HTMLButtonElement | undefined
+    assert.ok(connectButton)
+    connectButton.click()
+
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/agents')))
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/bindings')))
+    const agentRequest = harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/agents')
+    const bindingRequest = harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/channels/bindings')
+    assert.equal((agentRequest?.body as Record<string, unknown>).status, 'active')
+    assert.equal((bindingRequest?.body as Record<string, unknown>).agentId, 'agent-2')
+    assert.equal((bindingRequest?.body as Record<string, unknown>).provider, 'whatsapp')
   } finally {
     harness.close()
   }
@@ -259,17 +313,45 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
 
     harness.clickText('[data-route-link]', 'Channels')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'channels'))
-    assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /channel reach|delivery status|linked chats/i)
-    assert.match(harness.document.querySelector('#channel-summary-list')?.textContent || '', /read-only/)
-    assert.doesNotMatch(harness.document.querySelector('#channel-summary-list')?.textContent || '', /credentials|dead-letter|retries/i)
-    assert.ok(harness.document.querySelector('#channel-agent-list .row'))
-    assert.ok(harness.document.querySelector('#channel-binding-list .row'))
+    assert.match(harness.document.querySelector('[data-parity-route="channels"]')?.textContent || '', /provider reach|People roles|Watches|admin-gated/i)
+    const channelSurfaceText = harness.document.querySelector('#channel-gateway-surface')?.textContent || ''
+    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Start work/)
+    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Get updates/)
+    assert.match(harness.document.querySelector('#channel-reach-cards')?.textContent || '', /Approve on the go/)
+    for (const provider of ['WhatsApp', 'Telegram', 'Slack', 'Discord', 'Signal', 'Email', 'Webhook']) {
+      assert.match(harness.document.querySelector('#channel-add-grid')?.textContent || '', new RegExp(provider))
+    }
+    const channelFilter = harness.document.querySelector('#channel-filter') as HTMLInputElement
+    channelFilter.value = 'no-provider-match'
+    channelFilter.dispatchEvent(new harness.window.Event('input', { bubbles: true }))
+    await waitFor(() => assert.doesNotMatch(harness.document.querySelector('#channel-add-grid')?.textContent || '', /WhatsApp|Telegram|Slack|Discord|Signal|Email|Webhook/))
+    channelFilter.value = 'slack'
+    channelFilter.dispatchEvent(new harness.window.Event('input', { bubbles: true }))
+    await waitFor(() => assert.match(harness.document.querySelector('#channel-add-grid')?.textContent || '', /Slack/))
+    assert.doesNotMatch(harness.document.querySelector('#channel-add-grid')?.textContent || '', /WhatsApp/)
+    channelFilter.value = ''
+    channelFilter.dispatchEvent(new harness.window.Event('input', { bubbles: true }))
+    await waitFor(() => assert.match(harness.document.querySelector('#channel-add-grid')?.textContent || '', /WhatsApp/))
+    assert.match(harness.document.querySelector('#channel-connected-grid')?.textContent || '', /Team Telegram/)
+    for (const roleLabel of ['Owner', 'Admin', 'Member', 'Approver', 'Viewer']) {
+      assert.match(harness.document.querySelector('#channel-people-list')?.textContent || '', new RegExp(roleLabel))
+    }
+    assert.match(harness.document.querySelector('#channel-watch-list')?.textContent || '', /project \/ project-1/)
+    assert.match(harness.document.querySelector('#channel-watch-list')?.textContent || '', /Approver/)
+    assert.match(harness.document.querySelector('#channel-summary-list')?.textContent || '', /Connected channels|People|Active watches/)
+    assert.doesNotMatch(channelSurfaceText, /credentials|dead-letter|retries|leaked-secret|signed\?token=|secret:\/\//i)
     assert.ok(harness.document.querySelector('#channel-delivery-list .row'))
-    const userDeliveryText = harness.document.querySelector('#channel-delivery-list')?.textContent || ''
-    assert.doesNotMatch(userDeliveryText, /leaked-secret|signed\?token=|secret:\/\//)
+    const pauseWatchButton = [...harness.document.querySelectorAll('#channel-watch-list button')]
+      .find((button) => button.textContent?.trim() === 'Pause') as HTMLButtonElement | undefined
+    assert.ok(pauseWatchButton)
+    pauseWatchButton.click()
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/coordination/watches/watch-1/pause')))
     assert.ok(harness.lastRequest((request) => request.path === '/api/channels/agents?limit=100'))
     assert.ok(harness.lastRequest((request) => request.path === '/api/channels/bindings?limit=100'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/providers'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/channels/identities?limit=100'))
     assert.ok(harness.lastRequest((request) => request.path === '/api/channels/deliveries?limit=50'))
+    assert.ok(harness.lastRequest((request) => request.path === '/api/coordination/watches?limit=500'))
   } finally {
     harness.close()
   }

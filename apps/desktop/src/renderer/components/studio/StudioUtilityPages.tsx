@@ -1,4 +1,16 @@
-import { useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ChannelsGatewaySurface } from '@open-cowork/ui'
+import {
+  channelProviderLabel,
+  type ChannelAgentRecord,
+  type ChannelBindingPublicRecord,
+  type ChannelDeliveryPublicRecord,
+  type ChannelIdentityPublicRecord,
+  type ChannelProviderKind,
+  type ChannelProviderStatus,
+  type CoordinationWatch,
+  type CoordinationWatchInput,
+} from '@open-cowork/shared'
 import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
@@ -7,7 +19,6 @@ import { listVisibleSessionArtifacts } from '../chat/session-artifacts'
 import { SessionArtifactList } from '../chat/SessionArtifactList'
 import {
   Card,
-  ChannelStatusCard,
   EmptyState,
   Icon,
   StudioPageHeader,
@@ -126,70 +137,118 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
   )
 }
 
+type ChannelSnapshot = {
+  providers: ChannelProviderStatus[]
+  agents: ChannelAgentRecord[]
+  bindings: ChannelBindingPublicRecord[]
+  people: ChannelIdentityPublicRecord[]
+  deliveries: ChannelDeliveryPublicRecord[]
+  watches: CoordinationWatch[]
+}
+
+const EMPTY_CHANNEL_SNAPSHOT: ChannelSnapshot = {
+  providers: [],
+  agents: [],
+  bindings: [],
+  people: [],
+  deliveries: [],
+  watches: [],
+}
+
 export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const mcpConnections = useSessionStore((state) => state.mcpConnections)
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const workspaceSupport = useActiveWorkspaceSupport()
-  const connected = mcpConnections.filter((entry) => entry.connected).length
+  const [snapshot, setSnapshot] = useState<ChannelSnapshot>(EMPTY_CHANNEL_SNAPSHOT)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadChannels = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [
+        providers,
+        agents,
+        bindings,
+        people,
+        deliveries,
+        watches,
+      ] = await Promise.all([
+        window.coworkApi.channels.providers({ workspaceId: activeWorkspaceId }),
+        window.coworkApi.channels.agents({ workspaceId: activeWorkspaceId, limit: 100 }),
+        window.coworkApi.channels.bindings({ workspaceId: activeWorkspaceId, limit: 100 }),
+        window.coworkApi.channels.people({ workspaceId: activeWorkspaceId, limit: 100 }),
+        window.coworkApi.channels.deliveries({ workspaceId: activeWorkspaceId, limit: 50 }),
+        window.coworkApi.channels.watches({ workspaceId: activeWorkspaceId, limit: 500 }),
+      ])
+      setSnapshot({ providers, agents, bindings, people, deliveries, watches })
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError))
+      setSnapshot(EMPTY_CHANNEL_SNAPSHOT)
+    } finally {
+      setLoading(false)
+    }
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    void loadChannels()
+  }, [loadChannels])
+
+  const ensureChannelAgent = useCallback(async () => {
+    const existing = snapshot.agents.find((agent) => agent.status === 'active')
+    if (existing) return existing.agentId
+    const created = await window.coworkApi.channels.createAgent({
+      name: 'Gateway Channel Coworker',
+      profileName: 'default',
+      status: 'active',
+      managed: true,
+    })
+    return created.agentId
+  }, [snapshot.agents])
+
+  const connectProvider = useCallback(async (provider: ChannelProviderKind) => {
+    const agentId = await ensureChannelAgent()
+    await window.coworkApi.channels.connectBinding({
+      agentId,
+      provider,
+      displayName: `${channelProviderLabel(provider)} channel`,
+      status: 'auth_required',
+      settings: {},
+    })
+  }, [ensureChannelAgent])
+
+  const createWatch = useCallback((input: CoordinationWatchInput) => (
+    window.coworkApi.channels.createWatch({ ...input, workspaceId: activeWorkspaceId })
+  ), [activeWorkspaceId])
 
   return (
     <StudioPageShell>
-      <StudioPageHeader
-        eyebrow={t('studio.channels.eyebrow', 'Connections')}
-        title={t('studio.channels.title', 'Channels')}
-        description={t('studio.channels.description', 'Desktop channels are workspace and gateway entry points around OpenCode execution. Local runtime behavior stays owned by OpenCode.')}
-        actions={[{
-          id: 'settings',
-          children: t('studio.channels.settings', 'Open settings'),
-          onClick: onOpenSettings,
-          variant: 'secondary',
-          leftIcon: 'settings-2',
-        }]}
+      <ChannelsGatewaySurface
+        providers={snapshot.providers}
+        agents={snapshot.agents}
+        bindings={snapshot.bindings}
+        people={snapshot.people}
+        deliveries={snapshot.deliveries}
+        watches={snapshot.watches}
+        loading={loading}
+        error={error}
+        platformLabel={`${activeWorkspaceId} - ${workspaceSupport.flags.authority || 'desktop_local'}`}
+        canManage
+        onReload={loadChannels}
+        onConnectProvider={connectProvider}
+        onDisconnectBinding={(bindingId) => window.coworkApi.channels.disconnectBinding(bindingId, { workspaceId: activeWorkspaceId })}
+        onResolvePerson={(input) => window.coworkApi.channels.resolvePerson(input)}
+        onCreateWatch={createWatch}
+        onPauseWatch={(watchId) => window.coworkApi.channels.pauseWatch(watchId, { workspaceId: activeWorkspaceId })}
+        onResumeWatch={(watchId) => window.coworkApi.channels.resumeWatch(watchId, { workspaceId: activeWorkspaceId })}
+        onDeleteWatch={(watchId) => window.coworkApi.channels.deleteWatch(watchId, { workspaceId: activeWorkspaceId })}
       />
-
-      <div className="grid gap-3 md:grid-cols-3">
-        <StatCard label={t('studio.channels.workspace', 'Active workspace')} value={activeWorkspaceId} icon="activity" />
-        <StatCard label={t('studio.channels.connectedTools', 'Connected MCPs')} value={`${connected}/${mcpConnections.length}`} icon="activity" />
-        <StatCard label={t('studio.channels.authority', 'Authority')} value={workspaceSupport.flags.authority || 'desktop_local'} icon="activity" />
+      <div className="flex justify-end">
+        <button type="button" className="ui-button ui-button--ghost ui-button--sm" onClick={onOpenSettings}>
+          <Icon name="settings-2" size={16} />
+          <span>{t('studio.channels.settings', 'Open settings')}</span>
+        </button>
       </div>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <ChannelStatusCard
-          title={t('studio.channels.workspaceCard', 'Workspace channel')}
-          description={t('studio.channels.workspaceDescription', 'Use the workspace switcher in the sidebar to move between local, paired Desktop, Cloud, or Gateway-backed workspaces.')}
-          status={{ label: workspaceSupport.loaded ? t('studio.channels.ready', 'Ready') : t('studio.channels.checking', 'Checking'), tone: workspaceSupport.loaded ? 'success' : 'warning' }}
-          meta={<span className="text-2xs text-text-muted">{workspaceSupport.flags.pathExposure || t('studio.channels.noPathExposure', 'No path exposure')}</span>}
-        />
-        <ChannelStatusCard
-          title={t('studio.channels.gatewayCard', 'Gateway channel')}
-          description={t('studio.channels.gatewayDescription', 'Standalone Gateway and Cloud channel bindings are available through explicit workspace connections and admin setup, not implicit Desktop runtime mutation.')}
-          status={{ label: t('studio.channels.explicit', 'Explicit setup'), tone: 'neutral' }}
-        />
-      </div>
-
-      {mcpConnections.length ? (
-        <div className="grid gap-2">
-          {mcpConnections.map((connection) => (
-            <Card key={connection.name} padding="sm">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-text">{connection.name}</div>
-                  <div className="mt-0.5 truncate text-2xs text-text-muted">{connection.error || connection.rawStatus || t('studio.channels.mcpReady', 'MCP connection')}</div>
-                </div>
-                <span className={`rounded border px-2 py-1 text-2xs ${connection.connected ? 'border-green-500/30 text-green-200' : 'border-amber-500/30 text-amber-200'}`}>
-                  {connection.connected ? t('studio.channels.connected', 'Connected') : t('studio.channels.notConnected', 'Not connected')}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon="activity"
-          title={t('studio.channels.emptyTitle', 'No MCP channels connected')}
-          body={t('studio.channels.emptyBody', 'Configured tools and gateway workspaces will appear here after the runtime reports connection status.')}
-        />
-      )}
     </StudioPageShell>
   )
 }

@@ -140,9 +140,9 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     availability: 'shared',
     desktopSurface: 'Desktop Gateway/channel status and channel-backed chat context',
     cloudRouteIds: ['channels', 'chat'],
-    cloudAffordance: 'Show connected channel agents, channel bindings, delivery status, and linked Cloud run chats without exposing admin controls.',
+    cloudAffordance: 'Show provider reach, connected channel bindings, People roles, Watches, delivery status, and linked Cloud run chats with admin-gated setup controls.',
     boundary: 'Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned.',
-    disabledReason: 'Member routes are read-only and focused on reach, status, and linked chats.',
+    disabledReason: 'Channel setup, People resolution, and Watch mutation controls require owner/admin permissions; member reads remain available.',
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
   {

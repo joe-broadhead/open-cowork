@@ -345,9 +345,12 @@ test('cloud website bootstrap exposes typed client endpoint metadata', () => {
       error: null,
     },
     channels: {
+      providers: [],
       agents: [],
       bindings: [],
+      people: [],
       deliveries: [],
+      watches: [],
       error: null,
     },
     usageSummary: null,

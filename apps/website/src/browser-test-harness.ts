@@ -7,6 +7,7 @@ import { build as buildEsbuild } from 'esbuild'
 import { CLOUD_WEB_CLIENT_ENDPOINTS } from './client-contract.ts'
 import { CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
+import { handleBrowserChannelRequest, makeBrowserChannelState } from './browser-test-channels.ts'
 import { handleBrowserCoordinationRequest, makeBrowserCoordinationState, type BrowserHarnessMockRequest } from './browser-test-coordination.ts'
 import { iso, makeAuditEvents, makeDeliveries, makeLaunchpadFeed, makeMembers, makeSession, makeSessionView, makeTokens, makeUsageEvents, makeWorkers, makeWorkflows } from './browser-test-fixtures.ts'
 
@@ -162,12 +163,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     ],
     tokens: makeTokens(options.tokenCount || 1),
     members: makeMembers(options.memberCount || 2),
-    agents: [
-      { agentId: 'agent-1', name: 'On-call coding agent', profileName: 'default', status: 'active' },
-    ],
-    bindings: [
-      { bindingId: 'binding-1', agentId: 'agent-1', provider: 'telegram', displayName: 'Team Telegram', status: 'active', settings: { defaultChatId: 'chat-1' } },
-    ],
+    ...makeBrowserChannelState(),
     deliveries: makeDeliveries(options.deliveryCount || 1),
     workerPools: [
       { poolId: 'pool-1', name: 'Primary worker pool', mode: 'self_hosted', status: 'active', region: 'test-region', maxWorkers: 3, maxConcurrentWork: 6, updatedAt: iso(4) },
@@ -179,6 +175,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     workflows: makeWorkflows(options.workflowCount || 1),
     coordinationProjects: coordinationState.coordinationProjects,
     coordinationTasks: coordinationState.coordinationTasks,
+    coordinationWatches: coordinationState.coordinationWatches,
     runs: Array.from({ length: Math.min(options.workflowCount || 1, 60) }, (_, index) => ({
       id: `run-${index + 1}`,
       workflowId: `workflow-${index + 1}`,
@@ -343,27 +340,8 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       const workerId = decodeURIComponent(workerHeartbeatsMatch[1])
       return jsonResponse({ heartbeats: state.workerHeartbeats.filter((heartbeat: any) => heartbeat.workerId === workerId) })
     }
-    if (request.method === 'GET' && request.pathname === '/api/channels/agents') return jsonResponse({ agents: state.agents.slice(0, limitFromRequest(request, 100)) })
-    if (request.method === 'POST' && request.pathname === '/api/channels/agents') {
-      const agent = { agentId: `agent-${state.agents.length + 1}`, name: (request.body as Record<string, unknown>)?.name || 'Agent', profileName: (request.body as Record<string, unknown>)?.profileName || 'default', status: 'active' }
-      state.agents = [agent, ...state.agents]
-      return jsonResponse({ agent })
-    }
-    if (request.method === 'GET' && request.pathname === '/api/channels/bindings') return jsonResponse({ bindings: state.bindings.slice(0, limitFromRequest(request, 100)) })
-    if (request.method === 'POST' && request.pathname === '/api/channels/bindings') {
-      const binding = { bindingId: `binding-${state.bindings.length + 1}`, ...(request.body as Record<string, unknown>), status: 'auth_required' }
-      state.bindings = [binding, ...state.bindings]
-      return jsonResponse({ binding })
-    }
-    if (request.method === 'GET' && request.pathname === '/api/channels/deliveries') return jsonResponse({ deliveries: state.deliveries.slice(0, limitFromRequest(request, 50)) })
-    if (request.method === 'POST' && request.pathname.includes('/retry')) {
-      state.deliveries = state.deliveries.map((delivery: any) => ({ ...delivery, status: delivery.deliveryId === request.pathname.split('/')[4] ? 'pending' : delivery.status }))
-      return jsonResponse({ delivery: state.deliveries[0] })
-    }
-    if (request.method === 'POST' && request.pathname.includes('/dead-letter')) {
-      state.deliveries = state.deliveries.map((delivery: any) => ({ ...delivery, status: delivery.deliveryId === request.pathname.split('/')[4] ? 'dead' : delivery.status }))
-      return jsonResponse({ delivery: state.deliveries[0] })
-    }
+    const channelResponse = handleBrowserChannelRequest({ request, state, jsonResponse, limitFromRequest })
+    if (channelResponse) return channelResponse
     if (request.method === 'GET' && request.pathname === '/api/diagnostics') {
       return jsonResponse({
         generatedAt: iso(10),

@@ -85,7 +85,23 @@ export function makeBrowserCoordinationState(sessions: MockSession[]) {
     assignedSessionId: null,
     artifactRefs: [],
   }]
-  return { coordinationProjects, coordinationTasks }
+  const coordinationWatches = [{
+    ...coordinationBase('watch-1', 'watch', 24),
+    status: 'active',
+    target: { kind: 'project', id: 'project-1' },
+    events: ['task.moved', 'needs_input'],
+    channel: {
+      provider: 'telegram',
+      agentId: 'agent-1',
+      channelBindingId: 'binding-1',
+      target: { chatId: 'chat-1' },
+    },
+    recipient: { role: 'approver', label: 'Approver' },
+    deliverySurface: 'gateway_channel',
+    verbosity: 'normal',
+    cursor: null,
+  }]
+  return { coordinationProjects, coordinationTasks, coordinationWatches }
 }
 
 export function handleBrowserCoordinationRequest(options: {
@@ -184,6 +200,53 @@ export function handleBrowserCoordinationRequest(options: {
       updatedAt: session.updatedAt,
       kind: 'interactive',
     } : null)
+  }
+  if (request.method === 'GET' && request.pathname === '/api/coordination/watches') {
+    return jsonResponse({ watches: state.coordinationWatches.slice(0, limitFromRequest(request, 500)) })
+  }
+  if (request.method === 'POST' && request.pathname === '/api/coordination/watches') {
+    const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+      ? request.body as Record<string, any>
+      : {}
+    const watch = {
+      ...coordinationBase(`watch-${state.coordinationWatches.length + 1}`, 'watch', 70 + state.coordinationWatches.length),
+      status: body.status || 'active',
+      target: body.target || { kind: 'project', id: 'project-1' },
+      events: Array.isArray(body.events) ? body.events : ['task.moved'],
+      channel: body.channel || { provider: 'telegram', agentId: 'agent-1', channelBindingId: 'binding-1', target: {} },
+      recipient: body.recipient || { role: 'viewer' },
+      deliverySurface: body.deliverySurface || 'gateway_channel',
+      verbosity: body.verbosity || 'normal',
+      cursor: body.cursor || null,
+    }
+    state.coordinationWatches = [watch, ...state.coordinationWatches]
+    return jsonResponse({ watch }, 201)
+  }
+  const watchPauseMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)\/pause$/)
+  if (request.method === 'POST' && watchPauseMatch) {
+    const watchId = decodeURIComponent(watchPauseMatch[1])
+    state.coordinationWatches = state.coordinationWatches.map((watch: any) => watch.id === watchId ? { ...watch, status: 'paused', updatedAt: iso(80) } : watch)
+    return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
+  }
+  const watchResumeMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)\/resume$/)
+  if (request.method === 'POST' && watchResumeMatch) {
+    const watchId = decodeURIComponent(watchResumeMatch[1])
+    state.coordinationWatches = state.coordinationWatches.map((watch: any) => watch.id === watchId ? { ...watch, status: 'active', updatedAt: iso(81) } : watch)
+    return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
+  }
+  const watchMatch = request.pathname.match(/^\/api\/coordination\/watches\/([^/]+)$/)
+  if (request.method === 'POST' && watchMatch) {
+    const watchId = decodeURIComponent(watchMatch[1])
+    const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+      ? request.body as Record<string, any>
+      : {}
+    state.coordinationWatches = state.coordinationWatches.map((watch: any) => watch.id === watchId ? { ...watch, ...body, updatedAt: iso(82) } : watch)
+    return jsonResponse({ watch: state.coordinationWatches.find((watch: any) => watch.id === watchId) || null })
+  }
+  if (request.method === 'DELETE' && watchMatch) {
+    const watchId = decodeURIComponent(watchMatch[1])
+    state.coordinationWatches = state.coordinationWatches.filter((watch: any) => watch.id !== watchId)
+    return jsonResponse({ ok: true })
   }
   return null
 }
