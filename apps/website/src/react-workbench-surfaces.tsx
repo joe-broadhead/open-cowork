@@ -558,7 +558,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       {portals}
       <CloudProjectBoardPortal target={targets.projectBoard} bootstrap={bootstrap} agents={projectAgentNames} onSelectSession={onSelectSession} />
       <CloudArtifactSurfacePortals selectedView={selectedView} artifactActions={artifactActions} />
-      <CloudChannelSurfacePortals onSelectSession={onSelectSession} />
+      <CloudChannelSurfacePortals bootstrap={bootstrap} workspace={workspace} onSelectSession={onSelectSession} />
     </>
   )
 }

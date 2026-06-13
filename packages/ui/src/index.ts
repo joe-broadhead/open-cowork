@@ -11,6 +11,7 @@ export {
   type IconButtonProps,
 } from './Button.js'
 export { Card, type CardProps } from './Card.js'
+export { ChannelsGatewaySurface, type ChannelsGatewaySurfaceProps } from './ChannelsGatewaySurface.js'
 export { Dialog, type DialogProps } from './Dialog.js'
 export { DiffView, type DiffViewFile, type DiffViewProps } from './DiffView.js'
 export { DisabledHint } from './DisabledHint.js'

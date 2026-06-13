@@ -81,9 +81,12 @@ export type CloudWebClientStateContract = {
     error: string | null
   }
   channels: {
+    providers: unknown[]
     agents: unknown[]
     bindings: unknown[]
+    people: unknown[]
     deliveries: unknown[]
+    watches: unknown[]
     error: string | null
   }
   usageSummary: unknown | null

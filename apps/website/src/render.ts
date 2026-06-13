@@ -367,38 +367,17 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           <div class="section-header">
             <div>
               <h2>Channels</h2>
-              <div class="meta">Connected chat channels and delivery status</div>
+              <div class="meta">Provider reach, people, watches, and delivery status</div>
             </div>
             <div class="row-actions">
               <label><span>Filter</span><input id="channel-filter" autocomplete="off" placeholder="provider, channel, status, coworker" data-channel-control="true"></label>
               <button id="refresh-channels" type="button" data-channel-control="true">Refresh</button>
             </div>
           </div>
-          <div class="grid">
+          <div class="channel-route-shell">
             ${routeParityMarkup('channels')}
-            <div class="panel">
-              <h3>Channel summary</h3>
-              <div class="list" id="channel-summary-list">
-                <p class="empty">Channel status loads after sign-in.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Connected channels</h3>
-              <div class="list" id="channel-binding-list">
-                <p class="empty">No connected channels loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Channel coworkers</h3>
-              <div class="list" id="channel-agent-list">
-                <p class="empty">No channel coworkers loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Delivery status</h3>
-              <div class="list" id="channel-delivery-list">
-                <p class="empty">No channel deliveries loaded.</p>
-              </div>
+            <div id="channel-gateway-surface" class="studio-channels-surface">
+              <p class="empty">Channels load after sign-in.</p>
             </div>
           </div>
         </section>
@@ -635,10 +614,12 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
               <div class="form-grid">
                 <label><span>Agent</span><select id="binding-agent" name="agentId" data-admin-control="true"></select></label>
                 <label><span>Provider</span><select name="provider" data-admin-control="true">
+                  <option value="whatsapp">WhatsApp</option>
                   <option value="telegram">Telegram</option>
                   <option value="slack">Slack</option>
-                  <option value="email">Email</option>
                   <option value="discord">Discord Bridge</option>
+                  <option value="signal">Signal</option>
+                  <option value="email">Email</option>
                   <option value="webhook">Webhook</option>
                 </select></label>
                 <label><span>Display name</span><input name="displayName" autocomplete="off" placeholder="Team Slack" data-admin-control="true"></label>
