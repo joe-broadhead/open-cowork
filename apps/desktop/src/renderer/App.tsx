@@ -14,7 +14,7 @@ import { HomePage } from './components/HomePage'
 import { normalizeAppView, type AppNavigationTarget, type AppView } from './app-types'
 
 const ChatView = lazy(() => import('./components/chat/ChatView').then((m) => ({ default: m.ChatView })))
-const ThreadsPage = lazy(() => import('./components/threads/ThreadsPage').then((m) => ({ default: m.ThreadsPage })))
+const ProjectsBoardPage = lazy(() => import('./components/projects/ProjectsBoardPage').then((m) => ({ default: m.ProjectsBoardPage })))
 const WorkflowsPage = lazy(() => import('./components/workflows/WorkflowsPage').then((m) => ({ default: m.WorkflowsPage })))
 const AgentsPage = lazy(() => import('./components/agents/AgentsPage').then((m) => ({ default: m.AgentsPage })))
 const CapabilitiesPage = lazy(() => import('./components/capabilities/CapabilitiesPage').then((m) => ({ default: m.CapabilitiesPage })))
@@ -685,7 +685,7 @@ export function App() {
             )}
             {view === 'projects' && (
               <Suspense fallback={null}>
-                <ThreadsPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
+                <ProjectsBoardPage onOpenThread={(sessionId) => void openExistingThread(sessionId)} />
               </Suspense>
             )}
             {view === 'approvals' && (

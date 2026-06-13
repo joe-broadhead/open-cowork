@@ -44,6 +44,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'react-workbench-forms.ts',
     'react-workbench-hooks.ts',
     'react-workbench-launchpad.tsx',
+    'react-workbench-projects.tsx',
     'react-workbench-review.tsx',
     'react-workbench-surfaces.tsx',
     'react-workbench.ts',

@@ -7,19 +7,8 @@ import { build as buildEsbuild } from 'esbuild'
 import { CLOUD_WEB_CLIENT_ENDPOINTS } from './client-contract.ts'
 import { CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE } from './app-shell.ts'
 import { cloudWebsiteHtml } from './render.ts'
-import {
-  iso,
-  makeAuditEvents,
-  makeDeliveries,
-  makeLaunchpadFeed,
-  makeMembers,
-  makeSession,
-  makeSessionView,
-  makeTokens,
-  makeUsageEvents,
-  makeWorkers,
-  makeWorkflows,
-} from './browser-test-fixtures.ts'
+import { handleBrowserCoordinationRequest, makeBrowserCoordinationState, type BrowserHarnessMockRequest } from './browser-test-coordination.ts'
+import { iso, makeAuditEvents, makeDeliveries, makeLaunchpadFeed, makeMembers, makeSession, makeSessionView, makeTokens, makeUsageEvents, makeWorkers, makeWorkflows } from './browser-test-fixtures.ts'
 
 const require = createRequire(import.meta.url)
 const { JSDOM, VirtualConsole } = require('jsdom') as {
@@ -62,7 +51,7 @@ function bundledReactClientScript() {
 }
 
 type MockRole = 'owner' | 'admin' | 'member'
-type MockRequest = { method: string, path: string, body: unknown, headers: Record<string, string> }
+type MockRequest = BrowserHarnessMockRequest
 
 type MockEventSource = {
   url: string
@@ -164,6 +153,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
   const views: Record<string, any> = Object.fromEntries(
     sessions.slice(0, hydratedViewCount).map((session, index) => [session.sessionId, makeSessionView(session, index + 10, artifactCount)]),
   )
+  const coordinationState = makeBrowserCoordinationState(sessions)
   const requests: MockRequest[] = []
   const eventSources: MockEventSource[] = []
   const state: Record<string, any> = {
@@ -187,6 +177,8 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       { workerId: 'worker-1', poolId: 'pool-1', version: 'test', currentLoad: 1, activeWorkIds: ['session-1'], receivedAt: iso(5) },
     ],
     workflows: makeWorkflows(options.workflowCount || 1),
+    coordinationProjects: coordinationState.coordinationProjects,
+    coordinationTasks: coordinationState.coordinationTasks,
     runs: Array.from({ length: Math.min(options.workflowCount || 1, 60) }, (_, index) => ({
       id: `run-${index + 1}`,
       workflowId: `workflow-${index + 1}`,
@@ -439,6 +431,14 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'POST' && request.pathname === '/api/project-sources/snapshots') {
       return jsonResponse({ projectSource: { kind: 'snapshot', snapshotId: 'snapshot-1', title: 'Browser upload' } })
     }
+    const coordinationResponse = handleBrowserCoordinationRequest({
+      request,
+      state,
+      sessions,
+      jsonResponse,
+      limitFromRequest,
+    })
+    if (coordinationResponse) return coordinationResponse
     if (request.method === 'GET' && request.pathname === '/api/launchpad/feed') return jsonResponse(makeLaunchpadFeed(sessions, views))
     if (request.method === 'GET' && request.pathname === '/api/sessions') {
       const params = new URL(request.path, 'https://cloud.example.test').searchParams, limit = Math.min(Math.max(Math.floor(Number(params.get('limit') || sessions.length)) || sessions.length, 1), 500)
@@ -594,8 +594,8 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
         assert.doesNotMatch(document.querySelector('#thread-list')?.textContent || '', /No cloud threads loaded/)
         assert.doesNotMatch(document.querySelector('#workbench-agent-list')?.textContent || '', /No profile-allowed (?:agents|coworkers) loaded|No (?:agents|coworkers) loaded/)
         assert.doesNotMatch(document.querySelector('#workflow-list')?.textContent || '', /No (?:workflows|playbooks) loaded/)
+        assert.doesNotMatch(document.querySelector('#project-board-surface')?.textContent || '', /Loading project board/)
         assert.equal(document.querySelector('#prompt-form')?.getAttribute('data-react-owned'), 'chat')
-        assert.equal(document.querySelector('#session-form')?.getAttribute('data-react-owned'), 'project-session')
       }, 8000)
       if (role === 'admin' || role === 'owner') {
         await waitFor(() => {

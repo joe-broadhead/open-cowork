@@ -270,6 +270,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         throw new Error('coordination.createProject not mocked')
       }),
       updateProject: vi.fn(async () => null),
+      planWithCleo: vi.fn(async () => null),
       listTasks: vi.fn(async () => []),
       createTask: vi.fn(async () => {
         throw new Error('coordination.createTask not mocked')

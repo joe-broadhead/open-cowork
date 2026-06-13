@@ -728,11 +728,14 @@ test('cloud website binds actions through the React module client', () => {
 
 test('cloud website renders chat-first controls without local host path affordances', () => {
   assert.match(html, /id="thread-list"/)
+  assert.match(html, /id="project-board-surface"/)
+  assert.match(html, /Objectives, coworker tasks, linked OpenCode work/)
   assert.match(html, /id="session-form"/)
-  assert.match(html, /id="thread-objective-state"/)
-  assert.match(html, /Objectives are projected from selected Cloud chats/)
-  assert.match(html, /Git repository URL/)
-  assert.match(html, /Uploaded snapshot/)
+  assert.match(html, /Start from a project/)
+  assert.match(html, /name="repositoryUrl"/)
+  assert.match(html, /name="snapshotFiles"/)
+  assert.match(html, /id="thread-load-more"/)
+  assert.doesNotMatch(html, /id="thread-objective-state"/)
   assert.match(html, /id="prompt-form"/)
   assert.match(html, /id="composer-agent"/)
   assert.match(html, /id="chat-timeline"/)
