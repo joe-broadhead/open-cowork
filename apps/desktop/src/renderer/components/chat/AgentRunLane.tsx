@@ -32,6 +32,7 @@ interface Props {
   // users aren't surprised when the drill-in drawer reveals more nesting.
   // 0 / undefined means nothing is hidden; the chip doesn't render.
   deeperCount?: number
+  handoffLabel?: string | null
   metrics?: TaskRunMetrics
   onToggle?: () => void
 }
@@ -60,6 +61,7 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
   indentLevel = 0,
   expanded,
   deeperCount = 0,
+  handoffLabel = null,
   metrics,
   onToggle,
 }: Props) {
@@ -89,7 +91,7 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
       }}
       data-task-run-id={taskRun.id}
       aria-expanded={expanded}
-      aria-label={`${formatAgentName(taskRun.agent)} — ${statusLabel(taskRun.status)}`}
+      aria-label={`${formatAgentName(taskRun.agent)} — ${statusLabel(taskRun.status)}${handoffLabel ? ` from ${handoffLabel}` : ''}`}
     >
       <div
         className="relative shrink-0"
@@ -117,6 +119,12 @@ export const AgentRunLane = memo(function AgentRunLaneComponent({
         >
           {statusLabel(taskRun.status)}
         </span>
+        {handoffLabel && (
+          <span className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
+            <span className="shrink-0">from</span>
+            <span className="truncate text-text-secondary">{handoffLabel}</span>
+          </span>
+        )}
         {(taskRun.startedAt || isRunning) && (
           <ElapsedClock startedAt={taskRun.startedAt ?? null} finishedAt={taskRun.finishedAt ?? null} />
         )}

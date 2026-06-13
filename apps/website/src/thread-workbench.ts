@@ -72,6 +72,13 @@ export function cloudWebThreadProjection(view: CloudWebThreadView | null | undef
   return projection && typeof projection === 'object' && !Array.isArray(projection) ? projection : null
 }
 
+function compareCloudWebThreadUpdatedDesc(a: CloudWebThreadSession, b: CloudWebThreadSession) {
+  const aUpdated = a.updatedAt || ''
+  const bUpdated = b.updatedAt || ''
+  if (aUpdated === bUpdated) return 0
+  return bUpdated > aUpdated ? 1 : -1
+}
+
 export function filterCloudWebThreads(
   sessions: CloudWebThreadSession[],
   views: Record<string, CloudWebThreadView | undefined>,
@@ -84,18 +91,23 @@ export function filterCloudWebThreads(
   const profileFilter = (filters.profile || '').trim().toLowerCase()
   const projectFilter = filters.project || 'all'
   const tagFilter = (filters.tag || '').trim().toLowerCase()
+  const hasStatusFilter = statusFilter !== 'all'
+  const hasProfileFilter = Boolean(profileFilter)
+  const hasProjectFilter = projectFilter !== 'all'
+  const hasTagFilter = Boolean(tagFilter)
+  const hasQuery = queryTokens.length > 0
+  const needsProjection = hasStatusFilter || hasProfileFilter || hasProjectFilter || hasTagFilter || hasQuery
 
-  return [...sessions]
-    .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+  return sessions
     .filter((session) => {
-      const projection = cloudWebThreadProjection(views[session.sessionId])
-      const status = cloudWebThreadStatus(session, projection)
-      if (statusFilter !== 'all' && status !== statusFilter && session.status !== statusFilter) return false
-      if (profileFilter && String(session.profileName || projection?.profileName || '').toLowerCase() !== profileFilter) return false
-      if (projectFilter !== 'all' && cloudWebThreadProjectKind(projection) !== projectFilter) return false
-      const tags = cloudWebThreadTags(session, projection)
-      if (tagFilter && !tags.some((entry) => entry.toLowerCase().includes(tagFilter))) return false
-      if (!queryTokens.length) return true
+      const projection = needsProjection ? cloudWebThreadProjection(views[session.sessionId]) : null
+      const status = hasStatusFilter || hasQuery ? cloudWebThreadStatus(session, projection) : ''
+      if (hasStatusFilter && status !== statusFilter && session.status !== statusFilter) return false
+      if (hasProfileFilter && String(session.profileName || projection?.profileName || '').toLowerCase() !== profileFilter) return false
+      if (hasProjectFilter && cloudWebThreadProjectKind(projection) !== projectFilter) return false
+      const tags = hasTagFilter || hasQuery ? cloudWebThreadTags(session, projection) : []
+      if (hasTagFilter && !tags.some((entry) => entry.toLowerCase().includes(tagFilter))) return false
+      if (!hasQuery) return true
       const haystack = [
         session.sessionId,
         session.title,
@@ -106,5 +118,6 @@ export function filterCloudWebThreads(
       ].filter(Boolean).join(' ').toLowerCase()
       return queryTokens.every((token) => haystack.includes(token))
     })
+    .sort(compareCloudWebThreadUpdatedDesc)
     .slice(0, limit)
 }

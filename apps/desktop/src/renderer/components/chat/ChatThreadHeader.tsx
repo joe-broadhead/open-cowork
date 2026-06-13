@@ -1,3 +1,4 @@
+import type { ConversationTaskContext } from '@open-cowork/shared'
 import type { Session } from '../../stores/session'
 import { t } from '../../helpers/i18n'
 import { ActionCluster } from '../ui'
@@ -8,7 +9,9 @@ type ChatThreadHeaderProps = {
   parentSession: Session | null
   inspectorOpen: boolean
   unreverting: boolean
+  taskContext?: ConversationTaskContext | null
   onOpenParent: () => void
+  onOpenBoard?: () => void
   onToggleInspector: () => void
   onUnrevert: () => void
 }
@@ -19,14 +22,16 @@ export function ChatThreadHeader({
   parentSession,
   inspectorOpen,
   unreverting,
+  taskContext = null,
   onOpenParent,
+  onOpenBoard,
   onToggleInspector,
   onUnrevert,
 }: ChatThreadHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border-subtle px-4 py-2 flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <div className="text-[13px] font-medium text-text truncate">
+        <div data-testid="chat-thread-title" className="text-[13px] font-medium text-text truncate">
           {currentSession?.title || `Chat ${currentSessionId.slice(0, 8)}`}
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -46,6 +51,27 @@ export function ChatThreadHeader({
             >
               <span>⑂</span>
               <span>Forked from {parentSession?.title ? parentSession.title : 'chat'}</span>
+            </button>
+          )}
+          {taskContext && (
+            <span
+              aria-label={`Project ${taskContext.projectTitle}, task ${taskContext.taskTitle}`}
+              className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border-subtle bg-elevated px-1.5 py-0.5 text-[10px] text-text-muted"
+            >
+              <span className="shrink-0 text-text-muted">Project</span>
+              <span className="max-w-[150px] truncate text-text-secondary">{taskContext.projectTitle}</span>
+              <span aria-hidden="true" className="text-text-muted">→</span>
+              <span className="shrink-0 text-text-muted">Task</span>
+              <span className="max-w-[180px] truncate text-text">{taskContext.taskTitle}</span>
+            </span>
+          )}
+          {taskContext && onOpenBoard && (
+            <button
+              type="button"
+              onClick={onOpenBoard}
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-border-subtle text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            >
+              Open board
             </button>
           )}
           {currentSession?.changeSummary && currentSession.changeSummary.files > 0 && (

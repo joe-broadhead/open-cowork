@@ -383,7 +383,11 @@ export function SessionInspector({ onClose }: InspectorProps) {
           files={reviewFiles}
           empty="No artifacts to review yet."
           className="mb-5"
-        />
+        >
+          <p className="rounded-lg border border-border-subtle bg-elevated px-3 py-2 text-[12px] text-text-secondary">
+            Nothing ships until you approve.
+          </p>
+        </DiffView>
 
         {tab === 'context' && (
           <div className="flex flex-col gap-5">

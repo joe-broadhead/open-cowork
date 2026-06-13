@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
+  CoordinationBoardPayload,
   Message,
   PendingApproval,
   PendingQuestion,
@@ -203,12 +204,19 @@ function installChatViewApi(options: {
   unrevertResult?: boolean
   unrevertError?: Error
   runtimeReadyCallbacks?: Array<() => void>
+  coordinationBoard?: CoordinationBoardPayload
+  coordinationUpdatedCallbacks?: Array<() => void>
 } = {}) {
   const callbacks = options.runtimeReadyCallbacks ?? []
+  const coordinationCallbacks = options.coordinationUpdatedCallbacks ?? []
   return installRendererTestCoworkApi({
     on: {
       runtimeReady: vi.fn((callback: () => void) => {
         callbacks.push(callback)
+        return vi.fn()
+      }),
+      coordinationUpdated: vi.fn((callback: () => void) => {
+        coordinationCallbacks.push(callback)
         return vi.fn()
       }),
     },
@@ -224,6 +232,9 @@ function installChatViewApi(options: {
     },
     app: {
       builtinAgents: vi.fn(async () => []),
+    },
+    coordination: {
+      board: vi.fn(async () => options.coordinationBoard ?? { projects: [], tasks: [] }),
     },
   })
 }
@@ -364,6 +375,56 @@ describe('ChatView', () => {
     expect(screen.queryByTestId('session-inspector')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show Review' }))
     expect(screen.getByTestId('session-inspector')).toBeInTheDocument()
+  })
+
+  it('shows linked project and task context only when coordination links the session', async () => {
+    const user = userEvent.setup()
+    const onNavigate = vi.fn()
+    installChatViewApi({
+      coordinationBoard: {
+        projects: [{
+          id: 'project-1',
+          kind: 'project',
+          workspaceId: 'local',
+          ownerAuthority: 'desktop_local',
+          executionAuthority: 'desktop_local',
+          stateOwner: 'desktop_local_store',
+          createdAt: '2026-06-13T00:00:00.000Z',
+          updatedAt: '2026-06-13T00:00:00.000Z',
+          title: 'Studio redesign',
+          objective: 'Ship conversation parity',
+          status: 'active',
+          team: ['chief-of-staff'],
+        }],
+        tasks: [{
+          id: 'task-1',
+          kind: 'task',
+          workspaceId: 'local',
+          ownerAuthority: 'desktop_local',
+          executionAuthority: 'desktop_local',
+          stateOwner: 'desktop_local_store',
+          createdAt: '2026-06-13T00:00:00.000Z',
+          updatedAt: '2026-06-13T00:00:00.000Z',
+          projectId: 'project-1',
+          title: 'Conversation polish',
+          spec: 'Add handoff and review affordances',
+          status: 'running',
+          column: 'doing',
+          priority: 'high',
+          assignedSessionId: 'session-1',
+        }],
+      },
+    })
+    seedCurrentSession()
+
+    render(<ChatView onNavigate={onNavigate} />)
+
+    await screen.findByLabelText('Project Studio redesign, task Conversation polish')
+    expect(screen.getByText('Studio redesign')).toBeInTheDocument()
+    expect(screen.getByText('Conversation polish')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Open board' }))
+    expect(onNavigate).toHaveBeenCalledWith('projects')
   })
 
   it('scrolls from an approval card to its source tool when available', async () => {

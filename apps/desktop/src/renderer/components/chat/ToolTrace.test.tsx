@@ -91,6 +91,7 @@ function installArtifactApi() {
         mime: 'text/markdown',
         url: 'data:text/markdown;base64,cmVwb3J0',
       })),
+      open: vi.fn(async () => '/tmp/report.md'),
       export: vi.fn(async () => '/tmp/report.md'),
       reveal: vi.fn(async () => true),
     },

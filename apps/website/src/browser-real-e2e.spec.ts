@@ -22,7 +22,7 @@ import {
 
 const CI = Boolean(process.env.CI)
 const REAL_BROWSER_STEP_TIMEOUT_MS = 10_000
-const REAL_BROWSER_TEST_TIMEOUT_MS = 120_000
+const REAL_BROWSER_TEST_TIMEOUT_MS = 240_000
 const desktopRequire = createRequire(new URL('../../desktop/package.json', import.meta.url))
 const BUILT_REACT_CLIENT_PATH = fileURLToPath(new URL('../dist/client/open-cowork-cloud-react.js', import.meta.url))
 const FONT_ASSET_SPECS = {

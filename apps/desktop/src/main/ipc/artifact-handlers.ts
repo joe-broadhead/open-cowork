@@ -1,7 +1,8 @@
 import electron from 'electron'
 import { resolve } from 'path'
 import { basename, join } from 'path'
-import { chmodSync, copyFileSync, existsSync, realpathSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs'
+import { isSafeArtifactOpenTarget } from '@open-cowork/shared'
 import type {
   ArtifactIndexPayload,
   ArtifactIndexRequest,
@@ -23,7 +24,7 @@ import {
   validateSessionArtifactRequest,
   validateSessionArtifactUploadRequest,
 } from './object-validators.ts'
-import { buildArtifactAttachmentPayload } from '../artifact-attachments.ts'
+import { buildArtifactAttachmentPayload, inferArtifactMime } from '../artifact-attachments.ts'
 import { listLocalArtifactIndex, listLocalSessionArtifacts, updateLocalArtifactStatus } from '../artifact-index.ts'
 import { getChartArtifactsRoot } from '../chart-artifacts.ts'
 import { cleanupSandboxStorage, getSandboxStorageStats } from '../sandbox-storage.ts'
@@ -35,6 +36,9 @@ import { readWorkspaceIdOption } from '../workspace-gateway.ts'
 
 const MAX_CLOUD_ARTIFACT_EXPORT_BYTES = 50 * 1024 * 1024
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/
+const CLOUD_ARTIFACT_OPEN_TEMP_PREFIX = 'open-cowork-artifact-'
+const CLOUD_ARTIFACT_OPEN_TEMP_RETENTION_MS = 24 * 60 * 60 * 1000
+const CLOUD_ARTIFACT_OPEN_TEMP_GRACE_MS = 60 * 60 * 1000
 
 export function copyArtifactForExport(source: string, destination: string) {
   copyFileSync(source, destination)
@@ -75,15 +79,89 @@ export function decodeCloudArtifactDataUrl(url: string) {
 
 export function writeCloudArtifactForExport(destination: string, attachment: Pick<SessionArtifactAttachment, 'url'>) {
   const bytes = decodeCloudArtifactDataUrl(attachment.url)
-  // User-selected cloud artifact export. The bytes are validated as a bounded
-  // base64 data URL above and only written after an explicit save dialog.
+  // Explicit user artifact export/open. The bytes are validated as a bounded
+  // base64 data URL above before being written to a user-selected or temp path.
   // codeql[js/network-data-written-to-file]
   writeFileSync(destination, bytes)
   chmodSync(destination, 0o600)
 }
 
+async function openArtifactPath(shell: typeof electron.shell, filePath: string) {
+  const error = await shell.openPath(filePath)
+  if (error) throw new Error(`Could not open artifact: ${error}`)
+  return filePath
+}
+
+function assertSafeArtifactOpenTarget(filename: string, mime: string | null | undefined) {
+  if (isSafeArtifactOpenTarget({ filename, mime })) return
+  throw new Error('This artifact type cannot be opened directly. Export the artifact and inspect it manually.')
+}
+
+export function safeArtifactOpenFilename(filename: string | null | undefined, mime: string | null | undefined, fallback: string) {
+  const candidate = safeArtifactExportFilename(filename || fallback)
+  assertSafeArtifactOpenTarget(candidate, mime)
+  return candidate
+}
+
+export function cleanupCloudArtifactOpenTempDirs(
+  tempRoot: string,
+  options: {
+    nowMs?: number
+    maxAgeMs?: number
+  } = {},
+) {
+  const nowMs = options.nowMs ?? Date.now()
+  const maxAgeMs = options.maxAgeMs ?? CLOUD_ARTIFACT_OPEN_TEMP_RETENTION_MS
+  let removed = 0
+  try {
+    for (const entry of readdirSync(tempRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith(CLOUD_ARTIFACT_OPEN_TEMP_PREFIX)) continue
+      const directory = join(tempRoot, entry.name)
+      const stats = statSync(directory)
+      if (nowMs - stats.mtimeMs < maxAgeMs) continue
+      rmSync(directory, { recursive: true, force: true })
+      removed += 1
+    }
+  } catch {
+    return removed
+  }
+  return removed
+}
+
+function scheduleCloudArtifactOpenTempCleanup(tempRoot: string) {
+  const timer = setTimeout(() => {
+    try {
+      rmSync(tempRoot, { recursive: true, force: true })
+    } catch {
+      // Best-effort cleanup; the next startup pass prunes any leftover temp artifacts.
+    }
+  }, CLOUD_ARTIFACT_OPEN_TEMP_GRACE_MS)
+  timer.unref?.()
+}
+
+function electronTempPath(app: typeof electron.app | null | undefined) {
+  try {
+    return app?.getPath('temp') || null
+  } catch {
+    return null
+  }
+}
+
+function isAuthorizedLocalArtifact(root: string, source: string, sessionId: string) {
+  const chartRoot = resolve(getChartArtifactsRoot(sessionId))
+  if (root === safeRealPath(chartRoot)) return true
+  return isReadableSessionArtifact(sessionEngine.getSessionView(sessionId), source)
+}
+
 export function registerArtifactHandlers(context: IpcHandlerContext) {
   const { app, shell } = electron
+  const appTempPath = electronTempPath(app)
+  if (appTempPath) {
+    const removedOpenTempDirs = cleanupCloudArtifactOpenTempDirs(appTempPath)
+    if (removedOpenTempDirs > 0) {
+      log('artifact', `Cleaned up ${removedOpenTempDirs} stale cloud artifact open temp director${removedOpenTempDirs === 1 ? 'y' : 'ies'}`)
+    }
+  }
 
   registerIpcInvoke(context, 'artifact:list', objectArg<SessionArtifactListRequest>('artifact list request', validateSessionArtifactListRequest), async (event, request): Promise<SessionArtifact[]> => {
     const workspaceId = readWorkspaceIdOption(request)
@@ -115,6 +193,30 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
       throw new Error('Artifact upload is only available for Cloud workspaces.')
     }
     return context.workspaceGateway.uploadCloudArtifact(event, request, workspaceId)
+  })
+
+  registerIpcInvoke(context, 'artifact:open', objectArg<SessionArtifactExportRequest>('artifact open request', validateSessionArtifactExportRequest), async (event, request) => {
+    const workspaceId = readWorkspaceIdOption(request)
+    if (!context.workspaceGateway.isLocalWorkspace(event, workspaceId)) {
+      const attachment = await context.workspaceGateway.readCloudArtifactAttachment(event, request.sessionId, request.filePath, workspaceId)
+      const filename = safeArtifactOpenFilename(attachment.filename, attachment.mime, basename(request.filePath))
+      const tempPath = electronTempPath(app)
+      if (!tempPath) throw new Error('Artifact open is unavailable because the app temp directory is not ready.')
+      const tempRoot = mkdtempSync(join(tempPath, CLOUD_ARTIFACT_OPEN_TEMP_PREFIX))
+      const destination = join(tempRoot, filename)
+      writeCloudArtifactForExport(destination, attachment)
+      scheduleCloudArtifactOpenTempCleanup(tempRoot)
+      log('artifact', `Opened cloud artifact ${attachment.filename} from ${shortSessionId(request.sessionId)}`)
+      return openArtifactPath(shell, destination)
+    }
+
+    const { root, source } = context.resolvePrivateArtifactPath(request)
+    safeArtifactOpenFilename(basename(source), inferArtifactMime(source), basename(source))
+    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
+      throw new Error('Only surfaced session artifacts can be opened directly.')
+    }
+    log('artifact', `Opened artifact ${basename(source)} from ${shortSessionId(request.sessionId)}`)
+    return openArtifactPath(shell, source)
   })
 
   registerIpcInvoke(context, 'artifact:export', objectArg<SessionArtifactExportRequest>('artifact export request', validateSessionArtifactExportRequest), async (_event, request) => {
@@ -163,9 +265,7 @@ export function registerArtifactHandlers(context: IpcHandlerContext) {
       return context.workspaceGateway.readCloudArtifactAttachment(event, request.sessionId, request.filePath, workspaceId)
     }
     const { root, source } = context.resolvePrivateArtifactPath(request)
-    const chartRoot = resolve(getChartArtifactsRoot(request.sessionId))
-    const isChartArtifact = root === safeRealPath(chartRoot)
-    if (!isChartArtifact && !isReadableSessionArtifact(sessionEngine.getSessionView(request.sessionId), source)) {
+    if (!isAuthorizedLocalArtifact(root, source, request.sessionId)) {
       throw new Error('Only surfaced session artifacts can be attached to the thread.')
     }
     return buildArtifactAttachmentPayload(source)

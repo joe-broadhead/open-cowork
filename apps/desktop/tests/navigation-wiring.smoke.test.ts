@@ -204,7 +204,7 @@ test('home launchpad in-motion row routes through the real session activation pa
 
     await page.getByRole('button', { name: 'Home', exact: true }).first().click()
     await launchpadMotion.getByRole('button', { name: new RegExp(RECENT_TARGET_TITLE) }).click()
-    await page.locator('main').getByText(RECENT_TARGET_TITLE, { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByTestId('chat-thread-title').getByText(RECENT_TARGET_TITLE, { exact: true }).waitFor({ timeout: 10_000 })
 
     const markerCount = await page.getByText(RECENT_THREAD_MARKER, { exact: false }).count()
     assert.equal(markerCount, 0, 'switching via Home launchpad rows should hydrate the selected thread, not keep the prior transcript visible')

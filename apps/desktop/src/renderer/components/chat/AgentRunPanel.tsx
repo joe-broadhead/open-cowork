@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import type { PendingQuestion } from '@open-cowork/shared'
+import { resolveTaskRunHandoffAgent, type PendingQuestion } from '@open-cowork/shared'
 import type { PendingApproval, TaskRun } from '../../stores/session'
 import type { AgentVisual } from './agent-visuals'
 import { ElapsedClock } from './ElapsedClock'
@@ -44,6 +44,7 @@ interface Props {
   onFocusTask: (task: TaskRun, visibleTasks?: TaskRun[]) => void
   pendingApprovals?: PendingApproval[]
   pendingQuestions?: PendingQuestion[]
+  handoffAgentBySessionId?: Record<string, string>
   scaleEnabled?: boolean
   scaleStorageKey?: string
 }
@@ -79,6 +80,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
   onFocusTask,
   pendingApprovals = [],
   pendingQuestions = [],
+  handoffAgentBySessionId = {},
   scaleEnabled = false,
   scaleStorageKey,
 }: Props) {
@@ -128,6 +130,10 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
       return
     }
     onFocusTask(taskRun)
+  }
+  const handoffLabelForTask = (taskRun: TaskRun) => {
+    const agent = resolveTaskRunHandoffAgent(taskRun, handoffAgentBySessionId)
+    return agent ? formatAgentName(agent) : null
   }
 
   const allComplete = taskRuns.every((task) => task.status === 'complete')
@@ -272,6 +278,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
               groupMaxElapsedMs={maxElapsed}
               now={liveNow}
               expanded={focusedTaskId === lane.taskRun.id}
+              handoffLabel={handoffLabelForTask(lane.taskRun)}
               metrics={scaleEnabled ? scaleSummaryForTask(lane.taskRun, reviewIndex, liveNow) : undefined}
               onToggle={() => focusTask(lane.taskRun)}
             />
@@ -285,6 +292,7 @@ export const AgentRunPanel = memo(function AgentRunPanelComponent({
                 indentLevel={1}
                 expanded={focusedTaskId === nested.taskRun.id}
                 deeperCount={nested.deeperCount}
+                handoffLabel={handoffLabelForTask(nested.taskRun)}
                 metrics={scaleEnabled ? scaleSummaryForTask(nested.taskRun, reviewIndex, liveNow) : undefined}
                 onToggle={() => focusTask(nested.taskRun)}
               />

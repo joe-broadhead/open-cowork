@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -8,8 +8,10 @@ import type { CustomMcpConfig, DesktopPairingPublicRecord } from '@open-cowork/s
 import type { IpcHandlerContext } from '../apps/desktop/src/main/ipc/context.ts'
 import { registerAppHandlers, resolveSafeSaveTextPath, saveTextExportFile } from '../apps/desktop/src/main/ipc/app-handlers.ts'
 import {
+  cleanupCloudArtifactOpenTempDirs,
   decodeCloudArtifactDataUrl,
   registerArtifactHandlers,
+  safeArtifactOpenFilename,
   safeArtifactExportFilename,
 } from '../apps/desktop/src/main/ipc/artifact-handlers.ts'
 import { registerSessionHandlers } from '../apps/desktop/src/main/ipc/session-handlers.ts'
@@ -2708,6 +2710,45 @@ test('cloud artifact export helpers validate data URLs and sanitize default file
   assert.equal(safeArtifactExportFilename('../report.txt'), 'report.txt')
   assert.equal(safeArtifactExportFilename('/tmp/report.txt'), 'report.txt')
   assert.equal(safeArtifactExportFilename(''), 'artifact')
+  assert.equal(safeArtifactOpenFilename('result.txt', 'text/plain', 'run.command'), 'result.txt')
+  assert.equal(safeArtifactOpenFilename('result.md', 'application/octet-stream', 'run.command'), 'result.md')
+  assert.throws(
+    () => safeArtifactOpenFilename('spreadsheet.csv', 'text/csv', 'result.txt'),
+    /cannot be opened directly/,
+  )
+  assert.throws(
+    () => safeArtifactOpenFilename('run.command', 'text/plain', 'result.txt'),
+    /cannot be opened directly/,
+  )
+})
+
+test('cloud artifact open temp cleanup only removes stale scoped directories', () => {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'open-cowork-open-temp-root-'))
+  try {
+    const oldOpenDir = join(tempRoot, 'open-cowork-artifact-old')
+    const freshOpenDir = join(tempRoot, 'open-cowork-artifact-fresh')
+    const unrelatedDir = join(tempRoot, 'open-cowork-other-old')
+    mkdirSync(oldOpenDir)
+    mkdirSync(freshOpenDir)
+    mkdirSync(unrelatedDir)
+    writeFileSync(join(oldOpenDir, 'artifact.txt'), 'old')
+    writeFileSync(join(freshOpenDir, 'artifact.txt'), 'fresh')
+    writeFileSync(join(unrelatedDir, 'artifact.txt'), 'unrelated')
+
+    const nowMs = Date.now()
+    const oldDate = new Date(nowMs - 10_000)
+    const freshDate = new Date(nowMs - 500)
+    utimesSync(oldOpenDir, oldDate, oldDate)
+    utimesSync(freshOpenDir, freshDate, freshDate)
+    utimesSync(unrelatedDir, oldDate, oldDate)
+
+    assert.equal(cleanupCloudArtifactOpenTempDirs(tempRoot, { nowMs, maxAgeMs: 1_000 }), 1)
+    assert.equal(existsSync(oldOpenDir), false)
+    assert.equal(existsSync(freshOpenDir), true)
+    assert.equal(existsSync(unrelatedDir), true)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
 
 test('capability handlers route cloud workspace calls through the workspace gateway', async () => {
@@ -2965,6 +3006,34 @@ test('artifact IPC validates request shape before resolving private paths', asyn
     /Artifact path is required/,
   )
   assert.equal(resolveCalled, false)
+})
+
+test('artifact:open rejects active artifact file types before shell open', async () => {
+  const { context, handlers } = createBaseContext()
+  context.resolvePrivateArtifactPath = () => ({ root: '/tmp', source: '/tmp/run.command' })
+
+  registerArtifactHandlers(context)
+  const handler = handlers.get('artifact:open')
+
+  assert.ok(handler, 'expected artifact:open handler to be registered')
+  await assert.rejects(
+    () => handler({}, { sessionId: 'session-1', filePath: '/tmp/run.command' }),
+    /cannot be opened directly/,
+  )
+})
+
+test('artifact:open rejects passive private files that were not surfaced by the session', async () => {
+  const { context, handlers } = createBaseContext()
+  context.resolvePrivateArtifactPath = () => ({ root: '/tmp', source: '/tmp/private-note.txt' })
+
+  registerArtifactHandlers(context)
+  const handler = handlers.get('artifact:open')
+
+  assert.ok(handler, 'expected artifact:open handler to be registered')
+  await assert.rejects(
+    () => handler({}, { sessionId: 'session-1', filePath: '/tmp/private-note.txt' }),
+    /surfaced session artifacts/,
+  )
 })
 
 test('chart:save-artifact rejects unknown sessions before writing chart bytes', async () => {
