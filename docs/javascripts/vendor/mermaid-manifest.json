@@ -6,7 +6,7 @@
   "bundle": "docs/javascripts/vendor/mermaid.min.js",
   "generatedBy": "node scripts/build-docs-mermaid-vendor.mjs",
   "bundler": "esbuild",
-  "bundlerVersion": "0.28.0",
-  "bytes": 3271412,
-  "sha256": "fcc66ac550d28f5944d5a562f23230399808c7f4d9cf7b88e2e9f6d9849f9b53"
+  "bundlerVersion": "0.28.1",
+  "bytes": 3271465,
+  "sha256": "cdb5b957a931c6bd5a47711124efdb24204dfcef5f81fc065d86d99bfbb6d552"
 }
