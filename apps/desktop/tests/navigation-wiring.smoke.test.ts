@@ -13,48 +13,38 @@ const RECENT_TARGET_TITLE = 'Navigation target thread'
 const RECENT_THREAD_MARKER = 'navigation-regression-marker'
 const DEEP_LINK_THREAD_MARKER = 'canonical-resource-deep-link-marker'
 
-function makeThreadIndexFixture(index: number) {
-  const createdAt = new Date(Date.UTC(2026, 1, index + 1, 10, 0, 0)).toISOString()
-  const updatedAt = new Date(Date.UTC(2026, 1, index + 1, 11, 0, 0)).toISOString()
-  return {
-    id: `threads_view_fixture_${index}`,
-    title: `Threads workspace fixture ${index + 1}`,
-    directory: null,
-    opencodeDirectory: '/tmp/open-cowork-threads-fixture',
-    createdAt,
-    updatedAt,
-    kind: 'interactive',
-    automationId: null,
-    runId: null,
-    providerId: index % 2 === 0 ? 'openrouter' : 'codex',
-    modelId: index % 2 === 0 ? 'openrouter/sonnet' : 'codex/gpt-5',
-    summary: null,
-    parentSessionId: null,
-    changeSummary: null,
-    revertedMessageId: null,
-    managedByCowork: true as const,
-  }
-}
-
-test('sidebar Projects button opens the indexed Projects workspace', async () => {
-  const fixtures = Array.from({ length: 6 }, (_, index) => makeThreadIndexFixture(index))
-  const { page, cleanup } = await launchSmokeApp({
-    seedBeforeLaunch: ({ dataRoot }) => {
-      writeFileSync(join(dataRoot, 'sessions.json'), JSON.stringify(fixtures, null, 2))
-    },
-  })
+test('sidebar Projects button opens the coordination Projects board', async () => {
+  const { page, cleanup } = await launchSmokeApp()
 
   try {
     await waitForAppShell(page, 30_000)
-    await page.getByRole('button', { name: 'Projects', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Search projects' }).waitFor({ timeout: 10_000 })
-    await page.locator('main').getByText('Threads workspace fixture 6', { exact: true }).waitFor({ timeout: 10_000 })
-
-    const indexedCount = await page.evaluate(async () => {
-      const result = await window.coworkApi.threads.search({ text: 'Threads workspace fixture', limit: 10 })
-      return result.threads.length
+    await page.evaluate(async () => {
+      const project = await window.coworkApi.coordination.createProject({
+        title: 'Navigation smoke project',
+        objective: 'Verify the Projects nav opens the coordination board.',
+        team: ['cleo', 'build'],
+      })
+      await window.coworkApi.coordination.createTask({
+        projectId: project.id,
+        title: 'Coordinate navigation smoke',
+        spec: 'Render this task in the Projects board smoke test.',
+        status: 'running',
+        column: 'doing',
+        priority: 'med',
+        assigneeAgent: 'build',
+        assignedSessionId: null,
+      })
     })
-    assert.equal(indexedCount, fixtures.length)
+    await page.getByRole('button', { name: 'Projects', exact: true }).click()
+    await page.getByRole('heading', { name: 'Projects' }).waitFor({ timeout: 10_000 })
+    await page.locator('main h2').filter({ hasText: 'Navigation smoke project' }).waitFor({ timeout: 10_000 })
+    await page.locator('button.studio-kanban-task-button').filter({ hasText: 'Coordinate navigation smoke' }).waitFor({ timeout: 10_000 })
+
+    const boardCounts = await page.evaluate(async () => {
+      const board = await window.coworkApi.coordination.board()
+      return { projects: board.projects.length, tasks: board.tasks.length }
+    })
+    assert.deepEqual(boardCounts, { projects: 1, tasks: 1 })
   } finally {
     await cleanup()
   }

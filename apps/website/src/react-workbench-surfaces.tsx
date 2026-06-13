@@ -4,6 +4,7 @@ import { useAppApi } from '@open-cowork/ui/app-api'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { CloudArtifactSurfacePortals } from './react-workbench-artifacts.tsx'
 import { CloudChannelSurfacePortals } from './react-workbench-channels.tsx'
+import { CloudProjectBoardPortal } from './react-workbench-projects.tsx'
 import type { CloudRuntimeActionProps } from './react-workbench.ts'
 import { asRecord, errorMessage, setRouteHash } from './react-workbench-controller.ts'
 import type { CloudWebThreadView } from './thread-workbench.ts'
@@ -108,7 +109,6 @@ function list<T = unknown>(value: unknown): T[] {
 function text(value: unknown, fallback = '') {
   return String(value ?? fallback)
 }
-
 function workflowPillKind(status: unknown) {
   const value = String(status || '').toLowerCase()
   if (value === 'active' || value === 'completed' || value === 'running') return 'ok'
@@ -146,42 +146,6 @@ function workflowTriggersFromForm(data: FormData): WorkflowTriggerInput[] {
   if (type === 'webhook') return [{ id, type: 'webhook', enabled: true }]
   return [{ id: 'manual-web', type: 'manual', enabled: true }]
 }
-
-function CloudObjectiveState({ selectedView }: { selectedView: CloudWebThreadView | null }) {
-  const projection = asRecord(selectedView?.projection?.view)
-  const projectSource = asRecord(projection.projectSource)
-  const todos = list<Record<string, unknown>>(projection.todos).slice(0, 6)
-  const objective = text(projection.objective)
-  const objectiveLabel = !selectedView
-    ? 'Open a chat to see its projected objective.'
-    : objective || 'No projected objective is exposed for this chat.'
-  const sourceKind = selectedView ? text(projectSource.kind, 'chat-only') : 'Open a chat'
-  return (
-    <div className="list react-objective-state" aria-label="Selected chat objective">
-      <div className="row compact">
-        <strong>Current objective</strong>
-        <span>{objectiveLabel}</span>
-      </div>
-      <div className="row compact">
-        <strong>Project source</strong>
-        <span>{sourceKind}</span>
-      </div>
-      {todos.length ? (
-        <div className="activity-block">
-          <h4>Follow-up work</h4>
-          {todos.map((todo, index) => (
-            <div className="activity-row" key={text(todo.id, `objective-todo-${index}`)}>
-              <span className="pill">{text(todo.status, 'todo')}</span>
-              <span>{text(todo.content || todo.title, 'Todo')}</span>
-            </div>
-          ))}
-        </div>
-      ) : <p className="empty">No projected follow-up todos in this chat.</p>}
-      <p className="notice" data-kind="warn">Objectives are projected from the selected Cloud chat. A cross-project objective model is not exposed to Cloud Web yet.</p>
-    </div>
-  )
-}
-
 function currentInputValue(id: string) {
   return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value || ''
 }
@@ -357,7 +321,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
     workflows: usePortalTarget('workflow-list'),
     workflowRuns: usePortalTarget('workflow-run-list'),
     workflowDetail: usePortalTarget('workflow-detail'),
-    objectives: usePortalTarget('thread-objective-state'),
+    projectBoard: usePortalTarget('project-board-surface'),
   }
   const workflowDisabled = bootstrap.features.workflows === false
   const workflowDisabledReason = 'Playbook controls are disabled by this cloud profile.'
@@ -490,6 +454,7 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
   }, [workflowFilter, workflows])
   const selectedWorkflow = visibleWorkflows.find((workflow) => workflow.id === selectedWorkflowId) || visibleWorkflows[0] || null
   const selectedRuns = selectedWorkflow ? runs.filter((run) => run.workflowId === selectedWorkflow.id) : []
+  const projectAgentNames = useMemo(() => agents.map((agent) => agent.name), [agents])
   const runWorkflow = useCallback((workflow: Workflow) => {
     void (async () => {
       try {
@@ -588,10 +553,10 @@ export function CloudWorkbenchSurfacePortals({ bootstrap, workspace, selectedVie
       targets.workflowDetail,
     ))
   }
-  if (targets.objectives) portals.push(createPortal(<CloudObjectiveState selectedView={selectedView} />, targets.objectives))
   return (
     <>
       {portals}
+      <CloudProjectBoardPortal target={targets.projectBoard} bootstrap={bootstrap} agents={projectAgentNames} onSelectSession={onSelectSession} />
       <CloudArtifactSurfacePortals selectedView={selectedView} artifactActions={artifactActions} />
       <CloudChannelSurfacePortals onSelectSession={onSelectSession} />
     </>

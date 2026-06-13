@@ -168,8 +168,8 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Cloud Project Sources/)
     assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Objectives/)
     assert.match(harness.document.querySelector('[data-parity-route="threads"]')?.textContent || '', /Local Filesystem/)
-    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /Open a chat to see its projected objective/)
-    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /cross-project objective model/)
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Studio parity launch/)
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Plan with Cleo/)
 
     const chatLink = harness.document.querySelector('[data-route-link="chat"]') as HTMLAnchorElement
     chatLink.focus()
@@ -182,7 +182,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.match(harness.document.querySelector('#chat-session-title')?.textContent || '', /What shall we cowork on today/)
     assert.equal((harness.document.querySelector('#chat-inspector') as HTMLElement).hidden, true)
     await selectFirstCloudThread(harness)
-    assert.match(harness.document.querySelector('#thread-objective-state')?.textContent || '', /No projected objective is exposed for this chat/)
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Review Cloud API writes/)
     const workbench = harness.document.querySelector('.cloud-chat-workbench') as HTMLElement
     assert.ok(harness.document.querySelector('[data-workbench-pane="threads"]'))
     assert.ok(harness.document.querySelector('[data-workbench-layout="true"]'))
@@ -293,6 +293,66 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     assert.match(locked.document.querySelector('#status')?.textContent || '', /Playbook controls are disabled/)
   } finally {
     locked.close()
+  }
+})
+
+test('cloud web browser renders and mutates the Projects Kanban board through coordination APIs', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    await waitFor(() => assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Studio parity launch/))
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Backlog/)
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /In progress/)
+    assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Audit project surface parity/)
+
+    const boardSurface = harness.document.querySelector('#project-board-surface') as HTMLElement
+    const planButton = Array.from(boardSurface.querySelectorAll('.studio-project-board-header__actions button')) as HTMLButtonElement[]
+    const headerPlanButton = planButton.find((button) => button.textContent?.trim() === 'Plan with Cleo')
+    assert.ok(headerPlanButton)
+    headerPlanButton.click()
+    await waitFor(() => assert.ok(harness.document.querySelector('.studio-plan-form')))
+    harness.submit('.studio-plan-form')
+    await waitFor(() => {
+      assert.ok(harness.lastRequest((request) => request.method === 'POST' && /\/api\/coordination\/projects\/project-1\/plan-with-cleo$/.test(request.path)))
+      assert.match(harness.document.querySelector('#project-board-surface')?.textContent || '', /Clarify acceptance criteria/)
+    })
+
+    const taskButtons = Array.from(harness.document.querySelectorAll('.studio-kanban-task-button')) as HTMLButtonElement[]
+    const reviewTask = taskButtons
+      .find((button) => button.textContent?.includes('Review Cloud API writes'))
+    assert.ok(reviewTask)
+    reviewTask.click()
+    await waitFor(() => assert.match(harness.document.querySelector('.studio-task-drawer')?.textContent || '', /Review Cloud API writes/))
+    const doneStageButtons = Array.from(harness.document.querySelectorAll('.studio-stage-chips button')) as HTMLButtonElement[]
+    const doneStage = doneStageButtons
+      .find((button) => button.textContent?.trim() === 'Done')
+    assert.ok(doneStage)
+    doneStage.click()
+    await waitFor(() => {
+      const move = harness.lastRequest((request) => request.method === 'POST' && /\/api\/coordination\/tasks\/task-3\/move$/.test(request.path))
+      assert.equal((move?.body as Record<string, unknown>)?.column, 'done')
+    })
+
+    const assignee = harness.document.querySelector('.studio-select-row select') as HTMLSelectElement
+    assignee.value = 'data-analyst'
+    assignee.dispatchEvent(new harness.window.Event('change', { bubbles: true }))
+    await waitFor(() => {
+      const assign = harness.lastRequest((request) => request.method === 'POST' && /\/api\/coordination\/tasks\/task-3\/assign$/.test(request.path))
+      assert.equal((assign?.body as Record<string, unknown>)?.assigneeAgent, 'data-analyst')
+    })
+
+    const refreshedTaskButtons = Array.from(harness.document.querySelectorAll('.studio-kanban-task-button')) as HTMLButtonElement[]
+    const linkedTask = refreshedTaskButtons
+      .find((button) => button.textContent?.includes('Audit project surface parity'))
+    assert.ok(linkedTask)
+    linkedTask.click()
+    await waitFor(() => assert.match(harness.document.querySelector('.studio-task-drawer')?.textContent || '', /Audit project surface parity/))
+    harness.clickText('button', 'Open the work')
+    await waitFor(() => {
+      assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/api\/coordination\/tasks\/task-1\/work-target$/.test(request.path)))
+      assert.equal(harness.document.body.dataset.route, 'chat')
+    })
+  } finally {
+    harness.close()
   }
 })
 
@@ -480,6 +540,54 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
     } finally {
       reloaded.close()
     }
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser starts project-backed chats from Projects route sources', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin' }).start()
+  try {
+    const repositoryUrl = harness.document.querySelector('#session-form input[name="repositoryUrl"]') as HTMLInputElement
+    const ref = harness.document.querySelector('#session-form input[name="ref"]') as HTMLInputElement
+    const subdirectory = harness.document.querySelector('#session-form input[name="subdirectory"]') as HTMLInputElement
+    repositoryUrl.value = 'https://github.com/joe-broadhead/open-cowork.git'
+    ref.value = 'master'
+    subdirectory.value = 'apps/website'
+
+    harness.submit('#session-form')
+
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/project-sources/validate')))
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions')))
+    const sessionRequest = harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions')
+    assert.deepEqual(sessionRequest?.body, {
+      profileName: 'default',
+      projectSource: {
+        kind: 'git',
+        repositoryUrl: 'https://github.com/joe-broadhead/open-cowork.git',
+        ref: 'master',
+        subdirectory: 'apps/website',
+        credentialRef: null,
+      },
+    })
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'chat'))
+    assert.match(harness.document.querySelector('#status')?.textContent || '', /Chat started/)
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser keeps project-source policy denials in Projects route', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', projectSourceDenied: true }).start()
+  try {
+    const repositoryUrl = harness.document.querySelector('#session-form input[name="repositoryUrl"]') as HTMLInputElement
+    repositoryUrl.value = 'https://blocked.example/repo.git'
+
+    harness.submit('#session-form')
+
+    await waitFor(() => assert.match(harness.document.querySelector('#status')?.textContent || '', /blocked by policy/i))
+    assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/project-sources/validate'))
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === '/api/sessions'), undefined)
   } finally {
     harness.close()
   }
@@ -741,15 +849,6 @@ test('cloud web browser exercises BYOK, gateway, billing, diagnostics, and quota
     assert.match(harness.document.querySelector('[data-admin-surface-route="diagnostics"]')?.textContent || '', /recursively redacted/)
   } finally {
     harness.close()
-  }
-
-  const policyBlocked = await createCloudWebBrowserHarness({ role: 'admin', projectSourceDenied: true }).start()
-  try {
-    ;(policyBlocked.document.querySelector('#session-form input[name="repositoryUrl"]') as HTMLInputElement).value = 'https://blocked.example/repo.git'
-    policyBlocked.submit('#session-form')
-    await waitFor(() => assert.match(policyBlocked.document.querySelector('#status')?.textContent || '', /blocked by policy/i))
-  } finally {
-    policyBlocked.close()
   }
 
   const billingDisabled = await createCloudWebBrowserHarness({ role: 'admin', billingEnabled: false }).start()

@@ -119,66 +119,62 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           <div class="section-header">
             <div>
               <h2>Projects</h2>
-              <div class="meta">Recent conversations and project-backed work</div>
+              <div class="meta">Objectives, coworker tasks, linked OpenCode work</div>
             </div>
             <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
           </div>
-          <div class="workbench-split">
+          <div class="project-board-shell">
             ${routeParityMarkup('threads')}
-            <div class="panel thread-list-panel">
-              <div class="toolbar" aria-label="Chat filters">
-                <label><span>Search</span><input id="thread-query" autocomplete="off" placeholder="title, profile, project, tag"></label>
-                <label><span>Status</span><select id="thread-status">
-                  <option value="all">All</option>
-                  <option value="running">Running</option>
-                  <option value="approval">Awaiting approval</option>
-                  <option value="question">Awaiting answer</option>
-                  <option value="idle">Idle</option>
-                  <option value="errored">Error</option>
-                  <option value="closed">Closed</option>
-                </select></label>
-                <label><span>Profile</span><input id="thread-profile" autocomplete="off" placeholder="${escapeHtml(policy.profileName)}"></label>
-                <label><span>Project</span><select id="thread-project">
-                  <option value="all">All</option>
-                  <option value="chat">Chat-only</option>
-                  <option value="git">Git</option>
-                  <option value="snapshot">Uploaded snapshot</option>
-                </select></label>
-                <label><span>Tag/filter</span><input id="thread-tag" autocomplete="off" placeholder="tag or smart filter"></label>
-                <button id="refresh-threads" type="button">Refresh</button>
-              </div>
-              <div class="table-shell" role="table" aria-label="Cloud projects and chats">
-                <div class="table-row table-head" role="row">
-                  <span role="columnheader">Chat</span>
-                  <span role="columnheader">Status</span>
-                </div>
-                <div id="thread-list"></div>
-              </div>
-              <div class="section-header">
-                <div class="meta"><span id="thread-count">0</span> chat(s). <span id="thread-limit-status">No chats loaded</span>.</div>
-                <button id="thread-load-more" type="button" hidden>Load more</button>
+            <div id="project-board-surface">
+              <div class="panel">
+                <p class="empty">Loading project board...</p>
               </div>
             </div>
-            <form class="panel" id="session-form">
-              <h3>Start from a project</h3>
-              <div class="form-grid">
-                <label><span>Profile</span><input name="profileName" autocomplete="off" value="${escapeHtml(policy.profileName)}" data-chat-control="true"></label>
-                <label><span>Git repository URL</span><input name="repositoryUrl" autocomplete="off" placeholder="https://github.com/org/repo.git" data-chat-control="true"></label>
-                <label><span>Ref</span><input name="ref" autocomplete="off" placeholder="main" data-chat-control="true"></label>
-                <label><span>Subdirectory</span><input name="subdirectory" autocomplete="off" placeholder="optional" data-chat-control="true"></label>
-                <label class="span"><span>Credential ref</span><input name="credentialRef" autocomplete="off" placeholder="secret://git/github-readonly" data-chat-control="true"></label>
-                <label><span>Snapshot title</span><input name="snapshotTitle" autocomplete="off" placeholder="Browser upload" data-chat-control="true"></label>
-                <label class="span"><span>Uploaded snapshot</span><input name="snapshotFiles" type="file" multiple webkitdirectory data-chat-control="true"></label>
-                <button class="primary span" type="submit" data-chat-control="true">Start chat</button>
+            <div class="project-route-support">
+              <form class="panel" id="session-form" aria-label="Start project-backed Cloud chat">
+                <div class="section-header">
+                  <div><h3>Start from a project</h3><div class="meta">Create a Cloud chat from an allowed git repo or explicit browser snapshot.</div></div>
+                  <button class="primary" type="submit" data-chat-control="true">Start chat</button>
+                </div>
+                <div class="form-grid">
+                  <label><span>Profile</span><input name="profileName" autocomplete="off" value="${escapeHtml(policy.profileName)}" data-chat-control="true"></label>
+                  <label><span>Git repository URL</span><input name="repositoryUrl" autocomplete="off" placeholder="https://github.com/org/repo.git" data-chat-control="true"></label>
+                  <label><span>Ref</span><input name="ref" autocomplete="off" placeholder="main" data-chat-control="true"></label>
+                  <label><span>Subdirectory</span><input name="subdirectory" autocomplete="off" placeholder="optional" data-chat-control="true"></label>
+                  <label class="span"><span>Credential ref</span><input name="credentialRef" autocomplete="off" placeholder="secret://git/github-readonly" data-chat-control="true"></label>
+                  <label><span>Snapshot title</span><input name="snapshotTitle" autocomplete="off" placeholder="Browser upload" data-chat-control="true"></label>
+                  <label class="span"><span>Uploaded snapshot</span><input name="snapshotFiles" type="file" multiple webkitdirectory data-chat-control="true"></label>
+                </div>
+                <p class="empty">Cloud policy validates git and uploaded snapshot sources before execution. Local desktop paths and local MCP details are not uploaded implicitly.</p>
+              </form>
+              <div class="panel" aria-label="Cloud chat history paging">
+                <div class="section-header">
+                  <div><h3>Chat history</h3><div class="meta"><span id="thread-count">0</span> chat(s). <span id="thread-limit-status">No chats loaded</span>.</div></div>
+                  <button id="thread-load-more" type="button" hidden>Load more</button>
+                </div>
+                <div class="table-shell" role="table" aria-label="Cloud chats"><div id="thread-list"></div></div>
               </div>
-              <p class="empty">Cloud policy validates git and uploaded snapshot sources before execution. Local desktop paths and local MCP details are not uploaded implicitly.</p>
-            </form>
-            <div class="panel">
-              <h3>Objectives</h3>
-              <div class="list" id="thread-objective-state">
-                <p class="empty">Open a chat to see its projected objective.</p>
-                <p class="notice" data-kind="warn">Objectives are projected from selected Cloud chats. A cross-project objective model is not exposed yet.</p>
-              </div>
+            </div>
+            <div class="project-route-sync-targets" hidden aria-hidden="true">
+              <input id="thread-query" autocomplete="off" aria-label="Search chats">
+              <select id="thread-status" aria-label="Chat status filter">
+                <option value="all">All</option>
+                <option value="running">Running</option>
+                <option value="approval">Awaiting approval</option>
+                <option value="question">Awaiting answer</option>
+                <option value="idle">Idle</option>
+                <option value="errored">Error</option>
+                <option value="closed">Closed</option>
+              </select>
+              <input id="thread-profile" autocomplete="off" aria-label="Chat profile filter">
+              <select id="thread-project" aria-label="Chat project filter">
+                <option value="all">All</option>
+                <option value="chat">Chat-only</option>
+                <option value="git">Git</option>
+                <option value="snapshot">Uploaded snapshot</option>
+              </select>
+              <input id="thread-tag" autocomplete="off" aria-label="Chat tag filter">
+              <button id="refresh-threads" type="button">Refresh</button>
             </div>
           </div>
         </section>

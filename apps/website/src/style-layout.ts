@@ -433,6 +433,13 @@ export function cloudWebsiteLayoutStyles() {
       align-items: start;
       min-width: 0;
     }
+    .project-route-support {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: var(--space-3);
+      align-items: start;
+      min-width: 0;
+    }
     body[data-surface="workbench"] .parity-grid {
       display: none;
     }
@@ -485,7 +492,7 @@ export function cloudWebsiteLayoutStyles() {
         border-right: 0;
         border-bottom: var(--border-width-1) solid var(--color-border-subtle);
       }
-      .grid, .form-grid, .workbench-split, .cloud-chat-workbench {
+      .grid, .form-grid, .workbench-split, .project-route-support, .cloud-chat-workbench {
         grid-template-columns: 1fr;
       }
       .sidebar-thread-pane {
