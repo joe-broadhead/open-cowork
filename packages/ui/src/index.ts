@@ -9,6 +9,7 @@ export {
   type ApprovalsQueueQuestionPrompt,
   type ApprovalsQueueSurfaceProps,
 } from './ApprovalsQueueSurface.js'
+export { ArtifactsLibrarySurface, type ArtifactsLibrarySurfaceProps } from './ArtifactsLibrarySurface.js'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge.js'
 export {
   Button,

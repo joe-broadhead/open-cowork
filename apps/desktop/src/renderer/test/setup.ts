@@ -330,6 +330,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
     },
     artifact: {
       list: vi.fn(async () => []),
+      index: vi.fn(async () => ({ artifacts: [], total: 0 })),
       cleanup: vi.fn(async (mode) => ({
         mode,
         removedWorkspaces: 0,
@@ -346,6 +347,7 @@ function installCoworkApi(overrides: TestCoworkApi = {}) {
         cloudArtifactId: 'uploaded-artifact',
         mime: request.contentType || undefined,
       })),
+      open: vi.fn(async () => null),
       export: vi.fn(async () => null),
       readAttachment: vi.fn(async () => ({
         filename: 'chart.png',

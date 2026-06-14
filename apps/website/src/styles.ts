@@ -1,6 +1,7 @@
 import { cssColorLuminance, emitRootTokensCss, type PublicBrandingConfig } from '@open-cowork/shared'
 import { publicBrandingCss } from './branding.ts'
 import { cloudWebsiteAgentProfileStyles } from './style-agent-profile.ts'
+import { cloudWebsiteArtifactStyles } from './style-artifacts.ts'
 import { cloudWebsiteChatStyles } from './style-chat.ts'
 import { cloudWebsiteComponentStyles } from './style-components.ts'
 import { cloudWebsiteLaunchpadStyles } from './style-launchpad.ts'
@@ -210,6 +211,7 @@ ${cloudWebsiteLayoutStyles()}
 ${cloudWebsiteComponentStyles()}
 ${cloudWebsitePrimitiveStyles()}
 ${cloudWebsiteAgentProfileStyles()}
+${cloudWebsiteArtifactStyles()}
 ${cloudWebsiteChatStyles()}
 ${cloudWebsiteLaunchpadStyles()}
 ${cloudWebsiteSharedUiStyles()}

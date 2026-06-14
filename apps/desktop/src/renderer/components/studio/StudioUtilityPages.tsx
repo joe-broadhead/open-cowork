@@ -1,11 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ApprovalsQueueSurface,
+  ArtifactsLibrarySurface,
   ChannelsGatewaySurface,
   type ApprovalsQueuePermissionItem,
   type ApprovalsQueueQuestionItem,
 } from '@open-cowork/ui'
 import {
+  defaultArtifactStatusForKind,
+  inferArtifactKind,
+  isSafeArtifactOpenTarget,
+  type ArtifactIndexEntry,
+  type ArtifactIndexPayload,
   channelProviderLabel,
   type ChannelAgentRecord,
   type ChannelBindingPublicRecord,
@@ -20,11 +26,8 @@ import { useSessionStore } from '../../stores/session'
 import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
 import { t } from '../../helpers/i18n'
-import { listVisibleSessionArtifacts } from '../chat/session-artifacts'
-import { SessionArtifactList } from '../chat/SessionArtifactList'
 import {
   Card,
-  EmptyState,
   Icon,
   StudioPageHeader,
 } from '../ui'
@@ -37,6 +40,8 @@ type OpenChatProps = {
   onOpenChat: () => void
   onOpenHome?: () => void
 }
+
+const EMPTY_ARTIFACT_INDEX: ArtifactIndexPayload = { artifacts: [], total: 0 }
 
 function StudioPageShell({ children }: { children: ReactNode }) {
   return (
@@ -265,34 +270,121 @@ export function StudioChannelsPage({ onOpenSettings }: { onOpenSettings: () => v
 export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const sessions = useSessionStore((state) => state.sessions)
-  const currentView = useSessionStore((state) => state.currentView)
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const chartArtifactsBySession = useSessionStore((state) => state.chartArtifactsBySession)
   const workspaceSupport = useActiveWorkspaceSupport()
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === currentSessionId) || null,
-    [sessions, currentSessionId],
-  )
+  const [artifactIndexState, setArtifactIndexState] = useState<{
+    workspaceId: string | null
+    payload: ArtifactIndexPayload
+  }>({ workspaceId: null, payload: EMPTY_ARTIFACT_INDEX })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const loadSequenceRef = useRef(0)
   const activeWorkspaceIsLocal = activeWorkspaceId === LOCAL_WORKSPACE_ID
-  const canReadPrivateArtifacts = !currentSession?.directory && activeWorkspaceIsLocal
-  const chartArtifacts = useMemo(
-    () => currentSessionId
-      ? chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, currentSessionId)] || []
-      : [],
-    [activeWorkspaceId, chartArtifactsBySession, currentSessionId],
-  )
-  const artifacts = useMemo(
-    () => listVisibleSessionArtifacts(currentView, chartArtifacts, { canReadPrivateArtifacts }),
-    [canReadPrivateArtifacts, chartArtifacts, currentView],
-  )
-  const canShowArtifactList = Boolean(currentSessionId && (canReadPrivateArtifacts || artifacts.length > 0))
+  const canUseArtifactBodies = activeWorkspaceIsLocal || workspaceSupport.flags.canDownloadArtifact
+  const artifactActionDisabledReason = workspaceSupport.flags.reasons.downloadArtifact
+  const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions])
+  const artifactIndex = artifactIndexState.workspaceId === activeWorkspaceId ? artifactIndexState.payload : EMPTY_ARTIFACT_INDEX
+  const artifactIndexLoading = loading || artifactIndexState.workspaceId !== activeWorkspaceId
+
+  const loadArtifacts = useCallback(async () => {
+    const loadSequence = loadSequenceRef.current + 1
+    loadSequenceRef.current = loadSequence
+    const workspaceId = activeWorkspaceId
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await window.coworkApi.artifact.index({
+        workspaceId: activeWorkspaceIsLocal ? undefined : activeWorkspaceId,
+        limit: 200,
+      })
+      if (loadSequenceRef.current !== loadSequence) return
+      setArtifactIndexState({ workspaceId, payload: result })
+    } catch (loadError) {
+      if (loadSequenceRef.current !== loadSequence) return
+      setError(loadError instanceof Error ? loadError.message : String(loadError))
+      setArtifactIndexState({ workspaceId, payload: EMPTY_ARTIFACT_INDEX })
+    } finally {
+      if (loadSequenceRef.current === loadSequence) setLoading(false)
+    }
+  }, [activeWorkspaceId, activeWorkspaceIsLocal])
+
+  useEffect(() => {
+    void loadArtifacts()
+  }, [loadArtifacts])
+
+  const artifactRequest = useCallback((artifact: ArtifactIndexEntry) => ({
+    sessionId: artifact.sessionId,
+    filePath: artifact.filePath,
+    suggestedName: artifact.filename,
+    workspaceId: activeWorkspaceIsLocal ? undefined : activeWorkspaceId,
+  }), [activeWorkspaceId, activeWorkspaceIsLocal])
+
+  const openArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
+    await window.coworkApi.artifact.open(artifactRequest(artifact))
+  }, [artifactRequest])
+
+  const exportArtifact = useCallback(async (artifact: ArtifactIndexEntry) => {
+    await window.coworkApi.artifact.export(artifactRequest(artifact))
+  }, [artifactRequest])
+
+  const exportVisibleArtifacts = useCallback(async (artifacts: ArtifactIndexEntry[]) => {
+    for (const artifact of artifacts) {
+      await exportArtifact(artifact)
+    }
+  }, [exportArtifact])
+
+  const rendererChartArtifacts = useMemo<ArtifactIndexEntry[]>(() => {
+    return sessions.flatMap((session) => {
+      const sessionArtifacts = chartArtifactsBySession[sessionWorkspaceKey(activeWorkspaceId, session.id)] || []
+      return sessionArtifacts.map((artifact): ArtifactIndexEntry => {
+        const kind = inferArtifactKind(artifact)
+        return {
+          ...artifact,
+          kind,
+          status: artifact.status || defaultArtifactStatusForKind(kind),
+          sessionId: session.id,
+          sessionTitle: session.title,
+          workspaceId: activeWorkspaceId,
+        }
+      })
+    })
+  }, [activeWorkspaceId, chartArtifactsBySession, sessions])
+
+  const artifacts = useMemo(() => {
+    const merged = [...artifactIndex.artifacts]
+    const keys = new Set(merged.map((artifact) => `${artifact.sessionId}:${artifact.filePath}`))
+    for (const artifact of rendererChartArtifacts) {
+      const key = `${artifact.sessionId}:${artifact.filePath}`
+      if (keys.has(key)) continue
+      keys.add(key)
+      merged.push(artifact)
+    }
+    return merged
+  }, [artifactIndex.artifacts, rendererChartArtifacts])
+  const artifactTotal = artifactIndex.total + Math.max(0, artifacts.length - artifactIndex.artifacts.length)
+  const canUseArtifactBody = useCallback((artifact: ArtifactIndexEntry) => {
+    if (!canUseArtifactBodies) return false
+    if (!activeWorkspaceIsLocal) return true
+    if (artifact.kind === 'chart' || artifact.chart) return true
+    const session = sessionById.get(artifact.sessionId)
+    return Boolean(session && !session.directory)
+  }, [activeWorkspaceIsLocal, canUseArtifactBodies, sessionById])
+  const canOpenArtifactBody = useCallback((artifact: ArtifactIndexEntry) => (
+    canUseArtifactBody(artifact) && isSafeArtifactOpenTarget({ filename: artifact.filename, mime: artifact.mime })
+  ), [canUseArtifactBody])
+  const artifactBodyDisabledReason = useCallback((artifact: ArtifactIndexEntry) => {
+    if (!canUseArtifactBodies) return artifactActionDisabledReason
+    if (!activeWorkspaceIsLocal || canUseArtifactBody(artifact)) return null
+    return t('studio.artifacts.projectFileActionBlocked', 'Project-file artifacts stay in their project workspace. Open or export the file from the project itself.')
+  }, [activeWorkspaceIsLocal, artifactActionDisabledReason, canUseArtifactBodies, canUseArtifactBody])
 
   return (
     <StudioPageShell>
       <StudioPageHeader
         eyebrow={t('studio.artifacts.eyebrow', 'Deliverables')}
         title={t('studio.artifacts.title', 'Artifacts')}
-        description={t('studio.artifacts.description', 'Generated files, charts, and Cloud-safe attachments remain tied to the active OpenCode session and explicit artifact actions.')}
+        description={t('studio.artifacts.description', 'Generated files, charts, and Cloud-safe attachments across projects, sessions, and coworkers. OpenCode still owns execution; this page indexes the deliverables it already emits.')}
         actions={[{
           id: 'open-chat',
           children: t('studio.artifacts.openChat', 'Open chat'),
@@ -305,41 +397,34 @@ export function StudioArtifactsPage({ onOpenChat }: OpenChatProps) {
       />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <StatCard label={t('studio.artifacts.total', 'Artifacts')} value={artifacts.length} icon="file" />
-        <StatCard label={t('studio.artifacts.charts', 'Charts')} value={chartArtifacts.length} icon="file" />
+        <StatCard label={t('studio.artifacts.total', 'Artifacts')} value={artifactTotal} icon="file" />
+        <StatCard label={t('studio.artifacts.inReview', 'In review')} value={artifacts.filter((artifact) => artifact.status === 'in-review').length} icon="circle-help" />
         <StatCard label={t('studio.artifacts.workspace', 'Workspace')} value={activeWorkspaceId} icon="activity" />
       </div>
 
-      {canShowArtifactList && currentSessionId ? (
-        <SessionArtifactList
-          sessionId={currentSessionId}
-          artifacts={artifacts}
-          workspaceId={activeWorkspaceIsLocal ? undefined : activeWorkspaceId}
-          canDownloadArtifact={workspaceSupport.flags.canDownloadArtifact}
-          downloadDisabledReason={workspaceSupport.flags.reasons.downloadArtifact}
-          canRevealArtifact={workspaceSupport.flags.canRevealArtifact}
-          revealDisabledReason={workspaceSupport.flags.reasons.revealArtifact}
-        />
-      ) : (
-        <EmptyState
-          icon="file"
-          title={currentSessionId ? t('studio.artifacts.noSafeTitle', 'No reviewable artifacts') : t('studio.artifacts.emptyTitle', 'No active chat')}
-          body={currentSessionId
-            ? t('studio.artifacts.noSafeBody', 'Project file paths stay in the project workspace. This page only exposes private workspace artifacts, chart captures, and Cloud artifact records.')
-            : t('studio.artifacts.emptyBody', 'Open a chat to review its generated artifacts. This page does not scan local files outside explicit session artifacts.')}
-        />
-      )}
+      <ArtifactsLibrarySurface
+        artifacts={artifacts}
+        total={artifactTotal}
+        truncated={artifactIndex.truncated}
+        loading={artifactIndexLoading}
+        error={error}
+        canOpenArtifact={canOpenArtifactBody}
+        canExportArtifact={canUseArtifactBody}
+        artifactActionDisabledReason={artifactBodyDisabledReason}
+        onReload={loadArtifacts}
+        onOpenArtifact={openArtifact}
+        onExportArtifact={exportArtifact}
+        onExportAll={exportVisibleArtifacts}
+      />
 
-      {canShowArtifactList && currentSessionId && artifacts.length === 0 ? (
-        <Card padding="md">
-          <div className="flex items-start gap-3 text-xs text-text-muted">
-            <Icon name="info" size={16} className="mt-0.5 shrink-0 text-text-secondary" />
-            <div>
-              {t('studio.artifacts.noGeneratedYet', 'The active chat has no generated artifacts yet. File edits, chart captures, and Cloud artifacts will appear here when projected by the session.')}
-            </div>
+      <Card padding="md">
+        <div className="flex items-start gap-3 text-xs text-text-muted">
+          <Icon name="info" size={16} className="mt-0.5 shrink-0 text-text-secondary" />
+          <div>
+            {t('studio.artifacts.safetyNote', 'Artifact previews show filenames, status, coworker, source project, and session provenance only. Local paths, object-store keys, signed URLs, and artifact bodies stay behind explicit Open or Export actions.')}
           </div>
-        </Card>
-      ) : null}
+        </div>
+      </Card>
     </StudioPageShell>
   )
 }

@@ -151,7 +151,7 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
 
   const sessions = Array.from({ length: options.sessionCount || 1 }, (_, index) => makeSession(index + 1))
   const hydratedViewCount = options.hydratedViewCount ?? sessions.length
-  const artifactCount = options.artifactCount || 1
+  const artifactCount = options.artifactCount ?? 1
   const views: Record<string, any> = Object.fromEntries(
     sessions.slice(0, hydratedViewCount).map((session, index) => [session.sessionId, makeSessionView(session, index + 10, artifactCount)]),
   )
@@ -503,15 +503,20 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
       return jsonResponse({ ok: true })
     }
     if (request.method === 'GET' && request.pathname === '/api/artifacts') {
+      const limit = limitFromRequest(request, 100)
       const artifacts = Object.entries(views).flatMap(([sessionId, view]) =>
-        view.projection.view.artifacts.map((artifact: Record<string, unknown>) => ({
+        view.projection.view.artifacts.map((artifact: Record<string, unknown>, index: number) => ({
           ...artifact,
           sessionId,
-          status: artifact.status || 'draft',
+          sessionTitle: view.projection.view.title || view.session.title,
+          projectId: artifact.projectId || `project-${sessionId}`,
+          authorAgentId: artifact.authorAgentId || (index % 2 === 0 ? 'Cleo' : 'Design coworker'),
+          updatedAt: artifact.updatedAt || view.projection.view.updatedAt || view.session.updatedAt,
+          status: artifact.status || (index % 3 === 1 ? 'in-review' : index % 3 === 2 ? 'final' : 'draft'),
           kind: artifact.kind || 'document',
         })),
       )
-      return jsonResponse({ artifacts: artifacts.slice(0, limitFromRequest(request, 100)), total: artifacts.length })
+      return jsonResponse({ artifacts: artifacts.slice(0, limit), total: artifacts.length, truncated: artifacts.length > limit })
     }
     const artifactListMatch = request.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/)
     if (request.method === 'GET' && artifactListMatch) {
@@ -522,7 +527,6 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
     if (request.method === 'GET' && artifactMatch) {
       return jsonResponse({ artifact: { artifactId: decodeURIComponent(artifactMatch[2]), filename: 'summary.txt', contentType: 'text/plain', dataBase64: 'SGVsbG8=', size: 5 } })
     }
-
     return jsonResponse({ error: `Unhandled test route ${request.method} ${request.path}` }, 404)
   }
 

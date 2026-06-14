@@ -402,19 +402,19 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           <div class="section-header">
             <div>
               <h2>Artifacts</h2>
-              <div class="meta">Cloud artifact metadata</div>
+              <div class="meta">Cross-project deliverables</div>
             </div>
           </div>
           <div class="grid">
             ${routeParityMarkup('artifacts')}
             <div class="panel">
-              <h3>Selected chat artifacts</h3>
+              <h3>Artifact library</h3>
               <div class="list" id="artifact-list">
                 <p class="empty">No artifacts loaded.</p>
               </div>
             </div>
             <div class="panel">
-              <h3>Artifact library</h3>
+              <h3>Library scope</h3>
               <div class="list" id="artifact-history">
                 <p class="empty">No indexed artifacts loaded.</p>
               </div>

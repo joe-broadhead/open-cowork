@@ -312,7 +312,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   }, [api, selectedSessionId])
 
   const openArtifact = useCallback((artifactId: string, mode: 'view' | 'download', context?: ArtifactActionContext) => {
-    void withRuntimeAction(`artifact:${artifactId}`, async () => {
+    return withRuntimeAction(`artifact:${artifactId}`, async () => {
       const artifact = await readArtifact(artifactId, context?.sessionId)
       const blob = decodeBase64(artifact.dataBase64, artifact.contentType || artifact.mime)
       if (mode === 'download') {
