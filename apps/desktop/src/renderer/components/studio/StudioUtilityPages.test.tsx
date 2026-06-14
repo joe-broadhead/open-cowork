@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installRendererTestCoworkApi } from '../../test/setup'
-import { LOCAL_WORKSPACE_ID, sessionWorkspaceKey } from '../../stores/session-workspace-keys'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { useSessionStore } from '../../stores/session'
 import { StudioApprovalsPage, StudioArtifactsPage, StudioChannelsPage } from './StudioUtilityPages'
 
@@ -29,60 +29,139 @@ describe('StudioApprovalsPage', () => {
     resetSessionStore()
   })
 
-  it('scopes the waiting session count to the active chat queue', () => {
-    const unrelatedPermissionSession = sessionWorkspaceKey('cloud:other', 'other-permission-session')
-    const unrelatedQuestionSession = sessionWorkspaceKey('gateway:other', 'other-question-session')
+  it('aggregates waiting inputs across active-workspace chats only', () => {
+    const baseView = useSessionStore.getInitialState().currentView
+    const localSessions = [
+      { id: 'active-session', title: 'Active chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'review-session', title: 'Review chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+    ]
     useSessionStore.setState({
-      currentSessionId: 'active-session',
-      currentView: {
-        ...useSessionStore.getState().currentView,
-        pendingApprovals: [],
-        pendingQuestions: [],
+      sessions: localSessions,
+      sessionsByWorkspace: {
+        [LOCAL_WORKSPACE_ID]: localSessions,
+        'cloud:other': [{ id: 'other-session', title: 'Other workspace chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }],
       },
-      awaitingPermissionSessions: new Set([unrelatedPermissionSession]),
-      awaitingQuestionSessions: new Set([unrelatedQuestionSession]),
+      currentSessionId: 'active-session',
     })
+    useSessionStore.getState().setSessionView('active-session', {
+      ...baseView,
+      pendingApprovals: [{
+        id: 'approval-1',
+        sessionId: 'active-session',
+        tool: 'bash',
+        input: { command: 'pnpm test' },
+        description: 'Run command',
+        order: 2,
+      }],
+      pendingQuestions: [],
+    }, LOCAL_WORKSPACE_ID)
+    useSessionStore.getState().setSessionView('review-session', {
+      ...baseView,
+      pendingApprovals: [],
+      pendingQuestions: [{
+        id: 'question-1',
+        sessionId: 'review-session',
+        questions: [{
+          header: 'Confirm',
+          question: 'Continue?',
+          options: [{ label: 'Yes', description: 'Continue' }],
+        }],
+      }],
+    }, LOCAL_WORKSPACE_ID)
+    useSessionStore.getState().setSessionView('other-session', {
+      ...baseView,
+      pendingApprovals: [{
+        id: 'other-approval',
+        sessionId: 'other-session',
+        workspaceId: 'cloud:other',
+        tool: 'bash',
+        input: {},
+        description: 'Other workspace command',
+        order: 3,
+      }],
+      pendingQuestions: [],
+    }, 'cloud:other')
 
     render(<StudioApprovalsPage onOpenChat={vi.fn()} onOpenHome={vi.fn()} />)
 
-    const waitingStat = screen.getByText('Sessions waiting').parentElement
-    expect(waitingStat).not.toBeNull()
-    expect(within(waitingStat as HTMLElement).getByText('0')).toBeInTheDocument()
-    expect(screen.getByText('No approvals waiting')).toBeInTheDocument()
+    const summary = screen.getByLabelText('Approvals summary')
+    expect(within(summary).getByText('Permission requests')).toBeInTheDocument()
+    expect(within(summary).getByText('Questions')).toBeInTheDocument()
+    expect(within(summary).getByText('Sessions waiting')).toBeInTheDocument()
+    expect(within(summary).getAllByText('1')).toHaveLength(2)
+    expect(within(summary).getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('Run command')).toBeInTheDocument()
+    expect(screen.getAllByText('Continue?').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Other workspace command')).toBeNull()
   })
 
-  it('counts one active chat even when permission and question queues overlap', () => {
+  it('responds to permissions and questions from the standalone queue', async () => {
+    const permissionRespond = vi.fn(async () => undefined)
+    const questionReply = vi.fn(async () => undefined)
+    const questionReject = vi.fn(async () => undefined)
+    installRendererTestCoworkApi({
+      permission: { respond: permissionRespond },
+      question: { reply: questionReply, reject: questionReject },
+    })
+    const baseView = useSessionStore.getInitialState().currentView
+    const localSessions = [{ id: 'active-session', title: 'Active chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]
     useSessionStore.setState({
+      sessions: localSessions,
+      sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: localSessions },
       currentSessionId: 'active-session',
-      currentView: {
-        ...useSessionStore.getState().currentView,
-        pendingApprovals: [{
-          id: 'approval-1',
-          sessionId: 'active-session',
-          tool: 'bash',
-          input: {},
-          description: 'Run command',
-          order: 1,
-        }],
-        pendingQuestions: [{
-          id: 'question-1',
-          sessionId: 'active-session',
-          questions: [{
+    })
+    useSessionStore.getState().setSessionView('active-session', {
+      ...baseView,
+      pendingApprovals: [{
+        id: 'approval-1',
+        sessionId: 'active-session',
+        tool: 'bash',
+        input: { command: 'pnpm test' },
+        description: 'Run command',
+        order: 1,
+      }],
+      pendingQuestions: [{
+        id: 'question-1',
+        sessionId: 'active-session',
+        questions: [
+          {
             header: 'Confirm',
             question: 'Continue?',
             options: [{ label: 'Yes', description: 'Continue' }],
-          }],
-        }],
-      },
-      awaitingPermissionSessions: new Set(['active-session']),
-      awaitingQuestionSessions: new Set(['active-session']),
-    })
+          },
+          {
+            header: 'Scope',
+            question: 'Choose a scope',
+            options: [{ label: 'Smoke', description: 'Smoke only' }],
+            custom: false,
+          },
+        ],
+      }],
+    }, LOCAL_WORKSPACE_ID)
 
     render(<StudioApprovalsPage onOpenChat={vi.fn()} onOpenHome={vi.fn()} />)
 
-    const waitingStat = screen.getByText('Sessions waiting').parentElement
-    expect(waitingStat).not.toBeNull()
-    expect(within(waitingStat as HTMLElement).getByText('1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Always allow' })).toBeDisabled()
+    expect(screen.getByText('Persistent allow rules must be changed in Settings so the runtime can restart safely.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => expect(permissionRespond).toHaveBeenCalledWith('approval-1', true, 'active-session', { workspaceId: LOCAL_WORKSPACE_ID }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    await waitFor(() => expect(permissionRespond).toHaveBeenCalledWith('approval-1', false, 'active-session', { workspaceId: LOCAL_WORKSPACE_ID }))
+
+    const customAnswer = screen.getByLabelText('Custom answer for Confirm')
+    fireEvent.change(customAnswer, { target: { value: 'Use a custom answer' } })
+    fireEvent.click(screen.getByText('Yes'))
+    await waitFor(() => expect(customAnswer).toHaveValue(''))
+    expect(questionReply).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Reply' })).toBeDisabled()
+    fireEvent.click(screen.getByText('Smoke'))
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
+    await waitFor(() => expect(questionReply).toHaveBeenCalledWith('active-session', 'question-1', [['Yes'], ['Smoke']], { workspaceId: LOCAL_WORKSPACE_ID }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await waitFor(() => expect(questionReject).toHaveBeenCalledWith('active-session', 'question-1', { workspaceId: LOCAL_WORKSPACE_ID }))
   })
 })
 

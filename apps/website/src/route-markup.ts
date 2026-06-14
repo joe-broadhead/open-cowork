@@ -6,7 +6,10 @@ import { cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailabili
 function routeNavMarkup(route: CloudWebRoute) {
   const authClass = route.requiresAuth ? ' signed-in-only' : ''
   const adminClass = route.requiresAdmin ? ' admin-route' : ''
-  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" class="${authClass.trim()}${adminClass}">${escapeHtml(route.label)}</a>`
+  const alertBadge = route.id === 'approvals'
+    ? '<span class="nav-alert-count" id="approvals-alert-count" aria-live="polite"></span>'
+    : ''
+  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" class="${authClass.trim()}${adminClass}">${escapeHtml(route.label)}${alertBadge}</a>`
 }
 
 export function routeGroupsMarkup() {

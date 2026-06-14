@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChannelsGatewaySurface } from '@open-cowork/ui'
+import {
+  ApprovalsQueueSurface,
+  ChannelsGatewaySurface,
+  type ApprovalsQueuePermissionItem,
+  type ApprovalsQueueQuestionItem,
+} from '@open-cowork/ui'
 import {
   channelProviderLabel,
   type ChannelAgentRecord,
@@ -23,6 +28,10 @@ import {
   Icon,
   StudioPageHeader,
 } from '../ui'
+import {
+  approvalQueueActionKey,
+  buildDesktopApprovalQueueItems,
+} from './approval-queue-model'
 
 type OpenChatProps = {
   onOpenChat: () => void
@@ -56,18 +65,63 @@ function StatCard({ label, value, icon }: { label: string; value: string | numbe
 }
 
 export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
+  const sessionsByWorkspace = useSessionStore((state) => state.sessionsByWorkspace)
+  const sessionStateById = useSessionStore((state) => state.sessionStateById)
   const currentSessionId = useSessionStore((state) => state.currentSessionId)
   const currentView = useSessionStore((state) => state.currentView)
-  const pendingApprovals = currentView.pendingApprovals
-  const pendingQuestions = currentView.pendingQuestions
-  const hasActiveQueue = pendingApprovals.length > 0 || pendingQuestions.length > 0
+  const setCurrentSession = useSessionStore((state) => state.setCurrentSession)
+  const addGlobalError = useSessionStore((state) => state.addGlobalError)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
+
+  const queueItems = useMemo(() => buildDesktopApprovalQueueItems({
+    activeWorkspaceId,
+    sessionsByWorkspace,
+    sessionStateById,
+    currentSessionId,
+    currentView,
+    pendingAction,
+  }), [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, currentView, pendingAction])
+
+  const runQueueAction = useCallback(async (
+    item: Parameters<typeof approvalQueueActionKey>[0],
+    action: () => Promise<void>,
+  ) => {
+    setPendingAction(approvalQueueActionKey(item))
+    try {
+      await action()
+    } catch (error) {
+      addGlobalError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setPendingAction(null)
+    }
+  }, [addGlobalError])
+
+  const openQueueSession = useCallback((item: { sessionId: string }) => {
+    setCurrentSession(item.sessionId)
+    onOpenChat()
+  }, [onOpenChat, setCurrentSession])
+
+  const respondPermission = useCallback((item: ApprovalsQueuePermissionItem, allowed: boolean) => runQueueAction(item, () => (
+    window.coworkApi.permission.respond(item.id, allowed, item.sessionId, { workspaceId: item.workspaceId || activeWorkspaceId })
+  )), [activeWorkspaceId, runQueueAction])
+
+  const alwaysAllowUnavailable = useCallback(() => undefined, [])
+
+  const replyQuestion = useCallback((item: ApprovalsQueueQuestionItem, answers: string[][]) => runQueueAction(item, () => (
+    window.coworkApi.question.reply(item.sessionId, item.id, answers, { workspaceId: item.workspaceId || activeWorkspaceId })
+  )), [activeWorkspaceId, runQueueAction])
+
+  const rejectQuestion = useCallback((item: ApprovalsQueueQuestionItem) => runQueueAction(item, () => (
+    window.coworkApi.question.reject(item.sessionId, item.id, { workspaceId: item.workspaceId || activeWorkspaceId })
+  )), [activeWorkspaceId, runQueueAction])
 
   return (
     <StudioPageShell>
       <StudioPageHeader
         eyebrow={t('studio.approvals.eyebrow', 'Review')}
         title={t('studio.approvals.title', 'Approvals')}
-        description={t('studio.approvals.description', 'OpenCode permission requests and questions stay runtime-owned; this page gives you one place to find the active session queue.')}
+        description={t('studio.approvals.description', 'OpenCode permission requests and questions stay runtime-owned; this page gives you one place to answer waiting inputs across chats and channels.')}
         actions={[{
           id: 'open-chat',
           children: currentSessionId ? t('studio.approvals.openChat', 'Open chat') : t('studio.approvals.startChat', 'Start from Home'),
@@ -77,62 +131,17 @@ export function StudioApprovalsPage({ onOpenChat, onOpenHome }: OpenChatProps) {
         }]}
       />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <StatCard label={t('studio.approvals.permissions', 'Permission requests')} value={pendingApprovals.length} icon="circle-help" />
-        <StatCard label={t('studio.approvals.questions', 'Questions')} value={pendingQuestions.length} icon="circle-help" />
-        <StatCard
-          label={t('studio.approvals.sessions', 'Sessions waiting')}
-          value={hasActiveQueue ? 1 : 0}
-          icon="activity"
-        />
-      </div>
-
-      {hasActiveQueue ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {pendingApprovals.map((approval) => (
-            <Card key={approval.id} padding="md">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 grid h-8 w-8 place-items-center rounded-lg border border-border-subtle bg-surface text-amber-200">
-                  <Icon name="circle-help" size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-text">{approval.tool}</div>
-                  <div className="mt-1 text-xs leading-relaxed text-text-muted">{approval.description}</div>
-                  <div className="mt-2 text-2xs uppercase tracking-widest text-text-muted">
-                    {approval.taskRunId ? t('studio.approvals.specialist', 'Specialist lane') : t('studio.approvals.activeChat', 'Active chat')}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-          {pendingQuestions.map((question) => (
-            <Card key={question.id} padding="md">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 grid h-8 w-8 place-items-center rounded-lg border border-border-subtle bg-surface text-accent">
-                  <Icon name="circle-help" size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-text">{question.questions[0]?.header || t('studio.approvals.question', 'Question')}</div>
-                  <div className="mt-1 text-xs leading-relaxed text-text-muted">
-                    {question.questions[0]?.question || t('studio.approvals.questionFallback', 'Open the active chat to answer this question.')}
-                  </div>
-                  <div className="mt-2 text-2xs uppercase tracking-widest text-text-muted">
-                    {question.questions.length} {t('studio.approvals.prompts', 'prompt(s)')}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon="badge-check"
-          title={t('studio.approvals.emptyTitle', 'No approvals waiting')}
-          body={currentSessionId
-            ? t('studio.approvals.emptyBodyActive', 'The active chat has no pending OpenCode permissions or questions.')
-            : t('studio.approvals.emptyBody', 'Start or open a chat; permission requests and questions will appear here when OpenCode asks for input.')}
-        />
-      )}
+      <ApprovalsQueueSurface
+        items={queueItems}
+        emptyTitle={t('studio.approvals.emptyTitle', 'No approvals waiting')}
+        emptyBody={t('studio.approvals.emptyBody', 'OpenCode permission requests and questions will appear here when any chat needs your input.')}
+        onOpenSession={openQueueSession}
+        onAllowOnce={(item) => respondPermission(item, true)}
+        onAlwaysAllow={alwaysAllowUnavailable}
+        onDeny={(item) => respondPermission(item, false)}
+        onReplyQuestion={replyQuestion}
+        onRejectQuestion={rejectQuestion}
+      />
     </StudioPageShell>
   )
 }

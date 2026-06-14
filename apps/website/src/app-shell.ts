@@ -6,6 +6,7 @@ export type CloudWebSurface = 'workbench' | 'admin'
 export type CloudWebRouteId =
   | 'threads'
   | 'chat'
+  | 'approvals'
   | 'agents'
   | 'capabilities'
   | 'workflows'
@@ -55,6 +56,14 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     requiresAuth: true,
     requiresAdmin: false,
     summary: cloudWebWorkbenchRouteSummary('threads', 'Recent chats and project-backed Cloud work.'),
+  },
+  {
+    id: 'approvals',
+    label: 'Approvals',
+    surface: 'workbench',
+    requiresAuth: true,
+    requiresAdmin: false,
+    summary: cloudWebWorkbenchRouteSummary('approvals', 'Pending permission requests and questions across Cloud chats.'),
   },
   {
     id: 'agents',

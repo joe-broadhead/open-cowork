@@ -1,25 +1,22 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppApi } from '@open-cowork/ui/app-api'
 import type { LaunchpadFreshArtifactItem } from '@open-cowork/shared'
 import type { CloudWebClientBootstrap } from './client-contract.ts'
 import { CLOUD_WEB_THREAD_PAGE_SIZE, filterCloudWebThreads, type CloudWebThreadFilters, type CloudWebThreadSession, type CloudWebThreadView } from './thread-workbench.ts'
-import {
-  CloudApprovalsAndQuestions,
-  CloudChatTimeline,
-  CloudSidebarThreadList,
-  CloudThreadList,
-  buildCloudHandoffAgentBySessionId,
-  type ArtifactActionContext,
-} from './react-workbench.ts'
-import { CloudConversationMeta, useCloudConversationTaskContext } from './react-workbench-context.ts'
-import { CloudArtifactReviewDetail, CloudComposerActionCluster, CloudReviewPane } from './react-workbench-review.tsx'
-import { CloudAdminSurfacePortals } from './react-admin-surfaces.tsx'
-import { CloudComposerPortal } from './react-workbench-composer.tsx'
-import { CloudLaunchpadPortal, useCloudLaunchpad } from './react-workbench-launchpad.tsx'
+import { buildCloudHandoffAgentBySessionId, type ArtifactActionContext } from './react-workbench.ts'
+import { useCloudConversationTaskContext } from './react-workbench-context.ts'
+import { useCloudLaunchpad } from './react-workbench-launchpad.tsx'
 import { useCloudWorkbenchForms } from './react-workbench-forms.ts'
-import { CloudWorkbenchSurfacePortals } from './react-workbench-surfaces.tsx'
 import { cloudWebCoworkerOptionsFromWorkspace, cloudWebPromptAssignment } from './surface-workbench.ts'
+import { CloudWorkbenchPortals, useCloudWorkbenchPortalTargets } from './react-workbench-portals.tsx'
+import {
+  APPROVAL_QUEUE_VIEW_HYDRATION_LIMIT,
+  buildCloudApprovalQueueItems,
+  normalizeQuestionAnswers,
+  useActiveBodyRoute,
+  useCloudApprovalQueueHydration,
+  workspaceEventSessionId,
+} from './react-workbench-approvals.ts'
 import {
   allowedAgentsFromWorkspace,
   asRecord,
@@ -32,7 +29,6 @@ import {
   projectionSequence,
   readThreadFilters,
   sessionMessageCount,
-  sessionTitle,
   setCloudStatus,
   setRouteHash,
   syncThreadQueryControls,
@@ -50,17 +46,6 @@ declare global {
       loadMoreSessions: () => Promise<void>
     }
   }
-}
-
-function usePortalTarget(id: string, options: { clear?: boolean } = {}) {
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-  useEffect(() => {
-    const element = document.getElementById(id)
-    if (element && options.clear !== false) element.replaceChildren()
-    if (element && id === 'chat-timeline') element.hidden = true
-    setTarget(element)
-  }, [id, options.clear])
-  return target
 }
 
 function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBootstrap }) {
@@ -84,29 +69,17 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   const [sessionEventStatus, setSessionEventStatus] = useState<'idle' | 'connecting' | 'open' | 'retrying' | 'closed' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [artifactPanel, setArtifactPanel] = useState<ArtifactPanelState>({ artifactId: null, metadata: null, status: 'idle', error: null })
+  const [isLoadingApprovalQueue, setIsLoadingApprovalQueue] = useState(false)
   const sessionsRef = useRef(sessions)
   const threadLimitRef = useRef(threadLimit)
   const nextCursorRef = useRef(nextCursor)
   const isLoadingMoreRef = useRef(isLoadingMore)
   const selectedSessionIdRef = useRef(selectedSessionId)
   const viewsRef = useRef(views)
-
-  const threadListTarget = usePortalTarget('thread-list')
-  const sidebarListTarget = usePortalTarget('sidebar-thread-list')
-  const threadCountTarget = usePortalTarget('thread-count')
-  const sidebarCountTarget = usePortalTarget('sidebar-thread-count')
-  const limitStatusTarget = usePortalTarget('thread-limit-status')
-  const loadMoreTarget = usePortalTarget('thread-load-more', { clear: false })
-  const titleTarget = usePortalTarget('chat-session-title')
-  const metaTarget = usePortalTarget('chat-session-meta')
-  const managedActionsTarget = usePortalTarget('chat-managed-actions')
-  const timelineTarget = usePortalTarget('chat-timeline')
-  const composerTarget = usePortalTarget('prompt-form')
-  const sessionFormTarget = usePortalTarget('session-form', { clear: false })
-  const inspectorTarget = usePortalTarget('chat-inspector-detail')
-  const eventStatusTarget = usePortalTarget('chat-event-status')
-  const artifactDetailTarget = usePortalTarget('artifact-detail')
-  const launchpadTarget = usePortalTarget('cloud-launchpad-home')
+  const activeRoute = useActiveBodyRoute()
+  const activeRouteRef = useRef<string | null>(activeRoute)
+  const portalTargets = useCloudWorkbenchPortalTargets()
+  const { composerTarget, eventStatusTarget, loadMoreTarget, sessionFormTarget, timelineTarget } = portalTargets
 
   const selectedView = selectedSessionId ? views[selectedSessionId] || null : null
   const coworkerOptions = useMemo(() => cloudWebCoworkerOptionsFromWorkspace(workspace, bootstrap.profileName), [bootstrap.profileName, workspace])
@@ -123,6 +96,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   const visibleThreads = useMemo(() => filterCloudWebThreads(sessions, views, filters, threadLimit), [filters, sessions, threadLimit, views])
   const filteredThreadCount = useMemo(() => filterCloudWebThreads(sessions, views, filters, Number.MAX_SAFE_INTEGER).length, [filters, sessions, views])
   const handoffAgentBySessionId = useMemo(() => buildCloudHandoffAgentBySessionId(views), [views])
+  const approvalQueueItems = useMemo(() => buildCloudApprovalQueueItems(sessions, views, pendingAction), [pendingAction, sessions, views])
   const taskContext = useCloudConversationTaskContext(api, selectedSessionId)
 
   useEffect(() => {
@@ -149,6 +123,10 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     viewsRef.current = views
   }, [views])
 
+  useEffect(() => {
+    activeRouteRef.current = activeRoute
+  }, [activeRoute])
+
   const fetchSessionPage = useCallback(async (cursor: string | null): Promise<SessionListPage> => {
     return pageFromResponse(await api.sessions.list({ limit: pageLimit, cursor }))
   }, [api, pageLimit])
@@ -169,6 +147,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
         estimate = page.totalEstimate
         if (!cursor) break
       }
+      sessionsRef.current = merged
       setSessions(merged)
       nextCursorRef.current = cursor; setNextCursor(cursor)
       setTotalEstimate(estimate)
@@ -188,6 +167,27 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     }
   }, [fetchSessionPage, pageLimit])
 
+  const refreshApprovalQueueViews = useCallback(async (options: { force?: boolean, sessionIds?: string[] } = {}) => {
+    const candidates = sessionsRef.current.slice(0, APPROVAL_QUEUE_VIEW_HYDRATION_LIMIT)
+    const currentViews = viewsRef.current
+    const requestedSessionIds = new Set((options.sessionIds || []).filter(Boolean))
+    const targets = requestedSessionIds.size
+      ? candidates.filter((session) => requestedSessionIds.has(session.sessionId))
+      : options.force
+      ? candidates
+      : candidates.filter((session) => !currentViews[session.sessionId])
+    if (!targets.length) return
+    const results = await Promise.allSettled(targets.map((session) => api.sessions.view(session.sessionId) as Promise<CloudWebThreadView>))
+    setViews((current) => {
+      const next = { ...current }
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') next[targets[index].sessionId] = result.value
+      })
+      viewsRef.current = next
+      return next
+    })
+  }, [api])
+
   const loadMoreSessions = useCallback(async () => {
     if (visibleThreads.length < filteredThreadCount) {
       setThreadLimit((current) => current + pageLimit)
@@ -200,7 +200,11 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     setSessionListError(null)
     try {
       const page = await fetchSessionPage(cursor)
-      setSessions((current) => mergeSessions(current, page.sessions, true))
+      setSessions((current) => {
+        const next = mergeSessions(current, page.sessions, true)
+        sessionsRef.current = next
+        return next
+      })
       nextCursorRef.current = page.nextCursor; setNextCursor(page.nextCursor)
       setTotalEstimate(page.totalEstimate)
       setThreadLimit((current) => current + pageLimit)
@@ -219,6 +223,8 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     setViews((current) => ({ ...current, [sessionId]: view }))
     return view
   }, [api])
+
+  useCloudApprovalQueueHydration({ activeRoute, refreshApprovalQueueViews, sessions, setError, setIsLoadingApprovalQueue })
 
   const selectSession = useCallback(async (sessionId: string) => {
     setSelectedSessionId(sessionId)
@@ -250,12 +256,13 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     await loadView(selectedSessionId)
   }, [loadView, selectedSessionId])
 
-  const withRuntimeAction = useCallback(async (key: string, action: () => Promise<void>) => {
+  const withRuntimeAction = useCallback(async (key: string, action: () => Promise<void>, targetSessionId?: string | null) => {
     setPendingAction(key)
     setError(null)
     try {
       await action()
-      await refreshSelectedSession()
+      if (targetSessionId) await loadView(targetSessionId)
+      else await refreshSelectedSession()
       await loadSessions({ keepSelection: true, preserveLoadedPages: true })
       await loadLaunchpadFeed()
     } catch (nextError) {
@@ -263,32 +270,38 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     } finally {
       setPendingAction(null)
     }
-  }, [loadLaunchpadFeed, loadSessions, refreshSelectedSession])
+  }, [loadLaunchpadFeed, loadSessions, loadView, refreshSelectedSession])
 
-  const respondPermission = useCallback((permissionId: string, allowed: boolean) => {
-    if (!selectedSessionId) return
-    void withRuntimeAction(`approval:${permissionId}`, async () => {
-      await api.sessions.respondPermission(selectedSessionId, { permissionId, response: { allowed } })
-    })
+  const respondPermission = useCallback((permissionId: string, allowed: boolean, context?: { sessionId?: string | null }) => {
+    const targetSessionId = context?.sessionId || selectedSessionId
+    if (!targetSessionId) return
+    const key = context?.sessionId ? `permission:${targetSessionId}:${permissionId}` : `approval:${permissionId}`
+    void withRuntimeAction(key, async () => {
+      await api.sessions.respondPermission(targetSessionId, { permissionId, response: { allowed } })
+    }, targetSessionId)
   }, [api, selectedSessionId, withRuntimeAction])
 
-  const replyQuestion = useCallback((requestId: string, answers: string[]) => {
-    if (!selectedSessionId) return
-    const normalized = answers.map((answer) => answer.trim()).filter(Boolean)
+  const replyQuestion = useCallback((requestId: string, answers: string[] | string[][], context?: { sessionId?: string | null }) => {
+    const targetSessionId = context?.sessionId || selectedSessionId
+    if (!targetSessionId) return
+    const normalized = normalizeQuestionAnswers(answers)
     if (!normalized.length) {
       setError('Question answer is required.')
       return
     }
-    void withRuntimeAction(`question:${requestId}`, async () => {
-      await api.sessions.replyQuestion(selectedSessionId, { requestId, answers: normalized })
-    })
+    const key = context?.sessionId ? `question:${targetSessionId}:${requestId}` : `question:${requestId}`
+    void withRuntimeAction(key, async () => {
+      await api.sessions.replyQuestion(targetSessionId, { requestId, answers: normalized })
+    }, targetSessionId)
   }, [api, selectedSessionId, withRuntimeAction])
 
-  const rejectQuestion = useCallback((requestId: string) => {
-    if (!selectedSessionId) return
-    void withRuntimeAction(`question:${requestId}`, async () => {
-      await api.sessions.rejectQuestion(selectedSessionId, { requestId })
-    })
+  const rejectQuestion = useCallback((requestId: string, context?: { sessionId?: string | null }) => {
+    const targetSessionId = context?.sessionId || selectedSessionId
+    if (!targetSessionId) return
+    const key = context?.sessionId ? `question:${targetSessionId}:${requestId}` : `question:${requestId}`
+    void withRuntimeAction(key, async () => {
+      await api.sessions.rejectQuestion(targetSessionId, { requestId })
+    }, targetSessionId)
   }, [api, selectedSessionId, withRuntimeAction])
 
   const readArtifact = useCallback(async (artifactId: string, sessionId?: string | null) => {
@@ -400,7 +413,14 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       if (target.closest('#refresh-threads')) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        void loadSessions({ keepSelection: true })
+        void (async () => {
+          await loadSessions({ keepSelection: true })
+          if (activeRouteRef.current === 'approvals') await refreshApprovalQueueViews({ force: true })
+        })().catch((nextError) => {
+          const message = errorMessage(nextError)
+          setError(message)
+          setCloudStatus(message, 'warn')
+        })
         return
       }
       if (target.closest('#thread-load-more')) {
@@ -418,7 +438,7 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     }
     document.addEventListener('click', handler, true)
     return () => document.removeEventListener('click', handler, true)
-  }, [loadMoreSessions, loadSessions, startNewChatDraft])
+  }, [loadMoreSessions, loadSessions, refreshApprovalQueueViews, startNewChatDraft])
 
   useCloudWorkbenchForms({
     api,
@@ -469,16 +489,28 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
   useEffect(() => {
     try {
       const stream = api.workspace.events({
-        message: () => {
-          void loadSessions({ keepSelection: true, preserveLoadedPages: true })
-          void loadLaunchpadFeed()
+        message: (event) => {
+          void (async () => {
+            const sessionId = workspaceEventSessionId(event)
+            await loadSessions({ keepSelection: true, preserveLoadedPages: true })
+            if (sessionId) {
+              await refreshApprovalQueueViews({ sessionIds: [sessionId] })
+            } else if (activeRouteRef.current === 'approvals') {
+              await refreshApprovalQueueViews(event.type === 'snapshot.required' ? { force: true } : undefined)
+            }
+            await loadLaunchpadFeed()
+          })().catch((nextError) => {
+            const message = errorMessage(nextError)
+            setError(message)
+            setCloudStatus(message, 'warn')
+          })
         },
       })
       return () => stream.close()
     } catch {
       return undefined
     }
-  }, [api, loadLaunchpadFeed, loadSessions])
+  }, [api, loadLaunchpadFeed, loadSessions, refreshApprovalQueueViews])
 
   useEffect(() => {
     eventStatusTarget?.setAttribute('data-kind', error ? 'warn' : sessionEventStatus === 'open' || sessionEventStatus === 'idle' ? 'ok' : sessionEventStatus === 'retrying' ? 'warn' : '')
@@ -520,37 +552,26 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
     handoffAgentBySessionId,
   }
 
-  const portals: ReactNode[] = []
-  const pushPortal = (target: HTMLElement | null, node: ReactNode) => {
-    if (target) portals.push(createPortal(node, target))
-  }
-  pushPortal(threadListTarget, <CloudThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} limit={threadLimit} embedded onSelect={selectSession} />)
-  pushPortal(sidebarListTarget, <CloudSidebarThreadList sessions={sessions} views={views} filters={filters} selectedSessionId={selectedSessionId} onSelect={selectSession} />)
-  pushPortal(threadCountTarget, <>{filteredThreadCount}</>)
-  pushPortal(sidebarCountTarget, <>{filteredThreadCount}</>)
-  pushPortal(limitStatusTarget, <>{limitStatus}</>)
-  pushPortal(titleTarget, <>{selectedView ? sessionTitle(selectedView, selectedSessionId || 'Cloud chat') : 'What shall we cowork on today?'}</>)
-  pushPortal(metaTarget, <CloudConversationMeta summary={chatMeta} taskContext={taskContext} onOpenBoard={taskContext ? () => setRouteHash('threads') : undefined} />)
-  pushPortal(managedActionsTarget, (
-    <>
-      <CloudComposerActionCluster profileName={bootstrap.profileName} />
-      <button className="ghost chat-inspector-toggle" id="chat-inspector-toggle" type="button" aria-controls="chat-inspector" aria-expanded="false">Review</button>
-    </>
-  ),
-  )
-  pushPortal(timelineTarget, (
-    <>
-      <CloudApprovalsAndQuestions view={selectedView} {...actionProps} />
-      <CloudChatTimeline view={selectedView} {...actionProps} />
-    </>
-  ),
-  )
-  pushPortal(inspectorTarget, <CloudReviewPane view={selectedView} {...actionProps} />)
-  pushPortal(artifactDetailTarget, <CloudArtifactReviewDetail artifactPanel={artifactPanel} />)
-  pushPortal(eventStatusTarget, <>{statusText}</>)
-  pushPortal(composerTarget, (
-    <CloudComposerPortal
+  return (
+    <CloudWorkbenchPortals
+      targets={portalTargets}
       bootstrap={bootstrap}
+      workspace={workspace}
+      sessions={sessions}
+      views={views}
+      filters={filters}
+      selectedSessionId={selectedSessionId}
+      selectedView={selectedView}
+      threadLimit={threadLimit}
+      filteredThreadCount={filteredThreadCount}
+      approvalQueueItems={approvalQueueItems}
+      isLoadingApprovalQueue={isLoadingApprovalQueue}
+      limitStatus={limitStatus}
+      chatMeta={chatMeta}
+      taskContext={taskContext}
+      statusText={statusText}
+      actionProps={actionProps}
+      artifactPanel={artifactPanel}
       allowedAgents={allowedAgents}
       coworkerOptions={coworkerOptions}
       activeCoworker={activeCoworker}
@@ -558,42 +579,19 @@ function CloudReactWorkbenchImpl({ bootstrap }: { bootstrap: CloudWebClientBoots
       composerAgent={composerAgent}
       error={error}
       isSending={isSending}
-      selectedSessionId={selectedSessionId}
-      setComposerText={setComposerText}
-      setComposerAgent={setComposerAgent}
-    />
-  ),
-  )
-  pushPortal(launchpadTarget, (
-    <CloudLaunchpadPortal
-      feed={launchpadFeed}
-      loading={isLoadingLaunchpad}
-      error={launchpadError}
-      coworkerOptions={coworkerOptions}
-      policyKnown={Boolean(workspace)}
+      launchpadFeed={launchpadFeed}
+      isLoadingLaunchpad={isLoadingLaunchpad}
+      launchpadError={launchpadError}
       hasExplicitAllowedAgents={hasExplicitAllowedAgents}
-      onSuggestion={startLaunchpadSuggestion}
-      onOpenRoute={setRouteHash}
-      onOpenSession={(sessionId) => { void selectSession(sessionId) }}
-      onOpenArtifact={openLaunchpadArtifact}
-    />
-  ),
-  )
-  portals.push(
-    <CloudWorkbenchSurfacePortals
-      key="workbench-surfaces"
-      bootstrap={bootstrap}
-      workspace={workspace}
-      selectedView={selectedView}
-      onStartAgentChat={startNewChatDraft}
       onSelectSession={selectSession}
+      onStartNewChatDraft={startNewChatDraft}
       onReloadSessions={() => loadSessions({ keepSelection: true, preserveLoadedPages: true })}
-      artifactActions={actionProps}
-    />,
+      onSetComposerText={setComposerText}
+      onSetComposerAgent={setComposerAgent}
+      onLaunchpadSuggestion={startLaunchpadSuggestion}
+      onOpenLaunchpadArtifact={openLaunchpadArtifact}
+    />
   )
-  portals.push(<CloudAdminSurfacePortals key="admin-surfaces" bootstrap={bootstrap} workspace={workspace} />)
-
-  return <>{portals}</>
 }
 
 export const CloudReactWorkbench = memo(CloudReactWorkbenchImpl)

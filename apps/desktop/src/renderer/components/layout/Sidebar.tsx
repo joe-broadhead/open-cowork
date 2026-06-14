@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
   BrandingSidebarConfig,
   BrandingSidebarLowerConfig,
@@ -14,6 +14,7 @@ import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
 import { Icon } from '../ui'
+import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 
 interface Props {
   currentView: AppView
@@ -548,6 +549,18 @@ export function Sidebar({
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
+  const sessionsByWorkspace = useSessionStore((state) => state.sessionsByWorkspace)
+  const sessionStateById = useSessionStore((state) => state.sessionStateById)
+  const currentSessionId = useSessionStore((state) => state.currentSessionId)
+  const sessionView = useSessionStore((state) => state.currentView)
+  const approvalsQueueCount = useMemo(() => buildDesktopApprovalQueueItems({
+    activeWorkspaceId,
+    sessionsByWorkspace,
+    sessionStateById,
+    currentSessionId,
+    currentView: sessionView,
+  }).length, [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, sessionView])
 
   useEffect(() => {
     if (searchRequestNonce === 0) return
@@ -621,6 +634,11 @@ export function Sidebar({
               className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'approvals' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
               <Icon name="circle-help" size={16} />
               {t('sidebar.approvals', 'Approvals')}
+              {approvalsQueueCount > 0 ? (
+                <span className="nav-alert-count" aria-label={`${approvalsQueueCount} pending approvals and questions`}>
+                  {approvalsQueueCount}
+                </span>
+              ) : null}
             </button>
             <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.manage', 'Manage')}</div>
             <button onClick={() => onViewChange('team')}

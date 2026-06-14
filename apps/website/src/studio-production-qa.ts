@@ -69,9 +69,9 @@ export const STUDIO_VISUAL_QA_MATRIX: StudioVisualQaEntry[] = [
   {
     id: 'runtime-review-and-approvals',
     label: 'Runtime review, approvals, and questions',
-    routeIds: ['chat', 'artifacts'],
+    routeIds: ['chat', 'approvals', 'artifacts'],
     desktopSurface: 'Chat transcript, task lanes, approvals, questions, todos, runtime status, cost, tokens, and review panel',
-    cloudCheck: 'Messages, delegated specialist lanes, running/completed/error task states, approval/question cards, deliverables, todos, artifacts, cost, token usage, and follow-up actions are visible from Cloud projections.',
+    cloudCheck: 'Messages, delegated specialist lanes, running/completed/error task states, inline and standalone approval/question queues, deliverables, todos, artifacts, cost, token usage, and follow-up actions are visible from Cloud projections.',
     states: ['loading', 'empty', 'error', 'disabled', 'permission-gated', 'offline-disconnected', 'retry', 'destructive-confirmation'],
     boundary: 'Approval and question semantics remain OpenCode-owned; Cloud Web only submits tenant-scoped responses through Cloud API endpoints.',
     evidence: ['apps/website/src/render.test.ts', 'apps/website/src/react-workbench.test.ts', 'tests/cloud-session-projection-contract.test.ts'],

@@ -306,11 +306,15 @@ export type ArtifactActionContext = {
   sessionId?: string | null
 }
 
+export type CloudRuntimeActionContext = {
+  sessionId?: string | null
+}
+
 export type CloudRuntimeActionProps = {
   pendingAction?: string | null
-  onRespondPermission?: (permissionId: string, allowed: boolean) => void
-  onReplyQuestion?: (requestId: string, answers: string[]) => void
-  onRejectQuestion?: (requestId: string) => void
+  onRespondPermission?: (permissionId: string, allowed: boolean, context?: CloudRuntimeActionContext) => void
+  onReplyQuestion?: (requestId: string, answers: string[] | string[][], context?: CloudRuntimeActionContext) => void
+  onRejectQuestion?: (requestId: string, context?: CloudRuntimeActionContext) => void
   onViewArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onDownloadArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onInspectArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
