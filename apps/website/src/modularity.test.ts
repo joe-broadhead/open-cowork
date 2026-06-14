@@ -54,6 +54,7 @@ test('cloud web workbench production source stays split into bounded modules', (
     'route-markup.ts',
     'runtime-workbench.ts',
     'style-chat.ts',
+    'style-artifacts.ts',
     'style-components.ts',
     'style-launchpad.ts',
     'style-layout.ts',

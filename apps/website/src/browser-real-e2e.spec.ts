@@ -510,6 +510,7 @@ test('cloud web workbench passes a real Chromium desktop and mobile smoke', { ti
     assert.match(await page.locator('#workflow-detail').textContent() || '', /Latest run/)
     await page.locator('[data-route-link="artifacts"]').click()
     await page.waitForFunction(() => document.body.dataset.route === 'artifacts')
+    await page.waitForFunction(() => document.querySelector('#artifact-list')?.textContent?.includes('summary.txt'))
     assert.match(await page.locator('#artifact-list').textContent() || '', /summary\.txt/)
 
     for (const route of CLOUD_WEB_ROUTES) {

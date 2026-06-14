@@ -829,9 +829,12 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
     assert.equal(harness.document.querySelectorAll('#channel-delivery-list > .row').length, 50)
     assert.equal(harness.document.querySelectorAll('#workflow-list [role="row"]').length, 100)
     assert.equal(harness.document.querySelectorAll('#audit-list > .row').length, 100)
-    assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100)
     assert.ok(harness.document.querySelectorAll('#usage-list > .row').length <= 12)
     assert.ok(harness.document.querySelectorAll('#admin-worker-summary > .row').length <= 11)
+
+    harness.clickText('[data-route-link]', 'Artifacts')
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'artifacts'))
+    await waitFor(() => assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100))
 
     assert.ok(harness.lastRequest((request) => request.path === '/api/admin/members?limit=100'))
     assert.ok(harness.lastRequest((request) => request.path === '/api/api-tokens?limit=100'))
@@ -850,6 +853,10 @@ test('cloud web browser bounds large admin surfaces and redacts unsafe operation
     assert.doesNotMatch(channelDeliveryText, /leaked-secret|signed\?token=|secret:\/\//)
 
     const artifactText = harness.document.querySelector('#artifact-list')?.textContent || ''
+    assert.match(artifactText, /By/)
+    assert.match(artifactText, /Source/)
+    assert.match(artifactText, /loaded results only/)
+    assert.match(artifactText, /Export visible/)
     assert.doesNotMatch(artifactText, /signed\?token=|objectKey/)
 
     harness.clickText('#diagnostics button', 'Prepare bundle')
@@ -919,12 +926,23 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
       assert.equal(harness.document.body.dataset.route, 'artifacts')
       assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
       assert.ok(harness.document.querySelector('#artifact-detail [data-diff-view="true"], #artifact-detail[data-diff-view="true"]'))
-      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /summary\.txt/)
-      assert.doesNotMatch(harness.document.querySelector('#artifact-history')?.textContent || '', /Cross-chat artifact browsing waits/)
+      assert.match(harness.document.querySelector('#artifact-list')?.textContent || '', /summary\.txt/)
+      assert.match(harness.document.querySelector('#artifact-list')?.textContent || '', /By/)
+      assert.match(harness.document.querySelector('#artifact-list')?.textContent || '', /Source/)
+      assert.match(harness.document.querySelector('#artifact-history')?.textContent || '', /Indexed/)
+      assert.doesNotMatch(harness.document.querySelector('#artifact-list')?.textContent || '', /Cross-chat artifact browsing waits|objectKey|signed\?token=/)
     })
     assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts(?:\?|$)/.test(request.path)))
 
-    harness.clickText('.artifact-card button', 'Download')
+    const libraryInspectRequestCount = harness.requests.length
+    harness.clickText('#artifact-list .artifact-card button', 'Inspect')
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.route, 'artifacts')
+      assert.match(harness.document.querySelector('#artifact-detail')?.textContent || '', /Artifact metadata/)
+      assert.ok(harness.requests.slice(libraryInspectRequestCount).some((request) => request.method === 'GET' && /\/api\/sessions\/session-1\/artifacts(?:\?|$)/.test(request.path)))
+    })
+
+    harness.clickText('#artifact-list .artifact-card button', 'Export')
     await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/artifacts\/session-1-artifact$/.test(request.path))))
 
     harness.clickText('[data-route-link]', 'Playbooks')
@@ -935,6 +953,25 @@ test('cloud web browser handles approvals, questions, artifacts, and workflow ru
       assert.equal(harness.document.body.dataset.route, 'chat')
     })
     assert.ok(harness.lastRequest((request) => request.method === 'POST' && /\/api\/workflows\/workflow-1\/run$/.test(request.path)))
+  } finally {
+    harness.close()
+  }
+})
+
+test('cloud web browser renders an empty artifact library after the index loads', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', artifactCount: 0 }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+
+    harness.clickText('[data-route-link]', 'Artifacts')
+
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.route, 'artifacts')
+      assert.ok(harness.lastRequest((request) => request.method === 'GET' && /\/api\/artifacts(?:\?|$)/.test(request.path)))
+      const text = harness.document.querySelector('#artifact-list')?.textContent || ''
+      assert.match(text, /No artifacts found/)
+      assert.doesNotMatch(text, /Loading artifacts/)
+    })
   } finally {
     harness.close()
   }

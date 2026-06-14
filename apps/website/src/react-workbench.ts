@@ -315,8 +315,8 @@ export type CloudRuntimeActionProps = {
   onRespondPermission?: (permissionId: string, allowed: boolean, context?: CloudRuntimeActionContext) => void
   onReplyQuestion?: (requestId: string, answers: string[] | string[][], context?: CloudRuntimeActionContext) => void
   onRejectQuestion?: (requestId: string, context?: CloudRuntimeActionContext) => void
-  onViewArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
-  onDownloadArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
+  onViewArtifact?: (artifactId: string, context?: ArtifactActionContext) => Promise<void> | void
+  onDownloadArtifact?: (artifactId: string, context?: ArtifactActionContext) => Promise<void> | void
   onInspectArtifact?: (artifactId: string, context?: ArtifactActionContext) => void
   onOpenTaskSession?: (sessionId: string) => void
   handoffAgentBySessionId?: Record<string, string>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
@@ -170,12 +170,263 @@ describe('StudioArtifactsPage', () => {
     resetSessionStore()
   })
 
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (error: unknown) => void
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve
+      reject = promiseReject
+    })
+    return { promise, resolve, reject }
+  }
+
   it('keeps the Open chat action enabled when an active chat exists', () => {
     useSessionStore.setState({ currentSessionId: 'active-session' })
 
     render(<StudioArtifactsPage onOpenChat={vi.fn()} />)
 
     expect(screen.getByRole('button', { name: 'Open chat' })).not.toBeDisabled()
+  })
+
+  it('renders the cross-project artifact index with provenance and actions', async () => {
+    const sessions = [
+      { id: 'session-1', title: 'Q2 board review', createdAt: '2026-06-01T00:00:00.000Z', updatedAt: '2026-06-01T10:30:00.000Z' },
+      { id: 'session-2', title: 'Revenue packet', directory: '/Users/joe/project', createdAt: '2026-06-02T00:00:00.000Z', updatedAt: '2026-06-02T10:30:00.000Z' },
+    ]
+    useSessionStore.setState({
+      sessions,
+      sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: sessions },
+      currentSessionId: 'session-1',
+      chartArtifactsBySession: {
+        'session-1': [{
+          id: 'chart:/workspace/acme/private/board-chart.png',
+          filePath: '/workspace/acme/private/board-chart.png',
+          filename: 'board-chart.png',
+          toolId: 'chart-tool',
+          toolName: 'render_chart',
+          order: 3,
+          mime: 'image/png',
+          size: 1024,
+          chart: { format: 'vega-lite', spec: { mark: 'bar' }, title: 'Board chart' },
+        }],
+      },
+    })
+    const indexArtifacts = vi.fn(async () => ({
+      artifacts: [
+        {
+          id: 'session:write:/Users/joe/private/objectKey/report.md',
+          sessionId: 'session-1',
+          sessionTitle: 'Q2 board review',
+          workspaceId: LOCAL_WORKSPACE_ID,
+          filePath: '/Users/joe/private/objectKey/report.md',
+          filename: 'board-review.md',
+          toolId: 'write',
+          toolName: 'Writer',
+          order: 1,
+          mime: 'text/markdown',
+          size: 4096,
+          kind: 'document',
+          status: 'in-review',
+          authorAgentId: 'Cleo',
+          projectId: 'project-alpha',
+          updatedAt: '2026-06-01T10:30:00.000Z',
+        },
+        {
+          id: 'artifact-deck',
+          sessionId: 'session-1',
+          sessionTitle: 'Q2 board review',
+          workspaceId: LOCAL_WORKSPACE_ID,
+          filePath: '/Users/joe/private/board-deck.pptx',
+          filename: 'board-deck.pptx',
+          toolId: 'write',
+          toolName: 'Writer',
+          order: 2,
+          mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          size: 8192,
+          kind: 'deck',
+          status: 'draft',
+          authorAgentId: 'Cleo',
+          projectId: 'project-alpha',
+          updatedAt: '2026-06-01T11:30:00.000Z',
+        },
+        {
+          id: 'artifact-2',
+          sessionId: 'session-2',
+          sessionTitle: 'Revenue packet',
+          workspaceId: LOCAL_WORKSPACE_ID,
+          filePath: '/Users/joe/project/revenue.csv',
+          filename: 'revenue.csv',
+          toolId: 'spreadsheet',
+          toolName: 'Analyst',
+          order: 2,
+          mime: 'text/csv',
+          size: 2048,
+          kind: 'spreadsheet',
+          status: 'final',
+          authorAgentId: 'Analyst',
+          projectId: 'project-beta',
+          updatedAt: '2026-06-02T10:30:00.000Z',
+        },
+      ],
+      total: 3,
+    }))
+    const openArtifact = vi.fn(async () => '/tmp/board-review.md')
+    const exportArtifact = vi.fn(async () => '/tmp/board-review.md')
+    installRendererTestCoworkApi({
+      artifact: {
+        index: indexArtifacts,
+        open: openArtifact,
+        export: exportArtifact,
+      },
+    })
+
+    render(<StudioArtifactsPage onOpenChat={vi.fn()} />)
+
+    expect(await screen.findByText('board-review.md')).toBeInTheDocument()
+    expect(indexArtifacts).toHaveBeenCalledWith({ workspaceId: undefined, limit: 200 })
+    expect(screen.getAllByText('In review').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Cleo').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('project-alpha').length).toBeGreaterThan(0)
+    expect(screen.getByText('board-deck.pptx')).toBeInTheDocument()
+    expect(screen.getByText('revenue.csv')).toBeInTheDocument()
+    expect(screen.getByText('board-chart.png')).toBeInTheDocument()
+    const pageText = document.body.textContent || ''
+    expect(pageText).not.toContain('/Users/joe/private')
+    expect(pageText).not.toContain('/Users/joe/project')
+    expect(pageText).not.toContain('/workspace/acme/private')
+    expect(pageText).not.toContain('objectKey')
+    expect(screen.getByRole('button', { name: 'Export all' })).not.toBeDisabled()
+
+    const card = screen.getByText('board-review.md').closest('.studio-artifact-card') as HTMLElement
+    const deckCard = screen.getByText('board-deck.pptx').closest('.studio-artifact-card') as HTMLElement
+    const revenueCard = screen.getByText('revenue.csv').closest('.studio-artifact-card') as HTMLElement
+    expect(within(deckCard).getByRole('button', { name: 'Open' })).toBeDisabled()
+    expect(within(deckCard).getByRole('button', { name: 'Export' })).not.toBeDisabled()
+    expect(within(revenueCard).getByRole('button', { name: 'Open' })).toBeDisabled()
+    expect(within(revenueCard).getByRole('button', { name: 'Export' })).toBeDisabled()
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Open' }))
+    await waitFor(() => expect(openArtifact).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      filePath: '/Users/joe/private/objectKey/report.md',
+      suggestedName: 'board-review.md',
+      workspaceId: undefined,
+    }))
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Export' }))
+    await waitFor(() => expect(exportArtifact).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      filePath: '/Users/joe/private/objectKey/report.md',
+      suggestedName: 'board-review.md',
+      workspaceId: undefined,
+    }))
+  })
+
+  it('ignores stale artifact index responses after switching workspaces', async () => {
+    const first = deferred<Awaited<ReturnType<typeof window.coworkApi.artifact.index>>>()
+    const second = deferred<Awaited<ReturnType<typeof window.coworkApi.artifact.index>>>()
+    const indexArtifacts = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    installRendererTestCoworkApi({
+      artifact: {
+        index: indexArtifacts,
+      },
+    })
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:first' })
+
+    render(<StudioArtifactsPage onOpenChat={vi.fn()} />)
+    await waitFor(() => expect(indexArtifacts).toHaveBeenCalledWith({ workspaceId: 'cloud:first', limit: 200 }))
+
+    act(() => {
+      useSessionStore.setState({ activeWorkspaceId: 'cloud:second' })
+    })
+    await waitFor(() => expect(indexArtifacts).toHaveBeenCalledWith({ workspaceId: 'cloud:second', limit: 200 }))
+
+    await act(async () => {
+      second.resolve({
+        artifacts: [{
+          id: 'artifact-second',
+          sessionId: 'session-second',
+          filePath: 'cloud-artifact://artifact-second/result.md',
+          filename: 'second-workspace.md',
+          toolId: 'write',
+          toolName: 'Writer',
+          order: 1,
+          kind: 'document',
+          status: 'draft',
+          projectId: 'second-project',
+        }],
+        total: 1,
+      })
+      await second.promise
+    })
+    expect(await screen.findByText('second-workspace.md')).toBeInTheDocument()
+
+    await act(async () => {
+      first.resolve({
+        artifacts: [{
+          id: 'artifact-first',
+          sessionId: 'session-first',
+          filePath: 'cloud-artifact://artifact-first/result.md',
+          filename: 'first-workspace.md',
+          toolId: 'write',
+          toolName: 'Writer',
+          order: 1,
+          kind: 'document',
+          status: 'draft',
+          projectId: 'first-project',
+        }],
+        total: 1,
+      })
+      await first.promise
+    })
+
+    expect(screen.getByText('second-workspace.md')).toBeInTheDocument()
+    expect(screen.queryByText('first-workspace.md')).toBeNull()
+  })
+
+  it('hides the previous workspace artifact index while the next workspace loads', async () => {
+    const second = deferred<Awaited<ReturnType<typeof window.coworkApi.artifact.index>>>()
+    const indexArtifacts = vi.fn()
+      .mockResolvedValueOnce({
+        artifacts: [{
+          id: 'artifact-first',
+          sessionId: 'session-first',
+          filePath: 'cloud-artifact://artifact-first/result.md',
+          filename: 'first-workspace.md',
+          toolId: 'write',
+          toolName: 'Writer',
+          order: 1,
+          kind: 'document',
+          status: 'draft',
+          projectId: 'first-project',
+        }],
+        total: 1,
+      })
+      .mockReturnValueOnce(second.promise)
+    installRendererTestCoworkApi({
+      artifact: {
+        index: indexArtifacts,
+      },
+    })
+    useSessionStore.setState({ activeWorkspaceId: 'cloud:first' })
+
+    render(<StudioArtifactsPage onOpenChat={vi.fn()} />)
+    expect(await screen.findByText('first-workspace.md')).toBeInTheDocument()
+
+    act(() => {
+      useSessionStore.setState({ activeWorkspaceId: 'cloud:second' })
+    })
+
+    await waitFor(() => expect(indexArtifacts).toHaveBeenCalledWith({ workspaceId: 'cloud:second', limit: 200 }))
+    expect(screen.queryByText('first-workspace.md')).toBeNull()
+
+    await act(async () => {
+      second.resolve({ artifacts: [], total: 0 })
+      await second.promise
+    })
+    expect(screen.queryByText('first-workspace.md')).toBeNull()
   })
 })
 
@@ -270,7 +521,8 @@ describe('StudioChannelsPage', () => {
 
     render(<StudioChannelsPage onOpenSettings={vi.fn()} />)
 
-    expect(await screen.findByText('Start work')).toBeInTheDocument()
+    expect(await screen.findByText('Team Telegram')).toBeInTheDocument()
+    expect(screen.getByText('Start work')).toBeInTheDocument()
     expect(screen.getByText('Get updates')).toBeInTheDocument()
     expect(screen.getByText('Approve on the go')).toBeInTheDocument()
     for (const label of ['WhatsApp', 'Telegram', 'Slack', 'Discord', 'Signal', 'Email', 'Webhook']) {
@@ -279,7 +531,6 @@ describe('StudioChannelsPage', () => {
     for (const role of ['Owner', 'Admin', 'Member', 'Approver', 'Viewer']) {
       expect(screen.getAllByText(role).length).toBeGreaterThan(0)
     }
-    expect(screen.getByText('Team Telegram')).toBeInTheDocument()
     expect(screen.getByText('project / project-1')).toBeInTheDocument()
     const providerCard = (label: string) => [...document.querySelectorAll('#channel-add-grid article')]
       .find((card) => card.querySelector('h3')?.textContent === label)

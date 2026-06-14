@@ -171,7 +171,7 @@ test('cloud web browser keeps large admin surfaces bounded across route transiti
     assert.equal(harness.document.querySelectorAll('#channel-delivery-list > .row').length, 50)
     assert.equal(harness.document.querySelectorAll('#workflow-list [role="row"]').length, 100)
     assert.equal(harness.document.querySelectorAll('#audit-list > .row').length, 100)
-    assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100)
+    await waitFor(() => assert.equal(harness.document.querySelectorAll('#artifact-list .artifact-card').length, 100))
   } finally {
     harness.close()
   }
