@@ -471,6 +471,8 @@ export function validateCustomSkillConfig(record: Record<string, unknown>): Cust
 }
 
 export function validateCustomAgentConfig(record: Record<string, unknown>): CustomAgentConfig {
+  const mode = validateCustomAgentMode(record.mode)
+  const permissionOverrides = validateCustomAgentPermissionOverrides(record.permissionOverrides)
   const agent: CustomAgentConfig = {
     workspaceId: optionalString(record, 'workspaceId', 'Workspace id', MAX_IPC_ID_BYTES),
     scope: requiredScope(record),
@@ -495,9 +497,66 @@ export function validateCustomAgentConfig(record: Record<string, unknown>): Cust
     throw new Error('Agent color is invalid.')
   }
   agent.color = record.color as CustomAgentConfig['color']
+  if (mode !== undefined) agent.mode = mode
+  if (permissionOverrides !== undefined) agent.permissionOverrides = permissionOverrides
   const issue = validateCustomAgentContentLimits(agent)[0]
   if (issue) throw new Error(issue.message)
   return agent
+}
+
+function validateCustomAgentMode(value: unknown): CustomAgentConfig['mode'] | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (value === 'primary' || value === 'subagent') return value
+  throw new Error('Agent mode is invalid.')
+}
+
+function validateCustomAgentPermissionOverrides(value: unknown): CustomAgentConfig['permissionOverrides'] {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error('Agent permission overrides must be an array.')
+  return value.map((entry, index) => {
+    const record = plainRecord(entry, `Agent permission override ${index + 1}`)
+    const key = record.key
+    if (
+      key !== 'web' &&
+      key !== 'edit' &&
+      key !== 'bash' &&
+      key !== 'task' &&
+      key !== 'external_directory' &&
+      key !== 'mcp'
+    ) {
+      throw new Error(`Agent permission override ${index + 1} key is invalid.`)
+    }
+    const action = record.action
+    if (action !== 'allow' && action !== 'ask' && action !== 'deny') {
+      throw new Error(`Agent permission override ${index + 1} action is invalid.`)
+    }
+    const rulesInput = record.rules
+    const rules = rulesInput === undefined || rulesInput === null
+      ? undefined
+      : (() => {
+          if (!Array.isArray(rulesInput)) throw new Error(`Agent permission override ${index + 1} rules must be an array.`)
+          return rulesInput.map((rawRule, ruleIndex) => {
+            const rule = plainRecord(rawRule, `Agent permission override ${index + 1} rule ${ruleIndex + 1}`)
+            const ruleAction = rule.action
+            if (ruleAction !== 'allow' && ruleAction !== 'ask' && ruleAction !== 'deny') {
+              throw new Error(`Agent permission override ${index + 1} rule ${ruleIndex + 1} action is invalid.`)
+            }
+            const pattern = requiredString(rule, 'pattern', `Agent permission override ${index + 1} rule ${ruleIndex + 1} pattern`, MAX_IPC_ID_BYTES)
+            if (/[\r\n\0]/.test(pattern)) {
+              throw new Error(`Agent permission override ${index + 1} rule ${ruleIndex + 1} pattern cannot contain line breaks or null bytes.`)
+            }
+            return {
+              pattern,
+              action: ruleAction as NonNullable<CustomAgentConfig['permissionOverrides']>[number]['action'],
+            }
+          })
+        })()
+    return {
+      key,
+      action,
+      ...(rules ? { rules } : {}),
+    }
+  })
 }
 
 export function validateDestructiveConfirmationRequest(record: Record<string, unknown>): DestructiveConfirmationRequest {

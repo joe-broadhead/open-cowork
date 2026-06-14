@@ -101,6 +101,7 @@ test('session composer preferences persist separately from last-used model', () 
       opencodeDirectory: userDataDir,
       providerId: 'openrouter',
       modelId: 'openrouter/model-last-used',
+      composerAgentName: 'writer-lead',
       composerModelId: 'openrouter/model-composer',
       composerReasoningVariant: 'xhigh',
     }))
@@ -112,6 +113,7 @@ test('session composer preferences persist separately from last-used model', () 
 
     const record = listSessionRecords().find((entry) => entry.id === sessionId)
     assert.equal(record?.modelId, 'openrouter/model-last-used-after-prompt')
+    assert.equal(record?.composerAgentName, 'writer-lead')
     assert.equal(record?.composerModelId, 'openrouter/model-composer')
     assert.equal(record?.composerReasoningVariant, 'xhigh')
   } finally {

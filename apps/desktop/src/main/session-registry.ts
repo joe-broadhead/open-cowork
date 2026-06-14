@@ -20,6 +20,7 @@ export interface SessionRecord {
   runId: string | null
   providerId: string | null
   modelId: string | null
+  composerAgentName: string | null
   composerModelId: string | null
   composerReasoningVariant: string | null
   summary: SessionUsageSummary | null
@@ -251,6 +252,7 @@ export function toSessionRecord(input: {
   opencodeDirectory: string
   providerId?: string | null
   modelId?: string | null
+  composerAgentName?: string | null
   composerModelId?: string | null
   composerReasoningVariant?: string | null
   kind?: 'interactive' | 'workflow_draft' | 'workflow_run'
@@ -276,6 +278,7 @@ export function toSessionRecord(input: {
     runId: input.runId || null,
     providerId: input.providerId || null,
     modelId: input.modelId || null,
+    composerAgentName: input.composerAgentName || null,
     composerModelId: input.composerModelId || null,
     composerReasoningVariant: input.composerReasoningVariant || null,
     summary: input.summary || null,
@@ -299,6 +302,7 @@ export function toRendererSession(record: SessionRecord) {
     parentSessionId: record.parentSessionId,
     changeSummary: record.changeSummary,
     revertedMessageId: record.revertedMessageId,
+    composerAgentName: record.composerAgentName,
     composerModelId: record.composerModelId,
     composerReasoningVariant: record.composerReasoningVariant,
   }

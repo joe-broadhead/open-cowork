@@ -88,6 +88,21 @@ test('permission inheritance analyzer catches ask-to-allow child escalation', ()
   ])
 })
 
+test('permission inheritance matrix reads external directory object rules', () => {
+  const matrix = buildAgentPermissionMatrix({
+    scoped: {
+      permission: {
+        external_directory: {
+          '*': 'deny',
+          '/tmp/shared/*': 'ask',
+        },
+      },
+    },
+  })
+
+  assert.equal(matrix[0]?.sensitive.external_directory, 'ask')
+})
+
 test('remote approval fixture matrix names explicit authority policies', () => {
   assert.deepEqual(remoteApprovalFixtureMatrix().map((entry) => entry.permissionApproval), [
     'local-confirmation',

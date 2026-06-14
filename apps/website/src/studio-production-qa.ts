@@ -89,6 +89,17 @@ export const STUDIO_VISUAL_QA_MATRIX: StudioVisualQaEntry[] = [
     viewports: allViewports,
   },
   {
+    id: 'hire-coworker-wizard-boundary',
+    label: 'Hire a coworker wizard boundary',
+    routeIds: ['agents'],
+    desktopSurface: 'Desktop four-step Hire a coworker wizard with Role, Abilities, Brain, and Permissions',
+    cloudCheck: 'Agents route keeps the same coworker vocabulary and Start chat path while showing no local custom-agent editor; the parity matrix documents the Desktop-only reason.',
+    states: ['disabled', 'permission-gated'],
+    boundary: 'Cloud Web cannot edit local custom-agent files, local provider settings, or machine OpenCode permission config.',
+    evidence: ['apps/desktop/src/renderer/components/agents/AgentBuilderPage.test.tsx', 'apps/website/src/workbench-parity.ts', 'apps/website/src/studio-production-qa.test.ts'],
+    viewports: allViewports,
+  },
+  {
     id: 'playbooks-and-runs',
     label: 'Playbooks and runs',
     routeIds: ['workflows'],

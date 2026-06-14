@@ -395,6 +395,40 @@ export function App() {
     setPendingComposerInsert(`@${trimmed} `)
   }, [createAndActivateSession])
 
+  const startPrimaryCustomAgentThread = useCallback(async (agentName: string, directory?: string | null) => {
+    const trimmed = agentName.trim()
+    if (!trimmed) return
+    const activeWorkspaceId = normalizeWorkspaceId(useSessionStore.getState().activeWorkspaceId)
+    if (activeWorkspaceId !== LOCAL_WORKSPACE_ID) {
+      reportAppError(
+        'Custom coworker chats currently start from Desktop Local only. Switch to the local workspace and try again.',
+        new Error(`Cannot start local custom coworker "${trimmed}" in workspace "${activeWorkspaceId}".`),
+        'agents',
+      )
+      return
+    }
+    let sessionId: string | null = null
+    try {
+      const session = await createAndActivateSession(directory || undefined)
+      if (!session) return
+      sessionId = session.id
+      useSessionStore.getState().setSessionPrimaryAgent(session.id, trimmed)
+      await window.coworkApi.session.setComposerPreferences(session.id, { agentName: trimmed })
+      await window.coworkApi.session.prompt(
+        session.id,
+        'Introduce yourself and ask how you can help.',
+        undefined,
+        trimmed,
+      )
+    } catch (err) {
+      if (sessionId) {
+        useSessionStore.getState().setSessionPrimaryAgent(sessionId, null)
+        void window.coworkApi.session.setComposerPreferences(sessionId, { agentName: null }).catch(() => undefined)
+      }
+      reportAppError('Could not start coworker chat. Try again from the thread.', err, 'agents')
+    }
+  }, [createAndActivateSession, reportAppError])
+
   useAppGlobalEvents({
     runtimeReady,
     view,
@@ -706,6 +740,7 @@ export function App() {
                   onClose={() => navigateView('chat')}
                   onOpenCapabilities={() => navigateView('tools')}
                   onTestAgent={(agentName, directory) => void testAgentInNewThread(agentName, directory)}
+                  onStartAgentChat={(agentName, directory) => void startPrimaryCustomAgentThread(agentName, directory)}
                 />
               </Suspense>
             )}
@@ -763,6 +798,7 @@ export function App() {
                 navigateView('chat')
               }}
               onSetAgentMode={setAgentMode}
+              onStartAgentChat={startPrimaryCustomAgentThread}
               onOpenSettings={openSidebarSettings}
               onToggleSearch={openSidebarSearch}
             />

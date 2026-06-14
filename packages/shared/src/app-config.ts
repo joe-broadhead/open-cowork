@@ -345,6 +345,7 @@ export interface AgentStarterTemplate {
   label: string
   description: string
   color: string
+  mode?: 'primary' | 'subagent'
   instructions: string
   temperature?: number | null
   steps?: number | null

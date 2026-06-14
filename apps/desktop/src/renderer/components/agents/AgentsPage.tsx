@@ -40,12 +40,14 @@ export function AgentsPage({
   onClose,
   onOpenCapabilities,
   onTestAgent,
+  onStartAgentChat,
   initialDraft,
   onClearDraft,
 }: {
   onClose: () => void
   onOpenCapabilities: () => void
   onTestAgent?: (agentName: string, directory?: string | null) => void
+  onStartAgentChat?: (agentName: string, directory?: string | null) => void
   initialDraft?: Partial<CustomAgentConfig> | null
   onClearDraft?: () => void
 }) {
@@ -336,6 +338,10 @@ export function AgentsPage({
                 catalog={catalog}
                 onOpen={() => setSelected({ kind: 'custom', name: agent.name })}
                 onTest={onTestAgent ? () => onTestAgent(
+                  agent.name,
+                  agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
+                ) : undefined}
+                onStartChat={onStartAgentChat ? () => onStartAgentChat(
                   agent.name,
                   agent.scope === 'project' ? agent.directory || projectDirectory : projectDirectory,
                 ) : undefined}

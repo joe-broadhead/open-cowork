@@ -45,6 +45,7 @@ function makePackagedSeedSession() {
     runId: null,
     providerId: 'openrouter',
     modelId: 'anthropic/claude-sonnet-4',
+    composerAgentName: null,
     composerModelId: null,
     composerReasoningVariant: null,
     summary: null,

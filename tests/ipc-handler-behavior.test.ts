@@ -2979,9 +2979,52 @@ test('custom content handlers sync portable cloud metadata and block local-only 
     toolIds: ['read'],
     enabled: true,
     color: 'primary',
+    mode: 'primary',
+    permissionOverrides: [
+      { key: 'bash', action: 'allow' },
+    ],
   }), true)
   assert.equal((await handlers.get('agents:list')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.name, 'analyst')
+  assert.equal((await handlers.get('agents:list')?.({}, { workspaceId: 'cloud:test' }))?.[0]?.writeAccess, true)
   assert.equal((await handlers.get('agents:catalog')?.({}, { workspaceId: 'cloud:test' }))?.tools[0]?.id, 'read')
+  assert.equal(await handlers.get('agents:update')?.({}, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'analyst',
+  }, {
+    workspaceId: 'cloud:test',
+    scope: 'machine',
+    name: 'analyst',
+    description: 'Analyze data with updated copy',
+    instructions: 'Use the analysis skill.',
+    skillNames: ['analysis'],
+    toolIds: ['read'],
+    enabled: true,
+    color: 'primary',
+  }), true)
+  const updatedAgent = (await handlers.get('agents:list')?.({}, { workspaceId: 'cloud:test' }))?.[0]
+  assert.equal(updatedAgent?.mode, 'primary')
+  assert.deepEqual(updatedAgent?.permissionOverrides, [
+    { key: 'bash', action: 'allow' },
+  ])
+  assert.equal(updatedAgent?.writeAccess, true)
+  await assert.rejects(
+    () => handlers.get('agents:create')?.({}, {
+      workspaceId: 'cloud:test',
+      scope: 'machine',
+      name: 'local-path-agent',
+      description: 'Should not sync local directory permissions',
+      instructions: 'Do not save.',
+      skillNames: [],
+      toolIds: ['read'],
+      enabled: true,
+      color: 'primary',
+      permissionOverrides: [
+        { key: 'external_directory', action: 'deny', rules: [{ pattern: '/Users/alice/Private/*', action: 'allow' }] },
+      ],
+    }),
+    /Cloud custom agents cannot reference local external-directory permissions/,
+  )
   assert.equal(await handlers.get('agents:remove')?.({}, {
     workspaceId: 'cloud:test',
     scope: 'machine',

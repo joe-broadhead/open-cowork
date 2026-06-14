@@ -498,6 +498,7 @@ export interface CoworkAPI {
       parentSessionId?: string | null
       changeSummary?: SessionChangeSummary | null
       revertedMessageId?: string | null
+      composerAgentName?: string | null
       composerModelId?: string | null
       composerReasoningVariant?: string | null
     }) => void) => () => void

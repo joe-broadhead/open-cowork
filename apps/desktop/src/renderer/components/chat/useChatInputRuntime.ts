@@ -2,7 +2,7 @@ import { type Dispatch, type RefObject, type SetStateAction, useEffect, useMemo,
 import { t } from '../../helpers/i18n'
 import { useSessionStore } from '../../stores/session'
 import type { Session } from '../../stores/session'
-import type { WorkspaceOptions } from '@open-cowork/shared'
+import type { CustomAgentSummary, WorkspaceOptions } from '@open-cowork/shared'
 import type { Attachment, ChatInputModelEntry, InlinePickerState, MentionableAgent } from './chat-input-types'
 import { formatAgentLabel } from '../../helpers/agent-label.ts'
 import { ensureAttachmentId } from './chat-input-utils.ts'
@@ -17,6 +17,10 @@ type MentionableAgentCacheEntry = {
 }
 
 const mentionableAgentCache = new Map<string, MentionableAgentCacheEntry>()
+
+export function isMentionableCustomAgent(agent: Pick<CustomAgentSummary, 'enabled' | 'valid' | 'mode'>) {
+  return agent.enabled && agent.valid && agent.mode !== 'primary'
+}
 
 function scheduleIdle(task: () => void) {
   if (typeof window.requestIdleCallback === 'function') {
@@ -178,7 +182,7 @@ export function useMentionableAgents(currentProjectDirectory: string | null, wor
             description: agent.description || 'Focused delegated work',
           }))
         const userAgents = (customAgents || [])
-          .filter((agent) => agent.enabled && agent.valid)
+          .filter(isMentionableCustomAgent)
           .map((agent) => ({
             id: agent.name,
             label: formatAgentLabel(agent.name),

@@ -1471,6 +1471,7 @@
         "label": { "type": "string" },
         "description": { "type": "string" },
         "color": { "type": "string" },
+        "mode": { "type": "string", "enum": ["primary", "subagent"] },
         "instructions": { "type": "string" },
         "temperature": { "type": ["number", "null"], "minimum": 0 },
         "steps": { "type": ["integer", "null"], "minimum": 1 },

@@ -61,12 +61,15 @@ type BuildPaletteItemsInput = {
   commands: RuntimeCommand[]
   builtinAgents: BuiltInAgentDetail[]
   customAgents: CustomAgentSummary[]
+  currentProjectDirectory?: string | null
   platform?: string
   onNavigate: (view: View) => void
   onCreateThread: (directory?: string) => Promise<SessionInfo | null>
   onEnsureSession: () => Promise<boolean>
   onInsertComposer: (text: string) => void
+  onClearSessionPrimaryAgent: () => Promise<boolean | void> | boolean | void
   onSetAgentMode: (mode: PrimaryAgentMode) => void
+  onStartAgentChat: (agentName: string, directory?: string | null) => Promise<void> | void
   onSelectDirectory: () => Promise<string | null>
   onOpenSettings: () => void
   onToggleSearch: () => void
@@ -78,12 +81,15 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
     commands,
     builtinAgents,
     customAgents,
+    currentProjectDirectory = null,
     platform = '',
     onNavigate,
     onCreateThread,
     onEnsureSession,
     onInsertComposer,
+    onClearSessionPrimaryAgent,
     onSetAgentMode,
+    onStartAgentChat,
     onSelectDirectory,
     onOpenSettings,
     onToggleSearch,
@@ -106,21 +112,41 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
       },
     }))
 
-  const topLevelModes = builtinAgents
-    .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'primary' && isPrimaryAgentMode(agent.name))
-    .map((agent) => ({
-      id: `mode:${agent.name}`,
-      title: `Use ${agent.label}`,
-      subtitle: compactDescription(agent.description, COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
-      section: 'Modes' as const,
-      badge: 'Mode',
-      keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
-      run: () => {
-        if (!isPrimaryAgentMode(agent.name)) return
-        onSetAgentMode(agent.name)
-        onNavigate('chat')
-      },
-    }))
+  const topLevelModes = [
+    ...builtinAgents
+      .filter((agent) => !agent.hidden && agent.surface !== 'workflow' && agent.mode === 'primary' && isPrimaryAgentMode(agent.name))
+      .map((agent) => ({
+        id: `mode:${agent.name}`,
+        title: `Use ${agent.label}`,
+        subtitle: compactDescription(agent.description, COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
+        section: 'Modes' as const,
+        badge: 'Mode',
+        keywords: `${agent.name} ${agent.label} ${agent.description}`.toLowerCase(),
+        run: async () => {
+          if (!isPrimaryAgentMode(agent.name)) return
+          const cleared = await onClearSessionPrimaryAgent()
+          if (cleared === false) return false
+          onSetAgentMode(agent.name)
+          onNavigate('chat')
+        },
+      })),
+    ...customAgents
+      .filter((agent) => agent.enabled && agent.valid && agent.mode === 'primary')
+      .map((agent) => ({
+        id: `custom-mode:${agent.name}`,
+        title: `Use ${formatAgentLabel(agent.name)}`,
+        subtitle: compactDescription(agent.description || 'Custom lead coworker', COMMAND_PALETTE_DESCRIPTION_MAX_LENGTH),
+        section: 'Modes' as const,
+        badge: 'Custom',
+        keywords: `${agent.name} ${agent.description || ''} ${agent.instructions}`.toLowerCase(),
+        run: () => {
+          void Promise.resolve(onStartAgentChat(
+            agent.name,
+            agent.scope === 'project' ? agent.directory || currentProjectDirectory : currentProjectDirectory,
+          )).catch(() => undefined)
+        },
+      })),
+  ].sort((a, b) => a.title.localeCompare(b.title))
 
   const agentItems = [
     ...builtinAgents
@@ -138,9 +164,9 @@ export function buildCommandPaletteItems(input: BuildPaletteItemsInput): Palette
           onNavigate('chat')
           onInsertComposer(`@${agent.name} `)
         },
-      })),
+    })),
     ...customAgents
-      .filter((agent) => agent.enabled && agent.valid)
+      .filter((agent) => agent.enabled && agent.valid && agent.mode !== 'primary')
       .map((agent) => ({
         id: `custom-agent:${agent.name}`,
         title: formatAgentLabel(agent.name),

@@ -11,13 +11,7 @@ import { AgentAvatar } from './AgentAvatar'
 import { AvatarEditor } from './AvatarEditor'
 import { PluginIcon } from '../plugins/PluginIcon'
 import { AgentCapabilityProfileView } from '../ui'
-import {
-  agentTone,
-  computeAgentScope,
-  scopeLabel,
-  scopeTone,
-  type AgentScope,
-} from './agent-builder-utils'
+import { agentTone } from './agent-builder-utils'
 
 // Portrait card shown on the left of the builder. It stays focused on
 // identity first, with the deeper character-sheet details tucked behind
@@ -57,7 +51,6 @@ export function AgentCard({
   onSkillRemove,
   onEnabledChange,
 }: Props) {
-  const scope = computeAgentScope(draft.toolIds, catalog)
   const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
   const skillMap = new Map(catalog.skills.map((skill) => [skill.name, skill]))
   const avatarButtonRef = useRef<HTMLButtonElement>(null)
@@ -152,7 +145,7 @@ export function AgentCard({
       <div className="grid grid-cols-2 gap-2 px-5 pb-3">
         <StatTile label="Model" value={selectedModelName || (draft.model ? draft.model.split('/').pop()! : 'Default')} />
         <StatTile label="Steps" value={typeof draft.steps === 'number' ? String(draft.steps) : '-'} />
-        <ScopeTile scope={scope} />
+        <StatTile label="Mode" value={draft.mode === 'primary' ? 'Lead' : 'Specialist'} />
         <StatTile label="Temperature" value={typeof draft.temperature === 'number' ? draft.temperature.toFixed(1) : 'Default'} />
       </div>
 
@@ -355,25 +348,6 @@ function StatTile({ label, value }: { label: string; value: string }) {
     >
       <div className="text-[9px] uppercase tracking-[0.08em] text-text-muted">{label}</div>
       <div className="text-[12px] font-medium text-text truncate mt-0.5" title={value}>{value}</div>
-    </div>
-  )
-}
-
-function ScopeTile({ scope }: { scope: AgentScope }) {
-  const tone = scopeTone(scope)
-  return (
-    <div
-      className="rounded-lg px-2.5 py-2 border transition-colors"
-      style={{
-        background: `color-mix(in srgb, ${tone} 10%, var(--color-elevated))`,
-        borderColor: `color-mix(in srgb, ${tone} 24%, var(--color-border-subtle))`,
-      }}
-      title={`Access footprint: ${scopeLabel(scope)}`}
-    >
-      <div className="text-[9px] uppercase tracking-[0.08em]" style={{ color: tone }}>{t('agentCard.scope', 'Scope')}</div>
-      <div className="text-[12px] font-medium mt-0.5" style={{ color: tone }}>
-        {scopeLabel(scope)}
-      </div>
     </div>
   )
 }

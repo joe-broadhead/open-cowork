@@ -15,7 +15,7 @@ import {
 } from '@open-cowork/shared'
 import { useSessionStore } from './stores/session'
 import type { PrimaryAgentMode } from './stores/session'
-import { useWorkspaceSupportStore } from './stores/workspace-support'
+import { WORKSPACE_SUPPORT_APIS, useWorkspaceSupportStore } from './stores/workspace-support'
 import { LOCAL_WORKSPACE_ID } from './stores/session-workspace-keys'
 import { installRendererTestCoworkApi } from './test/setup'
 import { App } from './App'
@@ -205,15 +205,17 @@ vi.mock('./components/CommandPalette', () => ({
     onEnsureSession,
     onInsertComposer,
     onSetAgentMode,
+    onStartAgentChat,
     onOpenSettings,
     onToggleSearch,
   }: {
     onClose: () => void
     onNavigate: (view: AppNavigationTarget) => void
-    onCreateThread: () => void
+    onCreateThread: (directory?: string) => void
     onEnsureSession: () => Promise<boolean>
     onInsertComposer: (text: string) => void
     onSetAgentMode: (mode: PrimaryAgentMode) => void
+    onStartAgentChat: (agentName: string, directory?: string | null) => Promise<void> | void
     onOpenSettings: () => void
     onToggleSearch: () => void
   }) => (
@@ -224,6 +226,7 @@ vi.mock('./components/CommandPalette', () => ({
       <button type="button" onClick={() => void onEnsureSession()}>Palette ensure session</button>
       <button type="button" onClick={() => onInsertComposer('Inserted prompt')}>Palette insert</button>
       <button type="button" onClick={() => onSetAgentMode('plan')}>Palette plan mode</button>
+      <button type="button" onClick={() => void onStartAgentChat('writer-lead', '/workspace/acme')}>Palette custom lead</button>
       <button type="button" onClick={onOpenSettings}>Palette settings</button>
       <button type="button" onClick={onToggleSearch}>Palette search</button>
     </div>
@@ -345,6 +348,7 @@ function resetSessionStore() {
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+    sessionPrimaryAgents: {},
   })
   const localSupport = useWorkspaceSupportStore.getState().supportByWorkspace[LOCAL_WORKSPACE_ID] || []
   useWorkspaceSupportStore.setState({
@@ -737,6 +741,77 @@ describe('App', () => {
 
     act(() => listeners.menuAction?.('new-thread'))
     await waitFor(() => expect(api.session.create).toHaveBeenCalledTimes(2))
+  })
+
+  it('starts primary custom agents from the command palette with the selected runtime agent', async () => {
+    const user = userEvent.setup()
+    const { api, listeners } = installAppApi()
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    act(() => listeners.menuAction?.('command-palette'))
+    expect(await screen.findByTestId('command-palette')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Palette custom lead' }))
+
+    await waitFor(() => expect(api.session.create).toHaveBeenCalledWith('/workspace/acme'))
+    expect(api.session.activate).toHaveBeenCalledWith('new-session')
+    expect(api.session.setComposerPreferences).toHaveBeenCalledWith('new-session', { agentName: 'writer-lead' })
+    expect(api.session.prompt).toHaveBeenCalledWith(
+      'new-session',
+      'Introduce yourself and ask how you can help.',
+      undefined,
+      'writer-lead',
+    )
+    expect(useSessionStore.getState().sessionPrimaryAgents['new-session']).toBe('writer-lead')
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+  })
+
+  it('blocks primary custom agent chats in Cloud workspaces where local custom agents cannot be persisted', async () => {
+    const user = userEvent.setup()
+    const { api, listeners } = installAppApi()
+    const cloudSupport = workspaceApiSupportContextForAuthority('cloud_worker', {
+      surface: 'desktop_cloud',
+      onlineState: 'online',
+      status: 'supported',
+    })
+    useSessionStore.setState({
+      activeWorkspaceId: 'cloud:test',
+      sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: [], 'cloud:test': [] },
+      sessions: [],
+      currentSessionId: null,
+    })
+    useWorkspaceSupportStore.setState({
+      supportByWorkspace: {
+        [LOCAL_WORKSPACE_ID]: useWorkspaceSupportStore.getState().supportByWorkspace[LOCAL_WORKSPACE_ID] || [],
+        'cloud:test': WORKSPACE_SUPPORT_APIS.map((apiName) => ({
+          api: apiName,
+          status: 'supported',
+          verdict: { allowed: true, reason: null },
+          context: cloudSupport,
+        })),
+      },
+      loadedByWorkspace: { [LOCAL_WORKSPACE_ID]: true, 'cloud:test': true },
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    })
+
+    render(<App />)
+    await screen.findByTestId('home-page')
+
+    act(() => listeners.menuAction?.('command-palette'))
+    expect(await screen.findByTestId('command-palette')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Palette custom lead' }))
+
+    expect(api.session.create).not.toHaveBeenCalledWith('/workspace/acme')
+    expect(api.session.setComposerPreferences).not.toHaveBeenCalled()
+    expect(api.session.prompt).not.toHaveBeenCalled()
+    expect(api.diagnostics.reportRendererError).toHaveBeenCalledWith(expect.objectContaining({
+      view: 'agents',
+      message: expect.stringContaining('Custom coworker chats currently start from Desktop Local only'),
+    }))
   })
 
   it('opens existing threads through the shared session loader', async () => {

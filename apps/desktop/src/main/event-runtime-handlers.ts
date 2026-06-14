@@ -454,6 +454,7 @@ export function handleRuntimeSideEffectEvent(input: {
           parentSessionId: info.parentID,
           changeSummary: info.summary,
           revertedMessageId: info.revertedMessageId,
+          composerAgentName: updated?.composerAgentName,
           composerModelId: updated?.composerModelId,
           composerReasoningVariant: updated?.composerReasoningVariant,
         })

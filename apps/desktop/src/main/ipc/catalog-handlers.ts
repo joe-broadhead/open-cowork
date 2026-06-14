@@ -50,6 +50,10 @@ function recordFrom(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
+function hasOwn(object: object, key: string) {
+  return Object.prototype.hasOwnProperty.call(object, key)
+}
+
 const NATIVE_RUNTIME_TOOL_IDS = new Set([
   'read',
   'grep',
@@ -103,22 +107,28 @@ function cloudCatalogSkill(skill: CapabilitySkill): CustomAgentCatalog['skills']
   }
 }
 
-async function getCloudAgentCatalog(context: IpcHandlerContext, event: IpcMainInvokeEvent, workspaceId: string | null): Promise<CustomAgentCatalog> {
+async function getCloudAgentCatalog(context: IpcHandlerContext, event: IpcMainInvokeEvent, workspaceId: string | null, excludedTarget?: ScopedArtifactRef): Promise<CustomAgentCatalog> {
   const [tools, skills, customAgents] = await Promise.all([
     context.workspaceGateway.listCloudCapabilityTools(event, workspaceId),
     context.workspaceGateway.listCloudCapabilitySkills(event, workspaceId),
     context.workspaceGateway.listCloudCustomAgents(event, workspaceId),
   ])
+  const reservedCustomAgents = excludedTarget
+    ? customAgents.filter((agent) => !sameScopedAgent(normalizeCustomAgent(agent), excludedTarget))
+    : customAgents
   return {
     tools: tools.map(cloudCatalogTool),
     skills: skills.map(cloudCatalogSkill),
-    reservedNames: customAgents.map((agent) => agent.name).sort((a, b) => a.localeCompare(b)),
+    reservedNames: reservedCustomAgents.map((agent) => normalizeCustomAgent(agent).name).sort((a, b) => a.localeCompare(b)),
     colors: AGENT_COLORS,
   }
 }
 
 function assertCloudAgentIsPortable(agent: CustomAgentConfig): CustomAgentConfig {
   if (agent.scope === 'project' || agent.directory) throw new Error('Cloud custom agents cannot reference local project paths.')
+  if ((agent.permissionOverrides || []).some((override) => override.key === 'external_directory')) {
+    throw new Error('Cloud custom agents cannot reference local external-directory permissions.')
+  }
   return {
     ...agent,
     scope: 'machine',
@@ -126,10 +136,44 @@ function assertCloudAgentIsPortable(agent: CustomAgentConfig): CustomAgentConfig
   }
 }
 
+function permissionOverrideCanWrite(agent: CustomAgentConfig) {
+  return (agent.permissionOverrides || []).some((override) => (
+    (override.key === 'edit' || override.key === 'bash' || override.key === 'task' || override.key === 'external_directory' || override.key === 'mcp') &&
+    (
+      override.action === 'allow' ||
+      override.action === 'ask' ||
+      (override.rules || []).some((rule) => rule.action === 'allow' || rule.action === 'ask')
+    )
+  ))
+}
+
+function sameScopedAgent(left: CustomAgentConfig, right: ScopedArtifactRef) {
+  const leftName = (left.name || '').trim().toLowerCase()
+  const rightName = (right.name || '').trim().toLowerCase()
+  const leftScope = left.scope === 'project' ? 'project' : 'machine'
+  const rightScope = right.scope === 'project' ? 'project' : 'machine'
+  return leftName === rightName
+    && leftScope === rightScope
+    && (left.directory || null) === (right.directory || null)
+}
+
+function mergeOmittedAgentGuardrails(agent: CustomAgentConfig, existing: CustomAgentConfig | null | undefined): CustomAgentConfig {
+  if (!existing) return agent
+  const input = agent as unknown as Record<string, unknown>
+  return {
+    ...agent,
+    mode: hasOwn(input, 'mode') ? agent.mode : existing.mode,
+    permissionOverrides: hasOwn(input, 'permissionOverrides')
+      ? agent.permissionOverrides
+      : existing.permissionOverrides,
+  }
+}
+
 function cloudAgentSummary(agent: CustomAgentConfig) {
   return {
     ...agent,
-    writeAccess: agent.toolIds.some((toolId) => WRITE_TOOL_IDS.has(toolId) || toolId === 'bash'),
+    mode: agent.mode === 'primary' ? 'primary' : 'subagent',
+    writeAccess: agent.toolIds.some((toolId) => WRITE_TOOL_IDS.has(toolId) || toolId === 'bash') || permissionOverrideCanWrite(agent),
     valid: true,
     issues: [],
   }
@@ -423,7 +467,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
       const portable = assertCloudAgentIsPortable(normalized)
       const catalog = await getCloudAgentCatalog(context, _event, workspaceId)
       const siblingNames = (await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId)).map((entry) => normalizeCustomAgent(entry).name)
-      const issues = validateCustomAgent(portable, catalog, siblingNames)
+      const issues = validateCustomAgent(agent, catalog, siblingNames)
       if (issues.length > 0) throw new Error(issues[0]?.message || 'Invalid custom agent')
       return context.workspaceGateway.saveCloudCustomAgent(_event, portable, workspaceId)
     }
@@ -432,7 +476,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     }
     const catalog = await getCustomAgentCatalog(catalogContext)
     const siblingNames = listCustomAgents(catalogContext).map((entry) => normalizeCustomAgent(entry).name)
-    const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    const issues = validateCustomAgent(agent, catalog, siblingNames)
     if (issues.length > 0) {
       throw new Error(issues[0]?.message || 'Invalid custom agent')
     }
@@ -446,20 +490,30 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
   })
 
   registerIpcInvoke(context, 'agents:update', objectAndObjectArgs<ScopedArtifactRef, CustomAgentConfig>('custom agent target', 'custom agent', validateScopedArtifactRef, validateCustomAgentConfig), async (_event, target, agent) => {
-    const normalized = normalizeCustomAgent(agent)
     const workspaceId = readWorkspaceIdOption(agent) || readWorkspaceIdOption(target)
     if (!context.workspaceGateway.isLocalWorkspace(_event, workspaceId)) {
+      const cloudAgents = await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId)
+      const existing = cloudAgents
+        .map((entry) => normalizeCustomAgent(entry))
+        .find((entry) => sameScopedAgent(entry, target))
+      const merged = mergeOmittedAgentGuardrails(agent, existing)
+      const normalized = normalizeCustomAgent(merged)
       const portable = assertCloudAgentIsPortable(normalized)
-      const catalog = await getCloudAgentCatalog(context, _event, workspaceId)
-      const siblingNames = (await context.workspaceGateway.listCloudCustomAgents(_event, workspaceId))
-        .filter((entry) => !(entry.name === target.name && entry.scope === target.scope && (entry.directory || null) === (target.directory || null)))
+      const catalog = await getCloudAgentCatalog(context, _event, workspaceId, target)
+      const siblingNames = cloudAgents
+        .filter((entry) => !sameScopedAgent(normalizeCustomAgent(entry), target))
         .map((entry) => normalizeCustomAgent(entry).name)
-      const issues = validateCustomAgent(portable, catalog, siblingNames)
+      const issues = validateCustomAgent(merged, catalog, siblingNames)
       if (issues.length > 0) throw new Error(issues[0]?.message || 'Invalid custom agent')
       await context.workspaceGateway.removeCloudCustomAgent(_event, target, workspaceId)
       return context.workspaceGateway.saveCloudCustomAgent(_event, portable, workspaceId)
     }
     const resolvedTarget = context.resolveScopedTarget(target)
+    const existing = listCustomAgents({ directory: resolvedTarget.directory })
+      .map((entry) => normalizeCustomAgent(entry))
+      .find((entry) => sameScopedAgent(entry, resolvedTarget))
+    const merged = mergeOmittedAgentGuardrails(agent, existing)
+    const normalized = normalizeCustomAgent(merged)
     const catalogContext = {
       directory: normalized.scope === 'project' ? context.resolveScopedTarget(normalized).directory : resolvedTarget.directory,
     }
@@ -467,7 +521,7 @@ export function registerCatalogHandlers(context: IpcHandlerContext) {
     const siblingNames = listCustomAgents(catalogContext)
       .filter((entry) => !(entry.name === resolvedTarget.name && entry.scope === resolvedTarget.scope && (entry.directory || null) === (resolvedTarget.directory || null)))
       .map((entry) => normalizeCustomAgent(entry).name)
-    const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    const issues = validateCustomAgent(merged, catalog, siblingNames)
     if (issues.length > 0) {
       throw new Error(issues[0]?.message || 'Invalid custom agent')
     }

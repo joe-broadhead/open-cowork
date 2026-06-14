@@ -72,6 +72,40 @@ test('agent tool actions preview and save through the shared custom-agent store 
   })
 })
 
+test('agent tool save preserves omitted mode and permission guardrails on update', async () => {
+  await withAgentToolStore('preserve-guardrails', async () => {
+    await saveAgentFromTool({
+      ...draft,
+      mode: 'primary',
+      permissionOverrides: [
+        { key: 'mcp', action: 'deny', rules: [{ pattern: 'mcp__agents__preview_agent', action: 'allow' }] },
+      ],
+    })
+
+    await saveAgentFromTool({
+      ...draft,
+      description: 'Updated without touching guardrails.',
+    })
+
+    const preserved = getAgentFromTool({ scope: 'machine', name: 'weekly-analyst' }).agent
+    assert.equal(preserved.mode, 'primary')
+    assert.deepEqual(preserved.permissionOverrides, [
+      { key: 'mcp', action: 'deny', rules: [{ pattern: 'mcp__agents__preview_agent', action: 'allow' }] },
+    ])
+
+    await saveAgentFromTool({
+      ...draft,
+      description: 'Explicitly clears guardrails.',
+      mode: 'subagent',
+      permissionOverrides: [],
+    })
+
+    const cleared = getAgentFromTool({ scope: 'machine', name: 'weekly-analyst' }).agent
+    assert.equal(cleared.mode, 'subagent')
+    assert.deepEqual(cleared.permissionOverrides, [])
+  })
+})
+
 test('agent tool bridge requires bearer auth and returns before scheduling runtime refresh', async () => {
   await withAgentToolStore('bridge', async () => {
     let refreshCount = 0

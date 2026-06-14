@@ -21,6 +21,7 @@ export const STARTER_TEMPLATES: AgentTemplate[] = [
     label: 'Data Analyst',
     description: 'Answer business questions with data. Query sources, summarise findings, and produce charts.',
     color: 'info',
+    mode: 'subagent',
     instructions: [
       'You are a data analyst. Business stakeholders ask you questions; you answer with evidence.',
       '',
@@ -45,6 +46,7 @@ export const STARTER_TEMPLATES: AgentTemplate[] = [
     label: 'Research Assistant',
     description: 'Gather and synthesise information from multiple sources into concise, cited briefs.',
     color: 'accent',
+    mode: 'subagent',
     instructions: [
       'You are a research assistant. Given a topic or question, you gather sources and produce a concise brief.',
       '',
@@ -68,6 +70,7 @@ export const STARTER_TEMPLATES: AgentTemplate[] = [
     label: 'Writer',
     description: 'Draft prose — emails, memos, briefs, announcements — in your voice.',
     color: 'success',
+    mode: 'primary',
     instructions: [
       'You are a writer. You produce drafts that sound human, specific, and direct.',
       '',
@@ -91,6 +94,7 @@ export const STARTER_TEMPLATES: AgentTemplate[] = [
     label: 'Generalist',
     description: 'Balanced starter — pick a problem, pick the tools, and customise from here.',
     color: 'secondary',
+    mode: 'primary',
     instructions: [
       'You are a focused assistant. Answer what is asked and stop.',
       '',
@@ -124,6 +128,7 @@ function normalizeTemplate(entry: AgentStarterTemplate): AgentTemplate {
     label: entry.label,
     description: entry.description,
     color: coerceColor(entry.color),
+    mode: entry.mode === 'primary' ? 'primary' : 'subagent',
     instructions: entry.instructions,
     temperature: entry.temperature ?? null,
     steps: entry.steps ?? null,

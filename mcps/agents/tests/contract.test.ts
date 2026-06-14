@@ -97,6 +97,10 @@ function parseTextResult(result: Awaited<ReturnType<Client['callTool']>>) {
   return JSON.parse(first.text) as Record<string, unknown>
 }
 
+function hasOwn(object: object, key: string) {
+  return Object.prototype.hasOwnProperty.call(object, key)
+}
+
 async function assertToolError(client: Client, request: Parameters<Client['callTool']>[0], pattern: RegExp) {
   try {
     const result = await client.callTool(request)
@@ -114,8 +118,12 @@ const draft = {
   instructions: 'Load the analyst skill and produce a concise weekly summary.',
   skillNames: ['analyst'],
   toolIds: ['charts'],
+  mode: 'primary',
   enabled: true,
   color: 'success',
+  permissionOverrides: [
+    { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+  ],
 }
 
 test('agents MCP routes custom agent operations through the app bridge', async () => {
@@ -134,10 +142,29 @@ test('agents MCP routes custom agent operations through the app bridge', async (
       assert.equal(parseTextResult(await client.callTool({ name: 'get_agent', arguments: { name: draft.name, scope: 'machine' } })).route, '/get')
       assert.equal(parseTextResult(await client.callTool({ name: 'preview_agent', arguments: draft })).route, '/preview')
       assert.equal(parseTextResult(await client.callTool({ name: 'save_agent', arguments: draft })).route, '/save')
+      assert.equal(parseTextResult(await client.callTool({
+        name: 'save_agent',
+        arguments: {
+          name: draft.name,
+          scope: 'machine',
+          description: draft.description,
+          instructions: draft.instructions,
+          skillNames: draft.skillNames,
+          toolIds: draft.toolIds,
+          enabled: draft.enabled,
+          color: draft.color,
+        },
+      })).route, '/save')
       assert.equal(parseTextResult(await client.callTool({ name: 'delete_agent', arguments: { name: draft.name, scope: 'machine' } })).route, '/delete')
     })
-    assert.deepEqual(seen.map((entry) => entry.url), ['/list', '/get', '/preview', '/save', '/delete'])
+    assert.deepEqual(seen.map((entry) => entry.url), ['/list', '/get', '/preview', '/save', '/save', '/delete'])
     assert.equal((seen[2]?.body as { name?: string }).name, 'weekly-analyst')
+    assert.deepEqual((seen[2]?.body as { mode?: string, permissionOverrides?: unknown }).mode, 'primary')
+    assert.deepEqual((seen[2]?.body as { permissionOverrides?: unknown }).permissionOverrides, draft.permissionOverrides)
+    assert.deepEqual((seen[3]?.body as { mode?: string, permissionOverrides?: unknown }).mode, 'primary')
+    assert.deepEqual((seen[3]?.body as { permissionOverrides?: unknown }).permissionOverrides, draft.permissionOverrides)
+    assert.equal(hasOwn(seen[4]?.body as object, 'mode'), false)
+    assert.equal(hasOwn(seen[4]?.body as object, 'permissionOverrides'), false)
   })
 })
 

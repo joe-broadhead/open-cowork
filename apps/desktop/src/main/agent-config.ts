@@ -98,6 +98,10 @@ function taskPolicy(policy: PermissionAction, taskRules?: PermissionRuleMap): Pe
   return next
 }
 
+function isDelegatableCustomAgent(agent: RuntimeCustomAgent) {
+  return agent.mode !== 'primary'
+}
+
 export function buildOpenCoworkAgentConfig(options: {
   allToolPatterns: string[]
   allowToolPatterns?: string[]
@@ -121,6 +125,10 @@ export function buildOpenCoworkAgentConfig(options: {
   const customDelegationAgents = options.customDelegationAgents || []
   const enabledCustomAgents = customDelegationAgents.filter((agent) => !agent.disabled)
   const configuredAgents = getConfiguredAgentsFromConfig()
+  const delegatableConfiguredAgents = configuredAgents.filter((agent) => (agent.mode || 'subagent') === 'subagent')
+  const readonlyDelegatableConfiguredAgents = delegatableConfiguredAgents.filter((agent) => !configuredAgentMayWrite(agent))
+  const delegatableCustomAgents = enabledCustomAgents.filter(isDelegatableCustomAgent)
+  const readonlyDelegatableCustomAgents = delegatableCustomAgents.filter((agent) => !agent.writeAccess)
   // Skills are OpenCode-native reusable instructions, not task routing.
   // Keep every configured managed skill visible to built-in agents so a
   // fallback/general child task can still load the right workflow even if
@@ -137,15 +145,13 @@ export function buildOpenCoworkAgentConfig(options: {
     skillNames: managedSkillNames,
     projectDirectory: options.projectDirectory,
   })
-  const customTaskRules = Object.fromEntries(enabledCustomAgents.map((agent) => [agent.name, 'allow' as const]))
-  const readonlyCustomTaskRules = Object.fromEntries(enabledCustomAgents
-    .filter((agent) => !agent.writeAccess)
+  const customTaskRules = Object.fromEntries(delegatableCustomAgents
     .map((agent) => [agent.name, 'allow' as const]))
-  const configuredTaskRules = Object.fromEntries(configuredAgents
-    .filter((agent) => (agent.mode || 'subagent') === 'subagent')
+  const readonlyCustomTaskRules = Object.fromEntries(readonlyDelegatableCustomAgents
     .map((agent) => [agent.name, 'allow' as const]))
-  const readonlyConfiguredTaskRules = Object.fromEntries(configuredAgents
-    .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+  const configuredTaskRules = Object.fromEntries(delegatableConfiguredAgents
+    .map((agent) => [agent.name, 'allow' as const]))
+  const readonlyConfiguredTaskRules = Object.fromEntries(readonlyDelegatableConfiguredAgents
     .map((agent) => [agent.name, 'allow' as const]))
   const buildDelegatedAgents: DelegationPromptAgent[] = [
     {
@@ -163,18 +169,18 @@ export function buildOpenCoworkAgentConfig(options: {
       description: 'Measured improvement loops for skills, agents, prompts, and benchmarks.',
       source: 'builtin',
     },
-    ...configuredAgents
-      .filter((agent) => (agent.mode || 'subagent') === 'subagent')
+    ...delegatableConfiguredAgents
       .map((agent) => ({
         name: agent.name,
         description: agent.description,
         source: 'configured' as const,
-      })),
-    ...enabledCustomAgents.map((agent) => ({
-      name: agent.name,
-      description: agent.description,
-      source: 'custom' as const,
     })),
+    ...delegatableCustomAgents
+      .map((agent) => ({
+        name: agent.name,
+        description: agent.description,
+        source: 'custom' as const,
+      })),
   ]
   const planDelegatedAgents: DelegationPromptAgent[] = [
     {
@@ -182,16 +188,13 @@ export function buildOpenCoworkAgentConfig(options: {
       description: 'Read-only codebase and file-system investigation agent.',
       source: 'builtin',
     },
-    ...configuredAgents
-      .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+    ...readonlyDelegatableConfiguredAgents
       .map((agent) => ({
         name: agent.name,
         description: agent.description,
         source: 'configured' as const,
       })),
-    ...customDelegationAgents
-      .filter((agent) => !agent.disabled)
-      .filter((agent) => !agent.writeAccess)
+    ...readonlyDelegatableCustomAgents
       .map((agent) => ({
         name: agent.name,
         description: agent.description,
@@ -204,16 +207,13 @@ export function buildOpenCoworkAgentConfig(options: {
       description: 'Read-only codebase and file-system investigation agent.',
       source: 'builtin',
     },
-    ...configuredAgents
-      .filter((agent) => (agent.mode || 'subagent') === 'subagent' && !configuredAgentMayWrite(agent))
+    ...readonlyDelegatableConfiguredAgents
       .map((agent) => ({
         name: agent.name,
         description: agent.description,
         source: 'configured' as const,
       })),
-    ...customDelegationAgents
-      .filter((agent) => !agent.disabled)
-      .filter((agent) => !agent.writeAccess)
+    ...readonlyDelegatableCustomAgents
       .map((agent) => ({
         name: agent.name,
         description: agent.description,

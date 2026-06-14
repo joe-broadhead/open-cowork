@@ -16,6 +16,15 @@ const catalog: AgentCatalog = {
       supportsWrite: false,
       patterns: ['mcp__charts__*'],
     },
+    {
+      id: 'bash',
+      name: 'Bash',
+      icon: 'terminal',
+      description: 'Run shell commands.',
+      source: 'builtin',
+      supportsWrite: true,
+      patterns: ['bash'],
+    },
   ],
   skills: [
     {
@@ -77,5 +86,35 @@ describe('AgentStaticPreview', () => {
     expect(screen.getAllByText('0 of 0')).toHaveLength(2)
     expect(screen.queryByText('Tool patterns')).not.toBeInTheDocument()
     expect(screen.queryByText('Skills available to load')).not.toBeInTheDocument()
+  })
+
+  it('includes permission overrides in the displayed OpenCode scope', () => {
+    render(
+      <AgentStaticPreview
+        draft={draft({
+          toolIds: [],
+          skillNames: [],
+          permissionOverrides: [{ key: 'bash', action: 'allow' }],
+        })}
+        catalog={catalog}
+      />,
+    )
+
+    expect(screen.getByText('Standard scope')).toBeInTheDocument()
+  })
+
+  it('lets deny overrides remove selected write tools from the displayed OpenCode scope', () => {
+    render(
+      <AgentStaticPreview
+        draft={draft({
+          toolIds: ['bash'],
+          skillNames: [],
+          permissionOverrides: [{ key: 'bash', action: 'deny' }],
+        })}
+        catalog={catalog}
+      />,
+    )
+
+    expect(screen.getByText('Read only scope')).toBeInTheDocument()
   })
 })

@@ -237,6 +237,32 @@ test('disabled custom agents are not injected into config.agent or delegated to'
   assert.doesNotMatch(agents.build.prompt, /parked-specialist \(custom\)/)
 })
 
+test('primary custom agents are not exposed as delegated task targets', () => {
+  const agents = buildOpenCoworkAgentConfig({
+    allToolPatterns: ['mcp__github__*'],
+    customDelegationAgents: [
+      {
+        name: 'writing-lead',
+        description: 'Leads writing sessions.',
+        instructions: 'Draft carefully.',
+        skillNames: [],
+        toolNames: [],
+        writeAccess: false,
+        color: 'success',
+        mode: 'primary',
+        allowPatterns: [],
+        askPatterns: [],
+        deniedPatterns: [],
+        disabled: false,
+      },
+    ],
+  }) as Record<string, any>
+
+  assert.equal(agents.build.permission.task['writing-lead'], undefined)
+  assert.equal(agents.plan.permission.task['writing-lead'], undefined)
+  assert.doesNotMatch(agents.build.prompt, /writing-lead \(custom\)/)
+})
+
 test('custom delegation agents do not add duplicate native agent configs for selected tools', () => {
   const agents = buildOpenCoworkAgentConfig({
     allToolPatterns: ['bash', 'write', 'apply_patch'],
