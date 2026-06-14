@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from './Sidebar'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { useSessionStore } from '../../stores/session'
+import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { useWorkspaceSupportStore } from '../../stores/workspace-support'
 
 function deferred<T>() {
@@ -134,6 +135,44 @@ describe('Sidebar', () => {
     expect(screen.getByText('Artifacts')).toBeTruthy()
     expect(screen.getByText('Diagnostics')).toBeTruthy()
     expect(screen.queryByText('Acme AI')).toBeNull()
+  })
+
+  it('shows a live approvals alert count in the Studio nav', () => {
+    const baseView = useSessionStore.getInitialState().currentView
+    const sessions = [{ id: 'active-session', title: 'Active chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]
+    useSessionStore.setState({
+      activeWorkspaceId: LOCAL_WORKSPACE_ID,
+      sessions,
+      sessionsByWorkspace: { [LOCAL_WORKSPACE_ID]: sessions },
+      currentSessionId: 'active-session',
+    })
+    useSessionStore.getState().setSessionView('active-session', {
+      ...baseView,
+      pendingApprovals: [{
+        id: 'approval-1',
+        sessionId: 'active-session',
+        tool: 'bash',
+        input: {},
+        description: 'Run command',
+        order: 1,
+      }],
+      pendingQuestions: [{
+        id: 'question-1',
+        sessionId: 'active-session',
+        questions: [{ header: 'Confirm', question: 'Continue?', options: [] }],
+      }],
+    }, LOCAL_WORKSPACE_ID)
+
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    const approvalsButton = screen.getByRole('button', { name: /Approvals.*2/i })
+    expect(approvalsButton).toBeTruthy()
+    expect(screen.getByLabelText('2 pending approvals and questions')).toBeTruthy()
   })
 
   it('navigates to the Health Center from the secondary diagnostics entry', () => {

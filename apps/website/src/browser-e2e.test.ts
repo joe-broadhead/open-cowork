@@ -209,6 +209,91 @@ test('cloud web browser exercises every route declared in the route API matrix',
   }
 })
 
+test('cloud web browser renders the standalone approvals queue across chats', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', sessionCount: 2, hydratedViewCount: 2, multiPromptQuestions: true }).start()
+  try {
+    await waitFor(() => assert.equal(harness.document.body.dataset.auth, 'signed-in'))
+    assert.equal(harness.requests.some((request) => /\/api\/sessions\/[^/]+\/view$/.test(request.path)), false)
+    ;(harness.document.querySelector('[data-route-link="approvals"]') as HTMLAnchorElement).dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal(harness.document.body.dataset.route, 'approvals'))
+    await waitFor(() => assert.match(harness.document.querySelector('[data-route-link="approvals"]')?.textContent || '', /4/))
+    await waitFor(() => assert.match(harness.document.querySelector('#cloud-approvals-queue')?.textContent || '', /Run read-only tests/))
+
+    const queue = harness.document.querySelector('#cloud-approvals-queue') as HTMLElement
+    assert.match(queue.textContent || '', /Continue with deployment smoke/)
+    assert.match(queue.textContent || '', /via Cloud Web/)
+    assert.match(queue.textContent || '', /Always allow/)
+    assert.match(queue.textContent || '', /workspace policy/)
+
+    const firstSessionId = harness.sessions[0].sessionId
+    const secondSessionId = harness.sessions[1].sessionId
+    harness.views[secondSessionId].projection.view.pendingApprovals.push({
+      id: `${secondSessionId}-late-approval`,
+      tool: 'shell',
+      description: 'Restart deployment smoke',
+      input: { command: 'pnpm deploy:smoke' },
+      order: 25,
+    })
+    harness.views[secondSessionId].projection.sequence += 1
+    const workspaceSources = harness.eventSources.filter((source) => source.url === '/api/events')
+    assert.ok(workspaceSources.length)
+    const requestsBeforeWorkspaceEvent = harness.requests.length
+    for (const source of workspaceSources) {
+      source.emit('snapshot.required', { type: 'snapshot.required', sequence: 1, sessionId: secondSessionId })
+    }
+    await waitFor(() => {
+      assert.match(harness.document.querySelector('[data-route-link="approvals"]')?.textContent || '', /5/)
+      assert.match(queue.textContent || '', /Restart deployment smoke/)
+    })
+    const viewRefreshes = harness.requests
+      .slice(requestsBeforeWorkspaceEvent)
+      .filter((request) => /\/api\/sessions\/[^/]+\/view$/.test(request.path))
+      .map((request) => request.path)
+    assert.ok(viewRefreshes.includes(`/api/sessions/${secondSessionId}/view`))
+    assert.equal(viewRefreshes.includes(`/api/sessions/${firstSessionId}/view`), false)
+
+    const alwaysAllow = [...queue.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Always allow') as HTMLButtonElement | undefined
+    assert.ok(alwaysAllow)
+    assert.equal(alwaysAllow.disabled, true)
+
+    const firstPermission = [...queue.querySelectorAll('[data-kind="permission"]')]
+      .find((card) => card.textContent?.includes('Cloud thread 1') && card.textContent?.includes('Run read-only tests')) as HTMLElement | undefined
+    assert.ok(firstPermission)
+    const allowOnce = [...firstPermission.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Allow once') as HTMLButtonElement | undefined
+    assert.ok(allowOnce)
+    allowOnce.click()
+
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === `/api/sessions/${firstSessionId}/permission-respond`)))
+    const response = harness.lastRequest((request) => request.method === 'POST' && request.path === `/api/sessions/${firstSessionId}/permission-respond`)
+    assert.equal((response?.body as Record<string, unknown>).permissionId, `${firstSessionId}-approval`)
+    assert.deepEqual((response?.body as Record<string, unknown>).response, { allowed: true })
+
+    const questionCard = [...harness.document.querySelectorAll('#cloud-approvals-queue [data-kind="question"]')]
+      .find((card) => card.textContent?.includes('Cloud thread 1') && card.textContent?.includes('Smoke')) as HTMLElement | undefined
+    assert.ok(questionCard)
+    const reply = [...questionCard.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Reply') as HTMLButtonElement | undefined
+    assert.ok(reply)
+    assert.equal(reply.disabled, true)
+    ;([...questionCard.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Yes') as HTMLButtonElement).click()
+    assert.equal(harness.lastRequest((request) => request.method === 'POST' && request.path === `/api/sessions/${firstSessionId}/question-reply`), undefined)
+    ;([...questionCard.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Smoke') as HTMLButtonElement).click()
+    await waitFor(() => assert.equal(reply.disabled, false))
+    reply.click()
+
+    await waitFor(() => assert.ok(harness.lastRequest((request) => request.method === 'POST' && request.path === `/api/sessions/${firstSessionId}/question-reply`)))
+    const questionResponse = harness.lastRequest((request) => request.method === 'POST' && request.path === `/api/sessions/${firstSessionId}/question-reply`)
+    assert.equal((questionResponse?.body as Record<string, unknown>).requestId, `${firstSessionId}-question`)
+    assert.deepEqual((questionResponse?.body as Record<string, unknown>).answers, [['Yes'], ['Smoke']])
+  } finally {
+    harness.close()
+  }
+})
+
 test('cloud web browser exposes desktop parity boundaries and workbench state vocabulary', async () => {
   const harness = createCloudWebBrowserHarness({ role: 'admin' })
   const firstView = harness.views[harness.sessions[0].sessionId]
@@ -687,6 +772,10 @@ test('cloud web browser pages cloud threads through backend cursors without losi
 
     const loadMore = harness.document.querySelector('#thread-load-more') as HTMLButtonElement
     for (const expected of [400, 600, 800, 1000]) {
+      await waitFor(() => {
+        assert.equal((loadMore as HTMLElement).hidden, false)
+        assert.equal(loadMore.disabled, false)
+      })
       loadMore.click()
       await waitFor(() => assert.equal(harness.document.querySelectorAll('#thread-list [role="row"]').length, expected))
     }

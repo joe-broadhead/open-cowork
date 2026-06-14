@@ -112,6 +112,23 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     tests: ['browser-e2e.test.ts', 'render.test.ts', 'cloud-continuation-e2e.test.ts'],
   },
   {
+    routeId: 'approvals',
+    surface: 'workbench',
+    requiredRole: 'member',
+    endpointIds: ['sessions', 'sessionView', 'sessionEvents', 'sessionPermissionRespond', 'sessionQuestionReply', 'sessionQuestionReject'],
+    states: {
+      loading: 'Approvals route starts with a static loading shell while signed-in session views hydrate from bounded Cloud API pages.',
+      empty: 'No approvals waiting; the route explains that Cloud permission requests and questions appear when any chat needs input.',
+      error: 'Permission/question response failures render through the global Cloud workbench status without mutating browser-only state.',
+    },
+    disabledBehavior: 'Allow once, Deny, Reply, and Reject disable while that item is pending; Always allow remains visible but disabled because persistent policy is managed by the Cloud workspace.',
+    pagination: 'The route hydrates bounded session pages from /api/sessions plus /api/sessions/:sessionId/view; live streaming remains selected-chat scoped.',
+    paginationContract: paginationContract('cursor', 'implemented', 200),
+    redaction: 'Approval/question cards show projected runtime metadata only and never expose credentials, object-store internals, or local machine paths.',
+    redactionContract: redactionContract('safeOperationalMetadata'),
+    tests: ['browser-e2e.test.ts', 'render.test.ts'],
+  },
+  {
     routeId: 'agents',
     surface: 'workbench',
     requiredRole: 'member',

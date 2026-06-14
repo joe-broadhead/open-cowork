@@ -794,6 +794,7 @@ export function ApprovalCard({
   danger = false,
   actions,
   className,
+  children,
   ...props
 }: ApprovalCardProps) {
   return (
@@ -805,6 +806,7 @@ export function ApprovalCard({
         <h3>{title}</h3>
         {requester ? <p className="studio-decision-card__meta">{requester}</p> : null}
         {body ? <p>{body}</p> : null}
+        {children}
         <StudioActions actions={actions} />
       </div>
     </article>

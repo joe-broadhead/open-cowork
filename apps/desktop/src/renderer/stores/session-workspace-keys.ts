@@ -14,3 +14,16 @@ export function sessionWorkspaceKey(workspaceId: string | null | undefined, sess
 export function activeSessionWorkspaceKey(state: { activeWorkspaceId?: string | null }, sessionId: string) {
   return sessionWorkspaceKey(state.activeWorkspaceId, sessionId)
 }
+
+export function parseSessionWorkspaceKey(key: string) {
+  const match = key.match(/^workspace:([^:]+):session:(.+)$/)
+  if (!match) return { workspaceId: LOCAL_WORKSPACE_ID, sessionId: key }
+  try {
+    return {
+      workspaceId: normalizeWorkspaceId(decodeURIComponent(match[1] || '')),
+      sessionId: decodeURIComponent(match[2] || ''),
+    }
+  } catch {
+    return { workspaceId: LOCAL_WORKSPACE_ID, sessionId: key }
+  }
+}

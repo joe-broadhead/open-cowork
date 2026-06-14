@@ -80,6 +80,7 @@ type BrowserHarnessOptions = {
   signupMode?: string
   billingEnabled?: boolean
   allowedAgents?: string[] | null
+  multiPromptQuestions?: boolean
 }
 function parseJsonBody(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) return null
@@ -154,6 +155,26 @@ export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}
   const views: Record<string, any> = Object.fromEntries(
     sessions.slice(0, hydratedViewCount).map((session, index) => [session.sessionId, makeSessionView(session, index + 10, artifactCount)]),
   )
+  if (options.multiPromptQuestions && sessions[0]) {
+    const firstView = views[sessions[0].sessionId]
+    const firstQuestion = firstView?.projection?.view?.pendingQuestions?.[0]
+    if (firstQuestion) {
+      firstQuestion.questions = [
+        {
+          header: 'Scope',
+          question: 'Continue with deployment smoke?',
+          options: [{ label: 'Yes' }, { label: 'No' }],
+          custom: false,
+        },
+        {
+          header: 'Run mode',
+          question: 'Choose the run mode',
+          options: [{ label: 'Smoke' }, { label: 'Full' }],
+          custom: false,
+        },
+      ]
+    }
+  }
   const coordinationState = makeBrowserCoordinationState(sessions)
   const requests: MockRequest[] = []
   const eventSources: MockEventSource[] = []

@@ -245,6 +245,22 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           </div>
         </section>
 
+        <section ${routePanelAttrs('approvals')}>
+          <div class="section-header">
+            <div>
+              <h2>Approvals</h2>
+              <div class="meta">Pending permission requests and questions across Cloud chats</div>
+            </div>
+            <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
+          </div>
+          <div class="approval-route-shell">
+            ${routeParityMarkup('approvals')}
+            <div id="cloud-approvals-queue" class="studio-approvals-surface">
+              <p class="empty">Approvals load after sign-in.</p>
+            </div>
+          </div>
+        </section>
+
         <section ${routePanelAttrs('agents')}>
           <div class="section-header">
             <div>
