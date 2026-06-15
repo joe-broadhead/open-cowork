@@ -18,6 +18,7 @@ function makeAgent(overrides: Partial<CustomAgentSummary> = {}): CustomAgentSumm
     instructions: 'Use evidence before recommendations.',
     skillNames: ['analyst'],
     toolIds: ['charts'],
+    mode: 'subagent',
     enabled: true,
     color: 'info',
     avatar: 'data:image/png;base64,avatar',
@@ -51,6 +52,7 @@ describe('agent bundle helpers', () => {
       name: 'data-analyst',
       skillNames: ['analyst'],
       toolIds: ['charts'],
+      mode: 'subagent',
       exportedAt: '2026-05-09T12:00:00.000Z',
     })
     expect(bundle).not.toHaveProperty('scope')
@@ -98,7 +100,12 @@ describe('agent bundle helpers', () => {
   })
 
   it('round-trips through JSON and converts imported bundles into scoped agent configs', () => {
-    const bundle = encodeAgentBundle(makeAgent())
+    const bundle = encodeAgentBundle(makeAgent({
+      mode: 'primary',
+      permissionOverrides: [
+        { key: 'task', action: 'ask', rules: [{ pattern: 'build', action: 'allow' }] },
+      ],
+    }))
     const raw = stringifyAgentBundle(bundle)
     expect(raw.endsWith('\n')).toBe(true)
 
@@ -110,12 +117,51 @@ describe('agent bundle helpers', () => {
       scope: 'machine',
       directory: null,
       name: 'data-analyst',
+      mode: 'primary',
+      permissionOverrides: [
+        { key: 'task', action: 'ask', rules: [{ pattern: 'build', action: 'allow' }] },
+      ],
     })
     expect(bundleToAgentConfig(decoded.bundle, { scope: 'project', directory: '/workspace' })).toMatchObject({
       scope: 'project',
       directory: '/workspace',
       skillNames: ['analyst'],
     })
+  })
+
+  it('keeps local external-directory permissions out of portable bundles', () => {
+    const bundle = encodeAgentBundle(makeAgent({
+      permissionOverrides: [
+        { key: 'external_directory', action: 'allow', rules: [{ pattern: '/Users/alice/private/*', action: 'allow' }] },
+        { key: 'task', action: 'ask', rules: [{ pattern: 'build', action: 'allow' }] },
+      ],
+    }))
+
+    expect(bundle.permissionOverrides).toEqual([
+      { key: 'task', action: 'ask', rules: [{ pattern: 'build', action: 'allow' }] },
+    ])
+
+    const decoded = decodeAgentBundle({
+      format: AGENT_BUNDLE_FORMAT,
+      name: 'imported-agent',
+      description: 'Imported.',
+      instructions: 'Run the imported workflow.',
+      skillNames: [],
+      toolIds: [],
+      permissionOverrides: [
+        { key: 'external_directory', action: 'allow', rules: [{ pattern: '/Users/alice/private/*', action: 'allow' }] },
+        { key: 'bash', action: 'ask', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+      ],
+    })
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+
+    expect(decoded.bundle.permissionOverrides).toEqual([
+      { key: 'bash', action: 'ask', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ])
+    expect(bundleToAgentConfig(decoded.bundle, { scope: 'machine' }).permissionOverrides).toEqual([
+      { key: 'bash', action: 'ask', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ])
   })
 
   it('builds safe default filenames from agent names', () => {

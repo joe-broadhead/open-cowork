@@ -44,6 +44,7 @@ export interface SessionInfo {
   revertedMessageId?: string | null
   // Per-session composer defaults. These are intentionally separate from
   // providerId/modelId, which describe the last model observed in the session.
+  composerAgentName?: string | null
   composerModelId?: string | null
   composerReasoningVariant?: string | null
 }
@@ -54,6 +55,7 @@ export interface SessionPromptOptions {
 }
 
 export interface SessionComposerPreferences {
+  agentName?: string | null
   modelId?: string | null
   reasoningVariant?: string | null
 }

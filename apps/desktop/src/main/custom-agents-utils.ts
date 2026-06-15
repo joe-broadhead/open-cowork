@@ -1,4 +1,5 @@
 import {
+  getAppConfig,
   getBrandName,
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
@@ -9,10 +10,20 @@ import {
   type ConfiguredSkill,
   type ConfiguredTool,
 } from './config-loader.ts'
-import { validateCustomAgentDraft, type AgentColor, type CustomAgentIssue } from '@open-cowork/shared'
+import {
+  validateCustomAgentDraft,
+  type AgentColor,
+  type CustomAgentIssue,
+  type CustomAgentMode,
+  type CustomAgentPermissionAction,
+  type CustomAgentPermissionKey,
+  type CustomAgentPermissionOverride,
+  type CustomAgentPermissionRule,
+} from '@open-cowork/shared'
 import type { NativeConfigScope } from './runtime-paths.ts'
 import { humanizeToolId, nativeToolPermissionPatterns, nativeToolSupportsWrite } from './runtime-tools.ts'
 import { validateCustomAgentContentLimits } from './custom-content-limits.ts'
+import { getEffectiveSettings } from './settings.ts'
 
 export type CustomSkillLike = {
   name: string
@@ -37,6 +48,7 @@ export type CustomAgentLike = {
   enabled: boolean
   color: AgentColor
   avatar?: string | null
+  mode?: CustomAgentMode
   // Inference tuning forwarded to the SDK AgentConfig. Optional.
   model?: string | null
   variant?: string | null
@@ -47,6 +59,7 @@ export type CustomAgentLike = {
   // Specific tool patterns to deny even when the parent MCP is allowed.
   // See `CustomAgentConfig.deniedToolPatterns` for the full contract.
   deniedToolPatterns?: string[]
+  permissionOverrides?: CustomAgentPermissionOverride[]
 }
 
 export type NormalizedCustomAgent = Omit<CustomAgentLike, 'scope' | 'directory'> & {
@@ -109,6 +122,7 @@ export type RuntimeCustomAgent = {
   askPatterns: string[]
   deniedPatterns: string[]
   disabled: boolean
+  mode: CustomAgentMode
   model?: string | null
   variant?: string | null
   temperature?: number | null
@@ -158,6 +172,132 @@ function unique(values: string[]) {
   return Array.from(new Set(values))
 }
 
+const CUSTOM_AGENT_PERMISSION_KEYS = new Set<CustomAgentPermissionKey>([
+  'web',
+  'edit',
+  'bash',
+  'task',
+  'external_directory',
+  'mcp',
+])
+
+const WRITE_PERMISSION_FAMILIES = new Set<CustomAgentPermissionKey>([
+  'edit',
+  'bash',
+  'task',
+  'external_directory',
+  'mcp',
+])
+
+function normalizePermissionAction(value: unknown): CustomAgentPermissionAction {
+  return value === 'allow' || value === 'ask' || value === 'deny' ? value : 'deny'
+}
+
+function normalizePermissionMode(value: unknown): CustomAgentMode {
+  return value === 'primary' ? 'primary' : 'subagent'
+}
+
+function permissionOverrideSupportsRules(key: CustomAgentPermissionKey) {
+  return key !== 'web'
+}
+
+const PERMISSION_ACTION_RANK: Record<CustomAgentPermissionAction, number> = {
+  deny: 0,
+  ask: 1,
+  allow: 2,
+}
+
+function clampPermissionAction(
+  action: CustomAgentPermissionAction,
+  maximum: CustomAgentPermissionAction | null,
+): CustomAgentPermissionAction {
+  if (!maximum) return action
+  return PERMISSION_ACTION_RANK[action] <= PERMISSION_ACTION_RANK[maximum] ? action : maximum
+}
+
+const NON_MCP_PERMISSION_KEYS = new Set([
+  'skill',
+  'question',
+  'task',
+  'external_directory',
+  'doom_loop',
+  'todowrite',
+  'codesearch',
+  'webfetch',
+  'websearch',
+  'lsp',
+  'bash',
+  'edit',
+  'write',
+  'apply_patch',
+  'read',
+  'grep',
+  'glob',
+  'list',
+])
+
+function isLegacyMcpAliasPermissionKey(key: string) {
+  if (NON_MCP_PERMISSION_KEYS.has(key)) return false
+  if (key.startsWith('repo_')) return false
+  if (key.startsWith('mcp__')) return false
+  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
+}
+
+function isMcpPermissionRulePattern(pattern: string) {
+  if (pattern.startsWith('mcp__')) {
+    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
+  }
+  return isLegacyMcpAliasPermissionKey(pattern)
+}
+
+function normalizePermissionRule(key: CustomAgentPermissionKey, rule: CustomAgentPermissionRule): CustomAgentPermissionRule | null {
+  const pattern = typeof rule.pattern === 'string' ? rule.pattern.trim() : ''
+  if (!pattern) return null
+  if (/[\r\n\0]/.test(pattern)) return null
+  if (key === 'mcp' && !isMcpPermissionRulePattern(pattern)) return null
+  return {
+    pattern,
+    action: normalizePermissionAction(rule.action),
+  }
+}
+
+function validatePermissionOverrideRules(overrides?: CustomAgentPermissionOverride[] | null): CustomAgentIssue[] {
+  const issues: CustomAgentIssue[] = []
+  if (!Array.isArray(overrides)) return issues
+  for (const [overrideIndex, override] of overrides.entries()) {
+    if (!override || override.key !== 'mcp') continue
+    for (const [ruleIndex, rule] of (override.rules || []).entries()) {
+      const pattern = typeof rule.pattern === 'string' ? rule.pattern.trim() : ''
+      if (!pattern || /[\r\n\0]/.test(pattern)) continue
+      if (isMcpPermissionRulePattern(pattern)) continue
+      issues.push({
+        code: `permission_rule_pattern_invalid_mcp_${overrideIndex}_${ruleIndex}`,
+        message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.',
+      })
+    }
+  }
+  return issues
+}
+
+export function normalizeCustomAgentPermissionOverrides(overrides?: CustomAgentPermissionOverride[] | null): CustomAgentPermissionOverride[] {
+  if (!Array.isArray(overrides)) return []
+  const byKey = new Map<CustomAgentPermissionKey, CustomAgentPermissionOverride>()
+  for (const entry of overrides) {
+    if (!entry || !CUSTOM_AGENT_PERMISSION_KEYS.has(entry.key)) continue
+    const rules = permissionOverrideSupportsRules(entry.key)
+      ? (entry.rules || [])
+        .map((rule) => normalizePermissionRule(entry.key, rule))
+        .filter((rule): rule is CustomAgentPermissionRule => Boolean(rule))
+      : []
+    byKey.set(entry.key, {
+      key: entry.key,
+      action: normalizePermissionAction(entry.action),
+      ...(rules.length > 0 ? { rules } : {}),
+    })
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.key.localeCompare(b.key))
+}
+
 function humanize(value: string) {
   return value
     .split(/[-_]/g)
@@ -193,6 +333,7 @@ export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAg
     enabled: input.enabled !== false,
     color: CUSTOM_AGENT_COLORS.includes(input.color) ? input.color : 'accent',
     avatar: trimmedAvatar ? trimmedAvatar : null,
+    mode: normalizePermissionMode(input.mode),
     model: trimmedModel ? trimmedModel : null,
     variant: trimmedVariant ? trimmedVariant : null,
     temperature: typeof input.temperature === 'number' && Number.isFinite(input.temperature) ? input.temperature : null,
@@ -200,6 +341,7 @@ export function normalizeCustomAgent(input: CustomAgentLike): NormalizedCustomAg
     steps: typeof input.steps === 'number' && Number.isFinite(input.steps) && input.steps > 0 ? Math.round(input.steps) : null,
     options: input.options && typeof input.options === 'object' ? { ...input.options } : null,
     deniedToolPatterns: unique((input.deniedToolPatterns || []).map((value) => value.trim()).filter(Boolean)),
+    permissionOverrides: normalizeCustomAgentPermissionOverrides(input.permissionOverrides),
   }
 }
 
@@ -329,7 +471,8 @@ export function buildCustomAgentCatalog(input: {
 
 export function validateCustomAgent(agent: CustomAgentLike, catalog: CustomAgentCatalog, siblingNames: string[] = []): CustomAgentIssue[] {
   const normalized = normalizeCustomAgent(agent)
-  const issues: CustomAgentIssue[] = validateCustomAgentContentLimits(normalized)
+  const issues: CustomAgentIssue[] = validatePermissionOverrideRules(agent.permissionOverrides)
+  issues.push(...validateCustomAgentContentLimits(normalized))
   issues.push(...validateCustomAgentDraft({
     name: normalized.name,
     description: normalized.description,
@@ -362,15 +505,180 @@ export function buildCustomAgentPermissionFromCatalog(agent: CustomAgentLike, ca
     }
   }
 
+  const permissionOverrides = normalized.permissionOverrides || []
   for (const pattern of allowPatterns) permission[pattern] = 'allow'
   for (const pattern of askPatterns) permission[pattern] = 'ask'
+  applyCustomAgentPermissionDefaultOverrides(permission, permissionOverrides)
+  applyCustomAgentPermissionRuleOverrides(permission, permissionOverrides)
   for (const pattern of deniedPatterns) permission[pattern] = 'deny'
   return permission
 }
 
+function applyCustomAgentPermissionDefaultOverrides(
+  permission: Record<string, unknown>,
+  overrides: CustomAgentPermissionOverride[],
+) {
+  for (const override of overrides) {
+    if (override.key !== 'mcp' && permissionOverrideSupportsRules(override.key) && (override.rules || []).length > 0) {
+      for (const key of permissionKeysForOverride(override.key)) {
+        permission[key] = buildCappedPermissionRuleMap(key, override)
+      }
+      continue
+    }
+    const permissionKeys = override.key === 'mcp'
+      ? mcpPermissionKeysForDefaultOverride(permission)
+      : permissionKeysForOverride(override.key)
+    for (const key of permissionKeys) {
+      permission[key] = cappedPermissionActionForKey(key, override.action)
+    }
+  }
+}
+
+function applyCustomAgentPermissionRuleOverrides(
+  permission: Record<string, unknown>,
+  overrides: CustomAgentPermissionOverride[],
+) {
+  for (const override of overrides) {
+    if (override.key !== 'mcp') continue
+    for (const rule of override.rules || []) {
+      const patterns = override.key === 'mcp'
+        ? expandMcpToolPermissionPatterns([rule.pattern])
+        : [rule.pattern]
+      for (const pattern of patterns) permission[pattern] = rule.action
+    }
+  }
+}
+
+function buildCappedPermissionRuleMap(permissionKey: string, override: CustomAgentPermissionOverride) {
+  return {
+    '*': cappedPermissionActionForKey(permissionKey, override.action),
+    ...Object.fromEntries((override.rules || []).map((rule) => [
+      rule.pattern,
+      cappedPermissionActionForKey(permissionKey, rule.action),
+    ])),
+  }
+}
+
+function cappedPermissionActionForKey(
+  permissionKey: string,
+  action: CustomAgentPermissionAction,
+): CustomAgentPermissionAction {
+  return clampPermissionAction(action, maximumPermissionActionForKey(permissionKey))
+}
+
+function maximumPermissionActionForKey(permissionKey: string): CustomAgentPermissionAction | null {
+  const appPermissions = getAppConfig().permissions
+  const settings = getEffectiveSettings()
+  switch (permissionKey) {
+    case 'codesearch':
+    case 'webfetch':
+      return appPermissions.web
+    case 'websearch':
+      return appPermissions.webSearch ? appPermissions.web : 'deny'
+    case 'bash':
+      return settings.bashPermission
+    case 'edit':
+    case 'write':
+    case 'apply_patch':
+      return settings.fileWritePermission
+    case 'task':
+      return appPermissions.task
+    case 'external_directory':
+      return settings.fileWritePermission
+    default:
+      return null
+  }
+}
+
+function permissionKeysForOverride(key: CustomAgentPermissionKey): string[] {
+  switch (key) {
+    case 'web':
+      return ['codesearch', 'webfetch', 'websearch']
+    case 'edit':
+      return ['edit', 'write', 'apply_patch']
+    case 'mcp':
+      return ['mcp__*']
+    default:
+      return [key]
+  }
+}
+
+function permissionFamilyForPattern(pattern: string): CustomAgentPermissionKey | null {
+  if (pattern === 'bash') return 'bash'
+  if (pattern === 'task') return 'task'
+  if (pattern === 'external_directory') return 'external_directory'
+  if (pattern === 'edit' || pattern === 'write' || pattern === 'apply_patch') return 'edit'
+  if (pattern.startsWith('mcp__')) return 'mcp'
+  if (isLegacyMcpAliasPermissionKey(pattern)) return 'mcp'
+  return null
+}
+
+function writeFamiliesForTool(tool: CustomAgentCatalogTool): string[] {
+  if (!tool.supportsWrite) return []
+  const families = new Set<string>()
+  for (const pattern of [...tool.patterns, ...tool.allowPatterns, ...tool.askPatterns]) {
+    const family = permissionFamilyForPattern(pattern)
+    if (family && WRITE_PERMISSION_FAMILIES.has(family)) families.add(family)
+  }
+  const fallbackFamily = permissionFamilyForPattern(tool.id)
+  if (families.size === 0 && fallbackFamily && WRITE_PERMISSION_FAMILIES.has(fallbackFamily)) {
+    families.add(fallbackFamily)
+  }
+  if (families.size === 0) families.add(`tool:${tool.id}`)
+  return Array.from(families)
+}
+
+function overrideGrantsWriteAccess(override: CustomAgentPermissionOverride): boolean {
+  return override.action === 'allow' ||
+    override.action === 'ask' ||
+    (override.rules || []).some((rule) => rule.action === 'allow' || rule.action === 'ask')
+}
+
+function legacyAliasForMcpPermissionPattern(pattern: string) {
+  const match = pattern.match(/^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i)
+  if (!match?.[1] || !match[2]) return null
+  return `${match[1]}_${match[2]}`
+}
+
+function mcpPermissionKeysForDefaultOverride(permission: Record<string, unknown>) {
+  const keys = new Set(['mcp__*'])
+  for (const key of Object.keys(permission)) {
+    if (key.startsWith('mcp__')) {
+      keys.add(key)
+      const alias = legacyAliasForMcpPermissionPattern(key)
+      if (alias) keys.add(alias)
+    } else if (isLegacyMcpAliasPermissionKey(key)) {
+      keys.add(key)
+    }
+  }
+  return Array.from(keys)
+}
+
 function deriveWriteCapability(agent: CustomAgentLike, catalog: CustomAgentCatalog) {
   const toolMap = new Map(catalog.tools.map((tool) => [tool.id, tool]))
-  return agent.toolIds.some((toolId) => Boolean(toolMap.get(toolId)?.supportsWrite))
+  const writeFamilies = new Set<string>()
+  for (const tool of agent.toolIds
+    .map((toolId) => toolMap.get(toolId))
+    .filter((entry): entry is CustomAgentCatalogTool => Boolean(entry))) {
+    for (const family of writeFamiliesForTool(tool)) writeFamilies.add(family)
+  }
+  for (const override of agent.permissionOverrides || []) {
+    if (!WRITE_PERMISSION_FAMILIES.has(override.key)) continue
+    if (overrideGrantsWriteAccess(override)) {
+      writeFamilies.add(override.key)
+    } else if (override.action === 'deny') {
+      writeFamilies.delete(override.key)
+    }
+  }
+  if (writeFamilies.size > 0) return true
+  return (agent.permissionOverrides || []).some((override) => (
+    (override.key === 'edit' || override.key === 'bash' || override.key === 'task' || override.key === 'external_directory' || override.key === 'mcp') &&
+    (
+      override.action === 'allow' ||
+      override.action === 'ask' ||
+      (override.rules || []).some((rule) => rule.action === 'allow' || rule.action === 'ask')
+    )
+  ))
 }
 
 export function summarizeCustomAgents(input: {
@@ -398,7 +706,7 @@ function summarizeCustomAgentsWithCatalog(agents: CustomAgentLike[], catalog: Cu
     const siblingNames = agents
       .filter((_, siblingIndex) => siblingIndex !== index)
       .map((entry) => normalizeCustomAgent(entry).name)
-    const issues = validateCustomAgent(normalized, catalog, siblingNames)
+    const issues = validateCustomAgent(agent, catalog, siblingNames)
     const writeAccess = deriveWriteCapability(normalized, catalog)
     return {
       ...normalized,
@@ -443,6 +751,7 @@ export function buildRuntimeCustomAgents(input: {
         toolNames: agent.toolIds.map((toolId) => toolNames.get(toolId) || toolId),
         writeAccess: agent.writeAccess,
         color: agent.color,
+        mode: agent.mode || 'subagent',
         allowPatterns,
         askPatterns,
         deniedPatterns,

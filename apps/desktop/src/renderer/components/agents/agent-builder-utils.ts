@@ -9,6 +9,8 @@ import type {
   AgentColor,
   CustomAgentConfig,
   CustomAgentIssue,
+  CustomAgentPermissionKey,
+  CustomAgentPermissionOverride,
 } from '@open-cowork/shared'
 import { getBrandName } from '../../helpers/brand.ts'
 
@@ -50,18 +52,65 @@ export function agentTone(color?: AgentColor | string | null): string {
 
 // Three effective scopes derived from selected tools:
 //   read-only  — nothing the agent can do writes anywhere
-//   standard   — one or two write-capable tools (normal working set)
-//   powerful   — three or more write-capable tools (broad blast radius)
-// The goal is to teach users that "more tools = bigger footprint" without
-// showing a permissions dialog.
+//   standard   — one or two write-capable permission families
+//   powerful   — three or more write-capable permission families (broad blast radius)
+// The goal is to teach users that "more write authority = bigger footprint"
+// without showing a permissions dialog.
 export type AgentScope = 'read-only' | 'standard' | 'powerful'
 
-export function computeAgentScope(toolIds: string[], catalog: AgentCatalog): AgentScope {
-  const writeCount = toolIds
-    .map((id) => catalog.tools.find((tool) => tool.id === id))
-    .filter((tool): tool is AgentCatalogTool => Boolean(tool))
-    .filter((tool) => tool.supportsWrite)
-    .length
+const WRITE_PERMISSION_FAMILIES = new Set<CustomAgentPermissionKey>(['edit', 'bash', 'task', 'external_directory', 'mcp'])
+
+function permissionFamilyForPattern(pattern: string): CustomAgentPermissionKey | null {
+  if (pattern === 'bash') return 'bash'
+  if (pattern === 'task') return 'task'
+  if (pattern === 'external_directory') return 'external_directory'
+  if (pattern === 'edit' || pattern === 'write' || pattern === 'apply_patch') return 'edit'
+  if (pattern.startsWith('mcp__')) return 'mcp'
+  if (!pattern.startsWith('repo_') && /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(pattern)) return 'mcp'
+  return null
+}
+
+function writeFamiliesForTool(tool: AgentCatalogTool): string[] {
+  if (!tool.supportsWrite) return []
+  const families = new Set<string>()
+  for (const pattern of tool.patterns) {
+    const family = permissionFamilyForPattern(pattern)
+    if (family && WRITE_PERMISSION_FAMILIES.has(family)) families.add(family)
+  }
+  const fallbackFamily = permissionFamilyForPattern(tool.id)
+  if (families.size === 0 && fallbackFamily && WRITE_PERMISSION_FAMILIES.has(fallbackFamily)) {
+    families.add(fallbackFamily)
+  }
+  if (families.size === 0) families.add(`tool:${tool.id}`)
+  return Array.from(families)
+}
+
+function overrideGrantsWriteAccess(override: CustomAgentPermissionOverride): boolean {
+  return override.action === 'allow' ||
+    override.action === 'ask' ||
+    (override.rules || []).some((rule) => rule.action === 'allow' || rule.action === 'ask')
+}
+
+export function computeAgentScope(
+  toolIds: string[],
+  catalog: AgentCatalog,
+  permissionOverrides: CustomAgentPermissionOverride[] = [],
+): AgentScope {
+  const writeFamilies = new Set<string>()
+  for (const tool of toolIds
+    .map((id) => catalog.tools.find((entry) => entry.id === id))
+    .filter((entry): entry is AgentCatalogTool => Boolean(entry))) {
+    for (const family of writeFamiliesForTool(tool)) writeFamilies.add(family)
+  }
+  for (const override of permissionOverrides) {
+    if (!WRITE_PERMISSION_FAMILIES.has(override.key)) continue
+    if (overrideGrantsWriteAccess(override)) {
+      writeFamilies.add(override.key)
+    } else if (override.action === 'deny') {
+      writeFamilies.delete(override.key)
+    }
+  }
+  const writeCount = writeFamilies.size
   if (writeCount === 0) return 'read-only'
   if (writeCount <= 2) return 'standard'
   return 'powerful'
@@ -100,6 +149,7 @@ export interface AgentTemplate {
   label: string
   description: string
   color: AgentColor
+  mode?: CustomAgentConfig['mode']
   instructions: string
   temperature?: number | null
   steps?: number | null
@@ -120,6 +170,7 @@ export function applyTemplate(
     description: template.description,
     instructions: template.instructions,
     color: template.color,
+    mode: template.mode || 'subagent',
     toolIds: (template.toolIds || []).filter((id) => availableToolIds.has(id)),
     skillNames: (template.skillNames || []).filter((name) => availableSkillNames.has(name)),
     temperature: template.temperature ?? null,
@@ -129,6 +180,65 @@ export function applyTemplate(
 
 type AgentDraftIssue = CustomAgentIssue
 
+const PERMISSION_LABELS: Record<CustomAgentPermissionKey, string> = {
+  web: 'Web access',
+  edit: 'Edit files',
+  bash: 'Run commands',
+  task: 'Delegate work',
+  external_directory: 'External directories',
+  mcp: 'MCP tools',
+}
+
+const NON_MCP_PERMISSION_KEYS = new Set([
+  'bash',
+  'edit',
+  'write',
+  'apply_patch',
+  'read',
+  'task',
+  'webfetch',
+  'websearch',
+  'codesearch',
+  'external_directory',
+])
+
+function isLegacyMcpAliasPermissionKey(pattern: string) {
+  if (NON_MCP_PERMISSION_KEYS.has(pattern)) return false
+  if (pattern.startsWith('repo_')) return false
+  if (pattern.startsWith('mcp__')) return false
+  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(pattern)
+}
+
+export function isMcpPermissionRulePattern(pattern: string) {
+  if (pattern.startsWith('mcp__')) {
+    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
+  }
+  return isLegacyMcpAliasPermissionKey(pattern)
+}
+
+function validatePermissionOverrideRules(draft: CustomAgentConfig): AgentDraftIssue[] {
+  const issues: AgentDraftIssue[] = []
+  for (const override of draft.permissionOverrides || []) {
+    for (const [index, rule] of (override.rules || []).entries()) {
+      const pattern = rule.pattern.trim()
+      if (!pattern) {
+        issues.push({
+          code: `permission_rule_pattern_required_${override.key}_${index}`,
+          message: `${PERMISSION_LABELS[override.key]} permission rule pattern is required.`,
+        })
+        continue
+      }
+      if (override.key === 'mcp' && !isMcpPermissionRulePattern(pattern)) {
+        issues.push({
+          code: `permission_rule_pattern_invalid_mcp_${index}`,
+          message: 'MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.',
+        })
+      }
+    }
+  }
+  return issues
+}
+
 export function validateAgentDraft(params: {
   draft: CustomAgentConfig
   reservedNames: string[]
@@ -137,19 +247,22 @@ export function validateAgentDraft(params: {
   availableToolIds: string[]
   availableSkillNames: string[]
 }): AgentDraftIssue[] {
-  return validateCustomAgentDraft({
-    name: params.draft.name,
-    description: params.draft.description,
-    scope: params.draft.scope,
-    directory: params.draft.scope === 'project' ? params.projectTargetDirectory : null,
-    reservedNames: params.reservedNames,
-    siblingNames: params.existingNames,
-    availableToolIds: params.availableToolIds,
-    availableSkillNames: params.availableSkillNames,
-    toolIds: params.draft.toolIds,
-    skillNames: params.draft.skillNames,
-    brandName: getBrandName(),
-  })
+  return [
+    ...validateCustomAgentDraft({
+      name: params.draft.name,
+      description: params.draft.description,
+      scope: params.draft.scope,
+      directory: params.draft.scope === 'project' ? params.projectTargetDirectory : null,
+      reservedNames: params.reservedNames,
+      siblingNames: params.existingNames,
+      availableToolIds: params.availableToolIds,
+      availableSkillNames: params.availableSkillNames,
+      toolIds: params.draft.toolIds,
+      skillNames: params.draft.skillNames,
+      brandName: getBrandName(),
+    }),
+    ...validatePermissionOverrideRules(params.draft),
+  ]
 }
 
 export function linkedSkillNamesForTool(
@@ -251,7 +364,7 @@ export function compileAgentPreview(
   return {
     title: trimmedName,
     mentionAs: `@${trimmedName}`,
-    scope: computeAgentScope(draft.toolIds, catalog),
+    scope: computeAgentScope(draft.toolIds, catalog, draft.permissionOverrides),
     instructions: draft.instructions.trim() || 'No instructions yet — add guidance to shape tone, priorities, and output.',
     selectedTools,
     selectedSkills,

@@ -70,6 +70,20 @@ export interface CustomSkillConfig {
 }
 
 export type AgentColor = 'primary' | 'warning' | 'accent' | 'success' | 'info' | 'secondary'
+export type CustomAgentMode = 'primary' | 'subagent'
+export type CustomAgentPermissionAction = 'allow' | 'ask' | 'deny'
+export type CustomAgentPermissionKey = 'web' | 'edit' | 'bash' | 'task' | 'external_directory' | 'mcp'
+
+export interface CustomAgentPermissionRule {
+  pattern: string
+  action: CustomAgentPermissionAction
+}
+
+export interface CustomAgentPermissionOverride {
+  key: CustomAgentPermissionKey
+  action: CustomAgentPermissionAction
+  rules?: CustomAgentPermissionRule[]
+}
 
 // Inference tuning fields forwarded to OpenCode's AgentConfig. Every field is
 // optional; unset fields inherit session defaults. `options` is a passthrough
@@ -88,6 +102,7 @@ export interface CustomAgentConfig extends AgentInferenceOptions {
   workspaceId?: string
   scope: 'machine' | 'project'
   directory?: string | null
+  mode?: CustomAgentMode
   name: string
   description: string
   instructions: string
@@ -97,6 +112,7 @@ export interface CustomAgentConfig extends AgentInferenceOptions {
   color: AgentColor
   avatar?: string | null
   deniedToolPatterns?: string[]
+  permissionOverrides?: CustomAgentPermissionOverride[]
 }
 
 export interface CustomAgentIssue {
@@ -113,9 +129,11 @@ export interface AgentBundle {
   instructions: string
   skillNames: string[]
   toolIds: string[]
+  mode?: CustomAgentMode
   color: AgentColor
   avatar?: string | null
   enabled?: boolean
+  permissionOverrides?: CustomAgentPermissionOverride[]
   model?: string | null
   variant?: string | null
   temperature?: number | null

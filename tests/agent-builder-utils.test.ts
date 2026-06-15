@@ -75,19 +75,19 @@ describe('computeAgentScope', () => {
     const catalog = makeCatalog()
     assert.equal(computeAgentScope(['read', 'postgres'], catalog), 'read-only')
   })
-  it('returns standard when one or two write tools are selected', () => {
+  it('returns standard when one or two write permission families are selected', () => {
     const catalog = makeCatalog()
     assert.equal(computeAgentScope(['write'], catalog), 'standard')
     assert.equal(computeAgentScope(['write', 'slack'], catalog), 'standard')
   })
-  it('returns powerful when three or more write tools are selected', () => {
+  it('returns powerful when three or more write permission families are selected', () => {
     const catalog = makeCatalog({
       tools: [
         ...makeCatalog().tools,
-        { id: 'email', name: 'Email', icon: 'mail', description: 'Send email', supportsWrite: true, source: 'custom', patterns: ['mcp__email__*'] },
+        { id: 'shell', name: 'Shell', icon: 'terminal', description: 'Run shell commands', supportsWrite: true, source: 'builtin', patterns: ['bash'] },
       ],
     })
-    assert.equal(computeAgentScope(['write', 'slack', 'email'], catalog), 'powerful')
+    assert.equal(computeAgentScope(['write', 'slack', 'shell'], catalog), 'powerful')
   })
   it('ignores tool ids not present in the catalog', () => {
     const catalog = makeCatalog()

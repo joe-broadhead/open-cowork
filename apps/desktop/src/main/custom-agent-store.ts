@@ -7,6 +7,8 @@ import {
   VALID_CUSTOM_AGENT_NAME,
   type AgentColor,
   type CustomAgentConfig,
+  type CustomAgentMode,
+  type CustomAgentPermissionOverride,
   type RuntimeContextOptions,
   type ScopedArtifactRef,
 } from '@open-cowork/shared'
@@ -42,6 +44,7 @@ type ManagedAgentMetadata = {
   // inline in the JSON sidecar so runtime-project-overlay picks it up
   // for free along with the agent's .md + .opencowork.json pair.
   avatar?: string
+  mode?: CustomAgentMode
   // The Markdown `permission:` block remains the OpenCode-facing runtime
   // contract. These UI selections are duplicated in the Open Cowork sidecar
   // because some SDK-native tools (for example websearch/webfetch/bash) cannot
@@ -50,6 +53,7 @@ type ManagedAgentMetadata = {
   skillNames?: string[]
   toolIds?: string[]
   deniedToolPatterns?: string[]
+  permissionOverrides?: CustomAgentPermissionOverride[]
   model?: string | null
   variant?: string | null
   temperature?: number | null
@@ -76,6 +80,49 @@ const runtimeDirectivePattern = new RegExp(
   `${escapeRegExp(RUNTIME_DIRECTIVE_START)}[\\s\\S]*?${escapeRegExp(RUNTIME_DIRECTIVE_END)}\\s*`,
   'g',
 )
+
+function readAgentMode(value: unknown): CustomAgentMode {
+  return value === 'primary' ? 'primary' : 'subagent'
+}
+
+function readPermissionOverrides(value: unknown): CustomAgentPermissionOverride[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const next: CustomAgentPermissionOverride[] = []
+  for (const rawEntry of value) {
+    if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) continue
+    const entry = rawEntry as Record<string, unknown>
+    const key = entry.key
+    if (
+      key !== 'web' &&
+      key !== 'edit' &&
+      key !== 'bash' &&
+      key !== 'task' &&
+      key !== 'external_directory' &&
+      key !== 'mcp'
+    ) continue
+    const action = entry.action === 'allow' || entry.action === 'ask' || entry.action === 'deny'
+      ? entry.action
+      : 'deny'
+    const rules = Array.isArray(entry.rules)
+      ? entry.rules.flatMap((rawRule) => {
+          if (!rawRule || typeof rawRule !== 'object' || Array.isArray(rawRule)) return []
+          const rule = rawRule as Record<string, unknown>
+          const pattern = typeof rule.pattern === 'string' ? rule.pattern.trim() : ''
+          if (!pattern || /[\r\n\0]/.test(pattern)) return []
+          const ruleAction = rule.action === 'allow' || rule.action === 'ask' || rule.action === 'deny'
+            ? rule.action
+            : 'deny'
+          return [{ pattern, action: ruleAction as CustomAgentPermissionOverride['action'] }]
+        })
+      : []
+    next.push({
+      key,
+      action,
+      ...(rules.length > 0 ? { rules } : {}),
+    })
+  }
+  return next.length > 0 ? next : undefined
+}
 
 function splitMarkdownFrontmatter(content: string) {
   const match = content.match(/^(---\r?\n[\s\S]*?\r?\n---)(?:\r?\n)?([\s\S]*)$/)
@@ -133,6 +180,12 @@ function splitInlineYamlMappingEntries(value: string) {
 }
 
 function inlineYamlMappingKey(entry: string) {
+  const separator = yamlKeyValueSeparator(entry)
+  if (separator === -1) return ''
+  return yamlKey(entry.slice(0, separator))
+}
+
+function yamlKeyValueSeparator(entry: string) {
   let quote: '"' | '\'' | null = null
   let depth = 0
   for (let index = 0; index < entry.length; index += 1) {
@@ -154,16 +207,39 @@ function inlineYamlMappingKey(entry: string) {
       continue
     }
     if (char === ':' && depth === 0) {
-      return entry.slice(0, index).trim().replace(/^['"]|['"]$/g, '')
+      return index
     }
   }
-  return ''
+  return -1
+}
+
+function yamlKey(rawKey: string) {
+  const trimmed = rawKey.trim()
+  if (trimmed.startsWith('"')) {
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      return trimmed.replace(/^"|"$/g, '')
+    }
+  }
+  if (trimmed.startsWith('\'')) return trimmed.slice(1, -1)
+  return trimmed
+}
+
+function permissionYamlKey(key: string) {
+  return /^[A-Za-z0-9_./-]+$/.test(key) && !key.startsWith('*')
+    ? key
+    : JSON.stringify(key)
 }
 
 function parseYamlKeyLine(line: string, key: string, indent: string) {
-  const match = line.match(/^(\s*)(['"]?)([^'":]+)\2\s*:(.*)$/)
-  if (!match || match[1] !== indent || match[3]?.trim() !== key) return null
-  return match[4]?.trim() ?? ''
+  const actualIndent = line.match(/^\s*/)?.[0] || ''
+  if (actualIndent !== indent) return null
+  const content = line.slice(actualIndent.length)
+  const separator = yamlKeyValueSeparator(content)
+  if (separator === -1) return null
+  if (yamlKey(content.slice(0, separator)) !== key) return null
+  return content.slice(separator + 1).trim()
 }
 
 function stripRuntimeDirective(markdown: string) {
@@ -279,10 +355,10 @@ function parseFrontmatter(content: string) {
     if (!rawLine.trim()) continue
     const indent = rawLine.match(/^\s*/)?.[0].length || 0
     const line = rawLine.trim()
-    const separator = line.indexOf(':')
+    const separator = yamlKeyValueSeparator(line)
     if (separator === -1) continue
 
-    const key = line.slice(0, separator).trim().replace(/^['"]|['"]$/g, '')
+    const key = yamlKey(line.slice(0, separator))
     const rawValue = line.slice(separator + 1).trim()
 
     while (stack.length > 1 && indent <= stack[stack.length - 1]!.indent) {
@@ -472,9 +548,11 @@ function readManagedAgentMetadata(root: string, name: string): ManagedAgentMetad
     return {
       color: typeof value.color === 'string' ? value.color as AgentColor : undefined,
       avatar: typeof value.avatar === 'string' && value.avatar.length > 0 ? value.avatar : undefined,
+      mode: value.mode === 'primary' || value.mode === 'subagent' ? value.mode : undefined,
       skillNames: readStringArray(value.skillNames),
       toolIds: readStringArray(value.toolIds),
       deniedToolPatterns: readStringArray(value.deniedToolPatterns),
+      permissionOverrides: readPermissionOverrides(value.permissionOverrides),
       model: typeof value.model === 'string' && value.model.trim() ? value.model.trim() : null,
       variant: typeof value.variant === 'string' && value.variant.trim() ? value.variant.trim() : null,
       temperature: typeof value.temperature === 'number' && Number.isFinite(value.temperature) ? value.temperature : null,
@@ -494,7 +572,7 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
   const frontmatterLines = [
     '---',
     `description: ${JSON.stringify(agent.description)}`,
-    'mode: subagent',
+    `mode: ${readAgentMode(agent.mode)}`,
   ]
   pushOptionalStringFrontmatter(frontmatterLines, 'color', agent.color)
   pushOptionalStringFrontmatter(frontmatterLines, 'model', agent.model)
@@ -507,13 +585,13 @@ function serializeCustomAgentMarkdown(agent: CustomAgentConfig, permission: Reco
 
   for (const [key, rawValue] of Object.entries(permission)) {
     if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
-      frontmatterLines.push(`  ${key}:`)
+      frontmatterLines.push(`  ${permissionYamlKey(key)}:`)
       for (const [nestedKey, nestedValue] of Object.entries(rawValue as Record<string, unknown>)) {
         frontmatterLines.push(`    ${JSON.stringify(nestedKey)}: ${String(nestedValue)}`)
       }
       continue
     }
-    frontmatterLines.push(`  ${key}: ${String(rawValue)}`)
+    frontmatterLines.push(`  ${permissionYamlKey(key)}: ${String(rawValue)}`)
   }
 
   frontmatterLines.push('---')
@@ -547,10 +625,12 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
     const skillNames = metadata.skillNames ?? derivedSkillNames
     const toolIds = metadata.toolIds ?? derivedToolIds
     const deniedToolPatterns = metadata.deniedToolPatterns ?? derivedDenies
+    const mode = metadata.mode ?? readAgentMode(frontmatter.mode)
 
     agents.push({
       scope,
       directory: scope === 'project' ? targetDirectory(scope, directory) : null,
+      mode,
       name,
       // `parseFrontmatter` is already called above and handles the
       // "description is the first key" case correctly. The old regex
@@ -573,6 +653,7 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       steps: metadata.steps ?? null,
       options: metadata.options ?? null,
       ...(deniedToolPatterns.length > 0 ? { deniedToolPatterns } : {}),
+      ...(metadata.permissionOverrides?.length ? { permissionOverrides: metadata.permissionOverrides } : {}),
     })
   }
 
@@ -643,9 +724,11 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
   )
   writeJsonFile(agentMetaPath(root, agent.name), {
     color: agent.color,
+    mode: readAgentMode(agent.mode),
     skillNames: Array.from(new Set((agent.skillNames || []).map((name) => name.trim()).filter(Boolean))),
     toolIds: Array.from(new Set((agent.toolIds || []).map((id) => id.trim()).filter(Boolean))),
     deniedToolPatterns: Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean))),
+    ...(agent.permissionOverrides?.length ? { permissionOverrides: agent.permissionOverrides } : {}),
     ...(agent.avatar ? { avatar: agent.avatar } : {}),
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.variant ? { variant: agent.variant } : {}),

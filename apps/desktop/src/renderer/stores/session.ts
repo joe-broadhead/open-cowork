@@ -57,6 +57,7 @@ type SessionMetadataPatch = {
   parentSessionId?: string | null
   changeSummary?: SessionChangeSummary | null
   revertedMessageId?: string | null
+  composerAgentName?: string | null
   composerModelId?: string | null
   composerReasoningVariant?: string | null
 }
@@ -70,6 +71,7 @@ function applySessionMetadataPatch(session: Session, patch: SessionMetadataPatch
   if (patch.parentSessionId) next.parentSessionId = patch.parentSessionId
   if (patch.changeSummary !== undefined) next.changeSummary = patch.changeSummary
   if (patch.revertedMessageId !== undefined) next.revertedMessageId = patch.revertedMessageId
+  if (patch.composerAgentName !== undefined) next.composerAgentName = patch.composerAgentName
   if (patch.composerModelId !== undefined) next.composerModelId = patch.composerModelId
   if (patch.composerReasoningVariant !== undefined) next.composerReasoningVariant = patch.composerReasoningVariant
   return next
@@ -95,6 +97,7 @@ export interface SessionStore {
   addSession: (session: Session) => void
   renameSession: (id: string, title: string) => void
   setSessionComposerPreferences: (id: string, preferences: {
+    agentName?: string | null
     modelId?: string | null
     reasoningVariant?: string | null
   }) => void
@@ -113,6 +116,8 @@ export interface SessionStore {
 
   agentMode: PrimaryAgentMode
   setAgentMode: (mode: PrimaryAgentMode) => void
+  sessionPrimaryAgents: Record<string, string>
+  setSessionPrimaryAgent: (sessionId: string, agentName: string | null, workspaceId?: string | null) => void
 
   reasoningVariant: string | null
   setReasoningVariant: (variant: string | null) => void
@@ -228,6 +233,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (session.id !== id) return session
       return {
         ...session,
+        ...(Object.prototype.hasOwnProperty.call(preferences, 'agentName')
+          ? { composerAgentName: preferences.agentName ?? null }
+          : {}),
         ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
           ? { composerModelId: preferences.modelId ?? null }
           : {}),
@@ -242,6 +250,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
         if (session.id !== id) return session
         return {
           ...session,
+          ...(Object.prototype.hasOwnProperty.call(preferences, 'agentName')
+            ? { composerAgentName: preferences.agentName ?? null }
+            : {}),
           ...(Object.prototype.hasOwnProperty.call(preferences, 'modelId')
             ? { composerModelId: preferences.modelId ?? null }
             : {}),
@@ -276,6 +287,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     delete sessionStateById[sessionKey]
     const chartArtifactsBySession = { ...state.chartArtifactsBySession }
     delete chartArtifactsBySession[sessionKey]
+    const sessionPrimaryAgents = { ...state.sessionPrimaryAgents }
+    delete sessionPrimaryAgents[sessionKey]
 
     // Drop the id from the status Sets too — otherwise a session that was
     // busy / awaiting-permission / awaiting-question at delete time leaves
@@ -307,6 +320,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       awaitingPermissionSessions: nextAwaitingPermission,
       awaitingQuestionSessions: nextAwaitingQuestion,
       chartArtifactsBySession,
+      sessionPrimaryAgents,
     }
 
     if (targetIsActive && state.currentSessionId === id) {
@@ -451,6 +465,32 @@ export const useSessionStore = create<SessionStore>((set) => ({
 
   agentMode: 'build',
   setAgentMode: (mode) => set({ agentMode: mode }),
+  sessionPrimaryAgents: {},
+  setSessionPrimaryAgent: (sessionId, agentName, workspaceId) => set((state) => {
+    const activeWorkspaceId = normalizeWorkspaceId(state.activeWorkspaceId)
+    const targetWorkspaceId = normalizeWorkspaceId(workspaceId ?? activeWorkspaceId)
+    const sessionKey = workspaceId
+      ? sessionWorkspaceKey(workspaceId, sessionId)
+      : activeSessionWorkspaceKey(state, sessionId)
+    const sessionPrimaryAgents = { ...state.sessionPrimaryAgents }
+    const trimmed = agentName?.trim()
+    if (trimmed) sessionPrimaryAgents[sessionKey] = trimmed
+    else delete sessionPrimaryAgents[sessionKey]
+    const currentSessions = targetWorkspaceId === activeWorkspaceId
+      ? state.sessions
+      : state.sessionsByWorkspace[targetWorkspaceId] || []
+    const nextSessions = currentSessions.map((session) => (
+      session.id === sessionId ? { ...session, composerAgentName: trimmed || null } : session
+    ))
+    return {
+      sessions: targetWorkspaceId === activeWorkspaceId ? nextSessions : state.sessions,
+      sessionsByWorkspace: {
+        ...state.sessionsByWorkspace,
+        [targetWorkspaceId]: nextSessions,
+      },
+      sessionPrimaryAgents,
+    }
+  }),
   reasoningVariant: null,
   setReasoningVariant: (variant) => set({ reasoningVariant: variant }),
   totalCost: 0,

@@ -28,6 +28,8 @@ function seedCurrentSession() {
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+    sessionPrimaryAgents: {},
+    agentMode: 'build',
   })
   useSessionStore.getState().setSessions([
     {
@@ -67,6 +69,8 @@ function seedCloudSession() {
     awaitingQuestionSessions: new Set(),
     sessionStateById: {},
     chartArtifactsBySession: {},
+    sessionPrimaryAgents: {},
+    agentMode: 'build',
   })
   useWorkspaceSupportStore.setState({
     supportByWorkspace: {
@@ -247,6 +251,104 @@ describe('ChatInput', () => {
     }))
   })
 
+  it('keeps follow-up prompts in a custom primary agent thread routed to that agent', async () => {
+    const user = userEvent.setup()
+    const prompt = vi.fn(async () => null)
+    const api = installRendererTestCoworkApi({
+      app: {
+        config: vi.fn(async () => ({
+          appId: 'com.opencowork.desktop',
+          name: 'Open Cowork',
+          helpUrl: 'https://github.com/joe-broadhead/open-cowork',
+          defaultModel: null,
+          providers: { available: [] },
+          auth: { mode: 'none' },
+        })),
+      },
+      on: {
+        runtimeReady: vi.fn(() => () => undefined),
+      },
+      session: {
+        prompt,
+      },
+    })
+    seedCurrentSession()
+    const sessionWithComposerAgent = {
+      ...useSessionStore.getState().sessions[0]!,
+      composerAgentName: 'writer-lead',
+    }
+    useSessionStore.setState({
+      sessions: [sessionWithComposerAgent],
+      sessionsByWorkspace: { local: [sessionWithComposerAgent] },
+      sessionPrimaryAgents: {},
+    })
+
+    render(<ChatInput />)
+
+    expect(screen.getByPlaceholderText('Ask Writer Lead to work on this...')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Writer Lead' })).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'Continue the launch plan')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(api.session.prompt).toHaveBeenCalledWith(
+      'session-1',
+      'Continue the launch plan',
+      undefined,
+      'writer-lead',
+    ))
+  })
+
+  it('persists clearing a custom primary agent when switching back to a built-in mode', async () => {
+    const user = userEvent.setup()
+    const api = installModelRuntime()
+    seedCurrentSession()
+    const sessionWithComposerAgent = {
+      ...useSessionStore.getState().sessions[0]!,
+      composerAgentName: 'writer-lead',
+    }
+    useSessionStore.setState({
+      sessions: [sessionWithComposerAgent],
+      sessionsByWorkspace: { local: [sessionWithComposerAgent] },
+      sessionPrimaryAgents: { 'session-1': 'writer-lead' },
+    })
+
+    render(<ChatInput />)
+
+    await user.click(screen.getByRole('button', { name: 'Writer Lead' }))
+
+    expect(useSessionStore.getState().sessions[0]?.composerAgentName).toBeNull()
+    await waitFor(() => expect(api.session.setComposerPreferences).toHaveBeenCalledWith(
+      'session-1',
+      { agentName: null },
+    ))
+  })
+
+  it('persists clearing a custom primary agent when Shift+Tab switches to a built-in mode', async () => {
+    const api = installModelRuntime()
+    seedCurrentSession()
+    const sessionWithComposerAgent = {
+      ...useSessionStore.getState().sessions[0]!,
+      composerAgentName: 'writer-lead',
+    }
+    useSessionStore.setState({
+      sessions: [sessionWithComposerAgent],
+      sessionsByWorkspace: { local: [sessionWithComposerAgent] },
+      sessionPrimaryAgents: { 'session-1': 'writer-lead' },
+    })
+
+    render(<ChatInput />)
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+
+    expect(useSessionStore.getState().sessions[0]?.composerAgentName).toBeNull()
+    expect(useSessionStore.getState().agentMode).toBe('plan')
+    await waitFor(() => expect(api.session.setComposerPreferences).toHaveBeenCalledWith(
+      'session-1',
+      { agentName: null },
+    ))
+  })
+
   it('serializes rapid prompt submissions while a send is in flight', async () => {
     const pendingPrompt = createDeferred<null>()
     const prompt = vi.fn(() => pendingPrompt.promise)
@@ -330,6 +432,8 @@ describe('ChatInput', () => {
       awaitingQuestionSessions: new Set(),
       sessionStateById: {},
       chartArtifactsBySession: {},
+      sessionPrimaryAgents: {},
+      agentMode: 'build',
     })
     useSessionStore.getState().setSessions([
       {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   AgentCatalog,
   CustomAgentConfig,
+  CustomAgentPermissionOverride,
   ProviderModelDescriptor,
   PublicAppConfig,
 } from '@open-cowork/shared'
@@ -21,6 +22,7 @@ import {
   resolveAgentBuilderModelSelection,
   type WorkbenchTab,
 } from './AgentBuilderPrimitives'
+import { AgentPermissionEditor } from './AgentPermissionEditor'
 import { buildInitialAgentDraft, type BuilderTarget } from './agent-builder-drafts'
 import {
   applyTemplate,
@@ -43,6 +45,15 @@ type Props = {
   onTestAgent?: (agentName: string, directory?: string | null) => void
   onOpenCapabilities: () => void
 }
+
+type BuilderStep = 'role' | 'abilities' | 'brain' | 'permissions'
+
+const BUILDER_STEPS: Array<{ id: BuilderStep; label: string; detail: string }> = [
+  { id: 'role', label: 'Role', detail: 'Mission and starting role' },
+  { id: 'abilities', label: 'Abilities', detail: 'Skills and connections' },
+  { id: 'brain', label: 'Brain', detail: 'Model and behaviour' },
+  { id: 'permissions', label: 'Permissions', detail: 'OpenCode guardrails' },
+]
 
 // Single page serving all three agent types. For built-in and runtime
 // agents we render the same card + workbench + preview layout but with
@@ -85,6 +96,7 @@ export function AgentBuilderPage({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<WorkbenchTab>('capabilities')
+  const [step, setStep] = useState<BuilderStep>('role')
   const [projectTargetDirectory, setProjectTargetDirectory] = useState<string | null>(projectDirectory)
   const providers = appConfig?.providers.available || []
   const defaultProviderId = appConfig?.providers.defaultProvider || null
@@ -120,6 +132,11 @@ export function AgentBuilderPage({
       availableSkillNames: effectiveCatalog.skills.map((skill) => skill.name),
     })
   }, [effectiveCatalog, draft, existingCustomNames, projectTargetDirectory, readOnly, target])
+  const saveAndTestDisabledReason = draft.mode === 'primary'
+    ? t('agents.builder.primaryCannotMentionTest', 'Lead coworkers start chats directly and cannot be tested through an @mention.')
+    : draft.enabled === false
+      ? t('agents.builder.enableBeforeTest', 'Enable this coworker before testing it in chat.')
+      : null
 
   const toggleTool = (toolId: string) => {
     const linked = linkedSkillNamesForTool(effectiveCatalog, toolId)
@@ -188,7 +205,7 @@ export function AgentBuilderPage({
   const startBlank = () => {
     if (target.kind !== 'new') return
     setDraft(buildInitialAgentDraft({ kind: 'new', seed: null }))
-    setTab('capabilities')
+    setStep('role')
   }
 
   const applyStarter = (template: AgentTemplate) => {
@@ -197,7 +214,7 @@ export function AgentBuilderPage({
       kind: 'new',
       seed: applyTemplate(template, effectiveCatalog),
     }))
-    setTab('capabilities')
+    setStep('role')
   }
 
   const handleSave = async (options: { testAfterSave?: boolean } = {}) => {
@@ -205,9 +222,14 @@ export function AgentBuilderPage({
     setSaving(true)
     setError(null)
     try {
+      const draftPayload = { ...draft }
+      delete draftPayload.permissionOverrides
+      const permissionOverrides = draft.permissionOverrides
       const payload: CustomAgentConfig = {
-        ...draft,
+        ...draftPayload,
         directory: draft.scope === 'project' ? projectTargetDirectory || null : null,
+        mode: draft.mode === 'primary' ? 'primary' : 'subagent',
+        ...(permissionOverrides !== undefined ? { permissionOverrides } : {}),
       }
       if (target.kind === 'custom') {
         await window.coworkApi.agents.update(
@@ -258,14 +280,14 @@ export function AgentBuilderPage({
                 variant="primary"
                 size="md"
               >
-                {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.createCoworker', 'Create coworker')}
+                {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.hireCoworker', 'Hire coworker')}
               </Button>
               <Button
                 onClick={() => void handleSave({ testAfterSave: true })}
-                disabled={saving || issues.length > 0 || draft.enabled === false}
+                disabled={saving || issues.length > 0 || Boolean(saveAndTestDisabledReason)}
                 variant="secondary"
                 size="md"
-                title={draft.enabled === false ? t('agents.builder.enableBeforeTest', 'Enable this coworker before testing it in chat.') : t('agents.builder.saveAndMention', 'Save and insert an @mention into a new chat.')}
+                title={saveAndTestDisabledReason || t('agents.builder.saveAndMention', 'Save and insert an @mention into a new chat.')}
               >
                 Save & Test
               </Button>
@@ -311,14 +333,6 @@ export function AgentBuilderPage({
           </div>
         )}
 
-        {target.kind === 'new' && (
-          <StarterTemplatePanel
-            catalog={effectiveCatalog}
-            onStartBlank={startBlank}
-            onApplyTemplate={applyStarter}
-          />
-        )}
-
         {!readOnly && (
           <ScopeRow
             draft={draft}
@@ -347,9 +361,23 @@ export function AgentBuilderPage({
           />
 
           <div className="flex flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface">
-            <WorkbenchTabs tab={tab} onChange={setTab} />
+            {readOnly ? (
+              <WorkbenchTabs tab={tab} onChange={setTab} />
+            ) : (
+              <BuilderStepNav step={step} onChange={setStep} />
+            )}
             <div className="max-h-[640px] overflow-y-auto p-4">
-              {tab === 'capabilities' && (
+              {!readOnly && step === 'role' && (
+                <RoleStep
+                  targetKind={target.kind}
+                  catalog={effectiveCatalog}
+                  draft={draft}
+                  onStartBlank={startBlank}
+                  onApplyTemplate={applyStarter}
+                  onInstructionsChange={(instructions) => setDraft((current) => ({ ...current, instructions }))}
+                />
+              )}
+              {!readOnly && step === 'abilities' && (
                 <AgentCapabilitiesTab
                   catalog={effectiveCatalog}
                   selectedSkillNames={draft.skillNames}
@@ -363,14 +391,51 @@ export function AgentBuilderPage({
                   projectDirectory={projectTargetDirectory}
                 />
               )}
-              {tab === 'instructions' && (
+              {!readOnly && step === 'brain' && (
+                <BrainStep
+                  draft={draft}
+                  providers={providers}
+                  defaultProviderId={defaultProviderId}
+                  catalogOverrides={catalogOverrides}
+                  refreshProviderCatalog={refreshProviderCatalog}
+                  onProviderCatalogRefresh={(providerId, models) => {
+                    setCatalogOverrides((current) => ({ ...current, [providerId]: models }))
+                  }}
+                  onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+                />
+              )}
+              {!readOnly && step === 'permissions' && (
+                <PermissionsStep
+                  draft={draft}
+                  onPermissionOverridesChange={(permissionOverrides) => {
+                    setDraft((current) => ({ ...current, permissionOverrides }))
+                  }}
+                  readOnly={readOnly}
+                  catalog={effectiveCatalog}
+                />
+              )}
+              {readOnly && tab === 'capabilities' && (
+                <AgentCapabilitiesTab
+                  catalog={effectiveCatalog}
+                  selectedSkillNames={draft.skillNames}
+                  selectedToolIds={draft.toolIds}
+                  onToggleSkill={toggleSkill}
+                  onToggleTool={toggleTool}
+                  onAutoAttachTools={attachTools}
+                  readOnly={readOnly}
+                  deniedToolPatterns={draft.deniedToolPatterns || []}
+                  onToggleDeniedPattern={toggleDeniedPattern}
+                  projectDirectory={projectTargetDirectory}
+                />
+              )}
+              {readOnly && tab === 'instructions' && (
                 <InstructionsTab
                   value={draft.instructions}
                   onChange={(instructions) => setDraft((current) => ({ ...current, instructions }))}
                   readOnly={readOnly}
                 />
               )}
-              {tab === 'inference' && (
+              {readOnly && tab === 'inference' && (
                 <InferenceTab
                   draft={draft}
                   readOnly={readOnly}
@@ -384,21 +449,59 @@ export function AgentBuilderPage({
                   onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
                 />
               )}
-              {tab === 'preview' && (
+              {readOnly && tab === 'preview' && (
                 <AgentStaticPreview draft={draft} catalog={effectiveCatalog} />
               )}
             </div>
             {!readOnly && (
               <div className="flex items-center justify-between border-t border-border-subtle px-4 py-2 text-[10px] text-text-muted">
-                <span>{t('agents.openCapabilities', 'Need more tools or skills?')}</span>
                 <Button
-                  onClick={onOpenCapabilities}
+                  onClick={() => {
+                    const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
+                    const previous = BUILDER_STEPS[Math.max(0, currentIndex - 1)]
+                    if (previous) setStep(previous.id)
+                  }}
+                  disabled={step === 'role'}
                   variant="ghost"
                   size="sm"
-                  rightIcon="chevron-right"
+                  leftIcon="chevron-left"
                 >
-                  Open Tools & Skills
+                  Back
                 </Button>
+                {step === 'abilities' ? (
+                  <Button
+                    onClick={onOpenCapabilities}
+                    variant="ghost"
+                    size="sm"
+                    rightIcon="chevron-right"
+                  >
+                    Open Tools & Skills
+                  </Button>
+                ) : <span>{t('agents.builder.stepHint', 'Each step maps directly to the saved OpenCode agent config.')}</span>}
+                {step === 'permissions' ? (
+                  <Button
+                    onClick={() => void handleSave()}
+                    disabled={issues.length > 0}
+                    loading={saving}
+                    variant="primary"
+                    size="sm"
+                  >
+                    {target.kind === 'custom' ? t('agents.builder.saveChanges', 'Save changes') : t('agents.builder.hireCoworker', 'Hire coworker')}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      const currentIndex = BUILDER_STEPS.findIndex((entry) => entry.id === step)
+                      const next = BUILDER_STEPS[Math.min(BUILDER_STEPS.length - 1, currentIndex + 1)]
+                      if (next) setStep(next.id)
+                    }}
+                    variant="primary"
+                    size="sm"
+                    rightIcon="chevron-right"
+                  >
+                    Continue
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -471,5 +574,213 @@ function StarterTemplatePanel({
         </Button>
       </div>
     </section>
+  )
+}
+
+function BuilderStepNav({
+  step,
+  onChange,
+}: {
+  step: BuilderStep
+  onChange: (next: BuilderStep) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1 border-b border-border-subtle bg-elevated p-2">
+      {BUILDER_STEPS.map((entry, index) => {
+        const active = step === entry.id
+        return (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => onChange(entry.id)}
+            aria-label={entry.label}
+            className="flex min-w-[140px] flex-1 items-center gap-2 rounded-xl px-3 py-2 text-start transition-colors"
+            style={{
+              background: active ? 'var(--color-surface)' : 'transparent',
+              color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
+              boxShadow: active ? 'var(--shadow-card)' : 'none',
+            }}
+          >
+            <span
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold"
+              style={{
+                background: active ? 'var(--color-accent)' : 'var(--color-surface)',
+                color: active ? 'var(--color-accent-foreground)' : 'var(--color-text-muted)',
+                border: active ? '1px solid transparent' : '1px solid var(--color-border-subtle)',
+              }}
+            >
+              {index + 1}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold">{entry.label}</span>
+              <span className="block truncate text-2xs opacity-80">{entry.detail}</span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function RoleStep({
+  targetKind,
+  catalog,
+  draft,
+  onStartBlank,
+  onApplyTemplate,
+  onInstructionsChange,
+}: {
+  targetKind: BuilderTarget['kind']
+  catalog: AgentCatalog
+  draft: CustomAgentConfig
+  onStartBlank: () => void
+  onApplyTemplate: (template: AgentTemplate) => void
+  onInstructionsChange: (instructions: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      {targetKind === 'new' ? (
+        <StarterTemplatePanel
+          catalog={catalog}
+          onStartBlank={onStartBlank}
+          onApplyTemplate={onApplyTemplate}
+        />
+      ) : null}
+      <div>
+        <div className="mb-2">
+          <h2 className="text-sm font-semibold text-text">Mission instructions</h2>
+          <p className="mt-1 text-2xs leading-relaxed text-text-muted">
+            This is the system prompt OpenCode runs with. Keep it concrete: responsibilities, boundaries, process, and output shape.
+          </p>
+        </div>
+        <InstructionsTab
+          value={draft.instructions}
+          onChange={onInstructionsChange}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BrainStep({
+  draft,
+  providers,
+  defaultProviderId,
+  catalogOverrides,
+  refreshProviderCatalog,
+  onProviderCatalogRefresh,
+  onChange,
+}: {
+  draft: CustomAgentConfig
+  providers: PublicAppConfig['providers']['available']
+  defaultProviderId: string | null
+  catalogOverrides: Record<string, ProviderModelDescriptor[]>
+  refreshProviderCatalog: (providerId: string) => Promise<ProviderModelDescriptor[]>
+  onProviderCatalogRefresh: (providerId: string, models: ProviderModelDescriptor[]) => void
+  onChange: (patch: Partial<CustomAgentConfig>) => void
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <ModeSelector
+        value={draft.mode === 'primary' ? 'primary' : 'subagent'}
+        onChange={(mode) => onChange({ mode })}
+      />
+      <InferenceTab
+        draft={draft}
+        providers={providers}
+        defaultProviderId={defaultProviderId}
+        catalogOverrides={catalogOverrides}
+        onProviderCatalogRefresh={onProviderCatalogRefresh}
+        onRefreshProviderCatalog={refreshProviderCatalog}
+        onChange={onChange}
+      />
+    </div>
+  )
+}
+
+function ModeSelector({
+  value,
+  onChange,
+}: {
+  value: 'primary' | 'subagent'
+  onChange: (mode: 'primary' | 'subagent') => void
+}) {
+  const options: Array<{ value: 'primary' | 'subagent'; label: string; detail: string }> = [
+    {
+      value: 'primary',
+      label: 'Lead conversations',
+      detail: 'Shows as a primary coworker that can start and steer chats directly.',
+    },
+    {
+      value: 'subagent',
+      label: 'Specialist coworker',
+      detail: 'Available for other agents to delegate focused work to through OpenCode task routing.',
+    },
+  ]
+  return (
+    <div className="rounded-xl border border-border-subtle bg-elevated p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold text-text">Can they lead?</div>
+          <div className="mt-1 text-2xs text-text-muted">
+            Saved as OpenCode agent <code className="rounded border border-border-subtle bg-surface px-1">mode</code>.
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {options.map((option) => {
+          const active = value === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              aria-pressed={active}
+              className="rounded-xl border border-border-subtle bg-surface px-3 py-3 text-start transition-colors"
+              style={{
+                borderColor: active ? 'var(--color-accent)' : 'var(--color-border-subtle)',
+                boxShadow: active ? '0 0 0 1px var(--color-accent)' : 'none',
+              }}
+            >
+              <span className="block text-xs font-semibold text-text">{option.label}</span>
+              <span className="mt-1 block text-2xs leading-relaxed text-text-muted">{option.detail}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function PermissionsStep({
+  draft,
+  onPermissionOverridesChange,
+  readOnly,
+  catalog,
+}: {
+  draft: CustomAgentConfig
+  onPermissionOverridesChange: (overrides: CustomAgentPermissionOverride[]) => void
+  readOnly?: boolean
+  catalog: AgentCatalog
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="text-sm font-semibold text-text">OpenCode permissions</h2>
+        <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-text-muted">
+          Selected tools and skills grant the base runtime access. Change a row here only when this coworker needs a
+          tighter or broader saved override; read access stays fixed to allow.
+        </p>
+      </div>
+      <AgentPermissionEditor
+        value={draft.permissionOverrides}
+        onChange={onPermissionOverridesChange}
+        readOnly={readOnly}
+      />
+      <div className="rounded-xl border border-border-subtle bg-surface p-3">
+        <div className="mb-2 text-xs font-semibold text-text">OpenCode preview</div>
+        <AgentStaticPreview draft={draft} catalog={catalog} />
+      </div>
+    </div>
   )
 }

@@ -21,6 +21,7 @@ function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
     runId: null,
     providerId: 'anthropic',
     modelId: 'anthropic/claude',
+    composerAgentName: null,
     composerModelId: null,
     composerReasoningVariant: null,
     summary: null,

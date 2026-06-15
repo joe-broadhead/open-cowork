@@ -918,6 +918,9 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
     const sessionId = normalizeSessionId(sessionIdInput)
     const preferences = normalizeComposerPreferences(rawPreferences)
     const patch: Parameters<typeof updateSessionRecord>[1] = {}
+    if (Object.prototype.hasOwnProperty.call(preferences, 'agentName')) {
+      patch.composerAgentName = preferences.agentName ?? null
+    }
     if (Object.prototype.hasOwnProperty.call(preferences, 'modelId')) {
       patch.composerModelId = preferences.modelId ?? null
     }
@@ -1077,6 +1080,7 @@ export function registerSessionHandlers(context: IpcHandlerContext) {
           opencodeDirectory: record?.opencodeDirectory || getRuntimeHomeDir(),
           providerId: record?.providerId || settings.effectiveProviderId || null,
           modelId: record?.modelId || settings.effectiveModel || null,
+          composerAgentName: record?.composerAgentName || null,
           composerModelId: record?.composerModelId || null,
           composerReasoningVariant: record?.composerReasoningVariant || null,
           parentSessionId: session.parentID || sessionId,

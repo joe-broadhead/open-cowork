@@ -122,6 +122,7 @@ export function CustomSelectionCard({
   onOpen,
   onDelete,
   onExport,
+  onStartChat,
   onTest,
 }: {
   agent: CustomAgentSummary
@@ -129,9 +130,10 @@ export function CustomSelectionCard({
   onOpen: () => void
   onDelete: () => void
   onExport: () => void
+  onStartChat?: () => void
   onTest?: () => void
 }) {
-  const scope: AgentScope = catalog ? computeAgentScope(agent.toolIds, catalog) : 'read-only'
+  const scope: AgentScope = catalog ? computeAgentScope(agent.toolIds, catalog, agent.permissionOverrides) : 'read-only'
   return (
     <SelectionCardShell
       name={agent.name}
@@ -153,7 +155,10 @@ export function CustomSelectionCard({
         >
           <span>@{agent.name}</span>
           <div className="flex items-center gap-2">
-            {onTest && agent.enabled && agent.valid && (
+            {onStartChat && agent.enabled && agent.valid && agent.mode === 'primary' && (
+              <button onClick={onStartChat} className="hover:text-accent cursor-pointer">{t('agentCard.startChat', 'Start chat')}</button>
+            )}
+            {onTest && agent.enabled && agent.valid && agent.mode !== 'primary' && (
               <button onClick={onTest} className="hover:text-accent cursor-pointer">{t('agentCard.test', 'Test')}</button>
             )}
             <button onClick={onOpen} className="hover:text-text-secondary cursor-pointer">{t('agentCard.edit', 'Edit')}</button>

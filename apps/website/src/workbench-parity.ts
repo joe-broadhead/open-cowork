@@ -12,6 +12,7 @@ export type CloudWebWorkbenchConceptId =
   | 'runtime-status'
   | 'approvals-questions'
   | 'agents'
+  | 'hire-coworker'
   | 'tools-skills'
   | 'artifacts'
   | 'workflows'
@@ -89,6 +90,17 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     boundary: 'Cloud Web displays policy-safe coworker metadata and cannot edit local custom agent files.',
     disabledReason: 'Start chat disables when chat or coworker browsing is disabled by profile policy.',
     tests: ['render.test.ts', 'browser-e2e.test.ts'],
+  },
+  {
+    conceptId: 'hire-coworker',
+    label: 'Hire a Coworker',
+    availability: 'desktop-only',
+    desktopSurface: 'Desktop Team/Coworkers Hire a coworker wizard',
+    cloudRouteIds: ['agents'],
+    cloudAffordance: 'Show policy-safe coworker metadata and Start chat only; custom coworker creation and permission editing remain unavailable.',
+    boundary: 'The Hire wizard edits local custom-agent files, provider/model preferences, and OpenCode permission config owned by the Desktop runtime boundary.',
+    disabledReason: 'Hire a coworker is Desktop-only because Cloud Web cannot edit local custom agent files, local provider settings, or machine runtime permissions.',
+    tests: ['render.test.ts', 'studio-production-qa.test.ts'],
   },
   {
     conceptId: 'tools-skills',

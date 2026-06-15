@@ -21,6 +21,8 @@ export const CUSTOM_AGENT_LIMITS = {
   skillNames: 64,
   toolIds: 64,
   deniedToolPatterns: 128,
+  permissionOverrides: 12,
+  permissionRules: 128,
   optionsBytes: 32 * 1024,
   optionsDepth: 8,
 } as const
@@ -46,6 +48,7 @@ type CustomAgentLimitInput = {
   skillNames?: string[] | null
   toolIds?: string[] | null
   deniedToolPatterns?: string[] | null
+  permissionOverrides?: Array<{ rules?: Array<unknown> | null }> | null
   options?: Record<string, unknown> | null
 }
 
@@ -113,6 +116,14 @@ export function validateCustomAgentContentLimits(agent: CustomAgentLimitInput): 
   pushCountIssue(issues, 'too_many_skills', 'Agent skills', agent.skillNames?.length || 0, CUSTOM_AGENT_LIMITS.skillNames)
   pushCountIssue(issues, 'too_many_tools', 'Agent tools', agent.toolIds?.length || 0, CUSTOM_AGENT_LIMITS.toolIds)
   pushCountIssue(issues, 'too_many_denied_tool_patterns', 'Agent denied tool patterns', agent.deniedToolPatterns?.length || 0, CUSTOM_AGENT_LIMITS.deniedToolPatterns)
+  pushCountIssue(issues, 'too_many_permission_overrides', 'Agent permission overrides', agent.permissionOverrides?.length || 0, CUSTOM_AGENT_LIMITS.permissionOverrides)
+  pushCountIssue(
+    issues,
+    'too_many_permission_rules',
+    'Agent permission rules',
+    (agent.permissionOverrides || []).reduce((count, entry) => count + (entry.rules?.length || 0), 0),
+    CUSTOM_AGENT_LIMITS.permissionRules,
+  )
 
   if (agent.options && typeof agent.options === 'object') {
     const depth = jsonDepth(agent.options)

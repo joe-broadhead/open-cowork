@@ -74,7 +74,7 @@ function permissionObjectActions(value: unknown): PermissionInheritanceAction[] 
 function sensitiveAction(permission: Record<string, unknown> | undefined, key: SensitivePermissionKey): PermissionInheritanceAction {
   if (!permission) return 'deny'
   const value = permission[key]
-  if (key === 'task' && value && typeof value === 'object' && !Array.isArray(value)) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
     return maxAction(permissionObjectActions(value))
   }
   return normalizeAction(value)

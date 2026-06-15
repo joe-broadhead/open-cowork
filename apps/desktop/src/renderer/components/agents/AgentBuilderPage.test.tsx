@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
-import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, PublicAppConfig } from '@open-cowork/shared'
+import type { AgentCatalog, BuiltInAgentDetail, CustomAgentConfig, CustomAgentSummary, PublicAppConfig } from '@open-cowork/shared'
 import { installRendererTestCoworkApi } from '../../test/setup'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
@@ -109,32 +109,36 @@ function builtInAgent(overrides: Partial<BuiltInAgentDetail> = {}): BuiltInAgent
 }
 
 describe('AgentBuilderPage', () => {
-  it('creates a project-scoped custom agent from the builder form and workbench tabs', async () => {
+  it('creates a project-scoped custom agent from the four-step hire wizard', async () => {
     const user = userEvent.setup()
     const { create, onSaved } = renderBuilder()
 
-    expect(screen.getByRole('button', { name: 'Create coworker' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Hire coworker' })).toBeDisabled()
     expect(screen.getByText('Complete these before saving')).toBeInTheDocument()
     expect(screen.getByText('Selected capabilities')).toBeInTheDocument()
     expect(screen.queryByText(/loadout/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Role' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abilities' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Brain' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Permissions' })).toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText('agent-id'), 'market-analyst')
     await user.type(
       screen.getByPlaceholderText('What is this agent specialised to do?'),
       'Prepares market analysis briefings.',
     )
-    await user.click(screen.getByRole('button', { name: 'Capabilities' }))
+    await user.click(screen.getByRole('button', { name: 'Abilities' }))
     await user.click(screen.getAllByRole('button', { name: /Research Kit/ })[0]!)
     await user.click(screen.getByRole('button', { name: 'Add tools' }))
 
-    await user.click(screen.getByRole('button', { name: 'Instructions' }))
+    await user.click(screen.getByRole('button', { name: 'Role' }))
     await user.type(
       screen.getByPlaceholderText(/Examples:/),
       'Summarize market changes with concise evidence.',
     )
 
     await user.click(screen.getByRole('button', { name: 'Project' }))
-    await user.click(screen.getByRole('button', { name: 'Create coworker' }))
+    await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
@@ -145,7 +149,9 @@ describe('AgentBuilderPage', () => {
       toolIds: ['chart-maker'],
       scope: 'project',
       directory: '/workspace/acme',
+      mode: 'subagent',
     }))
+    expect(create.mock.calls[0]?.[0]).not.toHaveProperty('permissionOverrides')
     expect(onSaved).toHaveBeenCalledTimes(1)
   })
 
@@ -168,6 +174,164 @@ describe('AgentBuilderPage', () => {
     expect(screen.getAllByText('Web Search').length).toBeGreaterThan(0)
     expect(create).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it('does not add default permission overrides when saving a legacy custom agent', async () => {
+    const user = userEvent.setup()
+    const legacyAgent: CustomAgentSummary = {
+      scope: 'machine',
+      directory: null,
+      name: 'legacy-agent',
+      description: 'Legacy custom agent.',
+      instructions: 'Keep existing runtime permissions.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+      avatar: null,
+      deniedToolPatterns: [],
+      mode: 'subagent',
+      model: null,
+      variant: null,
+      temperature: null,
+      top_p: null,
+      steps: null,
+      options: null,
+      permissionOverrides: [],
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const { update } = renderBuilder({
+      target: { kind: 'custom', agent: legacyAgent },
+    })
+
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).not.toHaveProperty('permissionOverrides')
+  })
+
+  it('preserves partial custom-agent permission overrides on unrelated edits', async () => {
+    const user = userEvent.setup()
+    const agent: CustomAgentSummary = {
+      scope: 'machine',
+      directory: null,
+      name: 'partial-agent',
+      description: 'Partial custom agent.',
+      instructions: 'Keep partial runtime permissions.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+      avatar: null,
+      deniedToolPatterns: [],
+      mode: 'subagent',
+      model: null,
+      variant: null,
+      temperature: null,
+      top_p: null,
+      steps: null,
+      options: null,
+      permissionOverrides: [{ key: 'web', action: 'allow' }],
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const { update } = renderBuilder({
+      target: { kind: 'custom', agent },
+    })
+
+    await user.clear(screen.getByPlaceholderText('What is this agent specialised to do?'))
+    await user.type(screen.getByPlaceholderText('What is this agent specialised to do?'), 'Updated description.')
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1]).toMatchObject({
+      description: 'Updated description.',
+      permissionOverrides: [{ key: 'web', action: 'allow' }],
+    })
+  })
+
+  it('only persists explicitly edited permission rows for partial custom-agent overrides', async () => {
+    const user = userEvent.setup()
+    const agent: CustomAgentSummary = {
+      scope: 'machine',
+      directory: null,
+      name: 'partial-agent',
+      description: 'Partial custom agent.',
+      instructions: 'Keep partial runtime permissions.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+      avatar: null,
+      deniedToolPatterns: [],
+      mode: 'subagent',
+      model: null,
+      variant: null,
+      temperature: null,
+      top_p: null,
+      steps: null,
+      options: null,
+      permissionOverrides: [{ key: 'web', action: 'allow' }],
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const { update } = renderBuilder({
+      target: { kind: 'custom', agent },
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    const taskGroup = screen.getByRole('group', { name: 'Delegate work permission' })
+    await user.click(within(taskGroup).getByRole('button', { name: 'Allow' }))
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1].permissionOverrides).toEqual([
+      { key: 'web', action: 'allow' },
+      { key: 'task', action: 'allow' },
+    ])
+  })
+
+  it('persists an empty override array when clearing the last saved permission override', async () => {
+    const user = userEvent.setup()
+    const agent: CustomAgentSummary = {
+      scope: 'machine',
+      directory: null,
+      name: 'partial-agent',
+      description: 'Partial custom agent.',
+      instructions: 'Clear saved runtime permissions.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+      avatar: null,
+      deniedToolPatterns: [],
+      mode: 'subagent',
+      model: null,
+      variant: null,
+      temperature: null,
+      top_p: null,
+      steps: null,
+      options: null,
+      permissionOverrides: [{ key: 'web', action: 'allow' }],
+      writeAccess: false,
+      valid: true,
+      issues: [],
+    }
+    const { update } = renderBuilder({
+      target: { kind: 'custom', agent },
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    const webGroup = screen.getByRole('group', { name: 'Web access permission' })
+    await user.click(within(webGroup).getByRole('button', { name: 'Use inherited access' }))
+    await user.click(screen.getAllByRole('button', { name: 'Save changes' })[0]!)
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]?.[1].permissionOverrides).toEqual([])
   })
 
   it('uses refreshed model metadata in the summary capability profile', async () => {
@@ -197,7 +361,7 @@ describe('AgentBuilderPage', () => {
     })
     window.coworkApi.app.refreshProviderCatalog = refreshProviderCatalog
 
-    await user.click(screen.getByRole('button', { name: 'Model & behavior' }))
+    await user.click(screen.getByRole('button', { name: 'Brain' }))
     await user.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(refreshProviderCatalog).toHaveBeenCalledWith('openrouter'))
 
@@ -205,5 +369,136 @@ describe('AgentBuilderPage', () => {
 
     expect(screen.getByText('Mercury Ultra')).toBeInTheDocument()
     expect(screen.getAllByText('1M ctx').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('edits lead/specialist mode and specific permission rules', async () => {
+    const user = userEvent.setup()
+    const { create } = renderBuilder()
+
+    await user.click(screen.getByRole('button', { name: /Writer/ }))
+    await user.type(screen.getByPlaceholderText('agent-id'), 'writer-lead')
+    await user.type(
+      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      'Drafts stakeholder updates.',
+    )
+    const saveAndTestButton = screen.getByRole('button', { name: 'Save & Test' })
+    expect(saveAndTestButton).toBeDisabled()
+    expect(saveAndTestButton).toHaveAttribute(
+      'title',
+      'Lead coworkers start chats directly and cannot be tested through an @mention.',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Brain' }))
+    expect(screen.getByText('Lead conversations')).toBeInTheDocument()
+    expect(screen.getByText('Specialist coworker')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    expect(screen.getByText('allow · read')).toBeInTheDocument()
+    expect(screen.getByText('webfetch + websearch')).toBeInTheDocument()
+    expect(screen.getByText('edit + write + apply_patch')).toBeInTheDocument()
+
+    const webGroup = screen.getByRole('group', { name: 'Web access permission' })
+    expect(within(webGroup).queryByRole('button', { name: 'Add rule' })).not.toBeInTheDocument()
+    expect(within(webGroup).getByText(/URL and domain-specific web rules are not saved/)).toBeInTheDocument()
+
+    const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
+    await user.click(within(bashGroup).getByRole('button', { name: 'Deny' }))
+    await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
+    await user.type(within(bashGroup).getByPlaceholderText('git *, pnpm test, rm *'), 'pnpm test')
+    await user.selectOptions(within(bashGroup).getByLabelText('Run commands rule action'), 'allow')
+
+    await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'writer-lead',
+      mode: 'primary',
+      permissionOverrides: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'bash',
+          action: 'deny',
+          rules: [expect.objectContaining({ pattern: 'pnpm test', action: 'allow' })],
+        }),
+      ]),
+    }))
+  })
+
+  it('starts first-time specific permission rules from a denied wildcard', async () => {
+    const user = userEvent.setup()
+    const { create } = renderBuilder()
+
+    await user.click(screen.getByRole('button', { name: /Writer/ }))
+    await user.type(screen.getByPlaceholderText('agent-id'), 'rule-limited-writer')
+    await user.type(
+      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      'Runs only the approved command.',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
+    await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
+    await user.type(within(bashGroup).getByPlaceholderText('git *, pnpm test, rm *'), 'pnpm test')
+    await user.selectOptions(within(bashGroup).getByLabelText('Run commands rule action'), 'allow')
+
+    await user.click(screen.getAllByRole('button', { name: 'Hire coworker' })[0]!)
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      permissionOverrides: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'bash',
+          action: 'deny',
+          rules: [expect.objectContaining({ pattern: 'pnpm test', action: 'allow' })],
+        }),
+      ]),
+    }))
+  })
+
+  it('blocks saving blank specific permission rule patterns', async () => {
+    const user = userEvent.setup()
+    const { create } = renderBuilder()
+
+    await user.click(screen.getByRole('button', { name: /Writer/ }))
+    await user.type(screen.getByPlaceholderText('agent-id'), 'blank-rule-writer')
+    await user.type(
+      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      'Tests permission validation.',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    const bashGroup = screen.getByRole('group', { name: 'Run commands permission' })
+    await user.click(within(bashGroup).getByRole('button', { name: 'Add rule' }))
+
+    expect(screen.getAllByText('Run commands permission rule pattern is required.').length).toBeGreaterThanOrEqual(1)
+    for (const button of screen.getAllByRole('button', { name: 'Hire coworker' })) {
+      expect(button).toBeDisabled()
+    }
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('blocks saving invalid MCP permission rule patterns', async () => {
+    const user = userEvent.setup()
+    const { create } = renderBuilder()
+
+    await user.click(screen.getByRole('button', { name: /Writer/ }))
+    await user.type(screen.getByPlaceholderText('agent-id'), 'invalid-mcp-rule-writer')
+    await user.type(
+      screen.getByPlaceholderText('What is this agent specialised to do?'),
+      'Tests MCP permission validation.',
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Permissions' }))
+    const mcpGroup = screen.getByRole('group', { name: 'MCP tools permission' })
+    await user.click(within(mcpGroup).getByRole('button', { name: 'Add rule' }))
+    await user.type(
+      within(mcpGroup).getByPlaceholderText('mcp__github__pull_request_read'),
+      'bash',
+    )
+
+    expect(
+      screen.getAllByText('MCP tools permission rule pattern must be an MCP tool pattern like mcp__server__tool or server_tool.').length,
+    ).toBeGreaterThanOrEqual(1)
+    for (const button of screen.getAllByRole('button', { name: 'Hire coworker' })) {
+      expect(button).toBeDisabled()
+    }
+    expect(create).not.toHaveBeenCalled()
   })
 })

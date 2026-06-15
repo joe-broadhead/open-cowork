@@ -13,6 +13,7 @@ type ChatInputToolbarProps = {
   showReasoningControl?: boolean
   currentDirectory: string | null
   agentMode: PrimaryAgentMode
+  activeAgentLabel?: string | null
   currentSessionId: string | null
   isGenerating: boolean
   isAwaitingPermission: boolean
@@ -42,6 +43,7 @@ export function ChatInputToolbar({
   showReasoningControl = false,
   currentDirectory,
   agentMode,
+  activeAgentLabel,
   currentSessionId,
   isGenerating,
   isAwaitingPermission,
@@ -129,11 +131,11 @@ export function ChatInputToolbar({
 
         <Button
           onClick={onToggleAgentMode}
-          variant={agentMode === 'build' ? 'ghost' : 'secondary'}
+          variant={activeAgentLabel || agentMode !== 'build' ? 'secondary' : 'ghost'}
           size="sm"
           rightIcon="chevron-down"
         >
-          {primaryAgentModeLabel(agentMode)}
+          {activeAgentLabel || primaryAgentModeLabel(agentMode)}
         </Button>
       </div>
 

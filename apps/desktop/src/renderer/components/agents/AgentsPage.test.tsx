@@ -152,6 +152,7 @@ function renderAgentsPage(overrides: {
     onClose: vi.fn(),
     onOpenCapabilities: vi.fn(),
     onTestAgent: vi.fn(),
+    onStartAgentChat: vi.fn(),
     onClearDraft: vi.fn(),
   }
   const view = render(<AgentsPage {...props} />)
@@ -213,7 +214,7 @@ describe('AgentsPage', () => {
     expect(api.onClearDraft).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('button', { name: /Start from blank/ }))
-    expect(await screen.findByRole('button', { name: 'Create coworker' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Hire coworker' })).toBeDisabled()
 
     api.unmount()
     expect(api.unsubscribeRuntimeReady).toHaveBeenCalledTimes(1)
@@ -243,6 +244,42 @@ describe('AgentsPage', () => {
     await user.click(screen.getAllByRole('button', { name: 'Test' })[0]!)
 
     expect(api.onTestAgent).toHaveBeenCalledWith('market-analyst', '/workspace/acme')
+  })
+
+  it('starts primary custom agents as lead coworker chats instead of delegated tests', async () => {
+    const user = userEvent.setup()
+    const api = renderAgentsPage({
+      customAgents: [{
+        ...customAgent,
+        mode: 'primary',
+      }],
+      builtInAgents: [],
+      runtimeAgents: [],
+    })
+
+    expect(await screen.findByText('market-analyst')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Test' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start chat' }))
+    expect(api.onStartAgentChat).toHaveBeenCalledWith('market-analyst', null)
+    expect(api.onTestAgent).not.toHaveBeenCalled()
+  })
+
+  it('shows permission override write access in custom coworker scope chips', async () => {
+    renderAgentsPage({
+      customAgents: [{
+        ...customAgent,
+        name: 'override-writer',
+        skillNames: [],
+        toolIds: [],
+        permissionOverrides: [{ key: 'bash', action: 'allow' }],
+        writeAccess: true,
+      }],
+      builtInAgents: [],
+      runtimeAgents: [],
+    })
+
+    expect(await screen.findByText('override-writer')).toBeInTheDocument()
+    expect(screen.getByText('Standard')).toBeInTheDocument()
   })
 
   it('keeps large inventories in the normal card sections', async () => {

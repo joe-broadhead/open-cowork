@@ -24,6 +24,7 @@ interface CommandPaletteProps {
   onEnsureSession: () => Promise<boolean>
   onInsertComposer: (text: string) => void
   onSetAgentMode: (mode: PrimaryAgentMode) => void
+  onStartAgentChat: (agentName: string, directory?: string | null) => Promise<void> | void
   onOpenSettings: () => void
   onToggleSearch: () => void
 }
@@ -35,6 +36,7 @@ export function CommandPalette({
   onEnsureSession,
   onInsertComposer,
   onSetAgentMode,
+  onStartAgentChat,
   onOpenSettings,
   onToggleSearch,
 }: CommandPaletteProps) {
@@ -47,6 +49,7 @@ export function CommandPalette({
   const listboxId = 'command-palette-results'
   const currentSessionId = useSessionStore((s) => s.currentSessionId)
   const sessions = useSessionStore((s) => s.sessions)
+  const setSessionPrimaryAgent = useSessionStore((s) => s.setSessionPrimaryAgent)
 
   const currentProjectDirectory = useMemo(
     () => sessions.find((session) => session.id === currentSessionId)?.directory || null,
@@ -73,12 +76,32 @@ export function CommandPalette({
       commands,
       builtinAgents,
       customAgents,
+      currentProjectDirectory,
       platform: getShortcutPlatform(),
       onNavigate,
       onCreateThread,
       onEnsureSession,
       onInsertComposer,
+      onClearSessionPrimaryAgent: async () => {
+        const state = useSessionStore.getState()
+        const sessionId = state.currentSessionId
+        if (!sessionId) return true
+        const previousAgent = state.sessions.find((session) => session.id === sessionId)?.composerAgentName
+          || state.sessionPrimaryAgents[sessionId]
+          || null
+        if (!previousAgent) return true
+        setSessionPrimaryAgent(sessionId, null)
+        try {
+          await window.coworkApi.session.setComposerPreferences(sessionId, { agentName: null })
+          return true
+        } catch {
+          setSessionPrimaryAgent(sessionId, previousAgent)
+          useSessionStore.getState().addGlobalError('Could not switch agent mode. Please try again.')
+          return false
+        }
+      },
       onSetAgentMode,
+      onStartAgentChat,
       onSelectDirectory: () => window.coworkApi.dialog.selectDirectory(),
       onOpenSettings,
       onToggleSearch,
@@ -88,7 +111,7 @@ export function CommandPalette({
         return window.coworkApi.command.run(sessionId, name)
       },
     })
-  }, [builtinAgents, commands, customAgents, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, onSetAgentMode, onOpenSettings, onToggleSearch])
+  }, [builtinAgents, commands, customAgents, currentProjectDirectory, onCreateThread, onEnsureSession, onInsertComposer, onNavigate, setSessionPrimaryAgent, onSetAgentMode, onStartAgentChat, onOpenSettings, onToggleSearch])
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()

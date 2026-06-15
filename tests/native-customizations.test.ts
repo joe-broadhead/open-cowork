@@ -197,6 +197,7 @@ test('custom agent builder selections round-trip through managed sidecar metadat
         enabled: true,
         color: 'info',
         avatar: null,
+        mode: 'primary',
         model: 'openai/gpt-5.5',
         variant: null,
         temperature: 0.2,
@@ -204,6 +205,11 @@ test('custom agent builder selections round-trip through managed sidecar metadat
         steps: 25,
         options: { reasoningEffort: 'medium' },
         deniedToolPatterns: ['mcp__github__delete_repo'],
+        permissionOverrides: [
+          { key: 'web', action: 'allow' },
+          { key: 'edit', action: 'deny', rules: [{ pattern: '*.md', action: 'allow' }] },
+          { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+        ],
       },
       {
         skill: {
@@ -212,6 +218,8 @@ test('custom agent builder selections round-trip through managed sidecar metadat
         },
         websearch: 'allow',
         webfetch: 'allow',
+        '*.md': 'allow',
+        'pnpm test': 'allow',
         mcp__github__delete_repo: 'deny',
       },
     )
@@ -222,6 +230,12 @@ test('custom agent builder selections round-trip through managed sidecar metadat
     assert.deepEqual(agent.skillNames, ['analyst', 'chart-creator'])
     assert.deepEqual(agent.toolIds, ['websearch', 'webfetch'])
     assert.deepEqual(agent.deniedToolPatterns, ['mcp__github__delete_repo'])
+    assert.equal(agent.mode, 'primary')
+    assert.deepEqual(agent.permissionOverrides, [
+      { key: 'web', action: 'allow' },
+      { key: 'edit', action: 'deny', rules: [{ pattern: '*.md', action: 'allow' }] },
+      { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ])
     assert.equal(agent.model, 'openai/gpt-5.5')
     assert.equal(agent.temperature, 0.2)
     assert.equal(agent.steps, 25)
@@ -231,10 +245,19 @@ test('custom agent builder selections round-trip through managed sidecar metadat
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'))
     assert.deepEqual(metadata.skillNames, ['analyst', 'chart-creator'])
     assert.deepEqual(metadata.toolIds, ['websearch', 'webfetch'])
+    assert.equal(metadata.mode, 'primary')
+    assert.deepEqual(metadata.permissionOverrides, [
+      { key: 'web', action: 'allow' },
+      { key: 'edit', action: 'deny', rules: [{ pattern: '*.md', action: 'allow' }] },
+      { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ])
 
     const markdownPath = join(projectRoot, '.opencowork', 'agents', 'researcher.md')
     const markdown = readFileSync(markdownPath, 'utf-8')
+    assert.match(markdown, /mode: primary/)
     assert.match(markdown, /permission:\n {2}task: deny/)
+    assert.match(markdown, / {2}"\*\.md": allow/)
+    assert.match(markdown, / {2}"pnpm test": allow/)
     assert.match(markdown, / {2}skill:\n {4}"\*": deny\n {4}"analyst": allow\n {4}"chart-creator": allow/)
     assert.match(markdown, /open-cowork:runtime-directive:start/)
     assert.match(markdown, /Attached skills: analyst, chart-creator/)

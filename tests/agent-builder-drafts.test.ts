@@ -32,6 +32,10 @@ function makeCustomAgent(overrides?: Partial<CustomAgentSummary>): CustomAgentSu
     steps: 25,
     options: { reasoning: 'medium' },
     deniedToolPatterns: ['mcp__postgres__write'],
+    mode: 'primary',
+    permissionOverrides: [
+      { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ],
     writeAccess: false,
     valid: true,
     issues: [],
@@ -84,6 +88,10 @@ describe('blankAgentDraft', () => {
       skillNames: ['charts', 'charts'],
       toolIds: ['read', 'read'],
       deniedToolPatterns: ['mcp__x__write', 'mcp__x__write'],
+      mode: 'primary',
+      permissionOverrides: [
+        { key: 'web', action: 'allow' },
+      ],
     })
 
     assert.equal(draft.scope, 'project')
@@ -91,8 +99,11 @@ describe('blankAgentDraft', () => {
     assert.deepEqual(draft.skillNames, ['charts'])
     assert.deepEqual(draft.toolIds, ['read'])
     assert.deepEqual(draft.deniedToolPatterns, ['mcp__x__write'])
+    assert.equal(draft.mode, 'primary')
+    assert.deepEqual(draft.permissionOverrides, [{ key: 'web', action: 'allow' }])
 
     assert.equal(blankAgentDraft({ scope: 'machine', directory: '/ignored' }).directory, null)
+    assert.equal(blankAgentDraft().mode, 'subagent')
   })
 })
 
@@ -106,7 +117,23 @@ describe('draftFromCustomAgent', () => {
     assert.deepEqual(draft.skillNames, ['analysis'])
     assert.deepEqual(draft.toolIds, ['postgres'])
     assert.deepEqual(draft.deniedToolPatterns, ['mcp__postgres__write'])
+    assert.equal(draft.mode, 'primary')
+    assert.deepEqual(draft.permissionOverrides, [
+      { key: 'bash', action: 'deny', rules: [{ pattern: 'pnpm test', action: 'allow' }] },
+    ])
     assert.equal(draft.model, 'provider/model')
+  })
+
+  it('preserves missing legacy permission editor state for custom agents', () => {
+    const draft = draftFromCustomAgent(makeCustomAgent({ permissionOverrides: undefined }))
+
+    assert.equal(draft.permissionOverrides, undefined)
+  })
+
+  it('treats normalized empty permission editor arrays as legacy missing state', () => {
+    const draft = draftFromCustomAgent(makeCustomAgent({ permissionOverrides: [] }))
+
+    assert.equal(draft.permissionOverrides, undefined)
   })
 })
 
@@ -141,6 +168,12 @@ describe('draftFromRuntimeAgent', () => {
     assert.equal(draft.model, 'runtime/model')
     assert.deepEqual(draft.skillNames, [])
     assert.deepEqual(draft.toolIds, [])
+  })
+
+  it('preserves runtime primary mode for read-only draft previews', () => {
+    const draft = draftFromRuntimeAgent(makeRuntimeAgent({ mode: 'primary' }))
+
+    assert.equal(draft.mode, 'primary')
   })
 })
 

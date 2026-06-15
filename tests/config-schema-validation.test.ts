@@ -69,6 +69,48 @@ test('downstream contract version is required and fixed for this schema', () => 
   assert.throws(() => validateResolvedConfig(unsupported, 'downstream config'), /contractVersion/)
 })
 
+test('agent starter template schema accepts primary and subagent modes', () => {
+  const config = cloneConfig()
+  config.agentStarterTemplates = [
+    {
+      id: 'primary-coworker',
+      label: 'Primary coworker',
+      description: 'Starts a primary coworker.',
+      color: 'azure',
+      mode: 'primary',
+      instructions: 'Own the main conversation.',
+      toolIds: ['clock'],
+      skillNames: [],
+    },
+    {
+      id: 'delegated-coworker',
+      label: 'Delegated coworker',
+      description: 'Starts a delegated specialist.',
+      color: 'violet',
+      mode: 'subagent',
+      instructions: 'Handle delegated work.',
+      temperature: null,
+      steps: null,
+    },
+  ]
+
+  assert.doesNotThrow(() => validateResolvedConfig(config, 'starter template config'))
+
+  const invalid = cloneConfig()
+  invalid.agentStarterTemplates = [
+    {
+      id: 'invalid-coworker',
+      label: 'Invalid coworker',
+      description: 'Invalid starter mode.',
+      color: 'azure',
+      mode: 'manager',
+      instructions: 'This should not validate.',
+    },
+  ]
+
+  assert.throws(() => validateResolvedConfig(invalid, 'starter template config'), /agentStarterTemplates\[0\]\.mode/)
+})
+
 test('branding sidebar and home overrides validate', () => {
   const config = cloneConfig()
   config.branding.sidebar = {

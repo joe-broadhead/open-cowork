@@ -108,6 +108,7 @@ function normalizeSessionInfo(value: unknown): SessionInfo | null {
     parentSessionId: record.parentSessionId ?? null,
     changeSummary: record.changeSummary ?? null,
     revertedMessageId: record.revertedMessageId ?? null,
+    composerAgentName: record.composerAgentName ?? null,
     composerModelId: record.composerModelId ?? null,
     composerReasoningVariant: record.composerReasoningVariant ?? null,
   }

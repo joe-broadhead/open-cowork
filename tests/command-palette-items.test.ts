@@ -29,8 +29,14 @@ function createCallbacks() {
       onInsertComposer: (text: string) => {
         calls.push({ type: 'insert', value: text })
       },
+      onClearSessionPrimaryAgent: () => {
+        calls.push({ type: 'clear-primary-agent' })
+      },
       onSetAgentMode: (mode: PrimaryAgentMode) => {
         calls.push({ type: 'mode', value: mode })
+      },
+      onStartAgentChat: async (agentName: string) => {
+        calls.push({ type: 'start-agent-chat', value: agentName })
       },
       onSelectDirectory: async () => '/tmp/project',
       onOpenSettings: () => {
@@ -176,11 +182,13 @@ test('buildCommandPaletteItems filters runtime commands and exposes valid agents
   await customAgent.run()
   const modeItem = items.find((item) => item.id === 'mode:build')
   assert.ok(modeItem)
-  modeItem.run()
+  await modeItem.run()
   const cleoModeItem = items.find((item) => item.id === 'mode:chief-of-staff')
   assert.ok(cleoModeItem)
-  cleoModeItem.run()
+  await cleoModeItem.run()
 
+  const buildModeIndex = calls.findIndex((call) => call.type === 'mode' && call.value === 'build')
+  assert.equal(calls[buildModeIndex - 1]?.type, 'clear-primary-agent')
   assert.equal(calls.some((call) => call.type === 'mode' && call.value === 'chief-of-staff'), true)
 })
 

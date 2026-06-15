@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useSessionStore, type Session } from '../../stores/session'
 import { useActiveWorkspaceSupport } from '../../stores/workspace-support'
-import { LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
+import { activeSessionWorkspaceKey, LOCAL_WORKSPACE_ID } from '../../stores/session-workspace-keys'
 import { t } from '../../helpers/i18n'
+import { formatAgentLabel } from '../../helpers/agent-label'
 import { nextPrimaryAgentMode } from '../../helpers/primary-agent-mode'
 import { ChatInputAttachments } from './ChatInputAttachments'
 import { ChatInputInlinePicker } from './ChatInputInlinePicker'
@@ -96,6 +97,12 @@ export function ChatInput() {
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
   const agentMode = useSessionStore((s) => s.agentMode)
   const setAgentMode = useSessionStore((s) => s.setAgentMode)
+  const sessionPrimaryAgent = useSessionStore((s) => {
+    if (!currentSessionId) return null
+    const session = s.sessions.find((candidate) => candidate.id === currentSessionId)
+    return session?.composerAgentName || s.sessionPrimaryAgents[activeSessionWorkspaceKey(s, currentSessionId)] || null
+  })
+  const setSessionPrimaryAgent = useSessionStore((s) => s.setSessionPrimaryAgent)
   const [showModelMenu, setShowModelMenu] = useState(false)
   const [showReasoningMenu, setShowReasoningMenu] = useState(false)
   const [inlinePicker, setInlinePicker] = useState<InlinePickerState | null>(null)
@@ -164,6 +171,21 @@ export function ChatInput() {
   })
   const specialistAgents = useMentionableAgents(currentProjectDirectory, workspaceOptions)
 
+  const clearSessionPrimaryAgentForModeSwitch = useCallback(() => {
+    const state = useSessionStore.getState()
+    const sessionId = state.currentSessionId
+    if (!sessionId) return
+    const session = state.sessions.find((candidate) => candidate.id === sessionId)
+    const previousAgent = session?.composerAgentName || state.sessionPrimaryAgents[activeSessionWorkspaceKey(state, sessionId)] || null
+    if (!previousAgent) return
+
+    setSessionPrimaryAgent(sessionId, null)
+    void window.coworkApi.session.setComposerPreferences(sessionId, { agentName: null }).catch(() => {
+      setSessionPrimaryAgent(sessionId, previousAgent)
+      addGlobalError('Could not switch agent mode. Please try again.')
+    })
+  }, [addGlobalError, setSessionPrimaryAgent])
+
   const resizeComposerTextarea = useCallback((element = textareaRef.current) => {
     if (!element) return
     element.style.height = 'auto'
@@ -206,7 +228,7 @@ export function ChatInput() {
         return
       }
       const message = promptText || 'Describe this image.'
-      const promptAgent = directInvocation.agent || agentMode
+      const promptAgent = directInvocation.agent || sessionPrimaryAgent || agentMode
       const promptOptions = runtimeControlsManaged
         ? workspaceOptions
         : { ...(reasoningSelection.promptOptions || {}), ...(workspaceOptions || {}) }
@@ -229,7 +251,7 @@ export function ChatInput() {
       submitInFlightRef.current = false
       setSubmitInFlight(false)
     }
-  }, [input, attachments, currentSessionId, workspaceSupport.flags, specialistAgents, recordPrompt, agentMode, runtimeControlsManaged, workspaceOptions, reasoningSelection.promptOptions, addGlobalError])
+  }, [input, attachments, currentSessionId, workspaceSupport.flags, specialistAgents, recordPrompt, sessionPrimaryAgent, agentMode, runtimeControlsManaged, workspaceOptions, reasoningSelection.promptOptions, addGlobalError])
 
   const inlineSuggestions = useMemo(() => {
     if (!inlinePicker) return []
@@ -297,12 +319,13 @@ export function ChatInput() {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
         e.stopPropagation()
+        clearSessionPrimaryAgentForModeSwitch()
         setAgentMode(nextPrimaryAgentMode(useSessionStore.getState().agentMode))
       }
     }
     document.addEventListener('keydown', handler, true)
     return () => document.removeEventListener('keydown', handler, true)
-  }, [setAgentMode])
+  }, [clearSessionPrimaryAgentForModeSwitch, setAgentMode])
 
   useEffect(() => {
     if (!inlinePicker) return
@@ -542,7 +565,9 @@ export function ChatInput() {
               placeholder={isAwaitingQuestion
                 ? t('chat.placeholder.answerPending', 'Answer the pending question above to continue...')
                 : currentSessionId
-                  ? (agentMode === 'chief-of-staff'
+                  ? (sessionPrimaryAgent
+                    ? t('chat.placeholder.askCustomLead', 'Ask {{agent}} to work on this...', { agent: formatAgentLabel(sessionPrimaryAgent) })
+                    : agentMode === 'chief-of-staff'
                     ? t('chat.placeholder.askCleo', 'Ask Cleo to turn an objective into tasks...')
                     : agentMode === 'plan'
                       ? t('chat.placeholder.askPlan', 'Ask Plan to analyze or structure the work...')
@@ -564,6 +589,7 @@ export function ChatInput() {
             showReasoningControl={reasoningSelection.supportsReasoning}
             currentDirectory={currentProjectDirectory}
             agentMode={agentMode}
+            activeAgentLabel={sessionPrimaryAgent ? formatAgentLabel(sessionPrimaryAgent) : null}
             currentSessionId={currentSessionId || null}
             isGenerating={isGenerating}
             isAwaitingPermission={isAwaitingPermission}
@@ -588,7 +614,10 @@ export function ChatInput() {
               setShowModelMenu(false)
               setShowReasoningMenu(!showReasoningMenu)
             }}
-            onToggleAgentMode={() => setAgentMode(nextPrimaryAgentMode(agentMode))}
+            onToggleAgentMode={() => {
+              clearSessionPrimaryAgentForModeSwitch()
+              setAgentMode(nextPrimaryAgentMode(agentMode))
+            }}
             onFork={async () => {
               if (!currentSessionId) return
               const forked = await window.coworkApi.session.fork(currentSessionId)

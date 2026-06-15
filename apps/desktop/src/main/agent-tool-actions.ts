@@ -25,6 +25,32 @@ function sameScopedAgent(left: CustomAgentConfig, right: CustomAgentConfig | Sco
   return resolveProjectDirectory(left.directory) === resolveProjectDirectory(right.directory)
 }
 
+function hasOwn(object: object, key: string) {
+  return Object.prototype.hasOwnProperty.call(object, key)
+}
+
+function findExistingAgent(agent: CustomAgentConfig, context: AgentToolContext) {
+  return listCustomAgents(context)
+    .map(normalizeCustomAgent)
+    .find((entry) => sameScopedAgent(entry, agent))
+}
+
+function mergeOmittedAgentGuardrails(agent: CustomAgentConfig) {
+  const normalized = normalizeCustomAgent(agent)
+  const context = contextForAgent(normalized)
+  const existing = findExistingAgent(normalized, context)
+  if (!existing) return agent
+
+  const input = agent as unknown as Record<string, unknown>
+  return {
+    ...agent,
+    mode: hasOwn(input, 'mode') ? agent.mode : existing.mode,
+    permissionOverrides: hasOwn(input, 'permissionOverrides')
+      ? agent.permissionOverrides
+      : existing.permissionOverrides,
+  }
+}
+
 function siblingNamesFor(agent: CustomAgentConfig, context: AgentToolContext) {
   return listCustomAgents(context)
     .filter((entry) => !sameScopedAgent(normalizeCustomAgent(entry), agent))
@@ -42,6 +68,7 @@ function agentSummary(agent: CustomAgentConfig) {
     toolIds: normalized.toolIds,
     enabled: normalized.enabled,
     color: normalized.color,
+    mode: normalized.mode,
     model: normalized.model,
     variant: normalized.variant,
     temperature: normalized.temperature,
@@ -49,6 +76,7 @@ function agentSummary(agent: CustomAgentConfig) {
     steps: normalized.steps,
     options: normalized.options,
     deniedToolPatterns: normalized.deniedToolPatterns,
+    permissionOverrides: normalized.permissionOverrides,
   }
 }
 
@@ -62,10 +90,11 @@ function normalizeTarget(target: ScopedArtifactRef): ScopedArtifactRef {
 }
 
 export async function previewAgentFromTool(agent: CustomAgentConfig) {
-  const normalized = normalizeCustomAgent(agent)
+  const merged = mergeOmittedAgentGuardrails(agent)
+  const normalized = normalizeCustomAgent(merged)
   const context = contextForAgent(normalized)
   const catalog = await getCustomAgentCatalog(context)
-  const issues = validateCustomAgent(normalized, catalog, siblingNamesFor(normalized, context))
+  const issues = validateCustomAgent(merged, catalog, siblingNamesFor(normalized, context))
   const permission = issues.length === 0
     ? buildCustomAgentPermissionFromCatalog(normalized, catalog)
     : null
@@ -79,11 +108,12 @@ export async function previewAgentFromTool(agent: CustomAgentConfig) {
 }
 
 export async function saveAgentFromTool(agent: CustomAgentConfig) {
-  const preview = await previewAgentFromTool(agent)
+  const merged = mergeOmittedAgentGuardrails(agent)
+  const preview = await previewAgentFromTool(merged)
   if (!preview.ok) {
     throw new Error(preview.issues[0]?.message || 'Invalid custom agent.')
   }
-  const normalized = normalizeCustomAgent(agent)
+  const normalized = normalizeCustomAgent(merged)
   saveCustomAgent(normalized, preview.permission || {})
   invalidateCustomAgentCatalogCache()
   return {

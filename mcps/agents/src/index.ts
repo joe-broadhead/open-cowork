@@ -11,6 +11,15 @@ const BRIDGE_REQUEST_TIMEOUT_MS = 10_000
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 
 const agentColorSchema = z.enum(['primary', 'warning', 'accent', 'success', 'info', 'secondary'])
+const permissionActionSchema = z.enum(['allow', 'ask', 'deny'])
+const permissionOverrideSchema = z.object({
+  key: z.enum(['web', 'edit', 'bash', 'task', 'external_directory', 'mcp']),
+  action: permissionActionSchema,
+  rules: z.array(z.object({
+    pattern: z.string().min(1),
+    action: permissionActionSchema,
+  })).optional(),
+})
 
 const agentTargetShape = {
   name: z.string().min(1).describe('Custom agent id. Lowercase hyphenated ids are expected.'),
@@ -24,10 +33,12 @@ const agentDraftShape = {
   instructions: z.string().min(1).describe('Durable instructions for the custom agent.'),
   skillNames: z.array(z.string()).optional().default([]).describe('Skill bundle names this agent should load.'),
   toolIds: z.array(z.string()).optional().default([]).describe('Open Cowork tool ids or native OpenCode tool ids this agent may use.'),
+  mode: z.enum(['primary', 'subagent']).optional().describe('Whether this agent can lead conversations or only act as a delegated specialist. Omit to preserve an existing agent mode when updating.'),
   enabled: z.boolean().optional().default(true),
   color: agentColorSchema.optional().default('accent'),
   avatar: z.string().optional().nullable(),
   deniedToolPatterns: z.array(z.string()).optional().default([]).describe('Specific tool permission patterns to deny.'),
+  permissionOverrides: z.array(permissionOverrideSchema).optional().describe('Collapsed runtime permission guardrails. Omit to preserve existing guardrails when updating; pass an empty array only to clear them.'),
   model: z.string().optional().nullable(),
   variant: z.string().optional().nullable(),
   temperature: z.number().min(0).optional().nullable(),

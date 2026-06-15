@@ -17,6 +17,7 @@ export function blankAgentDraft(seed?: Partial<CustomAgentConfig> | null): Custo
   return {
     scope: seed?.scope || 'machine',
     directory: seed?.scope === 'project' ? seed.directory || null : null,
+    mode: seed?.mode === 'primary' ? 'primary' : 'subagent',
     name: seed?.name || '',
     description: seed?.description || '',
     instructions: seed?.instructions || '',
@@ -32,6 +33,9 @@ export function blankAgentDraft(seed?: Partial<CustomAgentConfig> | null): Custo
     steps: seed?.steps ?? null,
     options: seed?.options ?? null,
     deniedToolPatterns: Array.from(new Set(seed?.deniedToolPatterns || [])),
+    permissionOverrides: seed?.permissionOverrides && seed.permissionOverrides.length > 0
+      ? Array.from(seed.permissionOverrides)
+      : undefined,
   }
 }
 
@@ -39,6 +43,7 @@ export function draftFromCustomAgent(agent: CustomAgentSummary): CustomAgentConf
   return {
     scope: agent.scope,
     directory: agent.directory ?? null,
+    mode: agent.mode === 'primary' ? 'primary' : 'subagent',
     name: agent.name,
     description: agent.description,
     instructions: agent.instructions,
@@ -54,6 +59,9 @@ export function draftFromCustomAgent(agent: CustomAgentSummary): CustomAgentConf
     steps: agent.steps ?? null,
     options: agent.options ?? null,
     deniedToolPatterns: [...(agent.deniedToolPatterns || [])],
+    permissionOverrides: agent.permissionOverrides && agent.permissionOverrides.length > 0
+      ? [...agent.permissionOverrides]
+      : undefined,
   }
 }
 
@@ -70,6 +78,7 @@ export function draftFromBuiltInAgent(agent: BuiltInAgentDetail): CustomAgentCon
   return {
     scope: 'machine',
     directory: null,
+    mode: agent.mode,
     name: agent.name,
     description: agent.description,
     instructions,
@@ -90,6 +99,7 @@ export function draftFromRuntimeAgent(agent: RuntimeAgentDescriptor): CustomAgen
   return {
     scope: 'machine',
     directory: null,
+    mode: agent.mode === 'primary' ? 'primary' : 'subagent',
     name: agent.name,
     description: agent.description || '',
     instructions: '',

@@ -9,6 +9,7 @@ export type PromptOptionsInput = {
 }
 
 export type ComposerPreferencesInput = {
+  agentName?: string | null
   modelId?: string | null
   reasoningVariant?: string | null
 }
@@ -92,9 +93,11 @@ export function normalizeComposerPreferences(input: unknown): ComposerPreference
     throw new Error('Composer preferences must be an object')
   }
   const record = input as Record<string, unknown>
+  const agentName = normalizeNullableBoundedString(record.agentName, 'Composer agent name', MAX_PROMPT_AGENT_BYTES)
   const modelId = normalizeNullableBoundedString(record.modelId, 'Composer model id', MAX_COMPOSER_MODEL_ID_BYTES)
   const reasoningVariant = normalizeNullableBoundedString(record.reasoningVariant, 'Composer reasoning variant', MAX_PROMPT_VARIANT_BYTES)
   return {
+    ...(agentName !== undefined ? { agentName } : {}),
     ...(modelId !== undefined ? { modelId } : {}),
     ...(reasoningVariant !== undefined ? { reasoningVariant } : {}),
   }

@@ -12,6 +12,7 @@ export interface StoredSessionRecord {
   runId?: string | null
   providerId?: string | null
   modelId?: string | null
+  composerAgentName?: string | null
   composerModelId?: string | null
   composerReasoningVariant?: string | null
   summary?: SessionUsageSummary | null
@@ -97,6 +98,7 @@ export function normalizeStoredSessionRecord(
     runId: typeof item.runId === 'string' ? item.runId : null,
     providerId: typeof item.providerId === 'string' ? item.providerId : null,
     modelId: typeof item.modelId === 'string' ? item.modelId : null,
+    composerAgentName: typeof item.composerAgentName === 'string' ? item.composerAgentName : null,
     composerModelId: typeof item.composerModelId === 'string' ? item.composerModelId : null,
     composerReasoningVariant: typeof item.composerReasoningVariant === 'string' ? item.composerReasoningVariant : null,
     summary: item.summary && typeof item.summary === 'object'

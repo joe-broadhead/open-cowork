@@ -19,6 +19,7 @@ function makeSummary(overrides?: Partial<CustomAgentSummary>): CustomAgentSummar
     instructions: 'Work carefully through the diff…',
     skillNames: [],
     toolIds: ['read'],
+    mode: 'subagent',
     enabled: true,
     color: 'accent',
     model: null,
@@ -41,6 +42,7 @@ describe('encodeAgentBundle', () => {
     assert.equal(bundle.format, AGENT_BUNDLE_FORMAT)
     assert.equal(bundle.name, 'code-reviewer')
     assert.deepEqual(bundle.toolIds, ['read'])
+    assert.equal(bundle.mode, 'subagent')
     assert.equal(bundle.temperature, 0.2)
     assert.equal(bundle.steps, 25)
     assert.ok(bundle.exportedAt && new Date(bundle.exportedAt).toString() !== 'Invalid Date')
@@ -114,6 +116,14 @@ describe('encode → stringify → decode round-trip', () => {
       skillNames: ['chart-creator'],
       toolIds: ['websearch', 'webfetch'],
       color: 'info',
+      mode: 'primary',
+      permissionOverrides: [
+        {
+          key: 'task',
+          action: 'ask',
+          rules: [{ pattern: 'build', action: 'allow' }],
+        },
+      ],
       temperature: 0.5,
       steps: 40,
       avatar: 'data:image/png;base64,FAKE',
@@ -128,6 +138,14 @@ describe('encode → stringify → decode round-trip', () => {
     assert.deepEqual(decoded.bundle.toolIds, ['websearch', 'webfetch'])
     assert.deepEqual(decoded.bundle.skillNames, ['chart-creator'])
     assert.equal(decoded.bundle.color, 'info')
+    assert.equal(decoded.bundle.mode, 'primary')
+    assert.deepEqual(decoded.bundle.permissionOverrides, [
+      {
+        key: 'task',
+        action: 'ask',
+        rules: [{ pattern: 'build', action: 'allow' }],
+      },
+    ])
     assert.equal(decoded.bundle.temperature, 0.5)
     assert.equal(decoded.bundle.avatar, 'data:image/png;base64,FAKE')
   })
@@ -146,6 +164,21 @@ describe('bundleToAgentConfig', () => {
     const config = bundleToAgentConfig(bundle, { scope: 'project', directory: '/some/project' })
     assert.equal(config.scope, 'project')
     assert.equal(config.directory, '/some/project')
+  })
+
+  it('preserves imported mode and permission overrides', () => {
+    const bundle = encodeAgentBundle(makeSummary({
+      mode: 'primary',
+      permissionOverrides: [
+        { key: 'mcp', action: 'deny', rules: [{ pattern: 'mcp__github__*', action: 'ask' }] },
+      ],
+    }))
+    const config = bundleToAgentConfig(bundle, { scope: 'machine' })
+
+    assert.equal(config.mode, 'primary')
+    assert.deepEqual(config.permissionOverrides, [
+      { key: 'mcp', action: 'deny', rules: [{ pattern: 'mcp__github__*', action: 'ask' }] },
+    ])
   })
 })
 
