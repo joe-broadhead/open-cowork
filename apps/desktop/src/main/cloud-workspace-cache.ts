@@ -2,6 +2,7 @@ import electron from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import type {
+  CloudProjectSourceSummary,
   SessionArtifact,
   SessionInfo,
   SessionView,
@@ -91,6 +92,17 @@ function normalizeWorkspaceId(value: unknown) {
     : null
 }
 
+function readCacheString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readCacheRepositoryUrl(value: unknown) {
+  const raw = readCacheString(value)
+  if (!raw) return null
+  const stripped = raw.split(/[?#]/, 1)[0]?.trim() || raw
+  return stripped.replace(/^([a-z][a-z0-9+.-]*:\/\/)([^/@]+@)/i, '$1')
+}
+
 function normalizeSessionInfo(value: unknown): SessionInfo | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const record = value as Partial<SessionInfo>
@@ -111,7 +123,33 @@ function normalizeSessionInfo(value: unknown): SessionInfo | null {
     composerAgentName: record.composerAgentName ?? null,
     composerModelId: record.composerModelId ?? null,
     composerReasoningVariant: record.composerReasoningVariant ?? null,
+    projectSource: normalizeProjectSourceSummary(record.projectSource),
   }
+}
+
+function normalizeProjectSourceSummary(value: unknown): CloudProjectSourceSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Partial<CloudProjectSourceSummary>
+  if (record.kind === 'git') {
+    const repositoryUrl = readCacheRepositoryUrl(record.repositoryUrl)
+    if (!repositoryUrl) return null
+    return {
+      kind: 'git',
+      repositoryUrl,
+      ref: readCacheString(record.ref),
+      subdirectory: readCacheString(record.subdirectory),
+    }
+  }
+  if (record.kind === 'snapshot') {
+    const snapshotId = readCacheString(record.snapshotId)
+    if (!snapshotId) return null
+    return {
+      kind: 'snapshot',
+      snapshotId,
+      title: readCacheString(record.title),
+    }
+  }
+  return null
 }
 
 function normalizeEventCursors(value: unknown): Record<string, number> {

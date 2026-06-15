@@ -58,10 +58,11 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
     <aside class="nav">
       <div class="brand">
         ${brandLogoMarkup(branding)}
-        <div>
+        <div class="brand-copy">
           <div class="brand-title">${escapeHtml(branding.productName)}</div>
           <div class="meta" id="profile-name">${escapeHtml(policy.profileName)}</div>
         </div>
+        <button class="sidebar-rail-toggle" type="button" data-sidebar-rail-toggle="true" aria-pressed="false" aria-label="Collapse sidebar" title="Collapse sidebar"><span aria-hidden="true">|||</span></button>
       </div>
       <div class="workspace-card">
         <div class="workspace-card-row">
@@ -74,23 +75,21 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
         <button class="primary" type="button" data-new-thread-shortcut="true" data-chat-control="true">New chat</button>
         <button type="button" data-thread-search-focus="true">Search</button>
       </div>
+      <nav class="nav-sections nav-sections-primary" aria-label="Cloud Web sections">${routeGroupsMarkup(['studio'])}</nav>
       <label class="sidebar-search signed-in-only">
         <span>Search chats</span>
         <input id="sidebar-thread-query" autocomplete="off" placeholder="Search chats...">
       </label>
       <div class="sidebar-thread-pane signed-in-only" aria-label="Recent chats" data-workbench-pane="threads">
-        <div class="sidebar-pane-header">
-          <span>Chats</span>
-          <small><span id="sidebar-thread-count">0</span></small>
-        </div>
+        <div class="sidebar-pane-header"><span>Chats by project</span><small><span id="sidebar-thread-count">0</span></small></div>
         <div class="sidebar-thread-list" id="sidebar-thread-list"></div>
       </div>
-      <nav class="nav-sections" aria-label="Cloud Web sections">
-        ${routeGroupsMarkup()}
-      </nav>
-      <div class="role-card">
-        <div class="meta">Role</div>
-        <strong id="role-name">${adminDefault ? 'admin' : 'member'}</strong>
+      <nav class="nav-sections nav-sections-manage" aria-label="Cloud Web management sections">${routeGroupsMarkup(['manage'])}</nav>
+      <nav class="nav-sections nav-sections-admin" aria-label="Cloud Web admin sections">${routeGroupsMarkup(['admin'])}</nav>
+      <div class="sidebar-presence-footer">
+        <span class="sidebar-presence-avatar" aria-hidden="true">OC</span>
+        <div class="sidebar-presence-copy"><strong id="role-name">${adminDefault ? 'admin' : 'member'}</strong><span id="presence-meta">Cloud Web · ${escapeHtml(policy.profileName)}</span></div>
+        <a href="#settings" class="sidebar-presence-settings signed-in-only" data-presence-settings-link="true" aria-label="Open settings" title="Open settings"><span aria-hidden="true">S</span></a>
       </div>
       <div class="sidebar-utility signed-in-only" aria-label="Workspace actions">
         <button type="button" class="ghost" data-refresh-dashboard="true">Refresh</button>

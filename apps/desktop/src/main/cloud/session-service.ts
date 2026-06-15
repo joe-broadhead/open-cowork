@@ -31,6 +31,7 @@ import {
   type SessionImportItemCounts,
   type SessionImportRequest,
   normalizeCloudProjectSource,
+  summarizeCloudProjectSource,
   normalizeWorkflowSteps,
 } from '@open-cowork/shared'
 import {
@@ -1349,9 +1350,18 @@ export class CloudSessionService {
     await this.ensurePrincipal(principal)
     const session = await this.store.getSession(principal.tenantId, principal.userId, sessionId)
     if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
+    const projection = await this.store.getSessionProjection(principal.tenantId, sessionId)
     return {
-      session,
-      projection: await this.store.getSessionProjection(principal.tenantId, sessionId),
+      session: this.withProjectionProjectSource(session, projection),
+      projection,
+    }
+  }
+
+  private withProjectionProjectSource(session: SessionRecord, projection: SessionProjectionRecord | null): SessionRecord {
+    const source = normalizeCloudProjectSource(projection?.view?.projectSource)
+    return {
+      ...session,
+      projectSource: summarizeCloudProjectSource(source),
     }
   }
 
@@ -3890,9 +3900,10 @@ export class CloudSessionService {
   private async getTenantSessionView(tenantId: string, sessionId: string): Promise<CloudSessionView> {
     const session = await this.store.getSessionForTenant(tenantId, sessionId)
     if (!session) throw new CloudServiceError(404, 'Cloud session was not found.')
+    const projection = await this.store.getSessionProjection(tenantId, sessionId)
     return {
-      session,
-      projection: await this.store.getSessionProjection(tenantId, sessionId),
+      session: this.withProjectionProjectSource(session, projection),
+      projection,
     }
   }
 

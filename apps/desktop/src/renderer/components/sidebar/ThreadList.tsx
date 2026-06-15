@@ -9,7 +9,8 @@ import { t } from '../../helpers/i18n'
 import { writeTextToClipboard } from '../../helpers/clipboard'
 import { ViewErrorBoundary } from '../layout/ViewErrorBoundary'
 import { ModalBackdrop } from '../layout/ModalBackdrop'
-import type { SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
+import type { CloudProjectSourceSummary, SessionImportInventory, SessionImportSelection, WorkspaceInfo } from '@open-cowork/shared'
+import type { Session } from '../../stores/session'
 
 // Kick in virtualization only above this count. Below it, plain
 // rendering is a wash (~8ms mount for 50 rows) and avoids the
@@ -20,6 +21,112 @@ const VIRTUALIZE_THRESHOLD = 50
 // real — the virtualizer corrects on measurement. Rows shrink when
 // a thread has no directory / change summary below the title.
 const ESTIMATED_ROW_HEIGHT = 48
+const ESTIMATED_GROUP_HEADER_HEIGHT = 32
+
+type ThreadGroup = {
+  id: string
+  label: string
+  description: string
+  kind: 'sandbox' | 'project'
+  sessions: Session[]
+}
+
+type ThreadListItem =
+  | { type: 'group'; group: ThreadGroup }
+  | { type: 'session'; session: Session; rowIndex: number }
+
+function pathSegments(directory: string) {
+  return directory.split('/').map((segment) => segment.trim()).filter(Boolean)
+}
+
+function compactPathLabel(directory: string) {
+  const segments = pathSegments(directory)
+  return segments.slice(-2).join('/') || directory
+}
+
+function projectSourceGroupForSession(session: Session, source: CloudProjectSourceSummary): Omit<ThreadGroup, 'sessions'> {
+  if (source.kind === 'git') {
+    const repo = source.repositoryUrl || t('sidebar.gitRepository', 'Git repository')
+    const label = repo.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') || repo
+    return {
+      id: `project:git:${source.repositoryUrl || session.id}:${source.ref || ''}:${source.subdirectory || ''}`,
+      label,
+      description: [source.repositoryUrl, source.subdirectory].filter(Boolean).join(' · ') || t('sidebar.gitRepository', 'Git repository'),
+      kind: 'project',
+    }
+  }
+  return {
+    id: `project:snapshot:${source.snapshotId || session.id}`,
+    label: source.title || t('sidebar.uploadedSnapshot', 'Uploaded snapshot'),
+    description: source.snapshotId ? t('sidebar.snapshotDescription', 'Uploaded project snapshot') : t('sidebar.cloudProject', 'Cloud project'),
+    kind: 'project',
+  }
+}
+
+function threadGroupForSession(session: Session, activeWorkspaceIsLocal: boolean): Omit<ThreadGroup, 'sessions'> {
+  if (session.projectSource) return projectSourceGroupForSession(session, session.projectSource)
+
+  const directory = session.directory?.trim()
+  if (!directory) {
+    if (!activeWorkspaceIsLocal) {
+      return {
+        id: 'chat-only',
+        label: t('sidebar.chatOnly', 'Chat-only'),
+        description: t('sidebar.chatOnlyDescription', 'No project source'),
+        kind: 'sandbox',
+      }
+    }
+    return {
+      id: 'sandbox',
+      label: t('sidebar.sandbox', 'Sandbox'),
+      description: t('sidebar.sandboxDescription', 'Chat-only work'),
+      kind: 'sandbox',
+    }
+  }
+
+  const segments = pathSegments(directory)
+  const lastSegment = segments[segments.length - 1] || directory
+  const sandboxPath = segments.some((segment) => segment === 'Open Cowork Sandbox') || /^thread-\d{4}-\d{2}-\d{2}-/.test(lastSegment)
+  if (sandboxPath) {
+    return {
+      id: 'sandbox',
+      label: t('sidebar.sandbox', 'Sandbox'),
+      description: compactPathLabel(directory),
+      kind: 'sandbox',
+    }
+  }
+
+  return {
+    id: `project:${directory}`,
+    label: lastSegment,
+    description: compactPathLabel(directory),
+    kind: 'project',
+  }
+}
+
+function groupedThreadItems(sessions: Session[], activeWorkspaceIsLocal: boolean): ThreadListItem[] {
+  const groups = new Map<string, ThreadGroup>()
+  for (const session of sessions) {
+    const groupInfo = threadGroupForSession(session, activeWorkspaceIsLocal)
+    const existing = groups.get(groupInfo.id)
+    if (existing) {
+      existing.sessions.push(session)
+    } else {
+      groups.set(groupInfo.id, { ...groupInfo, sessions: [session] })
+    }
+  }
+
+  const items: ThreadListItem[] = []
+  let rowIndex = 0
+  for (const group of groups.values()) {
+    items.push({ type: 'group', group })
+    for (const session of group.sessions) {
+      items.push({ type: 'session', session, rowIndex })
+      rowIndex += 1
+    }
+  }
+  return items
+}
 
 export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; searchQuery?: string }) {
   const sessions = useSessionStore((s) => s.sessions)
@@ -64,12 +171,13 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
       ? interactiveSessions.filter(s => (s.title || s.id).toLowerCase().includes(searchQuery.toLowerCase()))
       : interactiveSessions
   ), [interactiveSessions, searchQuery])
+  const groupedItems = useMemo(() => groupedThreadItems(filtered, activeWorkspaceIsLocal), [activeWorkspaceIsLocal, filtered])
 
   const virtualize = filtered.length > VIRTUALIZE_THRESHOLD
   const virtualizer = useVirtualizer({
-    count: virtualize ? filtered.length : 0,
+    count: virtualize ? groupedItems.length : 0,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    estimateSize: (index) => groupedItems[index]?.type === 'group' ? ESTIMATED_GROUP_HEADER_HEIGHT : ESTIMATED_ROW_HEIGHT,
     overscan: 8,
   })
 
@@ -77,7 +185,7 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     if (!virtualize) return
     const frame = window.requestAnimationFrame(() => virtualizer.measure())
     return () => window.cancelAnimationFrame(frame)
-  }, [filtered.length, virtualize, virtualizer])
+  }, [groupedItems.length, virtualize, virtualizer])
 
   // When the active thread changes, keep it visible. Plays nice with
   // both virtualized and non-virtualized modes — in non-virtualized
@@ -85,12 +193,12 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
   // virtualized mode we ask the virtualizer to scroll by index.
   useEffect(() => {
     if (!currentSessionId) return
-    const index = filtered.findIndex((session) => session.id === currentSessionId)
+    const index = groupedItems.findIndex((item) => item.type === 'session' && item.session.id === currentSessionId)
     if (index < 0) return
     if (virtualize) {
       virtualizer.scrollToIndex(index, { align: 'auto' })
     }
-  }, [currentSessionId, filtered, virtualize, virtualizer])
+  }, [currentSessionId, groupedItems, virtualize, virtualizer])
 
   // Close menu on click outside
   useEffect(() => {
@@ -398,6 +506,27 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
     )
   }
 
+  const renderGroup = (group: ThreadGroup) => (
+    <div key={`group:${group.id}`} className="thread-group-header px-2 pb-1 pt-2">
+      <div className="flex min-w-0 items-center justify-between gap-2 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span aria-hidden="true" className="text-[11px] leading-none">{group.kind === 'sandbox' ? 'S' : 'P'}</span>
+          <span className="truncate">{group.label}</span>
+        </span>
+        <span className="shrink-0 rounded border border-border-subtle px-1 py-px text-[9px] normal-case tracking-normal text-text-muted">
+          {group.sessions.length}
+        </span>
+      </div>
+      <div className="truncate px-1.5 text-[9px] text-text-muted">{group.description}</div>
+    </div>
+  )
+
+  const renderItem = (item: ThreadListItem) => (
+    item.type === 'group'
+      ? renderGroup(item.group)
+      : renderRow(item.session, item.rowIndex)
+  )
+
   return (
     <div ref={scrollRef} className="min-h-[96px] flex-1 overflow-y-auto">
       {virtualize ? (
@@ -405,11 +534,11 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
           style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
         >
           {virtualizer.getVirtualItems().map((vRow) => {
-            const session = filtered[vRow.index]
-            if (!session) return null
+            const item = groupedItems[vRow.index]
+            if (!item) return null
             return (
               <div
-                key={session.id}
+                key={item.type === 'group' ? `group:${item.group.id}` : item.session.id}
                 data-index={vRow.index}
                 ref={virtualizer.measureElement}
                 style={{
@@ -420,14 +549,14 @@ export function ThreadList({ onSelect, searchQuery }: { onSelect?: () => void; s
                   transform: `translateY(${vRow.start}px)`,
                 }}
               >
-                {renderRow(session)}
+                {renderItem(item)}
               </div>
             )
           })}
         </div>
       ) : (
         <div className="flex flex-col gap-px">
-          {filtered.map((session, index) => renderRow(session, index))}
+          {groupedItems.map(renderItem)}
         </div>
       )}
 

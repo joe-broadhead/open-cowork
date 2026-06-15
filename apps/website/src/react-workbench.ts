@@ -7,10 +7,12 @@ import {
 import {
   CLOUD_WEB_THREAD_PAGE_SIZE,
   cloudWebThreadProjectLabel,
+  cloudWebThreadProjectSource,
   cloudWebThreadProjection,
   cloudWebThreadStatus,
   filterCloudWebThreads,
   type CloudWebThreadFilters,
+  type CloudWebThreadProjection,
   type CloudWebThreadSession,
   type CloudWebThreadView,
 } from './thread-workbench.ts'
@@ -242,7 +244,7 @@ function threadRows({ sessions, views, filters, selectedSessionId, limit = CLOUD
           'aria-pressed': selectedSessionId === session.sessionId ? 'true' : 'false',
           onClick: () => onSelect?.(session.sessionId),
         }, session.title || session.sessionId),
-        h('small', null, `${session.profileName || projection?.profileName || 'default'} - ${cloudWebThreadProjectLabel(projection)}`)),
+        h('small', null, `${session.profileName || projection?.profileName || 'default'} - ${cloudWebThreadProjectLabel(session, projection)}`)),
       h('span', { role: 'cell' }, h('span', { className: 'pill', 'data-kind': statusPillKind(status) }, status)))
     })
     : [h('div', { className: 'table-row empty-row', role: 'row', key: 'empty' },
@@ -260,11 +262,37 @@ export function CloudThreadList(props: CloudThreadListProps) {
     rows)
 }
 
+function cloudSidebarThreadGroupKey(session: CloudWebThreadSession, projection: CloudWebThreadProjection | null) {
+  const source = cloudWebThreadProjectSource(session, projection)
+  if (!source) return 'chat-only'
+  const kind = source.kind || 'project'
+  const identity = [
+    source.repositoryUrl || (source as Record<string, unknown>).snapshotId || source.title,
+    source.ref,
+    source.subdirectory,
+  ].filter(Boolean).join(':')
+  return identity ? `${kind}:${String(identity)}` : `${kind}:${session.sessionId}`
+}
+
 export function CloudSidebarThreadList({ sessions, views, filters, selectedSessionId, onSelect, limit = 50 }: CloudThreadListProps) {
   const rows = filterCloudWebThreads(sessions, views, filters, limit)
+  const groups = new Map<string, { label: string, entries: Array<{ session: CloudWebThreadSession; index: number }> }>()
+  rows.forEach((session, index) => {
+    const projection = cloudWebThreadProjection(views[session.sessionId])
+    const projectLabel = cloudWebThreadProjectLabel(session, projection)
+    const key = cloudSidebarThreadGroupKey(session, projection)
+    const group = groups.get(key)
+    if (group) group.entries.push({ session, index })
+    else groups.set(key, { label: projectLabel || 'chat-only', entries: [{ session, index }] })
+  })
+
   return h('div', { className: 'react-sidebar-thread-list' },
-    rows.length
-      ? rows.map((session, index) => {
+    groups.size
+      ? Array.from(groups.entries()).map(([groupKey, group]) => h('section', { className: 'sidebar-thread-project', key: groupKey },
+        h('div', { className: 'sidebar-thread-project__head' },
+          h('span', null, group.label),
+          h('small', null, `${group.entries.length}`)),
+        group.entries.map(({ session, index }) => {
         const projection = cloudWebThreadProjection(views[session.sessionId])
         const status = cloudWebThreadStatus(session, projection)
         return h('button', {
@@ -280,7 +308,7 @@ export function CloudSidebarThreadList({ sessions, views, filters, selectedSessi
           h('strong', null, session.title || session.sessionId),
           h('small', null, `${status} - ${session.profileName || projection?.profileName || 'default'}`)),
         h('span', { className: 'pill', 'data-kind': statusPillKind(status) }, status))
-      })
+      })))
       : h('p', { className: 'empty' }, 'No chats loaded.'))
 }
 

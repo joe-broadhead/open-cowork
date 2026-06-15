@@ -249,10 +249,11 @@ test('search shortcut reveals the sidebar search when the sidebar is collapsed',
   try {
     await waitForAppShell(page, 30_000)
 
-    await page.locator('.drag button').first().click()
-    await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:toggle-sidebar')))
+    await page.locator('aside[data-sidebar-collapsed="true"]').waitFor({ timeout: 10_000 })
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:toggle-search')))
+    await page.locator('aside[data-sidebar-collapsed="false"]').waitFor({ timeout: 10_000 })
     await page.getByPlaceholder(/Search projects and chats/i).waitFor({ timeout: 10_000 })
   } finally {
     await cleanup()
@@ -265,10 +266,11 @@ test('settings shortcut reveals the sidebar settings when the sidebar is collaps
   try {
     await waitForAppShell(page, 30_000)
 
-    await page.locator('.drag button').first().click()
-    await page.getByRole('button', { name: 'Home', exact: true }).first().waitFor({ state: 'hidden', timeout: 10_000 })
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:toggle-sidebar')))
+    await page.locator('aside[data-sidebar-collapsed="true"]').waitFor({ timeout: 10_000 })
 
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-cowork:open-settings')))
+    await page.locator('aside[data-sidebar-collapsed="false"]').waitFor({ timeout: 10_000 })
     await page.getByRole('dialog', { name: 'Settings' }).waitFor({ timeout: 10_000 })
     await page.getByRole('button', { name: 'Close dialog' }).waitFor({ timeout: 10_000 })
   } finally {

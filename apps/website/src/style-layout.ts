@@ -29,7 +29,7 @@ export function cloudWebsiteLayoutStyles() {
     }
     .brand {
       display: grid;
-      grid-template-columns: var(--control-h-lg) minmax(0, 1fr);
+      grid-template-columns: var(--control-h-lg) minmax(0, 1fr) var(--control-h-sm);
       align-items: center;
       gap: var(--space-3);
       min-width: 0;
@@ -208,10 +208,11 @@ export function cloudWebsiteLayoutStyles() {
       gap: var(--space-2);
     }
     .admin-nav {
-      margin-top: auto;
+      margin-top: 0;
       border-top: var(--border-width-1) solid var(--color-border-subtle);
       padding-top: var(--space-3);
     }
+    .manage-nav summary,
     .admin-nav summary {
       min-height: var(--control-h-md);
       border: var(--border-width-1) solid var(--color-border);
@@ -232,17 +233,29 @@ export function cloudWebsiteLayoutStyles() {
         border-color var(--dur-1) var(--ease-out),
         color var(--dur-1) var(--ease-out);
     }
+    .manage-nav summary small {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: var(--text-2xs);
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .manage-nav summary::-webkit-details-marker,
     .admin-nav summary::-webkit-details-marker {
       display: none;
     }
+    .manage-nav summary:hover,
     .admin-nav summary:hover {
       background: var(--color-surface-hover);
       color: var(--text);
     }
+    .manage-nav summary:focus-visible,
     .admin-nav summary:focus-visible {
       outline: 0;
       box-shadow: var(--ring-focus);
     }
+    .manage-nav summary::after,
     .admin-nav summary::after {
       content: '+';
       color: var(--muted);
@@ -250,18 +263,22 @@ export function cloudWebsiteLayoutStyles() {
       font-size: var(--text-sm);
       line-height: var(--lh-sm);
     }
+    .manage-nav[open] summary,
     .admin-nav[open] summary {
       background: var(--color-surface-active);
       border-color: var(--color-border-strong);
       color: var(--text);
     }
+    .manage-nav[open] summary::after,
     .admin-nav[open] summary::after {
       content: '-';
       color: var(--accent-text);
     }
+    .manage-nav .nav-links,
     .admin-nav .nav-links {
       margin-top: var(--space-2);
     }
+    .manage-nav:not([open]) .nav-links,
     .admin-nav:not([open]) .nav-links {
       display: none;
     }
@@ -286,6 +303,7 @@ export function cloudWebsiteLayoutStyles() {
       color: var(--color-text-secondary);
       display: flex;
       align-items: center;
+      gap: var(--space-2);
       font-size: var(--text-sm);
       font-weight: 650;
       line-height: var(--lh-sm);

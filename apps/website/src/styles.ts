@@ -9,6 +9,7 @@ import { cloudWebsiteLibraryStyles } from './style-library.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
 import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
+import { cloudWebsiteSidebarStyles } from './style-sidebar.ts'
 import { cloudWebsiteSettingsStyles } from './style-settings.ts'
 import { cloudWebsiteStudioUiStyles } from './style-studio-ui.ts'
 import { cloudWebsiteStudioPrimitiveStyles } from './style-studio-primitives.ts'
@@ -62,6 +63,7 @@ function cloudWebsiteBaseStyles(branding: PublicBrandingConfig) {
       color-scheme: ${cloudWebsiteColorScheme(branding)};
 ${publicBrandingCss(branding)}
       --cloud-shell-sidebar-w: 248px;
+      --cloud-shell-sidebar-rail-w: 64px;
       --shadow: var(--shadow-card);
       --surface-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 5%, transparent);
       --field-bg: color-mix(in srgb, var(--color-base) 72%, var(--color-elevated) 28%);
@@ -210,6 +212,7 @@ export function cloudWebsiteStyles(branding: PublicBrandingConfig) {
   return String.raw`${cloudWebsiteFontFaces()}
 ${cloudWebsiteBaseStyles(branding)}
 ${cloudWebsiteLayoutStyles()}
+${cloudWebsiteSidebarStyles()}
 ${cloudWebsiteComponentStyles()}
 ${cloudWebsitePrimitiveStyles()}
 ${cloudWebsiteAgentProfileStyles()}

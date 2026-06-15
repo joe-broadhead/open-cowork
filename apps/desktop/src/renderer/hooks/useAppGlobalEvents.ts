@@ -157,15 +157,18 @@ export function useAppGlobalEvents({
   }, [view, currentSessionId, toggleSidebar, runtimeReady, createAndActivateSession, openSidebarSearch, setView])
 
   useEffect(() => {
+    const handleToggleSidebar = () => toggleSidebar()
     const handleOpenSearch = () => openSidebarSearch()
     const handleOpenSettings = () => openSidebarSettings()
+    window.addEventListener('open-cowork:toggle-sidebar', handleToggleSidebar)
     window.addEventListener('open-cowork:toggle-search', handleOpenSearch)
     window.addEventListener('open-cowork:open-settings', handleOpenSettings)
     return () => {
+      window.removeEventListener('open-cowork:toggle-sidebar', handleToggleSidebar)
       window.removeEventListener('open-cowork:toggle-search', handleOpenSearch)
       window.removeEventListener('open-cowork:open-settings', handleOpenSettings)
     }
-  }, [openSidebarSearch, openSidebarSettings])
+  }, [openSidebarSearch, openSidebarSettings, toggleSidebar])
 
   useEffect(() => {
     // Both signals land us in the same UI state (signed-out banner, any

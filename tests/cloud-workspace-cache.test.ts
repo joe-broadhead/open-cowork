@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { FileCloudWorkspaceCache } from '../apps/desktop/src/main/cloud-workspace-cache.ts'
-import type { SessionView } from '@open-cowork/shared'
+import type { SessionInfo, SessionView } from '@open-cowork/shared'
 
 function cachePath() {
   return join(mkdtempSync(join(tmpdir(), 'open-cowork-cloud-cache-')), 'cloud-workspace-cache.json')
@@ -98,6 +98,42 @@ test('cloud workspace metadata-only cache strips session views', () => {
   assert.equal(cache.getSessionView('cloud:test', 'session-1'), null)
   const stored = readFileSync(path, 'utf-8')
   assert.equal(stored.includes('should not persist'), false)
+})
+
+test('cloud workspace cache preserves safe project source summaries only', () => {
+  const path = cachePath()
+  const cache = new FileCloudWorkspaceCache({
+    path,
+    mode: 'metadata-only',
+    secretStorage: encryptedStorage(),
+  })
+  const session = {
+    id: 'session-1',
+    title: 'Cloud thread',
+    directory: null,
+    createdAt: '2026-05-27T10:00:00.000Z',
+    updatedAt: '2026-05-27T10:00:00.000Z',
+    projectSource: {
+      kind: 'git',
+      repositoryUrl: ' https://github.com/acme/project.git?token=query-secret#fragment-secret ',
+      ref: ' main ',
+      subdirectory: ' apps/web ',
+      credentialRef: 'credential-secret',
+    },
+  } as unknown as SessionInfo
+
+  cache.upsertSessionList('cloud:test', [session])
+
+  assert.deepEqual(cache.listSessions('cloud:test')?.[0]?.projectSource, {
+    kind: 'git',
+    repositoryUrl: 'https://github.com/acme/project.git',
+    ref: 'main',
+    subdirectory: 'apps/web',
+  })
+  const stored = readFileSync(path, 'utf-8')
+  assert.equal(stored.includes('credential-secret'), false)
+  assert.equal(stored.includes('query-secret'), false)
+  assert.equal(stored.includes('fragment-secret'), false)
 })
 
 test('cloud workspace cache persists portable product metadata without message bodies', () => {

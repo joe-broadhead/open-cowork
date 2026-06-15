@@ -71,6 +71,91 @@ beforeEach(() => {
 })
 
 describe('ThreadList', () => {
+  it('groups chats by project and keeps sandbox chats separate', () => {
+    const groupedSessions: SessionInfo[] = [
+      {
+        id: 'client-main',
+        title: 'Client launch',
+        directory: '/Users/joe/Work/client-app',
+        createdAt: '2026-05-08T00:00:00.000Z',
+        updatedAt: '2026-05-08T00:00:00.000Z',
+      },
+      {
+        id: 'client-follow-up',
+        title: 'Client follow-up',
+        directory: '/Users/joe/Work/client-app',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      },
+      {
+        id: 'api-chat',
+        title: 'API review',
+        directory: '/Users/joe/Work/server-api',
+        createdAt: '2026-05-10T00:00:00.000Z',
+        updatedAt: '2026-05-10T00:00:00.000Z',
+      },
+      {
+        id: 'sandbox-chat',
+        title: 'Loose chat',
+        directory: '/Users/joe/Open Cowork Sandbox/thread-2026-06-14-abc123',
+        createdAt: '2026-05-11T00:00:00.000Z',
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      },
+    ]
+    useSessionStore.setState({
+      sessions: groupedSessions,
+      sessionsByWorkspace: { local: groupedSessions },
+      currentSessionId: 'client-main',
+    })
+
+    const { container } = render(<ThreadList />)
+
+    const groupHeaders = Array.from(container.querySelectorAll('.thread-group-header'))
+      .map((header) => header.textContent || '')
+
+    expect(groupHeaders).toHaveLength(3)
+    expect(groupHeaders.some((text) => text.includes('client-app') && text.includes('2'))).toBe(true)
+    expect(groupHeaders.some((text) => text.includes('server-api') && text.includes('1'))).toBe(true)
+    expect(groupHeaders.some((text) => text.includes('Sandbox') && text.includes('1'))).toBe(true)
+    expect(screen.getByRole('button', { name: /Client launch/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Loose chat/ })).toBeInTheDocument()
+  })
+
+  it('groups remote cloud chats by project source instead of sandbox', () => {
+    const cloudSessions: SessionInfo[] = [
+      {
+        id: 'cloud-api-main',
+        title: 'API cloud chat',
+        directory: null,
+        createdAt: '2026-05-08T00:00:00.000Z',
+        updatedAt: '2026-05-08T00:00:00.000Z',
+        projectSource: { kind: 'git', repositoryUrl: 'https://github.com/acme/api.git' },
+      },
+      {
+        id: 'cloud-chat-only',
+        title: 'Cloud chat only',
+        directory: null,
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      },
+    ]
+    useSessionStore.setState({
+      activeWorkspaceId: 'cloud-workspace',
+      sessions: cloudSessions,
+      sessionsByWorkspace: { 'cloud-workspace': cloudSessions },
+      currentSessionId: 'cloud-api-main',
+    })
+
+    const { container } = render(<ThreadList />)
+
+    const groupHeaders = Array.from(container.querySelectorAll('.thread-group-header'))
+      .map((header) => header.textContent || '')
+
+    expect(groupHeaders.some((text) => text.includes('api') && text.includes('1'))).toBe(true)
+    expect(groupHeaders.some((text) => text.includes('Chat-only') && text.includes('1'))).toBe(true)
+    expect(groupHeaders.some((text) => text.includes('Sandbox'))).toBe(false)
+  })
+
   it('opens an accessible thread action menu from the keyboard context-menu command', async () => {
     render(<ThreadList />)
 

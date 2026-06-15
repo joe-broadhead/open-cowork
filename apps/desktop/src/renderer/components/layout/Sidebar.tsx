@@ -13,7 +13,7 @@ import { t } from '../../helpers/i18n'
 import type { AppNavigationTarget, AppView } from '../../app-types'
 import { useSessionStore } from '../../stores/session'
 import { supportAllows, supportEntry, useWorkspaceSupportStore } from '../../stores/workspace-support'
-import { Icon } from '../ui'
+import { Icon, type IconName } from '../ui'
 import { buildDesktopApprovalQueueItems } from '../studio/approval-queue-model'
 
 interface Props {
@@ -22,11 +22,34 @@ interface Props {
   searchRequestNonce?: number
   settingsRequestNonce?: number
   branding?: BrandingSidebarConfig
+  collapsed?: boolean
+  onExpandSidebar?: () => void
 }
 
 const SettingsPanel = lazy(() =>
   import('../sidebar/SettingsPanel').then((module) => ({ default: module.SettingsPanel })),
 )
+
+type SidebarNavItem = {
+  view: AppNavigationTarget
+  icon: IconName
+  labelKey: string
+  fallback: string
+}
+
+const PRIMARY_NAV_ITEMS: SidebarNavItem[] = [
+  { view: 'home', icon: 'home', labelKey: 'sidebar.home', fallback: 'Home' },
+  { view: 'projects', icon: 'folder', labelKey: 'sidebar.projects', fallback: 'Projects' },
+  { view: 'approvals', icon: 'circle-help', labelKey: 'sidebar.approvals', fallback: 'Approvals' },
+]
+
+const MANAGE_NAV_ITEMS: SidebarNavItem[] = [
+  { view: 'team', icon: 'users', labelKey: 'sidebar.team', fallback: 'Team' },
+  { view: 'playbooks', icon: 'workflow', labelKey: 'sidebar.playbooks', fallback: 'Playbooks' },
+  { view: 'channels', icon: 'activity', labelKey: 'sidebar.channels', fallback: 'Channels' },
+  { view: 'tools', icon: 'blocks', labelKey: 'sidebar.toolsSkills', fallback: 'Tools & Skills' },
+  { view: 'artifacts', icon: 'file', labelKey: 'sidebar.artifacts', fallback: 'Artifacts' },
+]
 
 function safeLogoDataUrl(value: string | undefined) {
   const trimmed = value?.trim()
@@ -539,16 +562,100 @@ function WorkspaceSwitcher() {
   )
 }
 
+function SidebarNavButton({
+  item,
+  currentView,
+  collapsed,
+  onViewChange,
+  badge,
+}: {
+  item: SidebarNavItem
+  currentView: AppView
+  collapsed: boolean
+  onViewChange: (view: AppNavigationTarget) => void
+  badge?: number
+}) {
+  const label = t(item.labelKey, item.fallback)
+  const active = currentView === item.view
+
+  return (
+    <button
+      type="button"
+      onClick={() => onViewChange(item.view)}
+      aria-label={collapsed ? label : undefined}
+      aria-current={active ? 'page' : undefined}
+      title={collapsed ? label : undefined}
+      className={`sidebar-nav-item sidebar-nav-primary ${collapsed ? 'justify-center px-0' : ''} ${active ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}
+    >
+      <Icon name={item.icon} size={16} />
+      {!collapsed ? <span className="truncate">{label}</span> : null}
+      {!collapsed && badge && badge > 0 ? (
+        <span className="nav-alert-count" aria-label={`${badge} pending approvals and questions`}>
+          {badge}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+function SidebarPresenceFooter({
+  collapsed,
+  onSettings,
+  showSettings,
+}: {
+  collapsed: boolean
+  onSettings: () => void
+  showSettings: boolean
+}) {
+  const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
+  const workspaceLabel = activeWorkspaceId === LOCAL_WORKSPACE_FALLBACK.id
+    ? t('workspace.localShort', 'Local')
+    : t('workspace.cloudShort', 'Cloud')
+
+  return (
+    <div className={`shrink-0 border-t border-border-subtle ${collapsed ? 'px-2 py-2' : 'px-3 py-2.5'}`}>
+      <div className={`flex ${collapsed ? 'flex-col items-center justify-center gap-1.5' : 'items-center gap-2.5'}`}>
+        <span
+          aria-hidden="true"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border-subtle bg-surface-active font-display text-[11px] font-bold text-text"
+        >
+          OC
+        </span>
+        {!collapsed ? (
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12px] font-medium text-text">{t('sidebar.presenceName', 'You')}</div>
+            <div className="truncate text-[10px] text-text-muted">{workspaceLabel} · {t('workspace.status.online', 'Online')}</div>
+          </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={onSettings}
+          aria-label={t('sidebar.settings', 'Settings')}
+          aria-expanded={showSettings}
+          title={t('sidebar.settings', 'Settings')}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
+        >
+          <Icon name="settings-2" size={16} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Sidebar({
   currentView,
   onViewChange,
   searchRequestNonce = 0,
   settingsRequestNonce = 0,
   branding,
+  collapsed = false,
+  onExpandSidebar,
 }: Props) {
   const [showSettings, setShowSettings] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [manageOpen, setManageOpen] = useState(true)
+  const lastHandledSearchRequestNonce = useRef(0)
   const activeWorkspaceId = useSessionStore((state) => state.activeWorkspaceId)
   const sessionsByWorkspace = useSessionStore((state) => state.sessionsByWorkspace)
   const sessionStateById = useSessionStore((state) => state.sessionStateById)
@@ -561,13 +668,17 @@ export function Sidebar({
     currentSessionId,
     currentView: sessionView,
   }).length, [activeWorkspaceId, sessionsByWorkspace, sessionStateById, currentSessionId, sessionView])
+  const manageActive = MANAGE_NAV_ITEMS.some((item) => item.view === currentView)
 
   useEffect(() => {
     if (searchRequestNonce === 0) return
+    if (searchRequestNonce === lastHandledSearchRequestNonce.current) return
+    lastHandledSearchRequestNonce.current = searchRequestNonce
+    if (collapsed) onExpandSidebar?.()
     setShowSettings(false)
     setShowSearch(true)
     setSearchQuery('')
-  }, [searchRequestNonce])
+  }, [collapsed, onExpandSidebar, searchRequestNonce])
 
   useEffect(() => {
     if (settingsRequestNonce === 0) return
@@ -576,21 +687,38 @@ export function Sidebar({
     setShowSettings(true)
   }, [settingsRequestNonce])
 
+  useEffect(() => {
+    if (manageActive) setManageOpen(true)
+  }, [manageActive])
+
   return (
     <>
       <aside
-        className="flex min-h-0 w-[252px] shrink-0 flex-col overflow-hidden border-e border-border-subtle transition-[width] duration-200"
+        className={`flex min-h-0 shrink-0 flex-col border-e border-border-subtle transition-[width] duration-200 ${collapsed ? 'w-16 overflow-visible' : 'w-[252px] overflow-hidden'}`}
         style={{ background: 'color-mix(in srgb, var(--color-base) 92%, var(--color-elevated) 8%)' }}
+        aria-label={t('sidebar.navigation', 'Sidebar navigation')}
+        data-sidebar-collapsed={collapsed ? 'true' : 'false'}
         data-workbench-pane="threads"
       >
-          <SidebarBrandTop top={branding?.top} />
-          <WorkspaceSwitcher />
-          <div className="shrink-0 p-3 pb-1 flex gap-2">
-            <div className="flex-1">
-              <NewThreadButton onClick={() => onViewChange('chat')} />
+          {!collapsed ? <SidebarBrandTop top={branding?.top} /> : (
+            <div className="px-2 pt-3 pb-2">
+              <div className="grid h-10 w-10 place-items-center rounded-lg border border-border-subtle bg-elevated text-[12px] font-bold text-text">OC</div>
+            </div>
+          )}
+          {!collapsed ? <WorkspaceSwitcher /> : null}
+          <div className={`shrink-0 flex gap-2 ${collapsed ? 'flex-col px-3 pb-2' : 'p-3 pb-1'}`}>
+            <div className={collapsed ? '' : 'flex-1'}>
+              <NewThreadButton onClick={() => onViewChange('chat')} compact={collapsed} />
             </div>
             <button
-              onClick={() => setShowSearch(!showSearch)}
+              onClick={() => {
+                if (collapsed) {
+                  onExpandSidebar?.()
+                  setShowSearch(true)
+                  return
+                }
+                setShowSearch(!showSearch)
+              }}
               aria-label={t('sidebar.searchTitle', 'Search projects and chats (⌘K)')}
               aria-expanded={showSearch}
               className={`w-9 h-9 flex items-center justify-center rounded-lg border border-border-subtle transition-colors cursor-pointer ${showSearch ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
@@ -600,7 +728,7 @@ export function Sidebar({
             </button>
           </div>
 
-          {showSearch && (
+          {showSearch && !collapsed && (
             <div className="shrink-0 px-3 pb-1">
               <input
                 autoFocus
@@ -615,68 +743,59 @@ export function Sidebar({
             </div>
           )}
 
-          <div className="min-h-0 max-h-[40vh] overflow-y-auto px-2 pt-2 pb-1">
-            <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div>
-            <button onClick={() => onViewChange('home')}
-              aria-current={currentView === 'home' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'home' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="home" size={16} />
-              {t('sidebar.home', 'Home')}
-            </button>
-            <button onClick={() => onViewChange('projects')}
-              aria-current={currentView === 'projects' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'projects' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="folder" size={16} />
-              {t('sidebar.projects', 'Projects')}
-            </button>
-            <button onClick={() => onViewChange('approvals')}
-              aria-current={currentView === 'approvals' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'approvals' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="circle-help" size={16} />
-              {t('sidebar.approvals', 'Approvals')}
-              {approvalsQueueCount > 0 ? (
-                <span className="nav-alert-count" aria-label={`${approvalsQueueCount} pending approvals and questions`}>
-                  {approvalsQueueCount}
-                </span>
+          <div className={`min-h-0 overflow-y-auto px-2 pt-2 pb-1 ${collapsed ? 'max-h-none' : 'max-h-[40vh]'}`}>
+            {!collapsed ? <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.primary', 'Studio')}</div> : null}
+            {PRIMARY_NAV_ITEMS.map((item) => (
+              <SidebarNavButton
+                key={item.view}
+                item={item}
+                currentView={currentView}
+                collapsed={collapsed}
+                onViewChange={onViewChange}
+                badge={item.view === 'approvals' ? approvalsQueueCount : undefined}
+              />
+            ))}
+            <div className={`pt-3 ${collapsed ? 'px-0' : 'px-2'}`}>
+              <button
+                type="button"
+                onClick={() => setManageOpen((current) => !current)}
+                aria-expanded={manageOpen}
+                aria-label={collapsed ? t('sidebar.manage', 'Manage') : undefined}
+                title={collapsed ? t('sidebar.manage', 'Manage') : undefined}
+                className={`sidebar-nav-item sidebar-nav-primary w-full ${collapsed ? 'justify-center px-0' : ''} ${manageActive ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}
+              >
+                <Icon name={manageOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+                {!collapsed ? (
+                  <>
+                    <span className="truncate font-semibold uppercase tracking-widest text-[10px]">{t('sidebar.manage', 'Manage')}</span>
+                    <span className="min-w-0 flex-1 truncate text-end text-[10px] normal-case tracking-normal text-text-muted">
+                      {manageActive
+                        ? t(MANAGE_NAV_ITEMS.find((item) => item.view === currentView)?.labelKey || 'sidebar.manage', MANAGE_NAV_ITEMS.find((item) => item.view === currentView)?.fallback || 'Manage')
+                        : t('sidebar.manageHint', 'Team · Playbooks · Tools')}
+                    </span>
+                  </>
+                ) : null}
+              </button>
+              {manageOpen ? (
+                <div className={collapsed ? 'mt-1' : 'mt-1'}>
+                  {MANAGE_NAV_ITEMS.map((item) => (
+                    <SidebarNavButton
+                      key={item.view}
+                      item={item}
+                      currentView={currentView}
+                      collapsed={collapsed}
+                      onViewChange={onViewChange}
+                    />
+                  ))}
+                </div>
               ) : null}
-            </button>
-            <div className="px-2 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.manage', 'Manage')}</div>
-            <button onClick={() => onViewChange('team')}
-              aria-current={currentView === 'team' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'team' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="users" size={16} />
-              {t('sidebar.team', 'Team')}
-            </button>
-            <button onClick={() => onViewChange('playbooks')}
-              aria-current={currentView === 'playbooks' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'playbooks' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="workflow" size={16} />
-              {t('sidebar.playbooks', 'Playbooks')}
-            </button>
-            <button onClick={() => onViewChange('channels')}
-              aria-current={currentView === 'channels' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'channels' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="activity" size={16} />
-              {t('sidebar.channels', 'Channels')}
-            </button>
-            <button onClick={() => onViewChange('tools')}
-              aria-current={currentView === 'tools' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'tools' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="blocks" size={16} />
-              {t('sidebar.toolsSkills', 'Tools & Skills')}
-            </button>
-            <button onClick={() => onViewChange('artifacts')}
-              aria-current={currentView === 'artifacts' ? 'page' : undefined}
-              className={`sidebar-nav-item sidebar-nav-primary ${currentView === 'artifacts' ? 'bg-surface-active text-text' : 'text-text-secondary hover:bg-surface-hover hover:text-text'}`}>
-              <Icon name="file" size={16} />
-              {t('sidebar.artifacts', 'Artifacts')}
-            </button>
+            </div>
           </div>
 
           {/* Recent project chats — ThreadList owns its own scroll container so it
               can virtualize rows without fighting the parent over the
               scroll element reference. */}
-          <div className="flex min-h-[120px] flex-1 flex-col overflow-hidden px-2 py-2">
+          {!collapsed ? <div className="flex min-h-[120px] flex-1 flex-col overflow-hidden px-2 py-2">
             <button
               type="button"
               onClick={() => onViewChange('projects')}
@@ -686,10 +805,10 @@ export function Sidebar({
               {t('sidebar.recentWork', 'Recent work')}
             </button>
             <ThreadList onSelect={() => onViewChange('chat')} searchQuery={searchQuery} />
-          </div>
+          </div> : <div className="flex-1" />}
 
           {/* Tool status */}
-          <div className="max-h-[28vh] shrink-0 overflow-y-auto border-t border-border-subtle px-2 py-2">
+          {!collapsed ? <div className="max-h-[28vh] shrink-0 overflow-y-auto border-t border-border-subtle px-2 py-2">
             <SidebarLowerBranding lower={branding?.lower} />
             <button onClick={() => onViewChange('health')}
               aria-current={currentView === 'health' ? 'page' : undefined}
@@ -700,15 +819,19 @@ export function Sidebar({
             </button>
             <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">{t('sidebar.toolStatus', 'Tool Status')}</div>
             <McpStatus />
-          </div>
+          </div> : (
+            <div className="shrink-0 border-t border-border-subtle px-2 py-2">
+              <button onClick={() => onViewChange('health')}
+                aria-current={currentView === 'health' ? 'page' : undefined}
+                aria-label={t('sidebar.diagnostics', 'Diagnostics')}
+                title={t('sidebar.diagnostics', 'Diagnostics')}
+                className={`sidebar-nav-item sidebar-nav-primary justify-center px-0 ${currentView === 'health' ? 'bg-surface-active text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text-secondary'}`}>
+                <Icon name="heart-pulse" size={16} />
+              </button>
+            </div>
+          )}
 
-          {/* Settings */}
-          <button onClick={() => setShowSettings(true)}
-            aria-expanded={showSettings}
-            className="flex shrink-0 items-center gap-2.5 px-4 py-3 text-[13px] text-text-muted hover:text-text-secondary hover:bg-surface-hover transition-colors cursor-pointer border-t border-border-subtle">
-            <Icon name="settings-2" size={16} />
-            {t('sidebar.settings', 'Settings')}
-          </button>
+          <SidebarPresenceFooter collapsed={collapsed} showSettings={showSettings} onSettings={() => setShowSettings(true)} />
       </aside>
       {showSettings ? (
         <Suspense fallback={<div className="fixed inset-0 z-[60] grid place-items-center text-[12px] text-text-muted">{t('settings.loading', 'Loading settings...')}</div>}>

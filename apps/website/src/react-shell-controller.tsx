@@ -236,6 +236,7 @@ type RouteDomCache = {
   panels: Map<string, HTMLElement[]>
   links: Map<string, HTMLElement[]>
   adminNav: HTMLDetailsElement[]
+  manageNav: HTMLDetailsElement[]
 }
 
 function pushRouteElement<T extends HTMLElement>(map: Map<string, T[]>, routeId: string | undefined, element: T) {
@@ -254,6 +255,22 @@ function buildRouteDomCache(): RouteDomCache {
     panels,
     links,
     adminNav: Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-admin-nav]')),
+    manageNav: Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-manage-nav]')),
+  }
+}
+
+function setSidebarRailCollapsed(collapsed: boolean) {
+  document.body.dataset.sidebarRail = collapsed ? 'collapsed' : 'expanded'
+  try {
+    window.localStorage.setItem('open-cowork-cloud-sidebar-rail', collapsed ? 'collapsed' : 'expanded')
+  } catch {
+    // Browser storage can be unavailable in hardened contexts; the current
+    // document state is still enough for this session.
+  }
+  for (const toggle of document.querySelectorAll<HTMLButtonElement>('[data-sidebar-rail-toggle]')) {
+    toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false')
+    toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar')
+    toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
   }
 }
 
@@ -338,9 +355,12 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
             const label = `${linkRoute.label} - admin permissions required`
             if (link.dataset.locked !== 'true') link.dataset.locked = 'true'
             if (link.getAttribute('aria-label') !== label) link.setAttribute('aria-label', label)
+            if (link.title !== label) link.title = label
           } else {
+            const label = linkRoute?.label || routeId
             if (link.dataset.locked !== 'false') link.dataset.locked = 'false'
-            if (link.hasAttribute('aria-label')) link.removeAttribute('aria-label')
+            if (link.getAttribute('aria-label') !== label) link.setAttribute('aria-label', label)
+            if (link.title !== label) link.title = label
           }
         }
       }
@@ -353,6 +373,10 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
     for (const details of cache.adminNav) {
       const open = route.surface === 'admin'
       if (details.open !== open) details.open = open
+    }
+    for (const details of cache.manageNav) {
+      const routeInManage = Boolean(details.querySelector(`[data-route-link="${route.id}"]`))
+      if (routeInManage && !details.open) details.open = true
     }
     activeRouteIdRef.current = route.id
     if (document.body.dataset.route !== route.id) document.body.dataset.route = route.id
@@ -432,6 +456,7 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
     setText('org-meta', signedIn && email ? `${email} - ${role} - ${profile}` : signedIn ? `${role} - ${profile}` : 'Sign in to open your cloud workspace')
     setText('profile-name', profile)
     setText('role-name', role)
+    setText('presence-meta', signedIn && email ? `${email} - ${profile}` : `${profile} - ${signedIn ? 'online' : 'signed out'}`)
     setText('workspace-label', signedIn ? org : 'Studio workspace')
     setText('workspace-meta', signedIn && email ? `${email} - ${profile}` : 'Sign in to sync chats')
     setText('profile-summary', profile)
@@ -454,6 +479,16 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
   }, [bootstrap.defaultRoute, navigate])
 
   useEffect(() => {
+    let preferred = 'expanded'
+    try {
+      preferred = window.localStorage.getItem('open-cowork-cloud-sidebar-rail') || preferred
+    } catch {
+      preferred = 'expanded'
+    }
+    setSidebarRailCollapsed(preferred === 'collapsed')
+  }, [])
+
+  useEffect(() => {
     const handler = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null
       if (!target) return
@@ -462,6 +497,18 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
       if (routeLink) {
         event.preventDefault()
         navigate(routeLink.dataset.routeLink || bootstrap.defaultRoute)
+        return
+      }
+
+      if (target.closest('[data-sidebar-rail-toggle]')) {
+        event.preventDefault()
+        setSidebarRailCollapsed(document.body.dataset.sidebarRail !== 'collapsed')
+        return
+      }
+
+      if (target.closest('[data-presence-settings-link="true"]')) {
+        event.preventDefault()
+        navigate('settings')
         return
       }
 
@@ -501,7 +548,12 @@ export function CloudReactShellController({ bootstrap }: { bootstrap: CloudWebCl
           navigate('threads')
           window.requestAnimationFrame(() => document.getElementById('thread-query')?.focus())
         } else {
-          document.getElementById('sidebar-thread-query')?.focus()
+          if (document.body.dataset.sidebarRail === 'collapsed') {
+            setSidebarRailCollapsed(false)
+            window.requestAnimationFrame(() => document.getElementById('sidebar-thread-query')?.focus())
+          } else {
+            document.getElementById('sidebar-thread-query')?.focus()
+          }
         }
         return
       }

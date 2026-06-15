@@ -137,6 +137,93 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Acme AI')).toBeNull()
   })
 
+  it('collapses and reopens the Manage navigation group', () => {
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Team' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Playbooks' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Manage/ }))
+
+    expect(screen.queryByRole('button', { name: 'Team' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Playbooks' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Manage/ }))
+
+    expect(screen.getByRole('button', { name: 'Team' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Playbooks' })).toBeTruthy()
+  })
+
+  it('renders a compact rail without unmounting navigation actions', () => {
+    const onExpandSidebar = vi.fn()
+    render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        collapsed
+        onExpandSidebar={onExpandSidebar}
+      />,
+    )
+
+    expect(screen.getByRole('complementary', { name: 'Sidebar navigation' })).toHaveAttribute('data-sidebar-collapsed', 'true')
+    expect(screen.getByRole('button', { name: 'New Chat' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Manage' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Team' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Settings' }).parentElement).toHaveClass('flex-col')
+    expect(screen.queryByText('Recent work')).toBeNull()
+    expect(screen.queryByText('Tool Status')).toBeNull()
+    expect(screen.queryByText('New Chat')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Search projects and chats/ }))
+    expect(onExpandSidebar).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not re-expand the compact rail for an already handled search request', () => {
+    const onExpandSidebar = vi.fn()
+    const { rerender } = render(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        searchRequestNonce={1}
+        onExpandSidebar={onExpandSidebar}
+      />,
+    )
+
+    expect(onExpandSidebar).not.toHaveBeenCalled()
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        searchRequestNonce={1}
+        collapsed
+        onExpandSidebar={onExpandSidebar}
+      />,
+    )
+
+    expect(onExpandSidebar).not.toHaveBeenCalled()
+
+    rerender(
+      <Sidebar
+        currentView="home"
+        onViewChange={vi.fn()}
+        searchRequestNonce={2}
+        collapsed
+        onExpandSidebar={onExpandSidebar}
+      />,
+    )
+
+    expect(onExpandSidebar).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a live approvals alert count in the Studio nav', () => {
     const baseView = useSessionStore.getInitialState().currentView
     const sessions = [{ id: 'active-session', title: 'Active chat', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }]

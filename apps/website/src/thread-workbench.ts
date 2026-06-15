@@ -1,3 +1,5 @@
+import type { CloudProjectSourceSummary } from '@open-cowork/shared'
+
 export const CLOUD_WEB_THREAD_PAGE_SIZE = 200
 
 export type CloudWebThreadFilters = {
@@ -16,6 +18,7 @@ export type CloudWebThreadSession = {
   updatedAt?: string | null
   tags?: string[]
   smartFilters?: string[]
+  projectSource?: CloudProjectSourceSummary | null
 }
 
 export type CloudWebThreadProjection = {
@@ -24,7 +27,7 @@ export type CloudWebThreadProjection = {
   updatedAt?: string | null
   pendingApprovals?: unknown[]
   pendingQuestions?: unknown[]
-  projectSource?: { kind?: string, repositoryUrl?: string | null, title?: string | null } | null
+  projectSource?: CloudProjectSourceSummary | null
   tags?: string[]
   smartFilters?: string[]
 }
@@ -43,12 +46,16 @@ export function cloudWebThreadStatus(session: CloudWebThreadSession, projection:
   return projection?.status || session.status || 'idle'
 }
 
-export function cloudWebThreadProjectKind(projection: CloudWebThreadProjection | null | undefined) {
-  return projection?.projectSource?.kind || 'chat'
+export function cloudWebThreadProjectSource(session: CloudWebThreadSession | null | undefined, projection: CloudWebThreadProjection | null | undefined) {
+  return projection?.projectSource || session?.projectSource || null
 }
 
-export function cloudWebThreadProjectLabel(projection: CloudWebThreadProjection | null | undefined) {
-  const source = projection?.projectSource
+export function cloudWebThreadProjectKind(session: CloudWebThreadSession | null | undefined, projection: CloudWebThreadProjection | null | undefined) {
+  return cloudWebThreadProjectSource(session, projection)?.kind || 'chat'
+}
+
+export function cloudWebThreadProjectLabel(session: CloudWebThreadSession | null | undefined, projection: CloudWebThreadProjection | null | undefined) {
+  const source = cloudWebThreadProjectSource(session, projection)
   if (!source) return 'chat-only'
   if (source.kind === 'git') {
     const repo = source.repositoryUrl || 'git repository'
@@ -104,7 +111,7 @@ export function filterCloudWebThreads(
       const status = hasStatusFilter || hasQuery ? cloudWebThreadStatus(session, projection) : ''
       if (hasStatusFilter && status !== statusFilter && session.status !== statusFilter) return false
       if (hasProfileFilter && String(session.profileName || projection?.profileName || '').toLowerCase() !== profileFilter) return false
-      if (hasProjectFilter && cloudWebThreadProjectKind(projection) !== projectFilter) return false
+      if (hasProjectFilter && cloudWebThreadProjectKind(session, projection) !== projectFilter) return false
       const tags = hasTagFilter || hasQuery ? cloudWebThreadTags(session, projection) : []
       if (hasTagFilter && !tags.some((entry) => entry.toLowerCase().includes(tagFilter))) return false
       if (!hasQuery) return true
@@ -113,7 +120,7 @@ export function filterCloudWebThreads(
         session.title,
         session.profileName,
         status,
-        cloudWebThreadProjectLabel(projection),
+        cloudWebThreadProjectLabel(session, projection),
         ...tags,
       ].filter(Boolean).join(' ').toLowerCase()
       return queryTokens.every((token) => haystack.includes(token))

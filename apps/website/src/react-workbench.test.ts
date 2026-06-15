@@ -8,6 +8,7 @@ import {
   CloudChatTimeline,
   CloudSelectedArtifactHistory,
   CloudRuntimeStatus,
+  CloudSidebarThreadList,
   CloudThreadList,
 } from './react-workbench.ts'
 import { CLOUD_DELIVERABLE_APPROVAL_COPY, CloudConversationMeta } from './react-workbench-context.ts'
@@ -55,6 +56,69 @@ test('React workbench components render cloud-safe thread, timeline, runtime, an
   assert.doesNotMatch(html, /signedUrl/)
   assert.doesNotMatch(html, /objectKey/)
   assert.doesNotMatch(html, /leaked-secret/)
+})
+
+test('React Cloud sidebar groups chats by project source', () => {
+  const projectSession = makeSession(10)
+  const projectFollowUp = makeSession(20)
+  const chatOnlySession = makeSession(1)
+  const sessions = [projectSession, projectFollowUp, chatOnlySession]
+  const views = Object.fromEntries(sessions.map((session) => [session.sessionId, makeSessionView(session, 10, 0)]))
+
+  const html = renderToStaticMarkup(createElement(CloudSidebarThreadList, {
+    sessions,
+    views,
+    selectedSessionId: projectSession.sessionId,
+  }))
+
+  assert.match(html, /class="sidebar-thread-project"/)
+  assert.match(html, /repo/)
+  assert.match(html, />2<\/small>/)
+  assert.match(html, /chat-only/)
+  assert.match(html, />1<\/small>/)
+  assert.match(html, /data-selected="true"/)
+})
+
+test('React Cloud sidebar groups chats from session list project metadata without loaded views', () => {
+  const projectSession = {
+    ...makeSession(10),
+    projectSource: { kind: 'git' as const, repositoryUrl: 'https://github.com/acme/api.git' },
+  }
+  const projectFollowUp = {
+    ...makeSession(20),
+    projectSource: { kind: 'git' as const, repositoryUrl: 'https://github.com/acme/api.git' },
+  }
+  const chatOnlySession = makeSession(1)
+
+  const html = renderToStaticMarkup(createElement(CloudSidebarThreadList, {
+    sessions: [projectSession, projectFollowUp, chatOnlySession],
+    views: {},
+    selectedSessionId: projectSession.sessionId,
+  }))
+
+  assert.match(html, /api/)
+  assert.match(html, />2<\/small>/)
+  assert.match(html, /chat-only/)
+  assert.match(html, />1<\/small>/)
+  assert.match(html, /data-selected="true"/)
+})
+
+test('React Cloud sidebar keeps distinct repos with the same basename in separate groups', () => {
+  const acmeSession = makeSession(10)
+  const contosoSession = makeSession(20)
+  const sessions = [acmeSession, contosoSession]
+  const views = Object.fromEntries(sessions.map((session) => [session.sessionId, makeSessionView(session, 10, 0)]))
+  views[acmeSession.sessionId].projection.view.projectSource = { kind: 'git', repositoryUrl: 'https://github.com/acme/api.git' }
+  views[contosoSession.sessionId].projection.view.projectSource = { kind: 'git', repositoryUrl: 'https://github.com/contoso/api.git' }
+
+  const html = renderToStaticMarkup(createElement(CloudSidebarThreadList, {
+    sessions,
+    views,
+  }))
+
+  assert.equal(html.match(/class="sidebar-thread-project"/g)?.length, 2)
+  assert.equal(html.match(/>1<\/small>/g)?.length, 2)
+  assert.doesNotMatch(html, />2<\/small>/)
 })
 
 test('React workbench renders delegated handoff badges, task context, and approval-gated deliverables', () => {

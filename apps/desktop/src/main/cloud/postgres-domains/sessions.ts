@@ -1,3 +1,4 @@
+import { normalizeCloudProjectSource, summarizeCloudProjectSource } from '@open-cowork/shared'
 import type {
   ControlPlaneSessionStatus,
   ControlPlaneCommandStatus,
@@ -24,6 +25,15 @@ export function sessionFromRow(row: QueryRow): SessionRecord {
     status: String(row.status) as ControlPlaneSessionStatus,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+  }
+}
+
+export function sessionFromRowWithProjectSource(row: QueryRow): SessionRecord {
+  const session = sessionFromRow(row)
+  const source = normalizeCloudProjectSource(row.projection_project_source)
+  return {
+    ...session,
+    projectSource: summarizeCloudProjectSource(source),
   }
 }
 
