@@ -133,6 +133,17 @@ export const STUDIO_VISUAL_QA_MATRIX: StudioVisualQaEntry[] = [
     viewports: allViewports,
   },
   {
+    id: 'user-settings',
+    label: 'User Settings',
+    routeIds: ['settings'],
+    desktopSurface: 'Desktop Settings dialog: appearance, permissions, notifications, privacy, and profile status',
+    cloudCheck: 'Cloud Web exposes user-scoped Appearance, Notifications, Privacy, and read-only AI provider/profile status as a Studio route, while keeping BYOK and org policy in Admin.',
+    states: ['loading', 'disabled', 'permission-gated'],
+    boundary: 'Cloud Web persists durable user-scoped preferences through Cloud settings metadata; provider keys, local machine runtime config, and org policy stay Desktop/Admin-owned.',
+    evidence: ['apps/website/src/render.test.ts', 'apps/website/src/cloud-theme.test.ts', 'apps/website/src/studio-production-qa.test.ts'],
+    viewports: allViewports,
+  },
+  {
     id: 'secrets-gateway-audit-diagnostics',
     label: 'Secrets, Gateway, audit, and diagnostics',
     routeIds: ['byok', 'connections', 'billing', 'gateway', 'audit', 'diagnostics'],

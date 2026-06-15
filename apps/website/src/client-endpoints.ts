@@ -43,6 +43,8 @@ const CLOUD_WEB_ENDPOINT_DEFINITIONS = [
   { id: 'capabilitiesCatalog', method: 'GET', path: '/api/capabilities', csrf: false },
   { id: 'capabilityTools', method: 'GET', path: '/api/capabilities/tools', csrf: false },
   { id: 'capabilitySkills', method: 'GET', path: '/api/capabilities/skills', csrf: false },
+  { id: 'settings', method: 'GET', path: '/api/settings', csrf: false },
+  { id: 'setting', method: 'PUT', path: '/api/settings/:settingKey', csrf: true },
   { id: 'workflows', method: 'GET', path: '/api/workflows?limit=100', csrf: false },
   { id: 'workflow', method: 'GET', path: '/api/workflows/:workflowId', csrf: false },
   { id: 'workflowRun', method: 'POST', path: '/api/workflows/:workflowId/run', csrf: true },
@@ -83,7 +85,7 @@ export type CloudWebEndpointId = typeof CLOUD_WEB_ENDPOINT_DEFINITIONS[number]['
 
 export type CloudWebEndpoint = {
   id: CloudWebEndpointId
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   path: string
   csrf: boolean
 }

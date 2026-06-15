@@ -460,6 +460,7 @@ test('custom agent permission overrides cannot exceed app permission caps', () =
       webSearch: false,
     },
   }, () => {
+    saveSettings({ externalDirectoryPermission: 'deny' })
     const catalog = buildCustomAgentCatalog({
       builtinTools: builtinTools as any,
       builtinSkills: builtinSkills as any,
@@ -510,6 +511,7 @@ test('custom agent permission overrides honor user-disabled shell and write sett
     saveSettings({
       bashPermission: 'deny',
       fileWritePermission: 'deny',
+      externalDirectoryPermission: 'deny',
       enableBash: false,
       enableFileWrite: false,
     })
@@ -665,38 +667,49 @@ test('custom agent MCP default overrides do not rewrite native repo permissions'
 })
 
 test('custom agent MCP permission rules cannot grant native tool permissions', () => {
-  const catalog = buildCustomAgentCatalog({
-    builtinTools: builtinTools as any,
-    builtinSkills: builtinSkills as any,
-    customMcps: [],
-    customSkills: [],
-    state: baseSettings,
+  withConfigOverride({
+    permissions: {
+      bash: 'allow',
+      fileWrite: 'allow',
+      task: 'allow',
+      web: 'allow',
+      webSearch: true,
+    },
+  }, () => {
+    saveSettings({ mcpPermission: 'allow' })
+    const catalog = buildCustomAgentCatalog({
+      builtinTools: builtinTools as any,
+      builtinSkills: builtinSkills as any,
+      customMcps: [],
+      customSkills: [],
+      state: baseSettings,
+    })
+
+    const permission = buildCustomAgentPermissionFromCatalog({
+      name: 'mcp-rule-scoped',
+      description: 'Only scopes MCP tool permissions.',
+      instructions: 'Use approved MCP tools only.',
+      skillNames: [],
+      toolIds: ['github'],
+      enabled: true,
+      color: 'accent' as const,
+      permissionOverrides: [
+        {
+          key: 'mcp',
+          action: 'deny',
+          rules: [
+            { pattern: 'bash', action: 'allow' },
+            { pattern: 'mcp__github__pull_request_read', action: 'allow' },
+          ],
+        },
+      ],
+    }, catalog)
+
+    assert.notEqual(permission.bash, 'allow')
+    assert.equal(permission['mcp__*'], 'deny')
+    assert.equal(permission.mcp__github__pull_request_read, 'allow')
+    assert.equal(permission.github_pull_request_read, 'allow')
   })
-
-  const permission = buildCustomAgentPermissionFromCatalog({
-    name: 'mcp-rule-scoped',
-    description: 'Only scopes MCP tool permissions.',
-    instructions: 'Use approved MCP tools only.',
-    skillNames: [],
-    toolIds: ['github'],
-    enabled: true,
-    color: 'accent' as const,
-    permissionOverrides: [
-      {
-        key: 'mcp',
-        action: 'deny',
-        rules: [
-          { pattern: 'bash', action: 'allow' },
-          { pattern: 'mcp__github__pull_request_read', action: 'allow' },
-        ],
-      },
-    ],
-  }, catalog)
-
-  assert.notEqual(permission.bash, 'allow')
-  assert.equal(permission['mcp__*'], 'deny')
-  assert.equal(permission.mcp__github__pull_request_read, 'allow')
-  assert.equal(permission.github_pull_request_read, 'allow')
 })
 
 test('custom agent validation rejects invalid MCP permission rule patterns', () => {

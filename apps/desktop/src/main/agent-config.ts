@@ -102,6 +102,39 @@ function isDelegatableCustomAgent(agent: RuntimeCustomAgent) {
   return agent.mode !== 'primary'
 }
 
+function uniquePatterns(patterns: string[]) {
+  return Array.from(new Set(patterns))
+}
+
+function toolPatternCovers(candidate: string, ceilingPattern: string) {
+  if (candidate === ceilingPattern) return true
+  if (!ceilingPattern.endsWith('*')) return false
+  return candidate.startsWith(ceilingPattern.slice(0, -1))
+}
+
+function toolPatternCoveredBy(candidate: string, ceilingPatterns: ReadonlySet<string>) {
+  for (const ceilingPattern of ceilingPatterns) {
+    if (toolPatternCovers(candidate, ceilingPattern)) return true
+  }
+  return false
+}
+
+function applyAgentToolCeiling(input: {
+  allowPatterns?: string[]
+  askPatterns?: string[]
+  effectiveAskPatterns: ReadonlySet<string>
+  deniedPatterns: ReadonlySet<string>
+}) {
+  const requestedAllow = uniquePatterns(input.allowPatterns || [])
+  const requestedAsk = uniquePatterns(input.askPatterns || [])
+  const downgradedAsk = requestedAllow.filter((pattern) => toolPatternCoveredBy(pattern, input.effectiveAskPatterns))
+  return {
+    allowPatterns: requestedAllow.filter((pattern) => !toolPatternCoveredBy(pattern, input.deniedPatterns) && !toolPatternCoveredBy(pattern, input.effectiveAskPatterns)),
+    askPatterns: uniquePatterns([...requestedAsk, ...downgradedAsk])
+      .filter((pattern) => !toolPatternCoveredBy(pattern, input.deniedPatterns)),
+  }
+}
+
 export function buildOpenCoworkAgentConfig(options: {
   allToolPatterns: string[]
   allowToolPatterns?: string[]
@@ -114,6 +147,7 @@ export function buildOpenCoworkAgentConfig(options: {
   task?: PermissionAction
   web?: PermissionAction
   webSearch?: PermissionAction
+  externalDirectory?: PermissionAction
   projectDirectory?: string | null
   customDelegationAgents?: RuntimeCustomAgent[]
 }) {
@@ -144,6 +178,7 @@ export function buildOpenCoworkAgentConfig(options: {
   const managedExternalDirectoryRules = buildManagedExternalDirectoryRules({
     skillNames: managedSkillNames,
     projectDirectory: options.projectDirectory,
+    action: options.externalDirectory || 'allow',
   })
   const customTaskRules = Object.fromEntries(delegatableCustomAgents
     .map((agent) => [agent.name, 'allow' as const]))
@@ -221,10 +256,18 @@ export function buildOpenCoworkAgentConfig(options: {
       })),
   ]
 
-  const allowPatterns = Array.from(new Set([...(options.allowToolPatterns || []), ...globalAccess.allow]))
-  const askPatterns = Array.from(new Set([...(options.askToolPatterns || []), ...globalAccess.ask]))
-  const allToolPatterns = Array.from(new Set([...options.allToolPatterns, ...globalAccess.all]))
   const deniedToolPatterns = Array.from(new Set(options.deniedToolPatterns || []))
+  const deniedToolPatternSet = new Set(deniedToolPatterns)
+  const effectiveAskPatternSet = new Set([...(options.askToolPatterns || []), ...globalAccess.ask])
+  const globalCeiling = applyAgentToolCeiling({
+    allowPatterns: [...(options.allowToolPatterns || []), ...globalAccess.allow],
+    askPatterns: [...(options.askToolPatterns || []), ...globalAccess.ask],
+    effectiveAskPatterns: effectiveAskPatternSet,
+    deniedPatterns: deniedToolPatternSet,
+  })
+  const allowPatterns = globalCeiling.allowPatterns
+  const askPatterns = globalCeiling.askPatterns
+  const allToolPatterns = Array.from(new Set([...options.allToolPatterns, ...globalAccess.all]))
   const appPermissions = getAppConfig().permissions
   const bash = options.bash || 'deny'
   const fileWrite = options.fileWrite || 'deny'
@@ -286,6 +329,7 @@ export function buildOpenCoworkAgentConfig(options: {
         permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
+          askPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           allowAllSkills: true,
@@ -326,6 +370,7 @@ export function buildOpenCoworkAgentConfig(options: {
         permission: buildAgentPermission({
           allToolPatterns,
           allowPatterns,
+          askPatterns,
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           allowAllSkills: true,
@@ -434,22 +479,26 @@ export function buildOpenCoworkAgentConfig(options: {
         ].join('\n'),
         permission: buildAgentPermission({
           allToolPatterns,
-          allowPatterns: [
-            'websearch',
-            'webfetch',
-            'mcp__charts__*',
-            'mcp__skills__list_skill_bundles',
-            'mcp__skills__get_skill_bundle',
-            'mcp__agents__list_agents',
-            'mcp__agents__get_agent',
-            'mcp__agents__preview_agent',
-          ],
-          askPatterns: [
-            'mcp__skills__save_skill_bundle',
-            'mcp__skills__delete_skill_bundle',
-            'mcp__agents__save_agent',
-            'mcp__agents__delete_agent',
-          ],
+          ...applyAgentToolCeiling({
+            allowPatterns: [
+              'websearch',
+              'webfetch',
+              'mcp__charts__*',
+              'mcp__skills__list_skill_bundles',
+              'mcp__skills__get_skill_bundle',
+              'mcp__agents__list_agents',
+              'mcp__agents__get_agent',
+              'mcp__agents__preview_agent',
+            ],
+            askPatterns: [
+              'mcp__skills__save_skill_bundle',
+              'mcp__skills__delete_skill_bundle',
+              'mcp__agents__save_agent',
+              'mcp__agents__delete_agent',
+            ],
+            effectiveAskPatterns: effectiveAskPatternSet,
+            deniedPatterns: deniedToolPatternSet,
+          }),
           deniedPatterns: deniedToolPatterns,
           externalDirectoryRules: managedExternalDirectoryRules,
           skillRules: {
@@ -489,8 +538,14 @@ export function buildOpenCoworkAgentConfig(options: {
 
   for (const agent of configuredAgents) {
     const filteredSkillNames = (agent.skillNames || []).filter((skillName) => availableSkillNames.has(skillName))
-    const agentAllowPatterns = Array.from(new Set([...configuredAgentAllowPatterns(agent), ...defaultAgentAccess.allow]))
-    const agentAskPatterns = configuredAgentAskPatterns(agent)
+    const agentToolPolicy = applyAgentToolCeiling({
+      allowPatterns: [...configuredAgentAllowPatterns(agent), ...defaultAgentAccess.allow],
+      askPatterns: configuredAgentAskPatterns(agent),
+      effectiveAskPatterns: effectiveAskPatternSet,
+      deniedPatterns: deniedToolPatternSet,
+    })
+    const agentAllowPatterns = agentToolPolicy.allowPatterns
+    const agentAskPatterns = agentToolPolicy.askPatterns
     const agentPatterns = [...agentAllowPatterns, ...agentAskPatterns]
     const base: AgentConfig = {
       mode: agent.mode || 'subagent',

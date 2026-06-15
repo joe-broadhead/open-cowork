@@ -17,6 +17,7 @@ export type CloudWebWorkbenchConceptId =
   | 'artifacts'
   | 'workflows'
   | 'channels'
+  | 'settings'
   | 'objectives'
   | 'cloud-project-sources'
   | 'local-filesystem'
@@ -156,6 +157,17 @@ export const CLOUD_WEB_WORKBENCH_PARITY_MATRIX: CloudWebWorkbenchParityEntry[] =
     boundary: 'Cloud Web reads channel state through tenant-scoped Cloud APIs; Gateway delivery, provider adapters, and OpenCode execution remain service-owned.',
     disabledReason: 'Channel setup, People resolution, and Watch mutation controls require owner/admin permissions; member reads remain available.',
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
+  },
+  {
+    conceptId: 'settings',
+    label: 'User Settings',
+    availability: 'shared',
+    desktopSurface: 'Desktop Settings dialog',
+    cloudRouteIds: ['settings'],
+    cloudAffordance: 'Show user-scoped Appearance, Notifications, Privacy, and read-only AI provider/profile status without exposing admin BYOK or local machine runtime controls.',
+    boundary: 'Cloud Web persists durable user-scoped appearance, notification, and privacy preferences through the Cloud settings API; org secrets, provider keys, and local OpenCode runtime settings remain Admin/Desktop-owned.',
+    disabledReason: null,
+    tests: ['render.test.ts', 'cloud-theme.test.ts', 'studio-production-qa.test.ts'],
   },
   {
     conceptId: 'cloud-project-sources',

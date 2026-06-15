@@ -43,7 +43,7 @@ export type { AgentColor }
 let settingsCache: AppSettings | null = null
 let settingsSecretStorageForTests: SecretStorageAdapter | null = null
 
-export const SETTINGS_SCHEMA_VERSION = 8
+export const SETTINGS_SCHEMA_VERSION = 9
 
 type NativePermissionDefault = RuntimePermissionPolicy
 const MAX_SETTINGS_MAP_ENTRIES = 64
@@ -133,6 +133,8 @@ function createDefaults(): AppSettings {
   const defaultProviderDescriptor = config.providers.available.find((provider) => provider.id === defaultProvider)
   const bashPermission = defaultRuntimePermissionPolicy(appConfig.permissions.bash)
   const fileWritePermission = defaultRuntimePermissionPolicy(appConfig.permissions.fileWrite)
+  const webPermission = appConfig.permissions.web
+  const taskPermission = appConfig.permissions.task
   return {
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedProviderId: defaultProvider,
@@ -143,6 +145,18 @@ function createDefaults(): AppSettings {
     integrationEnabled: {},
     bashPermission,
     fileWritePermission,
+    webPermission,
+    webSearchEnabled: appConfig.permissions.webSearch,
+    taskPermission,
+    externalDirectoryPermission: 'allow',
+    mcpPermission: 'allow',
+    requireApprovalBeforeSending: true,
+    notificationVoiceReplies: true,
+    notificationSmartSuggestions: true,
+    notificationDailyDigest: false,
+    notificationSounds: true,
+    privacyKeepConversationHistory: true,
+    privacyShareAnonymizedUsage: false,
     enableBash: nativePermissionEnabledByDefault(bashPermission),
     enableFileWrite: nativePermissionEnabledByDefault(fileWritePermission),
     runtimeConfigSource: 'app',
@@ -260,6 +274,22 @@ function normalizeSettingsUpdate(settings: Partial<AppSettings>) {
       ? defaultRuntimePermissionPolicy(appPermissions.fileWrite)
       : 'deny'
   }
+  const webPermission = normalizeRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
+  if (webPermission) update.webPermission = webPermission
+  if (typeof settings.webSearchEnabled === 'boolean') update.webSearchEnabled = settings.webSearchEnabled && appPermissions.webSearch
+  const taskPermission = normalizeRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
+  if (taskPermission) update.taskPermission = taskPermission
+  const externalDirectoryPermission = normalizeRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
+  if (externalDirectoryPermission) update.externalDirectoryPermission = externalDirectoryPermission
+  const mcpPermission = normalizeRuntimePermissionPolicy(settings.mcpPermission, 'allow')
+  if (mcpPermission) update.mcpPermission = mcpPermission
+  if (typeof settings.requireApprovalBeforeSending === 'boolean') update.requireApprovalBeforeSending = settings.requireApprovalBeforeSending
+  if (typeof settings.notificationVoiceReplies === 'boolean') update.notificationVoiceReplies = settings.notificationVoiceReplies
+  if (typeof settings.notificationSmartSuggestions === 'boolean') update.notificationSmartSuggestions = settings.notificationSmartSuggestions
+  if (typeof settings.notificationDailyDigest === 'boolean') update.notificationDailyDigest = settings.notificationDailyDigest
+  if (typeof settings.notificationSounds === 'boolean') update.notificationSounds = settings.notificationSounds
+  if (typeof settings.privacyKeepConversationHistory === 'boolean') update.privacyKeepConversationHistory = settings.privacyKeepConversationHistory
+  if (typeof settings.privacyShareAnonymizedUsage === 'boolean') update.privacyShareAnonymizedUsage = settings.privacyShareAnonymizedUsage
   if (typeof settings.runtimeToolingBridgeEnabled === 'boolean') update.runtimeToolingBridgeEnabled = settings.runtimeToolingBridgeEnabled
   const runtimeConfigSource = normalizeRuntimeConfigSource(settings.runtimeConfigSource)
   if (runtimeConfigSource) update.runtimeConfigSource = runtimeConfigSource
@@ -290,6 +320,30 @@ function migrateLegacySettings(rawInput: unknown): AppSettings {
     appPermissions.fileWrite,
     defaults.fileWritePermission,
   )
+  const webPermission = migrateRuntimePermissionPolicy(
+    raw?.webPermission,
+    undefined,
+    appPermissions.web,
+    defaults.webPermission,
+  )
+  const taskPermission = migrateRuntimePermissionPolicy(
+    raw?.taskPermission,
+    undefined,
+    appPermissions.task,
+    defaults.taskPermission,
+  )
+  const externalDirectoryPermission = migrateRuntimePermissionPolicy(
+    raw?.externalDirectoryPermission,
+    undefined,
+    'allow',
+    defaults.externalDirectoryPermission,
+  )
+  const mcpPermission = migrateRuntimePermissionPolicy(
+    raw?.mcpPermission,
+    undefined,
+    'allow',
+    defaults.mcpPermission,
+  )
   const next: AppSettings = {
     ...defaults,
     _schemaVersion: SETTINGS_SCHEMA_VERSION,
@@ -311,6 +365,20 @@ function migrateLegacySettings(rawInput: unknown): AppSettings {
     integrationEnabled: normalizeBoolMap(raw?.integrationEnabled),
     bashPermission,
     fileWritePermission,
+    webPermission,
+    webSearchEnabled: typeof raw?.webSearchEnabled === 'boolean'
+      ? raw.webSearchEnabled && appPermissions.webSearch
+      : defaults.webSearchEnabled,
+    taskPermission,
+    externalDirectoryPermission,
+    mcpPermission,
+    requireApprovalBeforeSending: raw?.requireApprovalBeforeSending !== false,
+    notificationVoiceReplies: raw?.notificationVoiceReplies !== false,
+    notificationSmartSuggestions: raw?.notificationSmartSuggestions !== false,
+    notificationDailyDigest: raw?.notificationDailyDigest === true,
+    notificationSounds: raw?.notificationSounds !== false,
+    privacyKeepConversationHistory: raw?.privacyKeepConversationHistory !== false,
+    privacyShareAnonymizedUsage: raw?.privacyShareAnonymizedUsage === true,
     enableBash: bashPermission !== 'deny',
     enableFileWrite: fileWritePermission !== 'deny',
     runtimeConfigSource: normalizeRuntimeConfigSource(raw?.runtimeConfigSource) || defaults.runtimeConfigSource,
@@ -673,11 +741,20 @@ export function getEffectiveSettings(settings = loadSettings()): EffectiveAppSet
     settings.enableFileWrite === false ? 'deny' : settings.fileWritePermission,
     appPermissions.fileWrite,
   )
+  const webPermission = clampRuntimePermissionPolicy(settings.webPermission, appPermissions.web)
+  const taskPermission = clampRuntimePermissionPolicy(settings.taskPermission, appPermissions.task)
+  const externalDirectoryPermission = clampRuntimePermissionPolicy(settings.externalDirectoryPermission, 'allow')
+  const mcpPermission = clampRuntimePermissionPolicy(settings.mcpPermission, 'allow')
 
   return {
     ...settings,
     bashPermission,
     fileWritePermission,
+    webPermission,
+    webSearchEnabled: settings.webSearchEnabled && appPermissions.webSearch,
+    taskPermission,
+    externalDirectoryPermission,
+    mcpPermission,
     enableBash: bashPermission !== 'deny',
     enableFileWrite: fileWritePermission !== 'deny',
     effectiveProviderId: providerId,

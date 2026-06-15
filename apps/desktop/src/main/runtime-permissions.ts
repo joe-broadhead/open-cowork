@@ -15,6 +15,7 @@ export function buildCoworkRuntimePermissionConfig(options: {
   task: PermissionAction
   web: PermissionAction
   webSearch: PermissionAction
+  externalDirectory: PermissionAction
   projectDirectory?: string | null
 }) {
   return buildPermissionConfig({
@@ -22,6 +23,7 @@ export function buildCoworkRuntimePermissionConfig(options: {
     externalDirectoryRules: buildManagedExternalDirectoryRules({
       skillNames: options.managedSkillNames,
       projectDirectory: options.projectDirectory,
+      action: options.externalDirectory,
     }),
     allowPatterns: options.allowPatterns,
     askPatterns: options.askPatterns,

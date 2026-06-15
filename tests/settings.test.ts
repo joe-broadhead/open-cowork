@@ -122,6 +122,12 @@ test('native permission ask defaults initialize fresh profiles with toggles enab
     const settings = loadSettings()
     assert.equal(settings.bashPermission, 'ask')
     assert.equal(settings.fileWritePermission, 'ask')
+    assert.equal(settings.webPermission, 'allow')
+    assert.equal(settings.webSearchEnabled, true)
+    assert.equal(settings.taskPermission, 'allow')
+    assert.equal(settings.externalDirectoryPermission, 'allow')
+    assert.equal(settings.mcpPermission, 'allow')
+    assert.equal(settings.requireApprovalBeforeSending, true)
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
   } finally {
@@ -151,6 +157,15 @@ test('default public config initializes native permission toggles enabled', asyn
     const settings = loadSettings()
     assert.equal(settings.bashPermission, 'ask')
     assert.equal(settings.fileWritePermission, 'ask')
+    assert.equal(settings.webPermission, 'allow')
+    assert.equal(settings.webSearchEnabled, true)
+    assert.equal(settings.taskPermission, 'allow')
+    assert.equal(settings.externalDirectoryPermission, 'allow')
+    assert.equal(settings.mcpPermission, 'allow')
+    assert.equal(settings.notificationVoiceReplies, true)
+    assert.equal(settings.notificationDailyDigest, false)
+    assert.equal(settings.privacyKeepConversationHistory, true)
+    assert.equal(settings.privacyShareAnonymizedUsage, false)
     assert.equal(settings.enableBash, true)
     assert.equal(settings.enableFileWrite, true)
     assert.equal(settings.runtimeConfigSource, 'app')
@@ -188,6 +203,14 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
           oversized: 'x'.repeat(65 * 1024),
         },
       },
+      webPermission: 'allow',
+      webSearchEnabled: false,
+      taskPermission: 'deny',
+      externalDirectoryPermission: 'ask',
+      mcpPermission: 'deny',
+      requireApprovalBeforeSending: false,
+      notificationDailyDigest: true,
+      privacyShareAnonymizedUsage: true,
       runtimeConfigSource: 'machine',
       unexpectedTopLevel: 'should not persist',
     } as any)
@@ -198,6 +221,14 @@ test('saveSettings normalizes renderer updates before persistence', async () => 
     assert.equal(after.workflowQuietHoursStart, before.workflowQuietHoursStart)
     assert.equal(after.providerCredentials.openrouter.apiKey, 'valid-key')
     assert.equal(after.providerCredentials.openrouter.oversized, undefined)
+    assert.equal(after.webPermission, 'allow')
+    assert.equal(after.webSearchEnabled, false)
+    assert.equal(after.taskPermission, 'deny')
+    assert.equal(after.externalDirectoryPermission, 'ask')
+    assert.equal(after.mcpPermission, 'deny')
+    assert.equal(after.requireApprovalBeforeSending, false)
+    assert.equal(after.notificationDailyDigest, true)
+    assert.equal(after.privacyShareAnonymizedUsage, true)
     assert.equal(after.runtimeConfigSource, 'machine')
     assert.equal(after.unexpectedTopLevel, undefined)
   } finally {

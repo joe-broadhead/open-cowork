@@ -229,6 +229,23 @@ export const CLOUD_WEB_ROUTE_API_MATRIX: CloudWebRouteApiMatrixEntry[] = [
     tests: ['browser-e2e.test.ts', 'render.test.ts'],
   },
   {
+    routeId: 'settings',
+    surface: 'workbench',
+    requiredRole: 'member',
+    endpointIds: ['authMe', 'config', 'workspace', 'settings', 'setting'],
+    states: {
+      loading: 'User settings render from cached browser preferences and bootstrap theme/profile metadata while durable user preferences load.',
+      empty: 'No provider keys or local runtime settings are shown; the route still offers user-scoped appearance, notification, and privacy preferences.',
+      error: 'Auth, workspace, or settings API errors keep Settings usable with browser-local fallback and route runtime/provider configuration back to Desktop/Admin surfaces.',
+    },
+    disabledBehavior: 'Tenant-managed branding disables theme and accent controls; BYOK and local runtime permission controls are represented as read-only status rows only.',
+    pagination: 'Not applicable; user settings use one bounded user-scoped metadata record plus bootstrap/workspace metadata.',
+    paginationContract: paginationContract('not-applicable', 'not-applicable', null),
+    redaction: 'Provider keys, local machine runtime permissions, and organization policy internals never render in user settings.',
+    redactionContract: redactionContract('metadata-only'),
+    tests: ['render.test.ts', 'cloud-theme.test.ts', 'studio-production-qa.test.ts'],
+  },
+  {
     routeId: 'org',
     surface: 'admin',
     requiredRole: 'public',

@@ -32,7 +32,7 @@ const providerConfig = {
     dataDirName: 'Open Cowork',
     helpUrl: 'https://github.com/joe-broadhead/open-cowork',
   },
-  permissions: { bash: 'allow' as const, fileWrite: 'allow' as const },
+  permissions: { bash: 'allow' as const, fileWrite: 'allow' as const, task: 'allow' as const, web: 'allow' as const, webSearch: true },
   providers: {
     defaultProvider: 'openrouter',
     defaultModel: 'anthropic/claude-sonnet-4',

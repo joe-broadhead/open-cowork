@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
+import { clearSettingsCache, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import {
   listCustomMcps,
   listCustomAgents,
@@ -16,6 +18,34 @@ function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
   mkdirSync(parent, { recursive: true })
   return mkdtempSync(join(parent, prefix))
+}
+
+function withIsolatedPermissionSettings<T>(name: string, run: () => T): T {
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  const userDataDir = testTempDir(name)
+  try {
+    process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+    clearConfigCaches()
+    clearSettingsCache()
+    saveSettings({
+      bashPermission: 'allow',
+      fileWritePermission: 'allow',
+      webPermission: 'allow',
+      webSearchEnabled: true,
+      taskPermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      mcpPermission: 'allow',
+      enableBash: true,
+      enableFileWrite: true,
+    })
+    return run()
+  } finally {
+    clearSettingsCache()
+    clearConfigCaches()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(userDataDir, { recursive: true, force: true })
+  }
 }
 
 test('project-scoped MCP edits preserve JSONC comments and unrelated keys', () => {
@@ -334,7 +364,7 @@ Use Nova carefully.
   }
 })
 
-test('custom agent runtime guidance preserves explicit task delegation opt-in', () => {
+test('custom agent runtime guidance preserves explicit task delegation opt-in', () => withIsolatedPermissionSettings('opencowork-native-agent-task-settings-', () => {
   const projectRoot = testTempDir('opencowork-native-agent-task-optin-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
 
@@ -354,7 +384,9 @@ Coordinate carefully.
     syncCustomAgentRuntimeGuidance({ directory: projectRoot })
 
     const markdown = readFileSync(join(agentsDir, 'coordinator.md'), 'utf-8')
-    assert.match(markdown, /permission:\n {2}task: allow\n {2}webfetch: allow/)
+    assert.match(markdown, /permission:\n/)
+    assert.match(markdown, /^ {2}task: allow$/m)
+    assert.match(markdown, /^ {2}webfetch: allow$/m)
 
     const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'coordinator')
     assert.ok(agent)
@@ -362,9 +394,9 @@ Coordinate carefully.
   } finally {
     rmSync(projectRoot, { recursive: true, force: true })
   }
-})
+}))
 
-test('custom agent runtime guidance merges inline permission maps without duplicating keys', () => {
+test('custom agent runtime guidance merges inline permission maps without duplicating keys', () => withIsolatedPermissionSettings('opencowork-native-agent-inline-settings-', () => {
   const projectRoot = testTempDir('opencowork-native-agent-inline-permission-')
   const agentsDir = join(projectRoot, '.opencowork', 'agents')
 
@@ -383,7 +415,10 @@ Research carefully.
 
     const markdown = readFileSync(join(agentsDir, 'researcher.md'), 'utf-8')
     assert.equal(markdown.match(/^permission:/gm)?.length, 1)
-    assert.match(markdown, /permission:\n {2}bash: allow\n {2}webfetch: ask\n {2}task: deny/)
+    assert.match(markdown, /permission:\n/)
+    assert.match(markdown, /^ {2}bash: allow$/m)
+    assert.match(markdown, /^ {2}webfetch: ask$/m)
+    assert.match(markdown, /^ {2}task: deny$/m)
 
     const agent = listCustomAgents({ directory: projectRoot }).find((entry) => entry.name === 'researcher')
     assert.ok(agent)
@@ -391,7 +426,7 @@ Research carefully.
   } finally {
     rmSync(projectRoot, { recursive: true, force: true })
   }
-})
+}))
 
 test('runtime guidance rewrite failures do not abort startup sync', () => {
   const projectRoot = testTempDir('opencowork-native-agent-guidance-readonly-')

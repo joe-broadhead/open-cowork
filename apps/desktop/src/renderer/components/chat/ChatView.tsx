@@ -149,6 +149,7 @@ export function ChatView({ onNavigate }: ChatViewProps = {}) {
 
   const virtualize = timeline.length > VIRTUALIZE_THRESHOLD
   const virtualizer = useVirtualizer({
+    enabled: virtualize,
     count: virtualize ? timeline.length : 0,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => CHAT_ROW_ESTIMATE_PX,

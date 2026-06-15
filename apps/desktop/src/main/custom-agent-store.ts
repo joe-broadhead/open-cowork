@@ -2,13 +2,16 @@ import {
   basename,
   join,
 } from 'path'
-import { type Dirent, readdirSync, rmSync, statSync } from 'fs'
+import { existsSync, type Dirent, readdirSync, rmSync, statSync } from 'fs'
 import {
   VALID_CUSTOM_AGENT_NAME,
   type AgentColor,
   type CustomAgentConfig,
   type CustomAgentMode,
+  type CustomAgentPermissionAction,
+  type CustomAgentPermissionKey,
   type CustomAgentPermissionOverride,
+  type CustomAgentPermissionRule,
   type RuntimeContextOptions,
   type ScopedArtifactRef,
 } from '@open-cowork/shared'
@@ -36,6 +39,10 @@ import {
 } from './custom-store-common.ts'
 import { readScopedMcps } from './custom-mcp-store.ts'
 import { createAttachedSkillDirective } from './agent-prompts.ts'
+import {
+  buildCustomAgentCatalog,
+  buildCustomAgentPermissionFromCatalog,
+} from './custom-agents-utils.ts'
 
 type ManagedAgentMetadata = {
   color?: AgentColor
@@ -85,6 +92,35 @@ function readAgentMode(value: unknown): CustomAgentMode {
   return value === 'primary' ? 'primary' : 'subagent'
 }
 
+function readOptionalStringFrontmatter(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readOptionalNumberFrontmatter(value: unknown, options?: { integer?: boolean }) {
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value.trim())
+      : Number.NaN
+  if (!Number.isFinite(numeric)) return null
+  const next = options?.integer ? Math.round(numeric) : numeric
+  if (options?.integer && next <= 0) return null
+  return next
+}
+
+function readOptionalOptionsFrontmatter(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
 function readPermissionOverrides(value: unknown): CustomAgentPermissionOverride[] | undefined {
   if (!Array.isArray(value)) return undefined
   const next: CustomAgentPermissionOverride[] = []
@@ -121,7 +157,7 @@ function readPermissionOverrides(value: unknown): CustomAgentPermissionOverride[
       ...(rules.length > 0 ? { rules } : {}),
     })
   }
-  return next.length > 0 ? next : undefined
+  return next
 }
 
 function splitMarkdownFrontmatter(content: string) {
@@ -183,6 +219,35 @@ function inlineYamlMappingKey(entry: string) {
   const separator = yamlKeyValueSeparator(entry)
   if (separator === -1) return ''
   return yamlKey(entry.slice(0, separator))
+}
+
+function parseYamlScalar(rawValue: string) {
+  const quoted = rawValue.startsWith('"') || rawValue.startsWith('\'')
+  if (quoted) {
+    try {
+      return rawValue.startsWith('"')
+        ? JSON.parse(rawValue)
+        : rawValue.slice(1, -1)
+    } catch {
+      return rawValue.replace(/^['"]|['"]$/g, '')
+    }
+  }
+  if (rawValue === 'true') return true
+  if (rawValue === 'false') return false
+  if (rawValue === 'null') return null
+  return rawValue
+}
+
+function parseInlineYamlMapping(value: string) {
+  const entries = splitInlineYamlMappingEntries(value)
+  if (!entries) return null
+  const next: Record<string, unknown> = {}
+  for (const entry of entries) {
+    const separator = yamlKeyValueSeparator(entry)
+    if (separator === -1) continue
+    next[yamlKey(entry.slice(0, separator))] = parseYamlScalar(entry.slice(separator + 1).trim())
+  }
+  return next
 }
 
 function yamlKeyValueSeparator(entry: string) {
@@ -374,32 +439,13 @@ function parseFrontmatter(content: string) {
       continue
     }
 
-    const quoted = rawValue.startsWith('"') || rawValue.startsWith('\'')
-    if (quoted) {
-      try {
-        parent[key] = rawValue.startsWith('"')
-          ? JSON.parse(rawValue)
-          : rawValue.slice(1, -1)
-      } catch {
-        parent[key] = rawValue.replace(/^['"]|['"]$/g, '')
-      }
+    const inlineMap = parseInlineYamlMapping(rawValue)
+    if (inlineMap) {
+      parent[key] = inlineMap
       continue
     }
 
-    if (rawValue === 'true') {
-      parent[key] = true
-      continue
-    }
-    if (rawValue === 'false') {
-      parent[key] = false
-      continue
-    }
-    if (rawValue === 'null') {
-      parent[key] = null
-      continue
-    }
-
-    parent[key] = rawValue
+    parent[key] = parseYamlScalar(rawValue)
   }
 
   return root
@@ -498,6 +544,156 @@ function deriveDeniedToolPatternsFromPermission(permission: unknown) {
     .filter(([key, value]) => key !== 'skill' && key !== 'task' && value === 'deny')
     .map(([key]) => key)
     .sort((a, b) => a.localeCompare(b))
+}
+
+const PERMISSION_ACTION_RANK: Record<CustomAgentPermissionAction, number> = {
+  deny: 0,
+  ask: 1,
+  allow: 2,
+}
+
+const LEGACY_MCP_NON_TOOL_KEYS = new Set([
+  'skill',
+  'question',
+  'task',
+  'external_directory',
+  'doom_loop',
+  'todowrite',
+  'codesearch',
+  'webfetch',
+  'websearch',
+  'lsp',
+  'bash',
+  'edit',
+  'write',
+  'apply_patch',
+  'read',
+  'grep',
+  'glob',
+  'list',
+])
+
+function readPermissionActionValue(value: unknown): CustomAgentPermissionAction | null {
+  return value === 'allow' || value === 'ask' || value === 'deny' ? value : null
+}
+
+function strongestPermissionAction(actions: Array<CustomAgentPermissionAction | null | undefined>) {
+  let strongest: CustomAgentPermissionAction | null = null
+  for (const action of actions) {
+    if (!action) continue
+    if (!strongest || PERMISSION_ACTION_RANK[action] > PERMISSION_ACTION_RANK[strongest]) {
+      strongest = action
+    }
+  }
+  return strongest
+}
+
+function isLegacyMcpAliasPermissionKey(key: string) {
+  if (LEGACY_MCP_NON_TOOL_KEYS.has(key)) return false
+  if (key.startsWith('repo_')) return false
+  if (key.startsWith('mcp__')) return false
+  return /^[a-z0-9][a-z0-9_-]*_(?:\*|[a-z0-9][a-z0-9_*-]*)$/i.test(key)
+}
+
+function isMcpPermissionPattern(pattern: string) {
+  if (pattern.startsWith('mcp__')) {
+    return /^mcp__([a-z0-9][a-z0-9_-]*)__([^/]+)$/i.test(pattern)
+  }
+  return isLegacyMcpAliasPermissionKey(pattern)
+}
+
+function readPermissionRuleMap(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function rulesFromPermissionMap(
+  value: unknown,
+  filterPattern?: (pattern: string) => boolean,
+): CustomAgentPermissionRule[] {
+  const map = readPermissionRuleMap(value)
+  if (!map) return []
+  return Object.entries(map).flatMap(([pattern, rawAction]) => {
+    if (pattern === '*') return []
+    if (!pattern || /[\r\n\0]/.test(pattern)) return []
+    if (filterPattern && !filterPattern(pattern)) return []
+    const action = readPermissionActionValue(rawAction)
+    return action ? [{ pattern, action }] : []
+  })
+}
+
+function overrideFromDirectKeys(
+  key: CustomAgentPermissionKey,
+  permission: Record<string, unknown>,
+  permissionKeys: string[],
+): CustomAgentPermissionOverride | null {
+  const entries = permissionKeys.flatMap((permissionKey) => {
+    const action = readPermissionActionValue(permission[permissionKey])
+    return action ? [{ pattern: permissionKey, action }] : []
+  })
+  if (entries.length === 0) return null
+  const uniformAction = strongestPermissionAction(entries.map((entry) => entry.action))
+  const coversWholeFamily = entries.length === permissionKeys.length
+  const hasMixedActions = entries.some((entry) => entry.action !== uniformAction)
+  if (coversWholeFamily && uniformAction && !hasMixedActions) return { key, action: uniformAction }
+  return {
+    key,
+    action: 'deny',
+    rules: entries,
+  }
+}
+
+function overrideFromRuleMap(
+  key: Extract<CustomAgentPermissionKey, 'task' | 'external_directory'>,
+  value: unknown,
+): CustomAgentPermissionOverride | null {
+  const directAction = readPermissionActionValue(value)
+  if (directAction) return { key, action: directAction }
+
+  const map = readPermissionRuleMap(value)
+  if (!map) return null
+  const rules = rulesFromPermissionMap(map)
+  const explicitDefault = readPermissionActionValue(map['*'])
+  if (!explicitDefault && rules.length === 0) return null
+  const action = explicitDefault || 'deny'
+  return {
+    key,
+    action,
+    ...(rules.length > 0 ? { rules } : {}),
+  }
+}
+
+function deriveMcpPermissionOverride(permission: Record<string, unknown>): CustomAgentPermissionOverride | null {
+  const rules = Object.entries(permission).flatMap(([pattern, rawAction]) => {
+    if (pattern === 'mcp__*') return []
+    if (!isMcpPermissionPattern(pattern)) return []
+    const action = readPermissionActionValue(rawAction)
+    return action ? [{ pattern, action }] : []
+  })
+  const explicitDefault = readPermissionActionValue(permission['mcp__*'])
+  if (!explicitDefault && rules.length === 0) return null
+  const action = explicitDefault || 'deny'
+  return {
+    key: 'mcp',
+    action,
+    ...(rules.length > 0 ? { rules } : {}),
+  }
+}
+
+function derivePermissionOverridesFromPermission(permission: unknown) {
+  if (!permission || typeof permission !== 'object' || Array.isArray(permission)) return []
+  const record = permission as Record<string, unknown>
+  const overrides = [
+    overrideFromDirectKeys('web', record, ['codesearch', 'webfetch', 'websearch']),
+    overrideFromDirectKeys('edit', record, ['edit', 'write', 'apply_patch']),
+    overrideFromDirectKeys('bash', record, ['bash']),
+    overrideFromRuleMap('task', record.task),
+    overrideFromRuleMap('external_directory', record.external_directory),
+    deriveMcpPermissionOverride(record),
+  ].filter((entry): entry is CustomAgentPermissionOverride => Boolean(entry))
+
+  return overrides.sort((a, b) => a.key.localeCompare(b.key))
 }
 
 function pushOptionalStringFrontmatter(lines: string[], key: string, value: string | null | undefined) {
@@ -622,9 +818,11 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
     const derivedSkillNames = deriveSkillNamesFromPermission(permission)
     const derivedToolIds = deriveToolIdsFromPermission(permission, scope, directory)
     const derivedDenies = deriveDeniedToolPatternsFromPermission(permission)
+    const derivedPermissionOverrides = derivePermissionOverridesFromPermission(permission)
     const skillNames = metadata.skillNames ?? derivedSkillNames
     const toolIds = metadata.toolIds ?? derivedToolIds
     const deniedToolPatterns = metadata.deniedToolPatterns ?? derivedDenies
+    const permissionOverrides = metadata.permissionOverrides ?? derivedPermissionOverrides
     const mode = metadata.mode ?? readAgentMode(frontmatter.mode)
 
     agents.push({
@@ -646,14 +844,14 @@ function readScopedAgents(scope: NativeConfigScope, directory?: string | null) {
       enabled,
       color: metadata.color || 'accent',
       avatar: metadata.avatar || null,
-      model: metadata.model ?? null,
-      variant: metadata.variant ?? null,
-      temperature: metadata.temperature ?? null,
-      top_p: metadata.top_p ?? null,
-      steps: metadata.steps ?? null,
-      options: metadata.options ?? null,
+      model: metadata.model ?? readOptionalStringFrontmatter(frontmatter.model),
+      variant: metadata.variant ?? readOptionalStringFrontmatter(frontmatter.variant),
+      temperature: metadata.temperature ?? readOptionalNumberFrontmatter(frontmatter.temperature),
+      top_p: metadata.top_p ?? readOptionalNumberFrontmatter(frontmatter.top_p),
+      steps: metadata.steps ?? readOptionalNumberFrontmatter(frontmatter.steps, { integer: true }),
+      options: metadata.options ?? readOptionalOptionsFrontmatter(frontmatter.options),
       ...(deniedToolPatterns.length > 0 ? { deniedToolPatterns } : {}),
-      ...(metadata.permissionOverrides?.length ? { permissionOverrides: metadata.permissionOverrides } : {}),
+      ...(permissionOverrides.length > 0 ? { permissionOverrides } : {}),
     })
   }
 
@@ -680,6 +878,21 @@ function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: st
     return
   }
 
+  const projectDirectory = scope === 'project' ? targetDirectory(scope, directory) : null
+  const customMcps = [
+    ...readScopedMcps('machine'),
+    ...(projectDirectory ? readScopedMcps('project', projectDirectory) : []),
+  ]
+  const catalog = buildCustomAgentCatalog({
+    customMcps,
+    customSkills: [],
+    state: {
+      customMcps,
+      customSkills: [],
+      customAgents: [],
+    },
+  })
+
   for (const candidate of currentAgentMarkdownCandidates(root, entries)) {
     let content: string
     try {
@@ -689,15 +902,54 @@ function syncScopedAgentRuntimeGuidance(scope: NativeConfigScope, directory?: st
     }
 
     const { name } = candidate
+    const metadataPath = agentMetaPath(root, name)
+    const metadataExists = existsSync(metadataPath)
     const metadata = readManagedAgentMetadata(root, name)
     const frontmatter = parseFrontmatter(content)
     const skillNames = metadata.skillNames ?? deriveSkillNamesFromPermission(frontmatter.permission)
-    const { frontmatter: frontmatterBlock } = splitMarkdownFrontmatter(content)
-    const runtimeFrontmatter = applyCustomAgentPermissionDefaults(frontmatterBlock, skillNames)
-    const runtimeBody = renderAgentInstructionsForRuntime(readAgentInstructionsFromMarkdown(content), skillNames)
-    const nextContent = `${runtimeFrontmatter ? `${runtimeFrontmatter}\n\n` : ''}${runtimeBody}`.trimEnd() + '\n'
+    const toolIds = metadata.toolIds ?? deriveToolIdsFromPermission(frontmatter.permission, scope, projectDirectory)
+    const deniedToolPatterns = metadata.deniedToolPatterns ?? deriveDeniedToolPatternsFromPermission(frontmatter.permission)
+    const permissionOverrides = metadata.permissionOverrides ?? derivePermissionOverridesFromPermission(frontmatter.permission)
+    const agent = {
+      scope,
+      directory: projectDirectory,
+      mode: metadata.mode ?? readAgentMode(frontmatter.mode),
+      name,
+      description: typeof frontmatter.description === 'string' ? frontmatter.description : '',
+      instructions: readAgentInstructionsFromMarkdown(content),
+      skillNames,
+      toolIds,
+      enabled: candidate.enabled,
+      color: metadata.color || 'accent' as const,
+      avatar: metadata.avatar || null,
+      model: metadata.model ?? readOptionalStringFrontmatter(frontmatter.model),
+      variant: metadata.variant ?? readOptionalStringFrontmatter(frontmatter.variant),
+      temperature: metadata.temperature ?? readOptionalNumberFrontmatter(frontmatter.temperature),
+      top_p: metadata.top_p ?? readOptionalNumberFrontmatter(frontmatter.top_p),
+      steps: metadata.steps ?? readOptionalNumberFrontmatter(frontmatter.steps, { integer: true }),
+      options: metadata.options ?? readOptionalOptionsFrontmatter(frontmatter.options),
+      ...(deniedToolPatterns.length > 0 ? { deniedToolPatterns } : {}),
+      ...(permissionOverrides.length > 0 ? { permissionOverrides } : {}),
+    }
+    const nextContent = serializeCustomAgentMarkdown(agent, buildCustomAgentPermissionFromCatalog(agent, catalog))
     if (nextContent !== content) {
       try {
+        if (!metadataExists) {
+          writeJsonFile(metadataPath, {
+            color: agent.color,
+            mode: readAgentMode(agent.mode),
+            skillNames: Array.from(new Set(skillNames)),
+            toolIds: Array.from(new Set(toolIds)),
+            deniedToolPatterns: Array.from(new Set(deniedToolPatterns)),
+            ...(permissionOverrides.length > 0 ? { permissionOverrides } : {}),
+            ...(agent.model ? { model: agent.model } : {}),
+            ...(agent.variant ? { variant: agent.variant } : {}),
+            ...(typeof agent.temperature === 'number' && Number.isFinite(agent.temperature) ? { temperature: agent.temperature } : {}),
+            ...(typeof agent.top_p === 'number' && Number.isFinite(agent.top_p) ? { top_p: agent.top_p } : {}),
+            ...(typeof agent.steps === 'number' && Number.isFinite(agent.steps) && agent.steps > 0 ? { steps: Math.round(agent.steps) } : {}),
+            ...(agent.options && typeof agent.options === 'object' && Object.keys(agent.options).length > 0 ? { options: agent.options } : {}),
+          })
+        }
         writeFileAtomic(candidate.fullPath, nextContent)
       } catch (err) {
         log('agents', `Skipped runtime guidance rewrite for ${candidate.fullPath}: ${err instanceof Error ? err.message : String(err)}`)
@@ -728,7 +980,7 @@ export function saveCustomAgent(agent: CustomAgentConfig, permission: Record<str
     skillNames: Array.from(new Set((agent.skillNames || []).map((name) => name.trim()).filter(Boolean))),
     toolIds: Array.from(new Set((agent.toolIds || []).map((id) => id.trim()).filter(Boolean))),
     deniedToolPatterns: Array.from(new Set((agent.deniedToolPatterns || []).map((pattern) => pattern.trim()).filter(Boolean))),
-    ...(agent.permissionOverrides?.length ? { permissionOverrides: agent.permissionOverrides } : {}),
+    ...(agent.permissionOverrides ? { permissionOverrides: agent.permissionOverrides } : {}),
     ...(agent.avatar ? { avatar: agent.avatar } : {}),
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.variant ? { variant: agent.variant } : {}),

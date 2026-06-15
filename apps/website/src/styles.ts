@@ -8,6 +8,7 @@ import { cloudWebsiteLaunchpadStyles } from './style-launchpad.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
 import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
+import { cloudWebsiteSettingsStyles } from './style-settings.ts'
 import { cloudWebsiteStudioUiStyles } from './style-studio-ui.ts'
 import { cloudWebsiteStudioPrimitiveStyles } from './style-studio-primitives.ts'
 
@@ -215,6 +216,7 @@ ${cloudWebsiteArtifactStyles()}
 ${cloudWebsiteChatStyles()}
 ${cloudWebsiteLaunchpadStyles()}
 ${cloudWebsiteSharedUiStyles()}
+${cloudWebsiteSettingsStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}
 ${cloudWebsiteStudioUiStyles()}
 `

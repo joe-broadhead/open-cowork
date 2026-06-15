@@ -24,9 +24,11 @@ export function buildManagedSkillRules(skillNames: string[]): PermissionRuleMap 
 export function buildManagedExternalDirectoryRules(options: {
   skillNames: string[]
   projectDirectory?: string | null
+  action?: PermissionActionConfig
 }): PermissionRuleMap {
   const skillNames = Array.from(new Set(options.skillNames.filter(Boolean))).sort((a, b) => a.localeCompare(b))
   if (skillNames.length === 0) return {}
+  const action = options.action || 'allow'
 
   const rules: PermissionRuleMap = {}
   const machineSkillsDir = getMachineSkillsDir()
@@ -48,7 +50,7 @@ export function buildManagedExternalDirectoryRules(options: {
     projectReadableMirrorRoot,
   ]) {
     if (!root) continue
-    rules[join(root, '*')] = 'allow'
+    rules[join(root, '*')] = action
   }
 
   return rules
