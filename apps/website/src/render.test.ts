@@ -91,6 +91,15 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /Tools &amp; Skills/)
   assert.match(html, /Artifacts/)
   assert.match(html, /Settings/)
+  assert.match(html, /class="brand-copy"/)
+  assert.match(html, /data-sidebar-rail-toggle="true"/)
+  assert.match(html, /data-manage-nav/)
+  assert.match(html, /aria-label="Home"/)
+  assert.match(html, /aria-label="Manage"/)
+  assert.match(html, /aria-label="Admin controls"/)
+  assert.match(html, /Chats by project/)
+  assert.match(html, /class="sidebar-presence-footer"/)
+  assert.match(html, /data-presence-settings-link="true"/)
   assert.match(html, /Admin controls/)
   assert.match(html, /data-admin-nav/)
   assert.match(html, /Org/)
@@ -147,8 +156,11 @@ test('cloud website renders Studio and admin shell surfaces', () => {
   assert.match(html, /--accent-gradient: linear-gradient\(150deg,var\(--accent-2\),var\(--accent\)\);/)
   assert.match(html, /--accent-action-fill: linear-gradient\(rgba\(255,255,255,0\.01\),rgba\(255,255,255,0\.01\)\), var\(--accent-gradient\);/)
   assert.match(html, /--cloud-shell-sidebar-w: 248px;/)
+  assert.match(html, /--cloud-shell-sidebar-rail-w: 64px;/)
   assert.match(html, /font-variant-numeric: tabular-nums;/)
   assert.match(html, /\.nav-links a\[data-active="true"\]/)
+  assert.match(html, /body\[data-sidebar-rail="collapsed"\] \.shell/)
+  assert.match(html, /\.sidebar-thread-project__head/)
   assert.match(html, /box-shadow: var\(--ring-selected\);/)
   assert.match(html, /\.admin-nav:not\(\[open\]\) \.nav-links/)
   assert.match(html, /class="cloud-theme-switcher"/)
@@ -191,8 +203,8 @@ test('cloud website renders Studio and admin shell surfaces', () => {
 
 test('cloud website app shell exposes typed route metadata', () => {
   assert.equal(DEFAULT_CLOUD_WEB_ROUTE, 'chat')
-  assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.id), ['workbench', 'admin'])
-  assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.label), ['Studio', 'Admin'])
+  assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.id), ['studio', 'manage', 'admin'])
+  assert.deepEqual(CLOUD_WEB_ROUTE_GROUPS.map((group) => group.label), ['Studio', 'Manage', 'Admin'])
   assert.equal(findCloudWebRoute('chat')?.requiresAuth, false)
   assert.equal(findCloudWebRoute('threads')?.surface, 'workbench')
   assert.equal(findCloudWebRoute('approvals')?.requiresAuth, true)
@@ -991,7 +1003,7 @@ test('cloud website thread helper handles status filters and thousands-sized lis
         view: {
           status: 'running',
           pendingApprovals: [{ id: 'approval-1' }],
-          projectSource: { kind: 'git', repositoryUrl: 'https://github.com/acme/app.git' },
+          projectSource: { kind: 'git' as const, repositoryUrl: 'https://github.com/acme/app.git' },
         },
       },
     },
@@ -1000,7 +1012,7 @@ test('cloud website thread helper handles status filters and thousands-sized lis
         view: {
           status: 'running',
           pendingQuestions: [{ id: 'question-1' }],
-          projectSource: { kind: 'snapshot', title: 'Browser upload' },
+          projectSource: { kind: 'snapshot' as const, title: 'Browser upload' },
         },
       },
     },

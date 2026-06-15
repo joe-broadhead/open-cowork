@@ -692,15 +692,15 @@ export function App() {
         </div>
       ) : null}
       <div className="flex flex-1 min-h-0">
-        {!sidebarCollapsed && (
-          <Sidebar
-            currentView={view}
-            onViewChange={navigateView}
-            searchRequestNonce={sidebarSearchNonce}
-            settingsRequestNonce={sidebarSettingsNonce}
-            branding={config.branding.sidebar}
-          />
-        )}
+        <Sidebar
+          currentView={view}
+          onViewChange={navigateView}
+          searchRequestNonce={sidebarSearchNonce}
+          settingsRequestNonce={sidebarSettingsNonce}
+          branding={config.branding.sidebar}
+          collapsed={sidebarCollapsed}
+          onExpandSidebar={ensureSidebarVisible}
+        />
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
           <ViewErrorBoundary resetKey={view} onBackHome={() => navigateView('home')}>
             {view === 'home' && (

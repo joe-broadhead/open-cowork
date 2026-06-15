@@ -143,6 +143,7 @@ import {
   leaseFromRow,
   projectionFromRow,
   sessionFromRow,
+  sessionFromRowWithProjectSource,
   settingFromRow,
   workspaceEventFromRow,
 } from './postgres-domains/sessions.ts'
@@ -182,9 +183,7 @@ const CHANNEL_METADATA_MAX_BYTES = 16_384
 const BYOK_PROVIDER_ID_MAX_LENGTH = 64
 const BYOK_SECRET_TEXT_MAX_LENGTH = 4096
 function loadPgPool(connectionString: string): PgPool {
-  const pg = require('pg') as {
-    Pool: new (options: { connectionString: string }) => PgPool
-  }
+  const pg = require('pg') as { Pool: new (options: { connectionString: string }) => PgPool }
   return new pg.Pool({ connectionString })
 }
 
@@ -2094,12 +2093,16 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
   async listSessions(tenantId: string, userId: string) {
     await this.requireTenantUser(tenantId, userId)
     const result = await this.pool.query(
-      `SELECT * FROM cloud_sessions
-       WHERE tenant_id = $1 AND user_id = $2
-       ORDER BY updated_at DESC, session_id`,
+      `SELECT s.*, p.view -> 'projectSource' AS projection_project_source
+       FROM cloud_sessions s
+       LEFT JOIN cloud_session_projections p
+         ON p.tenant_id = s.tenant_id
+        AND p.session_id = s.session_id
+       WHERE s.tenant_id = $1 AND s.user_id = $2
+       ORDER BY s.updated_at DESC, s.session_id`,
       [tenantId, userId],
     )
-    return result.rows.map(sessionFromRow)
+    return result.rows.map(sessionFromRowWithProjectSource)
   }
 
   async listSessionsPage(input: ListSessionsPageInput) {
@@ -2107,40 +2110,44 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     const limit = Math.max(1, Math.min(500, Math.floor(input.limit ?? 100)))
     const cursor = decodeSessionPageCursor(input.cursor, input)
     const params: unknown[] = [input.tenantId, input.userId]
-    const where = ['tenant_id = $1', 'user_id = $2']
+    const where = ['s.tenant_id = $1', 's.user_id = $2']
     if (input.status) {
       params.push(input.status)
-      where.push(`status = $${params.length}`)
+      where.push(`s.status = $${params.length}`)
     }
     if (input.profileName) {
       params.push(input.profileName)
-      where.push(`profile_name = $${params.length}`)
+      where.push(`s.profile_name = $${params.length}`)
     }
     const query = input.query?.trim().toLowerCase()
     if (query) {
       params.push(`%${query}%`)
       where.push(`(
-        lower(COALESCE(title, '')) LIKE $${params.length}
-        OR lower(session_id) LIKE $${params.length}
-        OR lower(opencode_session_id) LIKE $${params.length}
-        OR lower(profile_name) LIKE $${params.length}
+        lower(COALESCE(s.title, '')) LIKE $${params.length}
+        OR lower(s.session_id) LIKE $${params.length}
+        OR lower(s.opencode_session_id) LIKE $${params.length}
+        OR lower(s.profile_name) LIKE $${params.length}
       )`)
     }
     if (cursor) {
       params.push(cursor.updatedAt, cursor.sessionId)
       const updatedAtParam = params.length - 1
       const sessionIdParam = params.length
-      where.push(`(updated_at < $${updatedAtParam} OR (updated_at = $${updatedAtParam} AND session_id > $${sessionIdParam}))`)
+      where.push(`(s.updated_at < $${updatedAtParam} OR (s.updated_at = $${updatedAtParam} AND s.session_id > $${sessionIdParam}))`)
     }
     params.push(limit + 1)
     const result = await this.pool.query(
-      `SELECT * FROM cloud_sessions
+      `SELECT s.*, p.view -> 'projectSource' AS projection_project_source
+       FROM cloud_sessions s
+       LEFT JOIN cloud_session_projections p
+         ON p.tenant_id = s.tenant_id
+        AND p.session_id = s.session_id
        WHERE ${where.join(' AND ')}
-       ORDER BY updated_at DESC, session_id
+       ORDER BY s.updated_at DESC, s.session_id
        LIMIT $${params.length}`,
       params,
     )
-    const rows = result.rows.map(sessionFromRow)
+    const rows = result.rows.map(sessionFromRowWithProjectSource)
     const items = rows.slice(0, limit)
     return {
       items,

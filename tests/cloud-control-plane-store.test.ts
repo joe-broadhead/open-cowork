@@ -102,6 +102,41 @@ test('cloud control plane paginates and filters user session lists', () => {
   )
 })
 
+test('cloud control plane exposes safe project-source summaries on session lists', () => {
+  const store = seededStore()
+  store.writeSessionProjection({
+    tenantId: 'tenant-1',
+    sessionId: 'session-1',
+    sequence: 1,
+    view: {
+      projectSource: {
+        kind: 'git',
+        repositoryUrl: 'https://github.com/example/repo.git?token=secret#fragment',
+        ref: 'feature/sidebar',
+        subdirectory: 'apps/web',
+        credentialRef: 'secret-token-ref',
+      },
+    },
+  })
+
+  const expectedSummary = {
+    kind: 'git',
+    repositoryUrl: 'https://github.com/example/repo.git',
+    ref: 'feature/sidebar',
+    subdirectory: 'apps/web',
+  }
+  assert.deepEqual(store.listSessions('tenant-1', 'user-1')[0]?.projectSource, expectedSummary)
+  assert.deepEqual(store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1' }).items[0]?.projectSource, expectedSummary)
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      store.listSessionsPage({ tenantId: 'tenant-1', userId: 'user-1' }).items[0]?.projectSource || {},
+      'credentialRef',
+    ),
+    false,
+  )
+  assert.equal(JSON.stringify(store.listSessions('tenant-1', 'user-1')[0]?.projectSource).includes('secret'), false)
+})
+
 test('cloud control plane keeps product domains isolated by tenant and org', () => {
   const store = seededStore()
   const org1 = store.ensureOrgForTenant({ tenantId: 'tenant-1', orgId: 'tenant-1', name: 'Acme' })

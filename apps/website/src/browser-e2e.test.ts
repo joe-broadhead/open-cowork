@@ -87,6 +87,26 @@ test('cloud web browser gates admin controls for member workspaces', async () =>
   }
 })
 
+test('cloud web browser expands the collapsed rail before focusing chat search', async () => {
+  const harness = await createCloudWebBrowserHarness({ role: 'admin', sessionCount: 2, hydratedViewCount: 2 }).start()
+  try {
+    const railToggle = harness.document.querySelector('[data-sidebar-rail-toggle]') as HTMLButtonElement
+    assert.ok(railToggle)
+    railToggle.dispatchEvent(new harness.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    await waitFor(() => assert.equal(harness.document.body.dataset.sidebarRail, 'collapsed'))
+    assert.equal(harness.document.querySelector('[data-route-link="chat"]')?.getAttribute('aria-label'), 'Home')
+    assert.equal(harness.document.querySelector('[data-route-link="agents"]')?.getAttribute('aria-label'), 'Team')
+
+    harness.clickText('button', 'Search')
+    await waitFor(() => {
+      assert.equal(harness.document.body.dataset.sidebarRail, 'expanded')
+      assert.equal(harness.document.activeElement?.id, 'sidebar-thread-query')
+    })
+  } finally {
+    harness.close()
+  }
+})
+
 test('cloud web browser disables member invite controls outside invite signup mode', async () => {
   const harness = await createCloudWebBrowserHarness({ role: 'admin', signupMode: 'disabled' }).start()
   try {
@@ -352,7 +372,7 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
       assert.equal(inspectorToggle.getAttribute('aria-expanded'), 'false')
     })
 
-    harness.clickText('[data-route-link]', 'Coworkers')
+    harness.clickText('[data-route-link]', 'Team')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'agents'))
     assert.ok(harness.document.querySelector('#workbench-agent-list .agent-card'))
     assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Leads ·/)

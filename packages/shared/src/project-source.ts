@@ -20,6 +20,15 @@ export type CloudSnapshotProjectSource = {
 export type CloudProjectSource = CloudGitProjectSource | CloudSnapshotProjectSource
 export type CloudProjectSourceInput = CloudProjectSource
 
+export type CloudProjectSourceSummary = {
+  kind: CloudProjectSourceKind
+  repositoryUrl?: string | null
+  ref?: string | null
+  subdirectory?: string | null
+  snapshotId?: string | null
+  title?: string | null
+}
+
 export type CloudProjectSourcePolicyVerdict = {
   allowed: boolean
   reason: string | null
@@ -91,6 +100,11 @@ function readNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
 }
 
+function cloudSafeGitRepositoryUrl(value: string) {
+  const stripped = value.split(/[?#]/, 1)[0]?.trim() || value.trim()
+  return stripped.replace(/^([a-z][a-z0-9+.-]*:\/\/)([^/@]+@)/i, '$1')
+}
+
 export function normalizeCloudProjectSource(value: unknown): CloudProjectSource | null {
   const record = asRecord(value)
   if (record.kind === 'git') {
@@ -118,4 +132,21 @@ export function normalizeCloudProjectSource(value: unknown): CloudProjectSource 
     }
   }
   return null
+}
+
+export function summarizeCloudProjectSource(source: CloudProjectSource | null | undefined): CloudProjectSourceSummary | null {
+  if (!source) return null
+  if (source.kind === 'git') {
+    return {
+      kind: 'git',
+      repositoryUrl: cloudSafeGitRepositoryUrl(source.repositoryUrl),
+      ref: source.ref,
+      subdirectory: source.subdirectory,
+    }
+  }
+  return {
+    kind: 'snapshot',
+    snapshotId: source.snapshotId,
+    title: source.title,
+  }
 }

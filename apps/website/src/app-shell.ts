@@ -34,8 +34,9 @@ export type CloudWebRoute = {
 }
 
 export type CloudWebRouteGroup = {
-  id: CloudWebSurface
+  id: 'studio' | 'manage' | 'admin'
   label: string
+  collapsible?: boolean
   routes: CloudWebRoute[]
 }
 
@@ -68,7 +69,7 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
   },
   {
     id: 'agents',
-    label: 'Coworkers',
+    label: 'Team',
     surface: 'workbench',
     requiresAuth: true,
     requiresAdmin: false,
@@ -198,13 +199,20 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
 
 export const CLOUD_WEB_ROUTE_GROUPS: CloudWebRouteGroup[] = [
   {
-    id: 'workbench',
+    id: 'studio',
     label: 'Studio',
-    routes: CLOUD_WEB_ROUTES.filter((route) => route.surface === 'workbench'),
+    routes: CLOUD_WEB_ROUTES.filter((route) => route.id === 'chat' || route.id === 'threads' || route.id === 'approvals'),
+  },
+  {
+    id: 'manage',
+    label: 'Manage',
+    collapsible: true,
+    routes: CLOUD_WEB_ROUTES.filter((route) => route.id === 'agents' || route.id === 'workflows' || route.id === 'channels' || route.id === 'capabilities' || route.id === 'artifacts' || route.id === 'settings'),
   },
   {
     id: 'admin',
     label: 'Admin',
+    collapsible: true,
     routes: CLOUD_WEB_ROUTES.filter((route) => route.surface === 'admin'),
   },
 ]

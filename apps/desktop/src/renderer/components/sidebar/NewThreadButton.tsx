@@ -28,7 +28,7 @@ function reportThreadError(error: unknown, view: string) {
   }
 }
 
-export function NewThreadButton({ onClick }: { onClick?: () => void }) {
+export function NewThreadButton({ onClick, compact = false }: { onClick?: () => void; compact?: boolean }) {
   const addSession = useSessionStore((s) => s.addSession)
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession)
   const addGlobalError = useSessionStore((s) => s.addGlobalError)
@@ -199,18 +199,20 @@ export function NewThreadButton({ onClick }: { onClick?: () => void }) {
         onClick={() => setShowMenu(!showMenu)}
         variant="secondary"
         size="sm"
-        fullWidth
+        fullWidth={!compact}
         leftIcon="plus"
-        className="new-thread-trigger"
+        aria-label={t('sidebar.newChat', 'New Chat')}
+        title={compact ? t('sidebar.newChat', 'New Chat') : undefined}
+        className={`new-thread-trigger ${compact ? 'h-9 w-9 justify-center px-0' : ''}`}
       >
-        {t('sidebar.newChat', 'New Chat')}
+        {compact ? null : t('sidebar.newChat', 'New Chat')}
       </Button>
 
       {showMenu && (
         <>
           <ModalBackdrop onDismiss={() => setShowMenu(false)} className="fixed inset-0 z-40" />
           <div
-            className="absolute start-0 end-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover"
+            className={`absolute start-0 top-full mt-1 z-50 rounded-xl overflow-hidden theme-popover ${compact ? 'w-72' : 'end-0'}`}
           >
             <Card
               interactive

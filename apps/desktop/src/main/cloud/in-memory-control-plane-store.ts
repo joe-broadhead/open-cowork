@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { normalizeWorkflowSteps, type CoordinationWatch, type WorkflowDraft, type WorkflowRun, type WorkflowRunStatus, type WorkflowStatus, type WorkflowSummary, type WorkflowTriggerType } from '@open-cowork/shared'
+import { normalizeCloudProjectSource, normalizeWorkflowSteps, summarizeCloudProjectSource, type CloudProjectSourceSummary, type CoordinationWatch, type WorkflowDraft, type WorkflowRun, type WorkflowRunStatus, type WorkflowStatus, type WorkflowSummary, type WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
 import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
@@ -399,6 +399,7 @@ export type SessionRecord = {
   title: string | null
   createdAt: string
   updatedAt: string
+  projectSource?: CloudProjectSourceSummary | null
 }
 
 export type ListSessionsPageInput = {
@@ -2931,7 +2932,16 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
         right.record.updatedAt.localeCompare(left.record.updatedAt)
         || left.record.sessionId.localeCompare(right.record.sessionId)
       ))
-      .map((session) => clone(session.record))
+      .map((session) => this.sessionRecordWithProjectSource(session.record))
+  }
+
+  private sessionRecordWithProjectSource(record: SessionRecord): SessionRecord {
+    const stored = this.sessions.get(key(record.tenantId, record.sessionId))
+    const source = normalizeCloudProjectSource(stored?.projection?.view?.projectSource)
+    return {
+      ...clone(record),
+      projectSource: summarizeCloudProjectSource(source),
+    }
   }
 
   listSessionsPage(input: ListSessionsPageInput): ListSessionsPageRecord {
@@ -2960,7 +2970,7 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
     const page = filtered.slice(0, limit)
     const hasMore = filtered.length > limit
     return {
-      items: page.map((session) => clone(session)),
+      items: page.map((session) => this.sessionRecordWithProjectSource(session)),
       nextCursor: hasMore && page.length > 0 ? encodeSessionPageCursor(page[page.length - 1]!, input) : null,
       totalEstimate: filtered.length,
     }

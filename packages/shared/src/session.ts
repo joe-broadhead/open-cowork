@@ -1,4 +1,5 @@
 import type { SessionArtifact } from './artifacts.js'
+import type { CloudProjectSourceSummary } from './project-source.js'
 
 // Aggregate diff stats for a session, mirroring SDK Session.summary (additions
 // + deletions + file count across the session's snapshot diff). Distinct from
@@ -47,6 +48,9 @@ export interface SessionInfo {
   composerAgentName?: string | null
   composerModelId?: string | null
   composerReasoningVariant?: string | null
+  // Cloud-safe project source summary for remote sessions. This intentionally
+  // omits credential refs and object-store keys used by the full source.
+  projectSource?: CloudProjectSourceSummary | null
 }
 
 export interface SessionPromptOptions {

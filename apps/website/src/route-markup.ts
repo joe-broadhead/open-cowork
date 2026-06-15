@@ -1,7 +1,29 @@
 import { cloudWebAdminSurfaceForRoute } from './admin-surface-matrix.ts'
-import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteId } from './app-shell.ts'
+import { CLOUD_WEB_ROUTE_GROUPS, CLOUD_WEB_ROUTES, DEFAULT_CLOUD_WEB_ROUTE, type CloudWebRoute, type CloudWebRouteGroup, type CloudWebRouteId } from './app-shell.ts'
 import { escapeHtml } from './html-utils.ts'
 import { cloudWebWorkbenchParityForRoute, type CloudWebWorkbenchParityAvailability } from './workbench-parity.ts'
+
+const ROUTE_NAV_ICONS: Record<CloudWebRouteId, string> = {
+  threads: 'P',
+  chat: '+',
+  approvals: '?',
+  agents: 'T',
+  capabilities: '*',
+  workflows: 'W',
+  channels: 'C',
+  artifacts: 'A',
+  settings: 'S',
+  org: 'O',
+  members: 'M',
+  policy: 'P',
+  byok: 'K',
+  connections: 'N',
+  billing: '$',
+  gateway: 'G',
+  audit: 'L',
+  usage: 'U',
+  diagnostics: 'D',
+}
 
 function routeNavMarkup(route: CloudWebRoute) {
   const authClass = route.requiresAuth ? ' signed-in-only' : ''
@@ -9,15 +31,27 @@ function routeNavMarkup(route: CloudWebRoute) {
   const alertBadge = route.id === 'approvals'
     ? '<span class="nav-alert-count" id="approvals-alert-count" aria-live="polite"></span>'
     : ''
-  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" class="${authClass.trim()}${adminClass}">${escapeHtml(route.label)}${alertBadge}</a>`
+  const label = escapeHtml(route.label)
+  return `<a href="#${escapeHtml(route.id)}" data-route-link="${escapeHtml(route.id)}" data-route-surface="${escapeHtml(route.surface)}" data-requires-auth="${route.requiresAuth ? 'true' : 'false'}" data-requires-admin="${route.requiresAdmin ? 'true' : 'false'}" aria-label="${label}" title="${label}" class="${authClass.trim()}${adminClass}"><span class="nav-icon" data-icon="${escapeHtml(ROUTE_NAV_ICONS[route.id])}" aria-hidden="true"></span><span class="nav-label">${label}</span>${alertBadge}</a>`
 }
 
-export function routeGroupsMarkup() {
-  return CLOUD_WEB_ROUTE_GROUPS.map((group) => {
+export function routeGroupsMarkup(groupIds?: Array<CloudWebRouteGroup['id']>) {
+  const groups = groupIds
+    ? CLOUD_WEB_ROUTE_GROUPS.filter((group) => groupIds.includes(group.id))
+    : CLOUD_WEB_ROUTE_GROUPS
+  return groups.map((group) => {
     const links = group.routes.map(routeNavMarkup).join('')
     if (group.id === 'admin') {
+      const label = `${escapeHtml(group.label)} controls`
       return `<details class="nav-group admin-nav" data-admin-nav data-nav-group="${escapeHtml(group.id)}">
-          <summary><span>${escapeHtml(group.label)} controls</span></summary>
+          <summary aria-label="${label}" title="${label}"><span>${label}</span></summary>
+          <div class="nav-links">${links}</div>
+        </details>`
+    }
+    if (group.collapsible) {
+      const label = escapeHtml(group.label)
+      return `<details class="nav-group manage-nav" data-manage-nav data-nav-group="${escapeHtml(group.id)}" open>
+          <summary aria-label="${label}" title="${label}"><span>${label}</span><small>Team · Playbooks · Tools</small></summary>
           <div class="nav-links">${links}</div>
         </details>`
     }

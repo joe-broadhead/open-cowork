@@ -142,6 +142,7 @@ function toSessionInfo(record: SessionRecord): SessionInfo {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     kind: 'interactive',
+    projectSource: record.projectSource || null,
   }
 }
 

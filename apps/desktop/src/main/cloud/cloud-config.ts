@@ -259,6 +259,13 @@ export function evaluateCloudProjectSourcePolicy(
         policyCode: 'project_source.git.raw_credentials',
       }
     }
+    if (url.search || url.hash) {
+      return {
+        allowed: false,
+        reason: 'Git repository URLs must not include query strings or fragments.',
+        policyCode: 'project_source.git.url_components',
+      }
+    }
     if (url.protocol === 'file:' && !policy.projectSources.git.allowFileUrls) {
       return { allowed: false, reason: 'Local file Git URLs are disabled for this cloud profile.', policyCode: 'project_source.git.file_url_disabled' }
     }

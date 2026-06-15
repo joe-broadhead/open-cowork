@@ -12,6 +12,7 @@ import type {
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
+  CloudProjectSourceSummary,
   CloudProjectionFenceToken,
   CloudSessionProjectionRecord,
   CloudSessionEventType,
@@ -48,6 +49,7 @@ export type {
   CloudProjectSnapshotUploadResult,
   CloudProjectSourceInput,
   CloudProjectSourcePolicyVerdict,
+  CloudProjectSourceSummary,
   CloudProjectionFenceToken,
   SessionArtifact,
   SessionArtifactAttachment,
@@ -247,6 +249,7 @@ export type SessionRecord = {
   profileName: string
   status: CloudClientSessionStatus
   title: string | null
+  projectSource?: CloudProjectSourceSummary | null
   createdAt: string
   updatedAt: string
 }

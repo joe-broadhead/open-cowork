@@ -127,6 +127,12 @@ function transport(): CloudTransportAdapter {
       title: 'Cloud session',
       createdAt: '2026-05-27T10:00:00.000Z',
       updatedAt: '2026-05-27T10:00:00.000Z',
+      projectSource: {
+        kind: 'git',
+        repositoryUrl: 'https://github.com/acme/project.git',
+        ref: 'main',
+        subdirectory: 'apps/web',
+      },
     }],
     createSession: async () => ({
       session: {
@@ -914,7 +920,14 @@ test('cloud workspace adapter falls back to read-only cached state when transpor
     cache,
   })
 
-  assert.equal((await offline.listSessions())[0]?.id, 'session-1')
+  const offlineSessions = await offline.listSessions()
+  assert.equal(offlineSessions[0]?.id, 'session-1')
+  assert.deepEqual(offlineSessions[0]?.projectSource, {
+    kind: 'git',
+    repositoryUrl: 'https://github.com/acme/project.git',
+    ref: 'main',
+    subdirectory: 'apps/web',
+  })
   assert.equal((await offline.getSessionInfo('session-1'))?.title, 'Cloud session')
   assert.equal((await offline.getSessionView('session-1')).messages[0]?.content, 'Hello')
   assert.equal((await offline.listWorkflows()).workflows[0]?.id, 'workflow-1')

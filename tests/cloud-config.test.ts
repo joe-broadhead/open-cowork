@@ -42,6 +42,14 @@ test('cloud project source policy allows safe git sources and blocks disallowed 
   }, policy).policyCode, 'project_source.git.raw_credentials')
   assert.equal(evaluateCloudProjectSourcePolicy({
     kind: 'git',
+    repositoryUrl: 'https://github.com/acme/repo.git?token=secret',
+  }, policy).policyCode, 'project_source.git.url_components')
+  assert.equal(evaluateCloudProjectSourcePolicy({
+    kind: 'git',
+    repositoryUrl: 'https://github.com/acme/repo.git#token-secret',
+  }, policy).policyCode, 'project_source.git.url_components')
+  assert.equal(evaluateCloudProjectSourcePolicy({
+    kind: 'git',
     repositoryUrl: 'https://github.com/acme/repo.git',
     ref: '--upload-pack=/tmp/pwned',
   }, policy).policyCode, 'project_source.git.ref')
