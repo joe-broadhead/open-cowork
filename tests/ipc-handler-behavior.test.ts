@@ -2100,12 +2100,17 @@ test('settings handlers sync only portable settings for cloud workspaces', async
       calls.push(`get:${key}`)
       return {
         key,
-        value: { selectedProviderId: 'anthropic', selectedModelId: 'claude-test' },
+        value: {
+          selectedProviderId: 'anthropic',
+          selectedModelId: 'claude-test',
+          notificationVoiceReplies: false,
+          privacyShareAnonymizedUsage: true,
+        },
         updatedAt: '2026-05-27T10:00:00.000Z',
       }
     },
     setSetting: async (key, value) => {
-      calls.push(`set:${key}:${value.selectedProviderId}`)
+      calls.push(`set:${key}:${value.selectedProviderId}:${value.notificationVoiceReplies}:${value.privacyShareAnonymizedUsage}`)
       return {
         key,
         value,
@@ -2151,6 +2156,8 @@ test('settings handlers sync only portable settings for cloud workspaces', async
 
   const current = await handlers.get('settings:get')?.({}, { workspaceId: 'cloud:test' })
   assert.equal(current.selectedProviderId, 'anthropic')
+  assert.equal(current.notificationVoiceReplies, false)
+  assert.equal(current.privacyShareAnonymizedUsage, true)
   assert.deepEqual(current.providerCredentials, {})
 
   await assert.rejects(
@@ -2161,18 +2168,38 @@ test('settings handlers sync only portable settings for cloud workspaces', async
     /do not sync raw/,
   )
 
+  await assert.rejects(
+    () => handlers.get('settings:set')?.({}, {
+      workspaceId: 'cloud:test',
+      webPermission: 'deny',
+    }),
+    /do not sync raw or local-only/,
+  )
+
+  await assert.rejects(
+    () => handlers.get('settings:set')?.({}, {
+      workspaceId: 'cloud:test',
+      privacyKeepConversationHistory: false,
+    }),
+    /do not sync raw or local-only/,
+  )
+
   const updated = await handlers.get('settings:set')?.({}, {
     workspaceId: 'cloud:test',
     selectedProviderId: 'openai',
     selectedModelId: 'gpt-test',
+    notificationVoiceReplies: true,
+    privacyShareAnonymizedUsage: false,
   })
   assert.equal(updated.selectedProviderId, 'openai')
+  assert.equal(updated.notificationVoiceReplies, true)
+  assert.equal(updated.privacyShareAnonymizedUsage, false)
   assert.deepEqual(updated.providerCredentials, {})
 
   assert.deepEqual(calls, [
     'get:portable-settings',
     'get:portable-settings',
-    'set:portable-settings:openai',
+    'set:portable-settings:openai:true:false',
   ])
 })
 

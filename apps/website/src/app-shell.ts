@@ -12,6 +12,7 @@ export type CloudWebRouteId =
   | 'workflows'
   | 'channels'
   | 'artifacts'
+  | 'settings'
   | 'org'
   | 'members'
   | 'policy'
@@ -104,6 +105,14 @@ export const CLOUD_WEB_ROUTES: CloudWebRoute[] = [
     requiresAuth: true,
     requiresAdmin: false,
     summary: cloudWebWorkbenchRouteSummary('artifacts', 'Cloud artifact metadata and downloads.'),
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    surface: 'workbench',
+    requiresAuth: true,
+    requiresAdmin: false,
+    summary: cloudWebWorkbenchRouteSummary('settings', 'User appearance, notifications, privacy, and cloud profile status.'),
   },
   {
     id: 'org',

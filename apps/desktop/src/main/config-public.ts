@@ -181,6 +181,9 @@ export function buildPublicAppConfig(
     permissions: {
       bash: config.permissions.bash,
       fileWrite: config.permissions.fileWrite,
+      task: config.permissions.task,
+      web: config.permissions.web,
+      webSearch: config.permissions.webSearch,
     },
     agentStarterTemplates: config.agentStarterTemplates || [],
     toolTrace: {

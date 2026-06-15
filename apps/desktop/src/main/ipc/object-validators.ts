@@ -48,6 +48,18 @@ const SETTINGS_UPDATE_KEYS = new Set([
   'integrationEnabled',
   'bashPermission',
   'fileWritePermission',
+  'webPermission',
+  'webSearchEnabled',
+  'taskPermission',
+  'externalDirectoryPermission',
+  'mcpPermission',
+  'requireApprovalBeforeSending',
+  'notificationVoiceReplies',
+  'notificationSmartSuggestions',
+  'notificationDailyDigest',
+  'notificationSounds',
+  'privacyKeepConversationHistory',
+  'privacyShareAnonymizedUsage',
   'enableBash',
   'enableFileWrite',
   'runtimeConfigSource',
@@ -383,7 +395,7 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
   update.providerCredentials = optionalNestedStringRecord(record, 'providerCredentials', 'Provider credentials')
   update.integrationCredentials = optionalNestedStringRecord(record, 'integrationCredentials', 'Integration credentials')
   update.integrationEnabled = optionalBooleanRecord(record, 'integrationEnabled', 'Integration enabled')
-  for (const key of ['bashPermission', 'fileWritePermission'] as const) {
+  for (const key of ['bashPermission', 'fileWritePermission', 'webPermission', 'taskPermission', 'externalDirectoryPermission', 'mcpPermission'] as const) {
     if (record[key] !== undefined) {
       if (typeof record[key] !== 'string' || !RUNTIME_PERMISSION_POLICIES.has(record[key])) {
         throw new Error(`${key} must be allow, ask, or deny.`)
@@ -393,6 +405,14 @@ export function validateSettingsUpdate(record: Record<string, unknown>): Partial
   }
   update.enableBash = optionalBoolean(record, 'enableBash', 'Bash enabled')
   update.enableFileWrite = optionalBoolean(record, 'enableFileWrite', 'File write enabled')
+  update.webSearchEnabled = optionalBoolean(record, 'webSearchEnabled', 'Web search enabled')
+  update.requireApprovalBeforeSending = optionalBoolean(record, 'requireApprovalBeforeSending', 'Require approval before sending')
+  update.notificationVoiceReplies = optionalBoolean(record, 'notificationVoiceReplies', 'Voice reply notifications')
+  update.notificationSmartSuggestions = optionalBoolean(record, 'notificationSmartSuggestions', 'Smart suggestion notifications')
+  update.notificationDailyDigest = optionalBoolean(record, 'notificationDailyDigest', 'Daily digest notifications')
+  update.notificationSounds = optionalBoolean(record, 'notificationSounds', 'Notification sounds')
+  update.privacyKeepConversationHistory = optionalBoolean(record, 'privacyKeepConversationHistory', 'Conversation history retention')
+  update.privacyShareAnonymizedUsage = optionalBoolean(record, 'privacyShareAnonymizedUsage', 'Anonymized usage sharing')
   if (record.runtimeConfigSource !== undefined) {
     if (typeof record.runtimeConfigSource !== 'string' || !RUNTIME_CONFIG_SOURCES.has(record.runtimeConfigSource)) {
       throw new Error('Runtime config source must be app or machine.')

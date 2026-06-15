@@ -39,7 +39,7 @@ const baseAppConfig: PublicAppConfig = {
     dataDirName: 'Open Cowork',
     helpUrl: 'https://github.com/joe-broadhead/open-cowork',
   },
-  permissions: { bash: 'allow', fileWrite: 'allow' },
+  permissions: { bash: 'allow', fileWrite: 'allow', task: 'allow', web: 'allow', webSearch: true },
   providers: {
     defaultProvider: null,
     defaultModel: null,

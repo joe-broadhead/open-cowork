@@ -16,6 +16,18 @@ function settings(overrides: Partial<EffectiveAppSettings> = {}): EffectiveAppSe
     integrationEnabled: {},
     bashPermission: 'deny',
     fileWritePermission: 'deny',
+    webPermission: 'allow',
+    webSearchEnabled: true,
+    taskPermission: 'allow',
+    externalDirectoryPermission: 'allow',
+    mcpPermission: 'allow',
+    requireApprovalBeforeSending: true,
+    notificationVoiceReplies: true,
+    notificationSmartSuggestions: true,
+    notificationDailyDigest: false,
+    notificationSounds: true,
+    privacyKeepConversationHistory: true,
+    privacyShareAnonymizedUsage: false,
     enableBash: false,
     enableFileWrite: false,
     runtimeToolingBridgeEnabled: true,
@@ -78,6 +90,9 @@ const config: PublicAppConfig = {
   permissions: {
     bash: 'allow',
     fileWrite: 'allow',
+    task: 'allow',
+    web: 'allow',
+    webSearch: true,
   },
   agentStarterTemplates: [],
 }
@@ -198,7 +213,7 @@ describe('SettingsPanel', () => {
     }))
   })
 
-  it('persists explicit developer permission modes', async () => {
+  it('persists explicit Studio permission modes and review gates', async () => {
     const settingsSet = vi.mocked(window.coworkApi.settings.set)
     const user = userEvent.setup()
 
@@ -209,6 +224,12 @@ describe('SettingsPanel', () => {
 
     await user.click(within(screen.getByRole('tablist', { name: 'Shell commands' })).getByRole('tab', { name: 'Allow' }))
     await user.click(within(screen.getByRole('tablist', { name: 'File editing' })).getByRole('tab', { name: 'Allow' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'Open web pages' })).getByRole('tab', { name: 'Ask' }))
+    await user.click(screen.getByRole('switch', { name: 'Web search' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'Delegate to coworkers' })).getByRole('tab', { name: 'Ask' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'Managed external directories' })).getByRole('tab', { name: 'Ask' }))
+    await user.click(within(screen.getByRole('tablist', { name: 'MCP tools' })).getByRole('tab', { name: 'Off' }))
+    expect(screen.getByText('External-send review will be controlled here when Gateway delivery policy enforcement is wired. Existing provider and tool approval policies remain in force.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Advanced/ }))
     const toolingBridge = await screen.findByRole('switch', { name: 'Developer config bridge' })
@@ -223,9 +244,37 @@ describe('SettingsPanel', () => {
     expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
       bashPermission: 'allow',
       fileWritePermission: 'allow',
+      webPermission: 'ask',
+      webSearchEnabled: false,
+      taskPermission: 'ask',
+      externalDirectoryPermission: 'ask',
+      mcpPermission: 'deny',
       enableBash: true,
       enableFileWrite: true,
       runtimeToolingBridgeEnabled: false,
+    })
+  })
+
+  it('persists notification and privacy preferences', async () => {
+    const settingsSet = vi.mocked(window.coworkApi.settings.set)
+    const user = userEvent.setup()
+
+    render(<SettingsPanel onClose={vi.fn()} />)
+
+    await screen.findByText('Settings')
+    await user.click(screen.getByRole('button', { name: /Notifications/ }))
+    await user.click(screen.getByRole('switch', { name: 'Voice replies' }))
+    await user.click(screen.getByRole('switch', { name: 'Daily digest' }))
+    await user.click(screen.getByRole('button', { name: /Privacy/ }))
+    expect(screen.getByText('Session retention stays managed by OpenCode runtime history and explicit storage cleanup until a verified retention policy is available.')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Help improve the product' }))
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(settingsSet).toHaveBeenCalledTimes(1))
+    expect(settingsSet.mock.calls[0]?.[0]).toMatchObject({
+      notificationVoiceReplies: false,
+      notificationDailyDigest: true,
+      privacyShareAnonymizedUsage: true,
     })
   })
 
@@ -364,6 +413,11 @@ describe('SettingsPanel', () => {
       workflowDesktopNotifications: true,
       workflowQuietHoursStart: null,
       workflowQuietHoursEnd: null,
+      notificationVoiceReplies: true,
+      notificationSmartSuggestions: true,
+      notificationDailyDigest: false,
+      notificationSounds: true,
+      privacyShareAnonymizedUsage: false,
     })
   })
 

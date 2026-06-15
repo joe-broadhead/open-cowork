@@ -306,6 +306,14 @@ function webSearchPolicy(web: PermissionAction, enabled: boolean): PermissionAct
   return enabled ? web : 'deny'
 }
 
+function isGlobalMcpToolPattern(pattern: string) {
+  return pattern === 'mcp__*'
+}
+
+function isKnownMcpToolPattern(pattern: string, mcpToolPatterns: ReadonlySet<string>) {
+  return isGlobalMcpToolPattern(pattern) || mcpToolPatterns.has(pattern)
+}
+
 function stripProviderPrefix(providerId: string, modelId: string | null | undefined) {
   const trimmed = modelId?.trim()
   if (!trimmed) return ''
@@ -338,8 +346,11 @@ function buildRuntimeConfigWithCustomMcpsResult(
   const appPermissions = appConfig.permissions
   const bashPolicy = applyUserPermissionPolicy(appPermissions.bash, settings.bashPermission, settings.enableBash)
   const fileWritePolicy = applyUserPermissionPolicy(appPermissions.fileWrite, settings.fileWritePermission, settings.enableFileWrite)
-  const webPolicy = appPermissions.web
-  const effectiveWebSearchPolicy = webSearchPolicy(webPolicy, appPermissions.webSearch)
+  const webPolicy = applyUserPermissionPolicy(appPermissions.web, settings.webPermission, true)
+  const effectiveWebSearchPolicy = webSearchPolicy(webPolicy, settings.webSearchEnabled && appPermissions.webSearch)
+  const taskPolicy = applyUserPermissionPolicy(appPermissions.task, settings.taskPermission, true)
+  const externalDirectoryPolicy = applyUserPermissionPolicy('allow', settings.externalDirectoryPermission, true)
+  const mcpPolicy = applyUserPermissionPolicy('allow', settings.mcpPermission, true)
   const providerId = settings.effectiveProviderId || appConfig.providers.defaultProvider || 'openrouter'
   const configModel = settings.effectiveModel
     || (providerId === appConfig.providers.defaultProvider ? appConfig.providers.defaultModel || '' : '')
@@ -413,38 +424,42 @@ function buildRuntimeConfigWithCustomMcpsResult(
     'disabled-by-user': [],
     'awaiting-oauth-opt-in': [],
   }
-  for (const builtin of getConfiguredMcpsFromConfig()) {
-    const resolution = evaluateBuiltInMcp(builtin, settings)
-    if (resolution.status === 'ready') {
-      mcpConfig[builtin.name] = resolution.entry
-    } else if (resolution.status === 'skipped') {
-      skippedByReason[resolution.reason].push(builtin.name)
-    }
-  }
-  const skipSummary = (Object.entries(skippedByReason) as Array<[BuiltInMcpSkipReason, string[]]>)
-    .filter(([, names]) => names.length > 0)
-    .map(([reason, names]) => `${reason}=[${names.join(', ')}]`)
-    .join(' ')
-  if (skipSummary) {
-    diagnostics.push({ scope: 'mcp', message: `Skipping bundled MCPs — ${skipSummary}` })
-  }
-  for (const customMcp of customMcps) {
-    try {
-      if (customMcp.type === 'stdio') {
-        validateCustomMcpStdioCommand(customMcp)
+  if (mcpPolicy === 'deny') {
+    diagnostics.push({ scope: 'mcp', message: 'Skipping MCP registration because MCP tools are disabled by user settings.' })
+  } else {
+    for (const builtin of getConfiguredMcpsFromConfig()) {
+      const resolution = evaluateBuiltInMcp(builtin, settings)
+      if (resolution.status === 'ready') {
+        mcpConfig[builtin.name] = resolution.entry
+      } else if (resolution.status === 'skipped') {
+        skippedByReason[resolution.reason].push(builtin.name)
       }
-    } catch (error) {
-      diagnostics.push({
-        scope: 'runtime',
-        message: `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`,
-      })
-      continue
     }
-    const entry = resolvedCustomMcpEntries
-      ? resolvedCustomMcpEntries.get(customMcp.name) || null
-      : resolveCustomMcpRuntimeEntry(customMcp)
-    if (!entry) continue
-    mcpConfig[customMcp.name] = entry
+    const skipSummary = (Object.entries(skippedByReason) as Array<[BuiltInMcpSkipReason, string[]]>)
+      .filter(([, names]) => names.length > 0)
+      .map(([reason, names]) => `${reason}=[${names.join(', ')}]`)
+      .join(' ')
+    if (skipSummary) {
+      diagnostics.push({ scope: 'mcp', message: `Skipping bundled MCPs — ${skipSummary}` })
+    }
+    for (const customMcp of customMcps) {
+      try {
+        if (customMcp.type === 'stdio') {
+          validateCustomMcpStdioCommand(customMcp)
+        }
+      } catch (error) {
+        diagnostics.push({
+          scope: 'runtime',
+          message: `Skipping invalid local MCP ${customMcp.name}: ${error instanceof Error ? error.message : String(error)}`,
+        })
+        continue
+      }
+      const entry = resolvedCustomMcpEntries
+        ? resolvedCustomMcpEntries.get(customMcp.name) || null
+        : resolveCustomMcpRuntimeEntry(customMcp)
+      if (!entry) continue
+      mcpConfig[customMcp.name] = entry
+    }
   }
 
   const configuredTools = getConfiguredToolsFromConfig()
@@ -480,19 +495,37 @@ function buildRuntimeConfigWithCustomMcpsResult(
     ...trustedCustomMcpPatterns,
     ...approvalCustomMcpPatterns,
   ]))
-  const allowedPatterns = Array.from(new Set([
+  const configuredMcpPatterns = configuredTools.flatMap((tool) => {
+    const patterns = getConfiguredToolPatterns(tool)
+    return patterns.some((pattern) => pattern === 'mcp__*' || pattern.startsWith('mcp__')) ? patterns : []
+  })
+  const mcpToolPatterns = new Set([
+    ...configuredMcpPatterns,
+    ...customMcpPatterns,
+  ])
+  const rawAllowedPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolAllowPatterns(tool)),
     ...trustedCustomMcpPatterns,
   ]))
-  const askPatterns = Array.from(new Set([
+  const rawAskPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolAskPatterns(tool)),
     ...approvalCustomMcpPatterns,
+  ]))
+  const isMcpPattern = (pattern: string) => isKnownMcpToolPattern(pattern, mcpToolPatterns)
+  const allowedPatterns = rawAllowedPatterns.filter((pattern) => !isMcpPattern(pattern) || mcpPolicy === 'allow')
+  const askPatterns = Array.from(new Set([
+    ...rawAskPatterns.filter((pattern) => !isMcpPattern(pattern)),
+    ...(mcpPolicy === 'allow'
+      ? rawAskPatterns.filter(isMcpPattern)
+      : mcpPolicy === 'ask'
+        ? [...rawAllowedPatterns, ...rawAskPatterns].filter(isMcpPattern)
+        : []),
   ]))
   const allToolPatterns = Array.from(new Set([
     ...configuredTools.flatMap((tool) => getConfiguredToolPatterns(tool)),
     ...customMcpPatterns,
   ]))
-  const deniedPatterns: string[] = []
+  const deniedPatterns: string[] = mcpPolicy === 'deny' ? ['mcp__*', ...Array.from(mcpToolPatterns)] : []
   const permission = buildCoworkRuntimePermissionConfig({
     managedSkillNames,
     allowPatterns: allowedPatterns,
@@ -500,9 +533,10 @@ function buildRuntimeConfigWithCustomMcpsResult(
     deniedPatterns,
     bash: bashPolicy,
     fileWrite: fileWritePolicy,
-    task: appPermissions.task,
+    task: taskPolicy,
     web: webPolicy,
     webSearch: effectiveWebSearchPolicy,
+    externalDirectory: externalDirectoryPolicy,
     projectDirectory,
   })
 
@@ -516,9 +550,10 @@ function buildRuntimeConfigWithCustomMcpsResult(
     availableSkillNames: managedSkillNames,
     bash: bashPolicy,
     fileWrite: fileWritePolicy,
-    task: appPermissions.task,
+    task: taskPolicy,
     web: webPolicy,
     webSearch: effectiveWebSearchPolicy,
+    externalDirectory: externalDirectoryPolicy,
     projectDirectory,
     customDelegationAgents,
   })
@@ -586,6 +621,17 @@ export function buildRuntimeConfig(projectDirectory?: string | null): Config {
 }
 
 export async function buildRuntimeConfigForRuntime(projectDirectory?: string | null): Promise<Config> {
+  const settings = getEffectiveSettings()
+  const mcpPolicy = applyUserPermissionPolicy('allow', settings.mcpPermission, true)
+  if (mcpPolicy === 'deny') {
+    const result = buildRuntimeConfigWithCustomMcpsResult(
+      projectDirectory,
+      listCustomMcps({ directory: projectDirectory || null }),
+      new Map(),
+    )
+    emitRuntimeConfigBuildDiagnostics(result.diagnostics)
+    return result.config
+  }
   const eligible = await listRuntimeEligibleCustomMcps(projectDirectory)
   const resolvedCustomMcpEntries = new Map<string, ResolvedRuntimeMcpEntry>()
   for (const customMcp of eligible.customMcps) {

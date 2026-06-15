@@ -55,7 +55,7 @@ test('studio production QA matrix covers every Cloud Web route, state class, and
 
   assert.match(doc, /Studio Production Visual QA Matrix/)
   assert.match(doc, /Production Audit Checklist/)
-  assert.equal(STUDIO_VISUAL_QA_MATRIX.length, 9)
+  assert.equal(STUDIO_VISUAL_QA_MATRIX.length, 10)
 
   for (const routeId of routeIds) {
     assert.ok(coveredRouteIds.has(routeId), `${routeId} has a Studio visual QA entry`)

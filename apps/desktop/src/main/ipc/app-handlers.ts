@@ -81,6 +81,11 @@ const CLOUD_PORTABLE_SETTING_KEYS = new Set<keyof CoworkSettings>([
   'workflowDesktopNotifications',
   'workflowQuietHoursStart',
   'workflowQuietHoursEnd',
+  'notificationVoiceReplies',
+  'notificationSmartSuggestions',
+  'notificationDailyDigest',
+  'notificationSounds',
+  'privacyShareAnonymizedUsage',
 ])
 const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'providerCredentials',
@@ -88,6 +93,13 @@ const CLOUD_FORBIDDEN_SETTING_KEYS = new Set<string>([
   'integrationEnabled',
   'bashPermission',
   'fileWritePermission',
+  'webPermission',
+  'webSearchEnabled',
+  'taskPermission',
+  'externalDirectoryPermission',
+  'mcpPermission',
+  'requireApprovalBeforeSending',
+  'privacyKeepConversationHistory',
   'enableBash',
   'enableFileWrite',
   'runtimeConfigSource',
@@ -141,6 +153,21 @@ function buildCloudEffectiveSettings(base: EffectiveAppSettings, value: Record<s
     workflowQuietHoursEnd: typeof value.workflowQuietHoursEnd === 'string' || value.workflowQuietHoursEnd === null
       ? value.workflowQuietHoursEnd
       : base.workflowQuietHoursEnd,
+    notificationVoiceReplies: typeof value.notificationVoiceReplies === 'boolean'
+      ? value.notificationVoiceReplies
+      : base.notificationVoiceReplies,
+    notificationSmartSuggestions: typeof value.notificationSmartSuggestions === 'boolean'
+      ? value.notificationSmartSuggestions
+      : base.notificationSmartSuggestions,
+    notificationDailyDigest: typeof value.notificationDailyDigest === 'boolean'
+      ? value.notificationDailyDigest
+      : base.notificationDailyDigest,
+    notificationSounds: typeof value.notificationSounds === 'boolean'
+      ? value.notificationSounds
+      : base.notificationSounds,
+    privacyShareAnonymizedUsage: typeof value.privacyShareAnonymizedUsage === 'boolean'
+      ? value.privacyShareAnonymizedUsage
+      : base.privacyShareAnonymizedUsage,
     effectiveProviderId: selectedProviderId,
     effectiveModel: selectedModelId,
     effectiveSmallModel: selectedSmallModelId,
@@ -176,8 +203,15 @@ export function hasRuntimeSensitiveSettingsUpdate(updates: Partial<CoworkSetting
     || updates.providerCredentials !== undefined
     || updates.integrationCredentials !== undefined
     || updates.integrationEnabled !== undefined
+    || updates.bashPermission !== undefined
+    || updates.fileWritePermission !== undefined
     || updates.enableBash !== undefined
     || updates.enableFileWrite !== undefined
+    || updates.webPermission !== undefined
+    || updates.webSearchEnabled !== undefined
+    || updates.taskPermission !== undefined
+    || updates.externalDirectoryPermission !== undefined
+    || updates.mcpPermission !== undefined
     || updates.runtimeConfigSource !== undefined
     || updates.runtimeToolingBridgeEnabled !== undefined
   )

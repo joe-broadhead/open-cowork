@@ -150,6 +150,54 @@ test('generated permission config enforces app-level bash deny after broad allow
   assert.equal(permission.apply_patch, 'deny')
 })
 
+test('agent tool ceilings downgrade and remove exact MCP grants under broad MCP policy', () => {
+  const mcpPatterns = [
+    'mcp__charts__*',
+    'mcp__skills__*',
+    'mcp__agents__*',
+    'mcp__workflows__*',
+    'charts_*',
+    'skills_*',
+    'agents_*',
+    'workflows_*',
+  ]
+  const askAgents = buildOpenCoworkAgentConfig({
+    allToolPatterns: mcpPatterns,
+    askToolPatterns: ['mcp__*', 'charts_*', 'skills_*', 'agents_*', 'workflows_*'],
+  }) as Record<string, any>
+
+  assert.equal(askAgents.charts.permission['mcp__charts__*'], 'ask')
+  assert.equal(askAgents.charts.permission['charts_*'], 'ask')
+  assert.equal(askAgents.autoresearch.permission['mcp__agents__preview_agent'], 'ask')
+  assert.equal(askAgents.autoresearch.permission['mcp__skills__list_skill_bundles'], 'ask')
+  assert.equal(askAgents['agent-builder'].permission['mcp__agents__preview_agent'], 'ask')
+  assert.equal(askAgents['workflow-designer'].permission['mcp__workflows__preview_workflow'], 'ask')
+
+  const denyAgents = buildOpenCoworkAgentConfig({
+    allToolPatterns: mcpPatterns,
+    deniedToolPatterns: ['mcp__*', 'charts_*', 'skills_*', 'agents_*', 'workflows_*'],
+  }) as Record<string, any>
+
+  assert.equal(denyAgents.charts.permission['mcp__charts__*'], 'deny')
+  assert.equal(denyAgents.charts.permission['charts_*'], 'deny')
+  assert.equal(denyAgents.autoresearch.permission['mcp__agents__preview_agent'], 'deny')
+  assert.equal(denyAgents.autoresearch.permission['mcp__skills__list_skill_bundles'], 'deny')
+  assert.equal(denyAgents['agent-builder'].permission['mcp__agents__preview_agent'], 'deny')
+  assert.equal(denyAgents['workflow-designer'].permission['mcp__workflows__preview_workflow'], 'deny')
+  assert.equal(denyAgents.autoresearch.permission['mcp__*'], 'deny')
+})
+
+test('global ask patterns stay promptable for read-only built-ins', () => {
+  const agents = buildOpenCoworkAgentConfig({
+    allToolPatterns: ['mcp__warehouse__read_rows'],
+    allowToolPatterns: ['mcp__warehouse__read_*'],
+    askToolPatterns: ['mcp__warehouse__read_*'],
+  }) as Record<string, any>
+
+  assert.equal(agents.plan.permission['mcp__warehouse__read_*'], 'ask')
+  assert.equal(agents['chief-of-staff'].permission['mcp__warehouse__read_*'], 'ask')
+})
+
 test('built-in agent details expose the native OpenCode agent set plus configured built-in agents', () => withIsolatedSettings('agent-details-', () => {
   const builtins = listBuiltInAgentDetails()
   const names = builtins.map((agent) => agent.name)

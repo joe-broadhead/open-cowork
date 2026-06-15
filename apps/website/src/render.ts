@@ -13,6 +13,7 @@ import {
 } from './branding.ts'
 import { escapeHtml, jsonScript } from './html-utils.ts'
 import { cloudWebsiteStyles } from './styles.ts'
+import { cloudSettingsRouteMarkup } from './cloud-settings-markup.ts'
 import { CloudReactSsrShell } from './react-shell.ts'
 import { CLOUD_WEB_ROUTE_API_MATRIX } from './route-api-matrix.ts'
 import { cloudLaunchpadStaticMarkup, routeAdminSurfaceMarkup, routeGroupsMarkup, routePanelAttrs, routeParityMarkup } from './route-markup.ts'
@@ -20,7 +21,6 @@ import { CLOUD_WEB_REACT_CLIENT_ASSET_PATH } from './react-client-asset.ts'
 import { DEFAULT_CLOUD_THEME_ACCENT_PRESET, DEFAULT_CLOUD_THEME_DENSITY, DEFAULT_CLOUD_THEME_PRESET, DEFAULT_CLOUD_THEME_SCHEME, cloudAccentPresetOptions, cloudThemePresetOptions, cloudThemePresetSelectMarkup } from './cloud-theme.ts'
 import { CLOUD_WEB_WORKBENCH_PARITY_MATRIX } from './workbench-parity.ts'
 import { CLOUD_SESSION_EVENT_TYPES, type PublicBrandingConfig } from '@open-cowork/shared'
-
 export type WebsiteBootstrapPolicy = { role: string; profileName: string; features: Record<string, boolean>; publicBranding?: PublicBrandingConfig | null }
 
 export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?: PublicBrandingConfig | null, cspNonce = '') {
@@ -427,6 +427,14 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
             </div>
           </div>
         </section>
+
+        ${cloudSettingsRouteMarkup({
+            tenantBrandingLocked,
+            profileName: policy.profileName,
+            role: policy.role,
+            chatEnabled: policy.features.chat === true,
+            workflowsEnabled: policy.features.workflows === true,
+          })}
 
         <section ${routePanelAttrs('org', { signedIn: false })}>
           <div class="section-header">

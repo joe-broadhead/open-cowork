@@ -381,6 +381,9 @@ export interface PublicAppConfig {
   permissions: {
     bash: RuntimePermissionPolicy
     fileWrite: RuntimePermissionPolicy
+    task: RuntimePermissionPolicy
+    web: RuntimePermissionPolicy
+    webSearch: boolean
   }
   agentStarterTemplates: AgentStarterTemplate[]
   toolTrace?: ToolTraceConfig
@@ -397,6 +400,18 @@ export interface AppSettings {
   integrationEnabled: Record<string, boolean>
   bashPermission: RuntimePermissionPolicy
   fileWritePermission: RuntimePermissionPolicy
+  webPermission: RuntimePermissionPolicy
+  webSearchEnabled: boolean
+  taskPermission: RuntimePermissionPolicy
+  externalDirectoryPermission: RuntimePermissionPolicy
+  mcpPermission: RuntimePermissionPolicy
+  requireApprovalBeforeSending: boolean
+  notificationVoiceReplies: boolean
+  notificationSmartSuggestions: boolean
+  notificationDailyDigest: boolean
+  notificationSounds: boolean
+  privacyKeepConversationHistory: boolean
+  privacyShareAnonymizedUsage: boolean
   // Back-compat booleans retained for older renderer payloads and settings
   // migrations. New UI should use bashPermission/fileWritePermission.
   enableBash: boolean

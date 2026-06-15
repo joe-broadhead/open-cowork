@@ -1,17 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import {
   buildProviderRuntimeConfig,
   buildRuntimeConfig,
   buildRuntimeConfigForRuntime,
 } from '../apps/desktop/src/main/runtime-config-builder.ts'
-import { clearConfigCaches } from '../apps/desktop/src/main/config-loader.ts'
-import { loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
+import { clearConfigCaches, getSidecarJsonSuffix } from '../apps/desktop/src/main/config-loader.ts'
+import { clearSettingsCache, loadSettings, saveSettings } from '../apps/desktop/src/main/settings.ts'
 import { removeCustomAgent, removeCustomMcp, saveCustomAgent, saveCustomMcp } from '../apps/desktop/src/main/native-customizations.ts'
-import { getMachineSkillsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
+import { getMachineSkillsDir, getProjectCoworkAgentsDir, getRuntimeSkillCatalogDir } from '../apps/desktop/src/main/runtime-paths.ts'
 import { copySkillsAndAgents } from '../apps/desktop/src/main/runtime-content.ts'
+import { buildCustomAgentCatalog, buildCustomAgentPermissionFromCatalog } from '../apps/desktop/src/main/custom-agents-utils.ts'
 
 function testTempDir(prefix: string) {
   const parent = join(process.cwd(), '.open-cowork-test')
@@ -119,6 +120,30 @@ test('buildRuntimeConfig resolves env-backed custom providers and project custom
     assert.equal(runtimeConfig.agent.build.permission['analytics_*'], 'allow')
     assert.equal(runtimeConfig.permission.bash, 'allow')
     assert.equal(runtimeConfig.permission.write, 'deny')
+
+    saveSettings({ mcpPermission: 'ask' })
+    const askMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    assert.equal(askMcpConfig.permission['mcp__analytics__*'], 'ask')
+    assert.equal(askMcpConfig.permission['analytics_*'], 'ask')
+    assert.equal(askMcpConfig.permission['mcp__warehouse__*'], 'ask')
+    assert.equal(askMcpConfig.permission['warehouse_*'], 'ask')
+    assert.equal(askMcpConfig.permission['mcp__clock__*'], 'ask')
+    assert.equal(askMcpConfig.permission['clock_*'], 'ask')
+    assert.equal(askMcpConfig.agent.build.permission['mcp__clock__*'], 'ask')
+    assert.equal(askMcpConfig.agent.build.permission['clock_*'], 'ask')
+    assert.equal(askMcpConfig.agent.build.permission['mcp__analytics__*'], 'ask')
+    assert.equal(askMcpConfig.agent.build.permission['analytics_*'], 'ask')
+
+    saveSettings({ mcpPermission: 'deny' })
+    const denyMcpConfig = buildRuntimeConfig(projectRoot) as Record<string, any>
+    assert.equal(denyMcpConfig.mcp.analytics, undefined)
+    assert.equal(denyMcpConfig.mcp.warehouse, undefined)
+    assert.equal(denyMcpConfig.permission['mcp__analytics__*'], 'deny')
+    assert.equal(denyMcpConfig.permission['analytics_*'], 'deny')
+    assert.equal(denyMcpConfig.permission['mcp__warehouse__*'], 'deny')
+    assert.equal(denyMcpConfig.permission['warehouse_*'], 'deny')
+    assert.equal(denyMcpConfig.agent.build.permission['mcp__analytics__*'], 'deny')
+    assert.equal(denyMcpConfig.agent.build.permission['analytics_*'], 'deny')
   } finally {
     removeCustomMcp({
       scope: 'project',
@@ -331,6 +356,188 @@ test('buildRuntimeConfig delegates to project-scoped custom agents without dupli
     removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'code-reviewer' })
     saveSettings(originalSettings)
     rmSync(projectRoot, { recursive: true, force: true })
+  }
+})
+
+test('runtime custom-agent markdown is capped by effective global permissions before OpenCode discovery', () => {
+  const tempRoot = testTempDir('opencowork-custom-agent-ceiling-')
+  const projectRoot = join(tempRoot, 'project')
+  const userDataDir = join(tempRoot, 'user-data')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+
+  mkdirSync(projectRoot, { recursive: true })
+  mkdirSync(userDataDir, { recursive: true })
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataDir
+  clearConfigCaches()
+  clearSettingsCache()
+
+  saveCustomMcp({
+    scope: 'project',
+    directory: projectRoot,
+    name: 'analytics',
+    type: 'http',
+    url: 'https://analytics.example.test/mcp',
+    permissionMode: 'allow',
+  })
+  saveCustomAgent(
+    {
+      scope: 'project',
+      directory: projectRoot,
+      name: 'analytics-runner',
+      description: 'Runs analytics workflows.',
+      instructions: 'Use the analytics MCP carefully.',
+      skillNames: [],
+      toolIds: ['analytics'],
+      enabled: true,
+      color: 'accent',
+      model: 'openrouter/deepseek/deepseek-v4-pro',
+      variant: 'draft',
+      temperature: 0.2,
+      top_p: 0.8,
+      steps: 8,
+      options: { reasoningEffort: 'low' },
+      permissionOverrides: [
+        { key: 'web', action: 'allow' },
+        { key: 'edit', action: 'allow' },
+        { key: 'task', action: 'allow' },
+        { key: 'external_directory', action: 'allow', rules: [{ pattern: '/tmp/analytics/*', action: 'allow' }] },
+        { key: 'mcp', action: 'allow' },
+      ],
+    },
+    {
+      'mcp__analytics__*': 'allow',
+      'analytics_*': 'allow',
+      webfetch: 'ask',
+      websearch: 'allow',
+      write: 'ask',
+      apply_patch: 'allow',
+      task: 'allow',
+      external_directory: {
+        '/tmp/analytics/*': 'allow',
+      },
+    },
+  )
+  const sidecarPath = join(getProjectCoworkAgentsDir(projectRoot), `analytics-runner${getSidecarJsonSuffix()}`)
+  rmSync(sidecarPath, { force: true })
+  saveSettings({
+    webPermission: 'deny',
+    fileWritePermission: 'deny',
+    taskPermission: 'deny',
+    externalDirectoryPermission: 'deny',
+    mcpPermission: 'deny',
+  })
+
+  try {
+    copySkillsAndAgents(projectRoot)
+    const markdown = readFileSync(join(getProjectCoworkAgentsDir(projectRoot), 'analytics-runner.md'), 'utf8')
+    assert.match(markdown, /webfetch: deny/)
+    assert.match(markdown, /websearch: deny/)
+    assert.match(markdown, /write: deny/)
+    assert.match(markdown, /apply_patch: deny/)
+    assert.match(markdown, /task: deny/)
+    assert.match(markdown, /external_directory:\n[ ]{4}"\*": deny\n[ ]{4}"\/tmp\/analytics\/\*": deny/)
+    assert.match(markdown, /"mcp__analytics__\*": deny/)
+    assert.match(markdown, /"analytics_\*": deny/)
+    assert.match(markdown, /model: "openrouter\/deepseek\/deepseek-v4-pro"/)
+    assert.match(markdown, /variant: "draft"/)
+    assert.match(markdown, /temperature: 0.2/)
+    assert.match(markdown, /top_p: 0.8/)
+    assert.match(markdown, /steps: 8/)
+    assert.match(markdown, /options: {"reasoningEffort":"low"}/)
+    assert.equal(existsSync(sidecarPath), true)
+
+    saveSettings({
+      webPermission: 'allow',
+      webSearchEnabled: true,
+      fileWritePermission: 'allow',
+      taskPermission: 'allow',
+      externalDirectoryPermission: 'allow',
+      mcpPermission: 'allow',
+    })
+    copySkillsAndAgents(projectRoot)
+    const restoredMarkdown = readFileSync(join(getProjectCoworkAgentsDir(projectRoot), 'analytics-runner.md'), 'utf8')
+    assert.match(restoredMarkdown, /webfetch: ask/)
+    assert.match(restoredMarkdown, /websearch: allow/)
+    assert.match(restoredMarkdown, /write: ask/)
+    assert.match(restoredMarkdown, /apply_patch: allow/)
+    assert.match(restoredMarkdown, /task: allow/)
+    assert.match(restoredMarkdown, /external_directory:\n[ ]{4}"\*": deny\n[ ]{4}"\/tmp\/analytics\/\*": allow/)
+    assert.match(restoredMarkdown, /"mcp__analytics__\*": allow/)
+    assert.match(restoredMarkdown, /"analytics_\*": allow/)
+    assert.match(restoredMarkdown, /model: "openrouter\/deepseek\/deepseek-v4-pro"/)
+    assert.match(restoredMarkdown, /variant: "draft"/)
+    assert.match(restoredMarkdown, /temperature: 0.2/)
+    assert.match(restoredMarkdown, /top_p: 0.8/)
+    assert.match(restoredMarkdown, /steps: 8/)
+    assert.match(restoredMarkdown, /options: {"reasoningEffort":"low"}/)
+  } finally {
+    removeCustomAgent({ scope: 'project', directory: projectRoot, name: 'analytics-runner' })
+    removeCustomMcp({ scope: 'project', directory: projectRoot, name: 'analytics' })
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    clearSettingsCache()
+    clearConfigCaches()
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test('custom agent permission overrides preserve nested guardrails and exact legacy tool rules', () => {
+  const tempRoot = testTempDir('opencowork-custom-agent-permission-rules-')
+  const previousUserDataDir = process.env.OPEN_COWORK_USER_DATA_DIR
+  process.env.OPEN_COWORK_USER_DATA_DIR = tempRoot
+  clearSettingsCache()
+  saveSettings({
+    bashPermission: 'allow',
+    fileWritePermission: 'allow',
+    webPermission: 'allow',
+    webSearchEnabled: true,
+  })
+
+  try {
+    const catalog = buildCustomAgentCatalog({
+      builtinTools: [],
+      builtinSkills: [],
+      customMcps: [],
+      customSkills: [],
+      state: {
+        customMcps: [],
+        customSkills: [],
+        customAgents: [],
+      },
+    })
+    const permission = buildCustomAgentPermissionFromCatalog({
+      scope: 'machine',
+      directory: null,
+      name: 'guarded-agent',
+      description: 'Uses guarded tools.',
+      instructions: 'Respect narrowed tool rules.',
+      skillNames: [],
+      toolIds: [],
+      enabled: true,
+      color: 'accent',
+      permissionOverrides: [
+        { key: 'edit', action: 'allow', rules: [{ pattern: '*.env', action: 'deny' }] },
+        { key: 'bash', action: 'allow', rules: [{ pattern: 'rm *', action: 'deny' }] },
+        { key: 'web', action: 'deny', rules: [{ pattern: 'webfetch', action: 'ask' }, { pattern: 'websearch', action: 'allow' }] },
+        { key: 'mcp', action: 'deny', rules: [{ pattern: 'mcp__github__pull_request_read', action: 'allow' }] },
+      ],
+    }, catalog) as Record<string, unknown>
+
+    assert.deepEqual(permission.edit, { '*': 'allow', '*.env': 'deny' })
+    assert.deepEqual(permission.write, { '*': 'allow', '*.env': 'deny' })
+    assert.deepEqual(permission.apply_patch, { '*': 'allow', '*.env': 'deny' })
+    assert.deepEqual(permission.bash, { '*': 'allow', 'rm *': 'deny' })
+    assert.equal(permission.codesearch, 'deny')
+    assert.equal(permission.webfetch, 'ask')
+    assert.equal(permission.websearch, 'allow')
+    assert.equal(permission['mcp__*'], 'deny')
+    assert.equal(permission.mcp__github__pull_request_read, 'allow')
+    assert.equal(permission.github_pull_request_read, 'allow')
+  } finally {
+    clearSettingsCache()
+    if (previousUserDataDir === undefined) delete process.env.OPEN_COWORK_USER_DATA_DIR
+    else process.env.OPEN_COWORK_USER_DATA_DIR = previousUserDataDir
+    rmSync(tempRoot, { recursive: true, force: true })
   }
 })
 

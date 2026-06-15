@@ -24,7 +24,7 @@ import { PermissionsPanel, RuntimeConfigPanel } from './SettingsPermissionsPanel
 import { StoragePanel } from './SettingsStoragePanel'
 import { SettingsPairingPanel } from './SettingsPairingPanel'
 
-type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'workflows' | 'storage' | 'pairing'
+type SettingsTab = 'appearance' | 'model' | 'advanced' | 'permissions' | 'notifications' | 'privacy' | 'workflows' | 'storage' | 'pairing'
 type SettingsSearchEntry = {
   id: string
   tab: SettingsTab
@@ -63,8 +63,8 @@ function CloudModelsPolicyPanel({ settings }: { settings: EffectiveAppSettings }
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
-        <div className="text-[12px] font-semibold text-text">{t('settings.cloudModels.title', 'Cloud profile runtime')}</div>
-        <div className="mt-1 text-[11px] leading-relaxed text-text-muted">
+        <div className="text-xs font-semibold text-text">{t('settings.cloudModels.title', 'Cloud profile runtime')}</div>
+        <div className="mt-1 text-xs leading-relaxed text-text-muted">
           {t('settings.cloudModels.description', 'This cloud workspace resolves providers, models, credentials, and runtime config through its cloud profile. Desktop shows policy-managed metadata only and never receives raw provider keys.')}
         </div>
       </div>
@@ -75,19 +75,140 @@ function CloudModelsPolicyPanel({ settings }: { settings: EffectiveAppSettings }
           { label: t('settings.cloudModels.smallModel', 'Small model'), value: smallModel },
         ].map((entry) => (
           <div key={entry.label} className="rounded-2xl border border-border-subtle bg-elevated px-3 py-3">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-text-muted">{entry.label}</div>
-            <div className="mt-1 truncate text-[12px] font-semibold text-text" title={entry.value}>{entry.value}</div>
-            <div className="mt-1 text-[10px] text-text-muted">{t('settings.cloudModels.managed', 'Policy managed')}</div>
+            <div className="text-xs uppercase tracking-[0.08em] text-text-muted">{entry.label}</div>
+            <div className="mt-1 truncate text-xs font-semibold text-text" title={entry.value}>{entry.value}</div>
+            <div className="mt-1 text-xs text-text-muted">{t('settings.cloudModels.managed', 'Policy managed')}</div>
           </div>
         ))}
       </div>
       <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4">
-        <div className="text-[12px] font-semibold text-text">{t('settings.cloudModels.credentials', 'Credential status')}</div>
-        <div className="mt-2 grid gap-2 text-[11px] text-text-muted">
+        <div className="text-xs font-semibold text-text">{t('settings.cloudModels.credentials', 'Credential status')}</div>
+        <div className="mt-2 grid gap-2 text-xs text-text-muted">
           <div>{t('settings.cloudModels.adminManaged', 'admin_managed: configured by the organisation and hidden from clients.')}</div>
           <div>{t('settings.cloudModels.configured', 'configured: a cloud BYOK secret exists, but plaintext is never synced to desktop.')}</div>
           <div>{t('settings.cloudModels.missing', 'missing: the workspace cannot execute until an admin adds the required key.')}</div>
           <div>{t('settings.cloudModels.expired', 'expired: the cloud credential needs to be refreshed or replaced.')}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SettingsToggleRow({
+  title,
+  description,
+  checked,
+  onToggle,
+}: {
+  title: string
+  description: string
+  checked: boolean
+  onToggle: () => void
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-text">{title}</div>
+        <div className="mt-1 text-xs leading-relaxed text-text-muted">{description}</div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={title}
+        onClick={onToggle}
+        className={`settings-switch shrink-0 ${checked ? 'settings-switch--on' : ''}`}
+      >
+        <span className="settings-switch__thumb" />
+      </button>
+    </div>
+  )
+}
+
+function SettingsNotificationsPanel({
+  settings,
+  update,
+}: {
+  settings: EffectiveAppSettings
+  update: (patch: Partial<EffectiveAppSettings>) => void
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
+        <SettingsToggleRow
+          title={t('settings.notifications.voiceReplies', 'Voice replies')}
+          description={t('settings.notifications.voiceRepliesDescription', 'Let coworkers answer out loud when a workflow explicitly asks for voice output.')}
+          checked={settings.notificationVoiceReplies}
+          onToggle={() => update({ notificationVoiceReplies: !settings.notificationVoiceReplies })}
+        />
+        <SettingsToggleRow
+          title={t('settings.notifications.smartSuggestions', 'Smart suggestions')}
+          description={t('settings.notifications.smartSuggestionsDescription', 'Show task ideas and launchpad suggestions based on recent workspace activity.')}
+          checked={settings.notificationSmartSuggestions}
+          onToggle={() => update({ notificationSmartSuggestions: !settings.notificationSmartSuggestions })}
+        />
+        <SettingsToggleRow
+          title={t('settings.notifications.dailyDigest', 'Daily digest')}
+          description={t('settings.notifications.dailyDigestDescription', 'Send a morning summary of completed runs, blocked work, and fresh artifacts.')}
+          checked={settings.notificationDailyDigest}
+          onToggle={() => update({ notificationDailyDigest: !settings.notificationDailyDigest })}
+        />
+        <SettingsToggleRow
+          title={t('settings.notifications.sounds', 'Sounds')}
+          description={t('settings.notifications.soundsDescription', 'Play a short chime when important work finishes or needs attention.')}
+          checked={settings.notificationSounds}
+          onToggle={() => update({ notificationSounds: !settings.notificationSounds })}
+        />
+      </div>
+      <div className="rounded-2xl border border-border-subtle bg-surface px-4 py-4 text-xs leading-relaxed text-text-muted">
+        {t('settings.notifications.workflowHint', 'Workflow-specific background, desktop notification, and quiet-hour controls remain under Automations.')}
+      </div>
+    </div>
+  )
+}
+
+function SettingsPrivacyPanel({
+  settings,
+  config,
+  update,
+}: {
+  settings: EffectiveAppSettings
+  config: PublicAppConfig
+  update: (patch: Partial<EffectiveAppSettings>) => void
+}) {
+  const links = [
+    { label: t('settings.privacy.privacyPolicy', 'Privacy policy'), href: config.branding.privacyUrl },
+    { label: t('settings.privacy.security', 'Security'), href: config.branding.securityUrl },
+    { label: t('settings.privacy.legal', 'Legal'), href: config.branding.legalUrl },
+  ].filter((entry) => entry.href)
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="text-xs font-semibold text-text">{t('settings.privacy.conversationHistory', 'Conversation history')}</div>
+          <div className="text-xs leading-relaxed text-text-muted">
+            {t('settings.privacy.conversationHistoryManaged', 'Session retention stays managed by OpenCode runtime history and explicit storage cleanup until a verified retention policy is available.')}
+          </div>
+        </div>
+        <SettingsToggleRow
+          title={t('settings.privacy.shareUsage', 'Help improve the product')}
+          description={t('settings.privacy.shareUsageDescription', 'Share anonymized usage signals only. Prompt text, artifacts, credentials, and local paths are never included.')}
+          checked={settings.privacyShareAnonymizedUsage}
+          onToggle={() => update({ privacyShareAnonymizedUsage: !settings.privacyShareAnonymizedUsage })}
+        />
+      </div>
+      <div className="rounded-2xl border border-border-subtle p-4 flex flex-col gap-3">
+        <div className="text-xs font-semibold text-text">{t('settings.privacy.dataControls', 'Data controls')}</div>
+        <div className="text-xs leading-relaxed text-text-muted">
+          {t('settings.privacy.dataControlsDescription', 'Storage cleanup, sandbox artifact cleanup, and support bundle redaction stay explicit so local files are never removed silently.')}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {links.map((entry) => (
+            <Button key={entry.label} variant="secondary" size="sm" onClick={() => window.open(entry.href, '_blank', 'noopener,noreferrer')}>
+              {entry.label}
+            </Button>
+          ))}
         </div>
       </div>
     </div>
@@ -196,8 +317,10 @@ export function SettingsPanel({
     () => [
         { id: 'appearance' as const, label: t('settings.tab.appearance', 'Appearance'), description: t('settings.tab.appearanceDescription', 'Theme, color scheme, and fonts') },
         { id: 'model' as const, label: t('settings.tab.model', 'Model'), description: t('settings.tab.modelDescription', 'Provider, primary model, and credentials') },
-        { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime bridge') },
         ...(activeWorkspaceIsLocal ? [{ id: 'permissions' as const, label: t('settings.tab.permissions', 'Permissions'), description: t('settings.tab.permissionsDescription', 'Local tool access') }] : []),
+        { id: 'notifications' as const, label: t('settings.tab.notifications', 'Notifications'), description: t('settings.tab.notificationsDescription', 'Suggestions, digests, and sounds') },
+        { id: 'privacy' as const, label: t('settings.tab.privacy', 'Privacy'), description: t('settings.tab.privacyDescription', 'History, data use, and policy links') },
+        { id: 'advanced' as const, label: t('settings.tab.advanced', 'Advanced'), description: t('settings.tab.advancedDescription', 'Small model, OAuth detail, and runtime bridge') },
         { id: 'workflows' as const, label: t('settings.tab.workflows', 'Automations'), description: t('settings.tab.workflowsDescription', 'Run behavior and notifications') },
         ...(activeWorkspaceIsLocal ? [{ id: 'pairing' as const, label: t('settings.tab.pairing', 'Pairing'), description: t('settings.tab.pairingDescription', 'Gateway and mobile access') }] : []),
         ...(activeWorkspaceIsLocal ? [{ id: 'storage' as const, label: t('settings.tab.storage', 'Storage'), description: t('settings.tab.storageDescription', 'Sandbox artifacts and cleanup') }] : []),
@@ -216,7 +339,12 @@ export function SettingsPanel({
       ...(activeWorkspaceIsLocal ? [
         { id: 'settings-permissions-shell', tab: 'permissions' as const, label: t('settings.permissions.bashTitle', 'Shell commands'), keywords: 'shell terminal bash permission approve deny allow' },
         { id: 'settings-permissions-files', tab: 'permissions' as const, label: t('settings.permissions.fileWriteTitle', 'File editing'), keywords: 'files write edit permission approve deny allow' },
+        { id: 'settings-permissions-web', tab: 'permissions' as const, label: t('settings.permissions.webTitle', 'Open web pages'), keywords: 'web fetch code search webfetch codesearch permission approve deny allow' },
+        { id: 'settings-permissions-task', tab: 'permissions' as const, label: t('settings.permissions.taskTitle', 'Delegate to coworkers'), keywords: 'task delegation coworkers subagent permission approve deny allow' },
+        { id: 'settings-permissions-review-send', tab: 'permissions' as const, label: t('settings.permissions.reviewSendTitle', 'Require approval before sending'), keywords: 'approval review send channel email message post' },
       ] : []),
+      { id: 'settings-notifications', tab: 'notifications', label: t('settings.tab.notifications', 'Notifications'), keywords: 'notifications voice suggestions digest sounds chime' },
+      { id: 'settings-privacy', tab: 'privacy', label: t('settings.tab.privacy', 'Privacy'), keywords: 'privacy history usage anonymized policy security legal data' },
       { id: 'settings-workflows', tab: 'workflows', label: t('settings.search.automations', 'Automation notifications'), keywords: 'workflow automation run background launch login notifications quiet hours' },
       ...(activeWorkspaceIsLocal ? [
         { id: 'settings-pairing', tab: 'pairing' as const, label: t('settings.search.pairing', 'Pairing'), keywords: 'gateway mobile pairing qr code desktop' },
@@ -290,6 +418,16 @@ export function SettingsPanel({
             integrationCredentials: settings.integrationCredentials,
             bashPermission: settings.bashPermission,
             fileWritePermission: settings.fileWritePermission,
+            webPermission: settings.webPermission,
+            webSearchEnabled: settings.webSearchEnabled,
+            taskPermission: settings.taskPermission,
+            externalDirectoryPermission: settings.externalDirectoryPermission,
+            mcpPermission: settings.mcpPermission,
+            notificationVoiceReplies: settings.notificationVoiceReplies,
+            notificationSmartSuggestions: settings.notificationSmartSuggestions,
+            notificationDailyDigest: settings.notificationDailyDigest,
+            notificationSounds: settings.notificationSounds,
+            privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
             enableBash: settings.enableBash,
             enableFileWrite: settings.enableFileWrite,
             runtimeConfigSource: settings.runtimeConfigSource,
@@ -308,6 +446,11 @@ export function SettingsPanel({
             workflowDesktopNotifications: settings.workflowDesktopNotifications,
             workflowQuietHoursStart: settings.workflowQuietHoursStart,
             workflowQuietHoursEnd: settings.workflowQuietHoursEnd,
+            notificationVoiceReplies: settings.notificationVoiceReplies,
+            notificationSmartSuggestions: settings.notificationSmartSuggestions,
+            notificationDailyDigest: settings.notificationDailyDigest,
+            notificationSounds: settings.notificationSounds,
+            privacyShareAnonymizedUsage: settings.privacyShareAnonymizedUsage,
           })
       dirtyProviderCredentialKeys.current = {}
       let next = savedSettings
@@ -401,7 +544,7 @@ export function SettingsPanel({
   const activeTab = tabs.find((entry) => entry.id === tab) || tabs[0]
   const footer = (
     <div className="settings-dialog-footer">
-      <div className="min-w-0 text-[11px]">
+      <div className="min-w-0 text-xs">
         <div className="text-text-muted">
           {t('settings.saveHint', 'Appearance changes apply immediately. Provider and permission changes restart the runtime when needed.')}
           {!activeWorkspaceIsLocal
@@ -429,7 +572,7 @@ export function SettingsPanel({
       <div className="settings-dialog-shell">
         <div className="settings-dialog-intro">
           <div className="min-w-0">
-            <div className="text-[12px] text-text-muted">
+            <div className="text-xs text-text-muted">
               {activeWorkspaceIsLocal
                 ? t('settings.subtitle', 'Tune the shell, model runtime, and local permissions.')
                 : t('settings.cloudSubtitle', 'Tune portable cloud workspace preferences. Runtime and credentials are policy-managed.')}
@@ -470,7 +613,7 @@ export function SettingsPanel({
                     <span>{tabs.find((candidate) => candidate.id === entry.tab)?.label}</span>
                   </button>
                 )) : (
-                  <div className="px-2 py-2 text-[11px] text-text-muted">{t('settings.searchNoResults', 'No settings match that search.')}</div>
+                  <div className="px-2 py-2 text-xs text-text-muted">{t('settings.searchNoResults', 'No settings match that search.')}</div>
                 )}
               </div>
             ) : null}
@@ -494,7 +637,7 @@ export function SettingsPanel({
             <div className="settings-content-heading">
               <div>
                 <h3 id="settings-active-section-title" className="font-display text-role-section-title font-bold text-text">{activeTab?.label}</h3>
-                <p className="mt-1 text-[12px] text-text-muted">{activeTab?.description}</p>
+                <p className="mt-1 text-xs text-text-muted">{activeTab?.description}</p>
               </div>
             </div>
             <div ref={contentRef} className="settings-content-scroll">
@@ -542,6 +685,16 @@ export function SettingsPanel({
               {tab === 'permissions' && (
                 <div>
                   <PermissionsPanel permissions={config.permissions} settings={settings} update={update} />
+                </div>
+              )}
+              {tab === 'notifications' && (
+                <div id="settings-notifications" className="scroll-mt-4">
+                  <SettingsNotificationsPanel settings={settings} update={update} />
+                </div>
+              )}
+              {tab === 'privacy' && (
+                <div id="settings-privacy" className="scroll-mt-4">
+                  <SettingsPrivacyPanel settings={settings} config={config} update={update} />
                 </div>
               )}
               {tab === 'workflows' && (

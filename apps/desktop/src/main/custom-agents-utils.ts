@@ -1,5 +1,4 @@
 import {
-  getAppConfig,
   getBrandName,
   getConfiguredAgentsFromConfig,
   getConfiguredSkillsFromConfig,
@@ -198,7 +197,7 @@ function normalizePermissionMode(value: unknown): CustomAgentMode {
 }
 
 function permissionOverrideSupportsRules(key: CustomAgentPermissionKey) {
-  return key !== 'web'
+  return Boolean(key)
 }
 
 const PERMISSION_ACTION_RANK: Record<CustomAgentPermissionAction, number> = {
@@ -511,6 +510,7 @@ export function buildCustomAgentPermissionFromCatalog(agent: CustomAgentLike, ca
   applyCustomAgentPermissionDefaultOverrides(permission, permissionOverrides)
   applyCustomAgentPermissionRuleOverrides(permission, permissionOverrides)
   for (const pattern of deniedPatterns) permission[pattern] = 'deny'
+  applyCustomAgentRuntimePermissionCeilings(permission)
   return permission
 }
 
@@ -519,7 +519,7 @@ function applyCustomAgentPermissionDefaultOverrides(
   overrides: CustomAgentPermissionOverride[],
 ) {
   for (const override of overrides) {
-    if (override.key !== 'mcp' && permissionOverrideSupportsRules(override.key) && (override.rules || []).length > 0) {
+    if (override.key !== 'mcp' && override.key !== 'web' && (override.rules || []).length > 0 && !overrideUsesExactPermissionKeyRules(override)) {
       for (const key of permissionKeysForOverride(override.key)) {
         permission[key] = buildCappedPermissionRuleMap(key, override)
       }
@@ -539,14 +539,21 @@ function applyCustomAgentPermissionRuleOverrides(
   overrides: CustomAgentPermissionOverride[],
 ) {
   for (const override of overrides) {
-    if (override.key !== 'mcp') continue
+    if (override.key !== 'mcp' && !overrideUsesExactPermissionKeyRules(override)) continue
     for (const rule of override.rules || []) {
       const patterns = override.key === 'mcp'
         ? expandMcpToolPermissionPatterns([rule.pattern])
         : [rule.pattern]
-      for (const pattern of patterns) permission[pattern] = rule.action
+      for (const pattern of patterns) permission[pattern] = cappedPermissionActionForKey(pattern, rule.action)
     }
   }
+}
+
+function overrideUsesExactPermissionKeyRules(override: CustomAgentPermissionOverride) {
+  const rules = override.rules || []
+  if (rules.length === 0) return false
+  const permissionKeys = new Set(permissionKeysForOverride(override.key))
+  return rules.every((rule) => permissionKeys.has(rule.pattern))
 }
 
 function buildCappedPermissionRuleMap(permissionKey: string, override: CustomAgentPermissionOverride) {
@@ -566,15 +573,38 @@ function cappedPermissionActionForKey(
   return clampPermissionAction(action, maximumPermissionActionForKey(permissionKey))
 }
 
+function isPermissionAction(value: unknown): value is CustomAgentPermissionAction {
+  return value === 'allow' || value === 'ask' || value === 'deny'
+}
+
+function applyCustomAgentRuntimePermissionCeilings(permission: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(permission)) {
+    const maximum = maximumPermissionActionForKey(key)
+    if (!maximum) continue
+    if (isPermissionAction(value)) {
+      permission[key] = clampPermissionAction(value, maximum)
+      continue
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      permission[key] = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([pattern, action]) => [
+        pattern,
+        isPermissionAction(action) ? clampPermissionAction(action, maximum) : action,
+      ]))
+    }
+  }
+}
+
 function maximumPermissionActionForKey(permissionKey: string): CustomAgentPermissionAction | null {
-  const appPermissions = getAppConfig().permissions
   const settings = getEffectiveSettings()
+  if (permissionKey === 'mcp__*' || permissionKey.startsWith('mcp__') || isLegacyMcpAliasPermissionKey(permissionKey)) {
+    return settings.mcpPermission
+  }
   switch (permissionKey) {
     case 'codesearch':
     case 'webfetch':
-      return appPermissions.web
+      return settings.webPermission
     case 'websearch':
-      return appPermissions.webSearch ? appPermissions.web : 'deny'
+      return settings.webSearchEnabled ? settings.webPermission : 'deny'
     case 'bash':
       return settings.bashPermission
     case 'edit':
@@ -582,9 +612,9 @@ function maximumPermissionActionForKey(permissionKey: string): CustomAgentPermis
     case 'apply_patch':
       return settings.fileWritePermission
     case 'task':
-      return appPermissions.task
+      return settings.taskPermission
     case 'external_directory':
-      return settings.fileWritePermission
+      return settings.externalDirectoryPermission
     default:
       return null
   }
