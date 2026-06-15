@@ -6178,6 +6178,10 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
         instructions: 'Summarize revenue for today.',
         agentName: 'data-analyst',
         toolIds: ['charts'],
+        steps: [
+          { id: 'load', title: 'Load daily revenue', detail: 'Fetch the latest revenue inputs.' },
+          { id: 'summarize', title: 'Summarize variance', detail: 'Highlight material changes.' },
+        ],
         triggers: [{ id: 'manual-1', type: 'manual', enabled: true }],
       }),
     })
@@ -6185,6 +6189,10 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
     const created = asRecord((await readJson(createResponse)).workflow)
     assert.equal(created.title, 'Revenue daily')
     assert.equal(created.status, 'active')
+    assert.deepEqual(asArray(created.steps).map((step) => String(asRecord(step).title)), [
+      'Load daily revenue',
+      'Summarize variance',
+    ])
 
     const workflowId = String(created.id)
     const runResponse = await fetch(`${baseUrl}/api/workflows/${workflowId}/run`, {
@@ -6211,9 +6219,18 @@ test('cloud HTTP exposes workflow create, manual run, and durable finalization',
 
     const fetched = asRecord((await readJson(await fetch(`${baseUrl}/api/workflows/${workflowId}`))).workflow)
     assert.equal(asRecord(asArray(fetched.runs)[0]).status, 'completed')
+    assert.deepEqual(asArray(fetched.steps).map((step) => String(asRecord(step).title)), [
+      'Load daily revenue',
+      'Summarize variance',
+    ])
     const listed = await readJson(await fetch(`${baseUrl}/api/workflows`))
     assert.equal(asArray(listed.workflows).length, 1)
     assert.equal(asArray(listed.runs).length, 1)
+    const listedWorkflow = asRecord(asArray(listed.workflows)[0])
+    assert.deepEqual(asArray(listedWorkflow.steps).map((step) => String(asRecord(step).title)), [
+      'Load daily revenue',
+      'Summarize variance',
+    ])
   } finally {
     await fixture.server.close()
   }

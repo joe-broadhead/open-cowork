@@ -771,8 +771,8 @@ test('cloud website renders chat-first controls without local host path affordan
   assert.match(html, /id="chat-timeline"/)
   assert.match(html, /id="workbench-agent-list"/)
   assert.match(html, /id="capability-filter"/)
-  assert.match(html, /id="tool-list"/)
-  assert.match(html, /id="skill-list"/)
+  assert.match(html, /id="capability-tabs"/)
+  assert.match(html, /id="capability-active-list"/)
   assert.match(html, /id="workflow-form"/)
   assert.match(html, /id="workflow-list"/)
   assert.match(html, /id="workflow-detail"/)
@@ -794,7 +794,9 @@ test('cloud website renders chat-first controls without local host path affordan
 
 test('cloud website surface helper derives agents, filters capabilities, and summarizes workflow triggers', () => {
   const agents = deriveCloudWebWorkbenchAgents({
-    policyAllowedAgents: ['build'],
+    policyAllowedAgents: [
+      { name: 'build', label: 'Build', mode: 'primary', modelLabel: 'Claude Sonnet', temperature: 0.2, steps: 40 },
+    ],
     tools: [
       { id: 'charts', agentNames: ['data-analyst'], source: 'builtin' },
       { id: 'custom-tool', agentNames: ['custom-agent'], source: 'custom' },
@@ -805,6 +807,10 @@ test('cloud website surface helper derives agents, filters capabilities, and sum
     ],
   })
   assert.deepEqual(agents.map((agent) => agent.name), ['build', 'custom-agent', 'data-analyst'])
+  assert.equal(agents.find((agent) => agent.name === 'build')?.mode, 'primary')
+  assert.equal(agents.find((agent) => agent.name === 'build')?.displayName, 'Build')
+  assert.equal(agents.find((agent) => agent.name === 'build')?.modelLabel, 'Claude Sonnet')
+  assert.equal(agents.find((agent) => agent.name === 'data-analyst')?.mode, 'subagent')
   assert.equal(agents.find((agent) => agent.name === 'custom-agent')?.custom, true)
   assert.equal(agents.find((agent) => agent.name === 'data-analyst')?.toolCount, 1)
   assert.equal(agents.find((agent) => agent.name === 'data-analyst')?.skillCount, 1)

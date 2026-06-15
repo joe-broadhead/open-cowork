@@ -18,6 +18,7 @@ import type {
 import {
   createCloudProjectionCheckpoint,
   createCloudProjectionFenceToken,
+  normalizeWorkflowSteps,
 } from '@open-cowork/shared'
 import { getAppDataDir } from '../config-loader.ts'
 import {
@@ -39,7 +40,7 @@ import {
   type WorkflowSecretStorageAdapter,
 } from './workflow-secret-storage.ts'
 
-const WORKFLOW_DB_SCHEMA_VERSION = 1
+const WORKFLOW_DB_SCHEMA_VERSION = 2
 const WORKFLOW_SCHEMA_VERSION_KEY = 'schema_version'
 const WORKFLOW_PROJECTION_VERSION_KEY = 'workflow_projection_version'
 const LOCAL_WORKFLOW_PROJECTION_TENANT_ID = 'desktop-local'
@@ -157,6 +158,7 @@ function initDb(db: DatabaseSync) {
       agent_name text not null,
       skill_names_json text not null,
       tool_ids_json text not null,
+      steps_json text not null default '[]',
       status text not null,
       project_directory text,
       draft_session_id text,
@@ -187,6 +189,11 @@ function initDb(db: DatabaseSync) {
     create index if not exists idx_workflow_runs_workflow on workflow_runs(workflow_id, created_at);
     create index if not exists idx_workflows_due on workflows(status, next_run_at);
   `)
+  const columns = new Set((db.prepare('pragma table_info(workflows)').all() as Array<{ name?: unknown }>)
+    .map((column) => String(column.name || '')))
+  if (!columns.has('steps_json')) {
+    db.exec(`alter table workflows add column steps_json text not null default '[]'`)
+  }
   db.prepare(`
     insert into workflow_meta (key, value)
     values (?, ?)
@@ -299,13 +306,23 @@ function rowToWorkflow(row: DbRow, webhookBaseUrl?: string | null): WorkflowSumm
   const latestRunStatus = row.latest_run_status && VALID_RUN_STATUS.has(String(row.latest_run_status) as WorkflowRunStatus)
     ? String(row.latest_run_status) as WorkflowRunStatus
     : null
+  const instructions = String(row.instructions || '')
+  const agentName = String(row.agent_name || 'build')
+  const skillNames = parseJson<string[]>(row.skill_names_json, [])
+  const toolIds = parseJson<string[]>(row.tool_ids_json, [])
   const workflow: WorkflowSummary = {
     id: String(row.id || ''),
     title: String(row.title || ''),
-    instructions: String(row.instructions || ''),
-    agentName: String(row.agent_name || 'build'),
-    skillNames: parseJson<string[]>(row.skill_names_json, []),
-    toolIds: parseJson<string[]>(row.tool_ids_json, []),
+    instructions,
+    agentName,
+    skillNames,
+    toolIds,
+    steps: normalizeWorkflowSteps(parseJson<unknown>(row.steps_json, null), {
+      instructions,
+      agentName,
+      skillNames,
+      toolIds,
+    }),
     status,
     projectDirectory: typeof row.project_directory === 'string' ? row.project_directory : null,
     draftSessionId: typeof row.draft_session_id === 'string' ? row.draft_session_id : null,
@@ -383,10 +400,10 @@ export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | n
   withTransaction((db) => {
     db.prepare(`
       insert into workflows (
-        id, title, instructions, agent_name, skill_names_json, tool_ids_json, status,
+        id, title, instructions, agent_name, skill_names_json, tool_ids_json, steps_json, status,
         project_directory, draft_session_id, triggers_json, created_at, updated_at,
         next_run_at, last_run_at, latest_run_id, latest_run_status, latest_run_session_id, latest_run_summary
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, null, null)
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, null, null)
     `).run(
       id,
       normalized.title,
@@ -394,6 +411,7 @@ export function createWorkflow(draft: WorkflowDraft, webhookBaseUrl?: string | n
       normalized.agentName,
       JSON.stringify(normalized.skillNames || []),
       JSON.stringify(normalized.toolIds || []),
+      JSON.stringify(normalized.steps || []),
       'active',
       normalized.projectDirectory || null,
       normalized.draftSessionId || null,

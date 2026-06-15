@@ -79,7 +79,7 @@ type BrowserHarnessOptions = {
   projectSourceDenied?: boolean
   signupMode?: string
   billingEnabled?: boolean
-  allowedAgents?: string[] | null
+  allowedAgents?: unknown[] | null
   multiPromptQuestions?: boolean
 }
 function parseJsonBody(value: unknown) {
@@ -115,7 +115,7 @@ export async function waitFor(assertion: () => void, timeoutMs = 2500) {
 
 export function createCloudWebBrowserHarness(options: BrowserHarnessOptions = {}) {
   const role = options.role || 'admin'
-  const allowedAgents = options.allowedAgents === undefined ? ['build', 'plan', 'chief-of-staff', 'data-analyst'] : options.allowedAgents
+  const allowedAgents = options.allowedAgents === undefined ? [{ name: 'build', label: 'Build', mode: 'primary', role: 'Implementation lead', modelLabel: 'Claude Sonnet', temperature: 0.2, steps: 40 }, { name: 'plan', label: 'Plan', mode: 'primary', role: 'Planning lead', modelLabel: 'GPT-5', temperature: 0.1, steps: 30 }, { name: 'chief-of-staff', label: 'Chief of Staff', mode: 'primary', role: 'Objective planner', modelLabel: 'Profile default', temperature: 0.15, steps: 50 }, { name: 'data-analyst', label: 'Data Analyst', mode: 'subagent', role: 'Analysis specialist', modelLabel: 'DeepSeek', temperature: 0.25, steps: 24 }] : options.allowedAgents
   const features = {
     chat: true,
     workflows: true,

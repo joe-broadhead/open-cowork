@@ -210,8 +210,16 @@ export function makeWorkflows(count: number) {
     title: index === 0 ? 'Daily review' : `Workflow ${index + 1}`,
     instructions: 'Review changed work.',
     agentName: 'build',
+    skillNames: ['analysis'],
+    toolIds: ['shell'],
+    steps: [
+      { id: 'step-1', title: 'Collect changed work', detail: 'Review repository and run context.' },
+      { id: 'step-2', title: 'Summarize risks', detail: 'Call out blockers and next actions.' },
+      { id: 'step-3', title: 'Post review summary', detail: 'Save the result in the run chat.' },
+    ],
     status: index % 7 === 0 && index !== 0 ? 'paused' : 'active',
     latestRunStatus: index % 3 === 0 ? 'completed' : 'queued',
+    lastRunAt: iso(index + 6),
     triggers: [{ type: 'manual', enabled: true }],
     updatedAt: iso(index + 5),
   }))

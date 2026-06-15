@@ -141,6 +141,7 @@ const relationshipWorkflowList: WorkflowListPayload = {
     latestRunSessionId: null,
     latestRunSummary: null,
     webhookUrl: null,
+    steps: [{ id: 'step-1', title: 'Publish report', detail: 'Generate and share the daily report.' }],
   }],
   runs: [],
 }

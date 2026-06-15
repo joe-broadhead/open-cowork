@@ -31,6 +31,7 @@ function payload(overrides: Partial<WorkflowListPayload> = {}): WorkflowListPayl
       latestRunSessionId: null,
       latestRunSummary: null,
       webhookUrl: 'http://127.0.0.1:47839/workflows/workflow-1',
+      steps: [{ id: 'step-1', title: 'Scan inbox', detail: 'Collect unread messages and summarize workload.' }],
     }],
     runs: [],
     ...overrides,
@@ -160,6 +161,18 @@ describe('WorkflowsPage', () => {
 
     expect(api.workflows?.runNow).toHaveBeenCalledWith('workflow-1')
     await waitFor(() => expect(onOpenThread).toHaveBeenCalledWith('ses_run'))
+  })
+
+  it('falls back when older workflow payloads omit ordered steps', async () => {
+    const legacyPayload = payload()
+    delete (legacyPayload.workflows[0] as Partial<WorkflowListPayload['workflows'][number]>).steps
+    installApi(legacyPayload)
+
+    render(<WorkflowsPage onOpenThread={vi.fn()} />)
+
+    expect(await screen.findByText('Inbox summary')).toBeInTheDocument()
+    expect(screen.getByText('Run saved instructions')).toBeInTheDocument()
+    expect(screen.getAllByText('Scan the inbox and email a concise workload summary.').length).toBeGreaterThan(0)
   })
 
   it('uses cloud workflow APIs and hides local webhook mutation controls', async () => {

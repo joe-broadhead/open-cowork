@@ -28,12 +28,19 @@ const triggerSchema = z.object({
   webhookSecret: z.string().optional().nullable().describe('Optional existing webhook secret; omit for generated secret.'),
 })
 
+const workflowStepSchema = z.object({
+  id: z.string().optional().describe('Stable step id; omit to let Open Cowork generate one.'),
+  title: z.string().min(1).describe('Short user-facing step title.'),
+  detail: z.string().optional().nullable().describe('Optional implementation detail for the step.'),
+})
+
 const workflowDraftShape = {
   title: z.string().min(1).describe('Short human-readable workflow name.'),
   instructions: z.string().min(1).describe('Durable repeatable task instructions for the execution agent.'),
   agentName: z.string().optional().default('build').describe('OpenCode agent that should execute the workflow, usually build unless a custom agent is better.'),
   skillNames: z.array(z.string()).optional().default([]).describe('Relevant skill names the execution agent should use.'),
   toolIds: z.array(z.string()).optional().default([]).describe('Relevant Open Cowork tool ids or MCP namespaces.'),
+  steps: z.array(workflowStepSchema).optional().describe('Optional ordered workflow steps to preserve in the saved playbook UI.'),
   projectDirectory: z.string().optional().nullable().describe('Granted project directory if this workflow should run in a project context.'),
   draftSessionId: z.string().optional().nullable().describe('The planning thread id that produced this workflow.'),
   triggers: z.array(triggerSchema).min(1).describe('Manual, schedule, and/or webhook triggers.'),

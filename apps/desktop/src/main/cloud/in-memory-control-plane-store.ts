@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import type { CoordinationWatch, WorkflowDraft, WorkflowRun, WorkflowRunStatus, WorkflowStatus, WorkflowSummary, WorkflowTriggerType } from '@open-cowork/shared'
+import { normalizeWorkflowSteps, type CoordinationWatch, type WorkflowDraft, type WorkflowRun, type WorkflowRunStatus, type WorkflowStatus, type WorkflowSummary, type WorkflowTriggerType } from '@open-cowork/shared'
 import type { CloudBillingEntitlements, CloudSubscriptionStatus } from '../config-types.ts'
 import { publicQuotaMessage, quotaExceeded, type QuotaPolicyCode } from './control-plane-errors.ts'
 import type {
@@ -3535,6 +3535,12 @@ export class InMemoryControlPlaneStore implements ControlPlaneStore {
       agentName: draft.agentName,
       skillNames: [...(draft.skillNames || [])],
       toolIds: [...(draft.toolIds || [])],
+      steps: normalizeWorkflowSteps(draft.steps, {
+        instructions: draft.instructions,
+        agentName: draft.agentName,
+        skillNames: draft.skillNames,
+        toolIds: draft.toolIds,
+      }),
       status: 'active',
       projectDirectory: draft.projectDirectory || null,
       draftSessionId: draft.draftSessionId || null,
