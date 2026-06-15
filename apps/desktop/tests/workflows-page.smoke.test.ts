@@ -22,6 +22,7 @@ function seedWorkflow(dataRoot: string) {
         agent_name text not null,
         skill_names_json text not null,
         tool_ids_json text not null,
+        steps_json text not null default '[]',
         status text not null,
         project_directory text,
         draft_session_id text,
@@ -61,13 +62,14 @@ function seedWorkflow(dataRoot: string) {
         agent_name,
         skill_names_json,
         tool_ids_json,
+        steps_json,
         status,
         project_directory,
         draft_session_id,
         triggers_json,
         created_at,
         updated_at
-      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       'Smoke workflow',
@@ -75,6 +77,7 @@ function seedWorkflow(dataRoot: string) {
       'missing-agent-smoke',
       '[]',
       '[]',
+      JSON.stringify([{ id: 'step-1', title: 'Exercise workflow run IPC', detail: null }]),
       'active',
       null,
       null,

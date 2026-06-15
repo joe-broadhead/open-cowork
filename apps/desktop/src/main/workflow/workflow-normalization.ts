@@ -5,6 +5,7 @@ import type {
   WorkflowTriggerType,
   WorkflowValidationGap,
 } from '@open-cowork/shared'
+import { normalizeWorkflowSteps } from '@open-cowork/shared'
 import { validateWorkflowSchedule } from './workflow-schedule.ts'
 
 const MAX_TEXT = 32 * 1024
@@ -124,6 +125,8 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowD
   const title = boundedText(draft.title, 'Workflow title', 512)
   const instructions = boundedText(draft.instructions, 'Workflow instructions', MAX_TEXT)
   const agentName = boundedText(draft.agentName || 'build', 'Workflow agent', 256)
+  const skillNames = normalizeStringList(draft.skillNames, 'Workflow skillNames')
+  const toolIds = normalizeStringList(draft.toolIds, 'Workflow toolIds')
   const idGenerator = options?.idGenerator ?? (() => crypto.randomUUID())
   const triggers = normalizeWorkflowTriggers(draft.triggers, {
     now: options?.now ?? new Date(),
@@ -137,8 +140,14 @@ export function normalizeWorkflowDraft(draft: WorkflowDraft, options?: WorkflowD
     title,
     instructions,
     agentName,
-    skillNames: normalizeStringList(draft.skillNames, 'Workflow skillNames'),
-    toolIds: normalizeStringList(draft.toolIds, 'Workflow toolIds'),
+    skillNames,
+    toolIds,
+    steps: normalizeWorkflowSteps(draft.steps, {
+      instructions,
+      agentName,
+      skillNames,
+      toolIds,
+    }),
     projectDirectory: boundedOptionalText(draft.projectDirectory, 'Workflow projectDirectory', 4096),
     draftSessionId: boundedOptionalText(draft.draftSessionId, 'Workflow draftSessionId', 256),
     triggers,

@@ -298,15 +298,10 @@ export function cloudWebsiteHtml(policy: WebsiteBootstrapPolicy, publicBranding?
           <div class="grid">
             ${routeParityMarkup('capabilities')}
             <div class="panel">
-              <h3>Tools</h3>
-              <div class="list" id="tool-list">
-                <p class="empty">No tools loaded.</p>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>Skills and MCPs</h3>
-              <div class="list" id="skill-list">
-                <p class="empty">No skills loaded.</p>
+              <h3>Capability library</h3>
+              <div id="capability-tabs"></div>
+              <div class="list" id="capability-active-list">
+                <p class="empty">No capabilities loaded.</p>
               </div>
             </div>
             <div class="panel">

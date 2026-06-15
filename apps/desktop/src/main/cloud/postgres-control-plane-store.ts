@@ -11,6 +11,7 @@ import {
   encodeSessionPageCursor,
 } from './control-plane-store.ts'
 import { redactAuditMetadata } from './audit-redaction.ts'
+import { normalizeWorkflowSteps } from '@open-cowork/shared'
 import type {
   WorkflowRunStatus,
   WorkflowStatus,
@@ -2986,17 +2987,25 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
     await this.requireTenantUser(input.tenantId, input.userId)
     const createdAt = nowIso(input.createdAt)
     const draft = input.draft
+    const skillNames = draft.skillNames || []
+    const toolIds = draft.toolIds || []
+    const steps = normalizeWorkflowSteps(draft.steps, {
+      instructions: draft.instructions,
+      agentName: draft.agentName,
+      skillNames,
+      toolIds,
+    })
     await this.pool.query(
       `INSERT INTO cloud_workflows (
         tenant_id, workflow_id, user_id, title, instructions, agent_name,
-        skill_names, tool_ids, status, project_directory, draft_session_id,
+        skill_names, tool_ids, steps, status, project_directory, draft_session_id,
         triggers, created_at, updated_at, next_run_at, last_run_at,
         latest_run_id, latest_run_status, latest_run_session_id, latest_run_summary
        )
        VALUES (
         $1, $2, $3, $4, $5, $6,
-        $7::jsonb, $8::jsonb, 'active', $9, $10,
-        $11::jsonb, $12, $12, $13, NULL,
+        $7::jsonb, $8::jsonb, $9::jsonb, 'active', $10, $11,
+        $12::jsonb, $13, $13, $14, NULL,
         NULL, NULL, NULL, NULL
        )
        ON CONFLICT (tenant_id, workflow_id) DO NOTHING`,
@@ -3007,8 +3016,9 @@ export class PostgresControlPlaneStore implements ControlPlaneStore, WorkflowWeb
         draft.title,
         draft.instructions,
         draft.agentName,
-        JSON.stringify(draft.skillNames || []),
-        JSON.stringify(draft.toolIds || []),
+        JSON.stringify(skillNames),
+        JSON.stringify(toolIds),
+        JSON.stringify(steps),
         draft.projectDirectory || null,
         draft.draftSessionId || null,
         JSON.stringify(draft.triggers),

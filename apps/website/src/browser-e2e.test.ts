@@ -355,19 +355,29 @@ test('cloud web browser exposes desktop parity boundaries and workbench state vo
     harness.clickText('[data-route-link]', 'Coworkers')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'agents'))
     assert.ok(harness.document.querySelector('#workbench-agent-list .agent-card'))
+    assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Leads ·/)
+    assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Specialists ·/)
+    assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Brain/)
+    assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Temperature/)
+    assert.match(harness.document.querySelector('#workbench-agent-list')?.textContent || '', /Max steps/)
     assert.equal(harness.document.querySelector('#workbench-agent-list > .row'), null)
 
     harness.clickText('[data-route-link]', 'Tools & Skills')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'capabilities'))
     assert.match(harness.document.querySelector('[data-parity-route="capabilities"]')?.textContent || '', /Local Stdio MCPs/)
-    assert.ok(harness.document.querySelector('#tool-list .capability-card'))
-    assert.ok(harness.document.querySelector('#skill-list .capability-card'))
-    assert.equal(harness.document.querySelector('#tool-list > .row'), null)
+    assert.match(harness.document.querySelector('#capability-tabs')?.textContent || '', /Abilities ·/)
+    assert.match(harness.document.querySelector('#capability-tabs')?.textContent || '', /Connections ·/)
+    assert.ok(harness.document.querySelector('#capability-active-list .capability-card'))
+    harness.clickText('#capability-tabs button', 'Connections · 2')
+    await waitFor(() => assert.match(harness.document.querySelector('#capability-active-list')?.textContent || '', /Shell/))
+    assert.equal(harness.document.querySelector('#capability-active-list > .row'), null)
     assert.match(harness.document.querySelector('#capability-policy-note')?.textContent || '', /Local stdio MCPs are Desktop-only/)
 
     harness.clickText('[data-route-link]', 'Playbooks')
     await waitFor(() => assert.equal(harness.document.body.dataset.route, 'workflows'))
     assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Latest run/)
+    assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Runs as build/)
+    assert.match(harness.document.querySelector('#workflow-detail')?.textContent || '', /Collect changed work/)
     const workflowForm = harness.document.querySelector('#workflow-form') as HTMLFormElement
     ;(workflowForm.elements.namedItem('title') as HTMLInputElement).value = 'Daily triage'
     ;(workflowForm.elements.namedItem('agentName') as HTMLInputElement).value = 'data-analyst'
@@ -657,11 +667,11 @@ test('cloud web browser creates, prompts, streams, reloads, and continues a clou
       assert.equal((harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement).disabled, false)
     })
     const agent = harness.document.querySelector('#composer-agent') as HTMLSelectElement
-    await waitFor(() => assert.match(agent.textContent || '', /build/))
+    await waitFor(() => assert.match(agent.textContent || '', /Build/))
     await waitFor(() => assert.match(harness.document.querySelector('#composer-agent-chips')?.textContent || '', /build/))
     harness.clickText('#composer-agent-chips button', '@build')
     assert.equal(agent.value, 'build')
-    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Assign to: build/))
+    await waitFor(() => assert.match(harness.document.querySelector('.composer-lead-row')?.textContent || '', /Assign to: Build/))
     const message = harness.document.querySelector('#prompt-form textarea[name="text"]') as HTMLTextAreaElement
     await waitFor(() => assert.match(message.value, /^@build/))
     assert.equal((harness.document.querySelector('#prompt-form .composer-send') as HTMLButtonElement).disabled, true)

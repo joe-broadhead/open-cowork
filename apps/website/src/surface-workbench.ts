@@ -13,6 +13,12 @@ type CapabilityWithAgents = {
 
 export type CloudWebWorkbenchAgent = {
   name: string
+  displayName: string
+  mode: 'primary' | 'subagent'
+  role: string
+  modelLabel: string
+  temperature: number | null
+  steps: number | null
   toolCount: number
   skillCount: number
   custom: boolean
@@ -89,6 +95,34 @@ function coworkerRoleFromName(name: string) {
   const cleaned = name.replace(/[-_.]+/g, ' ').trim()
   if (!cleaned) return 'Studio coworker'
   return `${cleaned[0]?.toUpperCase() || ''}${cleaned.slice(1)} coworker`
+}
+
+function coworkerModeFromRecord(name: string, record: Record<string, unknown>): CloudWebWorkbenchAgent['mode'] {
+  const mode = String(record.mode || record.variant || '').toLowerCase()
+  if (mode === 'primary' || mode === 'lead') return 'primary'
+  if (mode === 'subagent' || mode === 'specialist') return 'subagent'
+  const normalizedName = name.toLowerCase()
+  return normalizedName === 'build' || normalizedName === 'plan' || normalizedName === 'chief-of-staff'
+    ? 'primary'
+    : 'subagent'
+}
+
+function nullableNumber(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''))
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function agentConfigFromRecord(name: string, record: Record<string, unknown>): Omit<CloudWebWorkbenchAgent, 'toolCount' | 'skillCount' | 'custom'> {
+  const mode = coworkerModeFromRecord(name, record)
+  return {
+    name,
+    displayName: String(record.displayName || record.label || name),
+    mode,
+    role: String(record.role || record.title || record.description || (mode === 'primary' ? 'Lead coworker' : coworkerRoleFromName(name))),
+    modelLabel: String(record.modelLabel || record.model || record.modelId || record.brain || 'Profile default'),
+    temperature: nullableNumber(record.temperature),
+    steps: nullableNumber(record.steps || record.maxSteps || record.max_steps),
+  }
 }
 
 export function cloudWebCoworkerOptionsFromWorkspace(workspace: unknown, profileName = 'default'): CloudWebCoworkerOption[] {
@@ -172,25 +206,39 @@ export function cloudWebPromptAssignment(input: string, allowedAgents: string[],
 }
 
 export function deriveCloudWebWorkbenchAgents(input: {
-  policyAllowedAgents?: string[] | null
+  policyAllowedAgents?: unknown[] | null
   tools?: CapabilityWithAgents[]
   skills?: CapabilityWithAgents[]
 }): CloudWebWorkbenchAgent[] {
   const agents = new Map<string, CloudWebWorkbenchAgent>()
-  const ensure = (name: string) => {
+  const ensure = (name: string, sourceRecord: Record<string, unknown> = {}) => {
     const cleaned = name.trim()
     if (!cleaned) return null
     const current = agents.get(cleaned) || {
-      name: cleaned,
+      ...agentConfigFromRecord(cleaned, sourceRecord),
       toolCount: 0,
       skillCount: 0,
       custom: false,
+    }
+    if (sourceRecord && Object.keys(sourceRecord).length > 0) {
+      const config = agentConfigFromRecord(cleaned, sourceRecord)
+      current.displayName = config.displayName
+      current.mode = config.mode
+      current.role = config.role
+      current.modelLabel = config.modelLabel
+      current.temperature = config.temperature
+      current.steps = config.steps
+      current.custom = current.custom || sourceRecord.source === 'custom' || sourceRecord.origin === 'custom' || sourceRecord.custom === true
     }
     agents.set(cleaned, current)
     return current
   }
 
-  for (const name of asList<string>(input.policyAllowedAgents)) ensure(name)
+  for (const entry of asList<unknown>(input.policyAllowedAgents)) {
+    const record = agentOptionRecord(entry)
+    const name = String(typeof entry === 'string' ? entry : record.name || '').trim()
+    ensure(name, record)
+  }
   for (const tool of asList<CapabilityWithAgents>(input.tools)) {
     for (const name of asList<string>(tool.agentNames)) {
       const agent = ensure(name)

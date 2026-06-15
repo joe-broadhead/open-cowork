@@ -5,6 +5,7 @@ import { cloudWebsiteArtifactStyles } from './style-artifacts.ts'
 import { cloudWebsiteChatStyles } from './style-chat.ts'
 import { cloudWebsiteComponentStyles } from './style-components.ts'
 import { cloudWebsiteLaunchpadStyles } from './style-launchpad.ts'
+import { cloudWebsiteLibraryStyles } from './style-library.ts'
 import { cloudWebsiteLayoutStyles } from './style-layout.ts'
 import { cloudWebsitePrimitiveStyles } from './style-primitives.ts'
 import { cloudWebsiteSharedUiStyles } from './style-shared-ui.ts'
@@ -215,6 +216,7 @@ ${cloudWebsiteAgentProfileStyles()}
 ${cloudWebsiteArtifactStyles()}
 ${cloudWebsiteChatStyles()}
 ${cloudWebsiteLaunchpadStyles()}
+${cloudWebsiteLibraryStyles()}
 ${cloudWebsiteSharedUiStyles()}
 ${cloudWebsiteSettingsStyles()}
 ${cloudWebsiteStudioPrimitiveStyles()}

@@ -106,6 +106,11 @@ test('workflow store saves thread-created workflows and exposes webhook URLs', (
   assert.equal(workflow.title, 'Inbox summary')
   assert.equal(workflow.agentName, 'build')
   assert.equal(workflow.draftSessionId, 'ses_draft')
+  assert.deepEqual(workflow.steps.map((step) => step.title), [
+    'Prepare run context',
+    'Execute saved instructions',
+    'Review and summarize output',
+  ])
   assert.equal(workflow.webhookUrl, `http://127.0.0.1:47839/workflows/${workflow.id}`)
 
   const listed = listWorkflows('http://127.0.0.1:47839')
@@ -206,6 +211,7 @@ test('workflow normalization uses explicit calculation adapters', () => {
   const normalized = normalizeWorkflowDraft({
     ...draft,
     projectDirectory: ' /tmp/project ',
+    steps: [{ id: 'triage', title: 'Triage inbox', detail: 'Group urgent messages.' }],
     triggers: [{ id: '', type: 'webhook', enabled: true }],
   }, {
     now: new Date('2026-05-15T08:00:00.000Z'),
@@ -214,11 +220,34 @@ test('workflow normalization uses explicit calculation adapters', () => {
   })
 
   assert.equal(normalized.projectDirectory, '/tmp/project')
+  assert.deepEqual(normalized.steps, [{ id: 'triage', title: 'Triage inbox', detail: 'Group urgent messages.' }])
   assert.deepEqual(normalized.triggers.map((trigger) => `${trigger.id}:${trigger.type}`), [
     'generated-id:manual',
     'generated-id:webhook',
   ])
   assert.equal(normalized.triggers.find((trigger) => trigger.type === 'webhook')?.webhookSecret, 'generated-secret')
+
+  const derivedSteps = normalizeWorkflowDraft({
+    ...draft,
+    instructions: '1. Collect the inbox\n2. Summarize urgent work\n3. Send the digest',
+    triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+  })
+  assert.deepEqual(derivedSteps.steps.map((step) => step.title), [
+    'Collect the inbox',
+    'Summarize urgent work',
+    'Send the digest',
+  ])
+
+  const sentenceDerivedSteps = normalizeWorkflowDraft({
+    ...draft,
+    instructions: 'Collect the inbox. Summarize urgent work! Send the digest?',
+    triggers: [{ id: 'manual', type: 'manual', enabled: true }],
+  })
+  assert.deepEqual(sentenceDerivedSteps.steps.map((step) => step.title), [
+    'Collect the inbox',
+    'Summarize urgent work',
+    'Send the digest',
+  ])
 
   const preview = previewWorkflowDraftCalculation({
     ...draft,

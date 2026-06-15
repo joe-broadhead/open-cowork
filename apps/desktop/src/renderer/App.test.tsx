@@ -1084,6 +1084,7 @@ describe('App', () => {
       latestRunSessionId: 'run-session',
       latestRunSummary: null,
       webhookUrl: null,
+      steps: [{ id: 'step-1', title: 'Run workflow', detail: 'Execute the saved instructions.' }],
       runs: [{
         id: 'run-1',
         workflowId: 'workflow-1',

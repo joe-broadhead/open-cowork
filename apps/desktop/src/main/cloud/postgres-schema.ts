@@ -151,6 +151,7 @@ export const CLOUD_CONTROL_PLANE_SCHEMA_STATEMENTS = [
     agent_name text NOT NULL,
     skill_names jsonb NOT NULL,
     tool_ids jsonb NOT NULL,
+    steps jsonb NOT NULL DEFAULT '[]'::jsonb,
     status text NOT NULL,
     project_directory text,
     draft_session_id text,
@@ -804,6 +805,13 @@ export const CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS = [
     ON cloud_coordination_watches USING GIN (events jsonb_path_ops)`,
 ] as const
 
+export const CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_MIGRATION_ID = '015_cloud_workflow_steps'
+
+export const CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS = [
+  `ALTER TABLE cloud_workflows
+    ADD COLUMN IF NOT EXISTS steps jsonb NOT NULL DEFAULT '[]'::jsonb`,
+] as const
+
 export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration[] = [
   {
     id: CLOUD_CONTROL_PLANE_MIGRATION_ID,
@@ -862,5 +870,9 @@ export const CLOUD_CONTROL_PLANE_MIGRATIONS: readonly CloudControlPlaneMigration
   {
     id: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_MIGRATION_ID,
     statements: CLOUD_CONTROL_PLANE_COORDINATION_WATCHES_STATEMENTS,
+  },
+  {
+    id: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_MIGRATION_ID,
+    statements: CLOUD_CONTROL_PLANE_WORKFLOW_STEPS_STATEMENTS,
   },
 ] as const

@@ -31,6 +31,7 @@ import {
   type SessionImportItemCounts,
   type SessionImportRequest,
   normalizeCloudProjectSource,
+  normalizeWorkflowSteps,
 } from '@open-cowork/shared'
 import {
   getCapabilitySkillBundle,
@@ -3423,12 +3424,23 @@ export class CloudSessionService {
     if (!triggers.some((trigger) => trigger.type === 'manual')) {
       triggers.unshift({ id: this.ids.randomUUID(), type: 'manual', enabled: true })
     }
+    const title = boundedText(draft.title, 'Workflow title', WORKFLOW_TITLE_MAX_LENGTH)
+    const instructions = boundedText(draft.instructions, 'Workflow instructions', WORKFLOW_MAX_TEXT)
+    const agentName = boundedText(draft.agentName || 'build', 'Workflow agent', 256)
+    const skillNames = normalizeWorkflowStringList(draft.skillNames, 'Workflow skillNames')
+    const toolIds = normalizeWorkflowStringList(draft.toolIds, 'Workflow toolIds')
     return {
-      title: boundedText(draft.title, 'Workflow title', WORKFLOW_TITLE_MAX_LENGTH),
-      instructions: boundedText(draft.instructions, 'Workflow instructions', WORKFLOW_MAX_TEXT),
-      agentName: boundedText(draft.agentName || 'build', 'Workflow agent', 256),
-      skillNames: normalizeWorkflowStringList(draft.skillNames, 'Workflow skillNames'),
-      toolIds: normalizeWorkflowStringList(draft.toolIds, 'Workflow toolIds'),
+      title,
+      instructions,
+      agentName,
+      skillNames,
+      toolIds,
+      steps: normalizeWorkflowSteps(draft.steps, {
+        instructions,
+        agentName,
+        skillNames,
+        toolIds,
+      }),
       projectDirectory: boundedOptionalText(draft.projectDirectory, 'Workflow projectDirectory', WORKFLOW_FIELD_MAX_LENGTH),
       draftSessionId: boundedOptionalText(draft.draftSessionId, 'Workflow draftSessionId', 256),
       triggers,

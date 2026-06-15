@@ -1332,6 +1332,7 @@ async function handleApiRequest(
         agentName: readString(draft.agentName) || 'build',
         skillNames: readStringArray(draft.skillNames) || [],
         toolIds: readStringArray(draft.toolIds) || [],
+        steps: Array.isArray(draft.steps) ? draft.steps : undefined,
         projectDirectory: readString(draft.projectDirectory),
         draftSessionId: readString(draft.draftSessionId),
         triggers: Array.isArray(draft.triggers) ? draft.triggers : [],

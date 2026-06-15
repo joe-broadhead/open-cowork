@@ -25,12 +25,19 @@ export interface WorkflowTrigger {
   webhookSecret?: string | null
 }
 
+export interface WorkflowStep {
+  id: string
+  title: string
+  detail?: string | null
+}
+
 export interface WorkflowDraft {
   title: string
   instructions: string
   agentName: string
   skillNames?: string[]
   toolIds?: string[]
+  steps?: WorkflowStep[]
   projectDirectory?: string | null
   draftSessionId?: string | null
   triggers: WorkflowTrigger[]
@@ -52,6 +59,7 @@ export interface WorkflowSummary {
   agentName: string
   skillNames: string[]
   toolIds: string[]
+  steps: WorkflowStep[]
   status: WorkflowStatus
   projectDirectory: string | null
   draftSessionId: string | null
@@ -112,6 +120,9 @@ export interface WorkflowToolCreateResult {
 }
 
 const VALID_SCHEDULE_TYPES = new Set<WorkflowScheduleType>(['one_time', 'daily', 'weekly', 'monthly'])
+const MAX_WORKFLOW_STEPS = 8
+const MAX_WORKFLOW_STEP_TITLE_LENGTH = 160
+const MAX_WORKFLOW_STEP_DETAIL_LENGTH = 500
 
 type ZonedParts = {
   year: number
@@ -125,6 +136,194 @@ type ZonedParts = {
 function toNumber(value: string | undefined, fallback = 0) {
   const numeric = Number.parseInt(value || '', 10)
   return Number.isFinite(numeric) ? numeric : fallback
+}
+
+function trimmedString(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return ''
+  return compactWhitespace(value).slice(0, maxLength).trim()
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+function isWhitespace(value: string | undefined) {
+  return value === ' ' || value === '\t' || value === '\n' || value === '\r' || value === '\f'
+}
+
+function isAsciiDigit(value: string | undefined) {
+  if (!value) return false
+  const code = value.charCodeAt(0)
+  return code >= 48 && code <= 57
+}
+
+function isSentencePunctuation(value: string | undefined) {
+  return value === '.' || value === '!' || value === '?'
+}
+
+function compactWhitespace(value: string) {
+  let result = ''
+  let pendingSpace = false
+  for (const character of value.trim()) {
+    if (isWhitespace(character)) {
+      pendingSpace = result.length > 0
+      continue
+    }
+    if (pendingSpace) {
+      result += ' '
+      pendingSpace = false
+    }
+    result += character
+  }
+  return result
+}
+
+function firstNonWhitespaceIndex(value: string, fromIndex: number) {
+  let index = fromIndex
+  while (index < value.length && isWhitespace(value[index])) index += 1
+  return index
+}
+
+function stripInstructionListMarker(value: string) {
+  const line = value.trim()
+  if (!line) return ''
+
+  let index = 0
+  while (isAsciiDigit(line[index])) index += 1
+  if (index > 0 && (line[index] === '.' || line[index] === ')')) {
+    const next = firstNonWhitespaceIndex(line, index + 1)
+    if (next > index + 1) return line.slice(next).trim()
+  }
+
+  if (line[0] === '-' || line[0] === '*' || line[0] === '•') {
+    const next = firstNonWhitespaceIndex(line, 1)
+    if (next > 1) return line.slice(next).trim()
+  }
+
+  return line
+}
+
+function stripTrailingSentencePunctuation(value: string) {
+  let end = value.length
+  while (end > 0 && isSentencePunctuation(value[end - 1])) end -= 1
+  return value.slice(0, end)
+}
+
+function collectExplicitInstructionLines(instructions: string) {
+  const lines: string[] = []
+  let current = ''
+  for (let index = 0; index < instructions.length; index += 1) {
+    const character = instructions[index]
+    if (character === '\n' || character === '\r') {
+      const title = stripInstructionListMarker(current)
+      if (title) lines.push(title)
+      current = ''
+      if (character === '\r' && instructions[index + 1] === '\n') index += 1
+      continue
+    }
+    current += character
+  }
+  const title = stripInstructionListMarker(current)
+  if (title) lines.push(title)
+  return lines.slice(0, MAX_WORKFLOW_STEPS)
+}
+
+function collectSentenceInstructionLines(instructions: string) {
+  const limit = Math.min(3, MAX_WORKFLOW_STEPS)
+  const lines: string[] = []
+  let current = ''
+  for (let index = 0; index < instructions.length && lines.length < limit; index += 1) {
+    const character = instructions[index]
+    current += character
+    if (!isSentencePunctuation(character)) continue
+
+    let next = index + 1
+    while (next < instructions.length && isSentencePunctuation(instructions[next])) {
+      current += instructions[next]
+      index = next
+      next += 1
+    }
+
+    if (next < instructions.length && !isWhitespace(instructions[next])) continue
+
+    const title = trimmedString(stripTrailingSentencePunctuation(current), MAX_WORKFLOW_STEP_TITLE_LENGTH)
+    if (title) lines.push(title)
+    current = ''
+    while (next < instructions.length && isWhitespace(instructions[next])) {
+      index = next
+      next += 1
+    }
+  }
+
+  if (lines.length < limit) {
+    const title = trimmedString(stripTrailingSentencePunctuation(current), MAX_WORKFLOW_STEP_TITLE_LENGTH)
+    if (title) lines.push(title)
+  }
+
+  return lines
+}
+
+function normalizeWorkflowStepEntry(value: unknown, index: number): WorkflowStep | null {
+  if (typeof value === 'string') {
+    const title = trimmedString(value, MAX_WORKFLOW_STEP_TITLE_LENGTH)
+    return title ? { id: `step-${index + 1}`, title, detail: null } : null
+  }
+  const record = recordValue(value)
+  const title = trimmedString(record.title || record.name || record.label || record.summary, MAX_WORKFLOW_STEP_TITLE_LENGTH)
+  if (!title) return null
+  const id = trimmedString(record.id, 64) || `step-${index + 1}`
+  const detail = trimmedString(record.detail || record.description || record.instructions, MAX_WORKFLOW_STEP_DETAIL_LENGTH) || null
+  return { id, title, detail }
+}
+
+function instructionStepLines(instructions: unknown): string[] {
+  if (typeof instructions !== 'string') return []
+  const explicit = collectExplicitInstructionLines(instructions)
+  if (explicit.length > 1) return explicit
+
+  return collectSentenceInstructionLines(instructions)
+}
+
+export function normalizeWorkflowSteps(
+  value: unknown,
+  context: {
+    instructions?: unknown
+    agentName?: unknown
+    skillNames?: unknown
+    toolIds?: unknown
+  } = {},
+): WorkflowStep[] {
+  if (Array.isArray(value)) {
+    const steps = value
+      .slice(0, MAX_WORKFLOW_STEPS)
+      .map(normalizeWorkflowStepEntry)
+      .filter((step): step is WorkflowStep => Boolean(step))
+    if (steps.length > 0) return steps
+  }
+
+  const derived = instructionStepLines(context.instructions).map((title, index) => ({
+    id: `step-${index + 1}`,
+    title: trimmedString(title, MAX_WORKFLOW_STEP_TITLE_LENGTH) || `Step ${index + 1}`,
+    detail: null,
+  }))
+  if (derived.length > 1) return derived
+
+  const agentName = trimmedString(context.agentName, 80) || 'build'
+  const skillCount = Array.isArray(context.skillNames) ? context.skillNames.length : 0
+  const toolCount = Array.isArray(context.toolIds) ? context.toolIds.length : 0
+  const capabilityDetail = [
+    `Runs as ${agentName}.`,
+    skillCount ? `${skillCount} skill${skillCount === 1 ? '' : 's'}.` : null,
+    toolCount ? `${toolCount} tool${toolCount === 1 ? '' : 's'}.` : null,
+  ].filter(Boolean).join(' ')
+  const instructionDetail = typeof context.instructions === 'string'
+    ? trimmedString(context.instructions, MAX_WORKFLOW_STEP_DETAIL_LENGTH)
+    : ''
+  return [
+    { id: 'step-1', title: 'Prepare run context', detail: capabilityDetail || null },
+    { id: 'step-2', title: 'Execute saved instructions', detail: instructionDetail || null },
+    { id: 'step-3', title: 'Review and summarize output', detail: 'Capture the run result, errors, and follow-up actions.' },
+  ]
 }
 
 function getZonedParts(date: Date, timeZone: string): ZonedParts {

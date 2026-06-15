@@ -52,6 +52,18 @@ function runStatusTone(status?: WorkflowRun['status'] | null) {
   return 'text-muted'
 }
 
+function workflowLastRunLabel(workflow: WorkflowSummary) {
+  if (workflow.lastRunAt) return formatWorkflowDate(workflow.lastRunAt)
+  if (workflow.latestRunStatus) return workflow.latestRunStatus
+  return 'never'
+}
+
+function workflowDisplaySteps(workflow: WorkflowSummary) {
+  return workflow.steps?.length
+    ? workflow.steps
+    : [{ id: 'step-1', title: 'Run saved instructions', detail: workflow.instructions || null }]
+}
+
 function activeWebhookSecret(workflow: WorkflowSummary) {
   return workflow.triggers.find((trigger) => (
     trigger.enabled
@@ -275,6 +287,9 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                       </Badge>
                     </div>
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-secondary">{workflow.instructions}</p>
+                    <div className="mt-3 text-xs font-medium text-muted">
+                      Runs as {workflow.agentName || 'build'} <span aria-hidden="true">·</span> last run {workflowLastRunLabel(workflow)}
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {workflow.draftSessionId ? (
@@ -326,6 +341,20 @@ export function WorkflowsPage({ onOpenThread }: Props) {
                     </Button>
                   </div>
                 </div>
+
+                <ol className="mt-4 grid gap-2 md:grid-cols-3" aria-label={`${workflow.title} steps`}>
+                  {workflowDisplaySteps(workflow).map((step, index) => (
+                    <li key={step.id || index} className="flex min-w-0 gap-3 rounded-md border border-border bg-base/40 p-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-accent/40 bg-accent/15 text-xs font-bold text-accent">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-primary">{step.title}</span>
+                        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted">{step.detail}</span> : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border border-border bg-base/40 p-3">
